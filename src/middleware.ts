@@ -25,13 +25,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // 2. Identify if we are on a custom tenant domain or subdomain
-  const primaryDomain = "resalecommand.com"; // Adjust to your production domain
+  const primaryDomain = "resalecmd.com"; // Adjust to your production domain
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("localhost:4321");
   
   let tenantId: string | null = null;
   
   // Example detection logic:
-  // If it's a subdomain (e.g., tenant1.resalecommand.com) or a custom domain (e.g., myshop.com)
+  // If it's a subdomain (e.g., tenant1.resalecmd.com) or a custom domain (e.g., myshop.com)
   if (!isLocalhost && !host.endsWith(primaryDomain)) {
     // A. Custom Domain: Lookup tenantId in Appwrite
     tenantId = await resolveTenantIdFromHost(host);
