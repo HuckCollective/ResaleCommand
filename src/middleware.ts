@@ -25,20 +25,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // 2. Identify if we are on a custom tenant domain or subdomain
-  const primaryDomains = ["resalecmd.com", "resalecommand.com"];
+  const primaryDomain = "resalecmd.com";
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("localhost:4321");
   
   let tenantId: string | null = null;
   
-  const matchingPrimary = primaryDomains.find(d => host === d || host === `www.${d}`);
+  const isPrimary = host === primaryDomain || host === `www.${primaryDomain}`;
   
-  if (matchingPrimary) {
+  if (isPrimary) {
     // Main site, no tenant rewrite
     tenantId = null;
   } else if (!isLocalhost) {
-    // Check if it is a subdomain of any of our primary domains
-    const matchedDomain = primaryDomains.find(d => host.endsWith("." + d));
-    if (matchedDomain) {
+    // Check if it is a subdomain of our primary domain
+    if (host.endsWith("." + primaryDomain)) {
       // Extract subdomain
       const parts = host.split(".");
       const subdomain = parts[0];
