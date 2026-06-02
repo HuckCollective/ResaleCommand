@@ -25,23 +25,34 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // 2. Identify if we are on a custom tenant domain or subdomain
-  const primaryDomain = "resalecmd.com"; // Adjust to your production domain
+  const primaryDomains = ["resalecmd.com", "resalecommand.com"];
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("localhost:4321");
   
   let tenantId: string | null = null;
   
-  // Example detection logic:
-  // If it's a subdomain (e.g., tenant1.resalecmd.com) or a custom domain (e.g., myshop.com)
-  if (!isLocalhost && !host.endsWith(primaryDomain)) {
-    // A. Custom Domain: Lookup tenantId in Appwrite
-    tenantId = await resolveTenantIdFromHost(host);
-  } else if (host !== primaryDomain && !isLocalhost && host.endsWith("." + primaryDomain)) {
-    // B. Subdomain: Extract subdomain name as tenant ID
-    tenantId = host.split(".")[0];
+  const matchingPrimary = primaryDomains.find(d => host === d || host === `www.${d}`);
+  
+  if (matchingPrimary) {
+    // Main site, no tenant rewrite
+    tenantId = null;
+  } else if (!isLocalhost) {
+    // Check if it is a subdomain of any of our primary domains
+    const matchedDomain = primaryDomains.find(d => host.endsWith("." + d));
+    if (matchedDomain) {
+      // Extract subdomain
+      const parts = host.split(".");
+      const subdomain = parts[0];
+      if (subdomain !== "www") {
+        tenantId = subdomain;
+      }
+    } else {
+      // Custom Domain: Lookup tenantId in Appwrite
+      tenantId = await resolveTenantIdFromHost(host);
+    }
   } else if (isLocalhost) {
     // For local testing: if hostname contains a port, strip it, or check subdomains
     const subdomain = host.split(":")[0];
-    if (subdomain !== "localhost" && subdomain !== "127.0.0.1") {
+    if (subdomain !== "localhost" && subdomain !== "127.0.0.1" && subdomain !== "www") {
       // e.g. "tenant1.localhost:4321" -> "tenant1"
       tenantId = subdomain.split(".")[0];
     }
