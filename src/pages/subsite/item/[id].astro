@@ -1,0 +1,476 @@
+---
+import { databases } from '../../../lib/appwrite';
+import StoreHeaderCart from '../../../components/store/StoreHeaderCart.astro';
+import '../../../styles/global.css';
+
+const { id } = Astro.params;
+
+// Get tenant context from locals
+const tenantId = Astro.locals.tenantId || "default_tenant";
+const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
+const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items_dev";
+const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || "item_images";
+const APPWRITE_ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
+const APPWRITE_PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
+
+// Fallbacks
+const MOCK_TENANTS: Record<string, { storeName: string }> = {
+  "tenant1": { storeName: "Retro Tabletop Vintage" },
+  "tenent1": { storeName: "Retro Tabletop Vintage" },
+  "6979614d00281d143bbe": { storeName: "Resale Command Alpha" },
+  "69a9cbcb0038df55f6b9": { storeName: "Resale Command Beta" },
+  "default_tenant": { storeName: "Resale Command Storefront" }
+};
+
+const DB_TENANT_MAP: Record<string, string> = {
+  "tenant1": "6979614d00281d143bbe",
+  "tenent1": "6979614d00281d143bbe",
+  "default_tenant": "6979614d00281d143bbe"
+};
+
+const queryTenantId = DB_TENANT_MAP[tenantId] || tenantId;
+
+let item: any = null;
+let storeName = "Resale Store";
+let errorMsg = "";
+
+try {
+  // 1. Fetch Store Details
+  try {
+    const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
+      // Filter by tenantId
+      {
+        equal: (key: string, val: string) => `equal("${key}", "${val}")`,
+        limit: (val: number) => `limit(${val})`
+      } as any === undefined ? "" : "" // workaround for query builder differences
+    ]);
+  } catch (e) {
+    // collection not found or unconfigured, ignore and use fallback
+  }
+  storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
+
+  // 2. Fetch the Item Document
+  item = await databases.getDocument(DB_ID, ITEMS_COL, id || "");
+
+  // 3. Security/Tenant Verification:
+  // Ensure the loaded item actually belongs to the current tenant (or its mapped database tenant)
+  if (item && item.tenantId !== queryTenantId) {
+    item = null;
+    errorMsg = "This item does not belong to this store's catalog.";
+  }
+} catch (e: any) {
+  console.error(`[Public Item Page] Error loading item ID ${id}:`, e.message || e);
+  errorMsg = e.code === 404 ? "Item not found in the database." : "Failed to load product details.";
+}
+
+// Image URLs resolving
+const activeImages: string[] = [];
+if (item) {
+  if (item.imageId) activeImages.push(item.imageId);
+  if (Array.isArray(item.galleryImageIds)) {
+    item.galleryImageIds.forEach((imgId: string) => {
+      if (imgId && imgId !== item.imageId) activeImages.push(imgId);
+    });
+  }
+}
+
+const mainImageUrl = activeImages.length > 0
+  ? `${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${activeImages[0]}/view?project=${APPWRITE_PROJECT_ID}`
+  : "";
+---
+
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  {item ? (
+    <>
+      <title>{item.title} - {storeName}</title>
+      <meta name="description" content={item.conditionNotes || "Explore detailed vintage collectibles catalog."} />
+      
+      <!-- Open Graph / Facebook -->
+      <meta property="og:type" content="product" />
+      <meta property="og:title" content={`${item.title} - ${storeName}`} />
+      <meta property="og:description" content={item.conditionNotes || "Click to see price, condition and gallery description."} />
+      {mainImageUrl && <meta property="og:image" content={mainImageUrl} />}
+      <meta property="og:price:amount" content={item.resalePrice || "0.00"} />
+      <meta property="og:price:currency" content="USD" />
+
+      <!-- Twitter Card -->
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={item.title} />
+      <meta name="twitter:description" content={item.conditionNotes || "Click to view catalog details."} />
+      {mainImageUrl && <meta name="twitter:image" content={mainImageUrl} />}
+    </>
+  ) : (
+    <title>Product Details - {storeName}</title>
+  )}
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-base-300 via-base-200 to-base-300 text-base-content selection:bg-primary selection:text-primary-content">
+
+  <!-- Navigation Bar -->
+  <nav class="sticky top-0 z-50 backdrop-blur-md bg-base-100/80 border-b border-base-content/5 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <!-- Store Brand -->
+      <a href="/" class="flex items-center gap-2 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-primary-content font-bold text-xl shadow-md group-hover:scale-105 transition-transform">
+          {storeName.charAt(0)}
+        </div>
+        <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent group-hover:opacity-80 transition-opacity">
+          {storeName}
+        </span>
+      </a>
+
+      <!-- Server Island: Deferred Header Cart -->
+      <StoreHeaderCart tenantId={tenantId} server:defer>
+        <div slot="fallback" class="flex items-center gap-3 animate-pulse">
+          <div class="h-10 w-24 bg-base-300 rounded-btn"></div>
+          <div class="h-10 w-10 bg-base-300 rounded-full"></div>
+        </div>
+      </StoreHeaderCart>
+    </div>
+  </nav>
+
+  <!-- Page Body -->
+  <main class="max-w-6xl mx-auto px-4 py-12 md:py-16">
+    <!-- Back to Catalog Link -->
+    <div class="mb-8">
+      <a href="/" class="btn btn-sm btn-ghost gap-2 hover:translate-x-[-4px] transition-transform">
+        <span>←</span> Back to Storefront Catalog
+      </a>
+    </div>
+
+    {errorMsg ? (
+      <!-- Error Message -->
+      <div class="card bg-base-100 border border-base-content/5 shadow-xl p-12 text-center max-w-lg mx-auto">
+        <div class="w-16 h-16 rounded-full bg-error/10 text-error flex items-center justify-center mx-auto mb-4 text-3xl">
+          ⚠️
+        </div>
+        <h4 class="text-2xl font-bold">Unable to Load Product</h4>
+        <p class="text-sm text-base-content/60 mt-2">
+          {errorMsg}
+        </p>
+        <a href="/" class="btn btn-primary btn-sm mx-auto mt-6">Return to Catalog</a>
+      </div>
+    ) : item && (
+      <!-- Standalone Two-Column Details Card -->
+      <div class="card md:card-side bg-base-100 border border-base-content/5 shadow-2xl overflow-hidden rounded-3xl grid grid-cols-1 md:grid-cols-12">
+        
+        <!-- Left Media Carousel (5 Columns) -->
+        <div class="md:col-span-6 p-6 md:p-8 flex flex-col gap-4 border-b md:border-b-0 md:border-r border-base-content/5">
+          <div class="relative w-full aspect-square bg-base-200 rounded-2xl overflow-hidden shadow-inner border border-base-content/5 group">
+            {activeImages.length > 0 ? (
+              <img 
+                id="main-product-image"
+                src={`${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${activeImages[0]}/view?project=${APPWRITE_PROJECT_ID}`} 
+                alt={item.title} 
+                class="w-full h-full object-cover transition-all duration-300"
+              />
+            ) : (
+              <div class="w-full h-full flex items-center justify-center text-8xl bg-base-200">
+                📚
+              </div>
+            )}
+            
+            <!-- Floating status badge -->
+            <span class="absolute top-4 left-4 badge badge-neutral shadow-md font-bold text-xs py-2.5 px-3.5 tracking-wide">
+              {item.status || 'Active'}
+            </span>
+          </div>
+
+          <!-- Thumbnails Selector -->
+          {activeImages.length > 1 && (
+            <div class="flex gap-3 justify-center overflow-x-auto py-2">
+              {activeImages.map((imgId, idx) => (
+                <button
+                  class={`thumbnail-btn w-16 h-16 rounded-xl overflow-hidden border-2 transition-all hover:scale-105 ${idx === 0 ? 'border-primary opacity-100' : 'border-transparent opacity-60'}`}
+                  data-index={idx}
+                  data-url={`${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${imgId}/view?project=${APPWRITE_PROJECT_ID}`}
+                >
+                  <img src={`${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${imgId}/view?project=${APPWRITE_PROJECT_ID}`} class="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <!-- Right Product Info (6 Columns) -->
+        <div class="md:col-span-6 p-6 md:p-8 flex flex-col justify-between">
+          <div class="space-y-6">
+            <!-- Breadcrumbs / ID -->
+            <div class="text-xs opacity-50 flex items-center gap-1.5 font-semibold">
+              <span>CATALOG</span>
+              <span>/</span>
+              <span>ITEM {item.$id.substring(0, 8).toUpperCase()}</span>
+            </div>
+
+            <!-- Title -->
+            <h1 class="text-3xl md:text-4xl font-extrabold leading-tight tracking-tight text-base-content">
+              {item.title || "Unidentified Collectible"}
+            </h1>
+
+            <!-- Price -->
+            <div class="text-4xl font-black text-secondary flex items-baseline gap-1">
+              <span class="text-xl opacity-80">$</span>
+              <span>{typeof item.resalePrice === 'number' ? item.resalePrice.toFixed(2) : '0.00'}</span>
+            </div>
+
+            <!-- Divider -->
+            <div class="divider opacity-30 my-2"></div>
+
+            <!-- Keywords -->
+            {Array.isArray(item.keywords) && item.keywords.length > 0 && (
+              <div class="space-y-2">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-60">Tags</span>
+                <div class="flex flex-wrap gap-2">
+                  {item.keywords.map((tag: string) => (
+                    <span class="badge badge-neutral font-semibold">#{tag}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <!-- Description -->
+            <div class="space-y-2">
+              <span class="text-xs font-bold uppercase tracking-wider opacity-60">Description</span>
+              <p class="text-sm bg-base-200/80 p-5 rounded-2xl border border-base-content/5 leading-relaxed text-base-content/90 whitespace-pre-line shadow-inner max-h-56 overflow-y-auto">
+                {item.marketDescription || item.conditionNotes || "No description available for this item."}
+              </p>
+            </div>
+
+            <!-- Components -->
+            {item.components && (
+              <div class="space-y-2">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-60">Included Components</span>
+                <p class="text-xs leading-relaxed text-base-content/75 bg-base-300/40 p-4 rounded-xl border border-base-content/5">
+                  {item.components}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="flex flex-col sm:flex-row gap-4 pt-6 border-t border-base-content/10 mt-8">
+            <button 
+              id="favorite-btn"
+              data-id={item.$id}
+              class="btn btn-primary flex-1 gap-2.5 shadow-lg shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all text-base font-bold py-3.5"
+            >
+              <span id="fav-icon">🤍</span>
+              <span id="fav-label">Add to Favorites</span>
+            </button>
+            
+            <button 
+              id="share-btn"
+              class="btn btn-outline gap-2.5 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <span>🔗</span> Copy Product Link
+            </button>
+          </div>
+
+          <!-- Social Share Row -->
+          <div class="flex flex-col gap-2 pt-4 mt-2">
+            <span class="text-xs font-bold uppercase tracking-wider opacity-50">Share via:</span>
+            <div class="flex flex-wrap gap-2.5">
+              <!-- Twitter/X -->
+              <a 
+                id="share-twitter" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="btn btn-circle btn-sm btn-outline hover:bg-neutral hover:text-neutral-content transition-all"
+                title="Share on X (Twitter)"
+              >
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </a>
+
+              <!-- Facebook -->
+              <a 
+                id="share-facebook" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="btn btn-circle btn-sm btn-outline hover:bg-neutral hover:text-neutral-content transition-all"
+                title="Share on Facebook"
+              >
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z"/>
+                </svg>
+              </a>
+
+              <!-- Pinterest -->
+              <a 
+                id="share-pinterest" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="btn btn-circle btn-sm btn-outline hover:bg-neutral hover:text-neutral-content transition-all"
+                title="Share on Pinterest"
+              >
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.41 7.61 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.168 1.777 2.168 2.13 0 3.762-2.245 3.762-5.486 0-2.868-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.211-.174.263-.403.156-1.49-.694-2.42-2.875-2.42-4.626 0-3.768 2.737-7.229 7.892-7.229 4.144 0 7.362 2.956 7.362 6.899 0 4.117-2.597 7.431-6.2 7.431-1.21 0-2.348-.63-2.738-1.373 0 0-.599 2.282-.744 2.84-.282 1.084-1.047 2.443-1.561 3.284 1.133.351 2.336.543 3.59.543 6.63 0 12-5.375 12-12.007C24.017 5.37 18.647 0 12.017 0z"/>
+                </svg>
+              </a>
+
+              <!-- Email -->
+              <a 
+                id="share-email" 
+                class="btn btn-circle btn-sm btn-outline hover:bg-neutral hover:text-neutral-content transition-all"
+                title="Share via Email"
+              >
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    )}
+  </main>
+
+  <!-- Share Toast Alert -->
+  <div id="toast-container" class="toast toast-end toast-bottom z-50 hidden">
+    <div class="alert alert-success shadow-lg">
+      <span id="toast-message" class="font-bold"></span>
+    </div>
+  </div>
+
+  <!-- Client-side script for Carousel navigation, Favorites Toggle, and Copy Link -->
+  <script>
+    // 1. Gallery Carousel Logic
+    const thumbnails = document.querySelectorAll('.thumbnail-btn');
+    const mainImg = document.getElementById('main-product-image') as HTMLImageElement | null;
+
+    thumbnails.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.getAttribute('data-url');
+        if (url && mainImg) {
+          mainImg.src = url;
+          // Toggle active styles
+          thumbnails.forEach(t => t.classList.remove('border-primary', 'opacity-100'));
+          btn.classList.add('border-primary', 'opacity-100');
+        }
+      });
+    });
+
+    // 2. Favorites LocalStorage Logic
+    const favBtn = document.getElementById('favorite-btn');
+    const favIcon = document.getElementById('fav-icon');
+    const favLabel = document.getElementById('fav-label');
+    const toast = document.getElementById('toast-container');
+    const toastMsg = document.getElementById('toast-message');
+
+    if (favBtn && favIcon && favLabel) {
+      const itemId = favBtn.getAttribute('data-id') || "";
+
+      // Load initial state
+      let favorites: string[] = [];
+      try {
+        const saved = localStorage.getItem('store_favorites');
+        if (saved) favorites = JSON.parse(saved);
+      } catch(e) {}
+
+      const isFav = favorites.includes(itemId);
+      updateFavUI(isFav);
+
+      favBtn.addEventListener('click', () => {
+        // Toggle favorite list
+        let currentFavs: string[] = [];
+        try {
+          const saved = localStorage.getItem('store_favorites');
+          if (saved) currentFavs = JSON.parse(saved);
+        } catch(e) {}
+
+        const index = currentFavs.indexOf(itemId);
+        let nowFav = false;
+        if (index >= 0) {
+          currentFavs.splice(index, 1);
+          triggerToast("❤️ Removed from Favorites");
+        } else {
+          currentFavs.push(itemId);
+          nowFav = true;
+          triggerToast("❤️ Added to Favorites successfully!");
+        }
+
+        localStorage.setItem('store_favorites', JSON.stringify(currentFavs));
+        updateFavUI(nowFav);
+      });
+
+      function updateFavUI(favorited: boolean) {
+        if (favorited) {
+          favBtn?.classList.remove('btn-primary');
+          favBtn?.classList.add('btn-neutral');
+          if (favIcon) favIcon.textContent = "❤️";
+          if (favLabel) favLabel.textContent = "Remove from Favorites";
+        } else {
+          favBtn?.classList.remove('btn-neutral');
+          favBtn?.classList.add('btn-primary');
+          if (favIcon) favIcon.textContent = "🤍";
+          if (favLabel) favLabel.textContent = "Add to Favorites";
+        }
+      }
+    }
+
+    // 3. Share Button Logic (Clipboard Copy)
+    const shareBtn = document.getElementById('share-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          triggerToast("🔗 Link copied to clipboard!");
+        } catch(err) {
+          triggerToast("⚠️ Failed to copy link.");
+        }
+      });
+    }
+
+    // 4. Social Share Link Injection
+    const twitterShare = document.getElementById('share-twitter');
+    const facebookShare = document.getElementById('share-facebook');
+    const pinterestShare = document.getElementById('share-pinterest');
+    const emailShare = document.getElementById('share-email') as HTMLAnchorElement | null;
+
+    const pageUrl = window.location.href;
+    const pageTitle = document.title;
+    const pageImage = mainImg ? mainImg.src : '';
+
+    if (twitterShare) {
+      twitterShare.setAttribute('href', `https://twitter.com/intent/tweet?text=${encodeURIComponent(pageTitle)}&url=${encodeURIComponent(pageUrl)}`);
+    }
+    if (facebookShare) {
+      facebookShare.setAttribute('href', `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}`);
+    }
+    if (pinterestShare) {
+      pinterestShare.setAttribute('href', `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(pageUrl)}&media=${encodeURIComponent(pageImage)}&description=${encodeURIComponent(pageTitle)}`);
+    }
+    if (emailShare) {
+      emailShare.setAttribute('href', `mailto:?subject=${encodeURIComponent(pageTitle)}&body=${encodeURIComponent("Check out this awesome collectible: " + pageUrl)}`);
+    }
+
+    // Toast helper
+    let toastTimeout: number;
+    function triggerToast(message: string) {
+      if (toast && toastMsg) {
+        toastMsg.textContent = message;
+        toast.classList.remove('hidden');
+        
+        clearTimeout(toastTimeout);
+        toastTimeout = window.setTimeout(() => {
+          toast.classList.add('hidden');
+        }, 2500);
+      }
+    }
+  </script>
+
+</body>
+</html>

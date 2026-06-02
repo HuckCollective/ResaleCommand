@@ -34,11 +34,37 @@ export const POST: APIRoute = async ({ request }) => {
         const client = new Client();
         client
             .setEndpoint(import.meta.env.PUBLIC_APPWRITE_ENDPOINT)
-            .setProject(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID)
-            .setKey(import.meta.env.APPWRITE_API_KEY);
+            .setProject(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID);
+
+        const jwt = request.headers.get('X-Appwrite-JWT');
+        if (jwt) {
+            console.log('[API] Using client JWT for authentication');
+            client.setJWT(jwt);
+        } else if (import.meta.env.APPWRITE_API_KEY) {
+            console.log('[API] Using server API key for authentication');
+            client.setKey(import.meta.env.APPWRITE_API_KEY);
+        }
 
         const databases = new Databases(client);
         const storage = new Storage(client);
+
+        // Helper to run read operations with fallback to guest client if the primary client is unauthorized (401)
+        const executeRead = async <T>(operation: (db: Databases, stor: Storage) => Promise<T>): Promise<T> => {
+            try {
+                return await operation(databases, storage);
+            } catch (err: any) {
+                if (err.code === 401) {
+                    console.warn('[API] Appwrite read failed with 401 (unauthorized). Retrying with anonymous/guest access...');
+                    const guestClient = new Client()
+                        .setEndpoint(import.meta.env.PUBLIC_APPWRITE_ENDPOINT)
+                        .setProject(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID);
+                    const guestDatabases = new Databases(guestClient);
+                    const guestStorage = new Storage(guestClient);
+                    return await operation(guestDatabases, guestStorage);
+                }
+                throw err;
+            }
+        };
 
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
         let COLLECTION_ID = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID as string;
@@ -49,12 +75,12 @@ export const POST: APIRoute = async ({ request }) => {
         console.log('[API] Fetching item document...');
         let item;
         try {
-            item = await databases.getDocument(DB_ID as string, COLLECTION_ID, itemId);
+            item = await executeRead((db) => db.getDocument(DB_ID as string, COLLECTION_ID, itemId));
         } catch (e: any) {
             if (e.code === 404 && ALPHA_COLLECTION_ID) {
                 console.log('[API] Not found in standard collection, checking alpha collection...');
                 COLLECTION_ID = ALPHA_COLLECTION_ID;
-                item = await databases.getDocument(DB_ID as string, COLLECTION_ID, itemId);
+                item = await executeRead((db) => db.getDocument(DB_ID as string, COLLECTION_ID, itemId));
             } else {
                 throw e;
             }
@@ -76,15 +102,15 @@ export const POST: APIRoute = async ({ request }) => {
         const imageParts = await Promise.all(imageIds.map(async (id) => {
             try {
                 // getFileDownload returns an ArrayBuffer in node-appwrite (check version, usually ArrayBuffer or Buffer)
-                const buffer = await storage.getFileDownload(BUCKET_ID, id);
+                const buffer = await executeRead((db, stor) => stor.getFileDownload(BUCKET_ID, id));
                 return {
                     inlineData: {
                         data: Buffer.from(buffer).toString('base64'),
                         mimeType: 'image/jpeg' // Assuming JPEG for now, or check file extension/mime
                     }
                 };
-            } catch (e) {
-                console.error(`[API] Failed to download image ${id}:`, e);
+            } catch (e: any) {
+                console.error(`[API] Failed to download image ${id}:`, e.message || e);
                 return null;
             }
         }));

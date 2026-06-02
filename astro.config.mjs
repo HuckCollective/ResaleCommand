@@ -18,13 +18,15 @@ export default defineConfig({
   trailingSlash: "never",
   integrations: [mdx(), sitemap(), icon(), alpinejs(), vue()],
   adapter: vercel(),
+  devToolbar: {
+    enabled: false
+  },
   vite: {
     plugins: [tailwindcss()],
-    cacheDir: '/tmp/.vite',
+    // Let Vite use its default cache directory (node_modules/.vite) which is much faster on Windows than /tmp
     server: {
       watch: {
-        usePolling: true,
-        interval: 1000,
+        // Native OS file watching is much faster than polling on Windows
         ignored: ['**/node_modules/**', '**/.git/**']
       },
       hmr: {

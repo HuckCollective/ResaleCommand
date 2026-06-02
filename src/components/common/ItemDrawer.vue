@@ -1238,9 +1238,22 @@ const generateDescription = async () => {
         const idToUpdate = props.item ? props.item.$id : null;
         
         if (idToUpdate) {
+             let jwt = null;
+             try {
+                 const jwtRes = await account.createJWT();
+                 jwt = jwtRes.jwt;
+             } catch (jwtErr) {
+                 console.warn("Failed to create JWT, proceeding without it:", jwtErr);
+             }
+
+             const headers = { 'Content-Type': 'application/json' };
+             if (jwt) {
+                 headers['X-Appwrite-JWT'] = jwt;
+             }
+
              const res = await fetch('/api/generate-description', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ itemId: idToUpdate })
             });
             const data = await res.json();

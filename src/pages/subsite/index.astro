@@ -1,0 +1,165 @@
+---
+import { databases, Query } from '../../lib/appwrite';
+import StoreHeaderCart from '../../components/store/StoreHeaderCart.astro';
+// @ts-ignore
+import StoreCatalog from '../../components/store/StoreCatalog.vue';
+import '../../styles/global.css';
+
+// Rendered dynamically under rewritten path (e.g. domain.com/)
+const tenantId = Astro.locals.tenantId || "default_tenant";
+const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
+const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items_dev";
+
+let items: any[] = [];
+let storeName = "Resale Store";
+
+// Local fallback mapping for store details when DB is unconfigured or collection is missing
+const MOCK_TENANTS: Record<string, { storeName: string }> = {
+  "tenant1": { storeName: "Retro Tabletop Vintage" },
+  "tenent1": { storeName: "Retro Tabletop Vintage" },
+  "6979614d00281d143bbe": { storeName: "Resale Command Alpha" },
+  "69a9cbcb0038df55f6b9": { storeName: "Resale Command Beta" },
+  "default_tenant": { storeName: "Resale Command Storefront" }
+};
+
+// Map virtual/test tenants to actual database seed tenants that contain items
+const DB_TENANT_MAP: Record<string, string> = {
+  "tenant1": "6979614d00281d143bbe",
+  "tenent1": "6979614d00281d143bbe",
+  "default_tenant": "6979614d00281d143bbe"
+};
+
+const queryTenantId = DB_TENANT_MAP[tenantId] || tenantId;
+
+if (tenantId) {
+  // 1. Fetch Store Details
+  try {
+    const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
+      Query.equal("tenantId", tenantId),
+      Query.limit(1)
+    ]);
+    if (tenantRes.total > 0) {
+      storeName = tenantRes.documents[0].storeName || MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Resale`;
+    } else {
+      storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
+    }
+  } catch (err: any) {
+    if (err.type === "collection_not_found" || err.code === 404) {
+      console.warn(`[Subsite] 'tenant_domains' collection not found in database. Using default store name for tenant '${tenantId}'.`);
+    } else {
+      console.error("[Subsite] Error fetching store details:", err);
+    }
+    storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
+  }
+
+  // 2. Fetch Active Items for Sale
+  try {
+    const itemsRes = await databases.listDocuments(DB_ID, ITEMS_COL, [
+      Query.equal("tenantId", queryTenantId),
+      Query.limit(24)
+    ]);
+    items = itemsRes.documents;
+  } catch (err: any) {
+    console.error(`[Subsite] Failed to fetch items for tenant '${tenantId}' from collection '${ITEMS_COL}':`, err.message || err);
+  }
+}
+
+---
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{storeName} - Resale Command Storefront</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-base-300 via-base-200 to-base-300 text-base-content selection:bg-primary selection:text-primary-content">
+
+  <!-- Navigation Bar -->
+  <nav class="sticky top-0 z-50 backdrop-blur-md bg-base-100/80 border-b border-base-content/5 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <!-- Store Brand -->
+      <a href="/" class="flex items-center gap-2 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-primary-content font-bold text-xl shadow-md group-hover:scale-105 transition-transform">
+          {storeName.charAt(0)}
+        </div>
+        <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent group-hover:opacity-80 transition-opacity">
+          {storeName}
+        </span>
+      </a>
+
+      <!-- Server Island: Deferred Header Cart -->
+      <StoreHeaderCart tenantId={tenantId} server:defer>
+        <!-- Loading Skeleton Fallback -->
+        <div slot="fallback" class="flex items-center gap-3 animate-pulse">
+          <div class="h-10 w-24 bg-base-300 rounded-btn"></div>
+          <div class="h-10 w-10 bg-base-300 rounded-full"></div>
+        </div>
+      </StoreHeaderCart>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="relative overflow-hidden py-16 px-4 text-center">
+    <div class="absolute inset-0 bg-grid-white/[0.02] bg-[size:30px_30px]" />
+    <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+    
+    <div class="max-w-3xl mx-auto relative z-10">
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
+        Curated Premium Collectibles
+      </h2>
+      <p class="text-lg text-base-content/65 mb-8 max-w-xl mx-auto">
+        Explore high-quality vintage tabletop games, books, and rare collectibles sourced and authenticated specifically by {storeName}.
+      </p>
+      <div class="flex justify-center gap-4">
+        <a href="#catalog" class="btn btn-primary px-6 shadow-lg shadow-primary/20">Browse Catalog</a>
+        <a href="#about" class="btn btn-outline">Learn More</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Product Catalog Section (Dynamic Search/Filter/Sort with DaisyUI) -->
+  <main id="catalog" class="max-w-7xl mx-auto px-4 lg:px-8 pb-24">
+    <StoreCatalog 
+      client:load 
+      initialItems={items}
+      appwriteEndpoint={import.meta.env.PUBLIC_APPWRITE_ENDPOINT}
+      appwriteProjectId={import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}
+      appwriteBucketId={import.meta.env.PUBLIC_APPWRITE_BUCKET_ID}
+    />
+  </main>
+
+  <!-- Store Footer -->
+  <footer id="about" class="bg-base-950 text-neutral-content py-12 border-t border-white/5">
+    <div class="max-w-7xl mx-auto px-4 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div>
+        <h4 class="text-lg font-bold text-white mb-3">{storeName}</h4>
+        <p class="text-sm text-neutral-content/60 max-w-xs">
+          Powered by Resale Command. High-fidelity reseller operations, appraisals, and multi-tenant domain integrations.
+        </p>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-white mb-3">Integrity & Standards</h4>
+        <p class="text-sm text-neutral-content/60">
+          All items listed are inspected, graded, and packaged carefully. Authenticity is 100% guaranteed.
+        </p>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-white mb-3">Powered By</h4>
+        <div class="flex items-center gap-2">
+          <span class="text-xs badge badge-outline text-neutral-content/65">Astro Server Islands</span>
+          <span class="text-xs badge badge-outline text-neutral-content/65">Appwrite</span>
+          <span class="text-xs badge badge-outline text-neutral-content/65">Vercel Edge</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

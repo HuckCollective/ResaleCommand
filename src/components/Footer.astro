@@ -1,21 +1,31 @@
 ---
-import  {featureFlags}  from 'site-config';
+import { featureFlags } from "site-config";
 ---
 
 <footer class="my-20">
   <div class="text-center text-sm text-slate-600 space-y-2">
     <p>
-      { featureFlags.enableImprint && 
-        <a class="hover:underline hover:text-primary-light" href="/imprint">Imprint</a>
+      {
+        featureFlags.enableImprint && (
+          <a class="hover:underline hover:text-primary-light" href="/imprint">
+            Imprint
+          </a>
+        )
       }
-      { featureFlags.enableDataprotection && 
-        <a class="hover:underline hover:text-primary-light" href="/dataprotection">Dataprotection</a>
+      {
+        featureFlags.enableDataprotection && (
+          <a
+            class="hover:underline hover:text-primary-light"
+            href="/dataprotection">
+            Dataprotection
+          </a>
+        )
       }
 
-      <span class="block sm:inline"> Copyright © {new Date().getFullYear()} StormbringerGames LLC.</span>
+      <span class="block sm:inline">
+        Copyright © {new Date().getFullYear()} Huckleberry Collective LLC
+      </span>
     </p>
-    <div>
-      Made by Huckleberry Productions
-    </div>
+    <div>Made by Huckleberry Productions</div>
   </div>
 </footer>
