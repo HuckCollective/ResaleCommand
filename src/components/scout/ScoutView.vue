@@ -381,8 +381,9 @@
         <button @click="saveAllItems" 
                 class="flex-1 flex flex-col items-center justify-center transition-colors pb-safe"
                 :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) ? 'bg-success/20 text-success' : (result && result.items && result.items.length > 0 ? 'bg-success text-success-content hover:bg-success/90' : 'text-base-content/30 cursor-not-allowed')"
-                :disabled="!result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
-            <span class="text-2xl leading-none mb-1"><Icon icon="solar:object-scan-linear" /></span>
+                :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
+            <span v-if="savingAll" class="loading loading-spinner mb-1"></span>
+            <span v-else class="text-2xl leading-none mb-1"><Icon icon="solar:object-scan-linear" /></span>
             <span class="font-bold tracking-wider uppercase text-[10px]">Track All</span>
         </button>
         
@@ -836,13 +837,21 @@ function startNewScan() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+const savingAll = ref(false);
+
 async function saveAllItems() {
+    if (savingAll.value) return;
     if (!result.value || !result.value.items) return;
-    for (let i = 0; i < result.value.items.length; i++) {
-        const item = result.value.items[i];
-        if (!item.saved && !item.saving) {
-             await handleSaveItem(item, i);
+    savingAll.value = true;
+    try {
+        for (let i = 0; i < result.value.items.length; i++) {
+            const item = result.value.items[i];
+            if (!item.saved && !item.saving) {
+                 await handleSaveItem(item, i);
+            }
         }
+    } finally {
+        savingAll.value = false;
     }
 }
 
@@ -931,6 +940,11 @@ function getSliderColor(item: any) {
 // -- SAVE ACTION --
 async function handleSaveItem(item: any, index: number) {
     console.log('[ScoutView] handleSaveItem callled for item:', item.identity);
+    
+    if (item.saving || item.saved) {
+        console.log('[ScoutView] Item already saving/saved, ignoring save request for', item.identity);
+        return;
+    }
     
     if (!user.value) {
         addToast({ type: 'warning', message: "Please login first." });

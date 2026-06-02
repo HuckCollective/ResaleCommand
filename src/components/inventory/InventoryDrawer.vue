@@ -229,6 +229,7 @@ async function analyzeImage() {
 }
 
 async function saveItem() {
+    if (loading.value) return;
     if (!form.title) return;
     if (!user.value) {
         addToast({ type: 'warning', message: "Please login first" });

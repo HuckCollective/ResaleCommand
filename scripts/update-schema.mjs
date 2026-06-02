@@ -145,6 +145,11 @@ async function run() {
             await databases.createIndex(DB_ID, collectionId, 'idx_tenantId', 'key', ['tenantId'], ['asc']);
             console.log("Created index: idx_tenantId");
         } catch (e) { console.log("Index idx_tenantId might already exist or error:", e.message); }
+
+        try {
+            await databases.createIndex(DB_ID, collectionId, 'idx_identity', 'key', ['identity'], ['asc']);
+            console.log("Created index: idx_identity");
+        } catch (e) { console.log("Index idx_identity might already exist or error:", e.message); }
     }
 
     console.log("\nSchema Update Requests Sent. Please wait 1-2 minutes for Appwrite to process deletions and additions.");

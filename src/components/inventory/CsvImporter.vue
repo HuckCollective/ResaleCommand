@@ -637,16 +637,25 @@ async function importSelected() {
 
                     // 2. CHECK FOR DUPLICATE & UPDATE
                     try {
-                        const existing = await retryOperation(() => databases.listDocuments(DB, getCollectionId(), [
-                            Query.equal('title', item.title),
-                            Query.limit(50) // Search broadly for this title
-                        ]));
-                        
-                        // Check memory to see if we have a match
-                        const match = existing.documents.find(doc => 
-                            doc.identity === item.itemId || 
-                            doc.sourcingLocation?.includes('ShopGoodwill')
-                        );
+                        let match: any = null;
+                        try {
+                            // Try direct query on identity first
+                            const existing = await retryOperation(() => databases.listDocuments(DB, getCollectionId(), [
+                                Query.equal('identity', item.itemId),
+                                Query.limit(1)
+                            ]));
+                            if (existing.documents.length > 0) {
+                                match = existing.documents[0];
+                            }
+                        } catch (e: any) {
+                            console.warn('[Import] Direct identity check failed, running title fallback:', e.message);
+                            // Fallback: Query by title and match identity in memory
+                            const existing = await retryOperation(() => databases.listDocuments(DB, getCollectionId(), [
+                                Query.equal('title', item.title),
+                                Query.limit(100)
+                            ]));
+                            match = existing.documents.find(doc => doc.identity === item.itemId);
+                        }
                         
                         if (match) {
                             // ITEM EXISTS: Update it!

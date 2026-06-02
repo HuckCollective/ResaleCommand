@@ -115,6 +115,11 @@ async function run() {
         console.log("Created index: idx_purchaseLocation");
     } catch (e) { console.log("Index idx_purchaseLocation might already exist or error:", e.message); }
 
+    try {
+        await databases.createIndex(DB_ID, COLLECTION_ID, 'idx_identity', 'key', ['identity'], ['asc']);
+        console.log("Created index: idx_identity");
+    } catch (e) { console.log("Index idx_identity might already exist or error:", e.message); }
+
     console.log("Alpha Schema Update Complete!");
 }
 

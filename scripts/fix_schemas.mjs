@@ -43,6 +43,14 @@ async function addAttributes(collectionId) {
     } catch (e) {
         console.log(`ℹ️ 'components' attribute likely exists or failed on ${collectionId}:`, e.message);
     }
+
+    // idx_identity (Index)
+    try {
+        await databases.createIndex(DB_ID, collectionId, 'idx_identity', 'key', ['identity'], ['asc']);
+        console.log(`✅ Created 'idx_identity' index on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'idx_identity' index likely exists or failed on ${collectionId}:`, e.message);
+    }
 }
 
 async function run() {

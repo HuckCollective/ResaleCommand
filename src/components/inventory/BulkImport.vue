@@ -179,17 +179,33 @@ const processRows = async (rows) => {
 
         // Check for Duplicates (Server-Side)
         try {
-            const dbCheck = await databases.listDocuments(
-                import.meta.env.PUBLIC_APPWRITE_DB_ID, 
-                getCollectionId(),
-                [
-                    Query.equal('identity', itemId),
-                    Query.limit(1)
-                ]
-            );
+            let isDuplicate = false;
+            try {
+                const dbCheck = await databases.listDocuments(
+                    import.meta.env.PUBLIC_APPWRITE_DB_ID, 
+                    getCollectionId(),
+                    [
+                        Query.equal('identity', itemId),
+                        Query.limit(1)
+                    ]
+                );
+                isDuplicate = dbCheck.total > 0;
+            } catch (e) {
+                console.warn("Direct identity check failed, running title fallback:", e.message);
+                // Fallback: Query by title and check if any match has this identity
+                const titleCheck = await databases.listDocuments(
+                    import.meta.env.PUBLIC_APPWRITE_DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('title', title),
+                        Query.limit(100)
+                    ]
+                );
+                isDuplicate = titleCheck.documents.some(doc => doc.identity === itemId);
+            }
             
-            if (dbCheck.total > 0) {
-                logs.value.push(`⏭️ Skipping ${itemId} - Already in inventory (Server Check).`);
+            if (isDuplicate) {
+                logs.value.push(`⏭️ Skipping ${itemId} - Already in inventory (Duplicate Check).`);
                 continue;
             }
         } catch (e) {
