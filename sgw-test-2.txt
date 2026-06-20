@@ -1,0 +1,2 @@
+Status2: 404
+{"message":"No HTTP resource was found that matches the request URI 'https://wapp-buyermvc-prod.azurewebsites.net/api/ItemDetail/GetItemDetail'."}

@@ -33,8 +33,8 @@
                     </a>
                 </div>
 
-                <!-- IMAGE INPUTS -->
-                <div class="form-control w-full">
+                <!-- 1a. IMAGE INPUTS (Speed Scout Mode) -->
+                <div v-if="mode === 'speed'" class="form-control w-full">
                     <label class="label pt-0">
                         <span class="label-text opacity-70">Capture or Upload Item(s)</span>
                         <span v-if="dragOver" class="badge badge-primary badge-sm animate-pulse">Drop images here!</span>
@@ -74,17 +74,24 @@
                     <button @click="startCamera" class="btn btn-outline btn-primary w-full gap-2">
                         <Icon icon="solar:camera-linear" class="w-5 h-5" /> Add Photo with Camera
                     </button>
-                    
-                    <div class="divider my-2 opacity-50 text-xs uppercase">Power Features</div>
-                    
-                    <div v-if="isAuthenticated" class="form-control w-full">
-                        <label class="label py-1"><span class="label-text opacity-70 text-sm">Paste Web URL</span></label>
-                        <div class="join w-full flex">
-                            <input type="text" v-model="scoutUrl" class="input input-bordered join-item grow font-mono" placeholder="http://..." />
+                </div>
+
+                <!-- 1b. URL INPUT (Precision/Link Scout Mode) -->
+                <div v-if="mode === 'precision'" class="form-control w-full">
+                    <div v-if="isAuthenticated" class="form-control w-full space-y-3">
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <div class="grow form-control">
+                                <label class="label pt-0"><span class="label-text opacity-70 text-sm font-bold">Paste Web URL</span></label>
+                                <input type="text" v-model="scoutUrl" class="input input-bordered w-full font-mono text-sm" placeholder="Paste eBay, ShopGoodwill, FB Marketplace, Poshmark or Mercari link..." />
+                            </div>
+                            <div class="w-full sm:w-36 form-control">
+                                <label class="label pt-0"><span class="label-text opacity-70 text-sm font-bold">Scout ZIP Code</span></label>
+                                <input type="text" v-model="zipCode" @blur="saveZipCode" @change="saveZipCode" class="input input-bordered w-full font-mono text-sm text-center" placeholder="98101" maxlength="5" />
+                            </div>
                         </div>
                     </div>
                     
-                    <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-4 mt-2 text-sm">
+                    <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-4 text-sm">
                         <div class="font-bold text-primary mb-1">Web Link Import is restricted during Early Alpha.</div>
                         <span class="opacity-70">We're currently gathering feedback and accepting waitlist members for the collective. </span>
                         <a href="/login" class="link text-secondary font-bold">Log in to unlock access.</a>
@@ -109,6 +116,13 @@
                 <div class="form-control w-full">
                     <label class="label"><span class="label-text opacity-70">Cost Basis ($)</span></label>
                     <input v-model="cost" type="number" step="0.01" class="input input-bordered w-full" placeholder="0.00" />
+                </div>
+
+                <div class="form-control w-full mt-2">
+                    <label class="cursor-pointer label justify-start gap-3">
+                        <input type="checkbox" v-model="isAcquired" class="checkbox checkbox-primary checkbox-sm rounded-md" />
+                        <span class="label-text opacity-75 font-bold">Item Already Purchased / Acquired</span>
+                    </label>
                 </div>
 
                 <div class="form-control w-full">
@@ -142,23 +156,52 @@
             <div v-for="(item, index) in (result.items || [])" :key="index" class="card bg-base-100 shadow-lg border-t-4 border-t-primary">
                 <div class="card-body p-4 md:p-6">
                     
-                    <!-- Header -->
-                    <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
-                        <div class="flex items-start gap-4">
-                            <img v-if="item.fetched_image" 
-                                 :src="proxify(item.fetched_image)" 
-                                 @error="handleImageError" 
-                                 referrerpolicy="no-referrer"
-                                 class="w-24 h-24 object-cover rounded-lg shadow-sm border border-base-200" 
-                                 alt="Item Thumbnail" />
-                            <div>
-                                <h2 class="text-xl font-bold text-primary">{{ item.identity || 'Unidentified Item' }}</h2>
-                                <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-xs mt-1 btn-outline btn-secondary">
-                                    <Icon icon="solar:link-linear" /> View Source Listing
-                                </a>
+                    <!-- Header & Interactive Gallery -->
+                    <div class="flex flex-col md:flex-row gap-6 items-start w-full">
+                        <!-- Image Gallery (Left/Top) -->
+                        <div class="w-full md:w-1/2 flex flex-col gap-3">
+                            <div v-if="item.fetched_image" class="w-full h-64 sm:h-80 bg-base-200 border border-base-300 rounded-xl relative overflow-hidden flex items-center justify-center shadow-inner group">
+                                <img :src="proxify(item.fetched_image)" 
+                                     @error="handleImageError" 
+                                     referrerpolicy="no-referrer"
+                                     class="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105" 
+                                     alt="Item Main Image" />
+                                <div class="absolute top-2 left-2 badge badge-primary gap-1 shadow font-bold text-xs uppercase tracking-wide">
+                                    <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Main Photo
+                                </div>
+                            </div>
+                            
+                            <!-- Horizontal gallery of all scraped images -->
+                            <div v-if="item.fetched_images && item.fetched_images.length > 1" class="flex gap-2 overflow-x-auto py-1 scrollbar-thin max-w-full">
+                                <div v-for="(imgUrl, imgIdx) in item.fetched_images" 
+                                     :key="imgIdx" 
+                                     @click="item.fetched_image = imgUrl"
+                                     class="w-16 h-16 shrink-0 rounded-lg cursor-pointer border-2 transition-all relative overflow-hidden bg-base-100 shadow-sm"
+                                     :class="item.fetched_image === imgUrl ? 'border-primary ring-2 ring-primary/20 scale-95 shadow-md' : 'border-base-300 hover:border-primary/50'">
+                                    <img :src="proxify(imgUrl)" @error="handleImageError" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
+                                </div>
                             </div>
                         </div>
-                        <div class="badge badge-neutral hidden sm:inline-flex">#{{ Number(index) + 1 }}</div>
+
+                        <!-- Title & Source Section (Right/Bottom) -->
+                        <div class="w-full md:w-1/2 flex flex-col justify-between h-full space-y-4">
+                            <div>
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono font-bold">Scouted Listing</span>
+                                    <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
+                                </div>
+                                <h2 class="text-xl md:text-2xl font-black text-base-content tracking-tight leading-tight mb-2">{{ item.identity || 'Unidentified Item' }}</h2>
+                                
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-sm btn-outline btn-secondary gap-1.5 shadow-sm rounded-lg">
+                                        <Icon icon="solar:link-linear" class="w-4 h-4" /> View Source Listing
+                                    </a>
+                                    <a v-if="item.fetched_image && item.fetched_image.startsWith('http')" :href="'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(item.fetched_image)" target="_blank" class="btn btn-sm btn-outline btn-primary gap-1.5 shadow-sm rounded-lg">
+                                        <Icon icon="solar:camera-linear" class="w-4 h-4" /> Search Google Lens
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Pricing Grid -->
@@ -181,10 +224,59 @@
                         </div>
                     </div>
 
-                    <!-- Quick Max Buy -->
-                    <div class="bg-black text-white p-3 rounded-lg flex justify-between items-center mt-2 shadow-md">
-                        <span class="font-bold text-sm">Quick Max Buy (Est)</span>
-                        <span class="font-bold text-success text-lg">~${{ calculateMaxBuy(item.price_breakdown?.fair) }}</span>
+                    <!-- Sourcing Buy/Bid Limits -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                        <!-- Max Landed Buy -->
+                        <div class="bg-black text-white p-3 rounded-lg flex justify-between items-center shadow-md">
+                            <div class="flex flex-col text-left">
+                                <span class="text-[10px] uppercase font-bold opacity-60">Max Landed Cost (All-in)</span>
+                                <span class="text-[10px] opacity-75 font-medium">Incl. shipping/handling</span>
+                            </div>
+                            <span class="font-bold text-success text-lg">${{ calculateMaxBuy(item.price_breakdown?.fair) }}</span>
+                        </div>
+
+                        <!-- Max Bid (Auction) -->
+                        <div class="bg-neutral-800 text-white p-3 rounded-lg flex justify-between items-center shadow-md border border-neutral-700">
+                            <div class="flex flex-col text-left">
+                                <span class="text-[10px] uppercase font-bold text-primary">Suggested Max Bid</span>
+                                <span class="text-[10px] opacity-75 font-medium">Site bid limit (excl. shipping)</span>
+                            </div>
+                            <span class="font-bold text-lg" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
+                                ${{ calculateMaxBid(item) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Shipping Info Breakdown -->
+                    <div v-if="item.shipping_info" class="mt-4 bg-base-200 border border-base-300 rounded-xl p-4 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 bg-primary/10 text-primary rounded-xl">
+                                <Icon icon="solar:delivery-linear" class="text-2xl" />
+                            </div>
+                            <div>
+                                <div class="font-bold text-sm text-base-content flex items-center gap-1.5">
+                                    Estimated Shipping via {{ item.shipping_info.carrier || 'Carrier' }}
+                                </div>
+                                <div class="text-xs opacity-65 font-medium">
+                                    Calculated to ZIP {{ item.shipping_info.zipCode }} &bull; Ship: ${{ item.shipping_info.shipping?.toFixed(2) }} &bull; Handle: ${{ item.shipping_info.handling?.toFixed(2) }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-base-300 pt-3 md:pt-0 w-full md:w-auto">
+                            <div class="text-right">
+                                <span class="text-[10px] uppercase font-bold opacity-50 block leading-none">Total Shipping</span>
+                                <span class="text-xl font-black text-primary">${{ item.shipping_info.total?.toFixed(2) }}</span>
+                            </div>
+                            
+                            <!-- Include Shipping Toggle -->
+                            <div class="form-control">
+                                <label class="label cursor-pointer gap-2 p-0">
+                                    <span class="label-text text-xs font-bold opacity-75">Add to Cost</span>
+                                    <input type="checkbox" v-model="includeShippingInCost" class="toggle toggle-primary toggle-sm" />
+                                </label>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Sourcing Strategy Verdict -->
@@ -241,6 +333,52 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Bundle Lot Components -->
+                    <div v-if="item.lot_items && item.lot_items.length > 0" class="mt-4 bg-base-200 border border-base-300 rounded-xl p-4">
+                        <div class="font-bold text-sm mb-2 flex items-center gap-2 text-primary">
+                            <Icon icon="solar:box-linear" class="w-5 h-5" />
+                            <span>Bundle Components ({{ item.lot_items.length }} Items)</span>
+                        </div>
+                        <ul class="space-y-2 text-xs font-medium">
+                            <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
+                                <div class="flex justify-between items-start gap-3 w-full">
+                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name }}</span>
+                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1">{{ subItem.condition }}</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
+                                    <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Max Buy: <strong class="text-success">${{ calculateMaxBuy(subItem.estimated_value) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Max Bid: <strong class="text-secondary">${{ calculateSubItemMaxBid(subItem, item) }}</strong></span>
+                                    <span v-if="cost" class="opacity-30">|</span>
+                                    <span v-if="cost">Split Cost Basis: <strong class="text-warning">${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }}</strong></span>
+                                </div>
+                            </li>
+                        </ul>
+
+                        <!-- Save Mode Select -->
+                        <div class="form-control mt-4 border-t border-base-300 pt-3">
+                            <label class="label pb-1.5"><span class="label-text text-xs font-bold opacity-75">Inventory Import Preference</span></label>
+                            <div class="join grid grid-cols-2 w-full font-bold">
+                                <button class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !item.save_individually }" @click="item.save_individually = false">
+                                    Save as Single Bundle
+                                </button>
+                                <button class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': item.save_individually }" @click="item.save_individually = true">
+                                    Split Individually (x{{ item.lot_items.length }})
+                                </button>
+                            </div>
+                            <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
+                                <span v-if="item.save_individually">
+                                    Creates {{ item.lot_items.length }} separate inventory items. Cost basis will be split evenly (${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }} each).
+                                </span>
+                                <span v-else>
+                                    Saves the entire lot as a single combined inventory item.
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -371,7 +509,7 @@
         <!-- AI Scout Primary -->
         <button @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
                 class="flex-1 flex flex-col items-center justify-center bg-primary text-primary-content hover:bg-primary/90 transition-colors border-x border-base-300 shadow-inner pb-safe"
-                :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'link' && !scoutUrl)">
+                :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
             <span v-if="loading" class="loading loading-spinner mb-1"></span>
             <span v-else class="text-3xl leading-none mb-1"><Icon icon="solar:magic-stick-linear" /></span>
             <span class="font-black tracking-widest uppercase text-xs">AI Scout</span>
@@ -395,7 +533,7 @@
 import { ref, onMounted, watch, nextTick } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
-import { storage, databases, ID } from '../../lib/appwrite';
+import { account, storage, databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 
@@ -464,10 +602,13 @@ const scoutUrl = ref('');
 
 // Shared Inputs
 const cost = ref('');
+const isAcquired = ref(false);
 const sourcingLocation = ref('');
 const storageLocation = ref('');
 
 const result = ref<any>(null);
+const zipCode = ref('');
+const includeShippingInCost = ref(false);
 
 // Camera
 const cameraModal = ref<HTMLDialogElement | null>(null);
@@ -487,6 +628,19 @@ const initCartCheck = async () => {
 onMounted(async () => {
     console.log('[ScoutView] onMounted');
     await initCartCheck();
+    
+    // Check for ZIP code in localStorage first
+    const savedZip = localStorage.getItem('scout_zip_code');
+    if (savedZip) {
+        zipCode.value = savedZip;
+    }
+    
+    if (user.value) {
+        const userZip = (user.value.prefs as any)?.zipCode;
+        if (userZip) {
+            zipCode.value = userZip;
+        }
+    }
 });
 
 // Watch for user to load if not ready on mount
@@ -494,6 +648,52 @@ watch(user, async (newUser) => {
     if (newUser) {
         console.log('[ScoutView] User loaded via watch, checking cart...');
         await initCartCheck();
+        
+        // Load ZIP Code from user prefs
+        const userZip = (newUser.prefs as any)?.zipCode;
+        if (userZip) {
+            zipCode.value = userZip;
+        }
+    }
+}, { immediate: true });
+
+async function saveZipCode() {
+    if (!zipCode.value) return;
+    
+    // Validate ZIP code is 5 digits
+    const cleanZip = zipCode.value.trim().substring(0, 5);
+    if (!/^\d{5}$/.test(cleanZip)) {
+        return;
+    }
+    zipCode.value = cleanZip;
+
+    localStorage.setItem('scout_zip_code', cleanZip);
+    
+    if (user.value && isAuthenticated.value) {
+        try {
+            console.log('[ScoutView] Saving ZIP Code to Appwrite preferences:', cleanZip);
+            const currentPrefs = user.value.prefs || {};
+            const updatedPrefs = { ...currentPrefs, zipCode: cleanZip };
+            await account.updatePrefs(updatedPrefs);
+            user.value.prefs = updatedPrefs;
+            console.log('[ScoutView] Saved ZIP Code successfully');
+        } catch (err: any) {
+            console.error('[ScoutView] Failed to save ZIP Code in Appwrite preferences:', err);
+        }
+    }
+}
+
+watch([includeShippingInCost, result], () => {
+    if (!result.value || !result.value.items || result.value.items.length === 0) return;
+    
+    const item = result.value.items[0];
+    const askingPrice = parsePrice(item.purchase_strategy?.current_asking_price) || 0;
+    const shippingTotal = item.shipping_info?.total || 0;
+    
+    if (includeShippingInCost.value) {
+        cost.value = (askingPrice + shippingTotal).toFixed(2);
+    } else {
+        cost.value = askingPrice > 0 ? askingPrice.toFixed(2) : '';
     }
 });
 
@@ -729,7 +929,8 @@ async function analyzeListing() {
     try {
         const payload = JSON.stringify({ 
             images: [], 
-            notes: targetUrl + '\n\n' + userNotes.value 
+            notes: targetUrl + '\n\n' + userNotes.value,
+            zipCode: zipCode.value
         });
 
         const response = await fetch(`/api/identify-item`, {
@@ -755,6 +956,7 @@ async function analyzeListing() {
             });
         }
         result.value = data;
+        sourcingLocation.value = targetUrl;
         
         nextTick(() => {
             const el = document.getElementById('scout-results-section');
@@ -784,7 +986,8 @@ async function analyzeImage() {
     try {
         const payload = JSON.stringify({ 
             images: images.value,
-            notes: userNotes.value 
+            notes: userNotes.value,
+            zipCode: zipCode.value
         });
 
         const response = await fetch(`/api/identify-item`, {
@@ -834,6 +1037,8 @@ function startNewScan() {
     imageFiles.value = [];
     scoutUrl.value = '';
     userNotes.value = '';
+    cost.value = '';
+    isAcquired.value = false;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -882,6 +1087,22 @@ function parsePrice(priceStr: any) {
 function calculateMaxBuy(fairPriceStr: any) {
     const fair = parsePrice(fairPriceStr);
     return Math.floor(fair * 0.4); // 40% rule placeholder
+}
+
+function calculateMaxBid(item: any) {
+    const maxBuy = calculateMaxBuy(item.price_breakdown?.fair);
+    const shippingTotal = item.shipping_info?.total || 0;
+    const maxBid = maxBuy - shippingTotal;
+    return maxBid > 0 ? Math.floor(maxBid) : 0;
+}
+
+function calculateSubItemMaxBid(subItem: any, parentItem: any) {
+    const maxBuy = calculateMaxBuy(subItem.estimated_value);
+    const shippingTotal = parentItem.shipping_info?.total || 0;
+    const itemsCount = parentItem.lot_items?.length || 1;
+    const shippingPerItem = shippingTotal / itemsCount;
+    const maxBid = maxBuy - shippingPerItem;
+    return maxBid > 0 ? Math.floor(maxBid) : 0;
 }
 
 function formatPriceDisplay(val: any) {
@@ -972,15 +1193,65 @@ async function handleSaveItem(item: any, index: number) {
 
     item.saving = true;
     try {
-        // 1. Upload Images
+        // 1. Upload Images (local files) or Remote Images (scraped)
         let galleryIds: string[] = [];
         if (imageFiles.value.length > 0 && BUCKET_ID) {
-             console.log('[ScoutView] Uploading images...', imageFiles.value.length);
+             console.log('[ScoutView] Uploading local images...', imageFiles.value.length);
              const uploads = await Promise.all(imageFiles.value.map(file => 
                  storage.createFile(BUCKET_ID, ID.unique(), file)
              ));
              galleryIds = uploads.map(u => u.$id);
-             console.log('[ScoutView] Images uploaded:', galleryIds);
+             console.log('[ScoutView] Local images uploaded:', galleryIds);
+        } else if (item.fetched_images && item.fetched_images.length > 0) {
+             console.log('[ScoutView] Uploading remote images array...', item.fetched_images);
+             
+             // Ensure the current main image (item.fetched_image) is uploaded first
+             const mainImg = item.fetched_image || item.fetched_images[0];
+             const otherImgs = item.fetched_images.filter((img: string) => img !== mainImg);
+             const imagesToUpload = [mainImg, ...otherImgs].slice(0, 5); // Upload max 5 images
+             
+             try {
+                 const uploads = await Promise.all(imagesToUpload.map(async (imgUrl) => {
+                     try {
+                         const res = await fetch('/api/upload-remote-image', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ url: imgUrl })
+                         });
+                         if (res.ok) {
+                             const uploadRes = await res.json();
+                             return uploadRes.fileId || null;
+                         }
+                     } catch (e) {
+                         console.error('[ScoutView] Failed to upload remote image:', imgUrl, e);
+                     }
+                     return null;
+                 }));
+                 galleryIds = uploads.filter((id): id is string => id !== null);
+                 console.log('[ScoutView] Remote images uploaded:', galleryIds);
+             } catch (err) {
+                 console.error('[ScoutView] Failed to upload remote images:', err);
+             }
+        } else if (item.fetched_image) {
+             console.log('[ScoutView] Uploading remote image...', item.fetched_image);
+             try {
+                 const res = await fetch('/api/upload-remote-image', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ url: item.fetched_image })
+                 });
+                 if (res.ok) {
+                     const data = await res.json();
+                     if (data.fileId) {
+                         galleryIds.push(data.fileId);
+                         console.log('[ScoutView] Remote image uploaded, fileId:', data.fileId);
+                     }
+                 } else {
+                     console.warn('[ScoutView] Remote image upload API failed:', res.statusText);
+                 }
+             } catch (err) {
+                 console.error('[ScoutView] Failed to upload remote image:', err);
+             }
         }
         
         // 2. Upload Receipt if present
@@ -991,46 +1262,7 @@ async function handleSaveItem(item: any, index: number) {
              receiptId = up.$id;
         }
 
-        // 3. Prepare Payload
-        const itemPayload: any = {
-            identity: item.identity,
-            title: item.title || item.identity,
-            conditionNotes: (userNotes.value ? `User Note: ${userNotes.value}\n` : '') + (item.condition_notes || ''),
-            redFlags: item.red_flags || [],
-            
-            cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : 0.0,
-            resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
-            maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
-            
-            sourcingLocation: sourcingLocation.value || '',
-            storageLocation: storageLocation.value || '',
-            
-            status: cost.value ? 'acquired' : 'tracked',
-            keywords: item.keywords || [],
-            
-            // Temporary storage for images/receipts until schema is perfect
-            galleryImageIds: galleryIds,
-            // imageId removed as it causes schema error
-        };
-
-        // Note Hack for Receipt
-        if(receiptId) {
-             itemPayload.conditionNotes += `\n[RECEIPT: ${receiptId}]`;
-        }
-        
-        // Also note Location/Bin if needed as extra metadata (since cart handles location too)
-        if(storageLocation.value) {
-            itemPayload.conditionNotes = `[BIN: ${storageLocation.value}]\n` + itemPayload.conditionNotes;
-        }
-
-        // Save Full Analysis for Re-Scout
-        try {
-            itemPayload.marketDescription = JSON.stringify(item); 
-        } catch (e) {
-            console.error('[ScoutView] Failed to stringify analysis:', e);
-        }
-
-        // 4. Ensure Cart
+        // 3. Ensure Cart
         console.log('[ScoutView] Checking activeCart:', activeCart.value);
         if (!activeCart.value) {
              console.log('[ScoutView] No active cart, starting new one...');
@@ -1038,9 +1270,79 @@ async function handleSaveItem(item: any, index: number) {
              console.log('[ScoutView] New cart started:', activeCart.value);
         }
 
-        // 5. Save Item
-        console.log('[ScoutView] Adding item to cart...', itemPayload);
-        await addItemToCart(itemPayload);
+        // 4. Save Item(s)
+        if (item.save_individually && item.lot_items && item.lot_items.length > 0) {
+             console.log('[ScoutView] Saving items individually...', item.lot_items.length);
+             const individualCost = cost.value ? parseFloat((parseFloat(cost.value) / item.lot_items.length).toFixed(2)) : 0.0;
+             
+             // Loop and save each individual sub-item
+             for (let i = 0; i < item.lot_items.length; i++) {
+                 const subItem = item.lot_items[i];
+                 
+                 let noteDetails = `Lot Item: ${subItem.name}\nInferred Condition: ${subItem.condition}\n` + (item.condition_notes || '');
+                 if (item.shipping_info) {
+                      const { shipping, handling, carrier, zipCode } = item.shipping_info;
+                      noteDetails += `\n[Shipping: $${(shipping/item.lot_items.length).toFixed(2)}, Handling: $${(handling/item.lot_items.length).toFixed(2)} via ${carrier} to ${zipCode}]`;
+                 }
+                 if (receiptId) {
+                      noteDetails += `\n[RECEIPT: ${receiptId}]`;
+                 }
+                 if (storageLocation.value) {
+                      noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
+                 }
+                 
+                 const itemPayload = {
+                     identity: subItem.name,
+                     title: subItem.name,
+                     conditionNotes: noteDetails,
+                     redFlags: item.red_flags || [],
+                     cost: individualCost,
+                     resalePrice: parsePrice(subItem.estimated_value) || 0.0,
+                     maxBuyPrice: calculateMaxBuy(subItem.estimated_value) || 0.0,
+                     sourcingLocation: sourcingLocation.value || '',
+                     storageLocation: storageLocation.value || '',
+                     status: isAcquired.value ? 'acquired' : 'tracked',
+                     keywords: item.keywords || [],
+                     galleryImageIds: galleryIds, // Share the lot images
+                 };
+                 
+                 console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
+                 await addItemToCart(itemPayload);
+             }
+        } else {
+             // Save as single bundle
+             let noteDetails = (userNotes.value ? `User Note: ${userNotes.value}\n` : '') + (item.condition_notes || '');
+             if (item.shipping_info) {
+                  const { shipping, handling, carrier, zipCode } = item.shipping_info;
+                  noteDetails += `\n[Shipping: $${shipping?.toFixed(2)}, Handling: $${handling?.toFixed(2)} via ${carrier} to ${zipCode}]`;
+             }
+             if (receiptId) {
+                  noteDetails += `\n[RECEIPT: ${receiptId}]`;
+             }
+             if (storageLocation.value) {
+                  noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
+             }
+
+             const itemPayload: any = {
+                 identity: item.identity,
+                 title: item.title || item.identity,
+                 conditionNotes: noteDetails,
+                 redFlags: item.red_flags || [],
+                 cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : 0.0,
+                 resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                 maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
+                 sourcingLocation: sourcingLocation.value || '',
+                 storageLocation: storageLocation.value || '',
+                 status: isAcquired.value ? 'acquired' : 'tracked',
+                 keywords: item.keywords || [],
+                 galleryImageIds: galleryIds,
+             };
+             
+             // Removed JSON dump to marketDescription
+
+             console.log('[ScoutView] Adding bundle lot item to cart:', itemPayload);
+             await addItemToCart(itemPayload);
+        }
         console.log('[ScoutView] Item added to cart successfully');
         
         item.saved = true;

@@ -93,7 +93,14 @@
                     <div>
                         <h1 class="text-2xl md:text-3xl font-bold leading-tight mb-2">{{ title }}</h1>
                         <div class="flex items-center gap-4 text-sm opacity-60 font-mono">
-                            <span v-if="locationText" class="flex gap-1 items-center"><Icon icon="solar:map-point-linear" /> {{ locationText }}</span>
+                            <span v-if="locationText" class="flex gap-1 items-center">
+                                <Icon icon="solar:map-point-linear" /> 
+                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-[200px] md:max-w-[400px]" :title="locationText">
+                                    {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
+                                    <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
+                                </a>
+                                <span v-else>{{ locationText }}</span>
+                            </span>
                             <span v-if="item.$id">ID: {{ item.$id.slice(-6) }}</span>
                         </div>
                     </div>

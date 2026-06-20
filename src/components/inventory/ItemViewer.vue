@@ -25,8 +25,17 @@
                     </ul>
                 </div>
                 <div class="flex-none gap-2">
-                    <div class="badge badge-lg font-bold uppercase truncate" :class="statusBadgeClass">
-                        {{ statusText }}
+                    <div class="dropdown dropdown-end">
+                        <div tabindex="0" role="button" class="badge badge-lg font-bold uppercase truncate cursor-pointer hover:opacity-80 transition-opacity" :class="statusBadgeClass">
+                            {{ statusText }}
+                            <Icon icon="solar:alt-arrow-down-linear" class="ml-1 opacity-50" />
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-48 text-xs mt-2 font-bold border border-base-200">
+                            <li><a @click="updateStatus('tracked')" :class="{'active': item.status === 'tracked'}">Tracked</a></li>
+                            <li><a @click="updateStatus('acquired')" :class="{'active': item.status === 'acquired'}">Acquired</a></li>
+                            <li><a @click="updateStatus('listed')" :class="{'active': item.status === 'listed'}">Listed</a></li>
+                            <li><a @click="updateStatus('sold')" :class="{'active': item.status === 'sold'}">Sold</a></li>
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -94,7 +103,14 @@
                     <div>
                         <h1 class="text-3xl md:text-4xl font-bold leading-tight mb-2">{{ title }}</h1>
                         <div class="flex flex-wrap items-center gap-4 text-sm opacity-60 font-mono">
-                            <span v-if="locationText" class="flex gap-1 items-center badge badge-outline"><Icon icon="solar:map-point-linear" /> {{ locationText }}</span>
+                            <span v-if="locationText" class="flex gap-1 items-center badge badge-outline">
+                                <Icon icon="solar:map-point-linear" /> 
+                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-[200px] md:max-w-[400px]" :title="locationText">
+                                    {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
+                                    <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
+                                </a>
+                                <span v-else>{{ locationText }}</span>
+                            </span>
                             <span>ID: {{ item.$id }}</span>
                             <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="flex gap-1 items-center">
                                 <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm">{{ chan }}</span>
@@ -303,6 +319,26 @@ const statusBadgeClass = computed(() => {
     if (s === 'sold') return 'badge-neutral';
     return 'badge-ghost';
 });
+
+const updatingStatus = ref(false);
+const updateStatus = async (newStatus) => {
+    if (updatingStatus.value || !item.value) return;
+    updatingStatus.value = true;
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const collId = isAlphaMode.get() 
+            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
+            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+            
+        await databases.updateDocument(DB_ID, collId, item.value.$id, { status: newStatus });
+        item.value.status = newStatus;
+    } catch (err) {
+        console.error("Failed to update status:", err);
+        alert("Failed to update status: " + err.message);
+    } finally {
+        updatingStatus.value = false;
+    }
+};
 
 const renderedDescription = computed(() => {
     if (!item.value?.description) return '';

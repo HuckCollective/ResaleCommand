@@ -1122,7 +1122,11 @@ const initForm = () => {
         editForm.sourcingLocation = i.sourcingLocation || getNoteValue(i.conditionNotes, 'Location') || '';
         editForm.orderId = i.orderId || getNoteValue(i.conditionNotes, 'Order #') || getNoteValue(i.conditionNotes, 'Imported from Order #') || '';
         editForm.status = i.status || 'acquired';
-        editForm.description = i.marketDescription || i.description || ''; 
+        let desc = i.marketDescription || i.description || '';
+        if (desc && typeof desc === 'string' && desc.trim().startsWith('{') && desc.includes('"identity"')) {
+            desc = ''; // Hide raw AI JSON dump from older items
+        }
+        editForm.description = desc; 
         editForm.itemCondition = getNoteValue(i.conditionNotes, 'Condition') || '';
         editForm.existingGalleryIds = i.galleryImageIds || [];
         editForm.sellingLocations = i.sellingLocations || [];

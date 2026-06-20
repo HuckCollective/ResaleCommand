@@ -89,6 +89,7 @@
                                     <div class="join w-full">
                                         <select v-model="bulkStatusTarget" class="select select-sm select-bordered join-item bg-base-100 text-base-content flex-1">
                                             <option value="" disabled selected>Change Status...</option>
+                                            <option value="tracked">Tracked</option>
                                             <option value="acquired">Acquired</option>
                                             <option value="received">Received</option>
                                             <option value="placed">Placed</option>
@@ -245,6 +246,7 @@
                             <label class="label"><span class="label-text font-bold text-[10px] uppercase opacity-70">Status</span></label>
                             <select v-model="filterStatus" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100">
                                 <option value="all">All Items</option>
+                                <option value="tracked">Tracked</option>
                                 <option value="acquired">Acquired</option>
                                 <option value="received">Received</option>
                                 <option value="placed">Placed</option>
@@ -666,8 +668,11 @@ watch(currentTeam, (n) => { if(n) fetchLocations(); }, { immediate: true });
 const cartItems = computed(() => inventoryItems.value.filter(i => i.status === 'scouted'));
 const filteredInventory = computed(() => {
     return inventoryItems.value.filter(item => {
-        // Exclude cart items and tracked items
-        if (item.status === 'scouted' || item.status === 'tracked') return false;
+        // Exclude cart items
+        if (item.status === 'scouted') return false;
+
+        // Exclude tracked items by default (unless explicitly filtering for them)
+        if (item.status === 'tracked' && filterStatus.value !== 'tracked') return false;
 
         // --- AI Insight Filters ---
         if (insightFilter.value) {
