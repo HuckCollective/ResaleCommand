@@ -1,0 +1,6 @@
+{
+  "files.watcherExclude": {
+    "**/.vite/**": true,
+    "**/node_modules/.vite/**": true
+  }
+}

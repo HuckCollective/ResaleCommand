@@ -412,6 +412,15 @@
                         type="sellingLocations" 
                         badgeClass="badge-primary" 
                     />
+                    <div class="form-control bg-base-200/50 p-3 rounded-lg border border-base-300/50 -mt-2">
+                        <label class="label cursor-pointer justify-start gap-3 py-0">
+                            <input type="checkbox" v-model="showOnStorefront" class="checkbox checkbox-primary checkbox-sm" />
+                            <div>
+                                <span class="label-text font-bold text-xs select-none">Show on Storefront</span>
+                                <p class="text-[10px] opacity-60 leading-tight mt-0.5">Allow this item to be shown on your public storefront site (requires status 'placed' and a location).</p>
+                            </div>
+                        </label>
+                    </div>
                     <TagInput 
                         v-model="editForm.keywords" 
                         label="Keywords" 
@@ -785,6 +794,22 @@ const actualMainPhoto = computed(() => {
         if (editGalleryBuffer.value.length > 0) return { file: editGalleryBuffer.value[0], url: getObjectUrl(editGalleryBuffer.value[0]), type: 'new', idx: 0 };
         if (editForm.existingGalleryIds?.length > 0) return { file: null, url: getAssetUrl(editForm.existingGalleryIds[0]), id: editForm.existingGalleryIds[0], type: 'existing' };
         return { file: null, url: null, type: 'none' };
+    }
+});
+
+const showOnStorefront = computed({
+    get() {
+        return editForm.sellingLocations && editForm.sellingLocations.includes('storefront');
+    },
+    set(val) {
+        if (!editForm.sellingLocations) editForm.sellingLocations = [];
+        if (val) {
+            if (!editForm.sellingLocations.includes('storefront')) {
+                editForm.sellingLocations.push('storefront');
+            }
+        } else {
+            editForm.sellingLocations = editForm.sellingLocations.filter(loc => loc !== 'storefront');
+        }
     }
 });
 

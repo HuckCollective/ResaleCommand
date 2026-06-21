@@ -16,7 +16,10 @@
     <!-- Org Overview -->
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-            <h2 class="card-title text-2xl mb-4">{{ currentTeam.name }}</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="card-title text-2xl">{{ currentTeam.name }}</h2>
+                <span class="badge badge-neutral font-mono text-xs">ID: {{ currentTeam.$id }}</span>
+            </div>
             
             <div class="stats shadow w-full">
                 <div class="stat">
@@ -146,6 +149,68 @@
         </div>
     </div>
 
+    <!-- Storefront Settings (Owner Only) -->
+    <div v-if="isOwner" class="card bg-base-100 shadow-xl border border-base-200">
+        <div class="card-body">
+            <h3 class="font-bold text-xl mb-2 flex items-center gap-2">
+                <Icon icon="solar:shop-linear" class="w-6 h-6 text-primary" />
+                Storefront Custom Site Settings
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">Configure your public storefront name and custom domain/subdomain mapping.</p>
+            
+            <div v-if="fetchingDomain" class="flex justify-center py-4">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+            <div v-else class="space-y-4 max-w-md">
+                <div class="form-control w-full">
+                    <label class="label">
+                        <span class="label-text font-bold">Storefront Name</span>
+                    </label>
+                    <input type="text" v-model="tenantDomain.storeName" placeholder="e.g. Retro Tabletop Vintage" class="input input-bordered w-full" />
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label">
+                        <span class="label-text font-bold">Custom Domain or Subdomain</span>
+                    </label>
+                    <input type="text" v-model="tenantDomain.domain" placeholder="e.g. retro.resalecmd.com" class="input input-bordered w-full font-mono text-sm" />
+                    <label class="label">
+                        <span class="label-text-alt text-gray-400">Enter a subdomain like <code>vintage.resalecmd.com</code> or your own custom domain.</span>
+                    </label>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button class="btn btn-primary btn-sm gap-2" @click="saveTenantDomain" :disabled="savingDomain || !tenantDomain.storeName || !tenantDomain.domain">
+                        <span v-if="savingDomain" class="loading loading-spinner loading-xs"></span>
+                        <Icon icon="solar:disk-linear" class="w-4 h-4" />
+                        Save Storefront Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Preferences (Owner Only) -->
+    <div v-if="isOwner" class="card bg-base-100 shadow-xl border border-base-200">
+        <div class="card-body">
+            <h3 class="font-bold text-xl mb-2 flex items-center gap-2">
+                <Icon icon="solar:settings-linear" class="w-6 h-6 text-primary" />
+                Inventory Preferences
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">Set default display options for your organization's inventory.</p>
+            
+            <div class="form-control">
+                <label class="label cursor-pointer justify-start gap-4">
+                    <input type="checkbox" v-model="onlyShowFlaggedLocated" class="checkbox checkbox-primary" @change="saveInventoryPrefs" />
+                    <div>
+                        <span class="label-text font-bold text-base">Only Show Placed & Located Items by Default</span>
+                        <p class="text-xs text-gray-400 mt-0.5">Filter the inventory dashboard to show only items with status 'placed' that are categorized by storage or selling location.</p>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </div>
+
     <!-- Invite Modal -->
     <dialog class="modal" :class="{ 'modal-open': showInviteModal }">
        <div class="modal-box">
@@ -188,6 +253,87 @@ const orgSettings = ref({ $id: null, tenantId: '', placedLocations: [], allowedD
 const newLocation = ref('');
 const newDomain = ref('');
 const savingSettings = ref(false);
+
+// Storefront Custom Site Settings
+const tenantDomain = ref({ $id: null, domain: '', storeName: '', isActive: true });
+const fetchingDomain = ref(false);
+const savingDomain = ref(false);
+
+const fetchTenantDomain = async () => {
+    if (!currentTeam.value) return;
+    fetchingDomain.value = true;
+    try {
+        const response = await databases.listDocuments(DB_ID, 'tenant_domains', [
+            Query.equal('tenantId', currentTeam.value.$id),
+            Query.limit(1)
+        ]);
+        if (response.total > 0) {
+            const doc = response.documents[0];
+            tenantDomain.value = {
+                $id: doc.$id,
+                domain: doc.domain || '',
+                storeName: doc.storeName || '',
+                isActive: doc.isActive ?? true
+            };
+        } else {
+            tenantDomain.value = { $id: null, domain: '', storeName: '', isActive: true };
+        }
+    } catch (e: any) {
+        console.error("Failed to fetch tenant domain:", e);
+    } finally {
+        fetchingDomain.value = false;
+    }
+};
+
+const saveTenantDomain = async () => {
+    if (!currentTeam.value) return;
+    savingDomain.value = true;
+    try {
+        const dom = tenantDomain.value.domain.trim().toLowerCase();
+        const name = tenantDomain.value.storeName.trim();
+        
+        if (!dom || !name) {
+            addToast({ type: 'warning', message: "Storefront name and domain are required." });
+            return;
+        }
+
+        const payload = {
+            domain: dom,
+            storeName: name,
+            isActive: tenantDomain.value.isActive,
+            tenantId: currentTeam.value.$id
+        };
+
+        if (tenantDomain.value.$id) {
+            await databases.updateDocument(DB_ID, 'tenant_domains', tenantDomain.value.$id, payload);
+            addToast({ type: 'success', message: "Storefront settings updated successfully!" });
+        } else {
+            const doc = await databases.createDocument(DB_ID, 'tenant_domains', ID.unique(), payload);
+            tenantDomain.value.$id = doc.$id;
+            addToast({ type: 'success', message: "Storefront settings created successfully!" });
+        }
+    } catch (e: any) {
+        console.error("Failed to save tenant domain:", e);
+        addToast({ type: 'error', message: "Failed to save storefront settings: " + e.message });
+    } finally {
+        savingDomain.value = false;
+    }
+};
+
+// Inventory display preferences (per tenant in localStorage)
+const onlyShowFlaggedLocated = ref(false);
+
+const loadInventoryPrefs = () => {
+    if (!currentTeam.value) return;
+    const val = localStorage.getItem(`resale_command_only_flagged_located_${currentTeam.value.$id}`);
+    onlyShowFlaggedLocated.value = val === 'true';
+};
+
+const saveInventoryPrefs = () => {
+    if (!currentTeam.value) return;
+    localStorage.setItem(`resale_command_only_flagged_located_${currentTeam.value.$id}`, onlyShowFlaggedLocated.value ? 'true' : 'false');
+    addToast({ type: 'success', message: "Inventory display preference saved." });
+};
 
 const isOwner = computed(() => {
     // We need to check if the CURRENT USER is an owner of the CURRENT TEAM
@@ -387,6 +533,8 @@ watch(currentTeam, (newTeam) => {
     if (newTeam) {
         fetchMembers();
         fetchOrgSettings();
+        fetchTenantDomain();
+        loadInventoryPrefs();
     }
 }, { immediate: true });
 

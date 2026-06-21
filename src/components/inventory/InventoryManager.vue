@@ -279,6 +279,13 @@
                                 <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc">{{ loc }}</option>
                             </select>
                         </div>
+                        <div class="form-control w-full mt-4 border-t border-base-300/50 pt-3">
+                            <label class="label cursor-pointer justify-start gap-3 pt-0">
+                                <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-primary checkbox-sm" />
+                                <span class="label-text font-bold text-xs select-none">Only Placed & Located</span>
+                            </label>
+                            <p class="text-[10px] opacity-50 px-1 -mt-1 leading-tight">Filters to only show items with status 'placed' that have a storage location or at least one selling location.</p>
+                        </div>
                     </div>
                     </div>
                 </div>
@@ -647,6 +654,7 @@ const scrollToTop = () => {
 const filterKeywords = ref([]);
 const filterBinLocation = ref('');
 const filterLotType = ref('all');
+const filterFlaggedLocated = ref(false);
 const orgPlacedLocations = ref([]);
 
 const fetchLocations = async () => {
@@ -662,7 +670,14 @@ const fetchLocations = async () => {
     } catch(e) {}
 };
 
-watch(currentTeam, (n) => { if(n) fetchLocations(); }, { immediate: true });
+watch(currentTeam, (n) => { 
+    if (n) {
+        fetchLocations(); 
+        // Load default view preference for Flagged & Located
+        const val = localStorage.getItem(`resale_command_only_flagged_located_${n.$id}`);
+        filterFlaggedLocated.value = val === 'true';
+    } 
+}, { immediate: true });
 
 // Lifecycle
 const cartItems = computed(() => inventoryItems.value.filter(i => i.status === 'scouted'));
@@ -719,6 +734,13 @@ const filteredInventory = computed(() => {
         // Filter by Bin Location
         if (filterBinLocation.value && item.storageLocation !== filterBinLocation.value) {
             return false;
+        }
+
+        // Filter by Placed & Located Only
+        if (filterFlaggedLocated.value) {
+            const hasLocation = !!item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0);
+            const isPlaced = item.status === 'placed';
+            if (!hasLocation || !isPlaced) return false;
         }
 
         // Filter by specific Keywords (must have all selected keywords)

@@ -52,13 +52,19 @@ if (tenantId) {
     storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
   }
 
-  // 2. Fetch Active Items for Sale
+  // 2. Fetch Active Items for Sale (Only Placed & Located and Toggled to Show on Storefront)
   try {
     const itemsRes = await databases.listDocuments(DB_ID, ITEMS_COL, [
       Query.equal("tenantId", queryTenantId),
-      Query.limit(24)
+      Query.equal("status", "placed"),
+      Query.limit(100)
     ]);
-    items = itemsRes.documents;
+    // Filter to only show items that are located and toggled for storefront
+    items = itemsRes.documents.filter((item: any) => {
+      const hasLocation = !!item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0);
+      const isStorefront = item.sellingLocations && item.sellingLocations.includes("storefront");
+      return hasLocation && isStorefront;
+    });
   } catch (err: any) {
     console.error(`[Subsite] Failed to fetch items for tenant '${tenantId}' from collection '${ITEMS_COL}':`, err.message || err);
   }
