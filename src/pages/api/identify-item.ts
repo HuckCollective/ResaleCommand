@@ -633,11 +633,14 @@ export const ALL: APIRoute = async ({ request }) => {
                             } else {
                                 // C. Generic Full-Page Scrape (Fallback)
                                 const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+                                const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
                                 const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
-                                                  html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+                                                  html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || 
+                                                  html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i);
                                 
                                 contextText = `[Deep Parse - Generic URL]\n`;
-                                if (titleMatch) contextText += `Title: ${titleMatch[1]}\n`;
+                                if (ogTitleMatch) contextText += `Title: ${ogTitleMatch[1]}\n`;
+                                else if (titleMatch) contextText += `Title: ${titleMatch[1]}\n`;
                                 if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
                                 
                                 // Extract Structured JSON-LD Data (Critical for Pricing/Bids on obscure platforms)
@@ -653,8 +656,12 @@ export const ALL: APIRoute = async ({ request }) => {
                                 }
                                 
                                 // Extract Images (Max 5)
-                                const ogMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-                                const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
+                                const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+                                const fixUrl = (u: string) => {
+                                    if (!u) return '';
+                                    let fixed = u.replace(/&amp;/g, '&');
+                                    return fixed.startsWith('//') ? 'https:' + fixed : fixed;
+                                };
                                 
                                 if(ogMatch) imageUrls.add(fixUrl(ogMatch[1]));
                                 
