@@ -68,7 +68,8 @@
               <ul tabindex="0" class="mt-3 z-50 p-2 shadow menu menu-sm dropdown-content bg-base-100 rounded-box w-52">
                 <li v-if="isPartner"><div class="badge badge-secondary w-full">Partner</div></li>
                 
-                <div class="divider my-0"></div>
+                <div class="divider my-0" v-if="isPartner"></div>
+                <li><a href="/profile">Profile Settings</a></li>
                 <li><a @click="showCreateModal = true">+ Create Organization</a></li>
                 <div class="divider my-0"></div>
 
@@ -102,6 +103,7 @@
              <div v-else class="flex flex-col items-center gap-2">
                  <span class="text-lg font-bold text-primary-content">Hello, {{ user ? user.name : 'User' }}</span>
                  <span v-if="isPartner" class="badge badge-secondary">Partner</span>
+                 <a href="/profile" class="text-2xl text-primary-content hover:text-accent" @click="openMobile = false">Profile Settings</a>
                  <a @click="logout(); openMobile = false" class="text-2xl text-primary-content hover:text-accent cursor-pointer">Logout</a>
              </div>
           </div>

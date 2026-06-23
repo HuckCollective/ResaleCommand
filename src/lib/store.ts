@@ -129,3 +129,17 @@ export async function createTeam(name: string) {
 export async function inviteMember(teamId: string, email: string) {
       await auth.inviteMember(teamId, email);
 }
+
+export async function updateName(name: string) {
+      const updatedUser = await auth.updateName(name);
+      authStore.setKey('user', updatedUser);
+}
+
+export async function updateEmail(email: string, pass: string) {
+      const updatedUser = await auth.updateEmail(email, pass);
+      authStore.setKey('user', updatedUser);
+}
+
+export async function updatePassword(pass: string, oldPass: string) {
+      await auth.updatePassword(pass, oldPass);
+}

@@ -146,5 +146,32 @@ export const auth = {
           console.error("Error accepting invite:", error);
           throw error;
       }
+  },
+
+  async updateName(name: string) {
+      try {
+          return await account.updateName(name);
+      } catch (error) {
+          console.error("Error updating name:", error);
+          throw error;
+      }
+  },
+
+  async updateEmail(email: string, pass: string) {
+      try {
+          return await account.updateEmail(email, pass);
+      } catch (error) {
+          console.error("Error updating email:", error);
+          throw error;
+      }
+  },
+
+  async updatePassword(pass: string, oldPass: string) {
+      try {
+          return await account.updatePassword(pass, oldPass);
+      } catch (error) {
+          console.error("Error updating password:", error);
+          throw error;
+      }
   }
 };

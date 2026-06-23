@@ -18,7 +18,10 @@
         <div class="card-body">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="card-title text-2xl">{{ currentTeam.name }}</h2>
-                <span class="badge badge-neutral font-mono text-xs">ID: {{ currentTeam.$id }}</span>
+                <div class="flex flex-col items-end gap-1">
+                    <span class="badge badge-neutral font-mono text-xs">ID: {{ currentTeam.$id }}</span>
+                    <span class="text-xs opacity-75">Logged in as: <strong class="text-primary">{{ user?.email }}</strong></span>
+                </div>
             </div>
             
             <div class="stats shadow w-full">
@@ -61,9 +64,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="member in members" :key="member.$id">
-                            <td>{{ member.userName || '(Pending)' }}</td>
-                            <td>{{ member.userEmail }}</td>
+                        <tr v-for="member in resolvedMembers" :key="member.$id">
+                            <td>{{ member.userName || member.name || (member.confirm ? 'Unnamed User' : '(Pending)') }}</td>
+                            <td>{{ member.userEmail || member.email }}</td>
                             <td>
                                 <span v-if="member.roles.includes('owner')" class="badge badge-primary badge-outline">Owner</span>
                                 <span v-else class="badge badge-ghost">Member</span>
@@ -74,11 +77,19 @@
                                 <button v-if="!member.roles.includes('owner')" class="btn btn-ghost btn-xs text-error" @click="confirmRemove(member)">Remove</button>
                             </td>
                         </tr>
-                        <tr v-if="members.length === 0">
+                        <tr v-if="resolvedMembers.length === 0">
                             <td colspan="5" class="text-center opacity-50">No members found (Wait, that's impossible if you are here!)</td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Privacy notice -->
+            <div class="mt-4 p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-start gap-2 border border-base-300">
+                <Icon icon="solar:info-circle-linear" class="w-4 h-4 text-info flex-shrink-0 mt-0.5" />
+                <div>
+                    <span class="font-bold">Missing names or emails?</span> Appwrite hides member contact info by default. To make them visible to your team, open your **Appwrite Console > Auth > Security > Memberships privacy** and disable the privacy toggles.
+                </div>
             </div>
         </div>
     </div>
@@ -241,7 +252,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 
-const { user, isAuthenticated, currentTeam, loading } = useAuth();
+const { user, isAuthenticated, currentTeam, ownedTeam, loading } = useAuth();
 
 const members = ref<Models.Membership[]>([]);
 const inviteEmail = ref('');
@@ -336,13 +347,31 @@ const saveInventoryPrefs = () => {
 };
 
 const isOwner = computed(() => {
-    // We need to check if the CURRENT USER is an owner of the CURRENT TEAM
-    // Since we don't have the user's role in the `currentTeam` object directly (it's accurate in `ownedTeam` but `currentTeam` might be one we are just a member of),
-    // We should rely on the membership list we fetch, OR the derived state
-    // Ideally, we fetch members and check our own ID.
+    // Platform admins (users with 'admin' label) have full access to settings
+    if (user.value && user.value.labels?.includes('admin')) {
+        return true;
+    }
+    // Check if the current team matches the owned team from auth store
+    if (currentTeam.value && ownedTeam.value && currentTeam.value.$id === ownedTeam.value.$id) {
+        return true;
+    }
+    // Fallback: Check local memberships list
     if (!user.value || !members.value.length) return false;
     const myMembership = members.value.find(m => m.userId === user.value?.$id);
     return myMembership?.roles.includes('owner') || false;
+});
+
+const resolvedMembers = computed(() => {
+    return members.value.map(m => {
+        if (user.value && m.userId === user.value.$id) {
+            return {
+                ...m,
+                userName: m.userName || user.value.name,
+                userEmail: m.userEmail || user.value.email
+            };
+        }
+        return m;
+    });
 });
 
 const fetchMembers = async () => {
@@ -480,7 +509,8 @@ const handleInvite = async () => {
 };
 
 const confirmRemove = async (member: Models.Membership) => {
-    if (await confirmDialog(`Are you sure you want to remove ${member.userName || member.userEmail}?`, 'Remove Member', 'Remove', 'Cancel', 'btn-error')) {
+    const displayName = member.userName || member.name || member.userEmail || member.email || 'this member';
+    if (await confirmDialog(`Are you sure you want to remove ${displayName}?`, 'Remove Member', 'Remove', 'Cancel', 'btn-error')) {
         try {
             await teams.deleteMembership(currentTeam.value!.$id, member.$id);
             fetchMembers();
@@ -492,7 +522,8 @@ const confirmRemove = async (member: Models.Membership) => {
 };
 
 const handleResend = async (member: Models.Membership) => {
-    if (await confirmDialog(`Resend invitation to ${member.userEmail}? This will generate a new invite link.`, 'Resend Invite', 'Resend', 'Cancel')) {
+    const email = member.userEmail || member.email;
+    if (await confirmDialog(`Resend invitation to ${email}? This will generate a new invite link.`, 'Resend Invite', 'Resend', 'Cancel')) {
         try {
              // To resend, we delete the old membership (canceling old link) and create a new one
              try {
@@ -509,14 +540,14 @@ const handleResend = async (member: Models.Membership) => {
              await new Promise(r => setTimeout(r, 500));
 
              try {
-                console.log("Resending invite to:", member.userEmail); // DEBUG
-                if (!member.userEmail) throw new Error("Email is missing from membership object");
+                console.log("Resending invite to:", email); // DEBUG
+                if (!email) throw new Error("Email is missing from membership object");
                 
-                await teams.createMembership(currentTeam.value!.$id, ['member'], member.userEmail, ID.unique(), undefined, url);
+                await teams.createMembership(currentTeam.value!.$id, ['member'], email, ID.unique(), undefined, url);
              } catch (err: any) {
                 console.warn("First resend attempt failed, trying fallback...", err);
                 // Fallback for existing user
-                await teams.createMembership(currentTeam.value!.$id, ['member'], member.userEmail, undefined, undefined, url);
+                await teams.createMembership(currentTeam.value!.$id, ['member'], email, undefined, undefined, url);
              }
 
              addToast({ type: 'success', message: 'New invitation sent!' });

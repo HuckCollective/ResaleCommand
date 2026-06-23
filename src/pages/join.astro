@@ -62,7 +62,7 @@ import Layout from "../layouts/Layout.astro";
           // Fetch Owners
           const members = await teams.listMemberships(teamId);
           const owners = members.memberships.filter((m: any) => m.roles.includes('owner'));
-          this.owners = owners.map((o: any) => o.userName || o.userEmail).join(', ');
+          this.owners = owners.map((o: any) => o.userName || o.name || o.userEmail || o.email).join(', ');
 
           this.success = true;
           this.loading = false;

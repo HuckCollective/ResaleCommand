@@ -7,7 +7,10 @@ import {
   logout as logoutAction, 
   switchTeam as switchTeamAction, 
   createTeam as createTeamAction, 
-  inviteMember as inviteMemberAction 
+  inviteMember as inviteMemberAction,
+  updateName as updateNameAction,
+  updateEmail as updateEmailAction,
+  updatePassword as updatePasswordAction
 } from '../lib/store';
 import { computed } from 'vue';
 
@@ -40,6 +43,9 @@ export function useAuth() {
     logout: logoutAction,
     switchTeam: switchTeamAction,
     createTeam: createTeamAction,
-    inviteMember: inviteMemberAction
+    inviteMember: inviteMemberAction,
+    updateName: updateNameAction,
+    updateEmail: updateEmailAction,
+    updatePassword: updatePasswordAction
   };
 }
