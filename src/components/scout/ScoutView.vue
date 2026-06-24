@@ -617,6 +617,30 @@ let stream: MediaStream | null = null;
 let currentFacingMode = 'environment';
 
 // -- INIT --
+const ensureTrackerOpen = () => {
+    if (window.innerWidth >= 1024) {
+        const drawer = document.getElementById('app-drawer');
+        if (drawer && !drawer.classList.contains('lg:drawer-open')) {
+            drawer.classList.add('lg:drawer-open');
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+        }
+    } else {
+        const cb = document.getElementById('tracker-drawer') as HTMLInputElement;
+        if (cb && !cb.checked) {
+            cb.checked = true;
+        }
+    }
+};
+
+const hasAutoOpened = ref(false);
+
+watch(cartItems, (newItems) => {
+    if (newItems && newItems.length > 0 && !hasAutoOpened.value) {
+        hasAutoOpened.value = true;
+        ensureTrackerOpen();
+    }
+}, { immediate: true });
+
 const initCartCheck = async () => {
    if (user.value) {
         console.log('[ScoutView] User present, checking cart:', user.value.$id);
