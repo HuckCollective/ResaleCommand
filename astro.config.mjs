@@ -11,6 +11,8 @@ import alpinejs from "@astrojs/alpinejs";
 import vue from "@astrojs/vue";
 
 
+import os from "node:os";
+
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
@@ -23,7 +25,8 @@ export default defineConfig({
   },
   vite: {
     plugins: [tailwindcss()],
-    // Let Vite use its default cache directory (node_modules/.vite) which is much faster on Windows than /tmp
+    // On WSL/Linux, use a native temp directory to avoid Windows file lock (EACCES) issues on the mounted /c/ drive
+    cacheDir: os.platform() === "linux" ? "/tmp/vite_cache_resalecommand" : undefined,
     server: {
       watch: {
         usePolling: true,

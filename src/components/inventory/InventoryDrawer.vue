@@ -132,6 +132,7 @@ import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
+import { getSafeRawAnalysis } from '../../lib/inventory';
 
 const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 const DB = import.meta.env.PUBLIC_APPWRITE_DB_ID;
@@ -143,6 +144,7 @@ const isOpen = ref(false);
 const mode = ref<'manual' | 'csv'>('manual');
 const loading = ref(false);
 const analyzing = ref(false);
+const aiAnalysisResult = ref<any>(null);
 
 const images = ref<string[]>([]);
 const imageFiles = ref<File[]>([]);
@@ -186,6 +188,7 @@ function removeImage(idx: number) {
 async function analyzeImage() {
     if (images.value.length === 0) return;
     analyzing.value = true;
+    aiAnalysisResult.value = null;
     try {
         const payload = JSON.stringify({ 
             images: images.value,
@@ -206,6 +209,7 @@ async function analyzeImage() {
         // Auto-fill form
         if (data.items && data.items.length > 0) {
             const item = data.items[0];
+            aiAnalysisResult.value = item;
             form.title = item.title || item.identity;
             form.description = (item.condition_notes || '') + '\n' + (form.description || '');
             if(item.price_breakdown?.fair) {
@@ -218,6 +222,7 @@ async function analyzeImage() {
                 }
             }
         } else if (data.identity) { // Legacy single item response
+             aiAnalysisResult.value = data;
              form.title = data.title || data.identity;
              // ... map other fields if needed
         }
@@ -259,7 +264,8 @@ async function saveItem() {
             keywords: [],
             redFlags: [],
             galleryImageIds: galleryIds,
-            imageId: galleryIds[0] || null
+            imageId: galleryIds[0] || null,
+            rawAnalysis: aiAnalysisResult.value ? getSafeRawAnalysis(aiAnalysisResult.value) : undefined
         };
         
         await createItem(payload);
@@ -274,6 +280,7 @@ async function saveItem() {
         form.description = '';
         images.value = [];
         imageFiles.value = [];
+        aiAnalysisResult.value = null;
         
         window.location.reload();
 

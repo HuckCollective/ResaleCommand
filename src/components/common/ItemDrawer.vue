@@ -55,7 +55,7 @@
                 <!-- 1. Text Query (Item Description/Scout Input) -->
                 <div class="space-y-4">
                         <!-- 1. Text Query -->
-                        <div class="form-control w-full">
+                        <div class="form-control w-full" v-if="!item">
                             <label class="label pt-0 pb-1 flex justify-between w-full">
                                 <span class="label-text font-bold text-sm flex items-center gap-1">
                                     <Icon icon="solar:magic-stick-bold" class="w-4 h-4 text-primary" />
@@ -1453,8 +1453,8 @@ const urlToFile = async (url, filename) => {
              throw new Error("The image source returned an HTML page. The server might be blocking direct downloads.");
         }
         
-        const arrayBuffer = await res.arrayBuffer();
-        if (arrayBuffer.byteLength === 0) throw new Error("The image source returned 0-bytes.");
+        const blob = await res.blob();
+        if (blob.size === 0) throw new Error("The image source returned 0-bytes.");
         
         let finalName = filename;
         if (!finalName.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i)) {
@@ -1462,7 +1462,54 @@ const urlToFile = async (url, filename) => {
              finalName = `${finalName}.${ext}`;
         }
         
-        return new File([arrayBuffer], finalName, { type: contentType });
+        // Check if this is a ShopGoodwill image to crop the watermark at the bottom
+        const isSgw = url.includes('shopgoodwill');
+        if (isSgw) {
+            console.log('[ImageProcessor] ShopGoodwill image detected. Cropping watermark...', url);
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(blob);
+            
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = objectUrl;
+            });
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Crop top ~5% and bottom ~9% of the image height to remove watermarks cleanly
+            const cropTop = Math.round(img.height * 0.05);
+            const cropBottom = Math.round(img.height * 0.09);
+            const targetWidth = img.width;
+            const targetHeight = img.height - cropTop - cropBottom;
+            
+            if (targetHeight > 0) {
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                if (ctx) {
+                    ctx.drawImage(img, 0, cropTop, img.width, img.height - cropTop - cropBottom, 0, 0, targetWidth, targetHeight);
+                }
+            } else {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0);
+                }
+            }
+            
+            URL.revokeObjectURL(objectUrl);
+            
+            const croppedBlob = await new Promise((resolve) => {
+                canvas.toBlob(resolve, contentType, 0.9);
+            });
+            
+            if (croppedBlob) {
+                return new File([croppedBlob], finalName, { type: contentType });
+            }
+        }
+        
+        return new File([blob], finalName, { type: contentType });
     } catch (e) {
         console.error(e);
         return null; 

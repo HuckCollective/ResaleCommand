@@ -1,4 +1,4 @@
-import { Client, Databases } from 'node-appwrite';
+import { Client, Databases, Query } from 'node-appwrite';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,48 +16,52 @@ const client = new Client()
 const databases = new Databases(client);
 
 const DB_ID = process.env.PUBLIC_APPWRITE_DB_ID;
-const ITEMS_COL = process.env.PUBLIC_APPWRITE_COLLECTION_ID;
+
+const COLLECTIONS = ['items', 'items_dev', 'alpha_items'];
 
 async function checkAndUpdateSchema() {
-    console.log(`Checking Items Collection Schema for Collection ID: ${ITEMS_COL}`);
-    
-    try {
-        const attributes = await databases.listAttributes(DB_ID, ITEMS_COL);
-        const attributeMap = new Map(attributes.attributes.map(a => [a.key, a]));
+    for (const col of COLLECTIONS) {
+        console.log(`\n==================================================`);
+        console.log(`Checking Collection Schema for Collection ID: ${col}`);
+        console.log(`==================================================`);
+        
+        try {
+            const attributes = await databases.listAttributes(DB_ID, col, [Query.limit(100)]);
+            const attributeMap = new Map(attributes.attributes.map(a => [a.key, a]));
 
-        // Check rawAnalysis
-        if (!attributeMap.has('rawAnalysis')) {
-            console.log('🔴 rawAnalysis is MISSING. Adding it now...');
-            try {
-                await databases.createStringAttribute(DB_ID, ITEMS_COL, 'rawAnalysis', 5000, false);
-                console.log('✅ Created rawAnalysis attribute request sent.');
-            } catch (e) {
-                console.error('❌ Failed to create rawAnalysis:', e.message);
+            // Check rawAnalysis
+            if (!attributeMap.has('rawAnalysis')) {
+                console.log(`🔴 rawAnalysis is MISSING on ${col}. Adding it now...`);
+                try {
+                    await databases.createStringAttribute(DB_ID, col, 'rawAnalysis', 5000, false);
+                    console.log(`✅ Created rawAnalysis attribute request sent for ${col}.`);
+                } catch (e) {
+                    console.error(`❌ Failed to create rawAnalysis on ${col}:`, e.message);
+                }
+            } else {
+                const attr = attributeMap.get('rawAnalysis');
+                console.log(`🟢 rawAnalysis exists on ${col}. Status: ${attr.status}`);
             }
-        } else {
-            const attr = attributeMap.get('rawAnalysis');
-            console.log(`🟢 rawAnalysis exists. Status: ${attr.status}`);
-        }
 
-        // Check condition
-        if (!attributeMap.has('condition')) {
-            console.log('🔴 condition is MISSING. Adding it now...');
-            try {
-                await databases.createStringAttribute(DB_ID, ITEMS_COL, 'condition', 255, false);
-                console.log('✅ Created condition attribute request sent.');
-            } catch (e) {
-                console.error('❌ Failed to create condition:', e.message);
+            // Check condition
+            if (!attributeMap.has('condition')) {
+                console.log(`🔴 condition is MISSING on ${col}. Adding it now...`);
+                try {
+                    await databases.createStringAttribute(DB_ID, col, 'condition', 255, false);
+                    console.log(`✅ Created condition attribute request sent for ${col}.`);
+                } catch (e) {
+                    console.error(`❌ Failed to create condition on ${col}:`, e.message);
+                }
+            } else {
+                 const attr = attributeMap.get('condition');
+                 console.log(`🟢 condition exists on ${col}. Status: ${attr.status}`);
             }
-        } else {
-             const attr = attributeMap.get('condition');
-             console.log(`🟢 condition exists. Status: ${attr.status}`);
+
+        } catch (e) {
+            console.error(`Schema Check Failed for ${col}:`, e.message);
         }
-
-        console.log('\nProcessing complete. If you just added attributes, please wait a minute for them to become "available".');
-
-    } catch (e) {
-        console.error('Schema Check Failed:', e);
     }
+    console.log('\nProcessing complete. If you just added attributes, please wait a minute for them to become "available".');
 }
 
 checkAndUpdateSchema();

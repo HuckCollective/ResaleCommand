@@ -37,6 +37,43 @@ export interface ExtraItemData {
     components?: string;
     quantity?: number;
     parentLotId?: string;
+    rawAnalysis?: string;
+}
+
+export function getSafeRawAnalysis(item: any): string | null {
+    if (!item) return null;
+    try {
+        let str = JSON.stringify(item);
+        if (str.length <= 4900) return str;
+        
+        // If it's too long, copy and prune comparables
+        const pruned = { ...item };
+        if (pruned.comparables && pruned.comparables.length > 3) {
+            pruned.comparables = pruned.comparables.slice(0, 3);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Prune lot_items if still too long
+        if (pruned.lot_items && pruned.lot_items.length > 5) {
+            pruned.lot_items = pruned.lot_items.slice(0, 5);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Absolute fallback: keep only main fields
+        return JSON.stringify({
+            identity: item.identity,
+            title: item.title,
+            price_breakdown: item.price_breakdown,
+            shipping_info: item.shipping_info,
+            purchase_strategy: item.purchase_strategy,
+            condition_notes: item.condition_notes,
+            keywords: item.keywords
+        });
+    } catch (e) {
+        return null;
+    }
 }
 
 export async function saveItemToInventory(itemData: any, imageFile: File | null, extraData: ExtraItemData = {}, teamId?: string, ownerType: 'team' | 'user' = 'team') {
@@ -236,6 +273,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             safeNotes = safeNotes.substring(0, 800);
         }
 
+        const scoutObj = extraData.scoutData || (itemData && (itemData.price_breakdown || itemData.comparables) ? itemData : null);
         const doc: any = {
             title: itemData.title,
             identity: typeof itemData.identity === 'object' ? JSON.stringify(itemData.identity) : itemData.identity,
@@ -256,7 +294,10 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             keywords: Array.isArray(extraData.keywords) ? extraData.keywords : (extraData.scoutData && Array.isArray(extraData.scoutData.keywords) ? extraData.scoutData.keywords : undefined),
             components: extraData.components || undefined,
             quantity: extraData.quantity || 1,
-            parentLotId: extraData.parentLotId || undefined
+            parentLotId: extraData.parentLotId || undefined,
+            rawAnalysis: extraData.rawAnalysis !== undefined 
+                ? (extraData.rawAnalysis === '' ? null : extraData.rawAnalysis)
+                : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
         };
 
         // Remove undefined keys to satisfy Appwrite's strict document validation
@@ -684,6 +725,13 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             notes = notes.substring(0, 800);
         }
         data.conditionNotes = notes;
+
+        if (updates.rawAnalysis !== undefined) {
+            data.rawAnalysis = updates.rawAnalysis === '' ? null : updates.rawAnalysis;
+        } else if (updates.scoutData) {
+            const raw = getSafeRawAnalysis(updates.scoutData);
+            if (raw) data.rawAnalysis = raw;
+        }
 
         console.log("DEBUG: Safe Mode Update keys:", Object.keys(data));
         

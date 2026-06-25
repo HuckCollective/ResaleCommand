@@ -58,7 +58,7 @@
                         <!-- Gallery Mode -->
                         <div v-else class="flex gap-3 overflow-x-auto pb-2 w-full items-center pointer-events-auto">
                             <div v-for="(img, index) in images" :key="index" class="relative w-20 h-20 shrink-0 group cursor-pointer" @click="fileInput?.click()">
-                                <img :src="img" class="w-full h-full object-cover rounded shadow-sm border border-base-300" />
+                                <img :src="img.url" class="w-full h-full object-cover rounded shadow-sm border border-base-300" />
                                 <button @click.stop="removeImage(index)" class="btn btn-xs btn-circle btn-error absolute -top-2 -right-2 w-5 h-5 min-h-0 text-[10px] flex items-center justify-center z-30 shadow hover:scale-110">✕</button>
                             </div>
                             <!-- Add More Button -->
@@ -552,13 +552,32 @@ const {
 onMounted(async () => {
     // Check for Re-Scout
     const urlParams = new URLSearchParams(window.location.search);
-    const rescoutId = urlParams.get('rescout');
+    rescoutId.value = urlParams.get('rescout');
     
-    if (rescoutId && databases) {
-        console.log('[ScoutView] Re-scouting item:', rescoutId);
+    if (rescoutId.value && databases) {
+        console.log('[ScoutView] Re-scouting item:', rescoutId.value);
         analyzing.value = true;
         try {
-            const itemDoc = await databases.getDocument(DB_ID, ITEMS_COL, rescoutId);
+            const itemDoc = await databases.getDocument(DB_ID, ITEMS_COL, rescoutId.value);
+            
+            // Pre-fill inputs from existing document
+            if (itemDoc.cost !== undefined && itemDoc.cost !== null) cost.value = String(itemDoc.cost);
+            if (itemDoc.sourcingLocation) sourcingLocation.value = itemDoc.sourcingLocation;
+            if (itemDoc.storageLocation) storageLocation.value = itemDoc.storageLocation;
+            if (itemDoc.status === 'acquired') isAcquired.value = true;
+
+            // Pre-fill existing images in the preview if present
+            if (itemDoc.galleryImageIds && itemDoc.galleryImageIds.length > 0) {
+                images.value = itemDoc.galleryImageIds.map(id => {
+                    const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${import.meta.env.PUBLIC_APPWRITE_BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
+                    return { url };
+                });
+            } else if (itemDoc.imageId) {
+                const id = itemDoc.imageId;
+                const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${import.meta.env.PUBLIC_APPWRITE_BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
+                images.value = [{ url }];
+            }
+
             if (itemDoc.rawAnalysis) {
                 const analysis = JSON.parse(itemDoc.rawAnalysis);
                 // Hydrate the view
@@ -584,13 +603,13 @@ onMounted(async () => {
 });
 
 // -- STATE --
+const rescoutId = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 const error = ref<string | null>(null);
 const mode = ref<'speed' | 'precision'>('speed');
 const loading = ref(false);
 const analyzing = ref(false); // Added for re-scout feature
-const images = ref<string[]>([]);
-const imageFiles = ref<File[]>([]); 
+const images = ref<{ url: string; file?: File }[]>([]);
 const receiptFile = ref<File | null>(null);
 const userNotes = ref('');
 const dragOver = ref(false);
@@ -781,12 +800,13 @@ function capturePhoto() {
         
         ctx.drawImage(video as unknown as CanvasImageSource, 0, 0, width, height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        images.value.push(dataUrl);
+        const imgObj = { url: dataUrl, file: undefined as File | undefined };
+        images.value.push(imgObj);
         
         canvas.toBlob(blob => {
             if (blob) {
                 const file = new File([blob], `capture_${Date.now()}.jpg`, { type: "image/jpeg" });
-                imageFiles.value.push(file);
+                imgObj.file = file;
             }
         }, 'image/jpeg', 0.8);
     }
@@ -795,7 +815,6 @@ function capturePhoto() {
 
 function removeImage(index: number) {
     images.value.splice(index, 1);
-    imageFiles.value.splice(index, 1);
     if (images.value.length === 0) result.value = null;
 }
 
@@ -896,11 +915,10 @@ async function processFile(file: File) {
                     canvas.width = width;
                     canvas.height = height;
                      const ctx = canvas.getContext('2d');
-                    ctx?.drawImage(img, 0, 0, width, height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    images.value.push(dataUrl);
-                    imageFiles.value.push(file);
-                    resolve();
+                     ctx?.drawImage(img, 0, 0, width, height);
+                     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                     images.value.push({ url: dataUrl, file: file });
+                     resolve();
                 };
                 img.src = e.target.result as string;
             }
@@ -1009,7 +1027,7 @@ async function analyzeImage() {
     
     try {
         const payload = JSON.stringify({ 
-            images: images.value,
+            images: images.value.map(i => i.url),
             notes: userNotes.value,
             zipCode: zipCode.value
         });
@@ -1058,7 +1076,6 @@ async function analyzeImage() {
 function startNewScan() {
     result.value = null;
     images.value = [];
-    imageFiles.value = [];
     scoutUrl.value = '';
     userNotes.value = '';
     cost.value = '';
@@ -1182,6 +1199,114 @@ function getSliderColor(item: any) {
     return 'range-secondary';
 }
 
+const getSafeRawAnalysis = (item: any) => {
+    try {
+        let str = JSON.stringify(item);
+        if (str.length <= 4900) return str;
+        
+        // If it's too long, copy and prune comparables
+        const pruned = { ...item };
+        if (pruned.comparables && pruned.comparables.length > 3) {
+            pruned.comparables = pruned.comparables.slice(0, 3);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Prune lot_items if still too long
+        if (pruned.lot_items && pruned.lot_items.length > 5) {
+            pruned.lot_items = pruned.lot_items.slice(0, 5);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Absolute fallback: keep only main fields
+        return JSON.stringify({
+            identity: item.identity,
+            title: item.title,
+            price_breakdown: item.price_breakdown,
+            shipping_info: item.shipping_info,
+            purchase_strategy: item.purchase_strategy,
+            condition_notes: item.condition_notes,
+            keywords: item.keywords
+        });
+    } catch (e) {
+        return null;
+    }
+};
+
+const urlToFile = async (url: string, filename: string): Promise<File | null> => {
+    try {
+        const res = await fetch('/api/proxy-image?url=' + encodeURIComponent(url));
+        if (!res.ok) throw new Error("Image download failed");
+        
+        const contentType = res.headers.get('content-type') || 'image/jpeg';
+        if (contentType.includes('text/html')) {
+             throw new Error("The image source returned an HTML page. The server might be blocking direct downloads.");
+        }
+        
+        const blob = await res.blob();
+        if (blob.size === 0) throw new Error("The image source returned 0-bytes.");
+        
+        let finalName = filename;
+        if (!finalName.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i)) {
+             const ext = contentType.split('/')[1] || 'jpg';
+             finalName = `${finalName}.${ext}`;
+        }
+        
+        // Check if this is a ShopGoodwill image to crop the watermark at the bottom
+        const isSgw = url.includes('shopgoodwill');
+        if (isSgw) {
+            console.log('[ImageProcessor] ShopGoodwill image detected. Cropping watermark...', url);
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(blob);
+            
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = reject;
+                img.src = objectUrl;
+            });
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Crop top ~5% and bottom ~9% of the image height to remove watermarks cleanly
+            const cropTop = Math.round(img.height * 0.05);
+            const cropBottom = Math.round(img.height * 0.09);
+            const targetWidth = img.width;
+            const targetHeight = img.height - cropTop - cropBottom;
+            
+            if (targetHeight > 0) {
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                if (ctx) {
+                    ctx.drawImage(img, 0, cropTop, img.width, img.height - cropTop - cropBottom, 0, 0, targetWidth, targetHeight);
+                }
+            } else {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0);
+                }
+            }
+            
+            URL.revokeObjectURL(objectUrl);
+            
+            const croppedBlob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob((b) => resolve(b), contentType, 0.9);
+            });
+            
+            if (croppedBlob) {
+                return new File([croppedBlob], finalName, { type: contentType });
+            }
+        }
+        
+        return new File([blob], finalName, { type: contentType });
+    } catch (e) {
+        console.error('[ScoutView] urlToFile error:', e);
+        return null; 
+    }
+};
+
 // -- SAVE ACTION --
 async function handleSaveItem(item: any, index: number) {
     console.log('[ScoutView] handleSaveItem callled for item:', item.identity);
@@ -1217,17 +1342,40 @@ async function handleSaveItem(item: any, index: number) {
 
     item.saving = true;
     try {
-        // 1. Upload Images (local files) or Remote Images (scraped)
+        // Helper to extract file ID from Appwrite view/download URLs
+        const getFileIdFromUrl = (url: string): string | null => {
+            if (!url) return null;
+            const match = url.match(/\/files\/([^\/]+)\/(?:view|download)/);
+            if (match) return match[1];
+            if (!url.startsWith('http') && !url.startsWith('data:') && !url.startsWith('blob:')) {
+                return url;
+            }
+            return null;
+        };
+
+        // 1. Process and upload images (mixed local and existing)
         let galleryIds: string[] = [];
-        if (imageFiles.value.length > 0 && BUCKET_ID) {
-             console.log('[ScoutView] Uploading local images...', imageFiles.value.length);
-             const uploads = await Promise.all(imageFiles.value.map(file => 
-                 storage.createFile(BUCKET_ID, ID.unique(), file)
-             ));
-             galleryIds = uploads.map(u => u.$id);
-             console.log('[ScoutView] Local images uploaded:', galleryIds);
+        if (images.value.length > 0) {
+             console.log('[ScoutView] Processing gallery images...', images.value.length);
+             const uploads = await Promise.all(images.value.map(async (img: any) => {
+                 if (img.file) {
+                     // This is a new local image that needs to be uploaded to Appwrite storage
+                     try {
+                         const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), img.file);
+                         return up.$id;
+                     } catch (e: any) {
+                         console.error('[ScoutView] Failed to upload local image:', e);
+                         return null;
+                     }
+                 } else {
+                     // This is an existing image URL, extract its file ID
+                     return getFileIdFromUrl(img.url);
+                 }
+             }));
+             galleryIds = uploads.filter((id): id is string => id !== null);
+             console.log('[ScoutView] Final gallery IDs:', galleryIds);
         } else if (item.fetched_images && item.fetched_images.length > 0) {
-             console.log('[ScoutView] Uploading remote images array...', item.fetched_images);
+             console.log('[ScoutView] Uploading remote images array with client-side crop...', item.fetched_images);
              
              // Ensure the current main image (item.fetched_image) is uploaded first
              const mainImg = item.fetched_image || item.fetched_images[0];
@@ -1236,6 +1384,18 @@ async function handleSaveItem(item: any, index: number) {
              
              try {
                  const uploads = await Promise.all(imagesToUpload.map(async (imgUrl) => {
+                     try {
+                         const filename = imgUrl.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+                         const file = await urlToFile(imgUrl, filename);
+                         if (file) {
+                             const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
+                             return up.$id;
+                         }
+                     } catch (e) {
+                         console.error('[ScoutView] Client-side image crop/upload failed, trying fallback:', imgUrl, e);
+                     }
+                     
+                     // Fallback
                      try {
                          const res = await fetch('/api/upload-remote-image', {
                              method: 'POST',
@@ -1247,7 +1407,7 @@ async function handleSaveItem(item: any, index: number) {
                              return uploadRes.fileId || null;
                          }
                      } catch (e) {
-                         console.error('[ScoutView] Failed to upload remote image:', imgUrl, e);
+                         console.error('[ScoutView] Failed to upload remote image via fallback:', imgUrl, e);
                      }
                      return null;
                  }));
@@ -1257,21 +1417,37 @@ async function handleSaveItem(item: any, index: number) {
                  console.error('[ScoutView] Failed to upload remote images:', err);
              }
         } else if (item.fetched_image) {
-             console.log('[ScoutView] Uploading remote image...', item.fetched_image);
+             console.log('[ScoutView] Uploading remote image with client-side crop...', item.fetched_image);
              try {
-                 const res = await fetch('/api/upload-remote-image', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ url: item.fetched_image })
-                 });
-                 if (res.ok) {
-                     const data = await res.json();
-                     if (data.fileId) {
-                         galleryIds.push(data.fileId);
-                         console.log('[ScoutView] Remote image uploaded, fileId:', data.fileId);
+                 const imgUrl = item.fetched_image;
+                 const filename = imgUrl.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+                 let uploadedId: string | null = null;
+                 
+                 try {
+                     const file = await urlToFile(imgUrl, filename);
+                     if (file) {
+                         const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
+                         uploadedId = up.$id;
                      }
-                 } else {
-                     console.warn('[ScoutView] Remote image upload API failed:', res.statusText);
+                 } catch (e) {
+                     console.error('[ScoutView] Client-side image crop/upload failed, trying fallback:', e);
+                 }
+                 
+                 if (!uploadedId) {
+                     const res = await fetch('/api/upload-remote-image', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ url: imgUrl })
+                     });
+                     if (res.ok) {
+                         const data = await res.json();
+                         uploadedId = data.fileId || null;
+                     }
+                 }
+                 
+                 if (uploadedId) {
+                     galleryIds.push(uploadedId);
+                     console.log('[ScoutView] Remote image uploaded, fileId:', uploadedId);
                  }
              } catch (err) {
                  console.error('[ScoutView] Failed to upload remote image:', err);
@@ -1284,6 +1460,67 @@ async function handleSaveItem(item: any, index: number) {
              console.log('[ScoutView] Uploading receipt...');
              const up = await storage.createFile(BUCKET_ID, ID.unique(), receiptFile.value);
              receiptId = up.$id;
+        }
+
+        // 2b. If we are re-scouting/updating an existing document
+        if (rescoutId.value) {
+            console.log('[ScoutView] Updating existing document:', rescoutId.value);
+            let noteDetails = (userNotes.value ? `User Note: ${userNotes.value}\n` : '') + (item.condition_notes || '');
+            if (item.shipping_info) {
+                 const { shipping, handling, carrier, zipCode } = item.shipping_info;
+                 noteDetails += `\n[Shipping: $${shipping?.toFixed(2)}, Handling: $${handling?.toFixed(2)} via ${carrier} to ${zipCode}]`;
+            }
+            if (receiptId) {
+                 noteDetails += `\n[RECEIPT: ${receiptId}]`;
+            }
+            if (storageLocation.value) {
+                 noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
+            }
+
+            const updatePayload: any = {
+                identity: item.identity,
+                title: item.title || item.identity,
+                conditionNotes: noteDetails,
+                redFlags: item.red_flags || [],
+                cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : 0.0,
+                resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
+                sourcingLocation: sourcingLocation.value || '',
+                storageLocation: storageLocation.value || '',
+                status: isAcquired.value ? 'acquired' : 'tracked',
+                keywords: item.keywords || [],
+                rawAnalysis: getSafeRawAnalysis(item) || undefined
+            };
+            if (galleryIds.length > 0) {
+                updatePayload.galleryImageIds = galleryIds;
+                updatePayload.imageId = galleryIds[0];
+            }
+            if (receiptId) {
+                updatePayload.receiptImageId = receiptId;
+            }
+
+            Object.keys(updatePayload).forEach(key => updatePayload[key] === undefined && delete updatePayload[key]);
+
+            await databases.updateDocument(DB_ID, ITEMS_COL, rescoutId.value, updatePayload);
+            console.log('[ScoutView] Document updated successfully:', rescoutId.value);
+
+            // Update local state in useCart
+            const localIndex = cartItems.value.findIndex(ci => ci.$id === rescoutId.value);
+            if (localIndex !== -1) {
+                cartItems.value[localIndex] = {
+                    ...cartItems.value[localIndex],
+                    ...updatePayload
+                };
+            }
+
+            item.saved = true;
+            successMessage.value = `Updated ${item.identity}!`;
+            
+            setTimeout(() => {
+                successMessage.value = null;
+            }, 2000);
+
+            return;
         }
 
         // 3. Ensure Cart
@@ -1328,6 +1565,7 @@ async function handleSaveItem(item: any, index: number) {
                      status: isAcquired.value ? 'acquired' : 'tracked',
                      keywords: item.keywords || [],
                      galleryImageIds: galleryIds, // Share the lot images
+                     rawAnalysis: getSafeRawAnalysis(item) || undefined
                  };
                  
                  console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
@@ -1360,6 +1598,7 @@ async function handleSaveItem(item: any, index: number) {
                  status: isAcquired.value ? 'acquired' : 'tracked',
                  keywords: item.keywords || [],
                  galleryImageIds: galleryIds,
+                 rawAnalysis: getSafeRawAnalysis(item) || undefined
              };
              
              // Removed JSON dump to marketDescription

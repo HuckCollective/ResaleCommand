@@ -22,22 +22,39 @@ export const POST: APIRoute = async ({ request }) => {
 
         if (sgwId) {
             console.log(`Detected ShopGoodwill ID: ${sgwId}`);
-            const apiRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailByItemId/${sgwId}`);
-            if (apiRes.ok) {
-                const data = await apiRes.json();
-                const images = (data.additionalImages || []).map((img: any) => img.imageURL);
-                if (data.imageURL) images.unshift(data.imageURL); // Main image
-                
-                // Return immediately if we got API data
-                // We'll return title and price too!
-                if (images.length > 0 || data.title) {
-                     return new Response(JSON.stringify({ 
-                        success: true, 
-                        images: [...new Set(images)], // Dedup
-                        title: data.title,
-                        price: data.currentPrice
-                    }), { status: 200 });
+            try {
+                const apiRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/${sgwId}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Origin': 'https://shopgoodwill.com',
+                        'Referer': 'https://shopgoodwill.com/'
+                    }
+                });
+                if (apiRes.ok) {
+                    const data = await apiRes.json();
+                    if (data && (data.title || data.itemName)) {
+                        const imgServer = data.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
+                        const images: string[] = [];
+                        if (data.imageUrlString) {
+                            data.imageUrlString.split(';').forEach((p: string) => {
+                                const clean = p.trim().replace(/\\/g, '/');
+                                if (clean) images.push(imgServer + clean);
+                            });
+                        } else if (data.imageURL) {
+                            const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
+                            images.push(fixUrl(data.imageURL));
+                        }
+                        
+                        return new Response(JSON.stringify({ 
+                            success: true, 
+                            images: [...new Set(images)], // Dedup
+                            title: data.title || data.itemName,
+                            price: data.currentPrice || data.minimumBid || 0
+                        }), { status: 200 });
+                    }
                 }
+            } catch (err: any) {
+                console.error("Failed SGW API Parse in extract-images", err);
             }
         }
 

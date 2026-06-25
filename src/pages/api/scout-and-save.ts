@@ -5,6 +5,42 @@ import { model, generateContentWithBackoff } from '../../lib/gemini';
 
 export const prerender = false;
 
+function getSafeRawAnalysis(item: any): string | null {
+    if (!item) return null;
+    try {
+        let str = JSON.stringify(item);
+        if (str.length <= 4900) return str;
+        
+        // If it's too long, copy and prune comparables
+        const pruned = { ...item };
+        if (pruned.comparables && pruned.comparables.length > 3) {
+            pruned.comparables = pruned.comparables.slice(0, 3);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Prune lot_items if still too long
+        if (pruned.lot_items && pruned.lot_items.length > 5) {
+            pruned.lot_items = pruned.lot_items.slice(0, 5);
+        }
+        str = JSON.stringify(pruned);
+        if (str.length <= 4900) return str;
+
+        // Absolute fallback: keep only main fields
+        return JSON.stringify({
+            identity: item.identity,
+            title: item.title,
+            price_breakdown: item.price_breakdown,
+            shipping_info: item.shipping_info,
+            purchase_strategy: item.purchase_strategy,
+            condition_notes: item.condition_notes,
+            keywords: item.keywords
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
 // Initialize Server-Side Appwrite Client
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
@@ -172,6 +208,7 @@ export const ALL: APIRoute = async ({ request }) => {
             status: "scouted", // The new initial status
             tenantId: tenantId, 
             imageId: imageId || "",
+            rawAnalysis: getSafeRawAnalysis(aiData) || undefined,
         };
 
         const permissions = [

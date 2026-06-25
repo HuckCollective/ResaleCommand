@@ -102,6 +102,8 @@ async function run() {
 
     // 7. AI Description
     await createAttribute('marketDescription', 'string', 5000, false);
+    await createAttribute('rawAnalysis', 'string', 5000, false);
+    await createAttribute('condition', 'string', 255, false);
 
     // 8. INDEXES
     console.log("Creating Indexes...");
