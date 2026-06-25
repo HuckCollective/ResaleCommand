@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { Client, Databases, Query, ID, Storage } from "node-appwrite";
+import { Client, Databases, Query, ID, Storage, Permission, Role } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
 import { model, generateContentWithBackoff } from '../../lib/gemini';
 
@@ -174,13 +174,21 @@ export const ALL: APIRoute = async ({ request }) => {
             imageId: imageId || "",
         };
 
+        const permissions = [
+            Permission.read(Role.team(tenantId)),
+            Permission.update(Role.team(tenantId)),
+            Permission.delete(Role.team(tenantId)),
+            Permission.read(Role.user(tenantId)),
+            Permission.update(Role.user(tenantId)),
+            Permission.delete(Role.user(tenantId))
+        ];
+
         const createdItem = await db.createDocument(
              DB_ID,
              ITEMS_COL,
              ID.unique(),
-             itemDocument
-             // Permissions are handled automatically if tenantId is set and RLS is active,
-             // or you can explicitly define team permissions here if needed.
+             itemDocument,
+             permissions
         );
 
         console.log(`[Headless] Success! Item ${createdItem.$id} created.`);

@@ -128,6 +128,7 @@ import { ref, reactive } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import CsvImporter from './CsvImporter.vue';
 import { storage, databases, ID } from '../../lib/appwrite';
+import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
@@ -286,6 +287,23 @@ async function saveItem() {
 async function createItem(data: any) {
     if(!user.value) return; 
     
+    let permissions: string[] = [];
+    if (currentTeam.value) {
+        const teamRole = Role.team(currentTeam.value.$id);
+        permissions = [
+            Permission.read(teamRole),
+            Permission.update(teamRole),
+            Permission.delete(teamRole),
+        ];
+    } else {
+        const userRole = Role.user(user.value.$id);
+        permissions = [
+            Permission.read(userRole),
+            Permission.update(userRole),
+            Permission.delete(userRole),
+        ];
+    }
+    
     await databases.createDocument(
         DB,
         'items', 
@@ -295,7 +313,8 @@ async function createItem(data: any) {
             userId: user.value.$id,
             teamId: currentTeam.value?.$id || 'default',
             tenantId: currentTeam.value?.$id || 'default'
-        }
+        },
+        permissions
     );
 }
 </script>

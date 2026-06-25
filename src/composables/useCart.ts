@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { client, databases, storage, ID, Query } from '../lib/appwrite';
 import { Permission, Role, type Models } from 'appwrite';
+import { useAuth } from './useAuth';
 
 export interface CartExpense extends Models.Document {
     amount: number;
@@ -57,6 +58,7 @@ const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID; // 'item_images' (o
 let unsubscribe: (() => void) | null = null;
 
 export function useCart() {
+    const { user } = useAuth();
 
     const cartTotalItems = computed(() => cartItems.value.length);
     
@@ -198,6 +200,13 @@ export function useCart() {
             let permissions: string[] = [];
             if (activeCart.value.tenantId) {
                 const role = Role.team(activeCart.value.tenantId);
+                permissions = [
+                    Permission.read(role),
+                    Permission.update(role),
+                    Permission.delete(role),
+                ];
+            } else if (user.value) {
+                const role = Role.user(user.value.$id);
                 permissions = [
                     Permission.read(role),
                     Permission.update(role),
