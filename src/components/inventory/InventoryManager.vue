@@ -170,8 +170,14 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div class="flex justify-end w-full">
-                                    <button class="btn btn-sm btn-ghost text-error" @click="selectedItems = []" v-if="selectedItems.length > 0">Clear Selection</button>
+                                <div class="flex justify-between items-center w-full gap-2 mt-2 pt-2 border-t border-base-300/50">
+                                    <div>
+                                        <button v-if="selectedItems.length >= 2" type="button" class="btn btn-sm btn-accent gap-2 shadow-sm font-bold" @click="openBundleModal">
+                                            <Icon icon="solar:box-minimalistic-bold-duotone" class="w-4 h-4" />
+                                            Create Bundle from Selection ({{ selectedItems.length }})
+                                        </button>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-ghost text-error" @click="selectedItems = []" v-if="selectedItems.length > 0">Clear Selection</button>
                                 </div>
                             </div>
                         </div>
@@ -365,6 +371,71 @@
 
         <!-- Booth Reconciliation Modal -->
         <BoothReconciliation :isOpen="showReconciliation" @close="showReconciliation = false" />
+
+        <!-- Create Bundle Modal -->
+        <dialog ref="bundleModal" class="modal">
+            <div class="modal-box max-w-lg">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                    <Icon icon="solar:box-minimalistic-bold-duotone" class="w-6 h-6 text-accent" /> 
+                    Create Bundle from Selection
+                </h3>
+                
+                <div class="space-y-4">
+                    <!-- Suggested Title -->
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold opacity-70">Bundle Title</span></label>
+                        <input type="text" v-model="bundleTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Bundle Name" />
+                    </div>
+
+                    <!-- Cost & Resale row -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-control w-full">
+                            <label class="label"><span class="label-text font-bold opacity-70">Total Cost ($)</span></label>
+                            <input type="number" step="0.01" v-model="bundleCost" class="input input-bordered w-full font-mono text-sm" />
+                        </div>
+                        <div class="form-control w-full">
+                            <label class="label"><span class="label-text font-bold opacity-70">Suggested Resale ($)</span></label>
+                            <input type="number" step="0.01" v-model="bundleResalePrice" class="input input-bordered w-full font-mono text-sm" />
+                        </div>
+                    </div>
+
+                    <!-- Status Selection -->
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold opacity-70">Status</span></label>
+                        <select v-model="bundleStatus" class="select select-bordered w-full text-xs">
+                            <option value="tracked">Tracked</option>
+                            <option value="acquired">Acquired</option>
+                            <option value="received">Received</option>
+                            <option value="placed">Placed</option>
+                        </select>
+                    </div>
+
+                    <!-- List of Items included -->
+                    <div class="border border-base-300 rounded-xl p-3 bg-base-200/50">
+                        <label class="label pt-0 pb-1.5"><span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span></label>
+                        <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                            <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200">
+                                <span class="font-medium truncate max-w-[280px]">{{ item.title }}</span>
+                                <span class="font-mono text-base-content/60">${{ Number(item.cost || 0).toFixed(2) }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="alert alert-info py-2 shadow-sm text-xs leading-normal">
+                        <Icon icon="solar:info-circle-linear" class="w-5 h-5 shrink-0" />
+                        <span>This will create a new parent bundle item. The selected items will remain in the database but will be linked as children to this bundle.</span>
+                    </div>
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="closeBundleModal" :disabled="savingBundle">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm px-6" @click="submitBundle" :disabled="savingBundle || !bundleTitle">
+                        <span v-if="savingBundle" class="loading loading-spinner loading-xs"></span>
+                        Create Bundle
+                    </button>
+                </div>
+            </div>
+        </dialog>
 
         <!-- Floating Total Count / Scroll to Top -->
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-transform hover:-translate-y-1 cursor-pointer shadow-xl rounded-full" @click="scrollToTop">
@@ -1247,7 +1318,138 @@ const copyShareLink = async (id) => {
     }
 };
 
+//---------------------------------------------------------
+// BUNDLE LOGIC
+//---------------------------------------------------------
+const bundleModal = ref(null);
+const bundleTitle = ref('');
+const bundleCost = ref(0);
+const bundleResalePrice = ref(0);
+const bundleStatus = ref('acquired');
+const savingBundle = ref(false);
 
+const selectedItemsObjects = computed(() => {
+    return inventoryItems.value.filter(item => selectedItems.value.includes(item.$id));
+});
+
+const openBundleModal = () => {
+    const items = selectedItemsObjects.value;
+    if (items.length < 2) return;
+    
+    // Suggest title combining the first two items
+    const partTitles = items.slice(0, 2).map(i => i.title || i.itemName);
+    let suggestedTitle = `Bundle: ${partTitles.join(' + ')}`;
+    if (items.length > 2) {
+        suggestedTitle += ` & ${items.length - 2} more`;
+    }
+    bundleTitle.value = suggestedTitle;
+    
+    // Sum costs and resale prices
+    const totalCost = items.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
+    const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.estValue || i.listPrice || 0) || 0), 0);
+    
+    bundleCost.value = parseFloat(totalCost.toFixed(2));
+    bundleResalePrice.value = parseFloat(totalResale.toFixed(2));
+    bundleStatus.value = items[0]?.status || 'acquired';
+    
+    if (bundleModal.value) {
+        bundleModal.value.showModal();
+    }
+};
+
+const closeBundleModal = () => {
+    if (bundleModal.value) {
+        bundleModal.value.close();
+    }
+};
+
+const submitBundle = async () => {
+    const items = selectedItemsObjects.value;
+    if (items.length < 2) return;
+    
+    savingBundle.value = true;
+    try {
+        const user = await account.get();
+        const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
+        
+        // 1. Combine images from all selected items
+        const galleryIdsSet = new Set();
+        items.forEach(item => {
+            if (item.imageId) galleryIdsSet.add(item.imageId);
+            if (item.galleryImageIds) {
+                item.galleryImageIds.forEach(id => galleryIdsSet.add(id));
+            }
+        });
+        const combinedGallery = Array.from(galleryIdsSet);
+        const mainImageId = combinedGallery[0] || null;
+        
+        // 2. Combine keywords
+        const keywordsSet = new Set();
+        items.forEach(item => {
+            if (item.keywords) {
+                item.keywords.forEach(kw => keywordsSet.add(kw));
+            }
+        });
+        const combinedKeywords = Array.from(keywordsSet);
+        
+        // 3. Create the parent bundle document
+        const extraData = {
+            cost: bundleCost.value,
+            resalePrice: bundleResalePrice.value ? bundleResalePrice.value.toFixed(2) : undefined,
+            status: bundleStatus.value,
+            sourcingLocation: items[0]?.sourcingLocation || 'Combined Bundle',
+            storageLocation: items[0]?.storageLocation,
+            imageId: mainImageId,
+            galleryImageIds: combinedGallery,
+            keywords: combinedKeywords,
+            quantity: items.length,
+            rawAnalysis: JSON.stringify({
+                lot_items: items.map(i => ({
+                    name: i.title || i.itemName,
+                    condition: i.conditionNotes ? i.conditionNotes.split('\n')[0].substring(0, 100) : 'Gently Used',
+                    estimated_value: i.resalePrice ? `$${i.resalePrice}` : (i.estValue ? `$${i.estValue}` : undefined)
+                }))
+            })
+        };
+        
+        const parentDoc = await saveItemToInventory(
+            { title: bundleTitle.value, identity: bundleTitle.value, condition_notes: `Bundle of ${items.length} items.` },
+            null, // no new file upload
+            extraData,
+            teamId
+        );
+        
+        // 4. Update each child item's parentLotId to link them to the new parent bundle
+        const promises = items.map(item => 
+            updateInventoryItem(item.$id, { parentLotId: parentDoc.$id })
+        );
+        await Promise.all(promises);
+        
+        // 5. Optimistically update local state for the parent document and child documents
+        // Add parent doc to inventory list
+        inventoryItems.value.unshift(parentDoc);
+        // Update child items in local state
+        inventoryItems.value.forEach(item => {
+            if (items.some(i => i.$id === item.$id)) {
+                item.parentLotId = parentDoc.$id;
+            }
+        });
+        
+        // Close modal and reset state
+        closeBundleModal();
+        selectedItems.value = [];
+        addToast({ type: 'success', message: `Successfully created bundle "${bundleTitle.value}" with ${items.length} items!` });
+        
+        // Async refresh in background
+        fetchInventory('').catch(() => {});
+        
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to create bundle: ' + e.message });
+        console.error(e);
+    } finally {
+        savingBundle.value = false;
+    }
+};
 
 const showImport = ref(false); // CSV Modal
 

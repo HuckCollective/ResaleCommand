@@ -414,300 +414,361 @@ export const ALL: APIRoute = async ({ request }) => {
         if (userNotes) {
             const urlMatch = userNotes.match(/https?:\/\/[^\s]+/);
             if (urlMatch) {
-                const targetUrl = urlMatch[0];
-                                console.log(`Debug - Found URL for Deep Parse: ${targetUrl}`);
+                let targetUrl = urlMatch[0];
+                console.log(`Debug - Found URL for Deep Parse: ${targetUrl}`);
                 
-                // A. ShopGoodwill API Strategy (High Fidelity)
-                const sgwMatch = targetUrl.match(/shopgoodwill\.com\/(?:item|viewitem)\/(\d+)/i);
-                if (sgwMatch) {
-                    const itemId = sgwMatch[1];
-                    let parsedData: any = null;
+                // Resolve eBay short URL redirects
+                if (/ebay\.io/i.test(targetUrl)) {
                     try {
-                         const apiRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/${itemId}`, {
-                             headers: { 
-                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                                 'Origin': 'https://shopgoodwill.com',
-                                 'Referer': 'https://shopgoodwill.com/'
-                             }
-                         });
-                         if (apiRes.ok) {
-                             const itemData = await apiRes.json();
-                             if (itemData && (itemData.title || itemData.itemName)) {
-                                  parsedData = itemData;
-                             }
-                         }
-                    } catch (err) {
-                        console.error("Failed Deep SGW Parse", err);
-                    }
-
-                    if (parsedData) {
-                         // Parse multiple images
-                         const imgServer = parsedData.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
-                         const imgUrls: string[] = [];
-                         if (parsedData.imageUrlString) {
-                             parsedData.imageUrlString.split(';').forEach((p: string) => {
-                                 const clean = p.trim().replace(/\\/g, '/');
-                                 if (clean) imgUrls.push(imgServer + clean);
-                             });
-                         } else if (parsedData.imageURL) {
-                             const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
-                             imgUrls.push(fixUrl(parsedData.imageURL));
-                         }
-                         
-                         if (imgUrls.length > 0) {
-                             successfulImageUrl = imgUrls[0];
-                             scrapedImages = imgUrls.slice(0, 5);
-                         }
-
-                         // Calculate Shipping if zipCode is provided
-                         if (zipCode) {
-                             try {
-                                 console.log(`[Deep Parse - SGW] Calculating shipping to ZIP: ${zipCode}`);
-                                 const calcRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/CalculateShipping`, {
-                                     method: 'POST',
-                                     headers: {
-                                         'Content-Type': 'application/json',
-                                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                                         'Origin': 'https://shopgoodwill.com',
-                                         'Referer': 'https://shopgoodwill.com/'
-                                     },
-                                     body: JSON.stringify({
-                                         itemId: parseInt(itemId),
-                                         country: "US",
-                                         province: null,
-                                         zipCode: zipCode,
-                                         quantity: 1,
-                                         clientIP: "0.0.0.3"
-                                     })
-                                 });
-                                 if (calcRes.ok) {
-                                     const htmlText = await calcRes.text();
-                                     const shipMatch = htmlText.match(/id=['"]shipping-span['"]>\$([0-9.]+)/i);
-                                     const handMatch = htmlText.match(/Handling:\s*\$([0-9.]+)/i);
-                                     const totalMatch = htmlText.match(/Total Shipping and Handling:\s*\$([0-9.]+)/i) || 
-                                                        htmlText.match(/Total Shipping and Handling:.*?\$([0-9.]+)/is);
-                                     const carrierMatch = htmlText.match(/Shipping Carrier:\s*([^<]+)/i);
-                                     
-                                     if (totalMatch) {
-                                         scrapedShipping = {
-                                             shipping: shipMatch ? parseFloat(shipMatch[1]) : 0,
-                                             handling: handMatch ? parseFloat(handMatch[1]) : 0,
-                                             total: parseFloat(totalMatch[1]),
-                                             carrier: carrierMatch ? carrierMatch[1].trim() : 'FedEx',
-                                             zipCode: zipCode
-                                         };
-                                         console.log(`[Deep Parse - SGW] Calculated Shipping Total: $${scrapedShipping.total}`);
-                                     }
-                                 }
-                             } catch (calcErr) {
-                                 console.error("Failed SGW CalculateShipping", calcErr);
-                             }
-                         }
-
-                         let contextText = `[Deep Parse - ShopGoodwill]\n`;
-                         contextText += `Title: ${parsedData.title || parsedData.itemName}\n`;
-                         contextText += `Current Bid: $${parsedData.currentPrice} | Bids: ${parsedData.bidCount} | Ends: ${parsedData.endTime}\n`;
-                         if (scrapedShipping) {
-                             contextText += `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode} (Shipping: $${scrapedShipping.shipping}, Handling: $${scrapedShipping.handling})\n`;
-                         }
-                         
-                         const rawDesc = parsedData.description || "";
-                         const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').substring(0, 3000); // Strip HTML, keep 3000 chars
-                         contextText += `Description: ${cleanDesc}\n\n`;
-                         
-                         // Prepend to user notes
-                         userNotes = contextText + userNotes;
-                         
-                         // ONLY fetch external images if the client didn't provide any
-                         if (imageParts.length === 0 && imgUrls.length > 0) {
-                             const promises = imgUrls.slice(0, 3).map(u => fetchAndAddImage(u));
-                             await Promise.all(promises);
-                         }
-                    } else {
-                         // Fallback: Fetch public page HTML and parse
-                         console.log(`[Deep Parse - SGW] API failed for ${itemId}, falling back to generic page parse.`);
-                         try {
-                             const pageRes = await fetch(targetUrl, {
-                                 headers: {
-                                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
-                                 }
-                             });
-                             if (pageRes.ok) {
-                                 const html = await pageRes.text();
-                                 const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-                                 const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
-                                                   html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-                                 
-                                 let contextText = `[Deep Parse - ShopGoodwill Generic]\n`;
-                                 if (titleMatch) contextText += `Title: ${titleMatch[1].replace('| ShopGoodwill.com', '').trim()}\n`;
-                                 if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
-                                 
-                                 userNotes = contextText + "\n" + userNotes;
-                                 
-                                 // Try to extract images from page
-                                 if (imageParts.length === 0) {
-                                     const imageUrls = new Set<string>();
-                                     const ogMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-                                     const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
-                                     if (ogMatch) imageUrls.add(fixUrl(ogMatch[1]));
-                                     
-                                     const imgRegex = /src=["'](https?:\/\/[^"']*\.azureedge\.net\/[^"']*)["']/g;
-                                     let match;
-                                     let count = 0;
-                                     while ((match = imgRegex.exec(html)) !== null && count < 10) {
-                                         const src = fixUrl(match[1]);
-                                         // Clean backslashes to forward slashes for the remote image url
-                                         const cleanSrc = src.replace(/\\/g, '/');
-                                         if (!cleanSrc.includes('Logo.svg') && !cleanSrc.includes('General/')) {
-                                             imageUrls.add(cleanSrc);
-                                         }
-                                         count++;
-                                     }
-                                     
-                                     const topImages = Array.from(imageUrls).slice(0, 5);
-                                     if (topImages.length > 0) {
-                                         if (!successfulImageUrl) successfulImageUrl = topImages[0];
-                                         scrapedImages = topImages;
-                                     }
-                                     
-                                     if (imageParts.length === 0) {
-                                         const promises = topImages.slice(0, 3).map(imgUrl => fetchAndAddImage(imgUrl));
-                                         await Promise.all(promises);
-                                     }
-                                 }
-                             }
-                         } catch (e) {
-                             console.error("Failed SGW fallback parse", e);
-                         }
+                        console.log(`Debug - Resolving eBay short URL redirect: ${targetUrl}`);
+                        const redirectRes = await fetch(targetUrl, { method: 'GET', redirect: 'manual' });
+                        const location = redirectRes.headers.get('location');
+                        if (location) {
+                            targetUrl = location;
+                            console.log(`Debug - Resolved eBay short URL to: ${targetUrl}`);
+                        }
+                    } catch (e) {
+                        console.error("Failed to resolve eBay short URL redirect", e);
                     }
                 }
-                // B. Other Platform-Specific or Generic Scrapes
-                else {
-                     try {
-                        const pageRes = await fetch(targetUrl, { 
+                
+                const isEbay = /ebay\.(com|io|ca|co\.uk|com\.au|de|fr|it|es|nl|be|ch|at|pl|ie)/i.test(targetUrl);
+                
+                if (isEbay) {
+                    if (imageParts.length === 0) {
+                        return new Response(JSON.stringify({ 
+                            error: "eBay Link Scouting Unsupported", 
+                            details: "eBay blocks automated requests. To scout this item, please capture/upload a photo of the item, or describe it in the 'Additional Details' box." 
+                        }), { 
+                            status: 400,
                             headers: { 
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36' 
+                                "Access-Control-Allow-Origin": "*",
+                                "Content-Type": "application/json"
                             } 
                         });
-                        if(pageRes.ok) {
-                            const html = await pageRes.text();
-                            
-                            let scrapedData: any = null;
-                            if (targetUrl.includes('ebay.com')) {
-                                scrapedData = parseEbay(html);
-                            } else if (targetUrl.includes('facebook.com')) {
-                                scrapedData = parseFacebookMarketplace(html);
-                            } else if (targetUrl.includes('poshmark.com')) {
-                                scrapedData = parsePoshmark(html);
-                            } else if (targetUrl.includes('mercari.com')) {
-                                scrapedData = parseMercari(html);
-                            }
-                            
-                            let contextText = '';
-                            const imageUrls = new Set<string>();
-                            
-                            if (scrapedData) {
-                                contextText = `[Deep Parse - ${scrapedData.platform}]\n`;
-                                contextText += `Title: ${scrapedData.title}\n`;
-                                if (scrapedData.price) contextText += `Asking/Current Price: ${scrapedData.price}\n`;
-                                if (scrapedData.brand) contextText += `Brand: ${scrapedData.brand}\n`;
-                                if (scrapedData.location) contextText += `Location: ${scrapedData.location}\n`;
-                                if (scrapedData.shipping) {
-                                    contextText += `Shipping: ${scrapedData.shipping}\n`;
-                                    
-                                    const rawShip = scrapedData.shipping;
-                                    if (rawShip.toLowerCase().includes('free')) {
-                                        scrapedShipping = { shipping: 0, handling: 0, total: 0, carrier: 'eBay logistics', message: 'Free Shipping' };
-                                    } else {
-                                        const matches = rawShip.match(/[0-9.]+/);
-                                        if (matches) {
-                                            const amt = parseFloat(matches[0]);
-                                            scrapedShipping = { shipping: amt, handling: 0, total: amt, carrier: 'eBay logistics', message: rawShip };
-                                        }
-                                    }
-                                }
-                                if (scrapedData.description) contextText += `Description: ${scrapedData.description.substring(0, 1500)}\n`;
-                                contextText += `\n`;
-                                
-                                scrapedData.images.forEach((img: string) => imageUrls.add(img));
-                            } else {
-                                // C. Generic Full-Page Scrape (Fallback)
-                                const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-                                const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
-                                const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
-                                                  html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || 
-                                                  html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i);
-                                
-                                contextText = `[Deep Parse - Generic URL]\n`;
-                                if (ogTitleMatch) contextText += `Title: ${ogTitleMatch[1]}\n`;
-                                else if (titleMatch) contextText += `Title: ${titleMatch[1]}\n`;
-                                if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
-                                
-                                // Extract Structured JSON-LD Data (Critical for Pricing/Bids on obscure platforms)
-                                const ldRegex = /<script type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-                                let ldMatch;
-                                let structuredData = '';
-                                while ((ldMatch = ldRegex.exec(html)) !== null) {
-                                    structuredData += ldMatch[1] + '\n';
-                                }
-                                if (structuredData) {
-                                    // Keep the first 1500 characters of structured data to prevent prompt bloat while grabbing price metadata
-                                    contextText += `Structured Data: ${structuredData.substring(0, 1500)}\n`;
-                                }
-                                
-                                // Extract Images (Max 5)
-                                const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-                                const fixUrl = (u: string) => {
-                                    if (!u) return '';
-                                    let fixed = u.replace(/&amp;/g, '&');
-                                    return fixed.startsWith('//') ? 'https:' + fixed : fixed;
-                                };
-                                
-                                if(ogMatch) imageUrls.add(fixUrl(ogMatch[1]));
-                                
-                                // Extract SGW app-image-gallery (High Quality Gallery fallback for Angular)
-                                const galleryRegex = /<app-image-gallery[^>]*\[itemImages\]=["']([^"']*)["']/i; 
-                                const galleryMatch = html.match(galleryRegex);
-                                if (galleryMatch) {
-                                    try {
-                                        const jsonStr = galleryMatch[1].replace(/&quot;/g, '"');
-                                        const parsed = JSON.parse(jsonStr);
-                                        if (Array.isArray(parsed)) {
-                                            parsed.forEach((img: any) => {
-                                                 const u = img.imageURL || img.url || img;
-                                                 if (u && typeof u === 'string') imageUrls.add(fixUrl(u));
-                                            });
-                                        }
-                                    } catch (e) {}
-                                }
-
-                                const imgRegex = /<img[^>]+src=["'](https:\/\/[^"'\s]+|\/\/[^"'\s]+)["'][^>]*>/gi;
-                                let match;
-                                let count = 0;
-                                while ((match = imgRegex.exec(html)) !== null && count < 20) {
-                                    const src = fixUrl(match[1]);
-                                    if (src.match(/\.(jpg|jpeg|png|webp)(\?|&|$)/i) && !src.includes('logo') && !src.includes('icon')) {
-                                         imageUrls.add(src);
-                                    }
-                                    count++;
-                                }
-                            }
-                            
-                            userNotes = contextText + "\n" + userNotes;
-
-                            scrapedImages = Array.from(imageUrls).slice(0, 5);
-                            if (scrapedImages.length > 0 && !successfulImageUrl) {
-                                successfulImageUrl = scrapedImages[0];
-                            }
-
-                            // ONLY fetch external images if the client didn't provide any
-                            if (imageParts.length === 0) {
-                                const topImages = scrapedImages.slice(0, 3);
-                                const promises = topImages.map(imgUrl => fetchAndAddImage(imgUrl));
-                                await Promise.all(promises);
-                            }
+                    } else {
+                        console.log("Debug - eBay URL with images, skipping fetch and using image-based analysis.");
+                    }
+                } else {
+                    // A. ShopGoodwill API Strategy (High Fidelity)
+                    const sgwMatch = targetUrl.match(/shopgoodwill\.com\/(?:item|viewitem)\/(\d+)/i);
+                    if (sgwMatch) {
+                        const itemId = sgwMatch[1];
+                        let parsedData: any = null;
+                        try {
+                             const apiRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/${itemId}`, {
+                                 headers: { 
+                                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                                     'Origin': 'https://shopgoodwill.com',
+                                     'Referer': 'https://shopgoodwill.com/'
+                                 }
+                             });
+                             if (apiRes.ok) {
+                                 const itemData = await apiRes.json();
+                                 if (itemData && (itemData.title || itemData.itemName)) {
+                                      parsedData = itemData;
+                                 }
+                             }
+                        } catch (err) {
+                            console.error("Failed Deep SGW Parse", err);
                         }
-                     } catch(e) { console.warn("Deep Scrape failed", e); }
+
+                        if (parsedData) {
+                             // Parse multiple images
+                             const imgServer = parsedData.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
+                             const imgUrls: string[] = [];
+                             if (parsedData.imageUrlString) {
+                                 parsedData.imageUrlString.split(';').forEach((p: string) => {
+                                     const clean = p.trim().replace(/\\/g, '/');
+                                     if (clean) imgUrls.push(imgServer + clean);
+                                 });
+                             } else if (parsedData.imageURL) {
+                                 const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
+                                 imgUrls.push(fixUrl(parsedData.imageURL));
+                             }
+                             
+                             if (imgUrls.length > 0) {
+                                 successfulImageUrl = imgUrls[0];
+                                 scrapedImages = imgUrls.slice(0, 5);
+                             }
+
+                             // Calculate Shipping if zipCode is provided
+                             if (zipCode) {
+                                 try {
+                                     console.log(`[Deep Parse - SGW] Calculating shipping to ZIP: ${zipCode}`);
+                                     const calcRes = await fetch(`https://buyerapi.shopgoodwill.com/api/ItemDetail/CalculateShipping`, {
+                                         method: 'POST',
+                                         headers: {
+                                             'Content-Type': 'application/json',
+                                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                                             'Origin': 'https://shopgoodwill.com',
+                                             'Referer': 'https://shopgoodwill.com/'
+                                         },
+                                         body: JSON.stringify({
+                                             itemId: parseInt(itemId),
+                                             country: "US",
+                                             province: null,
+                                             zipCode: zipCode,
+                                             quantity: 1,
+                                             clientIP: "0.0.0.3"
+                                         })
+                                     });
+                                     if (calcRes.ok) {
+                                         const htmlText = await calcRes.text();
+                                         const shipMatch = htmlText.match(/id=['"]shipping-span['"]>\$([0-9.]+)/i);
+                                         const handMatch = htmlText.match(/Handling:\s*\$([0-9.]+)/i);
+                                         const totalMatch = htmlText.match(/Total Shipping and Handling:\s*\$([0-9.]+)/i) || 
+                                                            htmlText.match(/Total Shipping and Handling:.*?\$([0-9.]+)/is);
+                                         const carrierMatch = htmlText.match(/Shipping Carrier:\s*([^<]+)/i);
+                                         
+                                         if (totalMatch) {
+                                             scrapedShipping = {
+                                                 shipping: shipMatch ? parseFloat(shipMatch[1]) : 0,
+                                                 handling: handMatch ? parseFloat(handMatch[1]) : 0,
+                                                 total: parseFloat(totalMatch[1]),
+                                                 carrier: carrierMatch ? carrierMatch[1].trim() : 'FedEx',
+                                                 zipCode: zipCode
+                                             };
+                                             console.log(`[Deep Parse - SGW] Calculated Shipping Total: $${scrapedShipping.total}`);
+                                         }
+                                     }
+                                 } catch (calcErr) {
+                                     console.error("Failed SGW CalculateShipping", calcErr);
+                                 }
+                             }
+
+                             let contextText = `[Deep Parse - ShopGoodwill]\n`;
+                             contextText += `Title: ${parsedData.title || parsedData.itemName}\n`;
+                             contextText += `Current Bid: $${parsedData.currentPrice} | Bids: ${parsedData.bidCount} | Ends: ${parsedData.endTime}\n`;
+                             if (scrapedShipping) {
+                                 contextText += `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode} (Shipping: $${scrapedShipping.shipping}, Handling: $${scrapedShipping.handling})\n`;
+                             }
+                             
+                             const rawDesc = parsedData.description || "";
+                             const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').substring(0, 3000); // Strip HTML, keep 3000 chars
+                             contextText += `Description: ${cleanDesc}\n\n`;
+                             
+                             // Prepend to user notes
+                             userNotes = contextText + userNotes;
+                             
+                             // ONLY fetch external images if the client didn't provide any
+                             if (imageParts.length === 0 && imgUrls.length > 0) {
+                                 const promises = imgUrls.slice(0, 3).map(u => fetchAndAddImage(u));
+                                 await Promise.all(promises);
+                             }
+                        } else {
+                             // Fallback: Fetch public page HTML and parse
+                             console.log(`[Deep Parse - SGW] API failed for ${itemId}, falling back to generic page parse.`);
+                             try {
+                                 const pageRes = await fetch(targetUrl, {
+                                     headers: {
+                                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+                                     }
+                                 });
+                                 if (pageRes.ok) {
+                                     const html = await pageRes.text();
+                                     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+                                     const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
+                                                       html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+                                     
+                                     let contextText = `[Deep Parse - ShopGoodwill Generic]\n`;
+                                     if (titleMatch) contextText += `Title: ${titleMatch[1].replace('| ShopGoodwill.com', '').trim()}\n`;
+                                     if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
+                                     
+                                     userNotes = contextText + "\n" + userNotes;
+                                     
+                                     // Try to extract images from page
+                                     if (imageParts.length === 0) {
+                                         const imageUrls = new Set<string>();
+                                         const ogMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+                                         const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
+                                         if (ogMatch) imageUrls.add(fixUrl(ogMatch[1]));
+                                         
+                                         const imgRegex = /src=["'](https?:\/\/[^"']*\.azureedge\.net\/[^"']*)["']/g;
+                                         let match;
+                                         let count = 0;
+                                         while ((match = imgRegex.exec(html)) !== null && count < 10) {
+                                             const src = fixUrl(match[1]);
+                                             // Clean backslashes to forward slashes for the remote image url
+                                             const cleanSrc = src.replace(/\\/g, '/');
+                                             if (!cleanSrc.includes('Logo.svg') && !cleanSrc.includes('General/')) {
+                                                 imageUrls.add(cleanSrc);
+                                             }
+                                             count++;
+                                         }
+                                         
+                                         const topImages = Array.from(imageUrls).slice(0, 5);
+                                         if (topImages.length > 0) {
+                                             if (!successfulImageUrl) successfulImageUrl = topImages[0];
+                                             scrapedImages = topImages;
+                                         }
+                                         
+                                         if (imageParts.length === 0) {
+                                             const promises = topImages.slice(0, 3).map(imgUrl => fetchAndAddImage(imgUrl));
+                                             await Promise.all(promises);
+                                         }
+                                     }
+                                 }
+                             } catch (e) {
+                                 console.error("Failed SGW fallback parse", e);
+                             }
+                        }
+                    }
+                    // B. Other Platform-Specific or Generic Scrapes
+                    else {
+                         try {
+                            const pageRes = await fetch(targetUrl, { 
+                                headers: { 
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36' 
+                                } 
+                            });
+                            if (pageRes.ok) {
+                                const html = await pageRes.text();
+                                
+                                let scrapedData: any = null;
+                                const finalUrl = (pageRes.url || targetUrl).toLowerCase();
+                                
+                                if (finalUrl.includes('facebook.com') || targetUrl.includes('facebook.com')) {
+                                    scrapedData = parseFacebookMarketplace(html);
+                                } else if (finalUrl.includes('poshmark.com') || targetUrl.includes('poshmark.com')) {
+                                    scrapedData = parsePoshmark(html);
+                                } else if (finalUrl.includes('mercari.com') || targetUrl.includes('mercari.com')) {
+                                    scrapedData = parseMercari(html);
+                                }
+                                
+                                let contextText = '';
+                                const imageUrls = new Set<string>();
+                                
+                                if (scrapedData) {
+                                    contextText = `[Deep Parse - ${scrapedData.platform}]\n`;
+                                    contextText += `Title: ${scrapedData.title}\n`;
+                                    if (scrapedData.price) contextText += `Asking/Current Price: ${scrapedData.price}\n`;
+                                    if (scrapedData.brand) contextText += `Brand: ${scrapedData.brand}\n`;
+                                    if (scrapedData.location) contextText += `Location: ${scrapedData.location}\n`;
+                                    if (scrapedData.shipping) {
+                                        contextText += `Shipping: ${scrapedData.shipping}\n`;
+                                        
+                                        const rawShip = scrapedData.shipping;
+                                        if (rawShip.toLowerCase().includes('free')) {
+                                            scrapedShipping = { shipping: 0, handling: 0, total: 0, carrier: 'eBay logistics', message: 'Free Shipping' };
+                                        } else {
+                                            const matches = rawShip.match(/[0-9.]+/);
+                                            if (matches) {
+                                                const amt = parseFloat(matches[0]);
+                                                scrapedShipping = { shipping: amt, handling: 0, total: amt, carrier: 'eBay logistics', message: rawShip };
+                                            }
+                                        }
+                                    }
+                                    if (scrapedData.description) contextText += `Description: ${scrapedData.description.substring(0, 1500)}\n`;
+                                    contextText += `\n`;
+                                    
+                                    scrapedData.images.forEach((img: string) => imageUrls.add(img));
+                                } else {
+                                    // C. Generic Full-Page Scrape (Fallback)
+                                    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+                                    const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+                                    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
+                                                      html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || 
+                                                      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i);
+                                    
+                                    contextText = `[Deep Parse - Generic URL]\n`;
+                                    if (ogTitleMatch) contextText += `Title: ${ogTitleMatch[1]}\n`;
+                                    else if (titleMatch) contextText += `Title: ${titleMatch[1]}\n`;
+                                    if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
+                                    
+                                    // Extract Structured JSON-LD Data (Critical for Pricing/Bids on obscure platforms)
+                                    const ldRegex = /<script type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+                                    let ldMatch;
+                                    let structuredData = '';
+                                    while ((ldMatch = ldRegex.exec(html)) !== null) {
+                                        structuredData += ldMatch[1] + '\n';
+                                    }
+                                    if (structuredData) {
+                                        // Keep the first 1500 characters of structured data to prevent prompt bloat while grabbing price metadata
+                                        contextText += `Structured Data: ${structuredData.substring(0, 1500)}\n`;
+                                    }
+                                    
+                                    // Extract Images (Max 5)
+                                    const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+                                    const fixUrl = (u: string) => {
+                                        if (!u) return '';
+                                        let fixed = u.replace(/&amp;/g, '&');
+                                        return fixed.startsWith('//') ? 'https:' + fixed : fixed;
+                                    };
+                                    
+                                    if(ogMatch) imageUrls.add(fixUrl(ogMatch[1]));
+                                    
+                                    // Extract SGW app-image-gallery (High Quality Gallery fallback for Angular)
+                                    const galleryRegex = /<app-image-gallery[^>]*\[itemImages\]=["']([^"']*)["']/i; 
+                                    const galleryMatch = html.match(galleryRegex);
+                                    if (galleryMatch) {
+                                        try {
+                                            const jsonStr = galleryMatch[1].replace(/&quot;/g, '"');
+                                            const parsed = JSON.parse(jsonStr);
+                                            if (Array.isArray(parsed)) {
+                                                parsed.forEach((img: any) => {
+                                                     const u = img.imageURL || img.url || img;
+                                                     if (u && typeof u === 'string') imageUrls.add(fixUrl(u));
+                                                });
+                                            }
+                                        } catch (e) {}
+                                    }
+
+                                    const imgRegex = /<img[^>]+src=["'](https:\/\/[^"'\s]+|\/\/[^"'\s]+)["'][^>]*>/gi;
+                                    let match;
+                                    let count = 0;
+                                    while ((match = imgRegex.exec(html)) !== null && count < 20) {
+                                        const src = fixUrl(match[1]);
+                                        if (src.match(/\.(jpg|jpeg|png|webp)(\?|&|$)/i) && !src.includes('logo') && !src.includes('icon')) {
+                                             imageUrls.add(src);
+                                        }
+                                        count++;
+                                    }
+                                }
+                                
+                                userNotes = contextText + "\n" + userNotes;
+
+                                scrapedImages = Array.from(imageUrls).slice(0, 5);
+                                if (scrapedImages.length > 0 && !successfulImageUrl) {
+                                    successfulImageUrl = scrapedImages[0];
+                                }
+
+                                // ONLY fetch external images if the client didn't provide any
+                                if (imageParts.length === 0) {
+                                    const topImages = scrapedImages.slice(0, 3);
+                                    const promises = topImages.map(imgUrl => fetchAndAddImage(imgUrl));
+                                    await Promise.all(promises);
+                                }
+                            } else {
+                                if (imageParts.length === 0) {
+                                    return new Response(JSON.stringify({ 
+                                        error: "Scouting Failed", 
+                                        details: `Unable to access URL (Status: ${pageRes.status}). Please upload a photo or enter details manually.` 
+                                    }), { 
+                                        status: 400,
+                                        headers: { 
+                                            "Access-Control-Allow-Origin": "*",
+                                            "Content-Type": "application/json"
+                                        } 
+                                    });
+                                }
+                            }
+                         } catch(e: any) { 
+                             console.warn("Deep Scrape failed", e);
+                             if (imageParts.length === 0) {
+                                 return new Response(JSON.stringify({ 
+                                     error: "Scouting Failed", 
+                                     details: `Failed to connect to the provided URL. Please upload a photo or enter details manually.` 
+                                 }), { 
+                                     status: 400,
+                                     headers: { 
+                                         "Access-Control-Allow-Origin": "*",
+                                         "Content-Type": "application/json"
+                                     } 
+                                 });
+                             }
+                         }
+                    }
                 }
             }
         }

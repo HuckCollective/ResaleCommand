@@ -284,54 +284,103 @@
                              <button class="btn btn-xs btn-ghost" @click="scoutResult = null">✕</button>
                          </div>
                     </div>
-                    
-                    <!-- New Multi-Item Layout -->
+                                <!-- New Multi-Item Layout -->
                     <div v-if="scoutItemsArray.length > 1" class="space-y-4">
-                        <div class="alert alert-info py-2 px-3 text-xs shadow-sm">
-                            <span><Icon icon="solar:box-linear" class="w-4 h-4 inline mr-1" /> AI Identified {{ scoutItemsArray.length }} Items in this Lot</span>
+                        <div class="font-bold text-sm mb-2 flex items-center gap-2 text-primary border-b border-base-300 pb-2">
+                            <Icon icon="solar:box-linear" class="w-5 h-5" />
+                            <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
                         </div>
                         
-                        <div v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="collapse collapse-arrow bg-base-100 border border-base-200 rounded-box">
-                            <input type="checkbox" /> 
-                            <div class="collapse-title text-sm font-medium pr-8 flex justify-between items-center py-2 min-h-0">
-                                <span class="truncate">{{ idx + 1 }}. {{ resultItem.title || resultItem.identity }}</span>
-                                <span class="badge badge-sm badge-ghost ml-2 whitespace-nowrap" v-if="resultItem.price_breakdown?.fair">
-                                    {{ formatPriceOnly(resultItem.price_breakdown.fair) }}
-                                </span>
+                        <ul class="space-y-2 text-xs font-medium max-h-[300px] overflow-y-auto pr-1">
+                            <li v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
+                                <div class="flex justify-between items-start gap-3 w-full">
+                                    <span class="text-base-content font-bold leading-snug text-left truncate grow">{{ idx + 1 }}. {{ resultItem.title || resultItem.identity }}</span>
+                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ resultItem.condition || 'Gently Used' }}</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
+                                    <template v-if="resultItem.price_breakdown?.poor">
+                                        <span>Poor: <strong class="text-error">{{ formatPriceRange(resultItem.price_breakdown.poor) }}</strong></span>
+                                        <span class="opacity-30">|</span>
+                                    </template>
+                                    <template v-if="resultItem.price_breakdown?.fair">
+                                        <span>Fair: <strong class="text-primary">{{ formatPriceRange(resultItem.price_breakdown.fair) }}</strong></span>
+                                        <span class="opacity-30">|</span>
+                                    </template>
+                                    <template v-if="resultItem.price_breakdown?.mint">
+                                        <span>Mint: <strong class="text-success">{{ formatPriceRange(resultItem.price_breakdown.mint) }}</strong></span>
+                                        <span class="opacity-30">|</span>
+                                    </template>
+                                    <template v-if="resultItem.price_breakdown?.boutique_premium">
+                                        <span>Boutique: <strong class="text-secondary">{{ formatPriceRange(resultItem.price_breakdown.boutique_premium) }}</strong></span>
+                                        <span class="opacity-30">|</span>
+                                    </template>
+                                    <template v-if="(!resultItem.price_breakdown?.poor && !resultItem.price_breakdown?.fair && !resultItem.price_breakdown?.mint) && resultItem.estimated_value">
+                                        <span>Est. Resale: <strong class="text-primary">{{ formatPriceRange(resultItem.estimated_value) }}</strong></span>
+                                        <span class="opacity-30">|</span>
+                                    </template>
+                                    
+                                    <template v-if="editForm.cost && !isNaN(parseFloat(editForm.cost))">
+                                        <span>Split Cost: <strong class="text-warning">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong></span>
+                                        <template v-if="shippingCosts.total > 0">
+                                            <span class="opacity-30">|</span>
+                                            <span>Landed Cost: <strong class="text-error">${{ ((parseFloat(editForm.cost) + shippingCosts.total) / scoutItemsArray.length).toFixed(2) }}</strong></span>
+                                        </template>
+                                    </template>
+                                </div>
+                            </li>
+                        </ul>
+
+                        <!-- Suggested Bundle Valuation Grid -->
+                        <div v-if="scoutTotalRange" class="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-base-300">
+                            <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm">
+                                <span class="text-[9px] uppercase font-bold text-success">Mint</span>
+                                <span class="font-mono font-bold text-xs">{{ scoutTotalRange.mint.formatted }}</span>
                             </div>
-                            <div class="collapse-content text-xs space-y-2">
-                                 <div v-if="resultItem.red_flags?.length" class="text-warning"><Icon icon="solar:flag-linear" class="w-4 h-4 inline mr-1" /> {{ resultItem.red_flags.join(', ') }}</div>
-                                 <div v-if="resultItem.condition_notes"><Icon icon="solar:document-add-linear" class="w-4 h-4 inline mr-1" /> {{ resultItem.condition_notes }}</div>
-                                 <div class="grid grid-cols-3 gap-2 mt-1 opacity-70">
-                                     <div>Mint: {{ formatPriceRange(resultItem.price_breakdown?.mint) }}</div>
-                                     <div>Poor: {{ formatPriceRange(resultItem.price_breakdown?.poor) }}</div>
-                                     <div class="text-secondary font-bold" v-if="resultItem.price_breakdown?.boutique_premium">Boutique: {{ formatPriceRange(resultItem.price_breakdown.boutique_premium) }}</div>
-                                 </div>
+                            <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-primary shadow-sm">
+                                <span class="text-[9px] uppercase font-bold text-primary">Fair</span>
+                                <span class="font-mono font-bold text-xs">{{ scoutTotalRange.fair.formatted }}</span>
+                            </div>
+                            <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm">
+                                <span class="text-[9px] uppercase font-bold text-error">Poor</span>
+                                <span class="font-mono font-bold text-xs">{{ scoutTotalRange.poor.formatted }}</span>
+                            </div>
+                            <div class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30 shadow-sm">
+                                <span class="text-[9px] uppercase font-bold text-secondary">Boutique</span>
+                                <span class="font-mono font-bold text-xs">{{ scoutTotalRange.boutique.formatted }}</span>
                             </div>
                         </div>
 
-                        <div class="flex justify-between items-center pt-2 border-t border-base-300 font-bold">
-                            <span>Total Estimate (Fair):</span>
-                            <span class="text-success text-lg" v-if="scoutTotalRange">
-                                 {{ scoutTotalRange.formatted }}
-                            </span>
-                        </div>
-                        <div class="flex justify-between items-center pt-1 font-bold text-secondary text-sm" v-if="scoutTotalRange && scoutTotalRange.boutiqueLow > 0">
-                            <span>Total Boutique Estimate:</span>
-                            <span>
-                                 {{ scoutTotalRange.boutiqueFormatted }}
-                            </span>
+                        <!-- Save Mode Select -->
+                        <div class="form-control mt-4 border-t border-base-300 pt-3">
+                            <label class="label pb-1.5"><span class="label-text text-[10px] uppercase font-bold opacity-75">Inventory Import Preference</span></label>
+                            <div class="join grid grid-cols-2 w-full font-bold">
+                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !saveIndividually }" @click="saveIndividually = false">
+                                    Save as Single Bundle
+                                </button>
+                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': saveIndividually }" @click="saveIndividually = true">
+                                    Split Individually (x{{ scoutItemsArray.length }})
+                                </button>
+                            </div>
+                            <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
+                                <span v-if="saveIndividually">
+                                    Creates {{ scoutItemsArray.length }} separate inventory items. Cost basis will be split evenly (${{ editForm.cost && !isNaN(parseFloat(editForm.cost)) ? (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) : '0.00' }} each).
+                                </span>
+                                <span v-else>
+                                    Updates this item as a single combined inventory bundle.
+                                </span>
+                            </div>
                         </div>
                         
-                        <!-- Extract Items Button -->
+                        <!-- Actions -->
                         <div class="pt-4 border-t border-base-300">
-                             <button class="btn btn-primary w-full gap-2 shadow-md" @click="extractLotItems" :disabled="extractingLot">
-                                 <span v-if="extractingLot" class="loading loading-spinner"></span>
-                                 <span><Icon icon="solar:scissors-linear" class="w-4 h-4 inline mr-1" /> Extract {{ scoutItemsArray.length }} Items to Inventory</span>
+                             <button v-if="saveIndividually" type="button" class="btn btn-primary w-full gap-2 shadow-md" @click="extractLotItems" :disabled="extractingLot">
+                                  <span v-if="extractingLot" class="loading loading-spinner"></span>
+                                  <span><Icon icon="solar:scissors-linear" class="w-4 h-4 inline mr-1" /> Extract {{ scoutItemsArray.length }} Items to Inventory</span>
                              </button>
-                             <p class="text-xs text-center text-gray-400 mt-2">
-                                 This will create {{ scoutItemsArray.length }} new separate items using the data above.
-                             </p>
+                             
+                             <button v-else type="button" class="btn btn-secondary w-full gap-2 shadow-md text-white font-bold" @click="applyBundleSuggestions">
+                                  <span><Icon icon="solar:magic-stick-linear" class="w-4 h-4 inline mr-1" /> Apply Bundle Suggestions to Form</span>
+                             </button>
                         </div>
                     </div>
 
@@ -820,6 +869,12 @@ const scoutResult = ref(null);
 
 const scoutItemsArray = computed(() => {
     if (!scoutResult.value) return [];
+    if (scoutResult.value.lot_items && Array.isArray(scoutResult.value.lot_items)) {
+        return scoutResult.value.lot_items;
+    }
+    if (Array.isArray(scoutResult.value) && scoutResult.value.length === 1 && scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
+        return scoutResult.value[0].lot_items;
+    }
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) return scoutResult.value.items;
     if (Array.isArray(scoutResult.value)) return scoutResult.value;
     return [scoutResult.value];
@@ -907,6 +962,7 @@ const fetchingImages = ref(false);
 const analyzing = ref(false);
 const analysisStatus = ref('');
 const extractingLot = ref(false); // New state for bulk extraction
+const saveIndividually = ref(false); // Preference state for bulk lot
 const generatingDescription = ref(false);
 
 const openMdModal = () => {
@@ -1033,72 +1089,107 @@ function formatPriceOnly(val) {
     return String(s).split(/[a-z(]/i)[0].trim();
 }
 
+const shippingCosts = computed(() => {
+    // 1. Try to get from scoutResult (rawAnalysis)
+    if (scoutResult.value && scoutResult.value.shipping_info) {
+        const sInfo = scoutResult.value.shipping_info;
+        const shipping = parseFloat(sInfo.shipping) || 0;
+        const handling = parseFloat(sInfo.handling) || 0;
+        const total = parseFloat(sInfo.total) || (shipping + handling);
+        return { shipping, handling, total };
+    }
+    // 2. Fall back to parsing conditionNotes
+    const notes = props.item?.conditionNotes || '';
+    const match = notes.match(/\[Shipping:\s*\$([\d.]+),\s*Handling:\s*\$([\d.]+)/i);
+    if (match) {
+        const shipping = parseFloat(match[1]) || 0;
+        const handling = parseFloat(match[2]) || 0;
+        return { shipping, handling, total: shipping + handling };
+    }
+    return { shipping: 0, handling: 0, total: 0 };
+});
+
 const scoutTotalRange = computed(() => {
     if (!scoutItemsArray.value || scoutItemsArray.value.length === 0) return null;
-    let totalLow = 0, totalHigh = 0;
+    
+    const parseLowHigh = (priceVal) => {
+        if (!priceVal) return { low: 0, high: 0 };
+        let low = 0, high = 0;
+        if (Array.isArray(priceVal)) {
+            low = parseFloat(String(priceVal[0])) || 0;
+            high = parseFloat(String(priceVal[1])) || low;
+        } else if (typeof priceVal === 'object' && priceVal !== null) {
+            const parsed = parsePriceRange(priceVal);
+            low = parsed.low;
+            high = parsed.high;
+        } else {
+            const s = String(priceVal).replace(/[$,]/g, '').trim(); 
+            const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
+            if (range) {
+                low = parseFloat(range[1]) || 0;
+                high = parseFloat(range[2]) || 0;
+            } else {
+                const single = s.match(/(\d+(?:\.\d+)?)/);
+                if (single) {
+                    low = parseFloat(single[1]) || 0;
+                    high = low;
+                }
+            }
+        }
+        if (high < low) high = low;
+        return { low, high };
+    };
+
+    let mintLow = 0, mintHigh = 0;
+    let fairLow = 0, fairHigh = 0;
+    let poorLow = 0, poorHigh = 0;
     let boutiqueLow = 0, boutiqueHigh = 0;
     
     scoutItemsArray.value.forEach(resItem => {
-        let raw = resItem.price_breakdown?.fair || resItem.price_breakdown?.mint;
-        let low = 0, high = 0;
-        if (Array.isArray(raw)) {
-            low = parseFloat(String(raw[0])) || 0;
-            high = parseFloat(String(raw[1])) || low;
-        } else if (typeof raw === 'object' && raw !== null) {
-                low = parseFloat((raw.low || raw.min || raw.mint || 0).toString().replace(/,/g, ''));
-                high = parseFloat((raw.high || raw.max || raw.fair || low).toString().replace(/,/g, ''));
-        } else { 
-                const s = String(raw || '0').replace(/[$,]/g, '').trim(); 
-                const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
-                if (range) {
-                    low = parseFloat(range[1]) || 0;
-                    high = parseFloat(range[2]) || 0;
-                } else {
-                    const single = s.match(/(\d+(?:\.\d+)?)/);
-                    if(single) { low = parseFloat(single[1]) || 0; high = low; }
-                }
-        }
-        const mintPrice = parsePrice(resItem.price_breakdown?.mint);
-        if (mintPrice > 0 && low > mintPrice * 2) { low = mintPrice / 2; high = mintPrice; }
-        if (high < low) high = low;
-        totalLow += low;
-        totalHigh += high;
-        
-        // Boutique calculation
+        // Mint
+        const mint = parseLowHigh(resItem.price_breakdown?.mint);
+        mintLow += mint.low;
+        mintHigh += mint.high;
+
+        // Fair
+        const fair = parseLowHigh(resItem.price_breakdown?.fair || resItem.estimated_value);
+        fairLow += fair.low;
+        fairHigh += fair.high;
+
+        // Poor
+        const poor = parseLowHigh(resItem.price_breakdown?.poor);
+        poorLow += poor.low;
+        poorHigh += poor.high;
+
+        // Boutique
         if (resItem.price_breakdown?.boutique_premium) {
-            let bRaw = resItem.price_breakdown.boutique_premium;
-            let bLow = 0, bHigh = 0;
-            if (Array.isArray(bRaw)) {
-                bLow = parseFloat(String(bRaw[0])) || 0;
-                bHigh = parseFloat(String(bRaw[1])) || bLow;
-            } else if (typeof bRaw === 'object' && bRaw !== null) {
-                bLow = parseFloat((bRaw.low || bRaw.min || bRaw.mint || 0).toString().replace(/,/g, ''));
-                bHigh = parseFloat((bRaw.high || bRaw.max || bRaw.fair || bLow).toString().replace(/,/g, ''));
-            } else {
-                const s = String(bRaw || '0').replace(/[$,]/g, '').trim(); 
-                const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
-                if (range) {
-                    bLow = parseFloat(range[1]) || 0;
-                    bHigh = parseFloat(range[2]) || 0;
-                } else {
-                    const single = s.match(/(\d+(?:\.\d+)?)/);
-                    if(single) { bLow = parseFloat(single[1]) || 0; bHigh = bLow; }
-                }
-            }
-            if (bHigh < bLow) bHigh = bLow;
-            boutiqueLow += bLow;
-            boutiqueHigh += bHigh;
+            const b = parseLowHigh(resItem.price_breakdown.boutique_premium);
+            boutiqueLow += b.low;
+            boutiqueHigh += b.high;
         } else {
-            // fallback to fair price if no boutique specified
-            boutiqueLow += low;
-            boutiqueHigh += high;
+            // fallback to fair price
+            boutiqueLow += fair.low;
+            boutiqueHigh += fair.high;
         }
     });
-    return { 
-        low: totalLow, high: totalHigh, 
-        formatted: totalLow === totalHigh ? `$${totalLow.toFixed(2)}` : `$${totalLow.toFixed(2)} - $${totalHigh.toFixed(2)}`,
-        boutiqueLow, boutiqueHigh,
-        boutiqueFormatted: boutiqueLow === boutiqueHigh ? `$${boutiqueLow.toFixed(2)}` : `$${boutiqueLow.toFixed(2)} - $${boutiqueHigh.toFixed(2)}`
+
+    const formatRange = (low, high) => {
+        if (low === 0 && high === 0) return '-';
+        return low === high ? `$${low.toFixed(0)}` : `$${low.toFixed(0)} - $${high.toFixed(0)}`;
+    };
+
+    return {
+        low: fairLow,
+        high: fairHigh,
+        formatted: formatRange(fairLow, fairHigh),
+        boutiqueLow,
+        boutiqueHigh,
+        boutiqueFormatted: formatRange(boutiqueLow, boutiqueHigh),
+        
+        mint: { low: mintLow, high: mintHigh, formatted: formatRange(mintLow, mintHigh) },
+        fair: { low: fairLow, high: fairHigh, formatted: formatRange(fairLow, fairHigh) },
+        poor: { low: poorLow, high: poorHigh, formatted: formatRange(poorLow, poorHigh) },
+        boutique: { low: boutiqueLow, high: boutiqueHigh, formatted: formatRange(boutiqueLow, boutiqueHigh) }
     };
 });
 
@@ -1181,19 +1272,18 @@ const initForm = () => {
         scoutResult.value = null;
         scoutMdText.value = null;
 
-        if (i.conditionNotes) {
-            const mdMatch = i.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/);
-            if (mdMatch) {
-                const id = mdMatch[1].trim();
-                const urlPrimary = `${ENDPOINT}/storage/buckets/reports/files/${id}/download?project=${PROJECT}`;
-                const urlFallback = getAssetUrl(id).replace('/view', '/download');
-                fetch(urlPrimary).then(res => {
-                    if (!res.ok) throw new Error('Not in reports bucket');
-                    return res.text();
-                }).catch(() => fetch(urlFallback).then(res => res.text()))
-                .then(txt => { editForm.itemCondition = txt; scoutMdText.value = txt; }).catch(() => {});
+        // Priority 1: Load scoutResult from rawAnalysis if present
+        if (i.rawAnalysis) {
+            try {
+                const parsed = JSON.parse(i.rawAnalysis);
+                scoutResult.value = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
+            } catch (e) {
+                console.error('[ItemDrawer] Failed to parse rawAnalysis:', e);
             }
+        }
 
+        // Priority 2: Fallback to parsing tags in conditionNotes
+        if (!scoutResult.value && i.conditionNotes) {
             const fileMatch = i.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/);
             if (fileMatch) {
                 const id = fileMatch[1].trim();
@@ -1215,11 +1305,21 @@ const initForm = () => {
                     }
                 }
             }
-        } else if (i.rawAnalysis) {
-            try {
-                const parsed = JSON.parse(i.rawAnalysis);
-                scoutResult.value = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
-            } catch (e) {}
+        }
+
+        // Always check conditionNotes for markdown report tag if it exists
+        if (i.conditionNotes) {
+            const mdMatch = i.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/);
+            if (mdMatch) {
+                const id = mdMatch[1].trim();
+                const urlPrimary = `${ENDPOINT}/storage/buckets/reports/files/${id}/download?project=${PROJECT}`;
+                const urlFallback = getAssetUrl(id).replace('/view', '/download');
+                fetch(urlPrimary).then(res => {
+                    if (!res.ok) throw new Error('Not in reports bucket');
+                    return res.text();
+                }).catch(() => fetch(urlFallback).then(res => res.text()))
+                .then(txt => { editForm.itemCondition = txt; scoutMdText.value = txt; }).catch(() => {});
+            }
         }
     } else {
         editForm.title = '';
@@ -1648,11 +1748,25 @@ const analyzeExistingItem = async () => {
     } catch (e) { addToast({ type: 'error', message: "Analysis Error: " + e.message }); } finally { analyzing.value = false; analysisStatus.value = ''; }
 };
 
+const applyBundleSuggestions = () => {
+    if (suggestedTitleStr.value) editForm.title = suggestedTitleStr.value;
+    if (suggestedListPriceStr.value) editForm.resalePrice = suggestedListPriceStr.value;
+    if (suggestedEstLowStr.value) editForm.estLow = suggestedEstLowStr.value;
+    if (suggestedEstHighStr.value) editForm.estHigh = suggestedEstHighStr.value;
+    if (scoutMdText.value) {
+        editForm.description = scoutMdText.value;
+    } else if (suggestedDescriptionStr.value) {
+        editForm.description = suggestedDescriptionStr.value;
+    }
+    addToast({ type: 'success', message: 'Applied AI bundle suggestions to form.' });
+};
+
 const extractLotItems = async () => {
-    if (!Array.isArray(scoutResult.value) || scoutResult.value.length === 0) return;
+    const itemsToExtract = scoutItemsArray.value;
+    if (!itemsToExtract || itemsToExtract.length === 0) return;
     
     // Confirm extraction
-    if (!(await confirmDialog(`Are you sure you want to create ${scoutResult.value.length} new items from this lot?`, 'Extract Lot', 'Extract', 'Cancel'))) return;
+    if (!(await confirmDialog(`Are you sure you want to create ${itemsToExtract.length} new items from this lot?`, 'Extract Lot', 'Extract', 'Cancel'))) return;
     
     extractingLot.value = true;
     try {
@@ -1661,11 +1775,11 @@ const extractLotItems = async () => {
         const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
         
         // Loop over each item found by AI
-        for (const [index, lotItem] of scoutResult.value.entries()) {
+        for (const [index, lotItem] of itemsToExtract.entries()) {
             
             // Build the core data for the new item
-            const title = lotItem.title || lotItem.identity || `Lot Item #${index + 1}`;
-            let notes = lotItem.condition_notes || '';
+            const title = lotItem.title || lotItem.identity || lotItem.name || `Lot Item #${index + 1}`;
+            let notes = lotItem.condition_notes || lotItem.condition || '';
             if (lotItem.red_flags?.length) {
                 notes = `[FLAGS: ${lotItem.red_flags.join(', ')}]\n` + notes;
             }
@@ -1674,13 +1788,15 @@ const extractLotItems = async () => {
             // Try to assign a portion of the total cost to each item (e.g. Total / Count)
             let apportionedCost = 0;
             if (editForm.cost && parseFloat(editForm.cost) > 0) {
-                 apportionedCost = parseFloat((parseFloat(editForm.cost) / scoutResult.value.length).toFixed(2));
+                 apportionedCost = parseFloat((parseFloat(editForm.cost) / itemsToExtract.length).toFixed(2));
             }
 
             // Estimate Resale Price from AI
             let resalePrice = 0;
             if (lotItem.price_breakdown) {
                  resalePrice = getRationalPrice(lotItem);
+            } else if (lotItem.estimated_value) {
+                 resalePrice = parsePrice(lotItem.estimated_value);
             }
             
             // Figure out image inheritance
