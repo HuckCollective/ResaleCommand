@@ -484,8 +484,8 @@
                 :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) ? 'bg-success/20 text-success' : (result && result.items && result.items.length > 0 ? 'bg-success text-success-content hover:bg-success/90' : 'text-base-content/30 cursor-not-allowed')"
                 :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
             <span v-if="savingAll" class="loading loading-spinner mb-1"></span>
-            <span v-else class="text-2xl leading-none mb-1"><Icon icon="solar:object-scan-linear" /></span>
-            <span class="font-bold tracking-wider uppercase text-[10px]">Track All</span>
+            <span v-else class="text-2xl leading-none mb-1"><Icon icon="solar:disk-linear" /></span>
+            <span class="font-bold tracking-wider uppercase text-[10px]">Save</span>
         </button>
         
     </div>
@@ -507,7 +507,7 @@ const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; // Added this line
 const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 
 // -- COMPOSABLES --
-const { isAuthenticated, currentTeam, user } = useAuth();
+const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
 const { 
     activeCart, addItemToCart, startCart, checkActiveCart, cartItems
 } = useCart();
@@ -678,8 +678,7 @@ async function saveZipCode() {
             console.log('[ScoutView] Saving ZIP Code to Appwrite preferences:', cleanZip);
             const currentPrefs = user.value.prefs || {};
             const updatedPrefs = { ...currentPrefs, zipCode: cleanZip };
-            await account.updatePrefs(updatedPrefs);
-            user.value.prefs = updatedPrefs;
+            await updatePrefs(updatedPrefs);
             console.log('[ScoutView] Saved ZIP Code successfully');
         } catch (err: any) {
             console.error('[ScoutView] Failed to save ZIP Code in Appwrite preferences:', err);
@@ -702,12 +701,11 @@ watch([includeShippingInCost, result], () => {
 });
 
 // -- CAMERA LOGIC --
-function handleCapturedPhotos(files: File[]) {
-    files.forEach(file => {
+async function handleCapturedPhotos(files: File[]) {
+    for (const file of files) {
         if (images.value.length >= 5) return;
-        const url = URL.createObjectURL(file);
-        images.value.push({ url, file });
-    });
+        await processFile(file);
+    }
 }
 
 function removeImage(index: number) {
@@ -923,8 +921,20 @@ async function analyzeImage() {
     error.value = null;
     
     try {
+        const base64Images: string[] = [];
+        const remoteImageUrls: string[] = [];
+        
+        images.value.forEach(img => {
+            if (img.url.startsWith('data:')) {
+                base64Images.push(img.url);
+            } else if (img.url.startsWith('http')) {
+                remoteImageUrls.push(img.url);
+            }
+        });
+
         const payload = JSON.stringify({ 
-            images: images.value.map(i => i.url),
+            images: base64Images,
+            remoteImageUrls,
             notes: userNotes.value,
             zipCode: zipCode.value
         });
@@ -987,11 +997,30 @@ async function saveAllItems() {
     if (!result.value || !result.value.items) return;
     savingAll.value = true;
     try {
+        let savedAny = false;
         for (let i = 0; i < result.value.items.length; i++) {
             const item = result.value.items[i];
             if (!item.saved && !item.saving) {
-                 await handleSaveItem(item, i);
+                 await handleSaveItem(item, i, true);
+                 savedAny = true;
             }
+        }
+
+        if (savedAny) {
+            let cartItem = null;
+            if (rescoutId.value) {
+                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value);
+            } else {
+                cartItem = cartItems.value[cartItems.value.length - 1];
+            }
+            
+            ensureTrackerOpen();
+            
+            if (cartItem) {
+                window.dispatchEvent(new CustomEvent('open-tracker-item-preview', { detail: cartItem }));
+            }
+            
+            startNewScan();
         }
     } finally {
         savingAll.value = false;
@@ -1205,7 +1234,7 @@ const urlToFile = async (url: string, filename: string): Promise<File | null> =>
 };
 
 // -- SAVE ACTION --
-async function handleSaveItem(item: any, index: number) {
+async function handleSaveItem(item: any, index: number, isBatch = false) {
     console.log('[ScoutView] handleSaveItem callled for item:', item.identity);
     
     if (item.saving || item.saved) {
@@ -1509,12 +1538,26 @@ async function handleSaveItem(item: any, index: number) {
         item.saved = true;
         successMessage.value = `Saved ${item.identity}!`;
 
+        if (!isBatch) {
+            let cartItem = null;
+            if (rescoutId.value) {
+                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value);
+            } else {
+                cartItem = cartItems.value[cartItems.value.length - 1];
+            }
+            
+            ensureTrackerOpen();
+            
+            if (cartItem) {
+                window.dispatchEvent(new CustomEvent('open-tracker-item-preview', { detail: cartItem }));
+            }
+            
+            startNewScan();
+        }
+
         // Reset inputs smoothly
         setTimeout(() => {
             successMessage.value = null;
-            // Clear lists for next scan if in speed mode? 
-            // Or maybe just clear this item from result list.
-            // For now, let user manually decide when to clear all.
         }, 2000);
 
     } catch (e: any) {

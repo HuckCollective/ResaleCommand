@@ -157,6 +157,15 @@ export const auth = {
       }
   },
 
+  async updatePrefs(prefs: Models.Preferences) {
+      try {
+          return await account.updatePrefs(prefs);
+      } catch (error) {
+          console.error("Error updating prefs:", error);
+          throw error;
+      }
+  },
+
   async updateEmail(email: string, pass: string) {
       try {
           return await account.updateEmail(email, pass);

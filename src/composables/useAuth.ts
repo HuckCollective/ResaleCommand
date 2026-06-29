@@ -10,7 +10,8 @@ import {
   inviteMember as inviteMemberAction,
   updateName as updateNameAction,
   updateEmail as updateEmailAction,
-  updatePassword as updatePasswordAction
+  updatePassword as updatePasswordAction,
+  updatePrefs as updatePrefsAction
 } from '../lib/store';
 import { computed } from 'vue';
 
@@ -46,6 +47,7 @@ export function useAuth() {
     inviteMember: inviteMemberAction,
     updateName: updateNameAction,
     updateEmail: updateEmailAction,
-    updatePassword: updatePasswordAction
+    updatePassword: updatePasswordAction,
+    updatePrefs: updatePrefsAction
   };
 }

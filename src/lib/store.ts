@@ -135,6 +135,11 @@ export async function updateName(name: string) {
       authStore.setKey('user', updatedUser);
 }
 
+export async function updatePrefs(prefs: Models.Preferences) {
+      const updatedUser = await auth.updatePrefs(prefs);
+      authStore.setKey('user', updatedUser);
+}
+
 export async function updateEmail(email: string, pass: string) {
       const updatedUser = await auth.updateEmail(email, pass);
       authStore.setKey('user', updatedUser);

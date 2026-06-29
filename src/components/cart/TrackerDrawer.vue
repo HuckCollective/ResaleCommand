@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { storage, databases, ID } from '../../lib/appwrite';
 import { useCart, type CartItem } from '../../composables/useCart';
 import { useAuth } from '../../composables/useAuth';
@@ -201,8 +201,23 @@ const scrollToTop = () => {
     if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
+const handleOpenPreviewEvent = (e: any) => {
+    const item = e.detail;
+    if (item) {
+        const found = cartItems.value.find(i => i.$id === item.$id);
+        if (found) {
+            openPreview(found);
+        }
+    }
+};
+
 onMounted(async () => {
     await initCartCheck();
+    window.addEventListener('open-tracker-item-preview', handleOpenPreviewEvent);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('open-tracker-item-preview', handleOpenPreviewEvent);
 });
 
 watch(user, async (newUser) => {
