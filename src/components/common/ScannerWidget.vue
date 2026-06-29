@@ -25,20 +25,29 @@
                 <!-- Top Bar -->
                 <div class="absolute top-0 left-0 right-0 bg-linear-to-b from-black/80 to-transparent p-4 flex justify-between items-center text-white z-10 pt-safe">
                     <span class="font-bold drop-shadow-md">Camera</span>
-                    <span class="badge badge-primary">{{ photos.length }} Photo(s)</span>
+                    <div class="flex items-center gap-2">
+                        <span class="badge" :class="maxPhotos && photos.length >= maxPhotos ? 'badge-error' : 'badge-neutral'">
+                            {{ photos.length }}<template v-if="maxPhotos"> / {{ maxPhotos }}</template> Photo(s)
+                        </span>
+                        <button @click.prevent="stopCamera" class="btn btn-sm btn-circle btn-ghost text-white bg-black/20 backdrop-blur">✕</button>
+                    </div>
                 </div>
                 
                 <!-- Thumbnails (Bottom Left) -->
                 <div v-if="photos.length > 0" class="absolute bottom-32 left-4 right-4 flex gap-2 overflow-x-auto z-10 pointer-events-auto p-2">
-                    <div v-for="(photo, idx) in photos" :key="idx" class="w-16 h-16 shrink-0 border-2 border-white/50 rounded-md overflow-hidden bg-black/50 shadow-lg">
+                    <div v-for="(photo, idx) in photos" :key="idx" class="relative w-16 h-16 shrink-0 border-2 border-white/50 rounded-md overflow-hidden bg-black/50 shadow-lg group">
                         <img :src="getObjectUrl(photo)" class="w-full h-full object-cover">
+                        <button @click.prevent="$emit('remove-photo', idx)" class="btn btn-circle btn-xs btn-error absolute -top-1 -right-1 w-5 h-5 min-h-0 text-[10px] flex items-center justify-center shadow-md z-30 hover:scale-110">✕</button>
                     </div>
                 </div>
                 
                 <!-- Bottom Controls -->
                 <div class="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-8 flex justify-between items-center z-10 pb-safe">
                     <button @click.prevent="stopCamera" class="btn btn-ghost text-white px-2">Done</button>
-                    <button @click.prevent="capturePhoto" class="btn btn-circle btn-primary btn-lg border-4 border-white w-20 h-20 transform active:scale-95 transition-transform shadow-xl"></button>
+                    <button @click.prevent="capturePhoto" 
+                            class="btn btn-circle btn-primary btn-lg border-4 border-white w-20 h-20 transform active:scale-95 transition-transform shadow-xl"
+                            :class="maxPhotos && photos.length >= maxPhotos ? 'btn-disabled opacity-50 border-gray-500' : ''"
+                            :disabled="maxPhotos && photos.length >= maxPhotos"></button>
                     <button @click.prevent="flipCamera" class="btn btn-circle btn-ghost text-white bg-white/20"><Icon icon="solar:refresh-circle-linear" class="w-6 h-6" /></button>
                 </div>
             </div>
@@ -62,16 +71,25 @@ const props = defineProps({
     hideAllTriggers: {
         type: Boolean,
         default: false
+    },
+    maxPhotos: {
+        type: Number,
+        default: 0
     }
 });
 
-const emit = defineEmits(['photos-captured']);
+const emit = defineEmits(['photos-captured', 'remove-photo']);
 
 const objectUrls = new WeakMap();
-const getObjectUrl = (file) => {
-    if (!file) return '';
-    if (!objectUrls.has(file)) objectUrls.set(file, URL.createObjectURL(file));
-    return objectUrls.get(file);
+const getObjectUrl = (photo) => {
+    if (!photo) return '';
+    if (typeof photo === 'string') return photo;
+    if (photo && typeof photo === 'object' && photo.url) return photo.url;
+    if (photo instanceof File) {
+        if (!objectUrls.has(photo)) objectUrls.set(photo, URL.createObjectURL(photo));
+        return objectUrls.get(photo);
+    }
+    return '';
 };
 
 const cameraVideoDialog = ref(null);
@@ -136,6 +154,8 @@ const flipCamera = () => {
 };
 
 const capturePhoto = () => {
+    if (props.maxPhotos && props.photos.length >= props.maxPhotos) return;
+    
     const videoEl = cameraVideoDialog.value;
     if (!videoEl) return;
     const canvas = document.createElement('canvas');

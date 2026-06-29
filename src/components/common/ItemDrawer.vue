@@ -294,7 +294,7 @@
                         <ul class="space-y-2 text-xs font-medium max-h-[300px] overflow-y-auto pr-1">
                             <li v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
                                 <div class="flex justify-between items-start gap-3 w-full">
-                                    <span class="text-base-content font-bold leading-snug text-left truncate grow">{{ idx + 1 }}. {{ resultItem.title || resultItem.identity }}</span>
+                                    <span class="text-base-content font-bold leading-snug text-left truncate grow">{{ idx + 1 }}. {{ resultItem.name || resultItem.title || resultItem.identity || resultItem.item }}</span>
                                     <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ resultItem.condition || 'Gently Used' }}</span>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">

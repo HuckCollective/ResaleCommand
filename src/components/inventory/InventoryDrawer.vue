@@ -36,12 +36,16 @@
                 <!-- IMAGE UPLOAD & SCOUT -->
                 <div class="space-y-2">
                      <label class="label pt-0"><span class="label-text font-bold">Photos (Required for AI)</span></label>
-                     <div class="flex gap-2 items-center">
-                         <button class="btn btn-outline border-dashed flex-1" @click="$refs.fileInput.click()">
-                             <Icon icon="solar:camera-linear" class="w-4 h-4 mr-1 inline" /> Add Photo
-                         </button>
-                         <input type="file" ref="fileInput" @change="handleFileSelect" accept="image/*" multiple class="hidden" />
+                     <div class="flex gap-2 items-center w-full">
+                          <button class="btn btn-outline border-dashed flex-1 text-xs" @click="$refs.fileInput.click()">
+                              <Icon icon="solar:gallery-add-linear" class="w-4 h-4 mr-1 inline" /> Upload
+                          </button>
+                          <button class="btn btn-outline border-dashed flex-1 text-xs" @click="scannerWidget?.startCamera()">
+                              <Icon icon="solar:camera-linear" class="w-4 h-4 mr-1 inline" /> Camera
+                          </button>
+                          <input type="file" ref="fileInput" @change="handleFileSelect" accept="image/*" multiple class="hidden" />
                      </div>
+                     <ScannerWidget ref="scannerWidget" :photos="imageFiles" :hide-all-triggers="true" @photos-captured="handleCapturedPhotos" @remove-photo="removeImage" />
 
                      <!-- Thumbnails -->
                      <div v-if="images.length > 0" class="flex gap-2 overflow-x-auto pb-2 mt-2">
@@ -133,6 +137,7 @@ import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import { getSafeRawAnalysis } from '../../lib/inventory';
+import ScannerWidget from '../common/ScannerWidget.vue';
 
 const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 const DB = import.meta.env.PUBLIC_APPWRITE_DB_ID;
@@ -148,6 +153,7 @@ const aiAnalysisResult = ref<any>(null);
 
 const images = ref<string[]>([]);
 const imageFiles = ref<File[]>([]);
+const scannerWidget = ref<any>(null);
 
 const form = reactive({
     title: '',
@@ -182,6 +188,19 @@ function handleFileSelect(e: Event) {
 function removeImage(idx: number) {
     images.value.splice(idx, 1);
     imageFiles.value.splice(idx, 1);
+}
+
+function handleCapturedPhotos(files: File[]) {
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            if (ev.target?.result) {
+                images.value.push(ev.target.result as string);
+                imageFiles.value.push(file);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 // -- AI ANALYSIS --

@@ -71,7 +71,7 @@
                     
                     <div class="divider my-0 mb-4 opacity-50">OR</div>
                     
-                    <button @click="startCamera" class="btn btn-outline btn-primary w-full gap-2">
+                    <button @click="scannerWidget?.startCamera()" class="btn btn-outline btn-primary w-full gap-2">
                         <Icon icon="solar:camera-linear" class="w-5 h-5" /> Add Photo with Camera
                     </button>
                 </div>
@@ -345,7 +345,7 @@
                         <ul class="space-y-2 text-xs font-medium">
                             <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
                                 <div class="flex justify-between items-start gap-3 w-full">
-                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name }}</span>
+                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
                                     <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1">{{ subItem.condition }}</span>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
@@ -451,51 +451,14 @@
 
     </div>
 
-    <!-- CAMERA MODAL (Full Screen Overlay) -->
-    <dialog ref="cameraModal" class="modal">
-        <div class="modal-box p-0 bg-black w-full h-full max-h-none rounded-none max-w-none flex flex-col relative">
-            <video ref="videoPreview" autoplay playsinline class="w-full h-full object-cover flex-1"></video>
-            
-            <!-- OVERLAYS -->
-            <div class="absolute top-0 left-0 right-0 p-4 bg-linear-to-b from-black/50 to-transparent flex justify-between items-start z-20">
-                 <div class="badge badge-lg overflow-hidden transition-all" :class="images.length >= 5 ? 'badge-error' : 'badge-neutral'">
-                    {{ images.length }} / 5 Photos
-                 </div>
-                 <button @click="closeCamera" class="btn btn-sm btn-circle btn-ghost text-white bg-black/20 backdrop-blur">✕</button>
-            </div>
-
-            <!-- IN-CAMERA TERMINALS -->
-             <div v-if="images.length > 0" class="absolute left-0 right-0 bottom-32 z-20 px-4">
-                 <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-                     <div v-for="(img, idx) in images" :key="idx" class="relative w-16 h-16 shrink-0 rounded border-2 border-white/50 overflow-hidden shadow-lg animate-fade-in-up">
-                         <img :src="img" class="w-full h-full object-cover" />
-                     </div>
-                 </div>
-             </div>
-
-            <div class="absolute bottom-10 left-0 right-0 flex justify-center items-center gap-8 pb-safe z-50">
-                <!-- Done Button (Left) -->
-                <button v-if="images.length > 0" @click="closeCamera" class="btn btn-neutral rounded-full px-6 bg-white/20 backdrop-blur border-white/30 text-white min-w-[80px]">
-                    Done
-                </button>
-                <div v-else class="w-[80px]"></div> <!-- Spacer -->
-
-                <!-- Capture Button (Center) -->
-                <button @click="capturePhoto" 
-                    class="btn btn-circle h-20 w-20 border-4 shadow-xl transform active:scale-95 transition-all"
-                    :class="images.length >= 5 ? 'btn-disabled border-gray-500 opacity-50' : 'btn-primary border-white'"
-                >
-                    <span class="sr-only">Capture</span>
-                    <div class="w-16 h-16 rounded-full bg-white" :class="{'scale-90': capturing}"></div>
-                </button>
-
-                <!-- Switch Camera (Right) -->
-                <button @click="switchCamera" class="btn btn-circle btn-ghost text-white bg-black/30 backdrop-blur-md w-[80px]">
-                   <span class="text-2xl"><Icon icon="solar:refresh-circle-linear" /></span>
-                </button>
-            </div>
-        </div>
-    </dialog>
+    <ScannerWidget 
+        ref="scannerWidget" 
+        :photos="images" 
+        :max-photos="5"
+        :hide-all-triggers="true"
+        @photos-captured="handleCapturedPhotos"
+        @remove-photo="removeImage"
+    />
 
     <!-- BOTTOM DOCK NAV (Sticky to Viewport) -->
     <div class="sticky bottom-0 z-40 flex h-20 bg-base-200 border-t border-base-300 w-full shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.15)]">
@@ -536,6 +499,7 @@ import { useCart } from '../../composables/useCart';
 import { account, storage, databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
+import ScannerWidget from '../common/ScannerWidget.vue';
 
 // APPWRITE
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; // Added this line
@@ -630,10 +594,7 @@ const zipCode = ref('');
 const includeShippingInCost = ref(false);
 
 // Camera
-const cameraModal = ref<HTMLDialogElement | null>(null);
-const videoPreview = ref<HTMLVideoElement | null>(null);
-let stream: MediaStream | null = null;
-let currentFacingMode = 'environment';
+const scannerWidget = ref<any>(null);
 
 // -- INIT --
 const ensureTrackerOpen = () => {
@@ -741,76 +702,12 @@ watch([includeShippingInCost, result], () => {
 });
 
 // -- CAMERA LOGIC --
-const capturing = ref(false);
-
-async function startCamera() {
-    try {
-        cameraModal.value?.showModal();
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: currentFacingMode } 
-        });
-        if (videoPreview.value) {
-            videoPreview.value.srcObject = stream;
-        }
-    } catch (err: any) {
-        console.error("Camera Error:", err);
-        addToast({ type: 'error', message: "Could not access camera: " + err.message });
-    }
-}
-
-function closeCamera() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    cameraModal.value?.close();
-}
-
-function switchCamera() {
-    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    closeCamera();
-    setTimeout(startCamera, 300); // Small delay to allow modal to stay open logic
-}
-
-function capturePhoto() {
-    if (!stream || !videoPreview.value) return;
-    if (images.value.length >= 5) return;
-
-    capturing.value = true;
-    setTimeout(() => capturing.value = false, 150);
-    
-    const video = videoPreview.value;
-    const canvas = document.createElement('canvas');
-    const MAX_WIDTH = 1080;
-    let width = video.videoWidth;
-    let height = video.videoHeight;
-
-    if (width > MAX_WIDTH) {
-        height *= MAX_WIDTH / width;
-        width = MAX_WIDTH;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-    
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-        ctx.scale(currentFacingMode === 'user' ? -1 : 1, 1); // Mirror if front cam
-        if (currentFacingMode === 'user') ctx.translate(-width, 0);
-        
-        ctx.drawImage(video as unknown as CanvasImageSource, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const imgObj = { url: dataUrl, file: undefined as File | undefined };
-        images.value.push(imgObj);
-        
-        canvas.toBlob(blob => {
-            if (blob) {
-                const file = new File([blob], `capture_${Date.now()}.jpg`, { type: "image/jpeg" });
-                imgObj.file = file;
-            }
-        }, 'image/jpeg', 0.8);
-    }
-    // Don't close camera!
+function handleCapturedPhotos(files: File[]) {
+    files.forEach(file => {
+        if (images.value.length >= 5) return;
+        const url = URL.createObjectURL(file);
+        images.value.push({ url, file });
+    });
 }
 
 function removeImage(index: number) {
@@ -1539,8 +1436,9 @@ async function handleSaveItem(item: any, index: number) {
              // Loop and save each individual sub-item
              for (let i = 0; i < item.lot_items.length; i++) {
                  const subItem = item.lot_items[i];
+                 const subItemName = subItem.name || subItem.title || subItem.identity || subItem.item || 'Component Item';
                  
-                 let noteDetails = `Lot Item: ${subItem.name}\nInferred Condition: ${subItem.condition}\n` + (item.condition_notes || '');
+                 let noteDetails = `Lot Item: ${subItemName}\nInferred Condition: ${subItem.condition}\n` + (item.condition_notes || '');
                  if (item.shipping_info) {
                       const { shipping, handling, carrier, zipCode } = item.shipping_info;
                       noteDetails += `\n[Shipping: $${(shipping/item.lot_items.length).toFixed(2)}, Handling: $${(handling/item.lot_items.length).toFixed(2)} via ${carrier} to ${zipCode}]`;
@@ -1553,8 +1451,8 @@ async function handleSaveItem(item: any, index: number) {
                  }
                  
                  const itemPayload = {
-                     identity: subItem.name,
-                     title: subItem.name,
+                     identity: subItemName,
+                     title: subItemName,
                      conditionNotes: noteDetails,
                      redFlags: item.red_flags || [],
                      cost: individualCost,
