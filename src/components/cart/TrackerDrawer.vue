@@ -186,7 +186,10 @@ const initCartCheck = async () => {
 };
 
 const closeTracker = () => {
-    document.getElementById('tracker-drawer').checked = false;
+    const trackerDrawer = document.getElementById('tracker-drawer') as HTMLInputElement | null;
+    if (trackerDrawer) {
+        trackerDrawer.checked = false;
+    }
     
     // If desktop, remove static open class
     const drawer = document.getElementById('app-drawer');
