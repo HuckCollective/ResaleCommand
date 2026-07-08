@@ -186,9 +186,9 @@
                             </thead>
                             <tbody>
                                 <tr v-for="(row, idx) in results.unmatchedCsvItems" :key="idx">
-                                    <td class="font-bold">{{ row['Name'] }}</td>
-                                    <td class="font-mono text-xs opacity-50">{{ row['SKU'] }}</td>
-                                    <td><span class="badge badge-error badge-outline">{{ row['Inventory'] }}</span></td>
+                                    <td class="font-bold">{{ row['Name'] || row['Item Name'] || row['Item'] || row['Title'] || 'Unknown' }}</td>
+                                    <td class="font-mono text-xs opacity-50">{{ row['SKU'] || row['ID'] || '-' }}</td>
+                                    <td><span class="badge badge-error badge-outline">{{ row['Inventory'] || row['Status'] || row['State'] || 'Unknown' }}</span></td>
                                     <td>
                                         <div class="flex gap-2 items-center min-w-[300px]">
                                             <select v-model="manualLinkSelections[idx]" class="select select-bordered select-xs w-full max-w-xs bg-base-200 font-mono text-xs truncate">

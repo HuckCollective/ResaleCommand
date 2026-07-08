@@ -98,7 +98,10 @@ const processCSV = async () => {
     if (!file.value) return;
 
     // improved security check
+    const isTeam = !!currentTeam.value?.$id;
     const teamId = currentTeam.value?.$id || user.value?.$id;
+    const ownerType = isTeam ? 'team' : 'user';
+    
     if (!teamId) {
         addToast({ type: 'error', message: "Error: You must be logged in to import items." });
         return;
@@ -133,7 +136,9 @@ const processRows = async (rows) => {
     // (Removed auto-fix bucket call as requested - run `node scripts/fix-bucket.mjs` if needed)
     
     // improved security check
+    const isTeam = !!currentTeam.value?.$id;
     const teamId = currentTeam.value?.$id || user.value?.$id;
+    const ownerType = isTeam ? 'team' : 'user';
     
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -459,7 +464,7 @@ const processRows = async (rows) => {
                 extraData.imageId = mainImageId;
             }
 
-            await saveItemToInventory(itemToSave, null, extraData, teamId);
+            await saveItemToInventory(itemToSave, null, extraData, teamId, ownerType);
 
             logs.value.push(`✅ Imported: ${title.substring(0, 30)}... ${orderId ? '(with Order Link)' : ''}`);
 

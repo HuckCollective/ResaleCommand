@@ -140,6 +140,22 @@
                         <p class="whitespace-pre-wrap text-sm leading-relaxed text-warning-content/80">{{ cleanConditionNotes }}</p>
                     </div>
 
+                    <!-- Lot Contents -->
+                    <div v-if="childItems.length > 0" class="mt-6 border border-base-200 rounded-xl overflow-hidden bg-base-100 shadow-sm">
+                        <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
+                            <span>Bundle Contents ({{ childItems.length }})</span>
+                        </div>
+                        <ul class="divide-y divide-base-200">
+                            <li v-for="child in childItems" :key="child.$id" class="p-3 flex justify-between items-center hover:bg-base-200/30 transition-colors">
+                                <a :href="'/item/' + child.$id" class="font-medium text-sm truncate max-w-[70%] hover:text-primary transition-colors">{{ child.title }}</a>
+                                <div class="flex items-center gap-4">
+                                    <span class="badge badge-sm badge-outline opacity-60">{{ child.status }}</span>
+                                    <span class="font-mono text-xs font-bold text-success w-16 text-right">${{ Number(child.cost).toFixed(2) }}</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
                     <!-- Scout Data Output -->
                     <div v-if="parsedScoutData" class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm text-base-content overflow-hidden">
                         <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
@@ -237,6 +253,8 @@ const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 
+const childItems = ref([]);
+
 onMounted(async () => {
     loading.value = true;
     error.value = null;
@@ -248,6 +266,18 @@ onMounted(async () => {
             
         item.value = await databases.getDocument(DB_ID, collId, props.itemId);
         await loadScoutData(item.value);
+        
+        // Fetch child items if any exist
+        try {
+            const childRes = await databases.listDocuments(DB_ID, collId, [
+                Query.equal('parentLotId', item.value.$id),
+                Query.limit(100)
+            ]);
+            childItems.value = childRes.documents;
+        } catch (err) {
+            console.error("Failed to fetch child items:", err);
+        }
+        
     } catch (err) {
         console.error("Failed to load item:", err);
         error.value = err.message || "Could not fetch this item. You may not have access, or it was deleted.";

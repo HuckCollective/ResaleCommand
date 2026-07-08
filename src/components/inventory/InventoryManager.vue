@@ -364,6 +364,7 @@
             :item="previewItem" 
             @close="previewItem = null" 
             @edit="openEdit" 
+            @deconstruct="openDeconstructModal"
         />
 
         <!-- Bulk Import Modal -->
@@ -410,13 +411,47 @@
                         </select>
                     </div>
 
+                    <!-- LOT ANALYSIS DASHBOARD -->
+                    <div class="bg-base-300/50 rounded-xl p-4 border border-base-300 shadow-inner">
+                        <div class="text-[10px] uppercase font-bold opacity-60 mb-3 tracking-widest flex items-center gap-2">
+                            <Icon icon="solar:chart-square-bold-duotone" class="w-4 h-4 text-primary" />
+                            Lot Consolidation Analysis
+                        </div>
+                        <div class="grid grid-cols-2 gap-y-4 gap-x-6">
+                            <div class="flex flex-col">
+                                <span class="text-[10px] uppercase font-bold opacity-40">Total Units</span>
+                                <input type="number" v-model.number="bundleTotalUnits" min="1" class="input input-sm input-ghost w-24 p-0 px-1 text-lg font-bold bg-transparent border-b border-base-content/20 focus:outline-none focus:border-primary focus:bg-base-200 rounded-sm mt-0.5 transition-colors" />
+                            </div>
+                            <div class="flex flex-col text-right">
+                                <span class="text-[10px] uppercase font-bold opacity-40">Cost Per Unit</span>
+                                <span class="text-lg font-bold text-error">${{ bundleCostPerUnit.toFixed(2) }}</span>
+                            </div>
+                            <div class="flex flex-col border-t border-base-300 pt-3">
+                                <span class="text-[10px] uppercase font-bold opacity-40">Total Profit</span>
+                                <span class="text-xl font-black text-success">${{ bundleTotalProfit.toFixed(2) }}</span>
+                            </div>
+                            <div class="flex flex-col text-right border-t border-base-300 pt-3">
+                                <span class="text-[10px] uppercase font-bold opacity-40">Profit Per Unit</span>
+                                <span class="text-xl font-black text-primary">${{ bundleProfitPerUnit.toFixed(2) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- List of Items included -->
                     <div class="border border-base-300 rounded-xl p-3 bg-base-200/50">
                         <label class="label pt-0 pb-1.5"><span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span></label>
                         <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                            <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200">
-                                <span class="font-medium truncate max-w-[280px]">{{ item.title }}</span>
-                                <span class="font-mono text-base-content/60">${{ Number(item.cost || 0).toFixed(2) }}</span>
+                            <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm">
+                                <div class="flex flex-col min-w-0">
+                                    <span class="font-medium truncate max-w-[200px]">{{ item.title }}</span>
+                                    <span class="text-[9px] opacity-50 uppercase font-bold flex items-center gap-1">
+                                        Profit: <span class="text-success font-mono font-black">${{ ((parseFloat(item.resalePrice || item.estValue || 0) || 0) - bundleCostPerUnit).toFixed(2) }}</span>
+                                    </span>
+                                </div>
+                                <div class="flex flex-col items-end shrink-0">
+                                    <span class="font-mono text-base-content font-bold">${{ Number(item.resalePrice || item.estValue || 0).toFixed(2) }}</span>
+                                    <span class="text-[9px] opacity-40 uppercase">Resale</span>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -435,6 +470,39 @@
                     </button>
                 </div>
             </div>
+        </dialog>
+
+        <!-- Deconstruct Modal -->
+        <dialog ref="deconstructModalRef" class="modal">
+            <div class="modal-box max-w-sm">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                    <Icon icon="solar:pie-chart-2-bold-duotone" class="w-6 h-6 text-secondary" /> 
+                    Deconstruct Lot
+                </h3>
+                
+                <p class="text-xs mb-4">You are about to split <b>{{ deconstructItemData?.title }}</b> into individual items. The original cost of <b>${{ deconstructItemData?.cost || '0.00' }}</b> will be divided equally.</p>
+
+                <div class="form-control w-full mb-4">
+                    <label class="label"><span class="label-text font-bold opacity-70">How many individual items?</span></label>
+                    <input type="number" min="2" v-model.number="deconstructCount" class="input input-bordered w-full font-mono" />
+                </div>
+                
+                <div class="alert alert-info py-2 shadow-sm text-xs leading-normal mb-4">
+                    <Icon icon="solar:info-circle-linear" class="w-5 h-5 shrink-0" />
+                    <span>This will create {{ deconstructCount }} new items in your inventory with a cost basis of ${{ ((deconstructItemData?.cost || 0) / (deconstructCount || 1)).toFixed(2) }} each. The original lot will be archived.</span>
+                </div>
+
+                <div class="modal-action">
+                    <button class="btn btn-ghost btn-sm" @click="closeDeconstructModal" :disabled="isDeconstructing">Cancel</button>
+                    <button class="btn btn-secondary btn-sm" @click="submitDeconstruct" :disabled="isDeconstructing || deconstructCount < 2">
+                        <span v-if="isDeconstructing" class="loading loading-spinner loading-xs"></span>
+                        Confirm Split
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button @click="closeDeconstructModal" :disabled="isDeconstructing">close</button>
+            </form>
         </dialog>
 
         <!-- Floating Total Count / Scroll to Top -->
@@ -1318,9 +1386,6 @@ const copyShareLink = async (id) => {
     }
 };
 
-//---------------------------------------------------------
-// BUNDLE LOGIC
-//---------------------------------------------------------
 const bundleModal = ref(null);
 const bundleTitle = ref('');
 const bundleCost = ref(0);
@@ -1332,15 +1397,54 @@ const selectedItemsObjects = computed(() => {
     return inventoryItems.value.filter(item => selectedItems.value.includes(item.$id));
 });
 
+const userOverriddenUnits = ref(null);
+
+const bundleTotalUnits = computed({
+    get: () => {
+        if (userOverriddenUnits.value !== null) return userOverriddenUnits.value;
+        return selectedItemsObjects.value.reduce((sum, i) => {
+            let dbQty = parseInt(i.quantity) || 1;
+            let guessedQty = guessQuantityFromTitle(i.title) || 1;
+            return sum + Math.max(dbQty, guessedQty);
+        }, 0);
+    },
+    set: (val) => {
+        userOverriddenUnits.value = parseInt(val) || 1;
+    }
+});
+
+const bundleCostPerUnit = computed(() => {
+    if (bundleTotalUnits.value === 0) return 0;
+    return (bundleCost.value || 0) / bundleTotalUnits.value;
+});
+
+const bundleResalePerUnit = computed(() => {
+    if (bundleTotalUnits.value === 0) return 0;
+    return (bundleResalePrice.value || 0) / bundleTotalUnits.value;
+});
+
+const bundleTotalProfit = computed(() => {
+    return (bundleResalePrice.value || 0) - (bundleCost.value || 0);
+});
+
+const bundleProfitPerUnit = computed(() => {
+    if (bundleTotalUnits.value === 0) return 0;
+    return bundleTotalProfit.value / bundleTotalUnits.value;
+});
+
 const openBundleModal = () => {
     const items = selectedItemsObjects.value;
     if (items.length < 2) return;
     
-    // Suggest title combining the first two items
+    userOverriddenUnits.value = null; // Reset manual override
+    
+    // Suggest a title based on the default total units calculation
+    const totalUnits = bundleTotalUnits.value;
+    
     const partTitles = items.slice(0, 2).map(i => i.title || i.itemName);
-    let suggestedTitle = `Bundle: ${partTitles.join(' + ')}`;
+    let suggestedTitle = `Lot of ${totalUnits}: ${partTitles.join(' + ')}`;
     if (items.length > 2) {
-        suggestedTitle += ` & ${items.length - 2} more`;
+        suggestedTitle += ` & ${items.length - 2} more items`;
     }
     bundleTitle.value = suggestedTitle;
     
@@ -1354,6 +1458,108 @@ const openBundleModal = () => {
     
     if (bundleModal.value) {
         bundleModal.value.showModal();
+    }
+};
+
+//---------------------------------------------------------
+// DECONSTRUCT LOGIC
+//---------------------------------------------------------
+const deconstructModalRef = ref(null);
+const deconstructItemData = ref(null);
+const deconstructCount = ref(2);
+const isDeconstructing = ref(false);
+
+function guessQuantityFromTitle(title) {
+    if (!title) return null;
+    const lower = title.toLowerCase();
+    
+    // Pattern: "Lot of 50", "Set of 6", "Bundle of 12"
+    let match = lower.match(/(?:lot|set|bundle|collection)\s+of\s+(\d+)/);
+    if (match) return parseInt(match[1]);
+    
+    // Pattern: "50 Comic Books"
+    match = lower.match(/^(\d+)\s+(?:comic|graphic|book|magazine|item|piece|dvd|cd|game)/);
+    if (match) return parseInt(match[1]);
+    
+    // Pattern: "x15" or "15x"
+    match = lower.match(/(?:\s|^)x\s*(\d+)(?:\s|$)/);
+    if (match) return parseInt(match[1]);
+    
+    match = lower.match(/(?:\s|^)(\d+)\s*x(?:\s|$)/);
+    if (match) return parseInt(match[1]);
+    
+    return null;
+}
+
+const openDeconstructModal = (item) => {
+    previewItem.value = null; // Close preview
+    deconstructItemData.value = item;
+    
+    let dbQty = item.quantity && item.quantity > 1 ? parseInt(item.quantity) : 2;
+    let guessedQty = guessQuantityFromTitle(item.title) || 0;
+    
+    // Always suggest the larger of the two to account for bundled lots
+    deconstructCount.value = Math.max(dbQty, guessedQty);
+    
+    if (deconstructModalRef.value) deconstructModalRef.value.showModal();
+};
+
+const closeDeconstructModal = () => {
+    if (deconstructModalRef.value) deconstructModalRef.value.close();
+    deconstructItemData.value = null;
+};
+
+const submitDeconstruct = async () => {
+    if (!deconstructItemData.value || deconstructCount.value < 2) return;
+    
+    isDeconstructing.value = true;
+    try {
+        const parent = deconstructItemData.value;
+        const count = deconstructCount.value;
+        const totalCost = parseFloat(parent.cost) || 0;
+        const costPerUnit = parseFloat((totalCost / count).toFixed(2));
+        const user = await account.get();
+        const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
+
+        const promises = [];
+        for (let i = 0; i < count; i++) {
+            const childData = {
+                title: `${parent.title} (Unit ${i + 1} of ${count})`,
+                identity: parent.identity || parent.title,
+                cost: costPerUnit,
+                status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
+                sourcingLocation: parent.sourcingLocation,
+                storageLocation: parent.storageLocation,
+                imageId: parent.imageId,
+                galleryImageIds: parent.galleryImageIds,
+                keywords: parent.keywords,
+                quantity: 1,
+                parentLotId: parent.$id,
+                condition_notes: `Extracted from lot: ${parent.title}`
+            };
+            
+            promises.push(saveItemToInventory(childData, null, childData, teamId));
+        }
+        
+        await Promise.all(promises);
+        
+        await updateInventoryItem(parent.$id, { 
+            status: 'archived',
+            condition_notes: (parent.conditionNotes || '') + `\n\n[DECONSTRUCTED into ${count} units on ${new Date().toLocaleDateString()}]`
+        });
+        
+        addToast({ type: 'success', message: `Successfully deconstructed into ${count} items.` });
+        closeDeconstructModal();
+        
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
+        
+    } catch (e) {
+        console.error("Deconstruct error:", e);
+        addToast({ type: 'error', message: 'Failed to deconstruct: ' + e.message });
+    } finally {
+        isDeconstructing.value = false;
     }
 };
 
@@ -1402,8 +1608,11 @@ const submitBundle = async () => {
             imageId: mainImageId,
             galleryImageIds: combinedGallery,
             keywords: combinedKeywords,
-            quantity: items.length,
+            quantity: bundleTotalUnits.value,
             rawAnalysis: JSON.stringify({
+                cost_per_unit: bundleCostPerUnit.value,
+                total_profit: bundleTotalProfit.value,
+                profit_per_unit: bundleProfitPerUnit.value,
                 lot_items: items.map(i => ({
                     name: i.title || i.itemName,
                     condition: i.conditionNotes ? i.conditionNotes.split('\n')[0].substring(0, 100) : 'Gently Used',
@@ -1413,7 +1622,11 @@ const submitBundle = async () => {
         };
         
         const parentDoc = await saveItemToInventory(
-            { title: bundleTitle.value, identity: bundleTitle.value, condition_notes: `Bundle of ${items.length} items.` },
+            { 
+                title: bundleTitle.value, 
+                identity: bundleTitle.value, 
+                condition_notes: `Bundle of ${bundleTotalUnits.value} units.\n\n--- LOT ANALYSIS ---\nCost per unit: $${bundleCostPerUnit.value.toFixed(2)}\nProjected Profit: $${bundleTotalProfit.value.toFixed(2)}\nProfit per unit: $${bundleProfitPerUnit.value.toFixed(2)}` 
+            },
             null, // no new file upload
             extraData,
             teamId

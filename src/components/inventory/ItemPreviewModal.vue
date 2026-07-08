@@ -21,6 +21,9 @@
                     <button class="btn btn-sm btn-ghost tooltip tooltip-bottom" data-tip="Copy Share Link" @click="copyShareLink">
                         <Icon icon="solar:link-linear" class="w-4 h-4 mr-1 inline" /> Share
                     </button>
+                    <button v-if="!item.parentLotId" class="btn btn-sm btn-secondary tooltip tooltip-bottom" data-tip="Deconstruct lot into individual items" @click="emit('deconstruct', item)">
+                        <Icon icon="solar:pie-chart-2-linear" class="w-4 h-4 mr-1 inline" /> Deconstruct Lot
+                    </button>
                     <button class="btn btn-sm btn-primary" @click="editItem">
                         <Icon icon="solar:pen-linear" class="w-4 h-4 mr-1 inline" /> Edit Item
                     </button>
@@ -183,6 +186,22 @@
                         </div>
                     </div>
 
+                    <!-- Lot Contents -->
+                    <div v-if="childItems.length > 0" class="mt-6 border border-base-200 rounded-xl overflow-hidden bg-base-100 shadow-sm">
+                        <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
+                            <span>Bundle Contents ({{ childItems.length }})</span>
+                        </div>
+                        <ul class="divide-y divide-base-200">
+                            <li v-for="child in childItems" :key="child.$id" class="p-3 flex justify-between items-center hover:bg-base-200/30 transition-colors">
+                                <a :href="'/item/' + child.$id" class="font-medium text-sm truncate max-w-[70%] hover:text-primary transition-colors" target="_blank">{{ child.title }}</a>
+                                <div class="flex items-center gap-4">
+                                    <span class="badge badge-sm badge-outline opacity-60">{{ child.status }}</span>
+                                    <span class="font-mono text-xs font-bold text-success w-16 text-right">${{ Number(child.cost).toFixed(2) }}</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
                     <!-- Description / Scout Report -->
                     <div v-if="item.description" class="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-4 prose-a:text-primary pb-8">
                         <div class="divider text-xs uppercase opacity-50 font-bold tracking-widest mt-0">Full Details</div>
@@ -207,12 +226,14 @@ import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
+import { databases, Query } from '../../lib/appwrite';
+import { isAlphaMode } from '../../stores/env';
 
 const props = defineProps({
     item: { type: Object, default: null } // The item to preview. If null, modal is fully hidden.
 });
 
-const emit = defineEmits(['close', 'edit']);
+const emit = defineEmits(['close', 'edit', 'deconstruct']);
 
 const previewModal = ref(null);
 const selectedIndex = ref(0);
@@ -223,16 +244,36 @@ const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 
+const childItems = ref([]);
+
 // Watch for item changes to open modal and reset gallery
 watch(() => props.item, async (newItem) => {
     if (newItem) {
         selectedIndex.value = 0;
+        childItems.value = [];
         if (carouselRef.value) carouselRef.value.scrollLeft = 0;
         previewModal.value?.showModal();
         await loadScoutData(newItem);
+        
+        try {
+            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+            const collId = isAlphaMode.get() 
+                ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
+                : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+                
+            const childRes = await databases.listDocuments(DB_ID, collId, [
+                Query.equal('parentLotId', newItem.$id),
+                Query.limit(100)
+            ]);
+            childItems.value = childRes.documents;
+        } catch (err) {
+            console.error("Failed to fetch child items:", err);
+        }
+        
     } else {
         previewModal.value?.close();
         parsedScoutData.value = null;
+        childItems.value = [];
     }
 });
 
