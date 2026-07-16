@@ -232,7 +232,7 @@
                                 <span class="text-[10px] uppercase font-bold opacity-60">Max Landed Cost (All-in)</span>
                                 <span class="text-[10px] opacity-75 font-medium">Incl. shipping/handling</span>
                             </div>
-                            <span class="font-bold text-success text-lg">${{ calculateMaxBuy(item.price_breakdown?.fair) }}</span>
+                            <span class="font-bold text-success text-lg">${{ calculateMaxBuy(item) }}</span>
                         </div>
 
                         <!-- Max Bid (Auction) -->
@@ -1051,22 +1051,28 @@ function parsePrice(priceStr: any) {
     return parseFloat(matches[0]);
 }
 
-function calculateMaxBuy(fairPriceStr: any) {
-    const fair = parsePrice(fairPriceStr);
+function calculateMaxBuy(item: any) {
+    if (item?.purchase_strategy?.max_landed_cost) {
+        return Math.floor(item.purchase_strategy.max_landed_cost);
+    }
+    const fair = parsePrice(item?.price_breakdown?.fair);
     return Math.floor(fair * 0.4); // 40% rule placeholder
 }
 
 function calculateMaxBid(item: any) {
-    const maxBuy = calculateMaxBuy(item.price_breakdown?.fair);
-    const shippingTotal = item.shipping_info?.total || 0;
+    if (item?.purchase_strategy?.max_bid) {
+        return Math.floor(item.purchase_strategy.max_bid);
+    }
+    const maxBuy = calculateMaxBuy(item);
+    const shippingTotal = item?.shipping_info?.total || 0;
     const maxBid = maxBuy - shippingTotal;
     return maxBid > 0 ? Math.floor(maxBid) : 0;
 }
 
 function calculateSubItemMaxBid(subItem: any, parentItem: any) {
-    const maxBuy = calculateMaxBuy(subItem.estimated_value);
-    const shippingTotal = parentItem.shipping_info?.total || 0;
-    const itemsCount = parentItem.lot_items?.length || 1;
+    const maxBuy = calculateMaxBuy(subItem);
+    const shippingTotal = parentItem?.shipping_info?.total || 0;
+    const itemsCount = parentItem?.lot_items?.length || 1;
     const shippingPerItem = shippingTotal / itemsCount;
     const maxBid = maxBuy - shippingPerItem;
     return maxBid > 0 ? Math.floor(maxBid) : 0;

@@ -14,7 +14,16 @@
                     </p>
                     
                     <div class="form-control w-full">
-                        <input type="file" accept=".csv" class="file-input file-input-bordered w-full file-input-primary" @change="handleFileUpload" />
+                        <input type="file" ref="fileInputRef" class="hidden" @change="handleFileUpload" />
+                        <button 
+                            type="button"
+                            @click="fileInputRef?.click()"
+                            class="btn btn-outline btn-primary w-full gap-2 h-auto py-4 flex-col"
+                        >
+                            <Icon icon="solar:upload-linear" class="w-8 h-8" />
+                            <span class="font-bold">{{ selectedFileName || 'Tap to select CSV file' }}</span>
+                            <span class="text-xs opacity-60 font-normal">ShopGoodwill Export</span>
+                        </button>
                     </div>
 
                     <div class="form-control w-full mt-4">
@@ -65,6 +74,7 @@ import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
+import { Icon } from '@iconify/vue';
 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
@@ -82,6 +92,8 @@ const processing = ref(false);
 const logs = ref([]);
 const file = ref(null);
 const progress = ref(0);
+const fileInputRef = ref(null);
+const selectedFileName = ref('');
     onMounted(() => {
         console.log("[BulkImport] Version: 2026-02-08-FIXED-RELOAD");
         // ...
@@ -92,6 +104,7 @@ const runScout = ref(false);
 
 const handleFileUpload = (event) => {
     file.value = event.target.files[0];
+    selectedFileName.value = file.value?.name || '';
 };
 
 const processCSV = async () => {

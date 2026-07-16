@@ -387,8 +387,8 @@ export async function deleteInventoryItem(documentId: string) {
             if (scoutMatch) imagesToDelete.add(scoutMatch[1].trim());
         }
 
-        // 2. Delete Identified Images
-        if (imagesToDelete.size > 0 && BUCKET_ID) {
+        // 2. Delete Identified Images (Only in production, not in Alpha/Dev sandbox to prevent breaking shared images)
+        if (imagesToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
             console.log(`Deleting ${imagesToDelete.size} images for item ${documentId}...`);
             await Promise.allSettled(Array.from(imagesToDelete).map(id => 
                 storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete image ${id}:`, e))
@@ -527,8 +527,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
              });
         }
 
-        // Delete the removed images from the bucket
-        if (imagesToDelete.size > 0 && BUCKET_ID) {
+        // Delete the removed images from the bucket (Only in production, not in Alpha/Dev sandbox to prevent breaking shared images)
+        if (imagesToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
             console.log(`Deleting ${imagesToDelete.size} removed images from bucket...`);
             await Promise.allSettled(Array.from(imagesToDelete).map(id => 
                 storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete removed image ${id}:`, e))

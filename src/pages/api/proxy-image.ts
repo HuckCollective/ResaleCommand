@@ -12,12 +12,20 @@ export const GET: APIRoute = async ({ request, url }) => {
     const cleanUrl = imageUrl.replace(/\\/g, '/').trim();
 
     try {
+        const headers: Record<string, string> = {
+            // Mimic browser to avoid getting blocked
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'
+        };
+        if (cleanUrl.includes('/storage/buckets/')) {
+            const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID;
+            const apiKey = process.env.APPWRITE_API_KEY;
+            if (projectId) headers['X-Appwrite-Project'] = projectId;
+            if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+        }
+
         const response = await fetch(cleanUrl, {
             redirect: 'follow', // Follow redirects!
-            headers: {
-                // Mimic browser to avoid getting blocked
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'
-            }
+            headers
         });
 
         if (!response.ok) {

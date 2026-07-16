@@ -362,7 +362,60 @@ const markSingleStatus = async (id, status, payloadData = null) => {
             updatePayload.commissionPaid = payloadData.commissionPaid;
         }
 
-        await databases.updateDocument(DB_ID, targetDb.value, id, updatePayload);
+        if (status === 'sold' && payloadData && payloadData.isQuantitySplit) {
+            // Fetch parent
+            const parentDoc = await databases.getDocument(DB_ID, targetDb.value, id);
+            const qty = parentDoc.quantity || 1;
+            const totalCost = Number(parentDoc.cost || 0);
+            const unitCost = qty > 1 ? (totalCost / qty) : totalCost;
+            
+            const newQty = qty - 1;
+            const newCost = Math.max(0, totalCost - unitCost);
+            
+            // Update Parent lot
+            await databases.updateDocument(DB_ID, targetDb.value, id, {
+                quantity: newQty,
+                cost: newCost
+            });
+            
+            // Create Child sold document
+            const childDoc = {
+                title: payloadData.title,
+                identity: payloadData.title,
+                conditionNotes: `Sold from Lot: ${parentDoc.title} (${parentDoc.$id})`,
+                status: 'sold',
+                cost: unitCost,
+                soldPrice: payloadData.soldPrice || 0,
+                commissionPaid: payloadData.commissionPaid || 0,
+                parentLotId: parentDoc.$id,
+                quantity: 1,
+                tenantId: parentDoc.tenantId || null,
+                userId: parentDoc.userId || null,
+                storageLocation: parentDoc.storageLocation || null,
+                sourcingLocation: parentDoc.sourcingLocation || null
+            };
+            
+            Object.keys(childDoc).forEach(key => childDoc[key] === undefined && delete childDoc[key]);
+            
+            let permissions = undefined;
+            if (parentDoc.tenantId && parentDoc.tenantId !== 'default') {
+                permissions = [
+                    Permission.read(Role.team(parentDoc.tenantId)),
+                    Permission.update(Role.team(parentDoc.tenantId)),
+                    Permission.delete(Role.team(parentDoc.tenantId)),
+                ];
+            } else if (parentDoc.userId) {
+                permissions = [
+                    Permission.read(Role.user(parentDoc.userId)),
+                    Permission.update(Role.user(parentDoc.userId)),
+                    Permission.delete(Role.user(parentDoc.userId)),
+                ];
+            }
+            
+            await databases.createDocument(DB_ID, targetDb.value, ID.unique(), childDoc, permissions);
+        } else {
+            await databases.updateDocument(DB_ID, targetDb.value, id, updatePayload);
+        }
         
         if (status === 'sold') {
             results.value.soldItemsToUpdate = results.value.soldItemsToUpdate.filter(i => i.id !== id);
@@ -415,7 +468,61 @@ const manualLinkSync = async (csvRow, idx) => {
             updatePayload.commissionPaid = commissionPaid;
         }
 
-        await databases.updateDocument(DB_ID, targetDb.value, selectedId, updatePayload);
+        // Fetch selected item to check for lot
+        const dbItem = await databases.getDocument(DB_ID, targetDb.value, selectedId);
+        const parentQty = dbItem.quantity || 1;
+
+        if (isSoldInCsv && parentQty > 1) {
+            const totalCost = Number(dbItem.cost || 0);
+            const unitCost = totalCost / parentQty;
+            
+            const newQty = parentQty - 1;
+            const newCost = Math.max(0, totalCost - unitCost);
+            
+            // Update Parent lot
+            await databases.updateDocument(DB_ID, targetDb.value, selectedId, {
+                quantity: newQty,
+                cost: newCost
+            });
+            
+            // Create Child Sold
+            const childDoc = {
+                title: csvRow['Name'] || csvRow['Item Name'] || csvRow['Item'] || csvRow['Title'] || 'Linked Item from CSV',
+                identity: csvRow['Name'] || csvRow['Item Name'] || csvRow['Item'] || csvRow['Title'] || 'Linked Item',
+                conditionNotes: `Manually synced from Lot: ${dbItem.title} (${dbItem.$id})`,
+                status: 'sold',
+                cost: unitCost,
+                soldPrice: updatePayload.soldPrice || 0,
+                commissionPaid: updatePayload.commissionPaid || 0,
+                parentLotId: dbItem.$id,
+                quantity: 1,
+                tenantId: dbItem.tenantId || null,
+                userId: dbItem.userId || null,
+                storageLocation: dbItem.storageLocation || null,
+                sourcingLocation: dbItem.sourcingLocation || null
+            };
+            
+            Object.keys(childDoc).forEach(key => childDoc[key] === undefined && delete childDoc[key]);
+            
+            let permissions = undefined;
+            if (dbItem.tenantId && dbItem.tenantId !== 'default') {
+                permissions = [
+                    Permission.read(Role.team(dbItem.tenantId)),
+                    Permission.update(Role.team(dbItem.tenantId)),
+                    Permission.delete(Role.team(dbItem.tenantId)),
+                ];
+            } else if (dbItem.userId) {
+                permissions = [
+                    Permission.read(Role.user(dbItem.userId)),
+                    Permission.update(Role.user(dbItem.userId)),
+                    Permission.delete(Role.user(dbItem.userId)),
+                ];
+            }
+            
+            await databases.createDocument(DB_ID, targetDb.value, ID.unique(), childDoc, permissions);
+        } else {
+            await databases.updateDocument(DB_ID, targetDb.value, selectedId, updatePayload);
+        }
         
         // Remove from both Missing arrays
         results.value.missingAppwriteItems = results.value.missingAppwriteItems.filter(i => i.$id !== selectedId);
@@ -498,7 +605,7 @@ const createNewFromCsv = async (csvRow, idx) => {
 };
 
 const markAllStatus = async (status) => {
-    const listToUpdate = status === 'sold' ? results.value.soldItemsToUpdate : results.value.placedItemsToUpdate;
+    const listToUpdate = status === 'sold' ? [...results.value.soldItemsToUpdate] : [...results.value.placedItemsToUpdate];
     if (!results.value || listToUpdate.length === 0) return;
     
     processingUpdates.value = true;
@@ -506,16 +613,10 @@ const markAllStatus = async (status) => {
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || import.meta.env.VITE_PUBLIC_APPWRITE_DB_ID || "resale_db";
         
-        const promises = listToUpdate.map(item => {
-            const updatePayload = { status };
-            if (status === 'sold') {
-                updatePayload.soldPrice = item.soldPrice;
-                updatePayload.commissionPaid = item.commissionPaid;
-            }
-            return databases.updateDocument(DB_ID, targetDb.value, item.id, updatePayload);
-        });
-        
-        await Promise.all(promises);
+        // Update sequentially to prevent race conditions on quantity updates
+        for (const item of listToUpdate) {
+            await markSingleStatus(item.id, status, item);
+        }
         
         if (status === 'sold') {
             results.value.soldItemsToUpdate = [];

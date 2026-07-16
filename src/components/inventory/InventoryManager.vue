@@ -43,142 +43,210 @@
             
             <div class="drawer-content flex flex-col pb-8 lg:pl-6 pt-1">
                 <!-- Mobile Toggle & Header -->
-                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-3 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in relative z-20 pointer-events-auto">
-                        <div class="flex flex-col">
-                            <h1 class="text-3xl font-bold text-base-content tracking-tight">Inventory</h1>
-                            <p v-if="insightFilter" class="text-sm text-warning flex flex-wrap items-center gap-2 mt-1">
-                                <Icon icon="solar:lightbulb-bolt-bold-duotone" />
-                                AI Filter Active: Fix {{ insightFilter.replace(/_/g, ' ') }}
-                                <button class="btn btn-xs btn-ghost text-error" @click="insightFilter = ''; filterStatus = 'all'">Clear</button>
+                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 pt-3 pb-2 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+                    <!-- Row 1: Title + filter toggle -->
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <div class="flex-1 min-w-0">
+                            <h1 class="text-2xl font-bold text-base-content tracking-tight leading-none">Inventory</h1>
+                            <p v-if="insightFilter" class="text-xs text-warning flex items-center gap-1 mt-0.5">
+                                <Icon icon="solar:lightbulb-bolt-bold-duotone" class="w-3 h-3" />
+                                AI Filter: {{ insightFilter.replace(/_/g, ' ') }}
+                                <button class="btn btn-xs btn-ghost text-error px-1 h-auto min-h-0 py-0" @click="insightFilter = ''; filterStatus = 'all'">✕</button>
                             </p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <label for="inventory-sidebar" class="btn btn-square btn-ghost lg:hidden shadow-sm border border-base-200 bg-base-100">
-                                <Icon icon="solar:hamburger-menu-linear" class="w-5 h-5" />
-                            </label>
-                            <h2 class="text-2xl font-bold hidden sm:block">In Inventory</h2>
-                        </div>
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <button class="btn btn-sm btn-primary gap-2" @click="openAdd">
-                                <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
-                            </button>
-                            <button class="btn btn-sm btn-outline gap-2" @click="showImport = true">
-                                <Icon icon="solar:import-linear" class="w-4 h-4" /> Import CSV
-                            </button>
-                            <button class="btn btn-sm btn-accent gap-2" @click="showReconciliation = true">
-                                <Icon icon="solar:refresh-circle-linear" class="w-4 h-4" /> Booth Sync
-                            </button>
+                        <div class="flex items-center gap-1.5">
                             <span v-if="loading" class="loading loading-spinner loading-sm"></span>
+                            <!-- Filter toggle — mobile only -->
+                            <label for="inventory-sidebar" class="btn btn-sm btn-square btn-ghost lg:hidden border border-base-200 bg-base-100 shadow-sm" title="Filters">
+                                <Icon icon="solar:filter-linear" class="w-5 h-5" />
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Row 2: Add New + Import dropdown + Export dropdown -->
+                    <div class="flex items-center gap-2">
+                        <!-- Add New -->
+                        <button class="btn btn-sm btn-primary gap-1.5 flex-1 sm:flex-none" @click="openAdd">
+                            <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
+                        </button>
+
+                        <!-- Import dropdown -->
+                        <div class="dropdown flex-1 sm:flex-none">
+                            <div tabindex="0" role="button" class="btn btn-sm btn-outline gap-1.5 w-full">
+                                <Icon icon="solar:import-linear" class="w-4 h-4" /> Import
+                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
+                            </div>
+                            <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="showImport = true">
+                                        <Icon icon="solar:document-text-linear" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
+                                        <div>
+                                            <div class="font-bold text-sm">ShopGoodwill CSV</div>
+                                            <div class="text-xs opacity-60">Import bought &amp; shipped items</div>
+                                        </div>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="showReconciliation = true">
+                                        <Icon icon="solar:refresh-circle-linear" class="w-5 h-5 mt-0.5 shrink-0 text-accent" />
+                                        <div>
+                                            <div class="font-bold text-sm">Booth Sync</div>
+                                            <div class="text-xs opacity-60">Reconcile booth inventory</div>
+                                        </div>
+                                    </button>
+                                </li>
+                                <div class="divider my-1"></div>
+                                <li class="disabled opacity-40 cursor-not-allowed">
+                                    <span class="flex items-start gap-3 py-2">
+                                        <Icon icon="solar:plug-circle-linear" class="w-5 h-5 mt-0.5 shrink-0" />
+                                        <div>
+                                            <div class="font-bold text-sm flex items-center gap-2">Add Integration <span class="badge badge-xs">Soon</span></div>
+                                            <div class="text-xs opacity-60">eBay, Poshmark &amp; more</div>
+                                        </div>
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Export dropdown -->
+                        <div class="dropdown dropdown-end flex-1 sm:flex-none">
+                            <div tabindex="0" role="button" class="btn btn-sm btn-outline gap-1.5 w-full">
+                                <Icon icon="solar:export-linear" class="w-4 h-4" /> Export
+                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
+                            </div>
+                            <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="exportCsv">
+                                        <Icon icon="solar:file-download-linear" class="w-5 h-5 mt-0.5 shrink-0 text-success" />
+                                        <div>
+                                            <div class="font-bold text-sm">Export CSV</div>
+                                            <div class="text-xs opacity-60">{{ selectedItems.length > 0 ? selectedItems.length + ' selected items' : 'All ' + filteredInventory.length + ' filtered items' }}</div>
+                                        </div>
+                                    </button>
+                                </li>
+                                <div class="divider my-1"></div>
+                                <li class="disabled opacity-40 cursor-not-allowed">
+                                    <span class="flex items-start gap-3 py-2">
+                                        <Icon icon="solar:shop-linear" class="w-5 h-5 mt-0.5 shrink-0" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">Export to Booth <span class="badge badge-xs">Soon</span></div></div>
+                                    </span>
+                                </li>
+                                <li class="disabled opacity-40 cursor-not-allowed">
+                                    <span class="flex items-start gap-3 py-2">
+                                        <Icon icon="solar:tag-price-linear" class="w-5 h-5 mt-0.5 shrink-0" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">eBay <span class="badge badge-xs">Soon</span></div></div>
+                                    </span>
+                                </li>
+                                <li class="disabled opacity-40 cursor-not-allowed">
+                                    <span class="flex items-start gap-3 py-2">
+                                        <Icon icon="solar:hanger-linear" class="w-5 h-5 mt-0.5 shrink-0" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">Poshmark <span class="badge badge-xs">Soon</span></div></div>
+                                    </span>
+                                </li>
+                            </ul>
                         </div>
                     </div>
 
-                    <!-- BULK ACTIONS ACCORDION (Sticky with header) -->
-                    <div class="collapse collapse-arrow bg-base-200 border border-base-300 mt-2 transition-all shadow-sm" :class="{'bg-primary/10 border-primary shadow-md': selectedItems.length > 0}">
-                        <input type="checkbox" v-model="bulkOpen" /> 
-                        <div class="collapse-title min-h-0 p-3 flex items-center gap-3">
-                            <input type="checkbox" :checked="isAllSelected" @change="toggleAll" @click.stop class="checkbox checkbox-sm checkbox-primary z-20 relative cursor-pointer" />
-                            <span class="font-bold text-sm select-none">
-                                Select All in View 
-                                <span v-if="selectedItems.length > 0" class="text-primary ml-2 animate-fade-in">({{ selectedItems.length }} selected)</span>
-                            </span>
+                    <!-- SMART SELECTION / PIPELINE BAR -->
+                    <div class="mt-2 rounded-xl border transition-all duration-200"
+                         :class="selectedItems.length > 0 ? 'bg-primary/10 border-primary shadow-md' : 'bg-base-200 border-base-300'">
+
+                        <!-- State A: Nothing selected — show count + select all -->
+                        <div v-if="selectedItems.length === 0" class="flex items-center justify-between px-3 py-2.5 gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer select-none">
+                                <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="checkbox checkbox-sm checkbox-primary" />
+                                <span class="text-sm font-semibold">Select items to take action</span>
+                                <span class="text-xs opacity-50">{{ filteredInventory.length }} in view</span>
+                            </label>
+                            <button class="btn btn-xs btn-ghost gap-1 opacity-60 hover:opacity-100" @click="exportCsv">
+                                <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export All
+                            </button>
                         </div>
-                        <div class="collapse-content pb-3">
-                            <div class="flex flex-col gap-3 w-full pt-3 border-t border-base-300/50">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-                                    <div class="join w-full">
-                                        <select v-model="bulkStatusTarget" class="select select-sm select-bordered join-item bg-base-100 text-base-content flex-1">
-                                            <option value="" disabled selected>Change Status...</option>
-                                            <option value="tracked">Tracked</option>
-                                            <option value="acquired">Acquired</option>
-                                            <option value="received">Received</option>
-                                            <option value="placed">Placed</option>
-                                            <option value="sold">Sold</option>
-                                        </select>
-                                        <button class="btn btn-sm btn-primary join-item shrink-0" @click="applyBulkStatus" :disabled="!bulkStatusTarget || processingBulk">
-                                            <span v-if="processingBulk" class="loading loading-spinner loading-xs"></span>
-                                            Apply
-                                        </button>
-                                    </div>
-                                    <div class="join w-full" v-if="orgPlacedLocations && orgPlacedLocations.length > 0">
-                                        <select v-model="bulkLocationTarget" class="select select-sm select-bordered join-item bg-base-100 text-base-content flex-1">
-                                            <option value="" disabled selected>Change Location...</option>
-                                            <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc">{{ loc }}</option>
-                                        </select>
-                                        <button class="btn btn-sm btn-secondary join-item shrink-0" @click="applyBulkLocation" :disabled="!bulkLocationTarget || processingBulkLoc">
-                                            <span v-if="processingBulkLoc" class="loading loading-spinner loading-xs"></span>
-                                            Apply
-                                        </button>
-                                    </div>
-                                    <div class="join w-full col-span-1 sm:col-span-2 mt-2 pt-2 border-t border-base-300/50 flex flex-col" v-if="insightFilter">
-                                        <label class="label pt-0 -mb-1 pb-1"><span class="label-text font-bold text-[10px] uppercase opacity-70 text-warning"><Icon icon="solar:shield-warning-bold-duotone" class="inline" /> Admin Auto-Heal: {{ insightFilter.replace(/_/g, ' ') }}</span></label>
-                                        
-                                        <!-- Missing Estimated Value -->
-                                        <button v-if="insightFilter === 'missing_est_value'" class="btn btn-sm btn-warning w-full shadow-sm" 
-                                                @click="runAutoEstimatorAdmin" 
-                                                :disabled="isEstimating || selectedItems.length === 0">
-                                           <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                           <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
-                                           <span v-if="isEstimating">Estimating {{ bulkProgress }}/{{ bulkTotal }}</span>
-                                           <span v-else>Auto-Estimate {{ selectedItems.length }} Selected Items</span>
-                                        </button>
 
-                                        <!-- Missing Sold Price -->
-                                        <button v-if="insightFilter === 'missing_sold_price'" class="btn btn-sm btn-warning w-full shadow-sm" 
-                                                @click="runAutoCalcSoldPrice" 
-                                                :disabled="isEstimating || selectedItems.length === 0">
-                                           <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                           <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
-                                           <span v-if="isEstimating">Calculating {{ bulkProgress }}/{{ bulkTotal }}</span>
-                                           <span v-else>Auto-Calc Sold Price (-20%) for {{ selectedItems.length }} Items</span>
-                                        </button>
+                        <!-- State B: Items selected — inline action pipeline -->
+                        <div v-else class="flex flex-col gap-2 p-3">
+                            <!-- Top row: checkbox + count + clear -->
+                            <div class="flex items-center gap-3">
+                                <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="checkbox checkbox-sm checkbox-primary" />
+                                <span class="text-sm font-bold text-primary flex-1">{{ selectedItems.length }} item{{ selectedItems.length > 1 ? 's' : '' }} selected</span>
+                                <button class="btn btn-xs btn-ghost text-error" @click="selectedItems = []">✕ Clear</button>
+                            </div>
 
-                                        <!-- Missing Cost Basis -->
-                                        <div v-if="insightFilter === 'missing_cost'" class="flex gap-2">
-                                            <label class="input input-bordered input-sm flex items-center gap-2 w-32 bg-base-100 shadow-sm">
-                                                <span class="opacity-50">$</span>
-                                                <input type="number" step="0.01" v-model="bulkCostValue" class="grow" placeholder="0.00" />
-                                            </label>
-                                            <button class="btn btn-sm btn-warning flex-1 shadow-sm" 
-                                                    @click="runAutoCalcCost" 
-                                                    :disabled="isEstimating || selectedItems.length === 0 || bulkCostValue === ''">
-                                               <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                               <Icon v-else icon="solar:bill-check-bold-duotone" class="w-4 h-4" />
-                                               <span v-if="isEstimating">Processing {{ bulkProgress }}/{{ bulkTotal }}</span>
-                                               <span v-else>Set Cost for {{ selectedItems.length }} Items</span>
-                                            </button>
-                                        </div>
-
-                                        <!-- Missing Photos -->
-                                        <button v-if="insightFilter === 'missing_photos'" class="btn btn-sm btn-error w-full shadow-sm" 
-                                                @click="runAutoFetchPhotos" 
-                                                :disabled="isEstimating || selectedItems.length === 0">
-                                           <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                           <Icon v-else icon="solar:gallery-download-bold-duotone" class="w-4 h-4" />
-                                           <span v-if="isEstimating">Fetching {{ bulkProgress }}/{{ bulkTotal }}</span>
-                                           <span v-else>Auto-Fetch Photos for {{ selectedItems.length }} Items</span>
-                                        </button>
-
-                                        <!-- Missing Descriptions -->
-                                        <button v-if="insightFilter === 'missing_description'" class="btn btn-sm btn-info w-full shadow-sm" 
-                                                @click="runAutoGenerateDescriptions" 
-                                                :disabled="isEstimating || selectedItems.length === 0">
-                                           <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                           <Icon v-else icon="solar:pen-new-square-bold-duotone" class="w-4 h-4" />
-                                           <span v-if="isEstimating">Generating {{ bulkProgress }}/{{ bulkTotal }}</span>
-                                           <span v-else>Auto-Generate Descriptions for {{ selectedItems.length }} Items</span>
-                                        </button>
-                                    </div>
+                            <!-- Action row -->
+                            <div class="flex flex-wrap gap-2">
+                                <!-- Status -->
+                                <div class="join">
+                                    <select v-model="bulkStatusTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content">
+                                        <option value="" disabled selected>Set Status...</option>
+                                        <option value="tracked">Tracked</option>
+                                        <option value="acquired">Acquired</option>
+                                        <option value="received">Received</option>
+                                        <option value="placed">Placed</option>
+                                        <option value="sold">Sold</option>
+                                    </select>
+                                    <button class="btn btn-xs btn-primary join-item" @click="applyBulkStatus" :disabled="!bulkStatusTarget || processingBulk">
+                                        <span v-if="processingBulk" class="loading loading-spinner loading-xs"></span>
+                                        <span v-else>Apply</span>
+                                    </button>
                                 </div>
-                                <div class="flex justify-between items-center w-full gap-2 mt-2 pt-2 border-t border-base-300/50">
-                                    <div>
-                                        <button v-if="selectedItems.length >= 2" type="button" class="btn btn-sm btn-accent gap-2 shadow-sm font-bold" @click="openBundleModal">
-                                            <Icon icon="solar:box-minimalistic-bold-duotone" class="w-4 h-4" />
-                                            Create Bundle from Selection ({{ selectedItems.length }})
-                                        </button>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-ghost text-error" @click="selectedItems = []" v-if="selectedItems.length > 0">Clear Selection</button>
+
+                                <!-- Location -->
+                                <div class="join" v-if="orgPlacedLocations && orgPlacedLocations.length > 0">
+                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content">
+                                        <option value="" disabled selected>Set Location...</option>
+                                        <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                    </select>
+                                    <button class="btn btn-xs btn-secondary join-item" @click="applyBulkLocation" :disabled="!bulkLocationTarget || processingBulkLoc">
+                                        <span v-if="processingBulkLoc" class="loading loading-spinner loading-xs"></span>
+                                        <span v-else>Apply</span>
+                                    </button>
                                 </div>
+
+                                <!-- Bundle / Combine (2+ only) -->
+                                <button v-if="selectedItems.length >= 2" class="btn btn-xs btn-accent gap-1" @click="openBundleModal">
+                                    <Icon icon="solar:box-minimalistic-bold-duotone" class="w-3.5 h-3.5" /> Bundle
+                                </button>
+                                <button v-if="selectedItems.length >= 2" class="btn btn-xs btn-secondary gap-1" @click="openCombineModal">
+                                    <Icon icon="solar:link-minimalistic-bold" class="w-3.5 h-3.5" /> Combine
+                                </button>
+
+                                <!-- Export selected -->
+                                <button class="btn btn-xs btn-success gap-1 ml-auto" @click="exportCsv">
+                                    <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export {{ selectedItems.length }}
+                                </button>
+                            </div>
+
+                            <!-- Admin Auto-Heal row (only when insight filter active) -->
+                            <div v-if="insightFilter" class="pt-2 border-t border-primary/20">
+                                <div class="text-[10px] uppercase font-bold opacity-60 text-warning mb-1.5 flex items-center gap-1">
+                                    <Icon icon="solar:shield-warning-bold-duotone" class="w-3 h-3" /> Auto-Heal: {{ insightFilter.replace(/_/g, ' ') }}
+                                </div>
+                                <button v-if="insightFilter === 'missing_est_value'" class="btn btn-xs btn-warning w-full" @click="runAutoEstimatorAdmin" :disabled="isEstimating">
+                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                    <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
+                                    {{ isEstimating ? 'Estimating ' + bulkProgress + '/' + bulkTotal : 'Auto-Estimate ' + selectedItems.length + ' Items' }}
+                                </button>
+                                <button v-if="insightFilter === 'missing_sold_price'" class="btn btn-xs btn-warning w-full" @click="runAutoCalcSoldPrice" :disabled="isEstimating">
+                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                    {{ isEstimating ? 'Calculating ' + bulkProgress + '/' + bulkTotal : 'Auto-Calc Sold Price for ' + selectedItems.length + ' Items' }}
+                                </button>
+                                <div v-if="insightFilter === 'missing_cost'" class="flex gap-2">
+                                    <label class="input input-bordered input-xs flex items-center gap-1 w-28 bg-base-100">
+                                        <span class="opacity-50">$</span>
+                                        <input type="number" step="0.01" v-model="bulkCostValue" class="grow" placeholder="0.00" />
+                                    </label>
+                                    <button class="btn btn-xs btn-warning flex-1" @click="runAutoCalcCost" :disabled="isEstimating || bulkCostValue === ''">
+                                        <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                        {{ isEstimating ? 'Processing...' : 'Set Cost for ' + selectedItems.length + ' Items' }}
+                                    </button>
+                                </div>
+                                <button v-if="insightFilter === 'missing_photos'" class="btn btn-xs btn-error w-full" @click="runAutoFetchPhotos" :disabled="isEstimating">
+                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                    {{ isEstimating ? 'Fetching ' + bulkProgress + '/' + bulkTotal : 'Auto-Fetch Photos for ' + selectedItems.length + ' Items' }}
+                                </button>
+                                <button v-if="insightFilter === 'missing_description'" class="btn btn-xs btn-info w-full" @click="runAutoGenerateDescriptions" :disabled="isEstimating">
+                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                    {{ isEstimating ? 'Generating ' + bulkProgress + '/' + bulkTotal : 'Auto-Generate Descriptions for ' + selectedItems.length + ' Items' }}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -257,6 +325,7 @@
                                 <option value="received">Received</option>
                                 <option value="placed">Placed</option>
                                 <option value="sold">Sold</option>
+                                <option value="combined">Combined</option>
                             </select>
                         </div>
                         
@@ -472,6 +541,86 @@
             </div>
         </dialog>
 
+        <!-- Combine Selected into Lot Modal -->
+        <dialog ref="combineModal" class="modal">
+            <div class="modal-box max-w-lg">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                    <Icon icon="solar:link-minimalistic-bold" class="w-6 h-6 text-secondary" /> 
+                    Combine Selected into Lot
+                </h3>
+                
+                <div class="space-y-4">
+                    <!-- Primary Item Selector -->
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text font-bold opacity-70">Primary Item (Keep Photos & Description)</span>
+                        </label>
+                        <select v-model="combinePrimaryId" class="select select-bordered w-full text-xs font-bold" @change="onCombinePrimaryChange">
+                            <option v-for="item in selectedItemsObjects" :key="item.$id" :value="item.$id">
+                                {{ item.title }} (Qty: {{ item.quantity || 1 }}, Cost: ${{ Number(item.cost || 0).toFixed(2) }})
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Suggested Title -->
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold opacity-70">Lot Title</span></label>
+                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Lot Name" />
+                    </div>
+
+                    <!-- Cost & Resale row -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-control w-full">
+                            <label class="label"><span class="label-text font-bold opacity-70">Total Cost ($)</span></label>
+                            <input type="number" step="0.01" v-model="combineCost" class="input input-bordered w-full font-mono text-sm" />
+                        </div>
+                        <div class="form-control w-full">
+                            <label class="label"><span class="label-text font-bold opacity-70">Total Quantity</span></label>
+                            <input type="number" v-model.number="combineTotalUnits" min="1" class="input input-bordered w-full font-mono text-sm" />
+                        </div>
+                    </div>
+
+                    <!-- List of Items included -->
+                    <div class="border border-base-300 rounded-xl p-3 bg-base-200/50">
+                        <label class="label pt-0 pb-1.5">
+                            <span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span>
+                        </label>
+                        <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                            <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm" :class="{'ring-1 ring-secondary': item.$id === combinePrimaryId}">
+                                <div class="flex flex-col min-w-0">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="font-medium truncate max-w-[200px]" :class="item.$id === combinePrimaryId ? 'text-secondary font-bold' : ''">
+                                            {{ item.title }}
+                                        </span>
+                                        <span v-if="item.$id === combinePrimaryId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Primary</span>
+                                    </div>
+                                    <span class="text-[9px] opacity-50 uppercase font-bold">
+                                        Cost: ${{ Number(item.cost || 0).toFixed(2) }} | Qty: {{ item.quantity || 1 }}
+                                    </span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal">
+                        <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
+                        <span>This will merge the selected items into a single lot listing. The non-primary items will be permanently deleted from the database.</span>
+                    </div>
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="closeCombineModal" :disabled="savingCombine">Cancel</button>
+                    <button type="button" class="btn btn-secondary btn-sm px-6" @click="submitCombine" :disabled="savingCombine || !combineTitle || combineTotalUnits < 1">
+                        <span v-if="savingCombine" class="loading loading-spinner loading-xs mr-1"></span>
+                        Combine into Lot
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button @click="closeCombineModal" :disabled="savingCombine">close</button>
+            </form>
+        </dialog>
+
         <!-- Deconstruct Modal -->
         <dialog ref="deconstructModalRef" class="modal">
             <div class="modal-box max-w-sm">
@@ -530,6 +679,45 @@ import TagInput from '../common/TagInput.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { isAlphaMode } from '../../stores/env';
+
+// -- EXPORT CSV --
+function exportCsv() {
+    const itemsToExport = selectedItems.value.length > 0
+        ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
+        : filteredInventory.value;
+
+    if (itemsToExport.length === 0) {
+        addToast({ type: 'warning', message: 'No items to export.' });
+        return;
+    }
+
+    const headers = ['ID', 'Title', 'Status', 'Cost', 'Resale Price', 'Est. Value', 'Location', 'Condition Notes', 'Keywords', 'Date Added'];
+    const rows = itemsToExport.map(item => [
+        item.$id,
+        item.title || '',
+        item.status || '',
+        item.cost ?? '',
+        item.resalePrice ?? '',
+        item.estValue ?? '',
+        item.storageLocation || '',
+        (item.conditionNotes || '').replace(/\n/g, ' '),
+        (item.keywords || []).join('; '),
+        item.$createdAt ? new Date(item.$createdAt).toLocaleDateString() : ''
+    ]);
+
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventory-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast({ type: 'success', message: `Exported ${itemsToExport.length} items to CSV.` });
+}
 
 // Environment Variables
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
@@ -827,6 +1015,9 @@ const filteredInventory = computed(() => {
 
         // Exclude tracked items by default (unless explicitly filtering for them)
         if (item.status === 'tracked' && filterStatus.value !== 'tracked') return false;
+
+        // Exclude combined items by default (unless explicitly filtering for them)
+        if (item.status === 'combined' && filterStatus.value !== 'combined') return false;
 
         // --- AI Insight Filters ---
         if (insightFilter.value) {
@@ -1661,6 +1852,144 @@ const submitBundle = async () => {
         console.error(e);
     } finally {
         savingBundle.value = false;
+    }
+};
+
+const combineModal = ref(null);
+const combineTitle = ref('');
+const combineCost = ref(0);
+const combineTotalUnits = ref(1);
+const combinePrimaryId = ref(null);
+const savingCombine = ref(false);
+
+const openCombineModal = () => {
+    const items = selectedItemsObjects.value;
+    if (items.length < 2) return;
+    
+    // Choose the first item as default primary
+    combinePrimaryId.value = items[0].$id;
+    combineTitle.value = items[0].title;
+    
+    // Calculate total cost and total quantity
+    const totalCost = items.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
+    const totalQty = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+    
+    combineCost.value = parseFloat(totalCost.toFixed(2));
+    combineTotalUnits.value = totalQty;
+    
+    if (combineModal.value) {
+        combineModal.value.showModal();
+    }
+};
+
+const onCombinePrimaryChange = () => {
+    const primaryItem = selectedItemsObjects.value.find(i => i.$id === combinePrimaryId.value);
+    if (primaryItem) {
+        combineTitle.value = primaryItem.title;
+    }
+};
+
+const closeCombineModal = () => {
+    if (combineModal.value) {
+        combineModal.value.close();
+    }
+};
+
+const submitCombine = async () => {
+    const items = selectedItemsObjects.value;
+    if (items.length < 2 || !combinePrimaryId.value) return;
+    
+    savingCombine.value = true;
+    try {
+        const primaryItem = items.find(i => i.$id === combinePrimaryId.value);
+        if (!primaryItem) throw new Error("Primary item not found.");
+        
+        const user = await account.get();
+        const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
+        
+        // 1. Combine images from all selected items
+        const galleryIdsSet = new Set();
+        items.forEach(item => {
+            if (item.imageId) galleryIdsSet.add(item.imageId);
+            if (item.galleryImageIds) {
+                item.galleryImageIds.forEach(id => galleryIdsSet.add(id));
+            }
+        });
+        const combinedGallery = Array.from(galleryIdsSet);
+        const mainImageId = primaryItem.imageId || combinedGallery[0] || null;
+        
+        // 2. Prepare description/condition notes merge
+        let combinedNotes = (primaryItem.conditionNotes || '').trim();
+        const otherNotesList = items
+            .filter(i => i.$id !== primaryItem.$id)
+            .map(i => `[Merged Item: ${i.title} - Cost: $${Number(i.cost || 0).toFixed(2)}, Qty: ${i.quantity || 1}]\n${i.conditionNotes || ''}`.trim())
+            .filter(n => n.length > 0);
+        
+        if (otherNotesList.length > 0) {
+            combinedNotes += `\n\n--- MERGED ITEMS NOTES ---\n` + otherNotesList.join('\n\n');
+        }
+
+        // Calculate combined resale price
+        const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.listPrice || 0) || 0), 0);
+
+        // 3. Create the new combined item document representing the combined lot
+        const extraData = {
+            cost: combineCost.value,
+            resalePrice: totalResale ? totalResale.toFixed(2) : undefined,
+            status: primaryItem.status || 'acquired',
+            sourcingLocation: primaryItem.sourcingLocation || 'Combined Lot',
+            storageLocation: primaryItem.storageLocation,
+            imageId: mainImageId,
+            galleryImageIds: combinedGallery,
+            keywords: Array.from(new Set(items.flatMap(i => i.keywords || []))),
+            quantity: combineTotalUnits.value,
+            parentLotId: null,
+            rawAnalysis: primaryItem.rawAnalysis || null
+        };
+        
+        const combinedLotDoc = await saveItemToInventory(
+            { 
+                title: combineTitle.value, 
+                identity: combineTitle.value, 
+                condition_notes: combinedNotes 
+            },
+            null, // no file upload
+            extraData,
+            teamId
+        );
+        
+        // 4. Update all original items: set status to 'combined' and link to new lot
+        const updatePromises = items.map(item => 
+            updateInventoryItem(item.$id, {
+                status: 'combined',
+                parentLotId: combinedLotDoc.$id
+            })
+        );
+        await Promise.all(updatePromises);
+        
+        // 5. Optimistically update local state
+        // Add new combined document to inventory list
+        inventoryItems.value.unshift(combinedLotDoc);
+        // Mark combined items locally
+        inventoryItems.value.forEach(item => {
+            if (items.some(i => i.$id === item.$id)) {
+                item.status = 'combined';
+                item.parentLotId = combinedLotDoc.$id;
+            }
+        });
+        
+        // Close modal and reset state
+        closeCombineModal();
+        selectedItems.value = [];
+        addToast({ type: 'success', message: `Successfully combined into new lot "${combineTitle.value}"!` });
+        
+        // Async refresh in background
+        fetchInventory('').catch(() => {});
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to combine items: ' + e.message });
+        console.error(e);
+    } finally {
+        savingCombine.value = false;
     }
 };
 

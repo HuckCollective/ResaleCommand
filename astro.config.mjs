@@ -16,6 +16,9 @@ import os from "node:os";
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
+  server: {
+    host: true  // Listen on all interfaces: localhost + network (for mobile)
+  },
   site: "https://example.com",
   trailingSlash: "never",
   integrations: [mdx(), sitemap(), icon(), alpinejs(), vue()],
@@ -28,6 +31,7 @@ export default defineConfig({
     // On WSL/Linux, use a native temp directory to avoid Windows file lock (EACCES) issues on the mounted /c/ drive
     cacheDir: os.platform() === "linux" ? "/tmp/vite_cache_resalecommand" : undefined,
     server: {
+
       watch: {
         usePolling: true,
         interval: 1000,
@@ -36,7 +40,6 @@ export default defineConfig({
         ignored: ['**/node_modules/**', '**/.git/**', '**/.astro/**']
       },
       hmr: {
-        host: 'localhost',
         protocol: 'ws'
       }
     },

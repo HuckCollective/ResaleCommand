@@ -87,8 +87,26 @@ export function reconcileBoothInventory(csvText: string, appwriteItems: any[]): 
                         }
 
                         if (matchIndex > -1) {
-                            matchedForThisRow.push(unmatchedAppwrite[matchIndex]);
-                            unmatchedAppwrite.splice(matchIndex, 1); // remove from pool
+                            const matchedItem = unmatchedAppwrite[matchIndex];
+                            const qty = Number(matchedItem.quantity || 1);
+                            
+                            if (qty > 1) {
+                                const clonedItem = { ...matchedItem };
+                                const unitCost = Number(matchedItem.cost || 0) / qty;
+                                
+                                // Decrement quantity and cost basis in memory for the unmatched pool
+                                matchedItem.quantity = qty - 1;
+                                matchedItem.cost = Math.max(0, Number(matchedItem.cost || 0) - unitCost);
+                                
+                                matchedForThisRow.push({
+                                    ...clonedItem,
+                                    isQuantitySplit: true,
+                                    unitCost
+                                });
+                            } else {
+                                matchedForThisRow.push(matchedItem);
+                                unmatchedAppwrite.splice(matchIndex, 1); // remove from pool
+                            }
                         } else {
                             // If we can't find another match, stop trying to fill the quantity
                             break;
@@ -124,20 +142,35 @@ export function reconcileBoothInventory(csvText: string, appwriteItems: any[]): 
                                     commissionPaid = soldPrice * ((100 - consignorPct) / 100);
                                 }
 
-                                result.soldItemsToUpdate.push({
-                                    id: matchedItem.$id,
-                                    title: matchedItem.title,
-                                    currentStatus: matchedItem.status,
-                                    soldPrice,
-                                    commissionPaid
-                                });
+                                if (matchedItem.isQuantitySplit) {
+                                    result.soldItemsToUpdate.push({
+                                        id: matchedItem.$id,
+                                        title: csvName, // Use the specific name from the CSV!
+                                        currentStatus: matchedItem.status,
+                                        soldPrice,
+                                        commissionPaid,
+                                        isQuantitySplit: true,
+                                        unitCost: matchedItem.unitCost,
+                                        parentLotId: matchedItem.$id
+                                    });
+                                } else {
+                                    result.soldItemsToUpdate.push({
+                                        id: matchedItem.$id,
+                                        title: matchedItem.title,
+                                        currentStatus: matchedItem.status,
+                                        soldPrice,
+                                        commissionPaid
+                                    });
+                                }
                             } else if (!isSoldInCsv && matchedItem.status !== 'placed' && matchedItem.status !== 'sold') {
-                                // If it's in the CSV and not sold, it is physically in the booth and should be "placed"
-                                result.placedItemsToUpdate.push({
-                                    id: matchedItem.$id,
-                                    title: matchedItem.title,
-                                    currentStatus: matchedItem.status
-                                });
+                                if (!matchedItem.isQuantitySplit) {
+                                    // If it's in the CSV and not sold, it is physically in the booth and should be "placed"
+                                    result.placedItemsToUpdate.push({
+                                        id: matchedItem.$id,
+                                        title: matchedItem.title,
+                                        currentStatus: matchedItem.status
+                                    });
+                                }
                             }
                         });
                     } else {

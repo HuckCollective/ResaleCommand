@@ -21,7 +21,8 @@
                             <Icon icon="solar:link-minimalistic-bold" class="w-3 h-3 sm:mr-1" /> <span class="hidden sm:inline">Extracted</span>
                         </div>
                         <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="badge badge-xs sm:badge-sm bg-base-300/80 border-base-100/50 text-white font-bold backdrop-blur-sm shadow-sm opacity-90" title="Bulk Lot">
-                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3 sm:mr-1" /> <span class="hidden sm:inline">Lot</span>
+                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3 sm:mr-1" /> 
+                            <span>Lot <span v-if="item.quantity > 1">x{{ item.quantity }}</span><span v-else class="hidden sm:inline">Lot</span></span>
                         </div>
                     </div>
                     

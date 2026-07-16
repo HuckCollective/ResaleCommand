@@ -9,18 +9,20 @@
 
         <!-- Option A: File -->
         <div v-if="importMethod === 'file'" class="flex-1 flex flex-col items-center justify-center space-y-4">
-            <label class="w-full flex justify-center px-6 pt-5 pb-6 border-2 border-primary border-dashed rounded-md cursor-pointer hover:bg-base-200 transition-colors">
-                <div class="space-y-1 text-center">
-                    <Icon icon="solar:upload-linear" class="mx-auto h-12 w-12 text-primary" />
-                    <div class="flex text-sm text-gray-600 justify-center">
-                        <span class="relative font-medium text-primary hover:text-primary-focus">
-                            Upload CSV / Export
-                        </span>
-                    </div>
-                    <p class="text-xs text-gray-400">ShopGoodwill Exports</p>
+            <!-- Hidden file input triggered by button ref -->
+            <input type="file" ref="fileInputRef" class="hidden" @change="handleFileUpload" />
+            <button
+                type="button"
+                @click="fileInputRef?.click()"
+                class="w-full flex flex-col items-center justify-center px-6 pt-8 pb-8 border-2 border-primary border-dashed rounded-xl cursor-pointer hover:bg-base-200 active:bg-base-300 transition-colors gap-3"
+            >
+                <Icon icon="solar:upload-linear" class="h-12 w-12 text-primary" />
+                <div class="text-center">
+                    <div class="font-bold text-primary text-base">Tap to select CSV file</div>
+                    <p class="text-xs text-gray-400 mt-1">ShopGoodwill Exports</p>
                 </div>
-                <input type="file" class="sr-only" accept=".csv,.txt" @change="handleFileUpload" />
-            </label>
+                <div v-if="selectedFileName" class="badge badge-primary badge-sm mt-1">{{ selectedFileName }}</div>
+            </button>
         </div>
 
         <!-- Option B: Paste -->
@@ -215,6 +217,8 @@ const step = ref(1);
 const parsedItems = ref<any[]>([]);
 const importMethod = ref<'file' | 'paste'>('file');
 const pasteContent = ref('');
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const selectedFileName = ref('');
 const importing = ref(false);
 const importProgress = ref(0);
 const estimating = ref(false);
@@ -295,6 +299,7 @@ async function runEstimates() {
 function handleFileUpload(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
+    selectedFileName.value = file.name;
     const reader = new FileReader();
     reader.onload = (e) => {
         const text = e.target?.result as string;

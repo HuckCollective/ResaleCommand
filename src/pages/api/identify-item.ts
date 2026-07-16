@@ -237,6 +237,13 @@ export const ALL: APIRoute = async ({ request }) => {
                 if (referer) {
                     headers['Referer'] = referer;
                 }
+                if (imgUrl.includes('/storage/buckets/')) {
+                    const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID;
+                    const apiKey = process.env.APPWRITE_API_KEY;
+                    if (projectId) headers['X-Appwrite-Project'] = projectId;
+                    if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+                    console.log("Debug - Added Appwrite auth headers for storage URL fetch");
+                }
                 
                 const res = await fetch(imgUrl, { headers });
                 
@@ -857,6 +864,8 @@ export const ALL: APIRoute = async ({ request }) => {
           - 'purchase_strategy': An object containing strategic advice for sourcing this item:
                - 'verdict': ONE of these strict enums: "PASS", "WATCH", "BUY_NOW", "NEGOTIATE", "CHASE_AUCTION".
                - 'current_asking_price': State the current bid or asking price if found.
+               - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
+               - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
                - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
           - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
                - 'name': Specific name/description of the item.

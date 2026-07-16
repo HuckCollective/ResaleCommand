@@ -89,9 +89,15 @@
                     </div>
                 </div>
 
-                <div class="form-control">
-                    <label class="label"><span class="label-text">Bin / Location</span></label>
-                    <input v-model="form.bin" type="text" placeholder="e.g. Bin A-2" class="input input-bordered w-full" />
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Bin / Location</span></label>
+                        <input v-model="form.bin" type="text" placeholder="e.g. Bin A-2" class="input input-bordered w-full" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Quantity</span></label>
+                        <input v-model="form.quantity" type="number" min="1" step="1" placeholder="1" class="input input-bordered w-full" />
+                    </div>
                 </div>
                 
                 <div class="form-control">
@@ -136,7 +142,7 @@ import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
-import { getSafeRawAnalysis } from '../../lib/inventory';
+import { getSafeRawAnalysis, getCollectionId } from '../../lib/inventory';
 import ScannerWidget from '../common/ScannerWidget.vue';
 
 const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
@@ -160,7 +166,8 @@ const form = reactive({
     cost: '',
     listPrice: '',
     bin: '',
-    description: ''
+    description: '',
+    quantity: 1
 });
 
 function onImported() {
@@ -284,7 +291,8 @@ async function saveItem() {
             redFlags: [],
             galleryImageIds: galleryIds,
             imageId: galleryIds[0] || null,
-            rawAnalysis: aiAnalysisResult.value ? getSafeRawAnalysis(aiAnalysisResult.value) : undefined
+            rawAnalysis: aiAnalysisResult.value ? getSafeRawAnalysis(aiAnalysisResult.value) : undefined,
+            quantity: parseInt(form.quantity as any) || 1
         };
         
         await createItem(payload);
@@ -297,6 +305,7 @@ async function saveItem() {
         form.listPrice = '';
         form.bin = '';
         form.description = '';
+        form.quantity = 1;
         images.value = [];
         imageFiles.value = [];
         aiAnalysisResult.value = null;
@@ -332,7 +341,7 @@ async function createItem(data: any) {
     
     await databases.createDocument(
         DB,
-        'items', 
+        getCollectionId(), 
         ID.unique(),
         {
             ...data,
