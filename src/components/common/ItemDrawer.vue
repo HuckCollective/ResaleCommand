@@ -385,41 +385,41 @@
                     </div>
 
                     <!-- Old Single Item Layout (Fallback) -->
-                    <div v-else>
+                    <div v-else-if="scoutItemsArray.length === 1">
                         <!-- AI Found Image Thumbnail -->
-                        <div v-if="scoutResult.image" class="mb-3 flex justify-center">
-                            <img :src="proxify(scoutResult.image)" class="h-32 object-contain rounded-lg shadow-md border border-base-300" alt="AI Found Item" />
+                        <div v-if="scoutItemsArray[0].image" class="mb-3 flex justify-center">
+                            <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-lg shadow-md border border-base-300" alt="AI Found Item" />
                         </div>
 
                         <!-- Red Flags -->
-                        <div v-if="scoutResult.red_flags && scoutResult.red_flags.length > 0" class="alert alert-warning shadow-sm mb-2 p-2 text-xs">
-                            <span class="font-bold"><Icon icon="solar:flag-linear" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutResult.red_flags.join(', ') }}
+                        <div v-if="scoutItemsArray[0].red_flags && scoutItemsArray[0].red_flags.length > 0" class="alert alert-warning shadow-sm mb-2 p-2 text-xs">
+                            <span class="font-bold"><Icon icon="solar:flag-linear" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutItemsArray[0].red_flags.join(', ') }}
                         </div>
                         
                         <!-- Valuation -->
-                        <div v-if="scoutResult.price_breakdown" class="grid grid-cols-2 gap-2 mb-3">
+                        <div v-if="scoutItemsArray[0].price_breakdown" class="grid grid-cols-2 gap-2 mb-3">
                             <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-base-200">
                                 <span class="text-[10px] uppercase font-bold text-success">Mint</span>
-                                <span class="font-mono font-bold">{{ formatPriceRange(scoutResult.price_breakdown.mint) }}</span>
+                                <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.mint) }}</span>
                             </div>
                             <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-primary">
                                 <span class="text-[10px] uppercase font-bold text-primary">Fair</span>
-                                <span class="font-mono font-bold">{{ formatPriceRange(scoutResult.price_breakdown.fair) }}</span>
+                                <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.fair) }}</span>
                             </div>
                             <div class="flex flex-col items-center bg-base-100 p-2 rounded border border-base-200">
                                 <span class="text-[10px] uppercase font-bold text-error">Poor</span>
-                                <span class="font-mono font-bold">{{ formatPriceRange(scoutResult.price_breakdown.poor) }}</span>
+                                <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.poor) }}</span>
                             </div>
-                            <div v-if="scoutResult.price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30">
+                            <div v-if="scoutItemsArray[0].price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30">
                                 <span class="text-[10px] uppercase font-bold text-secondary">Boutique</span>
-                                <span class="font-mono font-bold">{{ formatPriceRange(scoutResult.price_breakdown.boutique_premium) }}</span>
+                                <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.boutique_premium) }}</span>
                             </div>
                         </div>
 
                         <!-- Comparables -->
-                        <div v-if="scoutResult.comparables && scoutResult.comparables.length > 0" class="space-y-1">
+                        <div v-if="scoutItemsArray[0].comparables && scoutItemsArray[0].comparables.length > 0" class="space-y-1">
                             <div class="text-[10px] font-bold uppercase opacity-50">Comps</div>
-                            <div v-for="(comp, cIdx) in scoutResult.comparables" :key="cIdx" class="flex justify-between items-center text-xs bg-base-100 p-1.5 rounded border border-base-200">
+                            <div v-for="(comp, cIdx) in scoutItemsArray[0].comparables" :key="cIdx" class="flex justify-between items-center text-xs bg-base-100 p-1.5 rounded border border-base-200">
                                 <span class="truncate pr-2">{{ comp.name }}</span>
                                 <span class="font-mono font-bold">{{ comp.price }}</span>
                             </div>

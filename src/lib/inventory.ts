@@ -46,31 +46,49 @@ export function getSafeRawAnalysis(item: any): string | null {
         let str = JSON.stringify(item);
         if (str.length <= 4900) return str;
         
-        // If it's too long, copy and prune comparables
-        const pruned = { ...item };
-        if (pruned.comparables && pruned.comparables.length > 3) {
-            pruned.comparables = pruned.comparables.slice(0, 3);
-        }
-        str = JSON.stringify(pruned);
-        if (str.length <= 4900) return str;
+        const processItem = (obj: any) => {
+            if (!obj) return obj;
+            const pruned = { ...obj };
+            if (pruned.comparables && pruned.comparables.length > 3) {
+                pruned.comparables = pruned.comparables.slice(0, 3);
+            }
+            if (pruned.lot_items && pruned.lot_items.length > 5) {
+                pruned.lot_items = pruned.lot_items.slice(0, 5);
+            }
+            return pruned;
+        };
 
-        // Prune lot_items if still too long
-        if (pruned.lot_items && pruned.lot_items.length > 5) {
-            pruned.lot_items = pruned.lot_items.slice(0, 5);
+        let pruned;
+        if (Array.isArray(item)) {
+            pruned = item.map(processItem);
+        } else if (item.items && Array.isArray(item.items)) {
+            pruned = { ...item, items: item.items.map(processItem) };
+        } else {
+            pruned = processItem(item);
         }
+        
         str = JSON.stringify(pruned);
         if (str.length <= 4900) return str;
 
         // Absolute fallback: keep only main fields
-        return JSON.stringify({
-            identity: item.identity,
-            title: item.title,
-            price_breakdown: item.price_breakdown,
-            shipping_info: item.shipping_info,
-            purchase_strategy: item.purchase_strategy,
-            condition_notes: item.condition_notes,
-            keywords: item.keywords
+        const fallbackObj = (obj: any) => ({
+            identity: obj.identity,
+            title: obj.title,
+            price_breakdown: obj.price_breakdown,
+            shipping_info: obj.shipping_info,
+            purchase_strategy: obj.purchase_strategy,
+            condition_notes: obj.condition_notes,
+            keywords: obj.keywords,
+            lot_items: obj.lot_items ? obj.lot_items.map((li: any) => ({ identity: li.identity, price_breakdown: li.price_breakdown })) : undefined
         });
+
+        if (Array.isArray(item)) {
+            return JSON.stringify(item.map(fallbackObj));
+        } else if (item.items && Array.isArray(item.items)) {
+            return JSON.stringify({ ...item, items: item.items.map(fallbackObj) });
+        } else {
+            return JSON.stringify(fallbackObj(item));
+        }
     } catch (e) {
         return null;
     }
