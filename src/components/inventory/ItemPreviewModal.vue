@@ -7,32 +7,48 @@
         
         <div v-if="item" class="modal-box w-full max-w-none h-full max-h-none min-h-screen rounded-none flex flex-col p-0 overflow-hidden bg-base-100 shadow-none relative">
             
-            <!-- Sticky Header -->
-            <div class="navbar bg-base-200 border-b border-base-300 min-h-12 sticky top-0 z-20 px-4">
-                <div class="flex-1">
-                    <div class="badge badge-lg font-bold uppercase truncate" :class="statusBadgeClass">
+            <!-- Sticky Header: status + minimal actions -->
+            <div class="navbar bg-base-200 border-b border-base-300 min-h-12 sticky top-0 z-20 px-3 gap-2">
+                <!-- Status badge (left) -->
+                <div class="flex-1 flex items-center gap-2 min-w-0">
+                    <div class="badge badge-lg font-bold uppercase shrink-0" :class="statusBadgeClass">
                         {{ statusText }}
                     </div>
-                    <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="ml-2 text-xs opacity-70 flex gap-1 items-center">
+                    <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="hidden sm:flex gap-1 items-center">
                         <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm badge-outline">{{ chan }}</span>
                     </span>
                 </div>
-                <div class="flex-none gap-2">
-                    <button class="btn btn-sm btn-ghost tooltip tooltip-bottom" data-tip="Copy Share Link" @click="copyShareLink">
-                        <Icon icon="solar:link-linear" class="w-4 h-4 mr-1 inline" /> Share
+                <!-- Right actions: Share icon + overflow menu + close -->
+                <div class="flex-none flex items-center gap-1">
+                    <!-- Share: icon only on mobile -->
+                    <button class="btn btn-sm btn-ghost btn-square" @click="copyShareLink" title="Copy Share Link">
+                        <Icon icon="solar:link-linear" class="w-4 h-4" />
                     </button>
-                    <button v-if="!item.parentLotId" class="btn btn-sm btn-secondary tooltip tooltip-bottom" data-tip="Deconstruct lot into individual items" @click="emit('deconstruct', item)">
-                        <Icon icon="solar:pie-chart-2-linear" class="w-4 h-4 mr-1 inline" /> Deconstruct Lot
+                    <!-- Edit Item: desktop only (mobile has sticky bottom bar) -->
+                    <button class="btn btn-sm btn-primary gap-1.5 hidden lg:flex" @click="emit('edit', item); close()">
+                        <Icon icon="solar:pen-bold" class="w-4 h-4" /> Edit Item
                     </button>
-                    <button class="btn btn-sm btn-primary" @click="editItem">
-                        <Icon icon="solar:pen-linear" class="w-4 h-4 mr-1 inline" /> Edit Item
-                    </button>
+                    <!-- ••• overflow menu (Deconstruct etc.) -->
+                    <div class="dropdown dropdown-end" v-if="!item.parentLotId">
+                        <div tabindex="0" role="button" class="btn btn-sm btn-ghost btn-square">
+                            <Icon icon="solar:menu-dots-bold" class="w-4 h-4" />
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-52 mt-1">
+                            <li>
+                                <button class="flex items-center gap-2 text-sm" @click="emit('deconstruct', item)">
+                                    <Icon icon="solar:pie-chart-2-linear" class="w-4 h-4 text-secondary" />
+                                    Deconstruct Lot
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <!-- Close -->
                     <button class="btn btn-sm btn-circle btn-ghost" @click="close">✕</button>
                 </div>
             </div>
 
             <!-- Scrollable Content -->
-            <div class="flex-1 overflow-y-auto w-full flex flex-col lg:flex-row">
+            <div class="flex-1 overflow-y-auto w-full flex flex-col lg:flex-row pb-20 lg:pb-0">
                 
                 <!-- Left Column: Media -->
                 <div class="w-full lg:w-5/12 bg-base-300 border-r border-base-300 flex flex-col relative shrink-0">
@@ -216,6 +232,16 @@
                     </div>
 
                 </div>
+            </div>
+
+            <!-- Sticky Bottom Bar: Primary action (mobile-app style) -->
+            <div class="sticky bottom-0 z-20 bg-base-100 border-t border-base-200 p-3 flex gap-2 lg:hidden">
+                <button class="btn btn-primary flex-1 gap-2" @click="emit('edit', item); close()">
+                    <Icon icon="solar:pen-bold" class="w-5 h-5" /> Edit Item
+                </button>
+                <button class="btn btn-ghost btn-square" @click="copyShareLink" title="Share">
+                    <Icon icon="solar:link-linear" class="w-5 h-5" />
+                </button>
             </div>
         </div>
     </dialog>

@@ -51,6 +51,54 @@ async function addAttributes(collectionId) {
     } catch (e) {
         console.log(`ℹ️ 'idx_identity' index likely exists or failed on ${collectionId}:`, e.message);
     }
+
+    // rawAnalysis (String, 5000 chars) - AI scout report JSON
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'rawAnalysis', 5000, false);
+        console.log(`✅ Created 'rawAnalysis' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'rawAnalysis' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
+
+    // keywords (String Array) - AI-generated tags
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'keywords', 100, false, undefined, true);
+        console.log(`✅ Created 'keywords' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'keywords' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
+
+    // sellingLocations (String Array) - Platform channels (eBay, Poshmark, etc.)
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'sellingLocations', 100, false, undefined, true);
+        console.log(`✅ Created 'sellingLocations' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'sellingLocations' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
+
+    // storageLocation (String) - bin/shelf location
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'storageLocation', 255, false);
+        console.log(`✅ Created 'storageLocation' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'storageLocation' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
+
+    // sourcingLocation (String) - where item was acquired
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'sourcingLocation', 512, false);
+        console.log(`✅ Created 'sourcingLocation' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'sourcingLocation' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
+
+    // redFlags (String Array) - AI-identified risk signals
+    try {
+        await databases.createStringAttribute(DB_ID, collectionId, 'redFlags', 255, false, undefined, true);
+        console.log(`✅ Created 'redFlags' attribute on ${collectionId}`);
+    } catch (e) {
+        console.log(`ℹ️ 'redFlags' attribute likely exists or failed on ${collectionId}:`, e.message);
+    }
 }
 
 async function run() {
