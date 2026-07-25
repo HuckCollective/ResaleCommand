@@ -297,7 +297,7 @@
                            }">{{ item.purchase_strategy.verdict.replace('_', ' ') }}</h3>
                         </div>
                         
-                        <div v-if="item.purchase_strategy.current_asking_price && !item.purchase_strategy.current_asking_price.includes('No Asking Price')" class="mb-2 inline-flex badge badge-neutral shadow-sm font-bold p-3">
+                        <div v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" class="mb-2 inline-flex badge badge-neutral shadow-sm font-bold p-3">
                             Asking/Bid: {{ item.purchase_strategy.current_asking_price }}
                         </div>
 
