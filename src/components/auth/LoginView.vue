@@ -2,7 +2,10 @@
   <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
     <div class="card w-full max-w-md bg-base-100 shadow-2xl">
       <div class="card-body">
-        <h2 class="card-title text-3xl font-bold justify-center mb-6">Sign in to your account</h2>
+        <h2 class="card-title text-3xl font-bold justify-center mb-6">
+          Sign in to your account
+          <span v-if="isDevLogin" class="badge badge-primary badge-sm mt-1 absolute top-4 right-4">Dev Mode</span>
+        </h2>
         
         <form @submit.prevent="submit" class="space-y-4">
           <div class="form-control w-full">
@@ -61,10 +64,12 @@ import { ref, computed, watchEffect } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 
 const auth = useAuth();
-const email = ref('');
-const password = ref('');
+const email = ref(import.meta.env.PUBLIC_TEST_USER_EMAIL || '');
+const password = ref(import.meta.env.PUBLIC_TEST_USER_PASSWORD || '');
 const loading = ref(false);
 const error = ref('');
+
+const isDevLogin = computed(() => !!import.meta.env.PUBLIC_TEST_USER_EMAIL);
 
 // Auto-redirect if already logged in
 watchEffect(() => {

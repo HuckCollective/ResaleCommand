@@ -850,6 +850,7 @@ export const ALL: APIRoute = async ({ request }) => {
           - 'title': A short SEO-friendly title string.
           - 'keywords': An array of strings.
           - 'condition_notes': A VERY BRIEF (1-2 sentences max) condition assessment.
+          - 'country_of_origin': Infer the manufacturing country if visible (e.g., from tags like "Made in China"). Return "Unknown" if not visible.
           - 'red_flags': An array of strings highlighting potential issues. Return empty if none.
           - 'price_breakdown': An object with estimated values:
               - 'mint': Price range if New/Mint.

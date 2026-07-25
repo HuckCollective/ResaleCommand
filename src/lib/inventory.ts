@@ -38,6 +38,7 @@ export interface ExtraItemData {
     quantity?: number;
     parentLotId?: string;
     rawAnalysis?: string;
+    countryOfOrigin?: string;
 }
 
 export function getSafeRawAnalysis(item: any): string | null {
@@ -79,6 +80,7 @@ export function getSafeRawAnalysis(item: any): string | null {
             purchase_strategy: obj.purchase_strategy,
             condition_notes: obj.condition_notes,
             keywords: obj.keywords,
+            country_of_origin: obj.country_of_origin,
             lot_items: obj.lot_items ? obj.lot_items.map((li: any) => ({ identity: li.identity, price_breakdown: li.price_breakdown })) : undefined
         });
 

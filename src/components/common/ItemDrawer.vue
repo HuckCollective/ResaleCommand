@@ -258,7 +258,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                      <div class="form-control w-full">
                         <label class="label"><span class="label-text">Bin Location</span></label>
                         <input type="text" list="org-bin-locations" v-model="editForm.storageLocation" class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200" placeholder="Type or select..." />
@@ -270,6 +270,11 @@
                      <div class="form-control w-full">
                         <label class="label"><span class="label-text">Source Order #</span></label>
                         <input type="text" v-model="editForm.orderId" class="input input-bordered w-full font-mono text-xs bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200" placeholder="e.g. ORD-12345" />
+                     </div>
+
+                     <div class="form-control w-full">
+                        <label class="label"><span class="label-text">Country of Origin</span></label>
+                        <input type="text" v-model="editForm.countryOfOrigin" class="input input-bordered w-full text-xs bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200" placeholder="e.g. China, US" />
                      </div>
                 </div>
 
@@ -808,7 +813,8 @@ const editForm = reactive({
     itemCondition: '',
     existingGalleryIds: [],
     sellingLocations: [],
-    keywords: []
+    keywords: [],
+    countryOfOrigin: ''
 });
 
 watch(() => editForm.status, (newStatus) => {
@@ -1321,6 +1327,19 @@ const initForm = () => {
                 .then(txt => { editForm.itemCondition = txt; scoutMdText.value = txt; }).catch(() => {});
             }
         }
+        
+        // Extract countryOfOrigin from scoutResult
+        if (scoutResult.value) {
+            const firstItem = Array.isArray(scoutResult.value) ? scoutResult.value[0] : (scoutResult.value.items ? scoutResult.value.items[0] : null);
+            if (firstItem && firstItem.country_of_origin && firstItem.country_of_origin !== 'Unknown') {
+                editForm.countryOfOrigin = firstItem.country_of_origin;
+            } else {
+                editForm.countryOfOrigin = '';
+            }
+        } else {
+            editForm.countryOfOrigin = '';
+        }
+
     } else {
         editForm.title = '';
         editForm.cost = '';
@@ -1337,6 +1356,7 @@ const initForm = () => {
         editForm.existingGalleryIds = [];
         editForm.sellingLocations = [];
         editForm.keywords = [];
+        editForm.countryOfOrigin = '';
         mainPhotoSelection.value = { type: 'none', val: null };
         scoutResult.value = null;
         scoutMdText.value = null;
@@ -1414,12 +1434,31 @@ const saveEdit = async () => {
              finalGallery.splice(actualMainPhoto.value.idx, 1);
         }
 
+        let finalScoutData = scoutResult.value;
+        if (editForm.countryOfOrigin !== undefined) {
+            let parsed = finalScoutData ? JSON.parse(JSON.stringify(finalScoutData)) : {};
+            let targetObj = Array.isArray(parsed) ? parsed[0] : (parsed.items ? parsed.items[0] : null);
+            if (!targetObj) {
+                targetObj = {};
+                if (Array.isArray(parsed)) parsed.push(targetObj);
+                else if (parsed.items) parsed.items.push(targetObj);
+                else parsed = { items: [targetObj] };
+            }
+            
+            if (editForm.countryOfOrigin.trim() === '') {
+                delete targetObj.country_of_origin;
+            } else {
+                targetObj.country_of_origin = editForm.countryOfOrigin.trim();
+            }
+            finalScoutData = parsed;
+        }
+
         const payload = {
             ...editForm,
             imageId: actualMainPhoto.value.id || null, // Existing main photo
             imageFile: finalImageFile, // New main photo
             galleryFiles: finalGallery,
-            scoutData: scoutResult.value,
+            scoutData: finalScoutData,
             components: componentsList.value.length > 0 ? JSON.stringify(componentsList.value) : null
         };
         emit('save', payload);

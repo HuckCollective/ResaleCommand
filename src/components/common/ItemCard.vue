@@ -60,7 +60,12 @@
             
             <!-- Tags/Sales Channels -->
             <div v-if="tags && tags.length > 0" class="flex gap-1 flex-wrap mt-1">
-                <span v-for="tag in tags" :key="tag" class="badge badge-[10px] badge-outline opacity-70 px-1 py-0">{{ tag }}</span>
+                <span v-for="tag in tags" :key="tag" class="badge badge-[10px] px-1 py-0 shadow-sm border-base-200"
+                      :class="{'bg-secondary/20 text-secondary': tag.toLowerCase().includes('ebay'), 'bg-primary/20 text-primary': tag.toLowerCase().includes('poshmark'), 'badge-outline opacity-70': !tag.toLowerCase().includes('ebay') && !tag.toLowerCase().includes('poshmark')}">
+                    <Icon v-if="tag.toLowerCase().includes('ebay')" icon="solar:tag-price-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
+                    <Icon v-else-if="tag.toLowerCase().includes('poshmark')" icon="solar:hanger-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
+                    {{ tag }}
+                </span>
             </div>
             
 
@@ -93,7 +98,7 @@ const titleClass = computed(() => props.compact ? 'text-xs h-[2.5em]' : 'text-ba
 // --- COMPUTED DATA ---
 const title = computed(() => props.item.title || props.item.identity || props.item.itemName || "Untitled Item");
 const locationText = computed(() => props.item.binLocation || props.item.purchaseLocation || '');
-const tags = computed(() => props.item.salesChannel || []);
+const tags = computed(() => props.item.sellingLocations || props.item.salesChannel || []);
 
 const statusText = computed(() => {
     const s = props.item.status || 'received';

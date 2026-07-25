@@ -115,35 +115,49 @@
                             </div>
                             <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
                                 <li>
-                                    <button class="flex items-start gap-3 py-2" @click="exportCsv">
+                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('generic')">
                                         <Icon icon="solar:file-download-linear" class="w-5 h-5 mt-0.5 shrink-0 text-success" />
                                         <div>
-                                            <div class="font-bold text-sm">Export CSV</div>
+                                            <div class="font-bold text-sm">Export Generic CSV</div>
                                             <div class="text-xs opacity-60">{{ selectedItems.length > 0 ? selectedItems.length + ' selected items' : 'All ' + filteredInventory.length + ' filtered items' }}</div>
                                         </div>
                                     </button>
                                 </li>
                                 <div class="divider my-1"></div>
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('ebay')">
+                                        <Icon icon="solar:tag-price-linear" class="w-5 h-5 mt-0.5 shrink-0 text-secondary" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">eBay Bulk Upload</div></div>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('poshmark')">
+                                        <Icon icon="solar:hanger-linear" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">Poshmark Bulk</div></div>
+                                    </button>
+                                </li>
                                 <li class="disabled opacity-40 cursor-not-allowed">
                                     <span class="flex items-start gap-3 py-2">
                                         <Icon icon="solar:shop-linear" class="w-5 h-5 mt-0.5 shrink-0" />
                                         <div><div class="font-bold text-sm flex items-center gap-2">Export to Booth <span class="badge badge-xs">Soon</span></div></div>
                                     </span>
                                 </li>
-                                <li class="disabled opacity-40 cursor-not-allowed">
-                                    <span class="flex items-start gap-3 py-2">
-                                        <Icon icon="solar:tag-price-linear" class="w-5 h-5 mt-0.5 shrink-0" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">eBay <span class="badge badge-xs">Soon</span></div></div>
-                                    </span>
-                                </li>
-                                <li class="disabled opacity-40 cursor-not-allowed">
-                                    <span class="flex items-start gap-3 py-2">
-                                        <Icon icon="solar:hanger-linear" class="w-5 h-5 mt-0.5 shrink-0" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">Poshmark <span class="badge badge-xs">Soon</span></div></div>
-                                    </span>
-                                </li>
                             </ul>
                         </div>
+                    </div>
+
+                    <!-- QUICK FILTERS ROW -->
+                    <div class="flex flex-wrap items-center gap-2 mt-3 -mb-2">
+                        <span class="text-[10px] font-bold uppercase opacity-60 ml-1">Quick Filters:</span>
+                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-primary/10 border-primary text-primary font-bold': insightFilter === 'ready_to_list'}" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
+                            <Icon icon="solar:checklist-linear" class="w-3.5 h-3.5" /> Ready to List
+                        </button>
+                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-error/10 border-error text-error font-bold': insightFilter === 'missing_photos'}" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
+                            <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Missing Photos
+                        </button>
+                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-warning/10 border-warning text-warning-content font-bold': insightFilter === 'missing_est_value'}" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
+                            <Icon icon="solar:dollar-linear" class="w-3.5 h-3.5" /> Missing Pricing
+                        </button>
                     </div>
 
                     <!-- SMART SELECTION / PIPELINE BAR -->
@@ -654,6 +668,33 @@
             </form>
         </dialog>
 
+        <!-- Post-Export Modal -->
+        <dialog ref="postExportModalRef" class="modal">
+            <div class="modal-box max-w-sm">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-success">
+                    <Icon icon="solar:check-circle-bold-duotone" class="w-6 h-6" /> 
+                    Export Complete!
+                </h3>
+                
+                <p class="text-sm mb-4">You just exported <b>{{ postExportItems.length }}</b> items for <b>{{ postExportPlatform }}</b>.</p>
+                <div class="alert bg-base-200 border border-base-300 py-3 shadow-sm text-xs leading-normal mb-6">
+                    <Icon icon="solar:shop-linear" class="w-5 h-5 shrink-0 text-primary" />
+                    <span>Would you like to automatically mark these items as <b>Placed</b> and tag them with <b>{{ postExportPlatform }}</b>?</span>
+                </div>
+
+                <div class="modal-action">
+                    <button class="btn btn-ghost btn-sm" @click="closePostExportModal" :disabled="processing">No Thanks</button>
+                    <button class="btn btn-primary btn-sm" @click="confirmPostExportActions" :disabled="processing">
+                        <span v-if="processing" class="loading loading-spinner loading-xs"></span>
+                        Yes, Mark as Placed
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button @click="closePostExportModal" :disabled="processing">close</button>
+            </form>
+        </dialog>
+
         <!-- Floating Total Count / Scroll to Top -->
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-transform hover:-translate-y-1 cursor-pointer shadow-xl rounded-full" @click="scrollToTop">
             <span class="badge badge-lg badge-primary border-none shadow-md px-6 py-4 font-bold text-sm flex gap-2 items-center">
@@ -679,9 +720,15 @@ import TagInput from '../common/TagInput.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { isAlphaMode } from '../../stores/env';
+import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, downloadCsv } from '../../lib/exportUtils';
 
 // -- EXPORT CSV --
-function exportCsv() {
+// -- EXPORT CSV --
+const postExportModalRef = ref(null);
+const postExportPlatform = ref('');
+const postExportItems = ref([]);
+
+function exportCsv(format = 'generic') {
     const itemsToExport = selectedItems.value.length > 0
         ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
         : filteredInventory.value;
@@ -691,33 +738,60 @@ function exportCsv() {
         return;
     }
 
-    const headers = ['ID', 'Title', 'Status', 'Cost', 'Resale Price', 'Est. Value', 'Location', 'Condition Notes', 'Keywords', 'Date Added'];
-    const rows = itemsToExport.map(item => [
-        item.$id,
-        item.title || '',
-        item.status || '',
-        item.cost ?? '',
-        item.resalePrice ?? '',
-        item.estValue ?? '',
-        item.storageLocation || '',
-        (item.conditionNotes || '').replace(/\n/g, ' '),
-        (item.keywords || []).join('; '),
-        item.$createdAt ? new Date(item.$createdAt).toLocaleDateString() : ''
-    ]);
+    let csvContent = '';
+    if (format === 'ebay') {
+        csvContent = generateEbayCsv(itemsToExport);
+    } else if (format === 'poshmark') {
+        csvContent = generatePoshmarkCsv(itemsToExport);
+    } else {
+        csvContent = generateGenericCsv(itemsToExport);
+    }
 
-    const csvContent = [headers, ...rows]
-        .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
+    const filename = `inventory-export-${format}-${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCsv(csvContent, filename);
+    addToast({ type: 'success', message: `Exported ${itemsToExport.length} items for ${format}.` });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventory-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    addToast({ type: 'success', message: `Exported ${itemsToExport.length} items to CSV.` });
+    // Show post-export actions for platform exports
+    if (format === 'ebay' || format === 'poshmark') {
+        postExportPlatform.value = format === 'ebay' ? 'eBay' : 'Poshmark';
+        postExportItems.value = itemsToExport;
+        if (postExportModalRef.value) {
+            postExportModalRef.value.showModal();
+        }
+    }
 }
+
+const closePostExportModal = () => {
+    if (postExportModalRef.value) postExportModalRef.value.close();
+};
+
+const confirmPostExportActions = async () => {
+    processing.value = true;
+    let successCount = 0;
+    try {
+        for (const item of postExportItems.value) {
+            const currentLocs = Array.isArray(item.sellingLocations) ? [...item.sellingLocations] : [];
+            let changed = false;
+            if (!currentLocs.includes(postExportPlatform.value)) {
+                currentLocs.push(postExportPlatform.value);
+                changed = true;
+            }
+            if (item.status !== 'placed' || changed) {
+                await updateInventoryItem(item.$id, {
+                    status: 'placed',
+                    sellingLocations: currentLocs
+                });
+                successCount++;
+            }
+        }
+        addToast({ type: 'success', message: `Updated ${successCount} items.` });
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to update some items: ' + e.message });
+    } finally {
+        processing.value = false;
+        closePostExportModal();
+    }
+};
 
 // Environment Variables
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
@@ -1044,6 +1118,12 @@ const filteredInventory = computed(() => {
             } else if (insightFilter.value === 'missing_photos') {
                 if (item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0)) return false;
                 if (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:'))) return false;
+            } else if (insightFilter.value === 'ready_to_list') {
+                if (!['acquired', 'received'].includes(item.status)) return false;
+                if (!item.title || item.title.trim() === '') return false;
+                if (!parseVal(item, 'resalePrice', 'Resale') && !parseVal(item, 'estValue', 'Est. Low')) return false;
+                const hasPhoto = item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0) || (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:')));
+                if (!hasPhoto) return false;
             }
         }
         
