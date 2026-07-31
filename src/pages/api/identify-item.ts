@@ -870,8 +870,10 @@ export const ALL: APIRoute = async ({ request }) => {
                - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
           - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
                - 'name': Specific name/description of the item.
+               - 'identity': The item's distinct identity.
                - 'estimated_value': Inferred individual resale value (e.g. "$20 - $30").
                - 'condition': Inferred condition of this item.
+               - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (0-1000) of this object in the image.
         `;
 
         const contentParts: any[] = [{ text: prompt }];
