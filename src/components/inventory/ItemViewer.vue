@@ -155,16 +155,22 @@
                     </div>
 
                     <!-- Lot Reconciliation Dashboard -->
-                    <div v-if="item && (item.quantity > 1 || childItems.length > 0)" class="mt-6 border border-base-300 rounded-2xl overflow-hidden bg-base-100 shadow-lg">
+                    <!-- Inbound Lot Reconciliation Dashboard -->
+                    <div v-if="(item && (item.quantity > 1 || childItems.length > 0)) || parentItem" class="mt-6 border border-base-300 rounded-2xl overflow-hidden bg-base-100 shadow-lg">
                         <div class="bg-base-200 p-4 border-b border-base-300 flex justify-between items-center">
                             <div>
                                 <h3 class="font-bold text-sm uppercase tracking-wider text-base-content flex items-center gap-1.5">
                                     <Icon icon="solar:chart-square-linear" class="w-5 h-5 text-primary" />
-                                    Lot Dashboard
+                                    Inbound Lot Dashboard
                                 </h3>
                                 <p class="text-[10px] opacity-60 mt-0.5">Track cost allocation, sales, and total return on investment for this group purchase.</p>
+                                <div v-if="parentItem" class="mt-2 text-xs">
+                                    <span class="opacity-60 font-bold uppercase mr-2">Sourced From:</span>
+                                    <a :href="'/item/' + parentItem.$id" class="link link-primary font-bold">{{ parentItem.title }}</a>
+                                </div>
                             </div>
-                            <span class="badge badge-primary font-mono text-xs font-bold">x{{ item.quantity }} Unsold</span>
+                            <span v-if="!parentItem" class="badge badge-primary font-mono text-xs font-bold">x{{ item.quantity }} Unsold</span>
+                            <span v-else class="badge badge-primary font-mono text-xs font-bold">x{{ parentItem.quantity }} Unsold</span>
                         </div>
 
                         <!-- Summary Cards -->
@@ -368,6 +374,7 @@ const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
 
 const childItems = ref([]);
+const parentItem = ref(null);
 
 // Sell One Form state
 const isSellOneModalOpen = ref(false);
@@ -420,7 +427,8 @@ const submitSellOne = async () => {
             tenantId: item.value.tenantId || null,
             userId: item.value.userId || null,
             storageLocation: item.value.storageLocation || null,
-            sourcingLocation: item.value.sourcingLocation || null
+            sourcingLocation: "", // Clear sourcing location for child
+            imageId: item.value.imageId || null // Use parent image for the sold record
         };
         
         Object.keys(childDoc).forEach(key => childDoc[key] === undefined && delete childDoc[key]);
@@ -462,9 +470,11 @@ const submitSellOne = async () => {
     }
 };
 
+const dashboardItem = computed(() => parentItem.value || item.value);
+
 const originalLotCost = computed(() => {
-    if (!item.value) return 0;
-    return Number(item.value.cost || 0) + childItems.value.reduce((acc, c) => acc + Number(c.cost || 0), 0);
+    if (!dashboardItem.value) return 0;
+    return Number(dashboardItem.value.cost || 0) + childItems.value.reduce((acc, c) => acc + Number(c.cost || 0), 0);
 });
 
 const allocatedCost = computed(() => {
@@ -499,8 +509,19 @@ onMounted(async () => {
         
         // Fetch child items if any exist
         try {
+            const targetParentId = item.value.parentLotId || item.value.$id;
+            
+            // If this is a child item, fetch the parent
+            if (item.value.parentLotId) {
+                try {
+                    parentItem.value = await databases.getDocument(DB_ID, collId, item.value.parentLotId);
+                } catch (e) {
+                    console.error("Failed to load parent item:", e);
+                }
+            }
+
             const childRes = await databases.listDocuments(DB_ID, collId, [
-                Query.equal('parentLotId', item.value.$id),
+                Query.equal('parentLotId', targetParentId),
                 Query.limit(100)
             ]);
             childItems.value = childRes.documents;

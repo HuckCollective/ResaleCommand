@@ -28,20 +28,7 @@
                     <button class="btn btn-sm btn-primary gap-1.5 hidden lg:flex" @click="emit('edit', item); close()">
                         <Icon icon="solar:pen-bold" class="w-4 h-4" /> Edit Item
                     </button>
-                    <!-- ••• overflow menu (Deconstruct etc.) -->
-                    <div class="dropdown dropdown-end" v-if="!item.parentLotId">
-                        <div tabindex="0" role="button" class="btn btn-sm btn-ghost btn-square">
-                            <Icon icon="solar:menu-dots-bold" class="w-4 h-4" />
-                        </div>
-                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-52 mt-1">
-                            <li>
-                                <button class="flex items-center gap-2 text-sm" @click="emit('deconstruct', item)">
-                                    <Icon icon="solar:pie-chart-2-linear" class="w-4 h-4 text-secondary" />
-                                    Deconstruct Lot
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
+
                     <!-- Close -->
                     <button class="btn btn-sm btn-circle btn-ghost" @click="close">✕</button>
                 </div>

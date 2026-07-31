@@ -710,17 +710,24 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
                 
                 // Strategy 3: Lite Data - Minified to fit in Notes
                 // Strip heavy arrays/text that is already in description
-                const lite = { 
-                    ...updates.scoutData, 
-                    comparables: [], // In Desc
-                    keywords: [],    // In Desc
-                    red_flags: updates.scoutData.red_flags || [],
-                    price_breakdown: updates.scoutData.price_breakdown
-                };
-                
-                // Remove other heavy props if any?
-                delete lite.description; // In Desc
-                delete lite.condition_notes; // In Notes
+                let lite;
+                if (Array.isArray(updates.scoutData)) {
+                    lite = updates.scoutData.map(item => ({
+                        ...item,
+                        comparables: [],
+                        keywords: []
+                    }));
+                } else {
+                    lite = { 
+                        ...updates.scoutData, 
+                        comparables: [], // In Desc
+                        keywords: [],    // In Desc
+                        red_flags: updates.scoutData.red_flags || [],
+                        price_breakdown: updates.scoutData.price_breakdown
+                    };
+                    delete lite.description; // In Desc
+                    delete lite.condition_notes; // In Notes
+                }
                 
                 try {
                     const jsonLite = JSON.stringify(lite);

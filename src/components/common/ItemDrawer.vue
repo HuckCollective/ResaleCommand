@@ -378,9 +378,9 @@
                         
                         <!-- Actions -->
                         <div class="pt-4 border-t border-base-300">
-                             <button v-if="saveIndividually" type="button" class="btn btn-primary w-full gap-2 shadow-md" @click="extractLotItems" :disabled="extractingLot">
-                                  <span v-if="extractingLot" class="loading loading-spinner"></span>
-                                  <span><Icon icon="solar:scissors-linear" class="w-4 h-4 inline mr-1" /> Extract {{ scoutItemsArray.length }} Items to Inventory</span>
+                             <button v-if="saveIndividually && props.item" type="button" class="btn btn-primary w-full gap-2 shadow-md" @click="$emit('deconstruct', { item: { ...props.item, ...editForm }, count: scoutItemsArray.length, scoutItems: scoutItemsArray })">
+
+                                  <span><Icon icon="solar:scissors-linear" class="w-4 h-4 inline mr-1" /> Split Lot ({{ scoutItemsArray.length }} Items)</span>
                              </button>
                              
                              <button v-else type="button" class="btn btn-secondary w-full gap-2 shadow-md text-white font-bold" @click="applyBundleSuggestions">
@@ -588,7 +588,12 @@
             <!-- Lot Dashboard Tab -->
             <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6" v-show="mainTab === 'lot'">
                 <div class="alert alert-secondary py-2 shadow-sm text-sm border-secondary/30 mb-4">
-                     <span class="text-xl"><Icon icon="solar:box-linear" class="w-6 h-6 inline mr-2" /></span> Lot Dashboard: Track extracted items and total box ROI.
+                     <span class="text-xl"><Icon icon="solar:box-linear" class="w-6 h-6 inline mr-2" /></span> Inbound Lot Dashboard: Track extracted items and total box ROI.
+                </div>
+
+                <div v-if="parentLot" class="bg-base-200/50 p-3 rounded-lg border border-base-200 text-xs mb-4">
+                     <span class="opacity-60 font-bold uppercase mr-2">Sourced From:</span>
+                     <a :href="'/item/' + parentLot.$id" class="link link-primary font-bold">{{ parentLot.title }}</a>
                 </div>
                 
                 <div v-if="loadingLot" class="flex justify-center py-12">
@@ -599,7 +604,7 @@
                     <div class="stats stats-vertical lg:stats-horizontal shadow w-full bg-base-200 border border-base-300 mb-6 text-sm">
                         <div class="stat px-4 py-2">
                             <div class="stat-title text-xs font-bold text-base-content/70">Original Box Cost</div>
-                            <div class="stat-value text-lg text-base-content">${{ Number(item?.cost || 0).toFixed(2) }}</div>
+                            <div class="stat-value text-lg text-base-content">${{ Number(lotDashboardItem?.cost || 0).toFixed(2) }}</div>
                             <div class="stat-desc font-bold mt-1" :class="lotROI >= 0 ? 'text-success' : 'text-error'">
                                 Total ROI: {{ lotROI >= 0 ? '+' : '' }}${{ lotROI.toFixed(2) }}
                             </div>
@@ -704,7 +709,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'save']);
+const emit = defineEmits(['close', 'save', 'deconstruct']);
 
 const mainTab = ref('details');
 const descTab = ref('preview');
@@ -1437,12 +1442,15 @@ const saveEdit = async () => {
         let finalScoutData = scoutResult.value;
         if (editForm.countryOfOrigin !== undefined) {
             let parsed = finalScoutData ? JSON.parse(JSON.stringify(finalScoutData)) : {};
-            let targetObj = Array.isArray(parsed) ? parsed[0] : (parsed.items ? parsed.items[0] : null);
-            if (!targetObj) {
-                targetObj = {};
-                if (Array.isArray(parsed)) parsed.push(targetObj);
-                else if (parsed.items) parsed.items.push(targetObj);
-                else parsed = { items: [targetObj] };
+            let targetObj;
+            if (Array.isArray(parsed)) {
+                if (parsed.length === 0) parsed.push({});
+                targetObj = parsed[0];
+            } else if (parsed.items) {
+                if (parsed.items.length === 0) parsed.items.push({});
+                targetObj = parsed.items[0];
+            } else {
+                targetObj = parsed;
             }
             
             if (editForm.countryOfOrigin.trim() === '') {
@@ -1800,103 +1808,34 @@ const applyBundleSuggestions = () => {
     addToast({ type: 'success', message: 'Applied AI bundle suggestions to form.' });
 };
 
-const extractLotItems = async () => {
-    const itemsToExtract = scoutItemsArray.value;
-    if (!itemsToExtract || itemsToExtract.length === 0) return;
-    
-    // Confirm extraction
-    if (!(await confirmDialog(`Are you sure you want to create ${itemsToExtract.length} new items from this lot?`, 'Extract Lot', 'Extract', 'Cancel'))) return;
-    
-    extractingLot.value = true;
-    try {
-        let successCount = 0;
-        const user = await account.get();
-        const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
-        
-        // Loop over each item found by AI
-        for (const [index, lotItem] of itemsToExtract.entries()) {
-            
-            // Build the core data for the new item
-            const title = lotItem.title || lotItem.identity || lotItem.name || `Lot Item #${index + 1}`;
-            let notes = lotItem.condition_notes || lotItem.condition || '';
-            if (lotItem.red_flags?.length) {
-                notes = `[FLAGS: ${lotItem.red_flags.join(', ')}]\n` + notes;
-            }
-            notes = `Extracted from Bulk Lot.\n` + notes;
-            
-            // Try to assign a portion of the total cost to each item (e.g. Total / Count)
-            let apportionedCost = 0;
-            if (editForm.cost && parseFloat(editForm.cost) > 0) {
-                 apportionedCost = parseFloat((parseFloat(editForm.cost) / itemsToExtract.length).toFixed(2));
-            }
-
-            // Estimate Resale Price from AI
-            let resalePrice = 0;
-            if (lotItem.price_breakdown) {
-                 resalePrice = getRationalPrice(lotItem);
-            } else if (lotItem.estimated_value) {
-                 resalePrice = parsePrice(lotItem.estimated_value);
-            }
-            
-            // Figure out image inheritance
-            let inheritedGallery = [];
-            let mainImageId = null;
-            if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
-                 inheritedGallery = [...editForm.existingGalleryIds];
-                 mainImageId = inheritedGallery[0];
-            } else if (actualMainPhoto.value.id) {
-                 inheritedGallery = [actualMainPhoto.value.id];
-                 mainImageId = actualMainPhoto.value.id;
-            }
-
-            const extraData = {
-                 cost: apportionedCost,
-                 resalePrice: resalePrice ? resalePrice.toFixed(2) : undefined,
-                 status: 'acquired', // New Workflow Status Standard
-                 sourcingLocation: editForm.sourcingLocation || 'Bulk Lot',
-                 orderId: editForm.orderId,
-                 storageLocation: editForm.storageLocation,
-                 imageId: mainImageId,
-                 galleryImageIds: inheritedGallery,
-                 scoutData: lotItem,
-                 parentLotId: props.item.$id
-            };
-            
-            // Save the item
-            await saveItemToInventory(
-                { title, identity: lotItem.identity || Math.random().toString(36).substring(2, 10), condition_notes: notes },
-                null, // No new local file upload, we're passing gallery IDs above
-                extraData,
-                teamId
-            );
-            successCount++;
-        }
-        
-        addToast({ type: 'success', message: `Successfully extracted ${successCount} items!` });
-        // We can close drawer or leave open. We'll leave open so they can see the parent item still if they want to save changes to it.
-        
-    } catch (e) {
-        addToast({ type: 'error', message: "Failed to extract lot: " + e.message });
-        console.error(e);
-    } finally {
-         extractingLot.value = false;
-    }
-};
-
 const lotChildren = ref([]);
+const parentLot = ref(null);
 const loadingLot = ref(false);
 
+const lotDashboardItem = computed(() => parentLot.value || props.item);
 const lotSoldChildren = computed(() => lotChildren.value.filter(c => c.status === 'sold'));
 const lotAllocatedCost = computed(() => lotChildren.value.reduce((sum, c) => sum + (Number(c.cost) || 0), 0));
 const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice) || 0), 0));
-const lotROI = computed(() => lotRealizedRevenue.value - Number(props.item?.cost || 0));
+const lotROI = computed(() => lotRealizedRevenue.value - Number(lotDashboardItem.value?.cost || 0));
 
 const fetchLotChildren = async () => {
     if (!props.item || !props.item.$id) return;
     loadingLot.value = true;
     try {
+        const targetParentId = props.item.parentLotId || props.item.$id;
+        
+        if (props.item.parentLotId) {
+            try {
+                 parentLot.value = await databases.getDocument(DB_ID, getCollectionId(), props.item.parentLotId);
+            } catch (e) {
+                 console.error("Failed to load parent lot", e);
+            }
+        } else {
+            parentLot.value = null;
+        }
+
         const res = await databases.listDocuments(DB_ID, getCollectionId(), [
-            Query.equal('parentLotId', props.item.$id),
+            Query.equal('parentLotId', targetParentId),
             Query.limit(100)
         ]);
         lotChildren.value = res.documents;

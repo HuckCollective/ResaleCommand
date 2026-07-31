@@ -2,5 +2,6 @@
   "files.watcherExclude": {
     "**/.vite/**": true,
     "**/node_modules/.vite/**": true
-  }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
 }

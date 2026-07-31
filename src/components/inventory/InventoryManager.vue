@@ -440,7 +440,7 @@
         <!-- ----------------------------------------------------------- -->
         <!-- EDIT DRAWER -->
         <!-- ----------------------------------------------------------- -->
-        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" @close="closeEditDrawer" @save="saveEdit" />
+        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" @close="closeEditDrawer" @save="saveEdit" @deconstruct="openDeconstructModal" />
 
         <!-- FULLSCREEN PREVIEW MODAL -->
         <ItemPreviewModal 
@@ -639,8 +639,8 @@
         <dialog ref="deconstructModalRef" class="modal">
             <div class="modal-box max-w-sm">
                 <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-                    <Icon icon="solar:pie-chart-2-bold-duotone" class="w-6 h-6 text-secondary" /> 
-                    Deconstruct Lot
+                    <Icon icon="solar:pie-chart-2-bold" class="w-5 h-5 text-secondary" /> 
+                    Split Inbound Lot
                 </h3>
                 
                 <p class="text-xs mb-4">You are about to split <b>{{ deconstructItemData?.title }}</b> into individual items. The original cost of <b>${{ deconstructItemData?.cost || '0.00' }}</b> will be divided equally.</p>
@@ -711,7 +711,7 @@ import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '.
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
 import { useAuth } from '../../composables/useAuth';
-import { account, databases, Query } from '../../lib/appwrite';
+import { account, databases, Query, storage, ID } from '../../lib/appwrite';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemCard from '../common/ItemCard.vue';
@@ -1762,17 +1762,29 @@ function guessQuantityFromTitle(title) {
     return null;
 }
 
-const openDeconstructModal = (item) => {
+const openDeconstructModal = async (payload) => {
+    const item = payload.item || payload;
+    const aiCount = payload.count || null;
+    const aiItems = payload.scoutItems || null;
+    
     previewItem.value = null; // Close preview
-    deconstructItemData.value = item;
+    isEditDrawerOpen.value = false; // Close edit drawer
+    deconstructItemData.value = { ...item, _aiItems: aiItems };
     
     let dbQty = item.quantity && item.quantity > 1 ? parseInt(item.quantity) : 2;
     let guessedQty = guessQuantityFromTitle(item.title) || 0;
     
-    // Always suggest the larger of the two to account for bundled lots
-    deconstructCount.value = Math.max(dbQty, guessedQty);
+    deconstructCount.value = aiCount || Math.max(dbQty, guessedQty);
     
-    if (deconstructModalRef.value) deconstructModalRef.value.showModal();
+    if (aiCount !== null && aiCount > 0 && aiItems && aiItems.length > 0) {
+        // AI already generated the items, skip asking how many and go straight to execution
+        deconstructCount.value = aiCount;
+        closeEditDrawer();
+        addToast({ type: 'info', message: `Splitting into ${aiCount} items... Please wait.` });
+        submitDeconstruct();
+    } else {
+        if (deconstructModalRef.value) deconstructModalRef.value.showModal();
+    }
 };
 
 const closeDeconstructModal = () => {
@@ -1787,35 +1799,114 @@ const submitDeconstruct = async () => {
     try {
         const parent = deconstructItemData.value;
         const count = deconstructCount.value;
-        const totalCost = parseFloat(parent.cost) || 0;
+        
+        let parentCost = parseFloat(parent.cost);
+        if (isNaN(parentCost) && parent.conditionNotes) {
+            const match = parent.conditionNotes.match(/Paid:[ \t]*\$?([0-9.]+)/i);
+            if (match) parentCost = parseFloat(match[1]);
+        }
+        
+        const totalCost = parentCost || 0;
         const costPerUnit = parseFloat((totalCost / count).toFixed(2));
         const user = await account.get();
         const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
 
+        let duplicatedImageId = null;
+        let pImageId = parent.imageId;
+        if (!pImageId && parent.galleryImageIds && parent.galleryImageIds.length > 0) pImageId = parent.galleryImageIds[0];
+        if (!pImageId && parent.conditionNotes) {
+             const match = parent.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
+             if (match) pImageId = match[1].split(',')[0].trim();
+        }
+
+        if (pImageId) {
+            try {
+                const url = getAssetUrl(pImageId);
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const file = new File([blob], `split-${pImageId}.jpg`, { type: blob.type });
+                const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                duplicatedImageId = upload.$id;
+            } catch (e) {
+                console.error("Failed to duplicate parent image", e);
+            }
+        }
+
+        let aiItems = parent._aiItems || null;
+        
+        // If the AI returned exactly ONE item, and it has 'lot_items', the user is splitting the lot_items!
+        if (aiItems && aiItems.length === 1 && aiItems[0].lot_items && Array.isArray(aiItems[0].lot_items)) {
+            aiItems = aiItems[0].lot_items;
+        } else if (!aiItems && parent.rawAnalysis) {
+            // Fallback: try to parse rawAnalysis if we didn't get _aiItems (e.g. triggered from inventory list instead of drawer)
+            try {
+                const parsed = JSON.parse(parent.rawAnalysis);
+                const items = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
+                if (items.length === 1 && items[0].lot_items && Array.isArray(items[0].lot_items)) {
+                    aiItems = items[0].lot_items;
+                } else {
+                    aiItems = items;
+                }
+            } catch (e) {
+                console.error('Failed to parse rawAnalysis for split names', e);
+            }
+        }
+
         const promises = [];
         for (let i = 0; i < count; i++) {
-            const childData = {
-                title: `${parent.title} (Unit ${i + 1} of ${count})`,
-                identity: parent.identity || parent.title,
-                cost: costPerUnit,
-                status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
-                sourcingLocation: parent.sourcingLocation,
-                storageLocation: parent.storageLocation,
-                imageId: parent.imageId,
-                galleryImageIds: parent.galleryImageIds,
-                keywords: parent.keywords,
-                quantity: 1,
-                parentLotId: parent.$id,
-                condition_notes: `Extracted from lot: ${parent.title}`
-            };
-            
-            promises.push(saveItemToInventory(childData, null, childData, teamId));
+            promises.push((async () => {
+                const aiData = aiItems && aiItems[i] ? aiItems[i] : null;
+                const title = aiData ? (aiData.title || aiData.name || `${parent.title} (Unit ${i + 1} of ${count})`) : `${parent.title} (Unit ${i + 1} of ${count})`;
+                const identity = aiData && (aiData.identity || aiData.title || aiData.name) ? (aiData.identity || aiData.title || aiData.name) : (parent.identity || parent.title);
+                
+                let childImageId = duplicatedImageId;
+                if (aiData && aiData.image) {
+                    try {
+                        const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(aiData.image)}`;
+                        const res = await fetch(proxiedUrl);
+                        if (res.ok) {
+                            const blob = await res.blob();
+                            const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: blob.type });
+                            const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                            childImageId = upload.$id;
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch AI image for split item", e);
+                    }
+                }
+                
+                let notes = aiData ? `Extracted from lot: ${parent.title}` : `[Needs Scouting]\n\nExtracted from lot: ${parent.title}`;
+                if (aiData && aiData.condition) notes = `Condition: ${aiData.condition}\n\n` + notes;
+                if (aiData && aiData.estimated_value) notes = `Estimated Value: ${aiData.estimated_value}\n\n` + notes;
+                
+                const childData = {
+                    title: title,
+                    identity: identity,
+                    condition_notes: notes
+                };
+                
+                const extraData = {
+                    cost: costPerUnit,
+                    status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
+                    sourcingLocation: "", // Clear sourcing location for child
+                    storageLocation: parent.storageLocation || (parent.conditionNotes ? (parent.conditionNotes.match(/Bin:[ \t]*([^\n\r]+)/i) || [])[1] : null),
+                    imageId: childImageId,
+                    galleryImageIds: [], // Clear gallery images
+                    keywords: parent.keywords,
+                    quantity: 1,
+                    parentLotId: parent.$id,
+                    ...(aiData ? { scoutData: aiData } : {})
+                };
+                
+                await saveItemToInventory(childData, null, extraData, teamId);
+            })());
         }
         
         await Promise.all(promises);
         
         await updateInventoryItem(parent.$id, { 
             status: 'archived',
+            cost: 0, // Transfer all cost to children to prevent double-counting
             condition_notes: (parent.conditionNotes || '') + `\n\n[DECONSTRUCTED into ${count} units on ${new Date().toLocaleDateString()}]`
         });
         
