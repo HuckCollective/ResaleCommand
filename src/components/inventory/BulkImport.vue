@@ -161,39 +161,12 @@ const processRows = async (rows) => {
         }
         return keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
     };
-
-    // Pre-processing: Group by Order ID to calculate Shipping/Handling
-    const orderShippingMap = {}; // orderId -> { totalShipping: 0, totalHandling: 0, itemCount: 0 }
     
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const rowKeys = Object.keys(row);
-        let orderId = row['Order ID'] || row['Order #'] || row['Order Number'] || row['OrderId'] || row['Order Id'] || row['Order No'] || row['Order No.'] || row['Invoice ID'] || row['Invoice #'];
-        if (orderId) {
-            orderId = orderId.toString().trim();
-            const shipKey = findCol(rowKeys, ['shipping', 'ship']);
-            const handKey = findCol(rowKeys, ['handling', 'handle']);
-            
-            const shipVal = shipKey ? parseFloat(row[shipKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
-            const handVal = handKey ? parseFloat(row[handKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
-
-            if (!orderShippingMap[orderId]) {
-                orderShippingMap[orderId] = { totalShipping: 0, totalHandling: 0, itemCount: 0 };
-            }
-            
-            // ShopGoodwill CSVs often repeat the total order shipping on every line, so we take the max
-            if (shipVal > orderShippingMap[orderId].totalShipping) orderShippingMap[orderId].totalShipping = shipVal;
-            if (handVal > orderShippingMap[orderId].totalHandling) orderShippingMap[orderId].totalHandling = handVal;
-            
-            orderShippingMap[orderId].itemCount++;
+        if (i === 0) {
+             logs.value.push("Headers: " + Object.keys(row).join(', '));
         }
-    }
-    
-    for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-                if (i === 0) {
-                     logs.value.push("Headers: " + Object.keys(row).join(', '));
-                }
         progress.value = i + 1;
         
         // 1. Detect Item ID (Priority: Explicit columns -> 9-digit numbers)
@@ -238,42 +211,40 @@ const processRows = async (rows) => {
         const titleKey = findCol(rowKeys, ['title', 'item name', 'name', 'description', 'item']);
         let title = titleKey ? row[titleKey] : `Item ${itemId}`;
 
-        // 2. Fuzzy Detect Price
+        // 2. Fuzzy Detect Price, Shipping, Handling
         const priceKey = findCol(rowKeys, ['price', 'paid', 'amount', 'cost', 'total', 'bid']);
+        const shipKey = findCol(rowKeys, ['shipping', 'ship']);
+        const handKey = findCol(rowKeys, ['handling', 'handle']);
+
         let basePrice = priceKey ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        let itemShipping = shipKey ? parseFloat(row[shipKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        let itemHandling = handKey ? parseFloat(row[handKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
         
-        let splitShipping = 0;
-        let splitHandling = 0;
-        
-        if (orderId && orderShippingMap[orderId]) {
-             const orderData = orderShippingMap[orderId];
-             if (orderData.itemCount > 0) {
-                 splitShipping = parseFloat((orderData.totalShipping / orderData.itemCount).toFixed(2));
-                 splitHandling = parseFloat((orderData.totalHandling / orderData.itemCount).toFixed(2));
-             }
-        }
-        
-        // The true landed cost
-        let price = (basePrice + splitShipping + splitHandling).toFixed(2);
+        // The true landed cost is the sum of the exact values on this row
+        let price = (basePrice + itemShipping + itemHandling).toFixed(2);
         
         let shippingNotes = ``;
-        if (splitShipping > 0 || splitHandling > 0) {
-             shippingNotes = `\n\n--- COST BREAKDOWN ---\nBase Bid: $${basePrice.toFixed(2)}\nShared Shipping: $${splitShipping.toFixed(2)}\nShared Handling: $${splitHandling.toFixed(2)}\nTrue Landed Cost: $${price}`;
+        if (itemShipping > 0 || itemHandling > 0) {
+             shippingNotes = `\n\n--- COST BREAKDOWN ---\nBase Bid: $${basePrice.toFixed(2)}\nShipping: $${itemShipping.toFixed(2)}\nHandling: $${itemHandling.toFixed(2)}\nTrue Landed Cost: $${price}`;
         }
 
         // Check for Duplicates (Server-Side) & Fix Existing Mode
         try {
-            let existingDoc = null;
+            let existingDocs = [];
             try {
                 const dbCheck = await databases.listDocuments(
                     import.meta.env.PUBLIC_APPWRITE_DB_ID, 
                     getCollectionId(),
                     [
-                        Query.equal('identity', itemId),
-                        Query.limit(1)
+                        Query.equal('identity', itemId)
                     ]
                 );
-                if (dbCheck.total > 0) existingDoc = dbCheck.documents[0];
+                if (dbCheck.total > 0) {
+                     existingDocs = dbCheck.documents;
+                     if (orderId) {
+                         existingDocs = existingDocs.filter(d => d.conditionNotes && d.conditionNotes.includes(orderId));
+                     }
+                }
             } catch (e) {
                 console.warn("Direct identity check failed, running title fallback:", e.message);
                 const titleCheck = await databases.listDocuments(
@@ -284,20 +255,20 @@ const processRows = async (rows) => {
                         Query.limit(100)
                     ]
                 );
-                existingDoc = titleCheck.documents.find(doc => doc.identity === itemId);
+                const match = titleCheck.documents.find(doc => doc.identity === itemId && (!orderId || (doc.conditionNotes && doc.conditionNotes.includes(orderId))));
+                if (match) existingDocs = [match];
             }
             
-            if (existingDoc) {
-                if (existingDoc.status === 'archived' || existingDoc.status === 'combined') {
-                     logs.value.push(`⏭️ Skipping ${itemId} - Already extracted/archived.`);
-                     continue;
-                } else {
-                     logs.value.push(`♻️ Updating ${itemId} - Correcting landed cost to $${price}.`);
+            if (existingDocs.length > 0) {
+                for (const existingDoc of existingDocs) {
+                     logs.value.push(`♻️ Updating ${existingDoc.$id} - Correcting landed cost to $${price}.`);
                      
                      let updatedNotes = existingDoc.conditionNotes || '';
-                     if (!updatedNotes.includes('COST BREAKDOWN')) {
-                          updatedNotes += shippingNotes;
+                     if (updatedNotes.includes('--- COST BREAKDOWN ---')) {
+                          // Strip out the old bad math block
+                          updatedNotes = updatedNotes.substring(0, updatedNotes.indexOf('--- COST BREAKDOWN ---')).trim();
                      }
+                     updatedNotes += shippingNotes;
                      
                      await databases.updateDocument(
                          import.meta.env.PUBLIC_APPWRITE_DB_ID,
@@ -309,8 +280,8 @@ const processRows = async (rows) => {
                              conditionNotes: updatedNotes
                          }
                      );
-                     continue;
                 }
+                continue; // Skip creating a new document since we updated the existing one(s)
             }
         } catch (e) {
             console.warn("Duplicate check failed, proceeding w/ caution:", e);
