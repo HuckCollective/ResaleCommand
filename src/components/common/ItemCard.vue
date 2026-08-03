@@ -88,7 +88,8 @@ defineEmits(['click-card']);
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
+const BUCKET = BUCKET_ID;
 
 // --- COMPUTED STYLES ---
 const containerClass = computed(() => props.compact ? 'text-xs' : 'text-sm');

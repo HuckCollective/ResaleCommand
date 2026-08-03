@@ -643,7 +643,7 @@
                     Split Inbound Lot
                 </h3>
                 
-                <p class="text-xs mb-4">You are about to split <b>{{ deconstructItemData?.title }}</b> into individual items. The original cost of <b>${{ deconstructItemData?.cost || '0.00' }}</b> will be divided equally.</p>
+                <p class="text-xs mb-4">You are about to split <b>{{ deconstructItemData?.title }}</b> into individual items. The original cost of <b>${{ deconstructItemData?.cost || deconstructItemData?.purchasePrice || '0.00' }}</b> will be divided equally.</p>
 
                 <div class="form-control w-full mb-4">
                     <label class="label"><span class="label-text font-bold opacity-70">How many individual items?</span></label>
@@ -652,7 +652,7 @@
                 
                 <div class="alert alert-info py-2 shadow-sm text-xs leading-normal mb-4">
                     <Icon icon="solar:info-circle-linear" class="w-5 h-5 shrink-0" />
-                    <span>This will create {{ deconstructCount }} new items in your inventory with a cost basis of ${{ ((deconstructItemData?.cost || 0) / (deconstructCount || 1)).toFixed(2) }} each. The original lot will be archived.</span>
+                    <span>This will create {{ deconstructCount }} new items in your inventory with a cost basis of ${{ ((parseFloat(deconstructItemData?.cost || deconstructItemData?.purchasePrice) || 0) / (deconstructCount || 1)).toFixed(2) }} each. The original lot will be archived.</span>
                 </div>
 
                 <div class="modal-action">
@@ -796,7 +796,8 @@ const confirmPostExportActions = async () => {
 // Environment Variables
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
+const BUCKET = BUCKET_ID;
 
 // Use Composable
 const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage } = useInventory();
@@ -1800,7 +1801,7 @@ const submitDeconstruct = async () => {
         const parent = deconstructItemData.value;
         const count = deconstructCount.value;
         
-        let parentCost = parseFloat(parent.cost);
+        let parentCost = parseFloat(parent.cost || parent.purchasePrice);
         if (isNaN(parentCost) && parent.conditionNotes) {
             const match = parent.conditionNotes.match(/Paid:[ \t]*\$?([0-9.]+)/i);
             if (match) parentCost = parseFloat(match[1]);
@@ -1812,6 +1813,7 @@ const submitDeconstruct = async () => {
         const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
 
         let duplicatedImageId = null;
+        let parentImageElement = null;
         let pImageId = parent.imageId;
         if (!pImageId && parent.galleryImageIds && parent.galleryImageIds.length > 0) pImageId = parent.galleryImageIds[0];
         if (!pImageId && parent.conditionNotes) {
@@ -1822,8 +1824,20 @@ const submitDeconstruct = async () => {
         if (pImageId) {
             try {
                 const url = getAssetUrl(pImageId);
-                const res = await fetch(url);
+                const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+                const res = await fetch(proxiedUrl);
                 const blob = await res.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                
+                // Pre-load for cropping later
+                parentImageElement = new Image();
+                await new Promise((resolve, reject) => {
+                     parentImageElement.onload = resolve;
+                     parentImageElement.onerror = reject;
+                     parentImageElement.src = objectUrl;
+                });
+                URL.revokeObjectURL(objectUrl);
+
                 const file = new File([blob], `split-${pImageId}.jpg`, { type: blob.type });
                 const upload = await storage.createFile(BUCKET, ID.unique(), file);
                 duplicatedImageId = upload.$id;
@@ -1873,6 +1887,47 @@ const submitDeconstruct = async () => {
                     } catch (e) {
                         console.error("Failed to fetch AI image for split item", e);
                     }
+                } else if (aiData && aiData.bounding_box && parentImageElement) {
+                     try {
+                         let bbox = aiData.bounding_box;
+                         if (typeof bbox === 'string') {
+                             bbox = JSON.parse(bbox);
+                         }
+                         const [ymin, xmin, ymax, xmax] = bbox;
+                         const imgW = parentImageElement.naturalWidth;
+                         const imgH = parentImageElement.naturalHeight;
+                         
+                         const sx = (xmin / 1000) * imgW;
+                         const sy = (ymin / 1000) * imgH;
+                         const sWidth = ((xmax - xmin) / 1000) * imgW;
+                         const sHeight = ((ymax - ymin) / 1000) * imgH;
+                         
+                         // Expand the crop slightly (10% padding) to ensure entire item is visible
+                         const paddingX = sWidth * 0.1;
+                         const paddingY = sHeight * 0.1;
+                         const cropX = Math.max(0, sx - paddingX);
+                         const cropY = Math.max(0, sy - paddingY);
+                         const cropW = Math.min(imgW - cropX, sWidth + (paddingX * 2));
+                         const cropH = Math.min(imgH - cropY, sHeight + (paddingY * 2));
+                         
+                         const canvas = document.createElement('canvas');
+                         canvas.width = cropW;
+                         canvas.height = cropH;
+                         const ctx = canvas.getContext('2d');
+                         ctx.drawImage(parentImageElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                         
+                         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                         const file = new File([blob], `crop-${ID.unique()}.jpg`, { type: 'image/jpeg' });
+                         const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                         childImageId = upload.$id;
+                     } catch(e) {
+                         console.error("Failed to crop image using bounding box", e);
+                         addToast({ type: 'error', message: `Crop failed: ${e.message}` });
+                     }
+                } else if (!aiData?.bounding_box) {
+                     addToast({ type: 'warning', message: `No bounding box returned by AI for ${title}` });
+                } else if (!parentImageElement) {
+                     addToast({ type: 'error', message: `Could not load main image to crop ${title}` });
                 }
                 
                 let notes = aiData ? `Extracted from lot: ${parent.title}` : `[Needs Scouting]\n\nExtracted from lot: ${parent.title}`;

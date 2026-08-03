@@ -152,6 +152,42 @@ const processRows = async (rows) => {
     const isTeam = !!currentTeam.value?.$id;
     const teamId = currentTeam.value?.$id || user.value?.$id;
     const ownerType = isTeam ? 'team' : 'user';
+
+    // Fuzzy Column Helper
+    const findCol = (keys, keywords) => {
+        for (const kw of keywords) {
+            const exact = keys.find(k => k.toLowerCase().trim() === kw.toLowerCase());
+            if (exact) return exact;
+        }
+        return keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+    };
+
+    // Pre-processing: Group by Order ID to calculate Shipping/Handling
+    const orderShippingMap = {}; // orderId -> { totalShipping: 0, totalHandling: 0, itemCount: 0 }
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowKeys = Object.keys(row);
+        let orderId = row['Order ID'] || row['Order #'] || row['Order Number'] || row['OrderId'] || row['Order Id'] || row['Order No'] || row['Order No.'] || row['Invoice ID'] || row['Invoice #'];
+        if (orderId) {
+            orderId = orderId.toString().trim();
+            const shipKey = findCol(rowKeys, ['shipping', 'ship']);
+            const handKey = findCol(rowKeys, ['handling', 'handle']);
+            
+            const shipVal = shipKey ? parseFloat(row[shipKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+            const handVal = handKey ? parseFloat(row[handKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+
+            if (!orderShippingMap[orderId]) {
+                orderShippingMap[orderId] = { totalShipping: 0, totalHandling: 0, itemCount: 0 };
+            }
+            
+            // ShopGoodwill CSVs often repeat the total order shipping on every line, so we take the max
+            if (shipVal > orderShippingMap[orderId].totalShipping) orderShippingMap[orderId].totalShipping = shipVal;
+            if (handVal > orderShippingMap[orderId].totalHandling) orderShippingMap[orderId].totalHandling = handVal;
+            
+            orderShippingMap[orderId].itemCount++;
+        }
+    }
     
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -195,9 +231,39 @@ const processRows = async (rows) => {
         itemId = itemId.toString().trim();
         if (orderId) orderId = orderId.toString().trim();
 
-        // Check for Duplicates (Server-Side)
+        // Fuzzy Column Helpers
+        const rowKeys = Object.keys(row);
+
+        // 1. Fuzzy Detect Title
+        const titleKey = findCol(rowKeys, ['title', 'item name', 'name', 'description', 'item']);
+        let title = titleKey ? row[titleKey] : `Item ${itemId}`;
+
+        // 2. Fuzzy Detect Price
+        const priceKey = findCol(rowKeys, ['price', 'paid', 'amount', 'cost', 'total', 'bid']);
+        let basePrice = priceKey ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        
+        let splitShipping = 0;
+        let splitHandling = 0;
+        
+        if (orderId && orderShippingMap[orderId]) {
+             const orderData = orderShippingMap[orderId];
+             if (orderData.itemCount > 0) {
+                 splitShipping = parseFloat((orderData.totalShipping / orderData.itemCount).toFixed(2));
+                 splitHandling = parseFloat((orderData.totalHandling / orderData.itemCount).toFixed(2));
+             }
+        }
+        
+        // The true landed cost
+        let price = (basePrice + splitShipping + splitHandling).toFixed(2);
+        
+        let shippingNotes = ``;
+        if (splitShipping > 0 || splitHandling > 0) {
+             shippingNotes = `\n\n--- COST BREAKDOWN ---\nBase Bid: $${basePrice.toFixed(2)}\nShared Shipping: $${splitShipping.toFixed(2)}\nShared Handling: $${splitHandling.toFixed(2)}\nTrue Landed Cost: $${price}`;
+        }
+
+        // Check for Duplicates (Server-Side) & Fix Existing Mode
         try {
-            let isDuplicate = false;
+            let existingDoc = null;
             try {
                 const dbCheck = await databases.listDocuments(
                     import.meta.env.PUBLIC_APPWRITE_DB_ID, 
@@ -207,10 +273,9 @@ const processRows = async (rows) => {
                         Query.limit(1)
                     ]
                 );
-                isDuplicate = dbCheck.total > 0;
+                if (dbCheck.total > 0) existingDoc = dbCheck.documents[0];
             } catch (e) {
                 console.warn("Direct identity check failed, running title fallback:", e.message);
-                // Fallback: Query by title and check if any match has this identity
                 const titleCheck = await databases.listDocuments(
                     import.meta.env.PUBLIC_APPWRITE_DB_ID,
                     getCollectionId(),
@@ -219,36 +284,37 @@ const processRows = async (rows) => {
                         Query.limit(100)
                     ]
                 );
-                isDuplicate = titleCheck.documents.some(doc => doc.identity === itemId);
+                existingDoc = titleCheck.documents.find(doc => doc.identity === itemId);
             }
             
-            if (isDuplicate) {
-                logs.value.push(`⏭️ Skipping ${itemId} - Already in inventory (Duplicate Check).`);
-                continue;
+            if (existingDoc) {
+                if (existingDoc.status === 'archived' || existingDoc.status === 'combined') {
+                     logs.value.push(`⏭️ Skipping ${itemId} - Already extracted/archived.`);
+                     continue;
+                } else {
+                     logs.value.push(`♻️ Updating ${itemId} - Correcting landed cost to $${price}.`);
+                     
+                     let updatedNotes = existingDoc.conditionNotes || '';
+                     if (!updatedNotes.includes('COST BREAKDOWN')) {
+                          updatedNotes += shippingNotes;
+                     }
+                     
+                     await databases.updateDocument(
+                         import.meta.env.PUBLIC_APPWRITE_DB_ID,
+                         getCollectionId(),
+                         existingDoc.$id,
+                         {
+                             cost: parseFloat(price),
+                             purchasePrice: parseFloat(price),
+                             conditionNotes: updatedNotes
+                         }
+                     );
+                     continue;
+                }
             }
         } catch (e) {
             console.warn("Duplicate check failed, proceeding w/ caution:", e);
         }
-
-                // Fuzzy Column Helpers
-                const findCol = (keys, keywords) => {
-                    // 1. Try EXACT match first (case-insensitive)
-                    for (const kw of keywords) {
-                        const exact = keys.find(k => k.toLowerCase().trim() === kw.toLowerCase());
-                        if (exact) return exact;
-                    }
-                    // 2. Partial match
-                    return keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
-                };
-                const rowKeys = Object.keys(row);
-
-                // 1. Fuzzy Detect Title
-                const titleKey = findCol(rowKeys, ['title', 'item name', 'name', 'description', 'item']);
-                let title = titleKey ? row[titleKey] : `Item ${itemId}`;
-
-                // 2. Fuzzy Detect Price
-                const priceKey = findCol(rowKeys, ['price', 'paid', 'amount', 'cost', 'total', 'bid']);
-                let price = priceKey ? row[priceKey] : '0';
                 
                 // 3. Fuzzy Detect Image
                 const imageKey = findCol(rowKeys, ['image', 'photo', 'picture', 'url']);
@@ -446,7 +512,7 @@ const processRows = async (rows) => {
 
 
             // Constuct Notes & Links
-            let notes = description;
+            let notes = description + shippingNotes;
 
             // DEBUG LOG: Verify Image ID before save
             if (mainImageId) {

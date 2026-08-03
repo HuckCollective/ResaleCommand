@@ -459,6 +459,7 @@
 </template>
 
 <script setup>
+import { BUCKET_ID } from '../../lib/inventory';
 import { ref, computed, watch, onMounted } from 'vue';
 
 const props = defineProps({
@@ -477,7 +478,7 @@ const props = defineProps({
   },
   appwriteBucketId: {
     type: String,
-    required: true
+    default: BUCKET_ID
   }
 });
 

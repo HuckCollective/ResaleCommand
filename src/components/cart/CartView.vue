@@ -130,7 +130,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
 
 const { user, currentTeam } = useAuth();
 const currentTeamId = computed(() => currentTeam.value?.$id);

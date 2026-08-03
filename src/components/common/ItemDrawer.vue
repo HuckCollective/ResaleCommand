@@ -669,6 +669,8 @@ import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
+import { ID } from 'appwrite';
+import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
 import { Icon } from '@iconify/vue';
 
 const { currentTeam } = useAuth();
@@ -698,9 +700,10 @@ onUnmounted(() => {
     document.body.style.overflow = '';
 });
 
-const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
+const BUCKET = BUCKET_ID;
+const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
 const props = defineProps({
     item: {
@@ -1298,7 +1301,7 @@ const initForm = () => {
             const fileMatch = i.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/);
             if (fileMatch) {
                 const id = fileMatch[1].trim();
-                const urlPrimary = `${ENDPOINT}/storage/buckets/reports/files/${id}/download?project=${PROJECT}`;
+                const urlPrimary = `${ENDPOINT}/storage/buckets/${REPORTS_BUCKET}/files/${id}/download?project=${PROJECT}`;
                 const urlFallback = getAssetUrl(id).replace('/view', '/download');
                 fetch(urlPrimary).then(res => {
                     if (!res.ok) throw new Error('Not in reports bucket');
@@ -1323,7 +1326,7 @@ const initForm = () => {
             const mdMatch = i.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/);
             if (mdMatch) {
                 const id = mdMatch[1].trim();
-                const urlPrimary = `${ENDPOINT}/storage/buckets/reports/files/${id}/download?project=${PROJECT}`;
+                const urlPrimary = `${ENDPOINT}/storage/buckets/${REPORTS_BUCKET}/files/${id}/download?project=${PROJECT}`;
                 const urlFallback = getAssetUrl(id).replace('/view', '/download');
                 fetch(urlPrimary).then(res => {
                     if (!res.ok) throw new Error('Not in reports bucket');

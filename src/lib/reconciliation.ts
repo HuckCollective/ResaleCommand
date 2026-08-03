@@ -53,7 +53,7 @@ export function reconcileBoothInventory(csvText: string, appwriteItems: any[]): 
                     
                     if (!csvName) return; // skip empty rows
 
-                    const matchedForThisRow = [];
+                    const matchedForThisRow: any[] = [];
 
                     // Attempt to find up to 'matchCount' matches for this single CSV row
                     // Even if qty is 0 (e.g. out of stock), we still need to match the item at least once to update its status!

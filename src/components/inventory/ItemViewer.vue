@@ -371,7 +371,9 @@ let isProgrammaticScroll = false;
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-const BUCKET = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
+const BUCKET = BUCKET_ID;
+const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
 const childItems = ref([]);
 const parentItem = ref(null);
@@ -666,7 +668,7 @@ const loadScoutData = async (currentItem) => {
         const mdMatch = currentItem.conditionNotes.match(/\[SCOUT_REPORT_MD:\s*([^\]]+)\]/);
         if (mdMatch) {
             const id = mdMatch[1].trim();
-            const downloadUrl = `${ENDPOINT}/storage/buckets/reports/files/${id}/download?project=${PROJECT}`;
+            const downloadUrl = `${ENDPOINT}/storage/buckets/${REPORTS_BUCKET}/files/${id}/download?project=${PROJECT}`;
             try {
                 const res = await fetch(downloadUrl);
                 if (res.ok) {
@@ -679,7 +681,7 @@ const loadScoutData = async (currentItem) => {
         const fileMatch = currentItem.conditionNotes.match(/\[SCOUT_REPORT_ID:\s*([^\]]+)\]/);
         if (fileMatch) {
             const fileId = fileMatch[1].trim();
-            const downloadUrl = `${ENDPOINT}/storage/buckets/reports/files/${fileId}/download?project=${PROJECT}`;
+            const downloadUrl = `${ENDPOINT}/storage/buckets/${REPORTS_BUCKET}/files/${fileId}/download?project=${PROJECT}`;
             try {
                 const res = await fetch(downloadUrl);
                 if (res.ok) {

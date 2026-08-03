@@ -145,7 +145,7 @@ import { Icon } from '@iconify/vue';
 import { getSafeRawAnalysis, getCollectionId } from '../../lib/inventory';
 import ScannerWidget from '../common/ScannerWidget.vue';
 
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
 const DB = import.meta.env.PUBLIC_APPWRITE_DB_ID;
 
 const { addLocalItem } = useInventory(); // Keep hook if needed

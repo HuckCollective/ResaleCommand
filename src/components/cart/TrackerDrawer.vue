@@ -127,7 +127,7 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
 
 const { user } = useAuth();
 const { 

@@ -504,7 +504,7 @@ import ScannerWidget from '../common/ScannerWidget.vue';
 // APPWRITE
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; // Added this line
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; // Added this line
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID;
+import { BUCKET_ID } from '../../lib/inventory';
 
 // -- COMPOSABLES --
 const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
@@ -533,12 +533,12 @@ onMounted(async () => {
             // Pre-fill existing images in the preview if present
             if (itemDoc.galleryImageIds && itemDoc.galleryImageIds.length > 0) {
                 images.value = itemDoc.galleryImageIds.map(id => {
-                    const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${import.meta.env.PUBLIC_APPWRITE_BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
+                    const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
                     return { url };
                 });
             } else if (itemDoc.imageId) {
                 const id = itemDoc.imageId;
-                const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${import.meta.env.PUBLIC_APPWRITE_BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
+                const url = id.startsWith('http') ? id : `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${id}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
                 images.value = [{ url }];
             }
 
@@ -1486,10 +1486,90 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              console.log('[ScoutView] Saving items individually...', item.lot_items.length);
              const individualCost = cost.value ? parseFloat((parseFloat(cost.value) / item.lot_items.length).toFixed(2)) : 0.0;
              
+             // Pre-load main image for cropping if possible
+             let mainImageElement: HTMLImageElement | null = null;
+             
+             let mainImgSrc = item.fetched_image || (item.fetched_images && item.fetched_images.length > 0 ? item.fetched_images[0] : null);
+             if (!mainImgSrc && item.imageId) {
+                 mainImgSrc = `${import.meta.env.PUBLIC_APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${item.imageId}/view?project=${import.meta.env.PUBLIC_APPWRITE_PROJECT_ID}`;
+             }
+             
+             if (mainImgSrc) {
+                 try {
+                     const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(mainImgSrc)}`;
+                     const res = await fetch(proxiedUrl);
+                     if (!res.ok) throw new Error("Failed to fetch image via proxy");
+                     const blob = await res.blob();
+                     const objectUrl = URL.createObjectURL(blob);
+                     
+                     mainImageElement = new Image();
+                     await new Promise((resolve, reject) => {
+                         mainImageElement!.onload = resolve;
+                         mainImageElement!.onerror = reject;
+                         mainImageElement!.src = objectUrl;
+                     });
+                     URL.revokeObjectURL(objectUrl);
+                 } catch (e) {
+                     console.warn('[ScoutView] Failed to load main image for cropping', e);
+                     mainImageElement = null;
+                 }
+             }
+
              // Loop and save each individual sub-item
              for (let i = 0; i < item.lot_items.length; i++) {
                  const subItem = item.lot_items[i];
                  const subItemName = subItem.name || subItem.title || subItem.identity || subItem.item || 'Component Item';
+                 
+                 let itemGalleryIds = [...galleryIds]; // Default to shared lot images
+                 
+                 // Apply crop if bounding box exists
+                 if (subItem.bounding_box && mainImageElement && BUCKET_ID) {
+                     try {
+                          let bbox = subItem.bounding_box;
+                          if (typeof bbox === 'string') {
+                              bbox = JSON.parse(bbox);
+                          }
+                          const [ymin, xmin, ymax, xmax] = bbox;
+                          const imgW = mainImageElement.naturalWidth;
+                          const imgH = mainImageElement.naturalHeight;
+                          
+                          const sx = (xmin / 1000) * imgW;
+                          const sy = (ymin / 1000) * imgH;
+                          const sWidth = ((xmax - xmin) / 1000) * imgW;
+                          const sHeight = ((ymax - ymin) / 1000) * imgH;
+                          
+                          // Expand crop slightly (10% padding)
+                          const paddingX = sWidth * 0.1;
+                          const paddingY = sHeight * 0.1;
+                          const cropX = Math.max(0, sx - paddingX);
+                          const cropY = Math.max(0, sy - paddingY);
+                          const cropW = Math.min(imgW - cropX, sWidth + (paddingX * 2));
+                          const cropH = Math.min(imgH - cropY, sHeight + (paddingY * 2));
+                          
+                          const canvas = document.createElement('canvas');
+                          canvas.width = cropW;
+                          canvas.height = cropH;
+                          const ctx = canvas.getContext('2d');
+                          if (ctx) {
+                              ctx.drawImage(mainImageElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                              const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                              if (blob) {
+                                  const file = new File([blob], `crop-${ID.unique()}.jpg`, { type: 'image/jpeg' });
+                                  const upload = await storage.createFile(BUCKET_ID, ID.unique(), file);
+                                  itemGalleryIds = [upload.$id]; // Set just the cropped image
+                              } else {
+                                  addToast({ type: 'error', message: 'Failed to generate crop blob' });
+                              }
+                          }
+                     } catch(e) {
+                         console.error("[ScoutView] Failed to crop image using bounding box", e);
+                         addToast({ type: 'error', message: `Crop failed: ${e.message}` });
+                     }
+                 } else if (!subItem.bounding_box) {
+                     addToast({ type: 'warning', message: `No bounding box returned by AI for ${subItemName}` });
+                 } else if (!mainImageElement) {
+                     addToast({ type: 'error', message: `Could not load main image to crop ${subItemName}` });
+                 }
                  
                  let noteDetails = `Lot Item: ${subItemName}\nInferred Condition: ${subItem.condition}\n` + (item.condition_notes || '');
                  if (item.shipping_info) {
@@ -1503,7 +1583,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                       noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
                  }
                  
-                 const itemPayload = {
+                 const itemPayload: any = {
                      identity: subItemName,
                      title: subItemName,
                      conditionNotes: noteDetails,
@@ -1515,9 +1595,13 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      storageLocation: storageLocation.value || '',
                      status: isAcquired.value ? 'acquired' : 'tracked',
                      keywords: item.keywords || [],
-                     galleryImageIds: galleryIds, // Share the lot images
+                     galleryImageIds: itemGalleryIds,
                      rawAnalysis: getSafeRawAnalysis(item) || undefined
                  };
+                 
+                 if (itemGalleryIds.length > 0) {
+                     itemPayload.imageId = itemGalleryIds[0];
+                 }
                  
                  console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
                  await addItemToCart(itemPayload);

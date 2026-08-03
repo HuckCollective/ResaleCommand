@@ -22,7 +22,7 @@ export async function GET({ request }) {
         // 1. Fetch all docs with old status
         let documentsToUpdate = [];
         let hasMore = true;
-        let lastId = null;
+        let lastId: string | null = null;
         let totalUpdated = 0;
 
         while (hasMore) {

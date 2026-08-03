@@ -8,7 +8,10 @@ const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 export const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
     : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
+
+const _isDev = (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || '').endsWith('_dev');
+export const BUCKET_ID = _isDev ? 'item_images_dev' : (import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images');
+export const REPORTS_BUCKET_ID = _isDev ? 'reports_dev' : 'reports';
 
 export interface ExtraItemData {
     cost?: string;
@@ -37,6 +40,7 @@ export interface ExtraItemData {
     components?: string;
     quantity?: number;
     parentLotId?: string;
+    soldPrice?: string | number;
     rawAnalysis?: string;
     countryOfOrigin?: string;
 }
@@ -210,14 +214,14 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 try {
                     const dateStr = new Date().toISOString().split('T')[0];
                     const mdFile = new File([md], `scout_${dateStr}.md`, { type: 'text/markdown' });
-                    const mdUpload = await storage.createFile('reports', ID.unique(), mdFile);
+                    const mdUpload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), mdFile);
                     mdFileId = mdUpload.$id;
                 } catch(e) { console.warn("MD upload failed", e); }
                 
                 // Strategy 1: Try .json
                 try {
                     const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                    const upload = await storage.createFile('reports', ID.unique(), file);
+                    const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                     fileId = upload.$id;
                 } catch(err1: any) {
                     
@@ -229,13 +233,13 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                             
                             // Retry JSON
                             const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                            const upload = await storage.createFile('reports', ID.unique(), file);
+                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                             fileId = upload.$id;
                         } catch (retryErr) {
                              // Fallback to TXT
                              try {
                                 const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                                const upload = await storage.createFile('reports', ID.unique(), file);
+                                const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                                 fileId = upload.$id;
                              } catch(e3) {
                                  throw retryErr; 
@@ -245,7 +249,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                         // Fallback to TXT
                         try {
                             const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                            const upload = await storage.createFile('reports', ID.unique(), file);
+                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                             fileId = upload.$id;
                         } catch (e4) {
                             throw err1;
@@ -368,44 +372,53 @@ export async function getInventoryItems(teamId?: string) {
         return [];
     }
 }
+export function getAssociatedFileIds(item: any): Set<string> {
+    const fileIds = new Set<string>();
+
+    // A. Check Standard Fields
+    if (item.imageId) fileIds.add(item.imageId);
+    if (item.receiptImageId) fileIds.add(item.receiptImageId);
+    if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
+        item.galleryImageIds.forEach((id: string) => fileIds.add(id));
+    }
+
+    // B. Check Notes for "Safe Mode" IDs
+    if (item.conditionNotes) {
+        // Main Image
+        const mainMatch = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
+        if (mainMatch) fileIds.add(mainMatch[1].trim());
+
+        // Gallery
+        const galleryMatch = item.conditionNotes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
+        if (galleryMatch) {
+            galleryMatch[1].split(',').forEach((s: string) => {
+                const id = s.trim();
+                if (id) fileIds.add(id);
+            });
+        }
+
+        // Receipt
+        const receiptMatch = item.conditionNotes.match(/\[RECEIPT ID: ([^\]]+)\]/i);
+        if (receiptMatch) fileIds.add(receiptMatch[1].trim());
+
+        // Scout Report
+        const scoutMatch = item.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/i);
+        if (scoutMatch) fileIds.add(scoutMatch[1].trim());
+        
+        // MD File
+        const mdMatch = item.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/i);
+        if (mdMatch) fileIds.add(mdMatch[1].trim());
+    }
+    
+    return fileIds;
+}
 
 export async function deleteInventoryItem(documentId: string) {
     try {
         // 1. Fetch the item to find associated images
         const item = await databases.getDocument(DB_ID, getCollectionId(), documentId);
         
-        const imagesToDelete = new Set<string>();
-
-        // A. Check Standard Fields
-        if (item.imageId) imagesToDelete.add(item.imageId);
-        if (item.receiptImageId) imagesToDelete.add(item.receiptImageId);
-        if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
-            item.galleryImageIds.forEach((id: string) => imagesToDelete.add(id));
-        }
-
-        // B. Check Notes for "Safe Mode" IDs
-        if (item.conditionNotes) {
-            // Main Image
-            const mainMatch = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
-            if (mainMatch) imagesToDelete.add(mainMatch[1].trim());
-
-            // Gallery
-            const galleryMatch = item.conditionNotes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
-            if (galleryMatch) {
-                galleryMatch[1].split(',').forEach((s: string) => {
-                    const id = s.trim();
-                    if (id) imagesToDelete.add(id);
-                });
-            }
-
-            // Receipt
-            const receiptMatch = item.conditionNotes.match(/\[RECEIPT ID: ([^\]]+)\]/i);
-            if (receiptMatch) imagesToDelete.add(receiptMatch[1].trim());
-
-            // Scout Report
-            const scoutMatch = item.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/i);
-            if (scoutMatch) imagesToDelete.add(scoutMatch[1].trim());
-        }
+        const imagesToDelete = getAssociatedFileIds(item);
 
         // 2. Delete Identified Images (Only in production, not in Alpha/Dev sandbox to prevent breaking shared images)
         if (imagesToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
@@ -517,44 +530,6 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             currentGalleryIds = [...currentGalleryIds, ...newIds];
         }
 
-        // Clean up deleted images from storage
-        const imagesToDelete = new Set<string>();
-        
-        // Check if main image was replaced/removed
-        if (currentDoc.imageId && updates.imageId !== undefined && currentDoc.imageId !== updates.imageId && currentDoc.imageId !== newMainUploadId) {
-            imagesToDelete.add(currentDoc.imageId);
-        }
-        
-        // Safely check old notes so we don't accidentally match the newly inserted tag
-        const oldNotes = currentDoc.conditionNotes || '';
-        const oldMainMatch = oldNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
-        if (oldMainMatch) {
-            const oldId = oldMainMatch[1].trim();
-            if (updates.imageId !== undefined && oldId !== updates.imageId && oldId !== newMainUploadId) {
-                imagesToDelete.add(oldId);
-            }
-        }
-
-        // Check if gallery images were removed
-        if (updates.existingGalleryIds !== undefined) {
-             const oldGalleryMatch = oldNotes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
-             const oldGalleryIds = oldGalleryMatch ? oldGalleryMatch[1].split(',').map((s: string) => s.trim()).filter((s: string) => s) : (currentDoc.galleryImageIds || []);
-             
-             oldGalleryIds.forEach((oldId: string) => {
-                 if (!updates.existingGalleryIds!.includes(oldId)) {
-                     imagesToDelete.add(oldId);
-                 }
-             });
-        }
-
-        // Delete the removed images from the bucket (Only in production, not in Alpha/Dev sandbox to prevent breaking shared images)
-        if (imagesToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
-            console.log(`Deleting ${imagesToDelete.size} removed images from bucket...`);
-            await Promise.allSettled(Array.from(imagesToDelete).map(id => 
-                storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete removed image ${id}:`, e))
-            ));
-        }
-
         // Update Gallery Tag & Field if changed
         if ((updates.galleryFiles?.length || 0) > 0 || updates.existingGalleryIds !== undefined) {
              data.galleryImageIds = currentGalleryIds; // Appwrite requires [] to clear array, not null
@@ -566,8 +541,6 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         }
 
         // --- Handle Text Fields (Safe Mode updates to Notes) ---
-
-        // --- Handle Text Fields ---
 
         // Helper to handle clearing or updating both Schema and Notes
         // Since some users might expect data inside notes vs schema
@@ -618,7 +591,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             if (BUCKET_ID && mdText.trim().length > 0) {
                  try {
                      const mdFile = new File([mdText], `scout_${documentId}.md`, { type: 'text/markdown' });
-                     const mdUpload = await storage.createFile('reports', ID.unique(), mdFile);
+                     const mdUpload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), mdFile);
                      updateTagValue('SCOUT_REPORT_MD', mdUpload.$id);
                  } catch(e) {
                      console.warn("Failed to upload MD report", e);
@@ -662,7 +635,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
                 try {
                     // Strategy 1: Try .json
                     const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                    const upload = await storage.createFile('reports', ID.unique(), file);
+                    const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                     fileId = upload.$id;
                 } catch(err1: any) {
                     // SELF-REPAIR: If extension not allowed, try to call fix-bucket endpoint
@@ -672,12 +645,12 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
                             await fetch('/api/dev/fix-bucket');
                             // Retry once
                             const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                            const upload = await storage.createFile('reports', ID.unique(), file);
+                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                             fileId = upload.$id;
                         } catch (retryErr) {
                             try {
                                 const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                                const upload = await storage.createFile('reports', ID.unique(), file);
+                                const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                                 fileId = upload.$id;
                             } catch(e3) {
                                  // Check 'fileId' to see if we succeeded in inner blocks? No, just throw to outer catch for Lite
@@ -688,7 +661,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
                         // Fallback to Strategy 2
                         try {
                             const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                            const upload = await storage.createFile('reports', ID.unique(), file);
+                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                             fileId = upload.$id;
                         } catch(e4) {
                              throw err1;
@@ -768,6 +741,27 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             documentId,
             data
         );
+        
+        // --- Robust Orphaned Image Deletion ---
+        try {
+            const oldFileIds = getAssociatedFileIds(currentDoc);
+            const newFileIds = getAssociatedFileIds(response);
+            
+            const orphansToDelete = new Set<string>();
+            oldFileIds.forEach(id => {
+                if (!newFileIds.has(id)) orphansToDelete.add(id);
+            });
+            
+            if (orphansToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
+                console.log(`Deleting ${orphansToDelete.size} orphaned files from bucket...`);
+                await Promise.allSettled(Array.from(orphansToDelete).map(id => 
+                    storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete orphaned file ${id}:`, e))
+                ));
+            }
+        } catch (cleanupErr) {
+             console.warn("Non-fatal error during orphaned file cleanup:", cleanupErr);
+        }
+
         return response;
     } catch (error) {
          console.error("Error updating item:", error);
