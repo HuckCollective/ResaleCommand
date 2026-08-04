@@ -241,9 +241,6 @@ const processRows = async (rows) => {
                 );
                 if (dbCheck.total > 0) {
                      existingDocs = dbCheck.documents;
-                     if (orderId) {
-                         existingDocs = existingDocs.filter(d => d.conditionNotes && d.conditionNotes.includes(orderId));
-                     }
                 }
             } catch (e) {
                 console.warn("Direct identity check failed, running title fallback:", e.message);
@@ -255,7 +252,7 @@ const processRows = async (rows) => {
                         Query.limit(100)
                     ]
                 );
-                const match = titleCheck.documents.find(doc => doc.identity === itemId && (!orderId || (doc.conditionNotes && doc.conditionNotes.includes(orderId))));
+                const match = titleCheck.documents.find(doc => doc.identity === itemId);
                 if (match) existingDocs = [match];
             }
             
