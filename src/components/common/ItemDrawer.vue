@@ -499,7 +499,7 @@
                             <span class="label-text font-bold">Product Description</span>
                             <button class="btn btn-xs btn-secondary btn-outline ml-2" @click="generateDescription" :disabled="generatingDescription || !item">
                                 <span v-if="generatingDescription" class="loading loading-spinner loading-xs"></span>
-                                <Icon icon="solar:magic-stick-linear" class="w-3 h-3 inline mr-1" /> AI Generate
+                                <Icon icon="mingcute:gemini-fill" class="w-3 h-3 inline mr-1" /> Generate
                             </button>
                             <div v-if="suggestedDescriptionStr && suggestedDescriptionStr === editForm.description" class="text-success shrink-0" title="AI Suggestion Applied">
                                 <div class="relative w-4 h-4 flex items-center justify-center">
@@ -672,8 +672,10 @@ import { confirmDialog } from '../../stores/confirm';
 import { ID } from 'appwrite';
 import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
 import { Icon } from '@iconify/vue';
+import { useLoader } from '../../composables/useLoader';
 
 const { currentTeam } = useAuth();
+const { showLoader, hideLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
 
@@ -1389,8 +1391,27 @@ const closeDrawer = () => {
     emit('close');
 };
 
+let descAbortController = new AbortController();
+
 const generateDescription = async () => {
     generatingDescription.value = true;
+    descAbortController = new AbortController();
+    
+    showLoader("Drafting a brilliant description...", {
+        basket: 'solar:magic-stick-bold-duotone',
+        berries: ['solar:document-text-bold-duotone', 'solar:pen-bold-duotone', 'solar:star-bold-duotone', 'solar:text-bold-duotone'],
+        basketColor: 'text-primary-content',
+        berryColor: 'text-primary-content',
+        backgroundColor: 'bg-primary/80',
+        cancelable: true,
+        onCancel: () => {
+            if (descAbortController) {
+                descAbortController.abort();
+            }
+            hideLoader();
+        }
+    });
+
     try {
         const idToUpdate = props.item ? props.item.$id : null;
         
@@ -1411,7 +1432,8 @@ const generateDescription = async () => {
              const res = await fetch('/api/generate-description', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ itemId: idToUpdate })
+                body: JSON.stringify({ itemId: idToUpdate }),
+                signal: descAbortController.signal
             });
             const data = await res.json();
             if(data.success && data.description) {
@@ -1425,9 +1447,14 @@ const generateDescription = async () => {
         }
         
     } catch (e) {
-        addToast({ type: 'error', message: 'Description generation failed: ' + e.message });
+        if (e.name === 'AbortError') {
+            addToast({ type: 'warning', message: 'Description generation canceled.' });
+        } else {
+            addToast({ type: 'error', message: 'Description generation failed: ' + e.message });
+        }
     } finally {
         generatingDescription.value = false;
+        hideLoader();
     }
 };
 
@@ -1677,12 +1704,15 @@ const selectFetchedImage = async (url) => {
     } else addToast({ type: 'error', message: "Could not download image." });
 };
 
+let scoutAbortController = new AbortController();
+
 const analyzeExistingItem = async () => {
     if (!actualMainPhoto.value.url && !editForm.sourcingLocation && !scoutQuery.value && !editForm.title) {
         addToast({ type: 'warning', message: "Please provide a title, text, a photo, or a link to analyze." });
         return;
     }
     analyzing.value = true;
+    scoutAbortController = new AbortController();
     analysisStatus.value = 'Preparing Images...';
     try {
         let base64Images = [];
@@ -1737,13 +1767,31 @@ const analyzeExistingItem = async () => {
         scoutMdText.value = '';
         analysisStatus.value = 'Analyzing with AI...';
 
+        const huckPhrases = [
+            "Hold your horses, I'm digging through the archives...",
+            "Crunching the numbers on this one...",
+            "Let me pull up the market comparables...",
+            "Analyzing the visual data, give me a sec...",
+            "Reviewing the photographic evidence..."
+        ];
+        showLoader(huckPhrases[Math.floor(Math.random() * huckPhrases.length)], {
+            basket: 'solar:archive-minimalistic-bold-duotone',
+            berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
+            basketColor: 'text-primary-content',
+            berryColor: 'text-primary-content',
+            backgroundColor: 'bg-primary/80',
+            cancelable: true,
+            onCancel: () => scoutAbortController.abort()
+        });
+
         const response = await fetch(`/api/identify-item`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 images: base64Images, 
                 remoteImageUrls: remoteUrls,
                 notes: contextNotes 
-            })
+            }),
+            signal: scoutAbortController.signal
         });
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
@@ -1795,7 +1843,13 @@ const analyzeExistingItem = async () => {
             }
             descTab.value = 'edit';
         }
-    } catch (e) { addToast({ type: 'error', message: "Analysis Error: " + e.message }); } finally { analyzing.value = false; analysisStatus.value = ''; }
+    } catch (e) { 
+        if (e.name === 'AbortError') {
+            addToast({ type: 'warning', message: 'Analysis canceled.' });
+        } else {
+            addToast({ type: 'error', message: "Analysis Error: " + e.message }); 
+        }
+    } finally { analyzing.value = false; analysisStatus.value = ''; hideLoader(); }
 };
 
 const applyBundleSuggestions = () => {

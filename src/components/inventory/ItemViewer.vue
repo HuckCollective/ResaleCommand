@@ -198,7 +198,7 @@
 
                         <!-- Child Listings -->
                         <div class="p-4" v-if="childItems.length > 0">
-                            <span class="text-[10px] font-bold uppercase opacity-50 tracking-wider block mb-2">Sold items from this lot ({{ childItems.length }})</span>
+                            <span class="text-[10px] font-bold uppercase opacity-50 tracking-wider block mb-2">Items linked to this lot ({{ childItems.length }})</span>
                             <div class="overflow-x-auto">
                                 <table class="table table-xs w-full">
                                     <thead>

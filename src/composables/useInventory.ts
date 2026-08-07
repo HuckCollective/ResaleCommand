@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { databases, Query, client } from '../lib/appwrite';
 import type { Models } from 'appwrite';
+import { useLoader } from './useLoader';
 
 import { isAlphaMode } from '../stores/env';
 
@@ -67,6 +68,9 @@ export function useInventory() {
         loading.value = true;
         error.value = null;
         
+        const { showLoader } = useLoader();
+        showLoader("Loading Inventory...");
+        
         try {
             // Appwrite limit is max 5000 documents per request
             const queries = [
@@ -96,6 +100,9 @@ export function useInventory() {
             error.value = e.message;
         } finally {
             loading.value = false;
+            // Hide the global Vue loader
+            const { hideLoader } = useLoader();
+            hideLoader();
         }
     };
     

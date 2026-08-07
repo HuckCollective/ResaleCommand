@@ -500,6 +500,7 @@ import { account, storage, databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
+import { useLoader } from '../../composables/useLoader';
 
 // APPWRITE
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; // Added this line
@@ -511,6 +512,7 @@ const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
 const { 
     activeCart, addItemToCart, startCart, checkActiveCart, cartItems
 } = useCart();
+const { showLoader, hideLoader } = useLoader();
 
 // -- LIFECYCLE --
 onMounted(async () => {
@@ -861,6 +863,21 @@ async function analyzeListing() {
     loading.value = true;
     error.value = null;
     
+    const huckPhrases = [
+        "Hold your horses, I'm digging through the archives...",
+        "Crunching the numbers on this one...",
+        "Let me pull up the market comparables...",
+        "Analyzing the data, give me a sec...",
+        "Reviewing the evidence..."
+    ];
+    showLoader(huckPhrases[Math.floor(Math.random() * huckPhrases.length)], {
+        basket: 'solar:archive-minimalistic-bold-duotone',
+        berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
+        basketColor: 'text-primary-content',
+        berryColor: 'text-primary-content',
+        backgroundColor: 'bg-primary/80'
+    });
+    
     const targetUrl = url;
     
     try {
@@ -909,6 +926,7 @@ async function analyzeListing() {
     } finally {
         loading.value = false;
         scoutUrl.value = ''; // Prep for next
+        hideLoader();
     }
 }
 
@@ -919,6 +937,21 @@ async function analyzeImage() {
     if (!images.value.length) return;
     loading.value = true;
     error.value = null;
+    
+    const huckPhrases = [
+        "Hold your horses, I'm digging through the archives...",
+        "Crunching the numbers on this one...",
+        "Let me pull up the market comparables...",
+        "Analyzing the visual data, give me a sec...",
+        "Reviewing the photographic evidence..."
+    ];
+    showLoader(huckPhrases[Math.floor(Math.random() * huckPhrases.length)], {
+        basket: 'solar:archive-minimalistic-bold-duotone',
+        berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
+        basketColor: 'text-primary-content',
+        berryColor: 'text-primary-content',
+        backgroundColor: 'bg-primary/80'
+    });
     
     try {
         const base64Images: string[] = [];
@@ -976,6 +1009,7 @@ async function analyzeImage() {
         error.value = `Analysis Failed: ${e.message}`;
     } finally {
         loading.value = false;
+        hideLoader();
     }
 }
 

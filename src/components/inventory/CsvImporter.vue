@@ -196,6 +196,9 @@ import { addToast, updateToast, removeToast } from '../../stores/toast';
 import Papa from 'papaparse';
 import { isAlphaMode } from '../../stores/env';
 import { Icon } from '@iconify/vue';
+import { useLoader } from '../../composables/useLoader';
+
+const { showLoader, hideLoader } = useLoader();
 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
@@ -571,8 +574,11 @@ async function retryOperation<T>(fn: () => Promise<T>, retries = 3, baseDelay = 
     }
 }
 
+let isImportCanceled = false;
+
 async function importSelected() {
     importing.value = true;
+    isImportCanceled = false;
     const targets = parsedItems.value.filter(i => i.selected);
     let completed = 0;
     let updated = 0;
@@ -586,6 +592,19 @@ async function importSelected() {
         duration: 0
     });
 
+    showLoader("Archiving file & starting import...", {
+        basket: 'solar:box-minimalistic-bold-duotone',
+        berries: ['solar:document-add-bold-duotone', 'solar:database-bold-duotone', 'solar:file-download-bold-duotone', 'solar:archive-bold-duotone'],
+        basketColor: 'text-secondary-content',
+        berryColor: 'text-secondary-content',
+        backgroundColor: 'bg-secondary/80',
+        cancelable: true,
+        onCancel: () => {
+            isImportCanceled = true;
+            hideLoader();
+        }
+    });
+
     try {
         const DB = import.meta.env.PUBLIC_APPWRITE_DB_ID;
         const { Query } = await import('appwrite');
@@ -597,6 +616,10 @@ async function importSelected() {
         console.log('[Import] Starting batch process for', total, 'items.');
 
         for (let i = 0; i < total; i += CONCURRENCY) {
+            if (isImportCanceled) {
+                addToast({ type: 'warning', message: 'Import canceled by user.' });
+                break;
+            }
             const chunk = targets.slice(i, i + CONCURRENCY);
             
             // Update Progress
@@ -764,6 +787,7 @@ async function importSelected() {
         addToast({ type: 'error', message: "Critical Import Error: " + e.message, duration: 0 });
     } finally {
         importing.value = false;
+        hideLoader();
     }
 }
 </script>

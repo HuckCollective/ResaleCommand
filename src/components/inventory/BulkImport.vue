@@ -75,6 +75,9 @@ import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
+import { useLoader } from '../../composables/useLoader';
+
+const { showLoader, hideLoader } = useLoader();
 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
@@ -106,14 +109,12 @@ const handleFileUpload = (event) => {
     file.value = event.target.files[0];
     selectedFileName.value = file.value?.name || '';
 };
+let isBulkCanceled = false;
 
 const processCSV = async () => {
     if (!file.value) return;
-
-    // improved security check
-    const isTeam = !!currentTeam.value?.$id;
+    
     const teamId = currentTeam.value?.$id || user.value?.$id;
-    const ownerType = isTeam ? 'team' : 'user';
     
     if (!teamId) {
         addToast({ type: 'error', message: "Error: You must be logged in to import items." });
@@ -121,8 +122,22 @@ const processCSV = async () => {
     }
 
     processing.value = true;
+    isBulkCanceled = false;
     logs.value = [];
     progress.value = 0;
+
+    showLoader("Reading CSV data...", {
+        basket: 'solar:box-minimalistic-bold-duotone',
+        berries: ['solar:document-add-bold-duotone', 'solar:database-bold-duotone', 'solar:file-download-bold-duotone', 'solar:folder-with-files-bold-duotone'],
+        basketColor: 'text-secondary-content',
+        berryColor: 'text-secondary-content',
+        backgroundColor: 'bg-secondary/80',
+        cancelable: true,
+        onCancel: () => {
+            isBulkCanceled = true;
+            hideLoader();
+        }
+    });
 
     Papa.parse(file.value, {
         header: true,
@@ -135,11 +150,13 @@ const processCSV = async () => {
             await processRows(rows);
             
             processing.value = false;
+            hideLoader();
             fetchInventory(''); 
         },
         error: (err) => {
             logs.value.push(`❌ CSV Error: ${err.message}`);
             processing.value = false;
+            hideLoader();
         }
     });
 };
@@ -163,6 +180,11 @@ const processRows = async (rows) => {
     };
     
     for (let i = 0; i < rows.length; i++) {
+        if (isBulkCanceled) {
+            logs.value.push("⚠️ Import canceled by user.");
+            break;
+        }
+        
         const row = rows[i];
         if (i === 0) {
              logs.value.push("Headers: " + Object.keys(row).join(', '));

@@ -5,6 +5,7 @@ import Footer from "@components/Footer.astro";
 import ToastContainer from "@components/ui/ToastContainer.vue";
 import ConfirmContainer from "@components/ui/ConfirmContainer.vue";
 import MarkdownModal from "@components/ui/MarkdownModal.astro";
+import HuckleberryLoader from "@components/common/HuckleberryLoader.vue";
 import { siteConfig } from "site-config";
 
 import "../styles/global.css";
@@ -57,6 +58,7 @@ const { title = siteConfig.title, description, image } = Astro.props;
   </div>
 
   <MarkdownModal />
+  <HuckleberryLoader client:load />
   <ToastContainer client:load />
   <ConfirmContainer client:load />
   <script>

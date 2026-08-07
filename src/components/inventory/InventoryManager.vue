@@ -618,7 +618,7 @@
                     
                     <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal">
                         <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
-                        <span>This will merge the selected items into a single lot listing. The non-primary items will be permanently deleted from the database.</span>
+                        <span>This will merge the selected items into a single Master Lot. The original items will be marked as "combined", linked to the new lot, and hidden from your main inventory view.</span>
                     </div>
                 </div>
 
@@ -800,6 +800,7 @@ import { BUCKET_ID } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 
 // Use Composable
+import { useLoader } from '../../composables/useLoader';
 const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage } = useInventory();
 const loadMore = loadNextPage; // Alias for template
 const { currentTeam, loading: authLoading } = useAuth();
@@ -1323,9 +1324,14 @@ const cameraVideo = ref(null);
 const isCameraOpen = ref(false);
 const cameraStream = ref(null);
 
+// Trigger loader immediately on setup (before mount) to prevent layout flash
+const { showLoader } = useLoader();
+showLoader("Loading Inventory...");
+
 // Lifecycle
 onMounted(async () => {
     console.log("InventoryManager Mounted - Version with Image Fetcher");
+    
     // ONLY fetch if auth is already loaded.
     if (!authLoading.value) {
         await fetchInventory(''); 
