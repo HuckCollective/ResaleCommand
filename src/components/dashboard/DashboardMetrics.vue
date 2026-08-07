@@ -66,6 +66,7 @@
 import { onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
+import { useLoader } from '../../composables/useLoader';
 
 const {
     loading,
@@ -76,6 +77,9 @@ const {
     insights,
     initDashboard
 } = useDashboardMetrics();
+
+const { showLoader } = useLoader();
+showLoader("Loading Dashboard...");
 
 onMounted(() => {
     initDashboard();
