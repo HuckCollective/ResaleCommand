@@ -1,0 +1,16 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SpeedEntryForm from '../../components/purchases/SpeedEntryForm.vue';
+---
+
+<Layout title="Speed Entry">
+  <div class="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div class="flex items-center gap-4 mb-4">
+      <a href="/purchases" class="btn btn-ghost btn-sm">
+        ← Back to Purchases
+      </a>
+    </div>
+    
+    <SpeedEntryForm client:load />
+  </div>
+</Layout>

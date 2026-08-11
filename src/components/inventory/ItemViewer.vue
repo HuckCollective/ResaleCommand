@@ -25,10 +25,15 @@
                     </ul>
                 </div>
                 <div class="flex-none gap-2 flex items-center">
-                    <button v-if="item && item.quantity > 1 && item.status !== 'sold'" 
+                    <button v-if="item && (item.quantity > 1 || childItems.length > 0) && item.status !== 'sold' && !item.parentLotId" 
+                            class="btn btn-xs btn-secondary font-bold shadow-sm"
+                            @click="openUnpackModal">
+                        <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5 mr-1" /> Unpack Item
+                    </button>
+                    <button v-if="item && item.quantity >= 1 && item.status !== 'sold'" 
                             class="btn btn-xs btn-primary font-bold shadow-sm"
                             @click="openSellOneModal">
-                        <Icon icon="solar:tag-linear" class="w-3.5 h-3.5 mr-1" /> Sell One
+                        <Icon icon="solar:tag-linear" class="w-3.5 h-3.5 mr-1" /> Record Sale
                     </button>
                     <div class="dropdown dropdown-end">
                         <div tabindex="0" role="button" class="badge badge-lg font-bold uppercase truncate cursor-pointer hover:opacity-80 transition-opacity" :class="statusBadgeClass">
@@ -310,12 +315,18 @@
     <dialog id="sell_one_modal" class="modal" :class="{ 'modal-open': isSellOneModalOpen }">
         <div class="modal-box bg-base-100 p-6 border border-base-200 relative">
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="closeSellOneModal">✕</button>
-            <h3 class="font-bold text-lg flex items-center gap-2"><Icon icon="solar:tag-linear" class="text-primary w-5 h-5" /> Sell One from Lot</h3>
-            <p class="text-xs opacity-70 mt-1">This will decrement the lot's quantity by 1 and split off a separate sold item.</p>
+            <h3 class="font-bold text-lg flex items-center gap-2"><Icon icon="solar:tag-linear" class="text-primary w-5 h-5" /> Record Sale</h3>
+            <p class="text-xs opacity-70 mt-1">If this is a multi-quantity item, this will split off the sold quantity into a separate sold record.</p>
             
-            <div class="form-control w-full mt-4">
-                <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">Sold Item Title</span></label>
-                <input v-model="sellOneForm.title" type="text" class="input input-bordered w-full font-bold" placeholder="e.g. Harry Potter Book 1" />
+            <div class="grid grid-cols-2 gap-4 mt-4">
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">Sold Item Title</span></label>
+                    <input v-model="sellOneForm.title" type="text" class="input input-bordered w-full font-bold" placeholder="e.g. Harry Potter Book 1" />
+                </div>
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">Quantity Sold</span></label>
+                    <input v-model="sellOneForm.quantity" type="number" step="1" min="1" :max="item?.quantity || 1" class="input input-bordered w-full font-bold" />
+                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4 mt-4">
@@ -345,6 +356,45 @@
         </div>
         <form method="dialog" class="modal-backdrop">
             <button @click="closeSellOneModal">close</button>
+        </form>
+    </dialog>
+
+    <!-- UNPACK MODAL -->
+    <dialog id="unpack_modal" class="modal" :class="{ 'modal-open': isUnpackModalOpen }">
+        <div class="modal-box bg-base-100 p-6 border border-base-200 relative">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="closeUnpackModal">✕</button>
+            <h3 class="font-bold text-lg flex items-center gap-2"><Icon icon="solar:box-minimalistic-linear" class="text-secondary w-5 h-5" /> Unpack Distinct Item</h3>
+            <p class="text-xs opacity-70 mt-1">Split a distinct item out of this lot. The allocated cost will be deducted from this main lot's cost.</p>
+            
+            <div class="form-control w-full mt-4">
+                <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">New Item Title</span></label>
+                <input v-model="unpackForm.title" type="text" class="input input-bordered w-full font-bold" placeholder="e.g. Rare Vintage Magazine Issue #1" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">Allocated Cost</span></label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50">$</span>
+                        <input v-model="unpackForm.cost" type="number" step="0.01" class="input input-bordered w-full pl-7 font-mono font-bold" placeholder="0.00" />
+                    </div>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-bold text-xs uppercase opacity-75">Quantity Pulled</span></label>
+                    <input v-model="unpackForm.quantity" type="number" step="1" min="1" class="input input-bordered w-full font-mono font-bold" />
+                </div>
+            </div>
+
+            <div class="modal-action mt-6">
+                <button class="btn btn-ghost btn-sm" @click="closeUnpackModal" :disabled="submittingUnpack">Cancel</button>
+                <button class="btn btn-secondary btn-sm shadow-md" @click="submitUnpack" :disabled="submittingUnpack || !unpackForm.title">
+                    <span v-if="submittingUnpack" class="loading loading-spinner loading-xs mr-1"></span>
+                    Unpack Item
+                </button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button @click="closeUnpackModal">close</button>
         </form>
     </dialog>
 </template>
@@ -384,15 +434,17 @@ const submittingSellOne = ref(false);
 const sellOneForm = reactive({
     title: '',
     soldPrice: '',
-    commissionPaid: '0'
+    commissionPaid: '0',
+    quantity: 1
 });
 
 import { reactive } from 'vue';
 
 const openSellOneModal = () => {
-    sellOneForm.title = item.value ? `${item.value.title} (Copy)` : '';
+    sellOneForm.title = item.value ? `${item.value.title}` : '';
     sellOneForm.soldPrice = '';
     sellOneForm.commissionPaid = '0';
+    sellOneForm.quantity = 1;
     isSellOneModalOpen.value = true;
 };
 
@@ -411,21 +463,37 @@ const submitSellOne = async () => {
         
         const qty = item.value.quantity || 1;
         const totalCost = Number(item.value.cost || 0);
-        const unitCost = qty > 1 ? (totalCost / qty) : totalCost;
+        const unitCost = qty > 0 ? (totalCost / qty) : totalCost;
         
-        const newQty = qty - 1;
-        const newCost = Math.max(0, totalCost - unitCost);
+        const soldQty = parseInt(sellOneForm.quantity) || 1;
+        const costOfSold = unitCost * soldQty;
+        
+        const newQty = Math.max(0, qty - soldQty);
+        const newCost = Math.max(0, totalCost - costOfSold);
+        
+        // If they sold EVERYTHING in this record, just update this record instead of splitting
+        if (newQty === 0) {
+            await databases.updateDocument(DB_ID, collId, item.value.$id, {
+                status: 'sold',
+                soldPrice: parseFloat(sellOneForm.soldPrice) || 0,
+                commissionPaid: parseFloat(sellOneForm.commissionPaid) || 0,
+                title: sellOneForm.title
+            });
+            isSellOneModalOpen.value = false;
+            window.location.reload();
+            return;
+        }
         
         const childDoc = {
             title: sellOneForm.title,
             identity: sellOneForm.title,
-            conditionNotes: `Sold from Lot: ${item.value.title} (${item.value.$id})`,
+            conditionNotes: `Sold from Multi-Quantity: ${item.value.title} (${item.value.$id})`,
             status: 'sold',
-            cost: unitCost,
+            cost: costOfSold,
             soldPrice: parseFloat(sellOneForm.soldPrice) || 0,
             commissionPaid: parseFloat(sellOneForm.commissionPaid) || 0,
             parentLotId: item.value.$id,
-            quantity: 1,
+            quantity: soldQty,
             tenantId: item.value.tenantId || null,
             userId: item.value.userId || null,
             storageLocation: item.value.storageLocation || null,
@@ -469,6 +537,104 @@ const submitSellOne = async () => {
         alert("Failed to submit sale: " + err.message);
     } finally {
         submittingSellOne.value = false;
+    }
+};
+
+// Unpack Item Form state
+const isUnpackModalOpen = ref(false);
+const submittingUnpack = ref(false);
+const unpackForm = reactive({
+    title: '',
+    cost: '',
+    quantity: 1
+});
+
+const openUnpackModal = () => {
+    unpackForm.title = '';
+    
+    // Auto-calculate remaining unit cost if applicable
+    const qty = item.value?.quantity || 1;
+    const totalCost = Number(item.value?.cost || 0);
+    const unitCost = qty > 0 ? (totalCost / qty) : 0;
+    unpackForm.cost = unitCost.toFixed(2);
+    unpackForm.quantity = 1;
+    isUnpackModalOpen.value = true;
+};
+
+const closeUnpackModal = () => {
+    isUnpackModalOpen.value = false;
+};
+
+const submitUnpack = async () => {
+    if (submittingUnpack.value || !item.value) return;
+    submittingUnpack.value = true;
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const collId = isAlphaMode.get() 
+            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
+            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        
+        const parentQty = item.value.quantity || 1;
+        const totalCost = Number(item.value.cost || 0);
+        
+        const pulledQty = parseInt(unpackForm.quantity) || 1;
+        const pulledCost = parseFloat(unpackForm.cost) || 0;
+        
+        const newParentQty = Math.max(0, parentQty - pulledQty);
+        const newParentCost = Math.max(0, totalCost - pulledCost);
+        
+        const childDoc = {
+            title: unpackForm.title,
+            identity: unpackForm.title,
+            conditionNotes: `Unpacked from Lot: ${item.value.title} (${item.value.$id})`,
+            status: 'acquired', // It's just acquired, not sold yet
+            cost: pulledCost,
+            parentLotId: item.value.$id,
+            quantity: pulledQty,
+            tenantId: item.value.tenantId || null,
+            userId: item.value.userId || null,
+            storageLocation: item.value.storageLocation || null,
+            sourcingLocation: item.value.sourcingLocation || null,
+            imageId: item.value.imageId || null,
+            purchaseId: item.value.purchaseId || null
+        };
+        
+        Object.keys(childDoc).forEach(key => childDoc[key] === undefined && delete childDoc[key]);
+        
+        // Update Parent
+        await databases.updateDocument(DB_ID, collId, item.value.$id, {
+            quantity: newParentQty,
+            cost: newParentCost
+        });
+        
+        // Permissions
+        let permissions = undefined;
+        if (item.value.tenantId && item.value.tenantId !== 'default') {
+            const role = Role.team(item.value.tenantId);
+            permissions = [
+                Permission.read(role),
+                Permission.update(role),
+                Permission.delete(role),
+            ];
+        } else if (item.value.userId) {
+            const role = Role.user(item.value.userId);
+            permissions = [
+                Permission.read(role),
+                Permission.update(role),
+                Permission.delete(role),
+            ];
+        }
+
+        // Create Unpacked Child Document
+        await databases.createDocument(DB_ID, collId, ID.unique(), childDoc, permissions);
+        
+        isUnpackModalOpen.value = false;
+        window.location.reload();
+    } catch (err) {
+        console.error("Unpack failed:", err);
+        alert("Failed to submit unpack: " + err.message);
+    } finally {
+        submittingUnpack.value = false;
     }
 };
 

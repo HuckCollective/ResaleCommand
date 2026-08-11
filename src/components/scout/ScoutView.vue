@@ -26,10 +26,13 @@
                 <!-- TABS -->
                 <div class="tabs tabs-boxed justify-center mb-4 bg-base-200">
                     <a class="tab gap-2" :class="{ 'tab-active': mode === 'speed' }" @click="mode = 'speed'">
-                        <Icon icon="solar:bolt-linear" /> Speed Scout
+                        <Icon icon="solar:camera-linear" /> Single Item
                     </a>
                     <a class="tab gap-2" :class="{ 'tab-active': mode === 'precision' }" @click="mode = 'precision'">
-                        <Icon icon="solar:magnifer-linear" /> Precision
+                        <Icon icon="solar:link-linear" /> Web Link
+                    </a>
+                    <a class="tab gap-2" :class="{ 'tab-active': mode === 'bulk' }" @click="mode = 'bulk'">
+                        <Icon icon="solar:document-text-linear" /> Bulk / Receipt
                     </a>
                 </div>
 
@@ -99,9 +102,14 @@
                 </div>
 
                 <!-- ADDITIONAL DETAILS -->
-                <div class="form-control mt-4">
-                    <label class="label pt-0"><span class="label-text opacity-70">Additional Details (Optional) Size, Brand, Defects, etc.</span></label>
-                    <textarea v-model="userNotes" class="textarea textarea-bordered h-24 text-sm" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
+                <div v-if="mode !== 'bulk'" class="form-control w-full mt-4 flex flex-col">
+                    <div class="mb-1 text-sm font-medium opacity-70 px-1">Additional Details (Optional) Size, Brand, Defects, etc.</div>
+                    <textarea v-model="userNotes" class="textarea textarea-bordered w-full h-24 text-sm leading-relaxed" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
+                </div>
+
+                <!-- 1c. BULK / RECEIPT ENTRY -->
+                <div v-if="mode === 'bulk'" class="form-control w-full">
+                    <SpeedEntryForm />
                 </div>
 
                 <!-- ANALYZE BUTTON MOVED TO COMPONENT STICKY FOOTER -->
@@ -109,7 +117,7 @@
         </div>
 
         <!-- 2. SHARED DETAILS SECTION (Only if results or manual entry) -->
-        <div v-if="result || images.length > 0" class="card bg-base-100 shadow-sm border border-base-200">
+        <div v-if="mode !== 'bulk' && (result || images.length > 0)" class="card bg-base-100 shadow-sm border border-base-200">
              <div class="card-body p-4">
 
                 
@@ -152,7 +160,7 @@
         </div>
 
         <!-- 3. RESULTS (ITEM CARDS) -->
-        <div v-if="result" id="scout-results-section" class="space-y-6">
+        <div v-if="mode !== 'bulk' && result" id="scout-results-section" class="space-y-6">
             <div v-for="(item, index) in (result.items || [])" :key="index" class="card bg-base-100 shadow-lg border-t-4 border-t-primary">
                 <div class="card-body p-4 md:p-6">
                     
@@ -470,12 +478,14 @@
         </button>
 
         <!-- AI Scout Primary -->
-        <button @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
+        <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
                 class="flex-1 flex flex-col items-center justify-center bg-primary text-primary-content hover:bg-primary/90 transition-colors border-x border-base-300 shadow-inner pb-safe"
                 :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
-            <span v-if="loading" class="loading loading-spinner mb-1"></span>
-            <span v-else class="text-3xl leading-none mb-1"><Icon icon="solar:magic-stick-linear" /></span>
-            <span class="font-black tracking-widest uppercase text-xs">AI Scout</span>
+            <span v-if="loading" class="loading loading-spinner loading-md"></span>
+            <template v-else>
+                <Icon icon="solar:magic-stick-3-bold-duotone" class="w-6 h-6 mb-1 drop-shadow-md" />
+                <span class="text-xs font-bold uppercase tracking-widest">{{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}</span>
+            </template>
         </button>
 
         <!-- Track All / Save -->
@@ -493,18 +503,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, watch, onMounted, computed, nextTick } from 'vue';
+import { Icon } from '@iconify/vue';
+import { account, storage, databases, ID } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
-import { account, storage, databases, ID } from '../../lib/appwrite';
-import { addToast } from '../../stores/toast';
-import { Icon } from '@iconify/vue';
-import ScannerWidget from '../common/ScannerWidget.vue';
 import { useLoader } from '../../composables/useLoader';
+import { addToast } from '../../stores/toast';
+import { isAlphaMode } from '../../stores/env';
+import SpeedEntryForm from '../purchases/SpeedEntryForm.vue';
+import ScannerWidget from '../common/ScannerWidget.vue';
 
 // APPWRITE
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; // Added this line
-const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; // Added this line
+const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; 
+const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
 import { BUCKET_ID } from '../../lib/inventory';
 
 // -- COMPOSABLES --

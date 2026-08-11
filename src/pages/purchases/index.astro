@@ -10,10 +10,15 @@ import PurchasesList from '../../components/purchases/PurchasesList.vue';
         <h1 class="text-4xl font-black text-base-content tracking-tight">Purchases</h1>
         <p class="text-base-content/70 mt-2">Track your incoming inventory and expenses.</p>
       </div>
-      <a href="/purchases/new" class="btn btn-primary shadow-lg shadow-primary/20">
-        New Purchase
-      </a>
-    </div>
+      <div class="flex gap-2">
+        <a href="/purchases/speed-entry" class="btn btn-warning shadow-lg shadow-warning/20">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          Speed Entry
+        </a>
+        <a href="/purchases/new" class="btn btn-primary shadow-lg shadow-primary/20">
+          New Purchase
+        </a>
+      </div>
     
     <PurchasesList client:load />
   </div>
