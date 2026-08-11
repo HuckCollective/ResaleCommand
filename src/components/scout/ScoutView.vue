@@ -1518,7 +1518,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         // 4. Save Item(s)
         if (item.save_individually && item.lot_items && item.lot_items.length > 0) {
              console.log('[ScoutView] Saving items individually...', item.lot_items.length);
-             const individualCost = cost.value ? parseFloat((parseFloat(cost.value) / item.lot_items.length).toFixed(2)) : 0.0;
+             const individualCost = cost.value ? parseFloat((Number(cost.value) / item.lot_items.length).toFixed(2)) : 0.0;
              
              // Pre-load main image for cropping if possible
              let mainImageElement: HTMLImageElement | null = null;
@@ -1659,7 +1659,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  title: item.title || item.identity,
                  conditionNotes: noteDetails,
                  redFlags: item.red_flags || [],
-                 cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : 0.0,
+                 cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
                  resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
                  maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
                  sourcingLocation: sourcingLocation.value || '',

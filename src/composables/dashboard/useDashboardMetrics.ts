@@ -1,10 +1,12 @@
 import { computed, ref } from 'vue';
 import { useInventory } from '../useInventory';
 import { useLoader } from '../useLoader';
+import { purchasesAPI } from '../../lib/purchases';
 
 export function useDashboardMetrics() {
     const { inventoryItems, loading, fetchInventory } = useInventory();
     const { hideLoader } = useLoader();
+    const purchases = ref<any[]>([]);
     
     // Default to true so Astro renders skeletons on the server!
     const isInitialLoading = ref(true);
@@ -36,6 +38,12 @@ export function useDashboardMetrics() {
         }, 0);
     });
 
+    const totalSpentPurchases = computed(() => {
+        return purchases.value.reduce((sum, p) => sum + (p.grandTotal || 0), 0);
+    });
+
+    const totalPurchasesCount = computed(() => purchases.value.length);
+
     const globalProjectedRevenue = computed(() => {
         return inventoryItems.value.filter(isActiveInventory).reduce((sum, item) => {
             const qty = item.quantity || 1;
@@ -53,7 +61,7 @@ export function useDashboardMetrics() {
     });
 
     const insights = computed(() => {
-        const alerts = [];
+        const alerts: Array<{ type: string; filter: string; title: string; description: string }> = [];
         
         // 1. Sold items missing a sale price
         const soldNoPrice = inventoryItems.value.filter(i => i.status === 'sold' && !(parseValue(i, 'soldPrice', 'Sold') || parseValue(i, 'price', 'Sold')));
@@ -119,10 +127,17 @@ export function useDashboardMetrics() {
     });
 
     const initDashboard = async () => {
+        const promises = [];
         if (inventoryItems.value.length === 0) {
             // @ts-ignore
-            await fetchInventory('');
+            promises.push(fetchInventory(''));
         }
+        promises.push(purchasesAPI.listPurchases().then(res => {
+            purchases.value = res.documents;
+        }).catch(console.error));
+        
+        await Promise.all(promises);
+        
         isInitialLoading.value = false;
         
         // Hide global Vue loader
@@ -137,6 +152,8 @@ export function useDashboardMetrics() {
         globalProfit,
         globalProjectedRevenue,
         globalSunkCost,
+        totalSpentPurchases,
+        totalPurchasesCount,
         insights,
         initDashboard
     };

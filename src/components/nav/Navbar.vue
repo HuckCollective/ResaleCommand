@@ -79,9 +79,27 @@
                      </a>
                   </li>
                   <li>
+                     <a href="/purchases" class="gap-2 font-semibold">
+                         <Icon icon="solar:cart-large-2-linear" class="w-4 h-4 text-primary" />
+                         Purchases
+                     </a>
+                  </li>
+                  <li>
                      <a href="/inventory" class="gap-2 font-semibold">
                          <Icon icon="solar:box-linear" class="w-4 h-4 text-primary" />
                          Inventory
+                     </a>
+                  </li>
+                  <li>
+                     <a href="/sales" class="gap-2 font-semibold">
+                         <Icon icon="solar:tag-horizontal-linear" class="w-4 h-4 text-primary" />
+                         Sales
+                     </a>
+                  </li>
+                  <li>
+                     <a href="/warehouse" class="gap-2 font-semibold">
+                         <Icon icon="solar:buildings-linear" class="w-4 h-4 text-primary" />
+                         Warehousing
                      </a>
                   </li>
                   

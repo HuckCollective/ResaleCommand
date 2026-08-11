@@ -13,14 +13,14 @@ export interface CartExpense extends Models.Document {
 }
 
 export interface Cart extends Models.Document {
-    source: string;
+    vendor: string;
     tenantId: string;
     buyerId: string;
-    date: string;
+    purchaseDate: string;
     status: string;
-    itemCount: number;
-    totalCost?: number;
-    completedAt?: string;
+    itemCount?: number;
+    subtotal?: number;
+    grandTotal?: number;
 }
 
 export interface CartItem extends Models.Document {
@@ -46,9 +46,10 @@ const error = ref<string | null>(null);
 
 // Config
 import { isAlphaMode } from '../stores/env';
+import { getPurchasesCollectionId } from '../lib/purchases';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-const CARTS_COL = 'carts'; 
+const CARTS_COL = getPurchasesCollectionId(); 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
     : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
@@ -90,12 +91,13 @@ export function useCart() {
                 CARTS_COL,
                 ID.unique(),
                 {
-                    source,
+                    vendor: source,
                     tenantId: teamId,
                     buyerId: userId,
-                    date: new Date().toISOString(),
-                    status: 'active',
-                    itemCount: 0
+                    purchaseDate: new Date().toISOString(),
+                    status: 'Draft',
+                    orderId: `SC-${Date.now()}`,
+                    poNumber: `PO-${Date.now().toString().slice(-6)}`
                 },
                 permissions
             );
@@ -140,7 +142,7 @@ export function useCart() {
                 const result = await databases.listDocuments(
                     DB_ID,
                     getCollectionId(),
-                    [Query.equal('cartId', cartId)]
+                    [Query.equal('purchaseId', cartId)]
                 );
                 cartItems.value = result.documents as unknown as CartItem[];
                 console.log('[useCart] fetchCartItems result (indexed):', result.documents);
@@ -151,7 +153,7 @@ export function useCart() {
                     Query.orderDesc('$createdAt'),
                     Query.limit(100) // Large enough to cover a typical trip count
                 ]);
-                const filtered = fallbackResult.documents.filter(doc => doc.cartId === cartId);
+                const filtered = fallbackResult.documents.filter(doc => doc.purchaseId === cartId);
                 cartItems.value = filtered as unknown as CartItem[];
                 console.log('[useCart] fetchCartItems result (fallback):', filtered);
             }
@@ -168,7 +170,7 @@ export function useCart() {
                 const result = await databases.listDocuments(
                     DB_ID,
                     EXPENSES_COL,
-                    [Query.equal('cartId', cartId)]
+                    [Query.equal('purchaseId', cartId)]
                 );
                 cartExpenses.value = result.documents as unknown as CartExpense[];
                 console.log('[useCart] fetchExpenses result (indexed):', result.documents);
@@ -178,7 +180,7 @@ export function useCart() {
                     Query.orderDesc('$createdAt'),
                     Query.limit(100)
                 ]);
-                const filtered = fallbackResult.documents.filter(doc => doc.cartId === cartId);
+                const filtered = fallbackResult.documents.filter(doc => doc.purchaseId === cartId);
                 cartExpenses.value = filtered as unknown as CartExpense[];
                 console.log('[useCart] fetchExpenses result (fallback):', filtered);
             }
@@ -220,17 +222,20 @@ export function useCart() {
                 ID.unique(),
                 {
                     ...itemData,
-                    cartId: activeCart.value.$id,
+                    purchaseId: activeCart.value.$id,
                     tenantId: activeCart.value.tenantId,
                 },
                 permissions
             );
             console.log('[useCart] Item created successfully:', newItem);
             cartItems.value.push(newItem as unknown as CartItem);
+            
+            // Sync subtotal to PO
+            const newSubtotal = cartItems.value.reduce((sum, i) => sum + (i.cost || 0), 0);
             await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                itemCount: cartItems.value.length
+                subtotal: newSubtotal
             });
-            console.log('[useCart] Cart updated with new item count.');
+            console.log('[useCart] Cart updated with new item and subtotal.');
         } catch (e: any) {
             console.error('[useCart] addItemToCart failed:', e);
             error.value = e.message;
@@ -258,6 +263,13 @@ export function useCart() {
                     Permission.update(role),
                     Permission.delete(role),
                 ];
+            } else if (user.value) {
+                const role = Role.user(user.value.$id);
+                permissions = [
+                    Permission.read(role),
+                    Permission.update(role),
+                    Permission.delete(role),
+                ];
             }
 
             const expense = await databases.createDocument(
@@ -265,8 +277,9 @@ export function useCart() {
                 EXPENSES_COL,
                 ID.unique(),
                 {
-                    cartId: activeCart.value.$id,
-                    tenantId: activeCart.value.tenantId,
+                    purchaseId: activeCart.value.$id,
+                    cartId: activeCart.value.$id, // Required by legacy schema
+                    tenantId: activeCart.value.tenantId || 'personal',
                     amount: amount, // Float
                     note: note,
                     receiptImageId: receiptImageId,
@@ -277,14 +290,26 @@ export function useCart() {
 
             cartExpenses.value.push(expense as unknown as CartExpense);
 
-            // Update Total on Cart Object for fast access
-            await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                totalCost: cartTotalCost.value
-            });
+            // Note: In future we could update feeTotal on the purchase record directly here
+            console.log("Expense added successfully");
 
         } catch (e: any) {
             console.error("Add Expense Failed", e);
             throw new Error(`Failed to add expense: ${e.message}`);
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    const deleteExpense = async (expenseId: string) => {
+        loading.value = true;
+        try {
+            await databases.deleteDocument(DB_ID, EXPENSES_COL, expenseId);
+            cartExpenses.value = cartExpenses.value.filter(e => e.$id !== expenseId);
+            console.log("[useCart] Expense deleted successfully");
+        } catch (e: any) {
+            console.error("[useCart] Delete Expense Failed", e);
+            throw new Error(`Failed to delete expense: ${e.message}`);
         } finally {
             loading.value = false;
         }
@@ -295,15 +320,18 @@ export function useCart() {
         if (!activeCart.value) return;
         loading.value = true;
         try {
+            const finalSubtotal = cartItems.value.reduce((sum, item) => sum + (parseFloat(item.cost as any) || 0), 0);
+            
             try {
                 await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                    status: 'completed',
-                    completedAt: new Date().toISOString()
+                    status: 'Received',
+                    subtotal: finalSubtotal
                 });
             } catch (innerErr: any) {
                 console.warn("Cart update failed, trying fallback without completedAt:", innerErr.message);
                 await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                    status: 'completed'
+                    status: 'Received',
+                    subtotal: finalSubtotal
                 });
             }
 
@@ -335,7 +363,7 @@ export function useCart() {
         loading.value = true;
         try {
             await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                status: 'aborted'
+                status: 'Cancelled'
             });
             
             // Delete all items in this cart to clean up DB
@@ -362,7 +390,7 @@ export function useCart() {
                  CARTS_COL,
                  [
                      Query.equal('buyerId', userId),
-                     Query.equal('status', 'active'),
+                     Query.equal('status', 'Draft'),
                      Query.orderDesc('$createdAt'),
                      Query.limit(1)
                  ]
@@ -389,9 +417,13 @@ export function useCart() {
         try {
             await databases.deleteDocument(DB_ID, getCollectionId(), itemId);
             cartItems.value = cartItems.value.filter(i => i.$id !== itemId);
+            
+            // Sync subtotal to PO
+            const newSubtotal = cartItems.value.reduce((sum, i) => sum + (i.cost || 0), 0);
             await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
-                itemCount: cartItems.value.length
+                subtotal: newSubtotal
             });
+            console.log('[useCart] Item deleted successfully, subtotal updated.');
         } catch (e: any) {
             console.error('[useCart] Failed to delete item:', e);
             error.value = e.message;
@@ -408,6 +440,13 @@ export function useCart() {
             const index = cartItems.value.findIndex(i => i.$id === itemId);
             if (index !== -1) {
                 cartItems.value[index] = updated as unknown as CartItem;
+            }
+            // Sync subtotal to PO
+            const newSubtotal = cartItems.value.reduce((sum, i) => sum + (i.cost || 0), 0);
+            if (activeCart.value) {
+                await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
+                    subtotal: newSubtotal
+                });
             }
         } catch (e: any) {
             console.error('[useCart] Failed to update item:', e);
@@ -430,6 +469,7 @@ export function useCart() {
         startCart,
         addItemToCart,
         addExpense,
+        deleteExpense,
         finishCart,
         abortCart,
         checkActiveCart,

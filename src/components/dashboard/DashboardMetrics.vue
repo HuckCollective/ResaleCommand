@@ -35,6 +35,15 @@
             <div class="stat-title">Items in Inventory</div>
             <div class="stat-desc text-warning">${{ globalSunkCost.toFixed(2) }} total sunk cost</div>
         </div>
+
+        <div class="stat">
+            <div class="stat-figure text-secondary">
+            <Icon icon="solar:cart-large-minimalistic-linear" class="w-8 h-8" />
+            </div>
+            <div class="stat-value text-secondary">{{ totalPurchasesCount }}</div>
+            <div class="stat-title">Orders Placed</div>
+            <div class="stat-desc text-secondary">${{ totalSpentPurchases.toFixed(2) }} total spent</div>
+        </div>
         
         </div>
 
@@ -74,6 +83,8 @@ const {
     globalProfit,
     globalProjectedRevenue,
     globalSunkCost,
+    totalSpentPurchases,
+    totalPurchasesCount,
     insights,
     initDashboard
 } = useDashboardMetrics();

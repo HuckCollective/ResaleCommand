@@ -78,9 +78,12 @@
                   <div class="collapse-content space-y-2"> 
                        <ul class="menu bg-base-200 w-full rounded-box">
                           <li v-for="exp in cartExpenses" :key="exp.$id">
-                              <a class="flex justify-between">
+                              <a class="flex justify-between items-center pr-2">
                                   <span>{{ exp.note || 'Expense' }}</span>
-                                  <span class="font-bold">${{ exp.amount }}</span>
+                                  <div class="flex items-center gap-3">
+                                      <span class="font-bold">${{ exp.amount }}</span>
+                                      <button @click.stop="handleRemoveExpense(exp.$id)" class="btn btn-ghost btn-xs text-error p-1 h-auto min-h-0"><Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" /></button>
+                                  </div>
                               </a>
                           </li>
                        </ul>
@@ -132,7 +135,7 @@ import { BUCKET_ID } from '../../lib/inventory';
 const { user } = useAuth();
 const { 
   activeCart, cartItems, cartExpenses, loading, 
-  checkActiveCart, addExpense, finishCart, abortCart, leaveCart,
+  checkActiveCart, addExpense, deleteExpense, finishCart, abortCart, leaveCart,
   deleteItem, updateItem
 } = useCart();
 
@@ -275,6 +278,17 @@ async function handleAddExpense() {
         addToast({ type: 'success', message: 'Expense added.' });
     } catch (e: any) {
         addToast({ type: 'error', message: "Failed to add expense: " + e.message });
+    }
+}
+
+async function handleRemoveExpense(expenseId: string) {
+    if (await confirmDialog("Remove this expense?", "Remove", "Remove", "Cancel", "btn-error")) {
+        try {
+            await deleteExpense(expenseId);
+            addToast({ type: 'success', message: 'Expense removed.' });
+        } catch (e: any) {
+            addToast({ type: 'error', message: "Failed to remove expense: " + e.message });
+        }
     }
 }
 

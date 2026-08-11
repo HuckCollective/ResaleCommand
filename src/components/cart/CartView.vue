@@ -30,7 +30,7 @@
               <!-- STICKY HEADER -->
               <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.05)] px-4 py-3 border-b border-base-200 mb-4 -mx-0 flex justify-between items-center">
                   <div class="flex-1 min-w-0 pr-4">
-                      <h2 class="text-xl font-bold truncate">Active Sourcing: {{ activeCart.source }}</h2>
+                      <h2 class="text-xl font-bold truncate">Active Sourcing: {{ activeCart.vendor }}</h2>
                   </div>
                   <div class="flex-none text-right text-xs opacity-70 font-bold bg-base-200 p-2 rounded">
                       <div>Est. Value: <span class="text-success">${{ cartTotalResale.toFixed(0) }}</span></div>

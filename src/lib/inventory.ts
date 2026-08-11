@@ -43,6 +43,9 @@ export interface ExtraItemData {
     soldPrice?: string | number;
     rawAnalysis?: string;
     countryOfOrigin?: string;
+    purchaseId?: string;
+    saleId?: string;
+    locationId?: string;
 }
 
 export function getSafeRawAnalysis(item: any): string | null {
@@ -319,6 +322,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             components: extraData.components || undefined,
             quantity: extraData.quantity || 1,
             parentLotId: extraData.parentLotId || undefined,
+            purchaseId: extraData.purchaseId || undefined,
+            saleId: extraData.saleId || undefined,
+            locationId: extraData.locationId || undefined,
             rawAnalysis: extraData.rawAnalysis !== undefined 
                 ? (extraData.rawAnalysis === '' ? null : extraData.rawAnalysis)
                 : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
@@ -372,6 +378,51 @@ export async function getInventoryItems(teamId?: string) {
         return [];
     }
 }
+
+export async function getItemsByPurchaseId(purchaseId: string) {
+    try {
+        const response = await databases.listDocuments(
+            DB_ID,
+            getCollectionId(),
+            [
+                Query.equal('purchaseId', purchaseId),
+                Query.limit(100)
+            ]
+        );
+        return response.documents;
+    } catch (error) {
+        console.error("Error fetching items by purchase:", error);
+        return [];
+    }
+}
+
+export async function searchItems(queryStr: string) {
+    try {
+        if (!queryStr) return [];
+        const queries = [
+            Query.limit(20),
+            Query.or([
+                Query.equal('identity', queryStr),
+                Query.search('title', queryStr)
+            ])
+        ];
+        const response = await databases.listDocuments(DB_ID, getCollectionId(), queries);
+        return response.documents;
+    } catch (error) {
+        console.warn("Native search failed, falling back to manual filter:", error);
+        const response = await databases.listDocuments(DB_ID, getCollectionId(), [Query.limit(100), Query.orderDesc('$createdAt')]);
+        const q = queryStr.toLowerCase();
+        return response.documents.filter(d => 
+            (d.identity && d.identity.toLowerCase().includes(q)) || 
+            (d.title && d.title.toLowerCase().includes(q))
+        ).slice(0, 20);
+    }
+}
+
+export async function linkItemToPurchase(itemId: string, purchaseId: string | null) {
+    return await updateInventoryItem(itemId, { purchaseId: purchaseId || '' });
+}
+
 export function getAssociatedFileIds(item: any): Set<string> {
     const fileIds = new Set<string>();
 
@@ -480,6 +531,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         if (updates.components !== undefined) data.components = updates.components;
         if (updates.quantity !== undefined) data.quantity = updates.quantity;
         if (updates.parentLotId !== undefined) data.parentLotId = updates.parentLotId;
+        if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
+        if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
 
         // --- Handle File Uploads & Update Notes ---
 
