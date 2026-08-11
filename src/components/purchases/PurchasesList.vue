@@ -97,6 +97,10 @@
 import { ref, onMounted } from 'vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { Query } from 'appwrite';
+import { useLoader } from '../../composables/useLoader';
+
+const { showLoader, hideLoader } = useLoader();
+showLoader("Loading Purchases...");
 
 const purchases = ref([]);
 const loading = ref(true);
@@ -177,6 +181,7 @@ const loadPurchases = async (isLoadMore = false) => {
     } finally {
         loading.value = false;
         loadingMore.value = false;
+        hideLoader();
     }
 };
 

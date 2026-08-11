@@ -268,9 +268,11 @@ import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInvent
 import { databases, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
 
 const { currentTeam } = useAuth();
+const { showLoader, hideLoader } = useLoader();
 
 const props = defineProps({
     purchaseId: {
@@ -329,6 +331,7 @@ const totalExpenses = computed(() => expenses.value.reduce((sum, e) => sum + (e.
 onMounted(async () => {
     if (isEdit.value) {
         loadingInit.value = true;
+        showLoader("Loading Purchase Details...");
         try {
             // Appwrite doesn't have a simple getDocument without the DB/Coll ID exposed in purchasesAPI,
             // so we do a listPurchases with a filter by ID.
@@ -357,6 +360,7 @@ onMounted(async () => {
             console.error('Failed to load purchase', e);
         } finally {
             loadingInit.value = false;
+            hideLoader();
         }
     }
 });
