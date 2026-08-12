@@ -16,14 +16,23 @@ export const POST: APIRoute = async ({ request }) => {
         // Sanitize the URL (e.g. replace invalid backslashes from ShopGoodwill databases)
         const cleanUrl = url.replace(/\\/g, '/').trim();
 
+        // ShopGoodwill block standard Node fetch user-agents and require a referer, so we spoof a standard browser
+        let referer = undefined;
+        try {
+            const u = new URL(cleanUrl);
+            referer = u.origin + '/';
+        } catch(e){}
+        
+        const headers: Record<string, string> = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        };
+        if (referer) {
+            headers['Referer'] = referer;
+        }
+
         // 1. Download image from external URL
-        const imgRes = await fetch(cleanUrl, {
-            headers: {
-                // ShopGoodwill block standard Node fetch user-agents, so we spoof a standard browser
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-            }
-        });
+        const imgRes = await fetch(cleanUrl, { headers });
 
         if (!imgRes.ok) {
             return new Response(JSON.stringify({ error: `Image fetch failed: ${imgRes.statusText}` }), { status: imgRes.status });
@@ -64,7 +73,7 @@ export const POST: APIRoute = async ({ request }) => {
             .setKey(import.meta.env.APPWRITE_API_KEY);
 
         const storage = new Storage(client);
-        const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
+        const BUCKET_ID = body.bucketId || import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
 
         // 3. Upload to Appwrite Bucket
         const upload = await storage.createFile(
@@ -75,7 +84,8 @@ export const POST: APIRoute = async ({ request }) => {
 
         return new Response(JSON.stringify({
             success: true,
-            fileId: upload.$id
+            fileId: upload.$id,
+            base64: `data:${contentType};base64,${buffer.toString('base64')}`
         }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }

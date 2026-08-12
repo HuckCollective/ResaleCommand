@@ -36,6 +36,17 @@
                         Start Import 🚀
                     </button>
                 </div>
+
+                <div v-if="undoBatch && undoBatch.items && (undoBatch.items.length > 0 || undoBatch.purchases.length > 0)" class="mt-4 border-t border-base-200 pt-4">
+                    <div class="flex flex-col gap-2">
+                        <span class="text-xs opacity-70 text-center text-error">Import didn't go as planned?</span>
+                        <button class="btn btn-error btn-outline w-full" @click="handleUndoImport" :disabled="processingUndo">
+                            <span v-if="processingUndo" class="loading loading-spinner loading-sm"></span>
+                            <Icon v-else icon="solar:undo-left-bold-duotone" class="w-5 h-5" />
+                            Undo Previous Import ({{ undoBatch.items.length }} items)
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -95,13 +106,14 @@ import { ref, onMounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { saveItemToInventory } from '../../lib/inventory';
+import { saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
+import { storage } from '../../lib/appwrite';
 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
@@ -123,6 +135,53 @@ const fileInputRef = ref(null);
 const selectedFileName = ref('');
 const total = ref(0);
 const runScout = ref(false);
+
+const undoBatch = ref(null);
+const processingUndo = ref(false);
+
+onMounted(() => {
+    const saved = localStorage.getItem('lastImportBatch');
+    if (saved) {
+        try {
+            undoBatch.value = JSON.parse(saved);
+        } catch(e) {}
+    }
+});
+
+const handleUndoImport = async () => {
+    if (!undoBatch.value) return;
+    if (!confirm(`Are you sure you want to permanently delete the ${undoBatch.value.items?.length || 0} items, ${undoBatch.value.purchases?.length || 0} purchases, and ${undoBatch.value.assets?.length || 0} images created during the last import?`)) return;
+    
+    processingUndo.value = true;
+    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
+    const ITEMS_COL = getCollectionId();
+    const PURCHASES_COL = import.meta.env.PUBLIC_APPWRITE_CARTS_COL || import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'carts';
+
+    try {
+        // 1. Delete Items
+        for (const id of (undoBatch.value.items || [])) {
+            try { await databases.deleteDocument(DB_ID, ITEMS_COL, id); } catch(e) { console.error("Undo Item fail:", e); }
+        }
+        // 2. Delete Purchases
+        for (const id of (undoBatch.value.purchases || [])) {
+            try { await databases.deleteDocument(DB_ID, PURCHASES_COL, id); } catch(e) { console.error("Undo Purchase fail:", e); }
+        }
+        // 3. Delete Assets
+        for (const id of (undoBatch.value.assets || [])) {
+            try { await storage.deleteFile(BUCKET_ID, id); } catch(e) { console.error("Undo Asset fail:", e); }
+        }
+        
+        localStorage.removeItem('lastImportBatch');
+        undoBatch.value = null;
+        addToast({ title: 'Undo Complete', type: 'success', message: 'The previous import has been fully rolled back.' });
+        window.location.reload();
+    } catch (e) {
+        console.error("Undo failed", e);
+        addToast({ title: 'Undo Failed', type: 'error', message: e.message });
+    } finally {
+        processingUndo.value = false;
+    }
+};
 
 let isBulkCanceled = false;
 
@@ -295,6 +354,14 @@ const processRows = async (rows) => {
 
     const createdPurchases = new Map(); // Tracks created purchase IDs
 
+    const currentImportBatch = {
+        timestamp: Date.now(),
+        purchases: [],
+        items: [],
+        assets: []
+    };
+    const persistBatch = () => { localStorage.setItem('lastImportBatch', JSON.stringify(currentImportBatch)); };
+
     for (let i = 0; i < rows.length; i++) {
         if (isBulkCanceled) {
             logs.value.push('⚠️ Import canceled by user.');
@@ -405,7 +472,7 @@ const processRows = async (rows) => {
             try {
                 const uploadRes = await fetch('/api/upload-remote-image', {
                     method: 'POST',
-                    body: JSON.stringify({ url: cleanLink, filename: `img-${itemId}` }),
+                    body: JSON.stringify({ url: cleanLink, filename: `img-${itemId}`, bucketId: BUCKET_ID }),
                     headers: { 'Content-Type': 'application/json' }
                 });
                 if (uploadRes.ok) {
@@ -413,6 +480,8 @@ const processRows = async (rows) => {
                     if (uploadData.success && uploadData.fileId) {
                         mainImageId = uploadData.fileId; 
                         scoutBase64 = uploadData.base64;
+                        currentImportBatch.assets.push(mainImageId);
+                        persistBatch();
                     }
                 }
             } catch (e) { console.warn(e); }
@@ -502,9 +571,11 @@ const processRows = async (rows) => {
                                grandTotal: row._orderSubtotal + row._orderTotalShipping + row._orderTotalHandling + row._orderTotalTax + row._orderTotalFee,
                                status: 'Pending'
                            });
-                      }
-                      dbPurchaseId = existingPurchase.$id;
-                      createdPurchases.set(orderId, dbPurchaseId);
+                           currentImportBatch.purchases.push(existingPurchase.$id);
+                           persistBatch();
+                       }
+                       dbPurchaseId = existingPurchase.$id;
+                       createdPurchases.set(orderId, dbPurchaseId);
                   } catch (e) {
                       logs.value.push(`⚠️ Failed to create purchase record for ${orderId}: ${e.message}`);
                   }
@@ -531,7 +602,15 @@ const processRows = async (rows) => {
             };
             if (mainImageId) extraData.imageId = mainImageId;
 
-            await saveItemToInventory(itemToSave, null, extraData, teamId, ownerType);
+            const savedItem = await saveItemToInventory(itemToSave, null, extraData, teamId, ownerType);
+            
+            if (savedItem && savedItem.$id) {
+                currentImportBatch.items.push(savedItem.$id);
+                if (savedItem.galleryImageIds && Array.isArray(savedItem.galleryImageIds)) {
+                    currentImportBatch.assets.push(...savedItem.galleryImageIds);
+                }
+                persistBatch();
+            }
 
             logs.value.push(`✅ Imported: ${title.substring(0, 30)}... ${orderId ? '(with Order Link)' : ''}`);
             await new Promise(r => setTimeout(r, 6000));

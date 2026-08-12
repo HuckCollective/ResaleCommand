@@ -423,45 +423,45 @@ export async function linkItemToPurchase(itemId: string, purchaseId: string | nu
     return await updateInventoryItem(itemId, { purchaseId: purchaseId || '' });
 }
 
-export function getAssociatedFileIds(item: any): Set<string> {
-    const fileIds = new Set<string>();
+export function getAssociatedFileIds(item: any): Map<string, string> {
+    const fileMap = new Map<string, string>();
 
-    // A. Check Standard Fields
-    if (item.imageId) fileIds.add(item.imageId);
-    if (item.receiptImageId) fileIds.add(item.receiptImageId);
+    // A. Check Standard Fields (Main Bucket)
+    if (item.imageId) fileMap.set(item.imageId, BUCKET_ID);
+    if (item.receiptImageId) fileMap.set(item.receiptImageId, BUCKET_ID);
     if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
-        item.galleryImageIds.forEach((id: string) => fileIds.add(id));
+        item.galleryImageIds.forEach((id: string) => fileMap.set(id, BUCKET_ID));
     }
 
     // B. Check Notes for "Safe Mode" IDs
     if (item.conditionNotes) {
         // Main Image
         const mainMatch = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
-        if (mainMatch) fileIds.add(mainMatch[1].trim());
+        if (mainMatch) fileMap.set(mainMatch[1].trim(), BUCKET_ID);
 
         // Gallery
         const galleryMatch = item.conditionNotes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
         if (galleryMatch) {
             galleryMatch[1].split(',').forEach((s: string) => {
                 const id = s.trim();
-                if (id) fileIds.add(id);
+                if (id) fileMap.set(id, BUCKET_ID);
             });
         }
 
         // Receipt
         const receiptMatch = item.conditionNotes.match(/\[RECEIPT ID: ([^\]]+)\]/i);
-        if (receiptMatch) fileIds.add(receiptMatch[1].trim());
+        if (receiptMatch) fileMap.set(receiptMatch[1].trim(), BUCKET_ID);
 
-        // Scout Report
+        // Scout Report (Reports Bucket)
         const scoutMatch = item.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/i);
-        if (scoutMatch) fileIds.add(scoutMatch[1].trim());
+        if (scoutMatch) fileMap.set(scoutMatch[1].trim(), REPORTS_BUCKET_ID);
         
-        // MD File
+        // MD File (Reports Bucket)
         const mdMatch = item.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/i);
-        if (mdMatch) fileIds.add(mdMatch[1].trim());
+        if (mdMatch) fileMap.set(mdMatch[1].trim(), REPORTS_BUCKET_ID);
     }
     
-    return fileIds;
+    return fileMap;
 }
 
 export async function deleteInventoryItem(documentId: string) {
@@ -471,11 +471,11 @@ export async function deleteInventoryItem(documentId: string) {
         
         const imagesToDelete = getAssociatedFileIds(item);
 
-        // 2. Delete Identified Images (Only in production, not in Alpha/Dev sandbox to prevent breaking shared images)
-        if (imagesToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
-            console.log(`Deleting ${imagesToDelete.size} images for item ${documentId}...`);
-            await Promise.allSettled(Array.from(imagesToDelete).map(id => 
-                storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete image ${id}:`, e))
+        // 2. Delete Identified Images
+        if (imagesToDelete.size > 0) {
+            console.log(`Deleting ${imagesToDelete.size} associated files for item ${documentId}...`);
+            await Promise.allSettled(Array.from(imagesToDelete.entries()).map(([fileId, bucketId]) => 
+                storage.deleteFile(bucketId, fileId).catch(e => console.warn(`Failed to delete file ${fileId} from ${bucketId}:`, e))
             ));
         }
 
@@ -797,18 +797,18 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         
         // --- Robust Orphaned Image Deletion ---
         try {
-            const oldFileIds = getAssociatedFileIds(currentDoc);
-            const newFileIds = getAssociatedFileIds(response);
+            const oldFileMap = getAssociatedFileIds(currentDoc);
+            const newFileMap = getAssociatedFileIds(response);
             
-            const orphansToDelete = new Set<string>();
-            oldFileIds.forEach(id => {
-                if (!newFileIds.has(id)) orphansToDelete.add(id);
-            });
+            const orphansToDelete = new Map<string, string>();
+            for (const [id, bucketId] of oldFileMap.entries()) {
+                if (!newFileMap.has(id)) orphansToDelete.set(id, bucketId);
+            }
             
-            if (orphansToDelete.size > 0 && BUCKET_ID && !isAlphaMode.get()) {
+            if (orphansToDelete.size > 0) {
                 console.log(`Deleting ${orphansToDelete.size} orphaned files from bucket...`);
-                await Promise.allSettled(Array.from(orphansToDelete).map(id => 
-                    storage.deleteFile(BUCKET_ID, id).catch(e => console.warn(`Failed to delete orphaned file ${id}:`, e))
+                await Promise.allSettled(Array.from(orphansToDelete.entries()).map(([fileId, bucketId]) => 
+                    storage.deleteFile(bucketId, fileId).catch(e => console.warn(`Failed to delete orphaned file ${fileId} from ${bucketId}:`, e))
                 ));
             }
         } catch (cleanupErr) {

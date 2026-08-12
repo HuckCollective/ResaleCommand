@@ -602,7 +602,7 @@
         <!-- Floating Total Count / Scroll to Top -->
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-transform hover:-translate-y-1 cursor-pointer shadow-xl rounded-full" @click="scrollToTop">
             <span class="badge badge-lg badge-primary border-none shadow-md px-6 py-4 font-bold text-sm flex gap-2 items-center">
-                {{ filteredInventory.length }} / {{ totalItems }} Items <Icon icon="solar:round-alt-arrow-up-linear" class="w-4 h-4" />
+                {{ filteredInventory.length }} / {{ baseInventoryCount }} Items <Icon icon="solar:round-alt-arrow-up-linear" class="w-4 h-4" />
             </span>
         </div>
     </div>
@@ -1013,6 +1013,13 @@ watch(currentTeam, (n) => {
 
 // Lifecycle
 const cartItems = computed(() => inventoryItems.value.filter(i => i.status === 'scouted'));
+
+// The true "base" total of items that would be shown without any user filters applied
+// (excluding items that are hidden by default like cart items, tracked, and combined items)
+const baseInventoryCount = computed(() => {
+    return inventoryItems.value.filter(i => i.status !== 'scouted' && i.status !== 'tracked' && i.status !== 'combined').length;
+});
+
 const filteredInventory = computed(() => {
     return inventoryItems.value.filter(item => {
         // Exclude cart items
