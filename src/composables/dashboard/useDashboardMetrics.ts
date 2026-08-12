@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { useInventory } from '../useInventory';
 import { useLoader } from '../useLoader';
 import { purchasesAPI } from '../../lib/purchases';
+import { Query } from 'appwrite';
 
 export function useDashboardMetrics() {
     const { inventoryItems, loading, fetchInventory } = useInventory();
@@ -132,7 +133,7 @@ export function useDashboardMetrics() {
             // @ts-ignore
             promises.push(fetchInventory(''));
         }
-        promises.push(purchasesAPI.listPurchases().then(res => {
+        promises.push(purchasesAPI.listPurchases([Query.limit(5000)]).then(res => {
             purchases.value = res.documents;
         }).catch(console.error));
         

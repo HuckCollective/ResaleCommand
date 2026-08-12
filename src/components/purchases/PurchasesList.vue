@@ -196,7 +196,10 @@ const loadPurchases = async (isLoadMore = false) => {
 
 const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString();
+    // Prevent timezone shifting by extracting the local date string
+    const datePart = dateStr.split('T')[0];
+    const [year, month, day] = datePart.split('-');
+    return `${parseInt(month)}/${parseInt(day)}/${year}`;
 };
 
 const getStatusClass = (status) => {
