@@ -1,6 +1,6 @@
 <template>
-  <div class="card bg-base-100 shadow-xl overflow-hidden border border-base-200">
-    <div class="p-4 border-b border-base-200 bg-base-100 flex gap-4">
+  <div class="card bg-base-100 shadow-xl border border-base-200">
+    <div class="p-4 border-b border-base-200 bg-base-100 flex gap-4 sticky top-0 z-10 shadow-sm rounded-t-2xl">
       <input 
         type="text" 
         v-model="searchQuery" 
@@ -30,7 +30,7 @@
                 <span v-else class="text-xs opacity-20">▼</span>
               </div>
             </th>
-            <th>Vendor</th>
+            <th class="hidden md:table-cell">Vendor</th>
             <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
               <div class="flex items-center gap-1">
                 Total
@@ -38,7 +38,7 @@
                 <span v-else class="text-xs opacity-20">▼</span>
               </div>
             </th>
-            <th>Status</th>
+            <th class="hidden md:table-cell">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -70,11 +70,11 @@
               <span v-else>{{ purchase.orderId }}</span>
             </td>
             <td>{{ formatDate(purchase.purchaseDate) }}</td>
-            <td>
+            <td class="hidden md:table-cell">
               <div class="badge badge-ghost">{{ purchase.vendor || 'Unknown' }}</div>
             </td>
             <td class="font-mono font-medium">${{ (purchase.grandTotal || 0).toFixed(2) }}</td>
-            <td>
+            <td class="hidden md:table-cell">
               <div class="badge" :class="getStatusClass(purchase.status)">
                 {{ purchase.status || 'Pending' }}
               </div>
@@ -89,6 +89,13 @@
         <span v-if="loadingMore" class="loading loading-spinner loading-xs"></span>
         Load More Orders
       </button>
+    </div>
+    
+    <!-- Floating Total Count / Scroll to Top -->
+    <div v-if="totalResults !== null" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-transform hover:-translate-y-1 cursor-pointer shadow-xl rounded-full" @click="scrollToTop">
+      <span class="badge badge-lg badge-primary border-none shadow-md px-6 py-4 font-bold text-sm flex gap-2 items-center">
+        {{ totalResults }} Purchases <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+      </span>
     </div>
   </div>
 </template>
@@ -106,6 +113,7 @@ const purchases = ref([]);
 const loading = ref(true);
 const loadingMore = ref(false);
 const hasMore = ref(false);
+const totalResults = ref(null);
 
 const searchQuery = ref('');
 const sortBy = ref('date'); // 'date' or 'total'
@@ -139,7 +147,7 @@ const loadPurchases = async (isLoadMore = false) => {
     }
     
     try {
-        const queries = [Query.limit(50)];
+        const queries = [Query.limit(5000)];
         
         if (sortBy.value === 'date') {
             queries.push(sortDesc.value ? Query.orderDesc('purchaseDate') : Query.orderAsc('purchaseDate'));
@@ -175,7 +183,8 @@ const loadPurchases = async (isLoadMore = false) => {
             purchases.value = res.documents;
         }
         
-        hasMore.value = res.documents.length === 50;
+        totalResults.value = res.total;
+        hasMore.value = res.documents.length === 5000;
     } catch (e) {
         console.error(e);
     } finally {
@@ -200,6 +209,10 @@ const getStatusClass = (status) => {
         case 'cancelled': return 'badge-error';
         default: return 'badge-ghost';
     }
+};
+
+const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 onMounted(() => {

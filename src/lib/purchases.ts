@@ -47,9 +47,6 @@ export const purchasesAPI = {
     },
 
     async listPurchases(queries = []) {
-        return await databases.listDocuments(DB_ID, getPurchasesCollectionId(), [
-            Query.orderDesc('purchaseDate'),
-            ...queries
-        ]);
+        return await databases.listDocuments(DB_ID, getPurchasesCollectionId(), queries);
     }
 };

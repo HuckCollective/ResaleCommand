@@ -206,8 +206,13 @@ const preProcessLandedCosts = (rows) => {
     const processedRows = [];
     
     for (const row of rows) {
-        let itemId = row['Item ID'] || row['ID'] || row['Item #'] || row['ItemId'] || row['Item Id'] || row['Item#'];
-        let orderId = row['Order ID'] || row['Order #'] || row['Order Number'] || row['OrderId'] || row['Order Id'] || row['Order No'] || row['Order No.'] || row['Invoice ID'] || row['Invoice #'];
+        const rKeys = Object.keys(row);
+        const itemCol = findCol(rKeys, ['item id', 'item #', 'itemid', 'item_id', 'item id', 'itemno', 'item number']);
+        const fallbackItemCol = findCol(rKeys, ['id']);
+        const orderCol = findCol(rKeys, ['order id', 'order #', 'order number', 'orderid', 'order id', 'order no', 'invoice id', 'invoice #', 'order', 'invoice']);
+
+        let itemId = itemCol ? row[itemCol] : (fallbackItemCol ? row[fallbackItemCol] : null);
+        let orderId = orderCol ? row[orderCol] : null;
         
         if (!itemId) {
             const possibleItem = Object.values(row).find(v => v && v.toString().match(/^\d{9}$/));
@@ -482,9 +487,17 @@ const processRows = async (rows) => {
                         scoutBase64 = uploadData.base64;
                         currentImportBatch.assets.push(mainImageId);
                         persistBatch();
+                    } else {
+                        logs.value.push(`⚠️ Image API returned success but failed to upload: ${uploadData.error || 'Unknown'}`);
                     }
+                } else {
+                    const errText = await uploadRes.text();
+                    logs.value.push(`⚠️ Image upload failed for ${itemId}: HTTP ${uploadRes.status} - ${errText}`);
                 }
-            } catch (e) { console.warn(e); }
+            } catch (e) { 
+                console.warn(e);
+                logs.value.push(`⚠️ Network error uploading image for ${itemId}: ${e.message}`);
+            }
         }
 
         let galleryFiles = [];
