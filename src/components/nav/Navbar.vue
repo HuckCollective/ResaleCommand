@@ -213,8 +213,17 @@
                     <a href="/dashboard" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
                         <Icon icon="solar:widget-linear" class="w-5 h-5 text-primary" /> Dashboard
                     </a>
+                    <a href="/purchases" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
+                        <Icon icon="solar:cart-large-2-linear" class="w-5 h-5 text-primary" /> Purchases
+                    </a>
                     <a href="/inventory" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
                         <Icon icon="solar:box-linear" class="w-5 h-5 text-primary" /> Inventory
+                    </a>
+                    <a href="/sales" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
+                        <Icon icon="solar:tag-horizontal-linear" class="w-5 h-5 text-primary" /> Sales
+                    </a>
+                    <a href="/warehouse" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
+                        <Icon icon="solar:buildings-linear" class="w-5 h-5 text-primary" /> Warehousing
                     </a>
                     
                     <div class="flex flex-wrap gap-2 mt-1">

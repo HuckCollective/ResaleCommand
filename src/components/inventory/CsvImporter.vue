@@ -383,15 +383,16 @@ function parseCSV(text: string) {
 
                 // 1. Priority: Check each keyword for an EXACT match first
                 for (const keyword of keywords) {
-                    const idx = headers.findIndex(h => h === keyword);
+                    const idx = headers.findIndex(h => h.replace(/\ufeff/g, '').trim() === keyword);
                     if (idx !== -1 && isValidContent(idx)) return idx;
                 }
                 
                 // 2. Priority: Check each keyword for a PARTIAL match
                 for (const keyword of keywords) {
                     const idx = headers.findIndex(h => {
-                            const containsKey = h.includes(keyword);
-                            const containsAnti = antiKeywords.some(ak => h.includes(ak));
+                            const cleanH = h.replace(/\ufeff/g, '');
+                            const containsKey = cleanH.includes(keyword);
+                            const containsAnti = antiKeywords.some(ak => cleanH.includes(ak));
                             return containsKey && !containsAnti;
                     });
                     if (idx !== -1 && isValidContent(idx)) return idx;

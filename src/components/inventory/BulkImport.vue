@@ -192,13 +192,12 @@ const handleFileUpload = (event) => {
 
 const cancelImport = () => { isBulkCanceled = true; };
 
-// Fuzzy Column Helper
 const findCol = (keys, keywords) => {
     for (const kw of keywords) {
-        const exact = keys.find(k => k.toLowerCase().trim() === kw.toLowerCase());
+        const exact = keys.find(k => k.toLowerCase().replace(/\ufeff/g, '').trim() === kw.toLowerCase());
         if (exact) return exact;
     }
-    return keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+    return keys.find(k => keywords.some(kw => k.toLowerCase().replace(/\ufeff/g, '').includes(kw)));
 };
 
 const preProcessLandedCosts = (rows) => {
