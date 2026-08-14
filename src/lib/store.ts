@@ -140,6 +140,26 @@ export async function updatePrefs(prefs: Models.Preferences) {
       authStore.setKey('user', updatedUser);
 }
 
+export async function updateTeamPrefs(teamId: string, prefs: any) {
+      const updatedTeam = await auth.updateTeamPrefs(teamId, prefs);
+      
+      // Update the team in the teams list
+      const currentTeams = authStore.get().teams;
+      const index = currentTeams.findIndex((t: any) => t.$id === teamId);
+      if (index !== -1) {
+          const newTeams = [...currentTeams];
+          newTeams[index] = updatedTeam;
+          authStore.setKey('teams', newTeams);
+      }
+      
+      // Update currentTeam if it's the one being modified
+      if (authStore.get().currentTeam?.$id === teamId) {
+          authStore.setKey('currentTeam', updatedTeam);
+      }
+      
+      return updatedTeam;
+}
+
 export async function updateEmail(email: string, pass: string) {
       const updatedUser = await auth.updateEmail(email, pass);
       authStore.setKey('user', updatedUser);

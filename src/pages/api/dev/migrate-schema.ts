@@ -45,6 +45,10 @@ export const GET: APIRoute = async () => {
             { key: 'storageLocation', size: 255, required: false, array: false },
             { key: 'marketDescription', size: 65000, required: false, array: false },
             { key: 'sellingLocations', size: 255, required: false, array: false },
+            { key: 'upc', size: 255, required: false, array: false },
+            { key: 'locationSku', size: 255, required: false, array: false },
+            { key: 'saleId', size: 255, required: false, array: false },
+            { key: 'warehouseId', size: 255, required: false, array: false },
             
             // Array attributes
             { key: 'galleryImageIds', size: 255, required: false, array: true },

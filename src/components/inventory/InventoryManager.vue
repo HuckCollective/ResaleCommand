@@ -68,6 +68,11 @@
                         <button class="btn btn-sm btn-primary gap-1.5 flex-1 sm:flex-none" @click="openAdd">
                             <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
                         </button>
+                        
+                        <!-- Generate UPCs -->
+                        <button class="btn btn-sm btn-outline btn-secondary gap-1.5 hidden sm:flex tooltip tooltip-bottom" data-tip="Generate missing UPCs" @click="handleGenerateUpcs">
+                            <Icon icon="solar:barcode-read-linear" class="w-4 h-4" /> Generate UPCs
+                        </button>
 
                         <!-- Import dropdown -->
                         <div class="dropdown flex-1 sm:flex-none">
@@ -730,9 +735,11 @@ const BUCKET = BUCKET_ID;
 
 // Use Composable
 import { useLoader } from '../../composables/useLoader';
-const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage } = useInventory();
+import { useAuth } from '../../composables/useAuth';
+const { currentTeam, user, loading: authLoading } = useAuth();
+
+const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs } = useInventory();
 const loadMore = loadNextPage; // Alias for template
-const { currentTeam, loading: authLoading } = useAuth();
 const currentTeamId = computed(() => currentTeam.value?.$id); 
 
 // State for Filters
@@ -1156,6 +1163,29 @@ const toggleAll = (event) => {
         selectedItems.value = filteredInventory.value.map(i => i.$id);
     } else {
         selectedItems.value = [];
+    }
+};
+
+const handleGenerateUpcs = async () => {
+    const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+    const missingCount = inventoryItems.value.filter(i => !i.upc).length;
+    if (missingCount === 0) {
+        addToast({ type: 'info', message: 'All items already have a UPC!' });
+        return;
+    }
+    const confirmed = await confirmDialog(
+        `Generate UPCs`,
+        `You have ${missingCount} items without a UPC. This will automatically assign a unique ID (e.g. ${prefix}0001) to each of them. Continue?`,
+        'Generate',
+        'cancel'
+    );
+    if (!confirmed) return;
+    
+    try {
+        const count = await generateUpcs(prefix);
+        addToast({ type: 'success', message: `Successfully generated ${count} UPCs!` });
+    } catch (e) {
+        addToast({ type: 'error', message: e.message || 'Failed to generate UPCs' });
     }
 };
 

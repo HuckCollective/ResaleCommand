@@ -1,11 +1,13 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import WarehouseManager from '../components/warehouses/WarehouseManager.vue';
+import LocationSync from '../components/warehouses/LocationSync.vue';
 ---
 
 <Layout title="Warehousing">
   <div class="p-8 max-w-7xl mx-auto space-y-8">
     
+    <LocationSync client:only="vue" />
     <WarehouseManager client:only="vue" />
     
   </div>

@@ -120,6 +120,59 @@ export function useInventory() {
         }
     };
 
+    /**
+     * Generate UPCs for items missing a UPC
+     */
+    const generateUpcs = async (prefix: string = 'HUCK-') => {
+        if (!currentTeamId) throw new Error("No active team");
+        
+        loading.value = true;
+        error.value = null;
+        const { showLoader, hideLoader } = useLoader();
+        showLoader(`Generating ${prefix} UPCs...`);
+
+        try {
+            // Find items without UPC
+            const missingUpcItems = inventoryItems.value.filter((i: any) => !i.upc);
+            if (missingUpcItems.length === 0) return 0;
+
+            // Find current max index for this prefix
+            const existingUpcs = inventoryItems.value
+                .map((i: any) => i.upc)
+                .filter(u => u && u.startsWith(prefix));
+            
+            let maxIndex = 0;
+            existingUpcs.forEach((u: string) => {
+                const numPart = u.replace(prefix, '');
+                const num = parseInt(numPart, 10);
+                if (!isNaN(num) && num > maxIndex) {
+                    maxIndex = num;
+                }
+            });
+
+            // Assign new UPCs
+            let updatedCount = 0;
+            for (const item of missingUpcItems) {
+                maxIndex++;
+                // Format to 4 digits minimum (e.g. 0001)
+                const newUpc = `${prefix}${maxIndex.toString().padStart(4, '0')}`;
+                
+                await databases.updateDocument(DB_ID, getCollectionId(), item.$id, {
+                    upc: newUpc
+                });
+                updatedCount++;
+            }
+            
+            return updatedCount;
+        } catch (err: any) {
+            console.error("Failed to generate UPCs:", err);
+            throw err;
+        } finally {
+            loading.value = false;
+            hideLoader();
+        }
+    };
+
     return {
         inventoryItems,
         totalItems,
@@ -128,6 +181,7 @@ export function useInventory() {
         hasMore,
         fetchInventory,
         loadNextPage,
-        addLocalItem
+        addLocalItem,
+        generateUpcs
     };
 }

@@ -103,15 +103,23 @@
                      </a>
                   </li>
                   
-                  <!-- Organization Settings Link (if team is selected) -->
+                  <!-- Organization Settings -->
+                  <!-- Active Team -->
                   <li v-if="currentTeam">
-                     <a href="/org/settings" class="gap-2 font-semibold text-secondary">
-                         <Icon icon="solar:settings-linear" class="w-4 h-4" />
-                         Manage Settings
+                     <a class="active bg-base-200">
+                        <Icon icon="solar:users-group-two-rounded-linear" class="w-4 h-4" />
+                        {{ currentTeam.name }}
                      </a>
                   </li>
 
-                  <div class="divider my-0"></div>
+                  <div class="divider my-1"></div>
+                  
+                  <li>
+                    <a href="/settings">
+                      <Icon icon="solar:settings-linear" class="w-4 h-4" />
+                      Settings
+                    </a>
+                  </li>
                   
                   <li v-if="!ownedTeam"><a @click="showCreateModal = true">+ Create Organization</a></li>
                   <li v-if="currentTeam && ownedTeam && currentTeam.$id === ownedTeam.$id">

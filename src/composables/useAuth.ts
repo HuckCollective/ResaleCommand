@@ -11,7 +11,8 @@ import {
   updateName as updateNameAction,
   updateEmail as updateEmailAction,
   updatePassword as updatePasswordAction,
-  updatePrefs as updatePrefsAction
+  updatePrefs as updatePrefsAction,
+  updateTeamPrefs as updateTeamPrefsAction
 } from '../lib/store';
 import { computed } from 'vue';
 
@@ -48,6 +49,7 @@ export function useAuth() {
     updateName: updateNameAction,
     updateEmail: updateEmailAction,
     updatePassword: updatePasswordAction,
-    updatePrefs: updatePrefsAction
+    updatePrefs: updatePrefsAction,
+    updateTeamPrefs: updateTeamPrefsAction
   };
 }

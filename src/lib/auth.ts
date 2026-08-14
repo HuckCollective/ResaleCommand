@@ -159,9 +159,18 @@ export const auth = {
 
   async updatePrefs(prefs: Models.Preferences) {
       try {
-          return await account.updatePrefs(prefs);
+          return await account.updatePrefs({ prefs });
       } catch (error) {
           console.error("Error updating prefs:", error);
+          throw error;
+      }
+  },
+
+  async updateTeamPrefs(teamId: string, prefs: any) {
+      try {
+          return await teams.updatePrefs({ teamId, prefs });
+      } catch (error) {
+          console.error("Error updating team prefs:", error);
           throw error;
       }
   },

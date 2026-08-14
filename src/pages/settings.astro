@@ -1,0 +1,14 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SettingsManager from '../components/settings/SettingsManager.vue';
+---
+
+<Layout title="Settings">
+  <div class="p-8 max-w-7xl mx-auto space-y-8">
+    <div class="flex items-center gap-4">
+      <h1 class="text-4xl font-black text-base-content tracking-tight">Settings</h1>
+    </div>
+    
+    <SettingsManager client:only="vue" />
+  </div>
+</Layout>
