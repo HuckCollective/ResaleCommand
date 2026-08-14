@@ -11,6 +11,16 @@
 
             <!-- Docked Title -->
             <div class="px-4 py-2 bg-base-100 flex-none z-20">
+                <!-- UPC Display -->
+                <div v-if="item?.upc" class="mb-2 flex items-center gap-2 text-xs font-mono bg-base-200 rounded px-2 py-1 border border-base-300 w-fit">
+                    <Icon icon="solar:tag-horizontal-bold-duotone" class="w-4 h-4 text-primary" />
+                    <span class="opacity-70">UPC:</span>
+                    <span class="font-bold tracking-wider">{{ item.upc }}</span>
+                </div>
+                <div v-else class="mb-2 flex items-center gap-2 text-xs font-mono bg-base-200/50 rounded px-2 py-1 border border-base-300/50 w-fit">
+                     <Icon icon="solar:tag-horizontal-bold-duotone" class="w-4 h-4 text-base-content/50" />
+                    <span class="opacity-50">UPC will auto-generate on save</span>
+                </div>
                 <div class="form-control w-full">
                     <label class="label flex flex-col items-start gap-1 px-0 pt-0 pb-1 w-full">
                         <!-- Unmatched -->

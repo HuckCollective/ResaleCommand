@@ -224,20 +224,20 @@ const executeSync = async () => {
       addToast({ type: 'success', message: `Saved Location SKUs to ${updatePromises.length} items.` });
     }
 
-    // 2. Export CSV (Injecting our UPC into their SKU column)
+    // 2. Export CSV (Injecting our UPC into their UPC column)
     const headers = splitCsvLine(rawCsvHeader.value);
-    const skuIdx = headers.findIndex(h => h.toLowerCase() === 'sku');
+    const upcIdx = headers.findIndex(h => h.toLowerCase() === 'upc');
     
     let finalCsv = rawCsvHeader.value + '\n';
     
     for (const row of parsedRows.value) {
       const cols = splitCsvLine(rawCsvLines.value[row.originalLineIndex]);
-      
-      // Inject our internal UPC (or fallback to ID) into their SKU column
       if (row.mappedItem) {
         const upcToInject = row.mappedItem.upc || row.mappedItem.$id;
         // Escape quotes if needed
-        cols[skuIdx] = upcToInject.includes(',') ? `"${upcToInject}"` : upcToInject;
+        if (upcIdx !== -1) {
+             cols[upcIdx] = upcToInject.includes(',') ? `"${upcToInject}"` : upcToInject;
+        }
       }
       
       finalCsv += cols.map(c => c?.includes(',') ? `"${c}"` : c).join(',') + '\n';

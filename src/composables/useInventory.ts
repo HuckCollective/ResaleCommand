@@ -17,6 +17,8 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 let currentTeamId: string | null = null;
 let unsubscribe: (() => void) | null = null;
+const generatingProgress = ref(0);
+const generatingTotal = ref(0);
 
 export function useInventory() {
     
@@ -124,17 +126,19 @@ export function useInventory() {
      * Generate UPCs for items missing a UPC
      */
     const generateUpcs = async (prefix: string = 'HUCK-') => {
-        if (!currentTeamId) throw new Error("No active team");
-        
         loading.value = true;
         error.value = null;
-        const { showLoader, hideLoader } = useLoader();
+        generatingProgress.value = 0;
+        
+        const { showLoader, hideLoader, updateLoader } = useLoader();
         showLoader(`Generating ${prefix} UPCs...`);
 
         try {
             // Find items without UPC
             const missingUpcItems = inventoryItems.value.filter((i: any) => !i.upc);
             if (missingUpcItems.length === 0) return 0;
+            
+            generatingTotal.value = missingUpcItems.length;
 
             // Find current max index for this prefix
             const existingUpcs = inventoryItems.value
@@ -157,10 +161,35 @@ export function useInventory() {
                 // Format to 4 digits minimum (e.g. 0001)
                 const newUpc = `${prefix}${maxIndex.toString().padStart(4, '0')}`;
                 
-                await databases.updateDocument(DB_ID, getCollectionId(), item.$id, {
-                    upc: newUpc
-                });
+                // Add a 200ms delay to prevent Appwrite rate limits when bulk updating
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                let success = false;
+                let retries = 0;
+                while (!success && retries < 3) {
+                    try {
+                        await databases.updateDocument(DB_ID, getCollectionId(), item.$id, {
+                            upc: newUpc
+                        });
+                        success = true;
+                    } catch (e: any) {
+                        if (e.code === 429) {
+                            console.warn("Rate limited, pausing for 2 seconds...");
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            retries++;
+                        } else {
+                            throw e;
+                        }
+                    }
+                }
+                item.upc = newUpc; // Update local state for immediate UI reflection
                 updatedCount++;
+                generatingProgress.value = updatedCount;
+                
+                // Update the loader message so it acts as a global progress indicator
+                if (updateLoader) {
+                    updateLoader(`Generating ${prefix} UPCs... (${updatedCount}/${generatingTotal.value})`);
+                }
             }
             
             return updatedCount;
@@ -169,8 +198,31 @@ export function useInventory() {
             throw err;
         } finally {
             loading.value = false;
+            generatingProgress.value = 0;
+            generatingTotal.value = 0;
             hideLoader();
         }
+    };
+
+    /**
+     * Get the next UPC for a given prefix without saving
+     */
+    const getNextUpc = (prefix: string = 'HUCK-') => {
+        const existingUpcs = inventoryItems.value
+            .map((i: any) => i.upc)
+            .filter(u => u && u.startsWith(prefix));
+        
+        let maxIndex = 0;
+        existingUpcs.forEach((u: string) => {
+            const numPart = u.replace(prefix, '');
+            const num = parseInt(numPart, 10);
+            if (!isNaN(num) && num > maxIndex) {
+                maxIndex = num;
+            }
+        });
+
+        maxIndex++;
+        return `${prefix}${maxIndex.toString().padStart(4, '0')}`;
     };
 
     return {
@@ -182,6 +234,9 @@ export function useInventory() {
         fetchInventory,
         loadNextPage,
         addLocalItem,
-        generateUpcs
+        generateUpcs,
+        getNextUpc,
+        generatingProgress,
+        generatingTotal
     };
 }

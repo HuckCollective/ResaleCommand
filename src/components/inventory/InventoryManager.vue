@@ -120,6 +120,13 @@
                             </div>
                             <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
                                 <li>
+                                    <a href="/inventory/sync" class="flex items-start gap-3 py-2">
+                                        <Icon icon="solar:synchronize-bold-duotone" class="w-5 h-5 mt-0.5 shrink-0 text-secondary" />
+                                        <div><div class="font-bold text-sm flex items-center gap-2">MemoryDen Sync</div></div>
+                                    </a>
+                                </li>
+                                <div class="divider my-1"></div>
+                                <li>
                                     <button class="flex items-start gap-3 py-2" @click="exportCsv('generic')">
                                         <Icon icon="solar:file-download-linear" class="w-5 h-5 mt-0.5 shrink-0 text-success" />
                                         <div>
@@ -735,10 +742,9 @@ const BUCKET = BUCKET_ID;
 
 // Use Composable
 import { useLoader } from '../../composables/useLoader';
-import { useAuth } from '../../composables/useAuth';
 const { currentTeam, user, loading: authLoading } = useAuth();
 
-const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs } = useInventory();
+const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs, getNextUpc } = useInventory();
 const loadMore = loadNextPage; // Alias for template
 const currentTeamId = computed(() => currentTeam.value?.$id); 
 
@@ -1512,6 +1518,11 @@ const saveEdit = async (payload) => {
     try {
         if (activeItem.value) {
             // UPDATE EXISTING
+            const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+            if (!payload.upc && !activeItem.value.upc) {
+                payload.upc = getNextUpc(prefix);
+            }
+
             const updatedDoc = await updateInventoryItem(activeItem.value.$id, payload);
             // Optimistic update to immediately reflect in UI before Appwrite query cache clears
             const idx = inventoryItems.value.findIndex(i => i.$id === activeItem.value.$id);
@@ -1520,6 +1531,10 @@ const saveEdit = async (payload) => {
             }
         } else {
             // CREATE NEW
+            const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+            if (!payload.upc) {
+                payload.upc = getNextUpc(prefix);
+            }
              const newDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' }, 
                 payload.imageFile,

@@ -40,6 +40,12 @@ export function useLoader() {
         loaderCancelable.value = true;
         activeOnCancel = null;
     };
+
+    const updateLoader = (msg: string) => {
+        if (globalLoading.value) {
+            loaderMessage.value = msg;
+        }
+    };
     
-    return { globalLoading, loaderMessage, loaderBasket, loaderBerries, loaderBasketColor, loaderBerryColor, loaderBackgroundColor, loaderCancelable, showLoader, hideLoader, triggerCancel };
+    return { globalLoading, loaderMessage, loaderBasket, loaderBerries, loaderBasketColor, loaderBerryColor, loaderBackgroundColor, loaderCancelable, showLoader, hideLoader, triggerCancel, updateLoader };
 }

@@ -46,6 +46,8 @@ export interface ExtraItemData {
     purchaseId?: string;
     saleId?: string;
     locationId?: string;
+    upc?: string;
+    locationSku?: string;
 }
 
 export function getSafeRawAnalysis(item: any): string | null {
@@ -325,6 +327,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             purchaseId: extraData.purchaseId || undefined,
             saleId: extraData.saleId || undefined,
             locationId: extraData.locationId || undefined,
+            upc: extraData.upc || undefined,
+            locationSku: extraData.locationSku || undefined,
             rawAnalysis: extraData.rawAnalysis !== undefined 
                 ? (extraData.rawAnalysis === '' ? null : extraData.rawAnalysis)
                 : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
@@ -533,6 +537,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         if (updates.parentLotId !== undefined) data.parentLotId = updates.parentLotId;
         if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
         if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
+        if (updates.upc !== undefined) data.upc = updates.upc;
 
         // --- Handle File Uploads & Update Notes ---
 
