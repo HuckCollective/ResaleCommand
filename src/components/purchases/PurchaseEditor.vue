@@ -7,8 +7,17 @@
     <template v-else>
       <div class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body">
-          <h2 class="card-title text-2xl mb-4">{{ isEdit ? 'Edit Purchase' : 'New Purchase Order' }}</h2>
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+            <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
+            <div class="form-control" v-if="isEdit">
+              <label class="label cursor-pointer gap-2 py-0">
+                <span class="label-text font-bold">Edit Mode</span>
+                <input type="checkbox" class="toggle toggle-primary toggle-sm" v-model="editMode" />
+              </label>
+            </div>
+          </div>
           
+          <fieldset :disabled="isEdit && !editMode" class="border-0 p-0 m-0 min-w-0">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Left Column -->
             <div class="space-y-4">
@@ -87,8 +96,9 @@
               </div>
             </div>
           </div>
+          </fieldset>
           
-          <div class="card-actions justify-between items-center mt-8 border-t border-base-200 pt-6">
+          <div v-if="!isEdit || editMode" class="card-actions justify-between items-center mt-8 border-t border-base-200 pt-6">
             <button v-if="isEdit" class="btn btn-error btn-outline" @click="handleDelete" :disabled="saving">
               Delete Purchase
             </button>
@@ -282,6 +292,7 @@ const props = defineProps({
 });
 
 const isEdit = computed(() => !!props.purchaseId);
+const editMode = ref(!props.purchaseId);
 const loadingInit = ref(false);
 const saving = ref(false);
 
@@ -386,6 +397,7 @@ const loadLinkedItems = async () => {
 
 const savePurchase = async () => {
     saving.value = true;
+    showLoader("Saving Purchase...");
     try {
         const payload = {
             ...form.value,
@@ -399,7 +411,7 @@ const savePurchase = async () => {
 
         if (isEdit.value) {
             await purchasesAPI.updatePurchase(props.purchaseId, payload);
-            // Show a simple success toast or just stay
+            editMode.value = false;
         } else {
             const res = await purchasesAPI.createPurchase(payload);
             // Redirect to edit page
@@ -410,6 +422,7 @@ const savePurchase = async () => {
         alert('Failed to save: ' + e.message);
     } finally {
         saving.value = false;
+        hideLoader();
     }
 };
 

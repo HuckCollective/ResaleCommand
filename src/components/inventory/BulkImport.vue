@@ -1,4 +1,5 @@
 <template>
+    <Teleport to="body">
     <!-- FILE SELECTION MODAL -->
     <div v-if="!processing && logs.length === 0" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div class="bg-base-100 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
@@ -99,6 +100,7 @@
             </div>
         </div>
     </div>
+    </Teleport>
 </template>
 
 <script setup>
