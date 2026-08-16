@@ -50,6 +50,11 @@ export const ALL: APIRoute = async ({ request }) => {
         } else if (rawBody.trim().startsWith("{")) {
             try {
                 const json = JSON.parse(rawBody);
+                let userNotes = "";
+                if (json.notes) {
+                    userNotes = json.notes;
+                }
+
                 const processDataUrl = (url: string) => {
                      if (url.startsWith("data:")) {
                          const parts = url.split(",");
@@ -81,10 +86,20 @@ export const ALL: APIRoute = async ({ request }) => {
             });
         }
 
+        let promptContext = "";
+        if (rawBody.trim().startsWith("{")) {
+            try {
+                const json = JSON.parse(rawBody);
+                if (json.notes) {
+                    promptContext = `\nCONTEXT / USER NOTES: "${json.notes}"\n`;
+                }
+            } catch(e) {}
+        }
+
         const prompt = `
           Analyze this image to extract a comprehensive inventory of components. 
           Usually this represents the back of a board game box, a TTRPG set, or an electronics bundle detailing its "Contents".
-          
+          ${promptContext}
           TASK:
           Extract every distinct component listed and its expected quantity. 
           If the image is NOT the back of a box, but rather a pile of physical items laid out, try your best to identify and count each distinct item you see.

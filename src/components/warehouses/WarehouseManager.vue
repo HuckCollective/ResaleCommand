@@ -37,6 +37,14 @@
           </div>
           
           <div class="space-y-2 mt-4 flex-1">
+            <div v-if="warehouse.categories || warehouse.niche" class="border-b border-base-200 pb-2">
+              <span class="opacity-70 text-xs font-bold block mb-1">Niche / Specialties</span>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="(cat, cIdx) in (warehouse.categories || warehouse.niche).split(',')" :key="cIdx" class="badge badge-xs badge-outline badge-primary">
+                  {{ cat.trim() }}
+                </span>
+              </div>
+            </div>
             <div class="flex justify-between items-center border-b border-base-200 pb-2">
               <span class="opacity-70 text-sm">Commission Rate</span>
               <span class="font-bold">{{ warehouse.commissionRate ? warehouse.commissionRate + '%' : '0%' }}</span>
@@ -67,7 +75,7 @@
         <form @submit.prevent="saveWarehouse" class="space-y-4">
           <div class="form-control w-full">
             <label class="label"><span class="label-text font-bold">Location Name</span></label>
-            <input type="text" v-model="editForm.name" required class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-2 focus:ring-primary/50 transition-colors" placeholder="e.g. Antique Mall A" />
+            <input type="text" v-model="editForm.name" required class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-2 focus:ring-primary/50 transition-colors" placeholder="e.g. DustyTiger or Memory Den" />
           </div>
 
           <div class="form-control w-full">
@@ -77,6 +85,15 @@
               <option value="Online">Online</option>
               <option value="Warehouse">Warehouse (Storage Only)</option>
             </select>
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label">
+              <span class="label-text font-bold">Niche & Allowed Categories</span>
+              <span class="label-text-alt text-[10px] opacity-70">Used by AI Scout</span>
+            </label>
+            <input type="text" v-model="editForm.categories" class="input input-bordered w-full bg-base-200 focus:bg-base-100" placeholder="e.g. Small Collectibles, Jewelry, Wands (or Vintage Clothes, Arcane Punk)" />
+            <label class="label pt-1 pb-0"><span class="label-text-alt text-[10px] opacity-60">Separate categories with commas</span></label>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -133,6 +150,7 @@ const editForm = ref<WarehouseData>({
   type: 'On-Site',
   commissionRate: 0,
   monthlyRent: 0,
+  categories: '',
   tenantId: ''
 });
 const editingId = ref<string | null>(null);
@@ -164,6 +182,7 @@ const openEditor = (warehouse?: WarehouseDocument) => {
       type: warehouse.type,
       commissionRate: warehouse.commissionRate || 0,
       monthlyRent: warehouse.monthlyRent || 0,
+      categories: warehouse.categories || warehouse.niche || '',
       tenantId: warehouse.tenantId
     };
   } else {
@@ -174,6 +193,7 @@ const openEditor = (warehouse?: WarehouseDocument) => {
       type: 'On-Site',
       commissionRate: 0,
       monthlyRent: 0,
+      categories: '',
       tenantId: team.value?.$id || ''
     };
   }

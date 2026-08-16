@@ -6,5 +6,5 @@ const { id } = Astro.params;
 ---
 
 <Layout title="Item Details | Resale Command">
-    <ItemViewer itemId={id} client:only="vue" />
+    <ItemViewer itemId={id || ''} client:only="vue" />
 </Layout>

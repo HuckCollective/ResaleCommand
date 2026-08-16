@@ -9,6 +9,8 @@ export interface WarehouseData {
     type: string;
     commissionRate?: number;
     monthlyRent?: number;
+    categories?: string;
+    niche?: string;
     tenantId: string;
 }
 

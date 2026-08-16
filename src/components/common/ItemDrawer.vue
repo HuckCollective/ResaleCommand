@@ -65,11 +65,11 @@
                 <!-- 1. Text Query (Item Description/Scout Input) -->
                 <div class="space-y-4">
                         <!-- 1. Text Query -->
-                        <div class="form-control w-full" v-if="!item">
+                        <div class="form-control w-full">
                             <label class="label pt-0 pb-1 flex justify-between w-full">
                                 <span class="label-text font-bold text-sm flex items-center gap-1">
                                     <Icon icon="solar:magic-stick-bold" class="w-4 h-4 text-primary" />
-                                    AI Scout Prompt
+                                    AI Deep Research Prompt
                                 </span>
                                 <span class="text-[10px] opacity-50 uppercase font-bold tracking-wider">Not Saved</span>
                             </label>
@@ -306,12 +306,53 @@
                             <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
                         </div>
                         
-                        <ul class="space-y-2 text-xs font-medium max-h-[300px] overflow-y-auto pr-1">
-                            <li v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
-                                <div class="flex justify-between items-start gap-3 w-full">
-                                    <span class="text-base-content font-bold leading-snug text-left truncate grow">{{ idx + 1 }}. {{ resultItem.name || resultItem.title || resultItem.identity || resultItem.item }}</span>
-                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ resultItem.condition || 'Gently Used' }}</span>
+                        <ul class="space-y-2 text-xs font-medium max-h-[350px] overflow-y-auto pr-1">
+                            <li v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex items-start gap-3 shadow-sm hover:border-primary/50 transition-colors">
+                                <!-- Interactive Cropped Preview Thumbnail with Photo Picker -->
+                                <div 
+                                    @click.stop="openPhotoPicker(idx)"
+                                    class="w-16 h-16 shrink-0 rounded-md overflow-hidden border border-base-300 bg-base-200 shadow-inner flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary relative group transition-all" 
+                                    title="Click to select / change photo"
+                                >
+                                    <img :src="cropPreviews[idx] || resultItem.image" class="w-full h-full object-cover" alt="Item preview" />
+                                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                                        <Icon icon="solar:gallery-edit-linear" class="w-5 h-5" />
+                                        <span class="text-[8px] font-bold mt-0.5">Change</span>
+                                    </div>
                                 </div>
+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                                    <div class="flex items-center justify-between gap-2 w-full">
+                                        <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                            <span class="text-primary font-bold text-xs">{{ idx + 1 }}.</span>
+                                            <input 
+                                                v-if="resultItem.name !== undefined"
+                                                v-model="resultItem.name" 
+                                                class="input input-xs input-ghost font-bold text-base-content leading-snug p-0 focus:input-bordered focus:px-2 w-full text-left truncate" 
+                                                :placeholder="resultItem.title || resultItem.identity || 'Item Name'"
+                                            />
+                                            <input 
+                                                v-else-if="resultItem.title !== undefined"
+                                                v-model="resultItem.title" 
+                                                class="input input-xs input-ghost font-bold text-base-content leading-snug p-0 focus:input-bordered focus:px-2 w-full text-left truncate" 
+                                                :placeholder="resultItem.identity || 'Item Name'"
+                                            />
+                                            <span v-else class="text-base-content font-bold leading-snug text-left truncate">{{ resultItem.identity || resultItem.item || 'Unknown Item' }}</span>
+                                        </div>
+                                        
+                                        <!-- Photo Swap Controls -->
+                                        <div class="flex items-center gap-0.5 shrink-0 bg-base-200/60 rounded px-1 py-0.5 border border-base-300/50">
+                                            <span class="text-[9px] uppercase font-semibold opacity-60 mr-1 hidden sm:inline">Photo:</span>
+                                            <button v-if="idx > 0" @click.stop="swapComponentPhotos(idx, idx - 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item above">
+                                                <Icon icon="solar:arrow-up-linear" class="w-3.5 h-3.5" />
+                                            </button>
+                                            <button v-if="idx < scoutItemsArray.length - 1" @click.stop="swapComponentPhotos(idx, idx + 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item below">
+                                                <Icon icon="solar:arrow-down-linear" class="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="flex">
+                                        <span class="badge badge-outline badge-primary badge-xs h-auto py-0.5 px-1.5 whitespace-normal text-left leading-tight inline-block">{{ resultItem.condition || 'Gently Used' }}</span>
+                                    </div>
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
                                     <template v-if="resultItem.price_breakdown?.poor">
                                         <span>Poor: <strong class="text-error">{{ formatPriceRange(resultItem.price_breakdown.poor) }}</strong></span>
@@ -342,6 +383,7 @@
                                         </template>
                                     </template>
                                 </div>
+                                </div>
                             </li>
                         </ul>
 
@@ -362,6 +404,29 @@
                             <div class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30 shadow-sm">
                                 <span class="text-[9px] uppercase font-bold text-secondary">Boutique</span>
                                 <span class="font-mono font-bold text-xs">{{ scoutTotalRange.boutique.formatted }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Bundle Market Report & Platform Strategy -->
+                        <div v-if="scoutResult?.market_report || (Array.isArray(scoutResult) && scoutResult[0]?.market_report)" class="bg-base-100 p-3 rounded-lg border border-primary/30 shadow-sm space-y-2 mt-3">
+                            <div class="flex items-center justify-between border-b border-base-200 pb-1.5">
+                                <span class="text-xs font-bold flex items-center gap-1.5 text-primary">
+                                    <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
+                                    Lot Market Strategy & Liquidation
+                                </span>
+                                <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report)?.sell_through_velocity" class="badge badge-xs badge-info font-bold">
+                                    {{ (scoutResult?.market_report || scoutResult[0]?.market_report).sell_through_velocity }}
+                                </span>
+                            </div>
+                            
+                            <div class="bg-primary/10 p-2 rounded-md border border-primary/20 flex flex-col gap-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] uppercase font-bold text-primary">Recommended Channel:</span>
+                                    <span class="badge badge-primary badge-sm font-bold">{{ (scoutResult?.market_report || scoutResult[0]?.market_report).best_platform }}</span>
+                                </div>
+                                <p class="text-[11px] opacity-90 leading-tight">
+                                    {{ (scoutResult?.market_report || scoutResult[0]?.market_report).platform_rationale }}
+                                </p>
                             </div>
                         </div>
 
@@ -437,6 +502,45 @@
                             <div v-for="(comp, cIdx) in scoutItemsArray[0].comparables" :key="cIdx" class="flex justify-between items-center text-xs bg-base-100 p-1.5 rounded border border-base-200">
                                 <span class="truncate pr-2">{{ comp.name }}</span>
                                 <span class="font-mono font-bold">{{ comp.price }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Market Report & Best Platform Card -->
+                        <div v-if="scoutItemsArray[0].market_report || scoutResult?.market_report" class="bg-base-100 p-3 rounded-lg border border-primary/30 shadow-sm space-y-2.5 mt-3">
+                            <div class="flex items-center justify-between border-b border-base-200 pb-1.5">
+                                <span class="text-xs font-bold flex items-center gap-1.5 text-primary">
+                                    <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
+                                    Market & Platform Strategy
+                                </span>
+                                <span v-if="(scoutItemsArray[0].market_report || scoutResult?.market_report)?.sell_through_velocity" class="badge badge-xs badge-info font-bold">
+                                    {{ (scoutItemsArray[0].market_report || scoutResult?.market_report).sell_through_velocity }}
+                                </span>
+                            </div>
+                            
+                            <!-- Best Platform Banner -->
+                            <div class="bg-primary/10 p-2.5 rounded-md border border-primary/20 flex flex-col gap-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] uppercase font-bold text-primary">Best Channel:</span>
+                                    <span class="badge badge-primary badge-sm font-bold">{{ (scoutItemsArray[0].market_report || scoutResult?.market_report).best_platform }}</span>
+                                </div>
+                                <p class="text-[11px] opacity-90 leading-snug">
+                                    {{ (scoutItemsArray[0].market_report || scoutResult?.market_report).platform_rationale }}
+                                </p>
+                            </div>
+
+                            <!-- Channel Comparisons -->
+                            <div v-if="(scoutItemsArray[0].market_report || scoutResult?.market_report)?.channels && (scoutItemsArray[0].market_report || scoutResult?.market_report).channels.length > 0" class="space-y-1.5 pt-0.5">
+                                <div class="text-[10px] font-bold uppercase opacity-60">Channel Trade-Offs (Speed vs Net Margin)</div>
+                                <div v-for="(ch, chIdx) in (scoutItemsArray[0].market_report || scoutResult?.market_report).channels" :key="chIdx" class="bg-base-200/70 p-2 rounded border border-base-content/10 flex flex-col gap-1 text-[11px]">
+                                    <div class="flex justify-between items-center font-bold">
+                                        <span>{{ ch.name }}</span>
+                                        <span class="text-success font-mono">{{ ch.est_price }}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center text-[10px] opacity-80">
+                                        <span>Net: <strong class="text-primary">{{ ch.net_payout || 'N/A' }}</strong></span>
+                                        <span class="badge badge-ghost badge-xs">{{ ch.speed || ch.recommendation }}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -540,12 +644,28 @@
                      <span class="text-xl"><Icon icon="solar:smart-speaker-minimalistic-linear" class="w-6 h-6 inline mr-2" /></span> Take a photo of the "Contents List" on the back of the box and the AI will build a checklist for you!
                 </div>
                 <div class="form-control w-full space-y-3">
-                    <label class="label pb-0"><span class="label-text font-bold">1. Select or Capture Contents List</span></label>
+                      <div class="form-control w-full">
+                          <label class="label pt-0 pb-1 flex justify-between w-full">
+                              <span class="label-text font-bold text-sm flex items-center gap-1">
+                                  <Icon icon="solar:magic-stick-bold" class="w-4 h-4 text-primary" />
+                                  Extraction Hints / Context
+                              </span>
+                          </label>
+                          <textarea v-model="scoutQuery" class="textarea textarea-bordered border border-base-content/20 h-16 text-sm w-full bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200" placeholder="e.g. Harry Potter wands lot..."></textarea>
+                      </div>
+                      
+                      <label class="label pb-0"><span class="label-text font-bold">1. Select or Capture Contents List</span></label>
                     
                     <ScannerWidget @photos-captured="handleVerifyPhotosCaptured" :hide-upload="false" />
 
-                    <div v-if="(editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) || (editGalleryBuffer && editGalleryBuffer.length > 0)">
-                        <label class="label py-0"><span class="label-text text-xs font-bold opacity-70">Or analyze existing gallery photo:</span></label>
+                     <div v-if="(editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) || (editGalleryBuffer && editGalleryBuffer.length > 0)">
+                        <div class="flex justify-between items-center py-1">
+                            <label class="label py-0"><span class="label-text text-xs font-bold opacity-70">Analyze existing gallery photo:</span></label>
+                            <button type="button" class="btn btn-ghost btn-xs text-primary font-bold gap-1" @click="extractComponentsFromAllGallery">
+                                <Icon icon="solar:magic-stick-linear" class="w-3.5 h-3.5" />
+                                Scan All ({{ (editForm.existingGalleryIds?.length || 0) + (editGalleryBuffer?.length || 0) }}) Photos
+                            </button>
+                        </div>
                         <div class="flex gap-2 overflow-x-auto pb-2">
                              <div v-for="id in editForm.existingGalleryIds" :key="id" class="relative w-16 h-16 shrink-0 cursor-pointer hover:ring-2 ring-primary rounded transition-all" @click="extractComponentsFromId(id)">
                                   <img :src="getAssetUrl(id)" class="w-full h-full object-cover rounded shadow-sm border border-base-300" />
@@ -650,8 +770,8 @@
                         <span v-if="analyzing" class="loading loading-spinner"></span>
                         <span v-if="analyzing" class="ml-2 text-xs font-normal max-w-[120px] sm:max-w-none truncate">{{ analysisStatus }}</span>
                         <template v-else>
-                            <span class="hidden sm:inline"><Icon icon="solar:magic-stick-linear" class="w-4 h-4 mr-1 inline" /> AI Scout</span>
-                            <span class="sm:hidden"><Icon icon="solar:magic-stick-linear" class="w-4 h-4 mr-1 inline" /> AI</span>
+                            <span class="hidden sm:inline"><Icon icon="solar:magic-stick-linear" class="w-4 h-4 mr-1 inline" /> AI Deep Research</span>
+                            <span class="sm:hidden"><Icon icon="solar:magic-stick-linear" class="w-4 h-4 mr-1 inline" /> AI Research</span>
                         </template>
                     </button>
                 </div>
@@ -665,6 +785,52 @@
                 </div>
         </div>
         </div>
+
+        <!-- Visual Photo Selector Modal for Bundle Components -->
+        <dialog :class="['modal modal-bottom sm:modal-middle z-[500]', { 'modal-open': pickingPhotoForItemIndex !== null }]">
+            <div v-if="pickingPhotoForItemIndex !== null" class="modal-box max-w-2xl bg-base-100 border border-base-300 shadow-2xl p-5">
+                <div class="flex items-center justify-between border-b border-base-300 pb-3 mb-4">
+                    <div>
+                        <h3 class="font-bold text-base flex items-center gap-2 text-primary">
+                            <Icon icon="solar:gallery-wide-bold-duotone" class="w-5 h-5" />
+                            <span>Select Photo for Item #{{ pickingPhotoForItemIndex + 1 }}</span>
+                        </h3>
+                        <p class="text-xs text-base-content/70 mt-0.5 truncate max-w-md">
+                            {{ scoutItemsArray[pickingPhotoForItemIndex]?.name || scoutItemsArray[pickingPhotoForItemIndex]?.title || 'Component Item' }}
+                        </p>
+                    </div>
+                    <button @click="pickingPhotoForItemIndex = null" class="btn btn-sm btn-circle btn-ghost">✕</button>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+                    <div 
+                        v-for="(url, pIdx) in allAvailableGalleryUrls" 
+                        :key="pIdx"
+                        @click="assignPhotoToComponent(pickingPhotoForItemIndex, url, pIdx)"
+                        class="relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition-all hover:scale-102 hover:border-primary group bg-base-200 shadow-sm"
+                        :class="isPhotoAssigned(pickingPhotoForItemIndex, pIdx) ? 'border-primary ring-2 ring-primary/50' : 'border-base-300'"
+                    >
+                        <img :src="url" class="w-full h-full object-cover" alt="Gallery photo" />
+                        <span class="absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded font-mono font-bold">
+                            Photo {{ pIdx + 1 }}
+                        </span>
+                        <div v-if="isPhotoAssigned(pickingPhotoForItemIndex, pIdx)" class="absolute top-1.5 right-1.5 bg-primary text-primary-content rounded-full p-1 shadow-md">
+                            <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <span class="badge badge-primary text-xs shadow">Select</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-action mt-4 pt-3 border-t border-base-300 flex justify-end">
+                    <button @click="pickingPhotoForItemIndex = null" class="btn btn-sm btn-ghost">Cancel</button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button @click="pickingPhotoForItemIndex = null">close</button>
+            </form>
+        </dialog>
         </div>
     </Teleport>
 </template>
@@ -683,11 +849,13 @@ import { ID } from 'appwrite';
 import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
 import { Icon } from '@iconify/vue';
 import { useLoader } from '../../composables/useLoader';
+import { warehousesApi } from '../../lib/warehouses';
 
 const { currentTeam } = useAuth();
-const { showLoader, hideLoader } = useLoader();
+const { showLoader, hideLoader, updateLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
+const orgWarehouses = ref([]);
 
 const fetchLocations = async () => {
     if (!currentTeam.value) return;
@@ -698,6 +866,11 @@ const fetchLocations = async () => {
         if (res.documents.length) {
             orgPlacedLocations.value = res.documents[0].placedLocations || [];
         }
+    } catch(e) {}
+
+    try {
+        const wList = await warehousesApi.listWarehouses(currentTeam.value.$id);
+        orgWarehouses.value = wList || [];
     } catch(e) {}
 };
 
@@ -734,13 +907,19 @@ const processing = ref(false);
 const extracting = ref(false);
 const componentsList = ref([]);
 
-const performExtraction = async (base64) => {
+const performExtraction = async (imagesPayload) => {
     extracting.value = true;
     try {
+        const bodyObj = { notes: scoutQuery.value };
+        if (Array.isArray(imagesPayload)) {
+            bodyObj.images = imagesPayload;
+        } else {
+            bodyObj.image = imagesPayload;
+        }
         const res = await fetch('/api/extract-components', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: base64 })
+            body: JSON.stringify(bodyObj)
         });
         const data = await res.json();
         if (data.components) {
@@ -762,9 +941,23 @@ const extractComponentsFromFile = async (file) => {
     reader.onload = () => performExtraction(reader.result);
 };
 
-const handleVerifyPhotosCaptured = (files) => {
-    if (files && files.length > 0) {
+const handleVerifyPhotosCaptured = async (files) => {
+    if (!files || files.length === 0) return;
+    if (files.length === 1) {
         extractComponentsFromFile(files[0]);
+    } else {
+        const base64List = await Promise.all(
+            Array.from(files).slice(0, 10).map(file => new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(file);
+            }))
+        );
+        const valid = base64List.filter(Boolean);
+        if (valid.length > 0) {
+            performExtraction(valid);
+        }
     }
 };
 
@@ -797,6 +990,73 @@ const extractComponentsFromId = async (id) => {
         reader.readAsDataURL(blob);
     } catch (e) {
         addToast({ type: 'error', message: "Error mapping photo: " + e.message });
+        extracting.value = false;
+    }
+};
+
+const extractComponentsFromAllGallery = async () => {
+    extracting.value = true;
+    try {
+        const base64List = [];
+        
+        // 1. Process local files in buffer
+        if (editGalleryBuffer.value && editGalleryBuffer.value.length > 0) {
+            const localBase64 = await Promise.all(
+                editGalleryBuffer.value.slice(0, 10).map(file => new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(file);
+                }))
+            );
+            base64List.push(...localBase64.filter(Boolean));
+        }
+        
+        // 2. Process existing gallery IDs
+        if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
+            const remotePromises = editForm.existingGalleryIds.slice(0, 10 - base64List.length).map(async (id) => {
+                try {
+                    let url = getAssetUrl(id);
+                    if (url.includes('/storage/buckets/') || !url.includes('/api/proxy-image')) {
+                        url = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+                    }
+                    const res = await fetch(url);
+                    if (!res.ok) return null;
+                    const blob = await res.blob();
+                    return await new Promise(resolve => {
+                        const canvas = document.createElement('canvas');
+                        const img = new Image();
+                        img.onload = () => {
+                            let w = img.width, h = img.height, max = 1600;
+                            if (w > max || h > max) { 
+                                if (w > h) { h = Math.round(h * (max/w)); w = max; } 
+                                else { w = Math.round(w * (max/h)); h = max; } 
+                            }
+                            canvas.width = w; canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        };
+                        img.onerror = () => resolve(null);
+                        const reader = new FileReader();
+                        reader.onload = (e) => img.src = e.target.result;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch(e) { return null; }
+            });
+            const remoteResults = await Promise.all(remotePromises);
+            base64List.push(...remoteResults.filter(Boolean));
+        }
+        
+        if (base64List.length === 0) {
+            addToast({ type: 'warning', message: "No gallery photos found to scan." });
+            extracting.value = false;
+            return;
+        }
+        
+        await performExtraction(base64List);
+    } catch(e) {
+        addToast({ type: 'error', message: "Error scanning all gallery photos: " + e.message });
         extracting.value = false;
     }
 };
@@ -904,6 +1164,170 @@ const scoutItemsArray = computed(() => {
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) return scoutResult.value.items;
     if (Array.isArray(scoutResult.value)) return scoutResult.value;
     return [scoutResult.value];
+});
+
+const cropPreviews = ref({});
+
+const generateCropPreviews = async (items) => {
+    if (!items || items.length === 0) return;
+    
+    // Collect all available gallery photo URLs
+    const galleryUrls = [];
+    if (actualMainPhoto.value?.url) galleryUrls.push(actualMainPhoto.value.url);
+    if (editForm.existingGalleryIds) {
+        editForm.existingGalleryIds.forEach(id => {
+            const u = getAssetUrl(id);
+            if (u && !galleryUrls.includes(u)) galleryUrls.push(u);
+        });
+    }
+    if (galleryUrls.length === 0 && props.item?.imageId) {
+        galleryUrls.push(getAssetUrl(props.item.imageId));
+    }
+    if (galleryUrls.length === 0) return;
+
+    const loadedImgs = {};
+    const loadImgByUrl = async (url) => {
+        if (!url) return null;
+        if (loadedImgs[url]) return loadedImgs[url];
+        try {
+            const proxiedUrl = url.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+            const res = await fetch(proxiedUrl);
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = objectUrl;
+            });
+            URL.revokeObjectURL(objectUrl);
+            loadedImgs[url] = img;
+            return img;
+        } catch(e) {
+            return null;
+        }
+    };
+
+    try {
+        const defaultImg = await loadImgByUrl(galleryUrls[0]);
+        if (!defaultImg) return;
+
+        for (let idx = 0; idx < items.length; idx++) {
+            const item = items[idx];
+            if (item.bounding_box && !cropPreviews.value[idx]) {
+                const imgIdx = (item.image_index !== undefined && galleryUrls[item.image_index]) ? item.image_index : 0;
+                const targetImg = (await loadImgByUrl(galleryUrls[imgIdx])) || defaultImg;
+
+                let bbox = item.bounding_box;
+                if (typeof bbox === 'string') {
+                    try { bbox = JSON.parse(bbox); } catch (e) {}
+                }
+                if (Array.isArray(bbox) && bbox.length === 4) {
+                    const [ymin, xmin, ymax, xmax] = bbox;
+                    const imgW = targetImg.naturalWidth;
+                    const imgH = targetImg.naturalHeight;
+
+                    const sx = (xmin / 1000) * imgW;
+                    const sy = (ymin / 1000) * imgH;
+                    const sWidth = ((xmax - xmin) / 1000) * imgW;
+                    const sHeight = ((ymax - ymin) / 1000) * imgH;
+
+                    const paddingX = sWidth * 0.1;
+                    const paddingY = sHeight * 0.1;
+                    const cropX = Math.max(0, sx - paddingX);
+                    const cropY = Math.max(0, sy - paddingY);
+                    const cropW = Math.min(imgW - cropX, sWidth + (paddingX * 2));
+                    const cropH = Math.min(imgH - cropY, sHeight + (paddingY * 2));
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = cropW;
+                    canvas.height = cropH;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(targetImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                    cropPreviews.value[idx] = canvas.toDataURL('image/jpeg', 0.85);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to generate crop previews", e);
+    }
+};
+
+const swapComponentPhotos = (idxA, idxB) => {
+    const list = scoutItemsArray.value;
+    if (!list || !list[idxA] || !list[idxB]) return;
+
+    const itemA = list[idxA];
+    const itemB = list[idxB];
+
+    // Swap bounding boxes, image indexes, and direct images
+    const tempBox = itemA.bounding_box;
+    const tempImgIdx = itemA.image_index;
+    const tempImg = itemA.image;
+
+    itemA.bounding_box = itemB.bounding_box;
+    itemA.image_index = itemB.image_index;
+    itemA.image = itemB.image;
+
+    itemB.bounding_box = tempBox;
+    itemB.image_index = tempImgIdx;
+    itemB.image = tempImg;
+
+    // Swap cached crop preview thumbnails
+    const tempCrop = cropPreviews.value[idxA];
+    cropPreviews.value[idxA] = cropPreviews.value[idxB];
+    cropPreviews.value[idxB] = tempCrop;
+};
+
+const pickingPhotoForItemIndex = ref(null);
+
+const allAvailableGalleryUrls = computed(() => {
+    const urls = [];
+    if (actualMainPhoto.value?.url) urls.push(actualMainPhoto.value.url);
+    if (editForm.existingGalleryIds) {
+        editForm.existingGalleryIds.forEach(id => {
+            const u = getAssetUrl(id);
+            if (u && !urls.includes(u)) urls.push(u);
+        });
+    }
+    if (urls.length === 0 && props.item?.imageId) {
+        urls.push(getAssetUrl(props.item.imageId));
+    }
+    return urls;
+});
+
+const openPhotoPicker = (idx) => {
+    pickingPhotoForItemIndex.value = idx;
+};
+
+const assignPhotoToComponent = (itemIdx, photoUrl, photoIdx) => {
+    if (itemIdx === null || itemIdx === undefined) return;
+    const list = scoutItemsArray.value;
+    if (!list || !list[itemIdx]) return;
+
+    const item = list[itemIdx];
+    item.image_index = photoIdx;
+    item.image = photoUrl;
+    item.bounding_box = null; // Direct full photo assigned, bypass cropping
+    cropPreviews.value[itemIdx] = photoUrl;
+    pickingPhotoForItemIndex.value = null;
+    addToast({ type: 'success', message: `Assigned Photo ${photoIdx + 1} to Item #${itemIdx + 1}` });
+};
+
+const isPhotoAssigned = (itemIdx, photoIdx) => {
+    if (itemIdx === null || itemIdx === undefined) return false;
+    const item = scoutItemsArray.value[itemIdx];
+    if (!item) return false;
+    return item.image_index === photoIdx;
+};
+
+watch(scoutResult, (newVal) => {
+    if (newVal) {
+        cropPreviews.value = {};
+        setTimeout(() => {
+            generateCropPreviews(scoutItemsArray.value);
+        }, 100);
+    }
 });
 
 const suggestedTitleStr = computed(() => {
@@ -1501,6 +1925,14 @@ const saveEdit = async () => {
             finalScoutData = parsed;
         }
 
+        if (saveIndividually.value && scoutItemsArray.value && scoutItemsArray.value.length > 1) {
+            emit('deconstruct', { 
+                count: scoutItemsArray.value.length, 
+                scoutItems: scoutItemsArray.value 
+            });
+            return;
+        }
+
         const payload = {
             ...editForm,
             imageId: actualMainPhoto.value.id || null, // Existing main photo
@@ -1740,17 +2172,17 @@ const analyzeExistingItem = async () => {
             const reader = new FileReader(); reader.onload = (e) => img.src = e.target.result; reader.readAsDataURL(blob);
         });
 
-        // 1. Process local/new camera buffer files
-        const resizePromises = editGalleryBuffer.value.slice(0, 3).map(async (file) => {
+        // 1. Process local/new camera buffer files (up to 10 photos)
+        const resizePromises = editGalleryBuffer.value.slice(0, 10).map(async (file) => {
             try { return await resize(file); } catch (e) { return null; }
         });
         const resizedLocal = (await Promise.all(resizePromises)).filter(img => img !== null);
         base64Images.push(...resizedLocal);
         
-        // 2. Process existing Appwrite URLs (Pass URLs to backend instead of downloading!)
+        // 2. Process existing Appwrite URLs (Pass all gallery URLs to backend)
         const remoteUrls = [];
         if (editForm.existingGalleryIds) {
-            for (const id of editForm.existingGalleryIds.slice(0, 3 - base64Images.length)) {
+            for (const id of editForm.existingGalleryIds.slice(0, Math.max(0, 12 - base64Images.length))) {
                 let url = getAssetUrl(id);
                 // Instead of proxying and downloading, pass the direct URL to the backend
                 if (url) remoteUrls.push(url);
@@ -1784,25 +2216,63 @@ const analyzeExistingItem = async () => {
             "Analyzing the visual data, give me a sec...",
             "Reviewing the photographic evidence..."
         ];
-        showLoader(huckPhrases[Math.floor(Math.random() * huckPhrases.length)], {
+        let progressTimer = null;
+        let progressVal = 15;
+        showLoader("Analyzing with AI Deep Research...", {
+            step: `Step 1 of 4: Preparing & optimizing ${base64Images.length + remoteUrls.length} photos...`,
+            progress: progressVal,
             basket: 'solar:archive-minimalistic-bold-duotone',
             berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
             basketColor: 'text-primary-content',
             berryColor: 'text-primary-content',
             backgroundColor: 'bg-primary/80',
             cancelable: true,
-            onCancel: () => scoutAbortController.abort()
+            onCancel: () => {
+                if (progressTimer) clearInterval(progressTimer);
+                scoutAbortController.abort();
+            }
         });
+
+        // Stage progress simulation while waiting for Gemini response
+        progressTimer = setInterval(() => {
+            progressVal = Math.min(95, progressVal + 5);
+            let stepMsg = "Step 2 of 4: Gemini Vision scanning visual signatures & character wands...";
+            if (progressVal >= 40 && progressVal < 70) {
+                stepMsg = "Step 3 of 4: Evaluating secondary market pricing & condition...";
+            } else if (progressVal >= 70) {
+                stepMsg = "Step 4 of 4: Detecting 2D bounding boxes & finalizing lot breakdown...";
+            }
+            updateLoader("Analyzing with AI Deep Research...", stepMsg, progressVal);
+        }, 1200);
+
+        const activeLocations = [];
+        if (orgWarehouses.value && orgWarehouses.value.length > 0) {
+            orgWarehouses.value.forEach(w => activeLocations.push({ 
+                name: w.name, 
+                type: w.type || 'Physical Booth', 
+                commissionRate: w.commissionRate,
+                categories: w.categories || w.niche || ''
+            }));
+        }
+        if (orgPlacedLocations.value && orgPlacedLocations.value.length > 0) {
+            orgPlacedLocations.value.forEach(loc => {
+                if (!activeLocations.some(l => l.name === loc)) {
+                    activeLocations.push({ name: loc, type: 'Physical Booth / Location' });
+                }
+            });
+        }
 
         const response = await fetch(`/api/identify-item`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 images: base64Images, 
                 remoteImageUrls: remoteUrls,
-                notes: contextNotes 
+                notes: contextNotes,
+                locations: activeLocations
             }),
             signal: scoutAbortController.signal
         });
+        if (progressTimer) clearInterval(progressTimer);
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             if (errData.isRateLimit) {
@@ -1844,7 +2314,19 @@ const analyzeExistingItem = async () => {
                     report += `**Valuation:** Mint: ${item.price_breakdown.mint}, Fair: ${item.price_breakdown.fair}, Poor: ${item.price_breakdown.poor}\n`;
                     if(item.price_breakdown.boutique_premium) report += `**Boutique Premium:** ${item.price_breakdown.boutique_premium}\n`;
                 }
-                if(item.comparables && item.comparables.length > 0) { report += `**Comparables:**\n`; item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status}]\n`); }
+                if(item.market_report) {
+                    report += `\n**Market & Strategy:**\n`;
+                    if (item.market_report.best_platform) report += `- **Best Platform:** ${item.market_report.best_platform}\n`;
+                    if (item.market_report.sell_through_velocity) report += `- **Velocity:** ${item.market_report.sell_through_velocity}\n`;
+                    if (item.market_report.platform_rationale) report += `- **Rationale:** ${item.market_report.platform_rationale}\n`;
+                }
+                if(item.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 0) {
+                    report += `\n**Identified Components (${item.lot_items.length} Items):**\n`;
+                    item.lot_items.forEach((li, lidx) => {
+                        report += `${lidx + 1}. **${li.name || li.identity}** - Est: ${li.estimated_value || 'N/A'}${li.condition ? ` (${li.condition})` : ''}\n`;
+                    });
+                }
+                if(item.comparables && item.comparables.length > 0) { report += `\n**Comparables:**\n`; item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status}]\n`); }
                 if(item.keywords && item.keywords.length > 0) report += `**Keywords:** ${item.keywords.join(', ')}\n`;
                 scoutMdText.value = report.trim();
                 

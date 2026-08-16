@@ -1297,7 +1297,7 @@ const isCameraOpen = ref(false);
 const cameraStream = ref(null);
 
 // Trigger loader immediately on setup (before mount) to prevent layout flash
-const { showLoader } = useLoader();
+const { showLoader, updateLoader, hideLoader } = useLoader();
 showLoader("Loading Inventory...");
 
 // Lifecycle
@@ -1676,7 +1676,7 @@ function guessQuantityFromTitle(title) {
 }
 
 const openDeconstructModal = async (payload) => {
-    const item = payload.item || payload;
+    const item = payload.item || (payload.$id ? payload : activeItem.value) || {};
     const aiCount = payload.count || null;
     const aiItems = payload.scoutItems || null;
     
@@ -1713,6 +1713,12 @@ const submitDeconstruct = async () => {
         const parent = deconstructItemData.value;
         const count = deconstructCount.value;
         
+        showLoader("Splitting Lot...", {
+            step: `Step 1 of 3: Preparing parent lot & calculating split cost basis...`,
+            progress: 10,
+            cancelable: false
+        });
+        
         let parentCost = parseFloat(parent.cost || parent.purchasePrice);
         if (isNaN(parentCost) && parent.conditionNotes) {
             const match = parent.conditionNotes.match(/Paid:[ \t]*\$?([0-9.]+)/i);
@@ -1726,8 +1732,13 @@ const submitDeconstruct = async () => {
 
         let duplicatedImageId = null;
         let parentImageElement = null;
-        let pImageId = parent.imageId;
+        let pImageId = parent.imageId || parent.mainPhotoId;
+        if (!pImageId && parent.existingGalleryIds && parent.existingGalleryIds.length > 0) pImageId = parent.existingGalleryIds[0];
         if (!pImageId && parent.galleryImageIds && parent.galleryImageIds.length > 0) pImageId = parent.galleryImageIds[0];
+        if (!pImageId && Array.isArray(parent.images) && parent.images.length > 0) pImageId = parent.images[0];
+        if (!pImageId && typeof parent.images === 'string') {
+            try { const parsed = JSON.parse(parent.images); if (Array.isArray(parsed) && parsed.length > 0) pImageId = parsed[0]; } catch(e){}
+        }
         if (!pImageId && parent.conditionNotes) {
              const match = parent.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
              if (match) pImageId = match[1].split(',')[0].trim();
@@ -1735,6 +1746,7 @@ const submitDeconstruct = async () => {
 
         if (pImageId) {
             try {
+                updateLoader("Splitting Lot...", `Step 1 of 3: Loading original lot photo for cropping...`, 15);
                 const url = getAssetUrl(pImageId);
                 const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
                 const res = await fetch(proxiedUrl);
@@ -1778,98 +1790,131 @@ const submitDeconstruct = async () => {
             }
         }
 
-        const promises = [];
+        const loadedGalleryImages = {};
+        const getGalleryImageElement = async (imgId) => {
+            if (!imgId) return parentImageElement;
+            if (loadedGalleryImages[imgId]) return loadedGalleryImages[imgId];
+            try {
+                const url = getAssetUrl(imgId);
+                const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+                const res = await fetch(proxiedUrl);
+                const blob = await res.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = objectUrl;
+                });
+                URL.revokeObjectURL(objectUrl);
+                loadedGalleryImages[imgId] = img;
+                return img;
+            } catch(e) {
+                return parentImageElement;
+            }
+        };
+
         for (let i = 0; i < count; i++) {
-            promises.push((async () => {
-                const aiData = aiItems && aiItems[i] ? aiItems[i] : null;
-                const title = aiData ? (aiData.title || aiData.name || `${parent.title} (Unit ${i + 1} of ${count})`) : `${parent.title} (Unit ${i + 1} of ${count})`;
-                const identity = aiData && (aiData.identity || aiData.title || aiData.name) ? (aiData.identity || aiData.title || aiData.name) : (parent.identity || parent.title);
-                
-                let childImageId = duplicatedImageId;
-                if (aiData && aiData.image) {
-                    try {
-                        const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(aiData.image)}`;
-                        const res = await fetch(proxiedUrl);
-                        if (res.ok) {
-                            const blob = await res.blob();
-                            const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: blob.type });
-                            const upload = await storage.createFile(BUCKET, ID.unique(), file);
-                            childImageId = upload.$id;
-                        }
-                    } catch (e) {
-                        console.error("Failed to fetch AI image for split item", e);
+            const aiData = aiItems && aiItems[i] ? aiItems[i] : null;
+            const title = aiData ? (aiData.title || aiData.name || `${parent.title} (Unit ${i + 1} of ${count})`) : `${parent.title} (Unit ${i + 1} of ${count})`;
+            const identity = aiData && (aiData.identity || aiData.title || aiData.name) ? (aiData.identity || aiData.title || aiData.name) : (parent.identity || parent.title);
+            
+            const currentPct = Math.round(20 + ((i + 1) / count) * 65);
+            updateLoader("Splitting Lot...", `Step 2 of 3: Cropping & creating item ${i + 1} of ${count} (${title})...`, currentPct);
+            
+            let targetImgElement = parentImageElement;
+            const galleryList = (parent.galleryImageIds && parent.galleryImageIds.length > 0) ? parent.galleryImageIds : (parent.existingGalleryIds || []);
+            if (aiData && aiData.image_index !== undefined && galleryList[aiData.image_index]) {
+                const specificImg = await getGalleryImageElement(galleryList[aiData.image_index]);
+                if (specificImg) targetImgElement = specificImg;
+            }
+            
+            let childImageId = duplicatedImageId;
+            if (aiData && aiData.image_index !== undefined && !aiData.bounding_box && galleryList[aiData.image_index]) {
+                childImageId = galleryList[aiData.image_index];
+            } else if (aiData && aiData.image) {
+                try {
+                    const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(aiData.image)}`;
+                    const res = await fetch(proxiedUrl);
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: blob.type });
+                        const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                        childImageId = upload.$id;
                     }
-                } else if (aiData && aiData.bounding_box && parentImageElement) {
-                     try {
-                         let bbox = aiData.bounding_box;
-                         if (typeof bbox === 'string') {
-                             bbox = JSON.parse(bbox);
-                         }
-                         const [ymin, xmin, ymax, xmax] = bbox;
-                         const imgW = parentImageElement.naturalWidth;
-                         const imgH = parentImageElement.naturalHeight;
-                         
-                         const sx = (xmin / 1000) * imgW;
-                         const sy = (ymin / 1000) * imgH;
-                         const sWidth = ((xmax - xmin) / 1000) * imgW;
-                         const sHeight = ((ymax - ymin) / 1000) * imgH;
-                         
-                         // Expand the crop slightly (10% padding) to ensure entire item is visible
-                         const paddingX = sWidth * 0.1;
-                         const paddingY = sHeight * 0.1;
-                         const cropX = Math.max(0, sx - paddingX);
-                         const cropY = Math.max(0, sy - paddingY);
-                         const cropW = Math.min(imgW - cropX, sWidth + (paddingX * 2));
-                         const cropH = Math.min(imgH - cropY, sHeight + (paddingY * 2));
-                         
-                         const canvas = document.createElement('canvas');
-                         canvas.width = cropW;
-                         canvas.height = cropH;
-                         const ctx = canvas.getContext('2d');
-                         ctx.drawImage(parentImageElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-                         
-                         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-                         const file = new File([blob], `crop-${ID.unique()}.jpg`, { type: 'image/jpeg' });
-                         const upload = await storage.createFile(BUCKET, ID.unique(), file);
-                         childImageId = upload.$id;
-                     } catch(e) {
-                         console.error("Failed to crop image using bounding box", e);
-                         addToast({ type: 'error', message: `Crop failed: ${e.message}` });
-                     }
-                } else if (!aiData?.bounding_box) {
-                     addToast({ type: 'warning', message: `No bounding box returned by AI for ${title}` });
-                } else if (!parentImageElement) {
-                     addToast({ type: 'error', message: `Could not load main image to crop ${title}` });
+                } catch (e) {
+                    console.error("Failed to fetch AI image for split item", e);
                 }
-                
-                let notes = aiData ? `Extracted from lot: ${parent.title}` : `[Needs Scouting]\n\nExtracted from lot: ${parent.title}`;
-                if (aiData && aiData.condition) notes = `Condition: ${aiData.condition}\n\n` + notes;
-                if (aiData && aiData.estimated_value) notes = `Estimated Value: ${aiData.estimated_value}\n\n` + notes;
-                
-                const childData = {
-                    title: title,
-                    identity: identity,
-                    condition_notes: notes
-                };
-                
-                const extraData = {
-                    cost: costPerUnit,
-                    status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
-                    sourcingLocation: "", // Clear sourcing location for child
-                    storageLocation: parent.storageLocation || (parent.conditionNotes ? (parent.conditionNotes.match(/Bin:[ \t]*([^\n\r]+)/i) || [])[1] : null),
-                    imageId: childImageId,
-                    galleryImageIds: [], // Clear gallery images
-                    keywords: parent.keywords,
-                    quantity: 1,
-                    parentLotId: parent.$id,
-                    ...(aiData ? { scoutData: aiData } : {})
-                };
-                
-                await saveItemToInventory(childData, null, extraData, teamId);
-            })());
+            } else if (aiData && aiData.bounding_box && targetImgElement) {
+                 try {
+                     let bbox = aiData.bounding_box;
+                     if (typeof bbox === 'string') {
+                         bbox = JSON.parse(bbox);
+                     }
+                     const [ymin, xmin, ymax, xmax] = bbox;
+                     const imgW = targetImgElement.naturalWidth;
+                     const imgH = targetImgElement.naturalHeight;
+                     
+                     const sx = (xmin / 1000) * imgW;
+                     const sy = (ymin / 1000) * imgH;
+                     const sWidth = ((xmax - xmin) / 1000) * imgW;
+                     const sHeight = ((ymax - ymin) / 1000) * imgH;
+                     
+                     // Expand the crop slightly (10% padding) to ensure entire item is visible
+                     const paddingX = sWidth * 0.1;
+                     const paddingY = sHeight * 0.1;
+                     const cropX = Math.max(0, sx - paddingX);
+                     const cropY = Math.max(0, sy - paddingY);
+                     const cropW = Math.min(imgW - cropX, sWidth + (paddingX * 2));
+                     const cropH = Math.min(imgH - cropY, sHeight + (paddingY * 2));
+                     
+                     const canvas = document.createElement('canvas');
+                     canvas.width = cropW;
+                     canvas.height = cropH;
+                     const ctx = canvas.getContext('2d');
+                     ctx.drawImage(parentImageElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                     
+                     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                     const file = new File([blob], `crop-${ID.unique()}.jpg`, { type: 'image/jpeg' });
+                     const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                     childImageId = upload.$id;
+                 } catch(e) {
+                     console.error("Failed to crop image using bounding box", e);
+                     addToast({ type: 'error', message: `Crop failed: ${e.message}` });
+                 }
+            } else if (!aiData?.bounding_box) {
+                 addToast({ type: 'warning', message: `No bounding box returned by AI for ${title}` });
+            } else if (!parentImageElement) {
+                 addToast({ type: 'error', message: `Could not load main image to crop ${title}` });
+            }
+            
+            let notes = aiData ? `Extracted from lot: ${parent.title}` : `[Needs Scouting]\n\nExtracted from lot: ${parent.title}`;
+            if (aiData && aiData.condition) notes = `Condition: ${aiData.condition}\n\n` + notes;
+            if (aiData && aiData.estimated_value) notes = `Estimated Value: ${aiData.estimated_value}\n\n` + notes;
+            
+            const childData = {
+                title: title,
+                identity: identity,
+                condition_notes: notes
+            };
+            
+            const extraData = {
+                cost: costPerUnit,
+                status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
+                sourcingLocation: "", // Clear sourcing location for child
+                storageLocation: parent.storageLocation || (parent.conditionNotes ? (parent.conditionNotes.match(/Bin:[ \t]*([^\n\r]+)/i) || [])[1] : null),
+                imageId: childImageId,
+                galleryImageIds: [], // Clear gallery images
+                keywords: parent.keywords,
+                quantity: 1,
+                parentLotId: parent.$id,
+                ...(aiData ? { scoutData: aiData } : {})
+            };
+            
+            await saveItemToInventory(childData, null, extraData, teamId);
         }
         
-        await Promise.all(promises);
+        updateLoader("Splitting Lot...", `Step 3 of 3: Archiving parent lot & finalizing child items...`, 95);
         
         await updateInventoryItem(parent.$id, { 
             status: 'archived',
@@ -1879,6 +1924,7 @@ const submitDeconstruct = async () => {
         
         addToast({ type: 'success', message: `Successfully deconstructed into ${count} items.` });
         closeDeconstructModal();
+        hideLoader();
         
         setTimeout(() => {
             window.location.reload();
@@ -1887,6 +1933,7 @@ const submitDeconstruct = async () => {
     } catch (e) {
         console.error("Deconstruct error:", e);
         addToast({ type: 'error', message: 'Failed to deconstruct: ' + e.message });
+        hideLoader();
     } finally {
         isDeconstructing.value = false;
     }

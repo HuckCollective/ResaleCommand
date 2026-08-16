@@ -404,11 +404,23 @@ export const ALL: APIRoute = async ({ request }) => {
                     await fetchAndAddImage(json.imageUrl);
                 }
                 
-                // NEW: Allow passing an array of remote URLs (e.g. from Appwrite)
+                // Allow passing an array of remote URLs (e.g. from Appwrite)
                 if (Array.isArray(json.remoteImageUrls)) {
-                    scrapedImages = json.remoteImageUrls.slice(0, 5);
-                    const promises = json.remoteImageUrls.slice(0, 5 - imageParts.length).map((imgUrl: string) => fetchAndAddImage(imgUrl));
+                    scrapedImages = json.remoteImageUrls.slice(0, 12);
+                    const promises = json.remoteImageUrls.slice(0, 12 - imageParts.length).map((imgUrl: string) => fetchAndAddImage(imgUrl));
                     await Promise.all(promises);
+                }
+                
+                // NEW: Allow passing organization locations with niches (e.g. Memory Den, DustyTiger)
+                if (Array.isArray(json.locations) && json.locations.length > 0) {
+                    const locNames = json.locations.map((l: any) => {
+                        let desc = `${l.name} (Type: ${l.type || 'Physical'}`;
+                        if (l.commissionRate !== undefined) desc += `, ${l.commissionRate}% comm.`;
+                        if (l.categories || l.niche) desc += `, Niche/Specialties: "${l.categories || l.niche}"`;
+                        desc += `)`;
+                        return desc;
+                    }).join('; ');
+                    userNotes = `[Organization Sales Channels & Location Niches: ${locNames}]\n\n` + userNotes;
                 }
 
             } catch (e) {
@@ -831,11 +843,48 @@ export const ALL: APIRoute = async ({ request }) => {
             5. "CHASE_AUCTION": If it is a live auction and current price/bid is low compared to the estimated Max Buy Price (which is ~40% of fair value or booth value).
             *IMPORTANT*: Many users sell in curated booth locations (antique malls, physical consignment booths) where they can realize the higher 'boutique_premium' price. When evaluating profit margins and determining the verdict, factor in the 'boutique_premium' value as a valid resale target. If an item would normally be a PASS based on online fair value but is a BUY based on booth value, recommend BUY_NOW or watch/negotiate, and explain this in the advice.
             *AUCTION BID LIMITS*: If the item is an auction (or the verdict is CHASE_AUCTION or WATCH), calculate the Suggested Max Bid as: (Max Buy Price - Estimated Shipping - Handling). Explicitly state this Max Bid limit in the 'advice' string (e.g., "Suggested max bid is $25.00 to stay under the landed target of $44.09").
+            
+          - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
+            When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
+            * If an organization physical location has a specific niche (e.g. DustyTiger = Small Collectibles, Jewelry, Pins, Wands; Memory Den = Vintage Clothing, Arcane / Punk, Jackets), ONLY recommend that physical location if the item strictly matches its niche!
+            * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear): DO NOT recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
+            * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
 
           - ACTIVELY READ TEXT & COVERS: Extract the EXACT title directly from the item. If it is a book, game, or media, read the cover text precisely (e.g., "Monster Manual", "Spell Compendium"). Pay close attention to small sub-text like "v.3.5".
           - SPECIFY EDITIONS: For tabletop games, RPGs (like Dungeons & Dragons), and textbooks, you MUST use the cover art style and layout to identify the EXACT EDITION (e.g., 1st Edition, v3.5, 4th Edition, 5e) and put it in the title.
           - STANDARD D&D 3.5: Standard 3.5e core books have MASSIVE, highly detailed painted metal borders, giant hinges, and locks covering the entire book. For example, the standard DMG has a huge silver lock mechanism with gems and the title is on a gold plaque. DO NOT call these "Premium". Call them "D&D 3.5e [Book Name]".
           - PREMIUM REPRINTS 3.5: ONLY call a book a "Premium Reprint" if the cover is mostly empty space featuring a SOLID flat faux-leather texture (solid dark green, dark red, or dark blue) across the entire cover. They DO NOT have massive painted silver locks or hinges. The title text floats directly on the plain leather texture above a single central globe/eye/crest.
+          
+          - UNIVERSAL MULTI-ITEM & BUNDLE LOT SCANNING (ALL CATEGORIES):
+            When the images contain multiple items (a lot, collection, bundle, or table display), you must inspect EVERY image and break down ALL individual items in the 'lot_items' array across all categories:
+            
+            1. TOYS, ACTION FIGURES & DIECAST (Star Wars, Marvel, Transformers, Hot Wheels, LEGO, Pokemon, Bionicle, etc.):
+               * Identify each specific character, vehicle, or set number (e.g. "Vintage 1977 Kenner Darth Vader", "Hot Wheels 1969 Redline Custom Camaro", "LEGO Star Wars Ahsoka Minifigure").
+               * Note accessories, completeness, or wear.
+               
+            2. CLOTHING & ACCESSORIES BUNDLES (Lululemon, Dr. Martens, Vintage Leather/Denim, Band Tees, Designer Purses):
+               * Identify each individual garment/shoe by brand tag, style name, colorway, and size if visible (e.g. "Lululemon Align High-Rise Leggings Sz 6 Navy", "Dr. Martens 1460 8-Eye Black Leather Boots").
+               
+            3. VIDEO GAMES, RETRO GAMING & ACCESSORIES (Nintendo NES/SNES/N64/Switch, PlayStation, Xbox, Handhelds):
+               * Identify the exact console model, controller color, and EACH individual game cartridge/disc title and packaging status (Loose vs CIB/Boxed).
+               
+            4. BOOKS, RPGs, COMIC LOTS & BOARD GAMES (D&D, Tolkien, Warhammer, Marvel/DC Comics):
+               * Read every spine, cover title, and issue number. Specify exact edition (1st Edition, 3.5e, 5e, Omnibus vs TPB).
+               
+            5. CAMERAS, VINTAGE ELECTRONICS & AUDIO (Canon, Nikon, Sony, Walkmans, Lenses, Stereo gear):
+               * Identify camera body model (e.g. "Canon EOS Rebel T3i"), lens specifications (e.g. "EF-S 18-55mm IS II"), and accompanying batteries/chargers.
+               
+            6. JEWELRY & PRECIOUS METALS / COLLECTIBLES (Sterling Silver 925, Gold 10k/14k/18k, Coins, Pins):
+               * Identify metal type, visible hallmarks, gemstone types, and brand stamps.
+               
+            7. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
+               * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
+               
+            CRITICAL UNIVERSAL RULE FOR LOTS & MULTI-ITEM IMAGES:
+            - For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
+            - STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'. NEVER assign DVD box coordinates to a wand, or a wand's coordinates to a DVD set!
+            - READ PRINTED NAMES: If a box or tag in the bounding box has printed text (e.g. "Hermione Granger's Wand", "Ron Weasley", "Harry Potter Complete Collection"), the 'name' MUST match that exact text!
+            
           - ACTIVELY READ TAGS: Pay very close attention to any tags or labels. If you see a brand tag or "New With Tags" (NWT) label, you MUST use that exact brand for identification and reflect its true higher value.
           - BE CONSERVATIVE BUT ACCURATE: Do not randomly guess high-end designer names if there's no tag/logo, but DO trust clear branding when it is visible. 
           - For "Style" items (e.g. "Goth Style", "Victorian Style"), if no authentic brand/hallmark exists, price them as UNBRANDED/COSTUME ($10-$30 range). 
@@ -862,18 +911,31 @@ export const ALL: APIRoute = async ({ request }) => {
                - 'name': Specific item name/title.
                - 'price': approx sold price.
                - 'status': "Sold" or "Listed"
+          - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the item in the primary image. (Example: [120, 45, 890, 210]).
           - 'purchase_strategy': An object containing strategic advice for sourcing this item:
                - 'verdict': ONE of these strict enums: "PASS", "WATCH", "BUY_NOW", "NEGOTIATE", "CHASE_AUCTION".
                - 'current_asking_price': State the current bid or asking price if found.
                - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
                - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
                - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
+          - 'market_report': An object analyzing sales channels, velocity, and profit:
+                - 'best_platform': String naming the recommended platform/channel (e.g. "Memory Den (Physical Booth)", "eBay", "Poshmark", "Mercari", "Facebook Marketplace", "Whatnot").
+                - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit (e.g., "Physical booth yields 35% higher net profit at $45 retail with 10% commission and zero shipping hassle, while eBay offers faster 7-day national liquidity at $32 with 13% fees.").
+                - 'sell_through_velocity': One of: "Fast (< 7 days)", "Moderate (2-4 weeks)", "Slow / Long-Tail (1-3 months)".
+                - 'target_buyer': Short phrase describing the ideal customer.
+                - 'channels': An array of channel comparisons (2-3 items):
+                    - 'name': Channel name (e.g. "Physical Booth / Consignment", "eBay Online", "Poshmark / Mercari")
+                    - 'est_price': Expected listing/sale price (e.g. "$45.00")
+                    - 'net_payout': Estimated net payout after fees/shipping (e.g., "~$40.50 after 10% commission")
+                    - 'speed': Estimated velocity rating (e.g. "High (Impulse Buy)", "Medium (Search-based)")
+                    - 'recommendation': e.g. "Best Net Profit" or "Fast Liquidation"
           - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
-               - 'name': Specific name/description of the item.
-               - 'identity': The item's distinct identity.
-               - 'estimated_value': Inferred individual resale value (e.g. "$20 - $30").
-               - 'condition': Inferred condition of this item.
-               - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (0-1000) of this object in the image.
+                - 'name': Specific name/description of the item (e.g. "Albus Dumbledore Elder Wand").
+                - 'identity': The item's distinct identity.
+                - 'estimated_value': Inferred individual resale value (e.g. "$25 - $35").
+                - 'condition': Inferred condition of this item.
+                - 'image_index': (Integer, 0-indexed: 0 for 1st image, 1 for 2nd image, etc.) Specify which image from the provided photos contains the clearest / best view or close-up of this item.
+                - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the exact physical object within that specific image ('image_index'). This is STRICTLY REQUIRED so the system can automatically crop a high-res standalone photo from whichever image has the best view of the item!
         `;
 
         const contentParts: any[] = [{ text: prompt }];

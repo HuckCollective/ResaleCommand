@@ -16,6 +16,6 @@ const { id } = Astro.params;
       <h1 class="text-3xl font-bold tracking-tight">Purchase Details</h1>
     </div>
     
-    <PurchaseEditor purchaseId={id} client:only="vue" />
+    <PurchaseEditor purchaseId={id || ''} client:only="vue" />
   </div>
 </Layout>

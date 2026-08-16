@@ -11,8 +11,23 @@
             <!-- Allow customizing the basket icon via a prop in the future, for now using noto:basket -->
             <Icon :icon="activeBasket" :class="['w-32 h-32 absolute bottom-0 z-10 animate-[pulse_2s_ease-in-out_infinite]', activeBasketColor]" />
         </div>
-        <h2 class="mt-8 text-3xl font-bold animate-[pulse_2s_ease-in-out_infinite] tracking-widest drop-shadow-md px-4 text-center" :class="activeBerryColor">{{ loaderMessage }}</h2>
-        <button v-if="loaderCancelable" @click="triggerCancel" class="mt-8 btn btn-outline btn-error z-20">Cancel</button>
+        <h2 class="mt-8 text-2xl sm:text-3xl font-bold animate-[pulse_2s_ease-in-out_infinite] tracking-widest drop-shadow-md px-4 text-center" :class="activeBerryColor">{{ loaderMessage }}</h2>
+        
+        <!-- Step & Sub-status indicator -->
+        <div v-if="loaderStep" class="mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full bg-base-100/60 border border-base-content/10 shadow-sm backdrop-blur-sm animate-fade-in max-w-md text-center">
+            <span class="loading loading-spinner loading-xs text-primary shrink-0"></span>
+            <span class="text-xs sm:text-sm font-semibold opacity-90 text-base-content">{{ loaderStep }}</span>
+        </div>
+
+        <!-- Optional Progress Bar -->
+        <div v-if="loaderProgress !== null" class="w-64 max-w-[80vw] mt-4">
+            <div class="w-full bg-base-300/50 rounded-full h-2 overflow-hidden shadow-inner border border-base-content/10">
+                <div class="bg-primary h-full transition-all duration-300 ease-out" :style="{ width: `${Math.min(100, Math.max(0, loaderProgress))}%` }"></div>
+            </div>
+            <div class="text-[10px] text-right font-mono font-bold opacity-60 mt-1">{{ Math.round(loaderProgress) }}%</div>
+        </div>
+
+        <button v-if="loaderCancelable" @click="triggerCancel" class="mt-6 btn btn-outline btn-error btn-sm z-20">Cancel</button>
     </div>
 </template>
 
@@ -44,7 +59,7 @@ const props = defineProps({
     }
 });
 
-const { globalLoading, loaderMessage, loaderBasket, loaderBerries, loaderBasketColor, loaderBerryColor, loaderBackgroundColor, loaderCancelable, triggerCancel } = useLoader();
+const { globalLoading, loaderMessage, loaderStep, loaderProgress, loaderBasket, loaderBerries, loaderBasketColor, loaderBerryColor, loaderBackgroundColor, loaderCancelable, triggerCancel } = useLoader();
 
 const activeBasket = computed(() => loaderBasket.value || props.basketIcon);
 const activeBasketColor = computed(() => loaderBasketColor.value || props.basketColor);

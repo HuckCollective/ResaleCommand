@@ -3,6 +3,8 @@ import { ref } from 'vue';
 // Global shared state for the loader
 const globalLoading = ref(false);
 const loaderMessage = ref("Picking, Counting, Shipping or Finding...");
+const loaderStep = ref("");
+const loaderProgress = ref<number | null>(null);
 const loaderBasket = ref("");
 const loaderBerries = ref<string | string[]>("");
 const loaderBasketColor = ref("");
@@ -12,8 +14,23 @@ const loaderCancelable = ref(true);
 let activeOnCancel: (() => void) | null = null;
 
 export function useLoader() {
-    const showLoader = (msg = "Picking, Counting, Shipping or Finding...", options?: { basket?: string, berries?: string | string[], basketColor?: string, berryColor?: string, backgroundColor?: string, cancelable?: boolean, onCancel?: () => void }) => {
+    const showLoader = (
+        msg = "Picking, Counting, Shipping or Finding...", 
+        options?: { 
+            step?: string,
+            progress?: number,
+            basket?: string, 
+            berries?: string | string[], 
+            basketColor?: string, 
+            berryColor?: string, 
+            backgroundColor?: string, 
+            cancelable?: boolean, 
+            onCancel?: () => void 
+        }
+    ) => {
         loaderMessage.value = msg;
+        loaderStep.value = options?.step || "";
+        loaderProgress.value = options?.progress !== undefined ? options.progress : null;
         if (options?.basket) loaderBasket.value = options.basket;
         if (options?.berries) loaderBerries.value = options.berries;
         if (options?.basketColor) loaderBasketColor.value = options.basketColor;
@@ -32,6 +49,9 @@ export function useLoader() {
     const hideLoader = () => {
         globalLoading.value = false;
         // Reset to default
+        loaderMessage.value = "Picking, Counting, Shipping or Finding...";
+        loaderStep.value = "";
+        loaderProgress.value = null;
         loaderBasket.value = "";
         loaderBerries.value = "";
         loaderBasketColor.value = "";
@@ -41,11 +61,28 @@ export function useLoader() {
         activeOnCancel = null;
     };
 
-    const updateLoader = (msg: string) => {
+    const updateLoader = (msg?: string, step?: string, progress?: number) => {
         if (globalLoading.value) {
-            loaderMessage.value = msg;
+            if (msg) loaderMessage.value = msg;
+            if (step !== undefined) loaderStep.value = step;
+            if (progress !== undefined) loaderProgress.value = progress;
         }
     };
     
-    return { globalLoading, loaderMessage, loaderBasket, loaderBerries, loaderBasketColor, loaderBerryColor, loaderBackgroundColor, loaderCancelable, showLoader, hideLoader, triggerCancel, updateLoader };
+    return { 
+        globalLoading, 
+        loaderMessage, 
+        loaderStep, 
+        loaderProgress, 
+        loaderBasket, 
+        loaderBerries, 
+        loaderBasketColor, 
+        loaderBerryColor, 
+        loaderBackgroundColor, 
+        loaderCancelable, 
+        showLoader, 
+        hideLoader, 
+        triggerCancel, 
+        updateLoader 
+    };
 }
