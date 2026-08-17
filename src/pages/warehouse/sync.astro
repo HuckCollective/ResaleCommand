@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import LocationSyncView from '../../components/warehouses/LocationSyncView.vue';
+---
+
+<Layout title="Location Inventory & Sales Sync">
+  <div class="p-4 md:p-8 max-w-[1600px] mx-auto">
+    <LocationSyncView client:only="vue" />
+  </div>
+</Layout>

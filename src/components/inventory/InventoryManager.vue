@@ -290,6 +290,21 @@
                     </div>
                 </div>
 
+            <!-- ACTIVE LOCATION FILTER BANNER -->
+            <div v-if="filterBinLocation" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
+                <div class="flex items-center gap-2">
+                    <Icon icon="solar:map-point-bold" class="w-5 h-5 text-info shrink-0" />
+                    <div class="text-sm">
+                        <span class="font-bold">Filtered by Location:</span>
+                        <span class="badge badge-neutral ml-1.5 font-bold">{{ filterBinLocation }}</span>
+                        <span class="opacity-75 text-xs ml-2">({{ filteredInventory.length }} item{{ filteredInventory.length === 1 ? '' : 's' }} found)</span>
+                    </div>
+                </div>
+                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''">
+                    <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" /> Show All Locations
+                </button>
+            </div>
+
             <!-- DEBUG / ERROR ALERT -->
             <div v-if="error" class="alert alert-error mb-4">
                 <span>Error: {{ error }}</span>
@@ -385,13 +400,13 @@
                                 placeholder="Any..." 
                                 badgeClass="badge-secondary" 
                             />
-                            <div class="form-control w-full mt-2" v-if="orgPlacedLocations && orgPlacedLocations.length > 0">
-                            <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Location</span></label>
-                            <select v-model="filterBinLocation" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
-                                <option value="">All Locations</option>
-                                <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc">{{ loc }}</option>
-                            </select>
-                        </div>
+                            <div class="form-control w-full mt-2">
+                                <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Location</span></label>
+                                <select v-model="filterBinLocation" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
+                                    <option value="">All Locations</option>
+                                    <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                </select>
+                            </div>
                         <div class="form-control w-full mt-4 border-t border-base-300/50 pt-3">
                             <label class="label cursor-pointer justify-start gap-3 pt-0">
                                 <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-primary checkbox-sm" />
@@ -657,6 +672,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { isAlphaMode } from '../../stores/env';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, downloadCsv } from '../../lib/exportUtils';
+import { warehousesApi } from '../../lib/warehouses';
 
 const isBundleModalOpen = ref(false);
 const bundleItemsList = ref([]);
@@ -1013,6 +1029,7 @@ const filterBinLocation = ref('');
 const filterLotType = ref('all');
 const filterFlaggedLocated = ref(false);
 const orgPlacedLocations = ref([]);
+const warehouseLocations = ref([]);
 
 const fetchLocations = async () => {
     if (!currentTeam.value) return;
@@ -1024,8 +1041,29 @@ const fetchLocations = async () => {
         if (res.documents.length) {
             orgPlacedLocations.value = res.documents[0].placedLocations || [];
         }
+        try {
+            const whs = await warehousesApi.listWarehouses(currentTeam.value.$id);
+            warehouseLocations.value = whs.map(w => w.name);
+        } catch (we) {}
     } catch(e) {}
 };
+
+const allAvailableLocations = computed(() => {
+    const set = new Set();
+    (orgPlacedLocations.value || []).forEach(l => l && set.add(String(l).trim()));
+    (warehouseLocations.value || []).forEach(l => l && set.add(String(l).trim()));
+    (inventoryItems.value || []).forEach(item => {
+        if (item.storageLocation) set.add(String(item.storageLocation).trim());
+        if (item.purchaseLocation) set.add(String(item.purchaseLocation).trim());
+        if (Array.isArray(item.sellingLocations)) {
+            item.sellingLocations.forEach(l => l && set.add(String(l).trim()));
+        } else if (typeof item.sellingLocations === 'string' && item.sellingLocations) {
+            set.add(String(item.sellingLocations).trim());
+        }
+    });
+    if (filterBinLocation.value) set.add(String(filterBinLocation.value).trim());
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+});
 
 watch(currentTeam, (n) => { 
     if (n) {
@@ -1104,9 +1142,28 @@ const filteredInventory = computed(() => {
             if (item.parentLotId || (item.quantity > 1) || (item.title && item.title.toLowerCase().startsWith('lot of'))) return false;
         }
 
-        // Filter by Bin Location
-        if (filterBinLocation.value && item.storageLocation !== filterBinLocation.value) {
-            return false;
+        // Filter by Location (Storage bin or selling location booth)
+        if (filterBinLocation.value) {
+            const rawTarget = filterBinLocation.value.trim().toLowerCase();
+            const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
+
+            const matchesLoc = (val) => {
+                if (!val) return false;
+                if (Array.isArray(val)) {
+                    return val.some(v => matchesLoc(v));
+                }
+                const str = String(val).trim().toLowerCase();
+                const cleanStr = str.replace(/[^a-z0-9]/g, '');
+                return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
+            };
+
+            const matchStorage = matchesLoc(item.storageLocation);
+            const matchSelling = matchesLoc(item.sellingLocations);
+            const matchPurchase = matchesLoc(item.purchaseLocation);
+
+            if (!matchStorage && !matchSelling && !matchPurchase) {
+                return false;
+            }
         }
 
         // Filter by Placed & Located Only
@@ -1344,6 +1401,15 @@ showLoader("Loading Inventory...");
 onMounted(async () => {
     console.log("InventoryManager Mounted - Version with Image Fetcher");
     
+    // Check URL parameters for location or status filters
+    if (typeof window !== 'undefined' && window.location?.search) {
+        const params = new URLSearchParams(window.location.search);
+        const loc = params.get('location');
+        const st = params.get('status');
+        if (loc) filterBinLocation.value = loc;
+        if (st) filterStatus.value = st;
+    }
+
     // ONLY fetch if auth is already loaded.
     if (!authLoading.value) {
         await fetchInventory(''); 

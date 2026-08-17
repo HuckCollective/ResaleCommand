@@ -429,12 +429,14 @@
                                 </span>
                             </div>
                             
-                            <div class="bg-primary/10 p-2 rounded-md border border-primary/20 flex flex-col gap-1">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[10px] uppercase font-bold text-primary">Recommended Channel:</span>
-                                    <span class="badge badge-primary badge-sm font-bold">{{ (scoutResult?.market_report || scoutResult[0]?.market_report).best_platform }}</span>
+                            <div class="bg-primary/10 p-3 rounded-lg border border-primary/25 flex flex-col gap-1.5">
+                                <div class="text-[10px] uppercase tracking-wider font-extrabold text-primary flex items-center gap-1">
+                                    <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Recommended Channel:
                                 </div>
-                                <p class="text-[11px] opacity-90 leading-tight">
+                                <div class="font-extrabold text-xs sm:text-sm text-base-content leading-tight">
+                                    {{ (scoutResult?.market_report || scoutResult[0]?.market_report).best_platform }}
+                                </div>
+                                <p v-if="(scoutResult?.market_report || scoutResult[0]?.market_report).platform_rationale" class="text-[11px] opacity-80 leading-relaxed mt-0.5">
                                     {{ (scoutResult?.market_report || scoutResult[0]?.market_report).platform_rationale }}
                                 </p>
                             </div>
@@ -527,12 +529,14 @@
                             </div>
                             
                             <!-- Best Platform Banner -->
-                            <div class="bg-primary/10 p-2.5 rounded-md border border-primary/20 flex flex-col gap-1">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[10px] uppercase font-bold text-primary">Best Channel:</span>
-                                    <span class="badge badge-primary badge-sm font-bold">{{ (scoutItemsArray[0].market_report || scoutResult?.market_report).best_platform }}</span>
+                            <div class="bg-primary/10 p-3 rounded-lg border border-primary/25 flex flex-col gap-1.5">
+                                <div class="text-[10px] uppercase tracking-wider font-extrabold text-primary flex items-center gap-1">
+                                    <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Best Channel:
                                 </div>
-                                <p class="text-[11px] opacity-90 leading-snug">
+                                <div class="font-extrabold text-xs sm:text-sm text-base-content leading-tight">
+                                    {{ (scoutItemsArray[0].market_report || scoutResult?.market_report).best_platform }}
+                                </div>
+                                <p v-if="(scoutItemsArray[0].market_report || scoutResult?.market_report).platform_rationale" class="text-[11px] opacity-80 leading-relaxed mt-0.5">
                                     {{ (scoutItemsArray[0].market_report || scoutResult?.market_report).platform_rationale }}
                                 </p>
                             </div>

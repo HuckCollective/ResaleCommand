@@ -37,19 +37,28 @@
 
       <!-- Step 2: Reconciliation UI -->
       <div v-else>
-        <div class="flex justify-between items-end mb-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-4">
           <div>
             <h3 class="font-bold text-lg">Process Sales ({{ parsedRows.length }})</h3>
-            <p class="text-xs opacity-70">
-              <span class="text-success font-bold">{{ matchedCount }} matched</span> • 
-              <span class="text-error font-bold">{{ unmatchedCount }} unmatched</span>
-            </p>
+            <div class="flex items-center gap-2 mt-1">
+              <div class="join">
+                <button class="btn btn-xs join-item" :class="{'btn-active btn-primary': filterTab === 'all'}" @click="filterTab = 'all'">
+                  All ({{ parsedRows.length }})
+                </button>
+                <button class="btn btn-xs join-item text-success" :class="{'btn-active btn-success text-white': filterTab === 'matched'}" @click="filterTab = 'matched'">
+                  Matched ({{ matchedCount }})
+                </button>
+                <button class="btn btn-xs join-item text-error" :class="{'btn-active btn-error text-white': filterTab === 'unmatched'}" @click="filterTab = 'unmatched'">
+                  Unmatched ({{ unmatchedCount }})
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 w-full sm:w-auto justify-end">
             <button class="btn btn-sm btn-ghost" @click="reset">Cancel</button>
-            <button class="btn btn-sm btn-primary" :disabled="unmatchedCount > 0 || isImporting" @click="executeImport">
+            <button class="btn btn-sm btn-primary shadow-md shadow-primary/20" :disabled="matchedCount === 0 || isImporting" @click="executeImport">
               <span v-if="isImporting" class="loading loading-spinner loading-sm"></span>
-              Commit Sales
+              Commit {{ matchedCount }} Matched {{ matchedCount === 1 ? 'Item' : 'Items' }}
             </button>
           </div>
         </div>
@@ -58,35 +67,42 @@
           <table class="table table-sm table-pin-rows">
             <thead>
               <tr class="bg-base-200">
-                <th>Status</th>
-                <th>Sale Date</th>
+                <th>Match</th>
+                <th>CSV Status</th>
                 <th>Sold Item (CSV)</th>
                 <th>Price</th>
                 <th>Map to ResaleCommand Item</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in parsedRows" :key="index" :class="{'bg-success/10': row.mappedItem}">
+              <tr v-for="(row, index) in displayedRows" :key="index" :class="{'bg-success/10': row.mappedItem}">
                 <td>
                   <Icon v-if="row.mappedItem" icon="solar:check-circle-bold" class="w-5 h-5 text-success" />
                   <Icon v-else icon="solar:danger-circle-bold" class="w-5 h-5 text-error" />
                 </td>
-                <td class="whitespace-nowrap">{{ row.date }}</td>
                 <td>
-                  <div class="font-semibold">{{ row.itemName }}</div>
-                  <div class="font-mono text-xs opacity-70">{{ row.extractedSku }}</div>
+                  <span class="badge badge-xs" :class="{'badge-success': row.status === 'sold' || row.status === 'paid', 'badge-ghost': row.status !== 'sold' && row.status !== 'paid'}">
+                    {{ row.status || 'N/A' }}
+                  </span>
                 </td>
-                <td class="font-mono text-success">${{ row.salePrice.toFixed(2) }}</td>
+                <td>
+                  <div class="font-semibold text-sm">{{ row.itemName }}</div>
+                  <div class="font-mono text-xs opacity-70 flex items-center gap-1">
+                    <Icon icon="solar:tag-bold" class="w-3 h-3 text-secondary" />
+                    <span>SKU: {{ row.extractedSku || 'N/A' }}</span>
+                  </div>
+                </td>
+                <td class="font-mono text-success font-bold">${{ row.salePrice.toFixed(2) }}</td>
                 <td>
                   <div v-if="row.mappedItem" class="flex items-center gap-2">
-                    <span class="badge badge-sm badge-outline">{{ row.mappedItem.upc || 'NO UPC' }}</span>
+                    <span class="badge badge-sm badge-outline font-mono font-bold">{{ row.mappedItem.upc || 'NO UPC' }}</span>
                     <span class="truncate max-w-[200px] text-sm">{{ row.mappedItem.title }}</span>
                     <button class="btn btn-xs btn-ghost text-error ml-auto" @click="row.mappedItem = null">✕</button>
                   </div>
                   <select v-else class="select select-bordered select-sm w-full max-w-xs" v-model="row.mappedItem">
                     <option :value="null">Search active inventory...</option>
                     <option v-for="item in availableItems" :key="item.$id" :value="item">
-                      {{ item.upc || 'N/A' }} - {{ item.title }}
+                      {{ item.upc ? `[${item.upc}] ` : '' }}{{ item.title }}
                     </option>
                   </select>
                 </td>
@@ -95,9 +111,12 @@
           </table>
         </div>
         
-        <div v-if="unmatchedCount > 0" class="alert alert-warning mt-4 py-2">
-          <Icon icon="solar:danger-triangle-bold" class="w-5 h-5" />
-          <span class="text-sm">You must map all items to process the batch. If an item doesn't exist, create it first.</span>
+        <div v-if="unmatchedCount > 0 && filterTab !== 'unmatched'" class="alert alert-info mt-4 py-2 text-xs flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Icon icon="solar:info-circle-bold" class="w-4 h-4" />
+            <span>{{ unmatchedCount }} items are unmatched. Clicking "Commit" will safely process only the {{ matchedCount }} matched items.</span>
+          </div>
+          <button class="btn btn-xs btn-outline" @click="filterTab = 'unmatched'">Review Unmatched</button>
         </div>
       </div>
     </div>
@@ -110,11 +129,13 @@ import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
+import { getCollectionId, DB_ID } from '../../lib/inventory';
 
 const { inventoryItems, fetchInventory, currentTeamId } = useInventory();
 const isProcessing = ref(false);
 const isImporting = ref(false);
 const platform = ref('memoryden');
+const filterTab = ref('all'); // 'all' | 'matched' | 'unmatched'
 const parsedRows = ref([]);
 
 onMounted(() => {
@@ -124,7 +145,13 @@ onMounted(() => {
 });
 
 const activeInventory = computed(() => {
-  return inventoryItems.value.filter(i => i.status !== 'Sold');
+  return inventoryItems.value;
+});
+
+const displayedRows = computed(() => {
+  if (filterTab.value === 'matched') return parsedRows.value.filter(r => r.mappedItem !== null);
+  if (filterTab.value === 'unmatched') return parsedRows.value.filter(r => r.mappedItem === null);
+  return parsedRows.value;
 });
 
 const availableItems = computed(() => {
@@ -173,13 +200,15 @@ const parseMemoryDenPayout = (csvText) => {
   }
 
   const headers = splitCsvLine(lines[0]).map(h => h?.trim().toLowerCase().replace(/"/g, ''));
-  const itemIdx = headers.findIndex(h => h === 'item');
-  const priceIdx = headers.findIndex(h => h === 'agreed' || h === 'amount' || h === 'price');
-  const dateIdx = headers.findIndex(h => h === 'sold' || h === 'date');
-  const costIdx = headers.findIndex(h => h === 'cost' || h === 'fee' || h === 'cost/split');
+  const itemIdx = headers.findIndex(h => h === 'name' || h === 'item' || h === 'product name');
+  const skuIdx = headers.findIndex(h => h === 'sku' || h === 'location sku');
+  const priceIdx = headers.findIndex(h => h === 'agreed price' || h === 'agreed' || h === 'amount' || h === 'price' || h === 'aged price');
+  const dateIdx = headers.findIndex(h => h === 'in stock' || h === 'sold' || h === 'date');
+  const statusIdx = headers.findIndex(h => h === 'inventory' || h === 'status');
+  const costIdx = headers.findIndex(h => h === 'cost' || h === 'fee' || h === 'cost/split' || h === 'split / cost');
 
   if (itemIdx === -1) {
-    addToast({ type: 'error', message: 'Could not find "Item" column in MemoryDen CSV.' });
+    addToast({ type: 'error', message: 'Could not find "Name" or "Item" column in MemoryDen CSV.' });
     isProcessing.value = false;
     return;
   }
@@ -187,45 +216,52 @@ const parseMemoryDenPayout = (csvText) => {
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]);
-    if (cols.length < itemIdx) continue;
+    if (cols.length <= itemIdx) continue;
     
     const fullItemName = cols[itemIdx]?.trim() || '';
     if (!fullItemName || fullItemName.includes('Rent') || fullItemName.includes('Credit')) continue; // Skip non-inventory items
 
+    const statusVal = statusIdx !== -1 ? cols[statusIdx]?.trim().toLowerCase() : '';
     const price = priceIdx !== -1 ? parseFloat(cols[priceIdx]?.replace(/[^0-9.-]+/g,"")) : 0;
     const date = dateIdx !== -1 ? cols[dateIdx]?.trim() : new Date().toLocaleDateString();
 
-    // MemoryDen exacts SKU from end of title: "Item Name - 0EJ066"
-    let extractedSku = '';
+    // MemoryDen SKU either from explicit SKU column or end of title: "Item Name - 0EJ066"
+    let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
     let itemName = fullItemName;
     const skuMatch = fullItemName.match(/ - ([A-Z0-9-]+)$/);
-    if (skuMatch) {
+    if (!extractedSku && skuMatch) {
       extractedSku = skuMatch[1];
       itemName = fullItemName.replace(skuMatch[0], '').trim();
     }
 
-    // Matching Logic Priority
+    // Matching Logic Priority against all inventory
     let matched = null;
     
-    // 1. Exact UPC match (Future state)
+    // 1. Exact Location SKU match
     if (extractedSku) {
-      matched = activeInventory.value.find(item => item.upc === extractedSku);
+      matched = activeInventory.value.find(item => item.locationSku === extractedSku || item.locationSku === `'${extractedSku}`);
     }
     
-    // 2. Exact Location SKU match (From LocationSync or previous mappings)
+    // 2. Exact UPC match
     if (!matched && extractedSku) {
-      matched = activeInventory.value.find(item => item.locationSku === extractedSku);
+      matched = activeInventory.value.find(item => item.upc === extractedSku);
     }
 
-    // 3. Fuzzy Title Fallback
+    // 3. Normalized Title Match
     if (!matched) {
-      matched = activeInventory.value.find(item => item.title.toLowerCase() === itemName.toLowerCase() || item.title.toLowerCase() === fullItemName.toLowerCase());
+      const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      matched = activeInventory.value.find(item => {
+        if (!item.title) return false;
+        const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return itemClean === cleanName || itemClean.includes(cleanName) || cleanName.includes(itemClean);
+      });
     }
 
     rows.push({
       date,
       itemName: fullItemName, // Display full original
       extractedSku,
+      status: statusVal,
       salePrice: isNaN(price) ? 0 : price,
       mappedItem: matched || null
     });
@@ -240,8 +276,7 @@ const executeImport = async () => {
   
   isImporting.value = true;
   try {
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'inventory';
+    const ITEMS_COL = getCollectionId();
     const SALES_COL = 'sales'; // Needs to exist in schema
 
     // Group items into a single Sale record or just create individual sales?
@@ -253,13 +288,19 @@ const executeImport = async () => {
       const item = row.mappedItem;
       if (!item) continue;
 
-      // 1. Update the Item: Mark Sold, save mapped locationSku, and save soldPrice
-      await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, {
-        status: 'sold',
-        soldPrice: row.salePrice,
-        locationSku: row.extractedSku || item.locationSku, // SAVE THE MAP
-        saleId: batchId
-      });
+      const isSoldOrPaid = row.status === 'sold' || row.status === 'paid';
+      const updatePayload = {
+        locationSku: row.extractedSku || item.locationSku
+      };
+
+      if (isSoldOrPaid) {
+        updatePayload.status = 'sold';
+        updatePayload.soldPrice = row.salePrice;
+        updatePayload.saleId = batchId;
+      }
+
+      // 1. Update the Item: Sync locationSku, and mark Sold if sold/paid
+      await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, updatePayload);
 
       // 2. Create Sale Record (if you have a sales collection)
       try {

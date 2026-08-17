@@ -55,6 +55,16 @@
 
         <!-- Body Area -->
         <div class="card-body p-2 pt-1 pb-1 gap-1 flex-1 flex flex-col justify-end">
+            <!-- UPC & Location SKU Identifiers -->
+            <div v-if="item.upc || item.locationSku || item.sku" class="flex gap-1.5 flex-wrap items-center my-0.5">
+                <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/85" title="UPC">
+                    <Icon icon="solar:barcode-minimalistic-bold" class="w-3 h-3 mr-0.5 text-primary" />{{ item.upc }}
+                </span>
+                <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary" title="Location / Memory Den SKU">
+                    <Icon icon="solar:tag-bold" class="w-2.5 h-2.5 mr-0.5" />{{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                </span>
+            </div>
+
             <!-- Subtitle/Location Slot -->
             <div v-if="locationText" class="text-xs opacity-60 truncate"><Icon icon="solar:map-point-linear" class="w-3 h-3 inline mr-1" />{{ locationText }}</div>
             

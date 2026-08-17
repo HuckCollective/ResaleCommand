@@ -919,16 +919,19 @@ export const ALL: APIRoute = async ({ request }) => {
                - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
                - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
           - 'market_report': An object analyzing sales channels, velocity, and profit:
-                - 'best_platform': String naming the recommended platform/channel (e.g. "Memory Den (Physical Booth)", "eBay", "Poshmark", "Mercari", "Facebook Marketplace", "Whatnot").
-                - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit (e.g., "Physical booth yields 35% higher net profit at $45 retail with 10% commission and zero shipping hassle, while eBay offers faster 7-day national liquidity at $32 with 13% fees.").
+                - 'best_platform': String naming the recommended platform/channel.
+                   * For CLOTHING, STREETWEAR & FASHION: ALWAYS prioritize specialized fashion marketplaces like "Depop" (vintage/Y2K/streetwear/indie), "Poshmark" (women's contemporary/designer/shoes/bags), "Grailed" (menswear/streetwear/archive/workwear), "The RealReal" (luxury), or "Memory Den (Physical Booth)" (tactile curated vintage/statement pieces) over generic eBay/Mercari.
+                   * For COLLECTIBLES, TOYS & PROPS: "Memory Den (Physical Booth)", "eBay", "Whatnot".
+                   * For MEDIA & GAMES: "eBay", "Mercari".
+                - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit (e.g., "Depop commands a 30% higher aesthetic premium for 90s vintage tees with 0% seller fees, while Memory Den booth offers instant local sales with 10% commission and zero shipping hassle.").
                 - 'sell_through_velocity': One of: "Fast (< 7 days)", "Moderate (2-4 weeks)", "Slow / Long-Tail (1-3 months)".
-                - 'target_buyer': Short phrase describing the ideal customer.
-                - 'channels': An array of channel comparisons (2-3 items):
-                    - 'name': Channel name (e.g. "Physical Booth / Consignment", "eBay Online", "Poshmark / Mercari")
+                - 'target_buyer': Short phrase describing the ideal customer (e.g. "Gen Z streetwear collectors", "Boutique vintage shoppers", "Everyday casual buyers").
+                - 'channels': An array of channel comparisons (2-4 items) tailored to the item category:
+                    - 'name': Channel name (e.g. "Depop (Vintage/Y2K)", "Poshmark (Fashion)", "Grailed (Menswear)", "Memory Den (Booth)", "eBay Online")
                     - 'est_price': Expected listing/sale price (e.g. "$45.00")
-                    - 'net_payout': Estimated net payout after fees/shipping (e.g., "~$40.50 after 10% commission")
-                    - 'speed': Estimated velocity rating (e.g. "High (Impulse Buy)", "Medium (Search-based)")
-                    - 'recommendation': e.g. "Best Net Profit" or "Fast Liquidation"
+                    - 'net_payout': Estimated net payout after fees/shipping (e.g. "~$43.00 (0% Depop seller fee)" or "~$40.50 after 10% booth commission")
+                    - 'speed': Estimated velocity rating (e.g. "High (Aesthetic Trend)", "Medium (Search-based)")
+                    - 'recommendation': e.g. "Best Net Profit", "Fast Fashion Liquidation", "Zero Shipping Hassle"
           - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
                 - 'name': Specific name/description of the item (e.g. "Albus Dumbledore Elder Wand").
                 - 'identity': The item's distinct identity.

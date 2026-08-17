@@ -35,7 +35,7 @@
             </div>
 
             <!-- Scrollable Content -->
-            <div class="flex-1 overflow-y-auto w-full flex flex-col lg:flex-row pb-20 lg:pb-0">
+            <div class="flex-1 overflow-y-auto w-full flex flex-col lg:flex-row pb-24">
                 
                 <!-- Left Column: Media -->
                 <div class="w-full lg:w-5/12 bg-base-300 border-r border-base-300 flex flex-col relative shrink-0">
@@ -98,8 +98,14 @@
                     
                     <div>
                         <h1 class="text-2xl md:text-3xl font-bold leading-tight mb-2">{{ title }}</h1>
-                        <div class="flex items-center gap-4 text-sm opacity-60 font-mono">
-                            <span v-if="locationText" class="flex gap-1 items-center">
+                        <div class="flex items-center gap-2 flex-wrap text-sm font-mono mb-2">
+                            <span v-if="item.upc" class="badge badge-sm font-mono font-bold bg-base-200 border-base-300 text-base-content" title="UPC">
+                                <Icon icon="solar:barcode-minimalistic-bold" class="w-3.5 h-3.5 mr-1 text-primary" />UPC: {{ item.upc }}
+                            </span>
+                            <span v-if="item.locationSku || item.sku" class="badge badge-sm font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary" title="Location SKU">
+                                <Icon icon="solar:tag-bold" class="w-3 h-3 mr-1" />SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                            </span>
+                            <span v-if="locationText" class="flex gap-1 items-center opacity-60">
                                 <Icon icon="solar:map-point-linear" /> 
                                 <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-[200px] md:max-w-[400px]" :title="locationText">
                                     {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
@@ -107,7 +113,7 @@
                                 </a>
                                 <span v-else>{{ locationText }}</span>
                             </span>
-                            <span v-if="item.$id">ID: {{ item.$id.slice(-6) }}</span>
+                            <span v-if="item.$id" class="opacity-40">ID: {{ item.$id.slice(-6) }}</span>
                         </div>
                     </div>
 
@@ -189,6 +195,56 @@
                         </div>
                     </div>
 
+                    <!-- Where to Sell / Platform Recommendations -->
+                    <div class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm overflow-hidden text-base-content">
+                        <div class="bg-base-200/60 p-3 border-b border-base-200 text-xs font-bold uppercase tracking-wider flex justify-between items-center">
+                            <span class="flex items-center gap-1.5 text-primary">
+                                <Icon icon="solar:shop-2-bold" class="w-4 h-4" />
+                                Where to Sell (Channel Suggestions)
+                            </span>
+                            <span v-if="sellingRecommendation.bestPlatform" class="badge badge-sm badge-primary font-bold">
+                                {{ sellingRecommendation.bestPlatform }}
+                            </span>
+                        </div>
+                        
+                        <div class="p-4 space-y-3">
+                            <!-- Top Platform & Rationale -->
+                            <div class="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <div>
+                                    <div class="text-[10px] uppercase font-bold text-primary opacity-80 tracking-wider">Top Recommended Channel</div>
+                                    <div class="text-sm md:text-base font-extrabold text-base-content mt-0.5">
+                                        {{ sellingRecommendation.bestPlatform }}
+                                    </div>
+                                    <p v-if="sellingRecommendation.rationale" class="text-xs opacity-75 mt-1 leading-relaxed">
+                                        {{ sellingRecommendation.rationale }}
+                                    </p>
+                                </div>
+                                <div v-if="sellingRecommendation.velocity" class="shrink-0">
+                                    <span class="badge badge-sm badge-outline font-bold text-xs bg-base-100 shadow-xs">
+                                        ⚡ Velocity: {{ sellingRecommendation.velocity }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Channel Comparison Cards -->
+                            <div v-if="sellingRecommendation.channels && sellingRecommendation.channels.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                                <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/50 p-3 rounded-lg border border-base-300 flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="font-bold text-xs truncate">{{ ch.name }}</span>
+                                            <span v-if="ch.recommendation" class="badge badge-xs badge-secondary">{{ ch.recommendation }}</span>
+                                        </div>
+                                        <div class="text-xs font-mono font-bold text-success">{{ ch.est_price || '-' }}</div>
+                                    </div>
+                                    <div class="text-[11px] opacity-70 mt-2 flex justify-between items-center border-t border-base-300 pt-1.5 font-mono">
+                                        <span>Net Payout:</span>
+                                        <span class="font-bold text-base-content">{{ ch.net_payout || '-' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Lot Contents -->
                     <div v-if="childItems.length > 0" class="mt-6 border border-base-200 rounded-xl overflow-hidden bg-base-100 shadow-sm">
                         <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
@@ -221,14 +277,30 @@
                 </div>
             </div>
 
-            <!-- Sticky Bottom Bar: Primary action (mobile-app style) -->
-            <div class="sticky bottom-0 z-20 bg-base-100 border-t border-base-200 p-3 flex gap-2 lg:hidden">
-                <button class="btn btn-primary flex-1 gap-2" @click="emit('edit', item); close()">
-                    <Icon icon="solar:pen-bold" class="w-5 h-5" /> Edit Item
-                </button>
-                <button class="btn btn-ghost btn-square" @click="copyShareLink" title="Share">
-                    <Icon icon="solar:link-linear" class="w-5 h-5" />
-                </button>
+            <!-- Sticky Bottom Bar: Always shown on bottom of preview screen -->
+            <div class="sticky bottom-0 z-30 bg-base-200/95 backdrop-blur-md border-t border-base-300 p-3 px-4 flex justify-between items-center gap-3 shadow-lg">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-sm truncate max-w-[200px] sm:max-w-xs md:max-w-md">{{ title }}</span>
+                        <div class="flex items-center gap-2 text-xs opacity-70 font-mono">
+                            <span v-if="item.upc" class="font-bold text-primary">{{ item.upc }}</span>
+                            <span v-if="item.locationSku || item.sku" class="text-secondary font-bold">SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}</span>
+                            <span class="text-success font-bold font-mono">{{ formatCurrency(estValue) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <button class="btn btn-ghost btn-sm" @click="copyShareLink" title="Copy Share Link">
+                        <Icon icon="solar:link-linear" class="w-4 h-4 mr-1" /> Share
+                    </button>
+                    <button class="btn btn-primary btn-sm md:btn-md gap-2 font-bold shadow-md shadow-primary/20" @click="emit('edit', item); close()">
+                        <Icon icon="solar:pen-bold" class="w-4 h-4 md:w-5 md:h-5" /> Edit Item
+                    </button>
+                    <button class="btn btn-ghost btn-sm btn-circle" @click="close" title="Close">
+                        ✕
+                    </button>
+                </div>
             </div>
         </div>
     </dialog>
@@ -569,6 +641,183 @@ const gallery = computed(() => {
     }
     
     return [];
+});
+
+const sellingRecommendation = computed(() => {
+    // 1. If explicit market_report exists on parsedScoutData
+    if (parsedScoutData.value?.market_report) {
+        const mr = parsedScoutData.value.market_report;
+        return {
+            bestPlatform: mr.best_platform || 'Physical Booth & Fashion Marketplace',
+            rationale: mr.platform_rationale || '',
+            velocity: mr.sell_through_velocity || 'Moderate (2-4 weeks)',
+            channels: mr.channels || []
+        };
+    }
+
+    // 2. Dynamic category & fashion intelligence
+    const est = Number(estValue.value) || 0;
+    const boutique = parsedScoutData.value?.price_breakdown?.boutique_premium;
+    const isHighBoutique = !!boutique || est >= 35;
+    const t = (title.value || '').toLowerCase();
+    const notes = (cleanConditionNotes.value || '').toLowerCase();
+    const allText = `${t} ${notes}`;
+
+    // Specialized Market Detection
+    const isVintage = allText.includes('vintage') || allText.includes('90s') || allText.includes('80s') || allText.includes('y2k') || allText.includes('retro') || allText.includes('grunge');
+    const isStreetwearOrTee = allText.includes('streetwear') || allText.includes('tee') || allText.includes('t-shirt') || allText.includes('hoodie') || allText.includes('sweatshirt') || allText.includes('skate');
+    const isMensOrWorkwear = allText.includes('carhartt') || allText.includes('workwear') || allText.includes('mens') || allText.includes('denim') || allText.includes('jacket') || allText.includes('leather');
+    const isWomensOrContemporary = allText.includes('dress') || allText.includes('skirt') || allText.includes('lululemon') || allText.includes('blouse') || allText.includes('purse') || allText.includes('handbag') || allText.includes('shoes') || allText.includes('heels') || allText.includes('boots');
+    const isLuxuryDesigner = allText.includes('gucci') || allText.includes('prada') || allText.includes('louis vuitton') || allText.includes('designer') || allText.includes('chanel') || allText.includes('coach');
+    const isMediaOrElectronics = t.includes('dvd') || t.includes('game') || t.includes('card') || t.includes('electronic') || t.includes('camera') || t.includes('audio');
+
+    let bestPlatform = 'Physical Booth / Consignment (Memory Den)';
+    let rationale = 'High visual appeal and tactile presence makes this ideal for booth retail with 10% commission and zero shipping cost.';
+    let velocity = 'Moderate (2-4 weeks)';
+    let channels = [];
+
+    if (isVintage && (isStreetwearOrTee || isMensOrWorkwear)) {
+        bestPlatform = 'Depop / Grailed (Streetwear & Vintage)';
+        rationale = 'Depop offers 0% seller fees and massive Gen Z/Y2K buyer demand, while Grailed targets high-paying menswear and vintage workwear enthusiasts.';
+        velocity = 'Fast (< 10 days)';
+        channels = [
+            {
+                name: 'Depop (Vintage/Y2K)',
+                est_price: est > 0 ? `$${(est * 1.1).toFixed(2)}` : '$30 - $55',
+                net_payout: est > 0 ? `~$${(est * 1.1 * 0.97).toFixed(2)} (0% seller fee)` : '~97% net',
+                recommendation: 'Top Trend Platform'
+            },
+            {
+                name: 'Grailed (Menswear)',
+                est_price: est > 0 ? `$${(est * 1.15).toFixed(2)}` : '$35 - $65',
+                net_payout: est > 0 ? `~$${(est * 1.15 * 0.88).toFixed(2)} (9% fee)` : '~88% net',
+                recommendation: 'High-Value Buyers'
+            },
+            {
+                name: 'Memory Den (Physical Booth)',
+                est_price: boutique || (est > 0 ? `$${(est * 1.2).toFixed(2)}` : '$35 - $60'),
+                net_payout: est > 0 ? `~$${(est * 1.2 * 0.9).toFixed(2)} (10% comm)` : '~90% net',
+                recommendation: 'Zero Shipping Hassle'
+            },
+            {
+                name: 'eBay Online',
+                est_price: est > 0 ? `$${est.toFixed(2)}` : '$25 - $40',
+                net_payout: est > 0 ? `~$${(est * 0.87).toFixed(2)} (13% fee)` : '~87% net',
+                recommendation: 'Broad Liquidity'
+            }
+        ];
+    } else if (isLuxuryDesigner) {
+        bestPlatform = 'The RealReal / Grailed / Poshmark';
+        rationale = 'High-end designer pieces achieve peak value on authenticated luxury marketplaces and curated fashion collector platforms.';
+        velocity = 'Moderate (2-3 weeks)';
+        channels = [
+            {
+                name: 'Grailed / Poshmark',
+                est_price: est > 0 ? `$${(est * 1.15).toFixed(2)}` : '$75 - $150',
+                net_payout: est > 0 ? `~$${(est * 1.15 * 0.8).toFixed(2)}` : '~80% net',
+                recommendation: 'Direct Buyer Sale'
+            },
+            {
+                name: 'The RealReal / Consignment',
+                est_price: boutique || (est > 0 ? `$${(est * 1.25).toFixed(2)}` : '$95 - $200'),
+                net_payout: est > 0 ? `~$${(est * 1.25 * 0.7).toFixed(2)}` : '~70% net',
+                recommendation: 'Hands-off Luxury'
+            },
+            {
+                name: 'Memory Den Booth',
+                est_price: boutique || (est > 0 ? `$${(est * 1.2).toFixed(2)}` : '$85 - $175'),
+                net_payout: est > 0 ? `~$${(est * 1.2 * 0.9).toFixed(2)} (10% comm)` : '~90% net',
+                recommendation: 'Showcase Glass Case'
+            }
+        ];
+    } else if (isWomensOrContemporary || isVintage) {
+        bestPlatform = 'Poshmark / Depop / Memory Den';
+        rationale = 'Poshmark flat $7.97 buyer priority shipping drives multi-item bundles, while Memory Den curated booth provides high-margin local boutique sales.';
+        velocity = 'Moderate (1-3 weeks)';
+        channels = [
+            {
+                name: 'Poshmark (Fashion/Boutique)',
+                est_price: est > 0 ? `$${(est * 1.1).toFixed(2)}` : '$28 - $50',
+                net_payout: est > 0 ? `~$${(est * 1.1 * 0.8).toFixed(2)} (20% fee)` : '~80% net',
+                recommendation: 'Active Bundle Shoppers'
+            },
+            {
+                name: 'Depop (Aesthetic/Vintage)',
+                est_price: est > 0 ? `$${(est * 1.05).toFixed(2)}` : '$25 - $45',
+                net_payout: est > 0 ? `~$${(est * 1.05 * 0.97).toFixed(2)} (0% seller fee)` : '~97% net',
+                recommendation: 'High Margin (No Fee)'
+            },
+            {
+                name: 'Memory Den (Physical Booth)',
+                est_price: boutique || (est > 0 ? `$${(est * 1.15).toFixed(2)}` : '$30 - $55'),
+                net_payout: est > 0 ? `~$${(est * 1.15 * 0.9).toFixed(2)} (10% comm)` : '~90% net',
+                recommendation: 'Zero Shipping Hassle'
+            },
+            {
+                name: 'Mercari / eBay',
+                est_price: est > 0 ? `$${est.toFixed(2)}` : '$20 - $35',
+                net_payout: est > 0 ? `~$${(est * 0.87).toFixed(2)}` : '~87% net',
+                recommendation: 'Casual Liquidation'
+            }
+        ];
+    } else if (isMediaOrElectronics) {
+        bestPlatform = 'eBay / Mercari Online';
+        rationale = 'High national search volume and exact barcode/UPC catalog matching makes eBay the fastest liquidity channel for media and electronics.';
+        velocity = 'Fast (< 7 days)';
+        channels = [
+            {
+                name: 'eBay Online',
+                est_price: est > 0 ? `$${est.toFixed(2)}` : '$20 - $35',
+                net_payout: est > 0 ? `~$${(est * 0.87).toFixed(2)} (13% fee)` : '~87% net',
+                recommendation: 'Highest Search Volume'
+            },
+            {
+                name: 'Mercari Online',
+                est_price: est > 0 ? `$${(est * 0.95).toFixed(2)}` : '$18 - $30',
+                net_payout: est > 0 ? `~$${(est * 0.95 * 0.9).toFixed(2)}` : '~90% net',
+                recommendation: 'Fast Mobile Buyers'
+            },
+            {
+                name: 'Memory Den / Booth',
+                est_price: boutique || (est > 0 ? `$${(est * 1.1).toFixed(2)}` : '$22 - $40'),
+                net_payout: est > 0 ? `~$${(est * 1.1 * 0.9).toFixed(2)} (10% comm)` : '~90% net',
+                recommendation: 'Impulse Media Shelf'
+            }
+        ];
+    } else {
+        bestPlatform = isHighBoutique ? 'Memory Den (Physical Booth)' : 'eBay & Poshmark';
+        rationale = isHighBoutique 
+            ? 'Curated physical display commands premium in-person pricing with only 10% commission and no shipping overhead.'
+            : 'Multi-channel cross-listing on eBay and fashion marketplaces provides wide visibility.';
+        velocity = 'Moderate (2-4 weeks)';
+        channels = [
+            {
+                name: 'Memory Den / Physical Booth',
+                est_price: boutique || (est > 0 ? `$${(est * 1.15).toFixed(2)}` : '$25 - $50'),
+                net_payout: est > 0 ? `~$${(est * 1.15 * 0.9).toFixed(2)} (10% comm)` : '~90% net',
+                recommendation: isHighBoutique ? 'Highest Margin' : 'No Shipping'
+            },
+            {
+                name: 'eBay / Poshmark',
+                est_price: est > 0 ? `$${est.toFixed(2)}` : '$20 - $40',
+                net_payout: est > 0 ? `~$${(est * 0.87).toFixed(2)}` : '~87% net',
+                recommendation: 'National Reach'
+            },
+            {
+                name: 'Depop / Mercari',
+                est_price: est > 0 ? `$${(est * 0.95).toFixed(2)}` : '$18 - $35',
+                net_payout: est > 0 ? `~$${(est * 0.95 * 0.9).toFixed(2)}` : '~90% net',
+                recommendation: 'Fast Mobile Liquidation'
+            }
+        ];
+    }
+
+    return {
+        bestPlatform,
+        rationale,
+        velocity,
+        channels
+    };
 });
 
 </script>

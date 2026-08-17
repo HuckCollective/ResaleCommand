@@ -4,11 +4,8 @@ import WarehouseManager from '../components/warehouses/WarehouseManager.vue';
 import LocationSync from '../components/warehouses/LocationSync.vue';
 ---
 
-<Layout title="Warehousing">
+<Layout title="Locations & Warehouses">
   <div class="p-8 max-w-7xl mx-auto space-y-8">
-    
-    <LocationSync client:only="vue" />
     <WarehouseManager client:only="vue" />
-    
   </div>
 </Layout>
