@@ -202,10 +202,16 @@ const parseMemoryDenPayout = (csvText) => {
   const headers = splitCsvLine(lines[0]).map(h => h?.trim().toLowerCase().replace(/"/g, ''));
   const itemIdx = headers.findIndex(h => h === 'name' || h === 'item' || h === 'product name');
   const skuIdx = headers.findIndex(h => h === 'sku' || h === 'location sku');
-  const priceIdx = headers.findIndex(h => h === 'agreed price' || h === 'agreed' || h === 'amount' || h === 'price' || h === 'aged price');
+  
+  const amountIdx = headers.findIndex(h => h === 'amount' || h === 'final amount' || h === 'sold amount' || h === 'net amount' || h.includes('amount'));
+  const agedPriceIdx = headers.findIndex(h => h.includes('aged price') || h.includes('sold price') || h.includes('sale price'));
+  const agreedPriceIdx = headers.findIndex(h => h.includes('agreed price') || h === 'agreed' || h.includes('price') || h.includes('total'));
+  
   const dateIdx = headers.findIndex(h => h === 'in stock' || h === 'sold' || h === 'date');
   const statusIdx = headers.findIndex(h => h === 'inventory' || h === 'status');
   const costIdx = headers.findIndex(h => h === 'cost' || h === 'fee' || h === 'cost/split' || h === 'split / cost');
+
+  const splitIdx = headers.findIndex(h => h.includes('consignor %') || h.includes('split') || h.includes('split / cost'));
 
   if (itemIdx === -1) {
     addToast({ type: 'error', message: 'Could not find "Name" or "Item" column in MemoryDen CSV.' });
@@ -222,7 +228,25 @@ const parseMemoryDenPayout = (csvText) => {
     if (!fullItemName || fullItemName.includes('Rent') || fullItemName.includes('Credit')) continue; // Skip non-inventory items
 
     const statusVal = statusIdx !== -1 ? cols[statusIdx]?.trim().toLowerCase() : '';
-    const price = priceIdx !== -1 ? parseFloat(cols[priceIdx]?.replace(/[^0-9.-]+/g,"")) : 0;
+    
+    let agreedPriceVal = agreedPriceIdx !== -1 ? parseFloat((cols[agreedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    let agedPriceVal = agedPriceIdx !== -1 ? parseFloat((cols[agedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    let grossPrice = agreedPriceVal > 0 ? agreedPriceVal : agedPriceVal;
+
+    let consignorPct = 85; // 85% default payout
+    if (splitIdx !== -1 && cols[splitIdx]) {
+      const parsedSplit = parseFloat(cols[splitIdx].replace(/[^0-9.]/g, ''));
+      if (parsedSplit > 0 && parsedSplit <= 100) consignorPct = parsedSplit;
+    }
+
+    let amountVal = amountIdx !== -1 ? parseFloat((cols[amountIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    let netSoldPrice = 0;
+    if (amountVal > 0 && amountVal !== grossPrice) {
+      netSoldPrice = amountVal;
+    } else if (grossPrice > 0) {
+      netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
+    }
+
     const date = dateIdx !== -1 ? cols[dateIdx]?.trim() : new Date().toLocaleDateString();
 
     // MemoryDen SKU either from explicit SKU column or end of title: "Item Name - 0EJ066"
@@ -262,7 +286,9 @@ const parseMemoryDenPayout = (csvText) => {
       itemName: fullItemName, // Display full original
       extractedSku,
       status: statusVal,
-      salePrice: isNaN(price) ? 0 : price,
+      listedPrice: grossPrice,
+      salePrice: netSoldPrice, // The actual net amount made after fees
+      netSoldPrice: netSoldPrice,
       mappedItem: matched || null
     });
   }

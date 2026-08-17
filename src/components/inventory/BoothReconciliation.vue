@@ -451,20 +451,23 @@ const manualLinkSync = async (csvRow, idx) => {
         if (isSoldInCsv) {
             const rawAmount = csvRow['Amount'] || csvRow['Agreed Price'] || csvRow['Agreed'] || '0';
             const rawCostSplit = csvRow['Cost/Split'] || '0';
-            const rawConsignorPct = csvRow['Consignor %'] || '100'; 
+            const rawConsignorPct = csvRow['Consignor %'] || '85'; 
             
-            const soldPrice = parseFloat(rawAmount.replace(/[^0-9.]/g, '')) || 0;
+            const gross = parseFloat(rawAmount.replace(/[^0-9.]/g, '')) || 0;
+            let netPayout = gross;
             let commissionPaid = 0;
 
-            if (csvRow['Cost/Split'] !== undefined) {
-                const payout = parseFloat(rawCostSplit.replace(/[^0-9.-]/g, '')) || 0;
-                commissionPaid = Math.max(0, soldPrice - payout);
+            if (csvRow['Cost/Split'] !== undefined && csvRow['Cost/Split'] !== '') {
+                netPayout = parseFloat(rawCostSplit.replace(/[^0-9.-]/g, '')) || 0;
+                commissionPaid = Math.max(0, gross - netPayout);
             } else {
-                const consignorPct = parseFloat(rawConsignorPct.replace(/[^0-9.]/g, '')) || 100;
-                commissionPaid = soldPrice * ((100 - consignorPct) / 100);
+                const consignorPct = parseFloat(rawConsignorPct.replace(/[^0-9.]/g, '')) || 85;
+                netPayout = Number((gross * (consignorPct / 100)).toFixed(2));
+                commissionPaid = Number((gross - netPayout).toFixed(2));
             }
             
-            updatePayload.soldPrice = soldPrice;
+            updatePayload.resalePrice = gross;
+            updatePayload.soldPrice = netPayout;
             updatePayload.commissionPaid = commissionPaid;
         }
 
@@ -564,20 +567,23 @@ const createNewFromCsv = async (csvRow, idx) => {
         if (isSoldInCsv) {
             const rawAmount = csvRow['Amount'] || csvRow['Agreed Price'] || csvRow['Agreed'] || '0';
             const rawCostSplit = csvRow['Cost/Split'] || '0';
-            const rawConsignorPct = csvRow['Consignor %'] || '100'; 
+            const rawConsignorPct = csvRow['Consignor %'] || '85'; 
             
-            const soldPrice = parseFloat(rawAmount.replace(/[^0-9.]/g, '')) || 0;
+            const gross = parseFloat(rawAmount.replace(/[^0-9.]/g, '')) || 0;
+            let netPayout = gross;
             let commissionPaid = 0;
 
-            if (csvRow['Cost/Split'] !== undefined) {
-                const payout = parseFloat(rawCostSplit.replace(/[^0-9.-]/g, '')) || 0;
-                commissionPaid = Math.max(0, soldPrice - payout);
+            if (csvRow['Cost/Split'] !== undefined && csvRow['Cost/Split'] !== '') {
+                netPayout = parseFloat(rawCostSplit.replace(/[^0-9.-]/g, '')) || 0;
+                commissionPaid = Math.max(0, gross - netPayout);
             } else {
-                const consignorPct = parseFloat(rawConsignorPct.replace(/[^0-9.]/g, '')) || 100;
-                commissionPaid = soldPrice * ((100 - consignorPct) / 100);
+                const consignorPct = parseFloat(rawConsignorPct.replace(/[^0-9.]/g, '')) || 85;
+                netPayout = Number((gross * (consignorPct / 100)).toFixed(2));
+                commissionPaid = Number((gross - netPayout).toFixed(2));
             }
             
-            docPayload.soldPrice = soldPrice;
+            docPayload.resalePrice = gross;
+            docPayload.soldPrice = netPayout;
             docPayload.commissionPaid = commissionPaid;
         }
 

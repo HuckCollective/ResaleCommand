@@ -1,5 +1,6 @@
 import { databases, Query, ID } from './appwrite';
 import type { Models } from 'appwrite';
+import { Permission, Role } from 'appwrite';
 import { warehousesApi } from './warehouses';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
@@ -59,12 +60,34 @@ export const salesApi = {
     },
 
     async createSale(data: SaleData): Promise<SaleDocument> {
-        return await databases.createDocument(
-            DB_ID,
-            SALES_COL,
-            ID.unique(),
-            data
-        ) as SaleDocument;
+        try {
+            let permissions: string[] = [];
+            if (data.tenantId) {
+                const role = Role.team(data.tenantId);
+                permissions = [
+                    Permission.read(role),
+                    Permission.update(role),
+                    Permission.delete(role),
+                ];
+            }
+            return await databases.createDocument(
+                DB_ID,
+                SALES_COL,
+                ID.unique(),
+                data,
+                permissions.length > 0 ? permissions : undefined
+            ) as SaleDocument;
+        } catch (err: any) {
+            if (err?.code === 400 || err?.code === 401 || err?.code === 403) {
+                return await databases.createDocument(
+                    DB_ID,
+                    SALES_COL,
+                    ID.unique(),
+                    data
+                ) as SaleDocument;
+            }
+            throw err;
+        }
     },
 
     async updateSale(id: string, data: Partial<SaleData>): Promise<SaleDocument> {

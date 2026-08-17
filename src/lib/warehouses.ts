@@ -1,5 +1,6 @@
 import { databases, Query, ID } from './appwrite';
 import type { Models } from 'appwrite';
+import { Permission, Role } from 'appwrite';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const WAREHOUSES_COL = 'warehouses';
@@ -39,11 +40,18 @@ export const warehousesApi = {
 
     async createWarehouse(data: WarehouseData): Promise<WarehouseDocument> {
         if (!data.tenantId) throw new Error("tenantId is required");
+        const role = Role.team(data.tenantId);
+        const permissions = [
+            Permission.read(role),
+            Permission.update(role),
+            Permission.delete(role),
+        ];
         return await databases.createDocument(
             DB_ID,
             WAREHOUSES_COL,
             ID.unique(),
-            data
+            data,
+            permissions
         ) as WarehouseDocument;
     },
 
