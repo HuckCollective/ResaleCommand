@@ -62,8 +62,20 @@
                             </label>
                         </div>
                     </div>
-                    <!-- Row 2: Add New + Import dropdown + Export dropdown -->
-                    <div class="flex items-center gap-2">
+                    <!-- Row 2: Search bar + Add New + Generate UPCs + Import dropdown + Export dropdown -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Quick Search Input -->
+                        <div class="relative flex-1 min-w-[220px] max-w-sm sm:max-w-md">
+                            <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
+                            <input 
+                                type="text" 
+                                v-model="searchQuery" 
+                                placeholder="Search title, UPC, #0735, bin..." 
+                                class="input input-sm input-bordered w-full pl-9 pr-8 text-xs bg-base-100 font-mono shadow-sm" 
+                            />
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100" title="Clear search">✕</button>
+                        </div>
+
                         <!-- Add New -->
                         <button class="btn btn-sm btn-primary gap-1.5 flex-1 sm:flex-none" @click="openAdd">
                             <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
@@ -339,7 +351,7 @@
 
                         <div class="form-control w-full">
                             <label class="label pt-0"><span class="label-text font-bold text-[10px] uppercase opacity-70">Search</span></label>
-                            <input type="text" v-model="searchQuery" placeholder="Search title, ID, bin..." class="input input-bordered input-sm w-full font-mono text-xs shadow-inner" />
+                            <input type="text" v-model="searchQuery" placeholder="Search title, UPC, #0735, bin..." class="input input-bordered input-sm w-full font-mono text-xs shadow-inner" />
                         </div>
 
                         <div class="form-control w-full">
@@ -1112,14 +1124,42 @@ const filteredInventory = computed(() => {
             if (!hasAllKeywords) return false;
         }
 
-        // Filter by Search (Free text)
+        // Filter by Search (Free text, UPC, SKU, Numeric suffix, Title, etc.)
         if (searchQuery.value) {
-            const query = searchQuery.value.toLowerCase();
+            const rawQuery = searchQuery.value.trim();
+            const query = rawQuery.toLowerCase();
+            const numericDigits = rawQuery.replace(/\D/g, '');
+
             const titleMatch = (item.title || item.itemName || '').toLowerCase().includes(query);
-            const idMatch = (item.identity || item.$id || '').toLowerCase().includes(query);
+            const idMatch = (item.$id || '').toLowerCase().includes(query);
+            const identityMatch = (item.identity || '').toLowerCase().includes(query);
             const binMatch = (item.storageLocation || '').toLowerCase().includes(query);
+            const orderMatch = (item.orderId || item.sourceOrderId || '').toLowerCase().includes(query);
+            const notesMatch = (item.conditionNotes || item.marketDescription || '').toLowerCase().includes(query);
             const keywordMatch = Array.isArray(item.keywords) && item.keywords.some(k => k.toLowerCase().includes(query));
-            if (!titleMatch && !idMatch && !binMatch && !keywordMatch) return false;
+            
+            // UPC / SKU Matching
+            const itemUpc = (item.upc || item.sku || '').toLowerCase();
+            const upcMatch = itemUpc.includes(query);
+
+            // Numeric Suffix & Partial Number Matching (e.g. searching "0735" or "735" matches "HUCK-0735")
+            let numericMatch = false;
+            if (numericDigits.length >= 1) {
+                const itemUpcDigits = itemUpc.replace(/\D/g, '');
+                if (itemUpcDigits) {
+                    if (itemUpcDigits.endsWith(numericDigits) || itemUpcDigits.includes(numericDigits)) {
+                        numericMatch = true;
+                    }
+                    const padded = numericDigits.padStart(4, '0');
+                    if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) {
+                        numericMatch = true;
+                    }
+                }
+            }
+
+            if (!titleMatch && !idMatch && !identityMatch && !binMatch && !keywordMatch && !orderMatch && !notesMatch && !upcMatch && !numericMatch) {
+                return false;
+            }
         }
         
         return true;
@@ -1830,22 +1870,42 @@ const submitDeconstruct = async () => {
             }
             
             let childImageId = duplicatedImageId;
-            if (aiData && aiData.image_index !== undefined && !aiData.bounding_box && galleryList[aiData.image_index]) {
+            
+            // Priority 1: Direct base64 image data (e.g. from client cropPreviews or per-photo AI)
+            if (aiData && aiData.image && typeof aiData.image === 'string' && aiData.image.startsWith('data:')) {
+                try {
+                    const res = await fetch(aiData.image);
+                    const blob = await res.blob();
+                    if (blob && blob.size > 0) {
+                        const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: 'image/jpeg' });
+                        const upload = await storage.createFile(BUCKET, ID.unique(), file);
+                        childImageId = upload.$id;
+                    }
+                } catch (e) {
+                    console.error("Failed to upload base64 image for split item", e);
+                }
+            }
+            // Priority 2: Direct existing gallery image ID
+            else if (aiData && aiData.image_index !== undefined && !aiData.bounding_box && galleryList[aiData.image_index]) {
                 childImageId = galleryList[aiData.image_index];
-            } else if (aiData && aiData.image) {
+            } 
+            // Priority 3: Remote image URL
+            else if (aiData && aiData.image && typeof aiData.image === 'string' && aiData.image.startsWith('http')) {
                 try {
                     const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(aiData.image)}`;
                     const res = await fetch(proxiedUrl);
                     if (res.ok) {
                         const blob = await res.blob();
-                        const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: blob.type });
+                        const file = new File([blob], `ai-split-${ID.unique()}.jpg`, { type: blob.type || 'image/jpeg' });
                         const upload = await storage.createFile(BUCKET, ID.unique(), file);
                         childImageId = upload.$id;
                     }
                 } catch (e) {
                     console.error("Failed to fetch AI image for split item", e);
                 }
-            } else if (aiData && aiData.bounding_box && targetImgElement) {
+            } 
+            // Priority 4: Bounding box crop on target image
+            else if (aiData && aiData.bounding_box && targetImgElement) {
                  try {
                      let bbox = aiData.bounding_box;
                      if (typeof bbox === 'string') {
@@ -1860,7 +1920,6 @@ const submitDeconstruct = async () => {
                      const sWidth = ((xmax - xmin) / 1000) * imgW;
                      const sHeight = ((ymax - ymin) / 1000) * imgH;
                      
-                     // Expand the crop slightly (10% padding) to ensure entire item is visible
                      const paddingX = sWidth * 0.1;
                      const paddingY = sHeight * 0.1;
                      const cropX = Math.max(0, sx - paddingX);
@@ -1872,7 +1931,7 @@ const submitDeconstruct = async () => {
                      canvas.width = cropW;
                      canvas.height = cropH;
                      const ctx = canvas.getContext('2d');
-                     ctx.drawImage(parentImageElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                     ctx.drawImage(targetImgElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
                      
                      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
                      const file = new File([blob], `crop-${ID.unique()}.jpg`, { type: 'image/jpeg' });
@@ -1880,12 +1939,7 @@ const submitDeconstruct = async () => {
                      childImageId = upload.$id;
                  } catch(e) {
                      console.error("Failed to crop image using bounding box", e);
-                     addToast({ type: 'error', message: `Crop failed: ${e.message}` });
                  }
-            } else if (!aiData?.bounding_box) {
-                 addToast({ type: 'warning', message: `No bounding box returned by AI for ${title}` });
-            } else if (!parentImageElement) {
-                 addToast({ type: 'error', message: `Could not load main image to crop ${title}` });
             }
             
             let notes = aiData ? `Extracted from lot: ${parent.title}` : `[Needs Scouting]\n\nExtracted from lot: ${parent.title}`;

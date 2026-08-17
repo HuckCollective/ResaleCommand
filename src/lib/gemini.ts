@@ -1,33 +1,38 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Ensure this is only run on the server or use a public proxy if strictly necessary, 
-// but for Astro SSR, 'GEMINI_API_KEY' (without PUBLIC_) is safe in .env
-const apiKey = import.meta.env.GEMINI_API_KEY;
+const getApiKey = () => {
+    return (typeof import.meta !== 'undefined' && import.meta.env?.GEMINI_API_KEY) || 
+           (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || '';
+};
 
-// Initialize only if key is present to avoid build errors
-export const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+export const getModel = () => {
+    const key = getApiKey();
+    if (!key) throw new Error("Gemini API key not configured (GEMINI_API_KEY)");
+    const ai = new GoogleGenerativeAI(key);
+    return ai.getGenerativeModel({ 
+        model: "gemini-2.5-flash",
+        systemInstruction: "You are a master appraiser. CRITICAL DIRECTIVE: You must NEVER misidentify D&D 3.5e Premium Reprints (which feature a solitary embossed eye, lock, or globe on faux-leather) as '5e', 'Alternate Art', or 'Hydro74'. That specific artwork is explicitly 3.5e."
+    });
+};
 
-// Using the latest valid model namespace
-export const model = genAI ? genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash",
-    systemInstruction: "You are a master appraiser. CRITICAL DIRECTIVE: You must NEVER misidentify D&D 3.5e Premium Reprints (which feature a solitary embossed eye, lock, or globe on faux-leather) as '5e', 'Alternate Art', or 'Hydro74'. That specific artwork is explicitly 3.5e."
-}) : null;
+export const genAI = getApiKey() ? new GoogleGenerativeAI(getApiKey()) : null;
+export const model = getApiKey() ? getModel() : null;
 
 // Helper to provide robust exponential backoff for generateContent calls
-// Useful for dealing with free-tier 429 rate limits or transient 503 errors (e.g. 27% errors)
 export const generateContentWithBackoff = async (
     request: any, 
     maxRetries = 10, 
     baseDelayMs = 2500
 ) => {
-    if (!model) throw new Error("Gemini model not initialized");
+    const activeModel = getModel();
+    if (!activeModel) throw new Error("Gemini model not initialized");
     
     let retries = maxRetries;
     let delayMs = baseDelayMs;
     
     while (retries > 0) {
         try {
-            const result = await model.generateContent(request);
+            const result = await activeModel.generateContent(request);
             return result;
         } catch (err: any) {
             const msg = (err.message || "").toLowerCase();

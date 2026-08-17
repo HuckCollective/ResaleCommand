@@ -403,23 +403,36 @@ export async function getItemsByPurchaseId(purchaseId: string) {
 export async function searchItems(queryStr: string) {
     try {
         if (!queryStr) return [];
-        const queries = [
-            Query.limit(20),
-            Query.or([
-                Query.equal('identity', queryStr),
-                Query.search('title', queryStr)
-            ])
-        ];
-        const response = await databases.listDocuments(DB_ID, getCollectionId(), queries);
-        return response.documents;
+        const raw = queryStr.trim();
+        const numericDigits = raw.replace(/\D/g, '');
+        const q = raw.toLowerCase();
+
+        const response = await databases.listDocuments(DB_ID, getCollectionId(), [
+            Query.limit(100),
+            Query.orderDesc('$createdAt')
+        ]);
+
+        return response.documents.filter((d: any) => {
+            const titleMatch = (d.title || d.itemName || '').toLowerCase().includes(q);
+            const identityMatch = (d.identity || d.$id || '').toLowerCase().includes(q);
+            const itemUpc = (d.upc || d.sku || '').toLowerCase();
+            const upcMatch = itemUpc.includes(q);
+
+            let numMatch = false;
+            if (numericDigits.length >= 1) {
+                const itemUpcDigits = itemUpc.replace(/\D/g, '');
+                if (itemUpcDigits) {
+                    if (itemUpcDigits.endsWith(numericDigits) || itemUpcDigits.includes(numericDigits)) numMatch = true;
+                    const padded = numericDigits.padStart(4, '0');
+                    if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) numMatch = true;
+                }
+            }
+
+            return titleMatch || identityMatch || upcMatch || numMatch;
+        }).slice(0, 20);
     } catch (error) {
-        console.warn("Native search failed, falling back to manual filter:", error);
-        const response = await databases.listDocuments(DB_ID, getCollectionId(), [Query.limit(100), Query.orderDesc('$createdAt')]);
-        const q = queryStr.toLowerCase();
-        return response.documents.filter(d => 
-            (d.identity && d.identity.toLowerCase().includes(q)) || 
-            (d.title && d.title.toLowerCase().includes(q))
-        ).slice(0, 20);
+        console.warn("Search items failed:", error);
+        return [];
     }
 }
 

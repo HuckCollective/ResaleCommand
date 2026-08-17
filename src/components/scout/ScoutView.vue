@@ -214,21 +214,21 @@
 
                     <!-- Pricing Grid -->
                     <div class="grid grid-cols-4 gap-2 text-center mt-2">
-                        <div class="bg-base-200 rounded p-2 flex flex-col">
-                            <span class="text-[10px] uppercase font-bold opacity-50">NEW/MINT</span>
-                            <span class="text-success font-bold text-sm md:text-base">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
+                        <div class="bg-base-200/80 border border-base-300 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                            <span class="badge badge-success badge-xs font-bold mb-1">MINT</span>
+                            <span class="font-mono font-bold text-sm md:text-base text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
                         </div>
-                        <div class="bg-primary/10 rounded p-2 flex flex-col border border-primary/20">
-                            <span class="text-[10px] uppercase font-bold opacity-50 text-primary">USED/FAIR</span>
-                            <span class="text-primary font-bold text-sm md:text-base">{{ formatPriceDisplay(item.price_breakdown?.fair) }}</span>
+                        <div class="bg-primary/10 border border-primary/30 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                            <span class="badge badge-primary badge-xs font-bold mb-1">FAIR</span>
+                            <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.price_breakdown?.fair) }}</span>
                         </div>
-                        <div class="bg-base-200 rounded p-2 flex flex-col">
-                            <span class="text-[10px] uppercase font-bold opacity-50">POOR</span>
-                            <span class="text-warning font-bold text-xs md:text-sm">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
+                        <div class="bg-base-200/80 border border-base-300 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                            <span class="badge badge-warning badge-xs font-bold mb-1">POOR</span>
+                            <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
                         </div>
-                        <div class="bg-secondary/10 rounded p-2 flex flex-col border border-secondary/20">
-                            <span class="text-[10px] uppercase font-bold opacity-70 text-secondary">BOUTIQUE</span>
-                            <span class="text-secondary font-bold text-sm md:text-base">{{ formatPriceDisplay(item.price_breakdown?.boutique_premium) }}</span>
+                        <div class="bg-secondary/10 border border-secondary/30 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                            <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
+                            <span class="font-mono font-extrabold text-sm md:text-base text-base-content">{{ formatBoutiquePriceDisplay(item) }}</span>
                         </div>
                     </div>
 
@@ -1151,6 +1151,24 @@ function formatPriceDisplay(val: any) {
     }
     
     return String(val);
+}
+
+function formatBoutiquePriceDisplay(item: any) {
+    if (item?.price_breakdown?.boutique_premium) {
+        return formatPriceDisplay(item.price_breakdown.boutique_premium);
+    }
+    const mint = parsePrice(item?.price_breakdown?.mint);
+    const fair = parsePrice(item?.price_breakdown?.fair);
+    if (mint > 0) {
+        const low = Math.round(mint * 1.15);
+        const high = Math.round(mint * 1.4);
+        return `$${low} - $${high}`;
+    } else if (fair > 0) {
+        const low = Math.round(fair * 1.3);
+        const high = Math.round(fair * 1.6);
+        return `$${low} - $${high}`;
+    }
+    return '$45 - $65';
 }
 
 function getSliderMinMax(item: any) {

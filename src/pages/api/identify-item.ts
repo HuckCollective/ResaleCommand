@@ -905,7 +905,7 @@ export const ALL: APIRoute = async ({ request }) => {
               - 'mint': Price range if New/Mint.
               - 'fair': Price range if Used/Good.
               - 'poor': Price range if Poor/Damaged.
-              - 'boutique_premium': Price range if sold in a curated physical boutique or antique shop.
+              - 'boutique_premium': (REQUIRED string) High-end physical booth / curated antique shop retail pricing tier (e.g. "$45 - $65"). MUST always be included.
               - 'confidence': (Low/Medium/High)
           - 'comparables': An array of EXACTLY 1 similar item sold on eBay/etc (BE BRIEF).
                - 'name': Specific item name/title.

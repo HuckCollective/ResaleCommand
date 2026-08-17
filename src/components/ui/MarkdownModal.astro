@@ -93,6 +93,11 @@
     if (contentDiv) {
       // Render the markdown to HTML
       contentDiv.innerHTML = marked(currentRawText);
+      contentDiv.querySelectorAll('img').forEach((img) => {
+        img.addEventListener('error', () => {
+          img.style.display = 'none';
+        });
+      });
     }
 
     if (modal) {

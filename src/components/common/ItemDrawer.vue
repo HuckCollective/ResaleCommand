@@ -314,7 +314,17 @@
                                     class="w-16 h-16 shrink-0 rounded-md overflow-hidden border border-base-300 bg-base-200 shadow-inner flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary relative group transition-all" 
                                     title="Click to select / change photo"
                                 >
-                                    <img :src="cropPreviews[idx] || resultItem.image" class="w-full h-full object-cover" alt="Item preview" />
+                                    <img 
+                                        v-if="cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])" 
+                                        :src="cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])" 
+                                        class="w-full h-full object-cover" 
+                                        alt="Item preview" 
+                                        @error="$event.target.style.display = 'none'; $event.target.nextElementSibling?.classList.remove('hidden')" 
+                                    />
+                                    <div :class="{'hidden': cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])}" class="flex flex-col items-center justify-center text-base-content/40 p-1">
+                                        <Icon icon="solar:gallery-wide-bold" class="w-6 h-6" />
+                                        <span class="text-[8px] font-bold">Pick Photo</span>
+                                    </div>
                                     <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
                                         <Icon icon="solar:gallery-edit-linear" class="w-5 h-5" />
                                         <span class="text-[8px] font-bold mt-0.5">Change</span>
@@ -401,9 +411,9 @@
                                 <span class="text-[9px] uppercase font-bold text-error">Poor</span>
                                 <span class="font-mono font-bold text-xs">{{ scoutTotalRange.poor.formatted }}</span>
                             </div>
-                            <div class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30 shadow-sm">
-                                <span class="text-[9px] uppercase font-bold text-secondary">Boutique</span>
-                                <span class="font-mono font-bold text-xs">{{ scoutTotalRange.boutique.formatted }}</span>
+                            <div class="flex flex-col items-center bg-purple-500/10 p-2 rounded border border-purple-500/30 shadow-sm">
+                                <span class="text-[9px] uppercase font-bold text-purple-700 dark:text-purple-300">Boutique</span>
+                                <span class="font-mono font-bold text-xs text-purple-700 dark:text-purple-300">{{ scoutTotalRange.boutique.formatted }}</span>
                             </div>
                         </div>
 
@@ -453,8 +463,7 @@
                         
                         <!-- Actions -->
                         <div class="pt-4 border-t border-base-300">
-                             <button v-if="saveIndividually && props.item" type="button" class="btn btn-primary w-full gap-2 shadow-md" @click="$emit('deconstruct', { item: { ...props.item, ...editForm }, count: scoutItemsArray.length, scoutItems: scoutItemsArray })">
-
+                             <button v-if="saveIndividually && props.item" type="button" class="btn btn-primary w-full gap-2 shadow-md" @click="triggerSplitLot">
                                   <span><Icon icon="solar:scissors-linear" class="w-4 h-4 inline mr-1" /> Split Lot ({{ scoutItemsArray.length }} Items)</span>
                              </button>
                              
@@ -468,7 +477,7 @@
                     <div v-else-if="scoutItemsArray.length === 1">
                         <!-- AI Found Image Thumbnail -->
                         <div v-if="scoutItemsArray[0].image" class="mb-3 flex justify-center">
-                            <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-lg shadow-md border border-base-300" alt="AI Found Item" />
+                            <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-lg shadow-md border border-base-300" alt="AI Found Item" @error="$event.target.style.display = 'none'" />
                         </div>
 
                         <!-- Red Flags -->
@@ -490,9 +499,9 @@
                                 <span class="text-[10px] uppercase font-bold text-error">Poor</span>
                                 <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.poor) }}</span>
                             </div>
-                            <div v-if="scoutItemsArray[0].price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-2 rounded border border-secondary/30">
-                                <span class="text-[10px] uppercase font-bold text-secondary">Boutique</span>
-                                <span class="font-mono font-bold">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.boutique_premium) }}</span>
+                            <div v-if="scoutItemsArray[0].price_breakdown.boutique_premium" class="flex flex-col items-center bg-purple-500/10 p-2 rounded border border-purple-500/30">
+                                <span class="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-300">Boutique</span>
+                                <span class="font-mono font-bold text-purple-700 dark:text-purple-300">{{ formatPriceRange(scoutItemsArray[0].price_breakdown.boutique_premium) }}</span>
                             </div>
                         </div>
 
@@ -1210,13 +1219,25 @@ const generateCropPreviews = async (items) => {
 
     try {
         const defaultImg = await loadImgByUrl(galleryUrls[0]);
-        if (!defaultImg) return;
 
         for (let idx = 0; idx < items.length; idx++) {
             const item = items[idx];
+            
+            // Priority 1: Direct 1:1 image URL from per-photo inspection
+            if (item.image_url) {
+                cropPreviews.value[idx] = item.image_url;
+                continue;
+            }
+            if (item.image_index !== undefined && !item.bounding_box && galleryUrls[item.image_index]) {
+                cropPreviews.value[idx] = galleryUrls[item.image_index];
+                continue;
+            }
+
+            // Priority 2: Cropped bounding box if bounding box exists
             if (item.bounding_box && !cropPreviews.value[idx]) {
                 const imgIdx = (item.image_index !== undefined && galleryUrls[item.image_index]) ? item.image_index : 0;
                 const targetImg = (await loadImgByUrl(galleryUrls[imgIdx])) || defaultImg;
+                if (!targetImg) continue;
 
                 let bbox = item.bounding_box;
                 if (typeof bbox === 'string') {
@@ -1333,9 +1354,13 @@ watch(scoutResult, (newVal) => {
 const suggestedTitleStr = computed(() => {
     if (!scoutResult.value) return null;
     
+    // Priority 1: Direct title property from inspection synthesis
+    if (scoutResult.value.title) {
+        return scoutResult.value.title;
+    }
+    
     // Check if it's the standard API response format { items: [...] }
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items.length > 0) {
-        // If it's a bulk lot (multiple items), combine the titles
         if (scoutResult.value.items.length > 1) {
             const names = scoutResult.value.items.map(i => i.title || i.identity).filter(Boolean);
             if (names.length > 0) {
@@ -1348,7 +1373,6 @@ const suggestedTitleStr = computed(() => {
     
     // Fallback for legacy single object or array formats
     if (Array.isArray(scoutResult.value) && scoutResult.value.length > 0) {
-        // If it's a bulk lot (multiple items), combine the titles
         if (scoutResult.value.length > 1) {
             const names = scoutResult.value.map(i => i.title || i.identity).filter(Boolean);
             if (names.length > 0) {
@@ -1366,6 +1390,11 @@ const suggestedTitleStr = computed(() => {
 
 const suggestedListPriceStr = computed(() => {
     if (!scoutResult.value) return null;
+    if (scoutResult.value.price_breakdown) {
+        let fair = parsePrice(scoutResult.value.price_breakdown.fair);
+        if (!fair) fair = parsePrice(scoutResult.value.price_breakdown.mint);
+        if (fair > 0) return fair.toFixed(2);
+    }
     if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
         return ((scoutTotalRange.value.low + scoutTotalRange.value.high) / 2).toFixed(2);
     }
@@ -1378,6 +1407,10 @@ const suggestedListPriceStr = computed(() => {
 
 const suggestedEstLowStr = computed(() => {
     if (!scoutResult.value) return null;
+    if (scoutResult.value.price_breakdown) {
+        let poor = parsePrice(scoutResult.value.price_breakdown.poor);
+        if (poor > 0) return poor.toFixed(2);
+    }
     if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
         return scoutTotalRange.value.low.toFixed(2);
     }
@@ -1389,6 +1422,10 @@ const suggestedEstLowStr = computed(() => {
 
 const suggestedEstHighStr = computed(() => {
     if (!scoutResult.value) return null;
+    if (scoutResult.value.price_breakdown) {
+        let mint = parsePrice(scoutResult.value.price_breakdown.mint);
+        if (mint > 0) return mint.toFixed(2);
+    }
     if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
         return scoutTotalRange.value.high.toFixed(2);
     }
@@ -2179,18 +2216,27 @@ const analyzeExistingItem = async () => {
         const resizedLocal = (await Promise.all(resizePromises)).filter(img => img !== null);
         base64Images.push(...resizedLocal);
         
-        // 2. Process existing Appwrite URLs (Pass all gallery URLs to backend)
+        // 2. Fetch and convert all available gallery photos to Base64 (eliminates backend 404/auth issues)
+        const availableUrls = allAvailableGalleryUrls.value || [];
         const remoteUrls = [];
-        if (editForm.existingGalleryIds) {
-            for (const id of editForm.existingGalleryIds.slice(0, Math.max(0, 12 - base64Images.length))) {
-                let url = getAssetUrl(id);
-                // Instead of proxying and downloading, pass the direct URL to the backend
-                if (url) remoteUrls.push(url);
+        const remotePromises = availableUrls.slice(0, Math.max(0, 12 - base64Images.length)).map(async (url) => {
+            try {
+                remoteUrls.push(url);
+                if (url.startsWith('data:')) return url;
+                const proxied = url.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+                const res = await fetch(proxied);
+                if (!res.ok) return null;
+                const blob = await res.blob();
+                return await resize(blob);
+            } catch (e) {
+                return null;
             }
-        }
+        });
+        const converted = (await Promise.all(remotePromises)).filter(Boolean);
+        base64Images.push(...converted);
         
         // 3. Fallback to just main photo URL if somehow nothing was caught
-        if (base64Images.length === 0 && remoteUrls.length === 0 && actualMainPhoto.value.url) {
+        if (base64Images.length === 0 && actualMainPhoto.value.url) {
             let url = actualMainPhoto.value.url;
             if (url.startsWith('data:')) {
                 try { const res = await fetch(url); base64Images.push(await resize(await res.blob())); } catch (e) {}
@@ -2262,12 +2308,20 @@ const analyzeExistingItem = async () => {
             });
         }
 
-        const response = await fetch(`/api/identify-item`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        const totalPhotos = base64Images.length + remoteUrls.length;
+        const isMultiPhoto = totalPhotos > 1;
+        const apiEndpoint = isMultiPhoto ? '/api/inspect-lot' : '/api/identify-item';
+
+        const response = await fetch(apiEndpoint, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 images: base64Images, 
                 remoteImageUrls: remoteUrls,
+                title: editForm.title,
                 notes: contextNotes,
+                cost: editForm.cost,
+                quantity: editForm.quantity || props.item?.quantity,
+                sourcingLocation: editForm.sourcingLocation || props.item?.sourcingLocation,
                 locations: activeLocations
             }),
             signal: scoutAbortController.signal
@@ -2283,7 +2337,32 @@ const analyzeExistingItem = async () => {
         }
         
         const data = await response.json();
-        if (data.items && data.items.length > 0) {
+        
+        // Handle Per-Photo Lot Inspection Result
+        if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
+            scoutResult.value = data;
+            
+            // Immediately assign 1:1 crisp photos to components
+            data.lot_items.forEach((li, idx) => {
+                const photoUrl = li.image_url || (li.image_index !== undefined && allAvailableGalleryUrls.value[li.image_index]);
+                if (photoUrl) {
+                    cropPreviews.value[idx] = photoUrl;
+                }
+            });
+
+            let desc = `**LOT BREAKDOWN (${data.lot_items.length} Items):**\n`;
+            data.lot_items.forEach((item, idx) => {
+                desc += `\n**${idx+1}. ${item.name || item.identity}** - Est: ${item.estimated_value || 'N/A'}\n`;
+                if(item.condition) desc += `- Condition: ${item.condition}\n`;
+                if(item.ocr_detected_text) desc += `- OCR Read: ${item.ocr_detected_text}\n`;
+            });
+            if (data.market_report) {
+                desc += `\n**Market Strategy:** Best Channel: ${data.market_report.best_platform}\n`;
+                if (data.market_report.platform_rationale) desc += `${data.market_report.platform_rationale}\n`;
+            }
+            scoutMdText.value = desc.trim();
+            descTab.value = 'edit';
+        } else if (data.items && data.items.length > 0) {
             if (data.items.length > 1) {
                 scoutResult.value = data.items;
                 let totalLow = 0, totalHigh = 0;
@@ -2329,9 +2408,6 @@ const analyzeExistingItem = async () => {
                 if(item.comparables && item.comparables.length > 0) { report += `\n**Comparables:**\n`; item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status}]\n`); }
                 if(item.keywords && item.keywords.length > 0) report += `**Keywords:** ${item.keywords.join(', ')}\n`;
                 scoutMdText.value = report.trim();
-                
-                // Note: We deliberately do NOT mutate editForm here.
-                // The UI will detect scoutResult and display suggestion buttons.
             }
             descTab.value = 'edit';
         }
@@ -2355,6 +2431,18 @@ const applyBundleSuggestions = () => {
         editForm.description = suggestedDescriptionStr.value;
     }
     addToast({ type: 'success', message: 'Applied AI bundle suggestions to form.' });
+};
+
+const triggerSplitLot = () => {
+    const enrichedItems = scoutItemsArray.value.map((item, idx) => ({
+        ...item,
+        image: cropPreviews.value[idx] || item.image || item.image_url || (item.image_index !== undefined && allAvailableGalleryUrls.value[item.image_index]) || ''
+    }));
+    emit('deconstruct', {
+        item: { ...props.item, ...editForm },
+        count: enrichedItems.length,
+        scoutItems: enrichedItems
+    });
 };
 
 const lotChildren = ref([]);
