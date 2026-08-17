@@ -290,9 +290,11 @@ const consolidatedSales = computed(() => {
       const locName = (Array.isArray(item.sellingLocations) ? item.sellingLocations[0] : item.sellingLocations) || item.storageLocation || 'Location';
       const commRate = getCommissionRate(locName);
 
-      const gross = Number(item.soldPrice || item.resalePrice || item.listPrice || 0);
-      const fees = gross * (commRate / 100);
-      const net = gross - fees;
+      const gross = Number(item.resalePrice || item.listPrice || item.soldPrice || 0);
+      const net = (item.soldPrice !== undefined && item.soldPrice !== null && Number(item.soldPrice) > 0)
+        ? Number(item.soldPrice)
+        : Number((gross * (1 - (commRate / 100))).toFixed(2));
+      const fees = Math.max(0, Number((gross - net).toFixed(2)));
 
       list.push({
         uniqueKey: `item-${item.$id}`,

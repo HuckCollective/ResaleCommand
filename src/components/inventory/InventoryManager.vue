@@ -846,7 +846,7 @@ const runAutoCalcSoldPrice = async () => {
         bulkProgress.value++;
         const rp = parseFloat(item.resalePrice || item.listPrice || 0);
         if (rp > 0) {
-            const calcPrice = parseFloat((rp * 0.8).toFixed(2));
+            const calcPrice = parseFloat((rp * 0.85).toFixed(2));
             try {
                 await updateInventoryItem(item.$id, { soldPrice: calcPrice });
                 item.soldPrice = calcPrice;
@@ -1310,7 +1310,7 @@ const applyBulkStatus = async () => {
                  const currentSoldPrice = item.soldPrice || '';
                  const rp = parseFloat(item.resalePrice || item.listPrice || 0);
                  if (!currentSoldPrice && rp > 0) {
-                     updates.soldPrice = parseFloat((rp * 0.8).toFixed(2));
+                     updates.soldPrice = parseFloat((rp * 0.85).toFixed(2));
                      autoCalcCount++;
                  }
              }
@@ -1328,7 +1328,7 @@ const applyBulkStatus = async () => {
                     const currentSoldPrice = item.soldPrice || '';
                     const rp = parseFloat(item.resalePrice || item.listPrice || 0);
                     if (!currentSoldPrice && rp > 0) {
-                         item.soldPrice = parseFloat((rp * 0.8).toFixed(2));
+                         item.soldPrice = parseFloat((rp * 0.85).toFixed(2));
                     }
                 }
             }
