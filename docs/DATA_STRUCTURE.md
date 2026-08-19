@@ -35,24 +35,36 @@ If your CSV has two columns named similarly:
 
 ---
 
+---
+
 ## 2. Database Structure (Appwrite)
 
-**Database ID:** `inventory_db` (or from env `PUBLIC_APPWRITE_DB_ID`)
-**Collection ID:** `items` (or from env `PUBLIC_APPWRITE_COLLECTION_ID`)
+**Database ID:** `inventory_db` (or from env `PUBLIC_APPWRITE_DB_ID`)  
+**Main Items Collection ID:** `items` (or from env `PUBLIC_APPWRITE_COLLECTION_ID`)
 
 ### Core Schema (`items` Collection)
 
-| Attribute Name      | Type   | Size/Format | Required | Description                                                                          |
-| :------------------ | :----- | :---------- | :------- | :----------------------------------------------------------------------------------- |
-| `title`             | String | 255         | **Yes**  | Item title/headline.                                                                 |
-| `status`            | String | 50          | No       | `scouted`, `acquired`, `processing`, `need_to_list`, `listed`, `at_location`, `sold` |
-| `conditionNotes`    | String | 1000+       | No       | Condition details. **Also used for "Safe Mode" backup data.**                        |
-| `paidPrice`         | Float  | -           | No       | Purchase cost.                                                                       |
-| `resalePrice`       | Float  | -           | No       | Target sale price.                                                                   |
-| `maxBuyPrice`       | Float  | -           | No       | Max bid limit (for scouting).                                                        |
-| `purchaseLocation`  | String | 255         | No       | Source URL (e.g., ShopGoodwill link) or Store Name.                                  |
-| `binLocation`       | String | 255         | No       | Physical location (e.g., "Bin A-2").                                                 |
-| `marketDescription` | String | 5000        | No       | AI-generated description.                                                            |
+| Attribute Name       | Type     | Size/Constraints       | Required | Description                                                                          |
+| :------------------- | :------- | :--------------------- | :------- | :----------------------------------------------------------------------------------- |
+| `title`              | String   | 255                    | **Yes**  | Item title/headline.                                                                 |
+| `identity`           | String   | 255                    | No       | Unique identifier or system hash.                                                    |
+| `status`             | String   | 50                     | No       | `scouted`, `acquired`, `received`, `placed`, `sold`                                  |
+| `conditionNotes`     | String   | 1000+ (max 800 parsed) | No       | Condition details, import tags, and analytics safe mode.                             |
+| `cost`               | Float    | -                      | No       | Purchase / unit cost paid.                                                           |
+| `resalePrice`        | Float    | -                      | No       | Listed / gross agreed sticker price.                                                 |
+| `soldPrice`          | Float    | -                      | No       | **Net take-home payout** after consignment commission fees.                          |
+| `maxBuyPrice`        | Float    | -                      | No       | Max buy price limit (for scouting).                                                  |
+| `quantity`           | Integer  | **min: 1, max: 100000**| No       | In-stock quantity. **Note: Appwrite rejects 0. Mark sold with status: 'sold'.**      |
+| `upc`                | String   | 255                    | No       | Barcode identifier (e.g. `HUCK-0042`, `PDXGL-0001`).                                 |
+| `locationSku`        | String   | 255                    | No       | External booth SKU (e.g. `0EJ001` for Memory Den).                                   |
+| `parentLotId`        | String   | 255                    | No       | Parent item ID if split from a multi-quantity lot.                                   |
+| `sellingLocations`   | String[] | Array of Strings       | No       | Physical booth / selling channel tags (e.g. `["MemoryDen", "DustyTiger"]`).           |
+| `sourcingLocation`   | String   | 255                    | No       | Source store, thrift shop, or URL link.                                              |
+| `storageLocation`    | String   | 255                    | No       | Physical storage bin / location.                                                     |
+| `marketDescription`  | String   | 5000                   | No       | AI-generated product description & comparables.                                      |
+| `saleId`             | String   | 255                    | No       | Associated sales collection record ID.                                               |
+| `purchaseId`         | String   | 255                    | No       | Associated purchase order record ID.                                                 |
+| `tenantId`           | String   | 255                    | No       | Organization / Team ID.                                                              |
 
 ### Images & Media
 
@@ -62,15 +74,33 @@ If your CSV has two columns named similarly:
 | `galleryImageIds` | String[] | Array of IDs for additional photos.             |
 | `receiptImageId`  | String   | ID of the purchase receipt image.               |
 
-### Legacy / "Safe Mode" Fields
+### `sales` Collection
 
-If attributes like `paidPrice` or `imageId` are missing from the schema, the system automatically appends them to `conditionNotes` in this format:
+| Attribute Name     | Type   | Description                                                              |
+| :----------------- | :----- | :----------------------------------------------------------------------- |
+| `soNumber`         | String | Sales order number (e.g. `SO-1042`).                                     |
+| `warehouseId`      | String | Warehouse / booth location ID where item sold.                           |
+| `orderId`          | String | Linked item UPC or external SKU.                                         |
+| `saleDate`         | String | ISO timestamp of the sale.                                               |
+| `status`           | String | `Sold`, `Completed`, `Pending`.                                          |
+| `grossAmount`      | Float  | Total customer purchase amount.                                          |
+| `commissionFee`    | Float  | Location consignment commission fee charged.                             |
+| `netPayout`        | Float  | Actual take-home amount received.                                        |
+| `tenantId`         | String | Team / tenant owner.                                                     |
 
-- `Paid: $19.99`
-- `[MAIN IMAGE ID: 65a4b...]`
-- `Imported from Order #12345`
+### `warehouses` Collection
 
-### Indexes
+| Attribute Name     | Type    | Description                                                             |
+| :----------------- | :------ | :---------------------------------------------------------------------- |
+| `name`             | String  | Location name (e.g. `MemoryDen`).                                       |
+| `type`             | String  | `Consignment Booth`, `On-Site`, `Online`, `Warehouse`.                  |
+| `commissionRate`   | Float   | Default commission % fee (e.g. `15` for 15%).                            |
+| `monthlyRent`      | Float   | Fixed monthly space rent fee ($).                                       |
+| `categories`       | String  | Allowed niche / category keywords.                                      |
+| `isDefault`        | Boolean | Default location flag.                                                  |
+| `tenantId`         | String  | Team / tenant owner.                                                     |
 
-- `idx_title`: Key index on `title` (ASC) for searching.
-- `idx_purchaseLocation`: Key index on `purchaseLocation` (ASC) for filtering by source.
+### Critical Schema Rules:
+1. **Quantity Constraints**: The `quantity` integer attribute strictly enforces `1 <= quantity <= 100,000`. Never write `0` to `quantity`; items are retired/sold by updating `status: 'sold'`.
+2. **Notes Truncation**: `conditionNotes` are capped at 800 characters before payload submission to prevent byte-length overflow from multi-byte unicode characters.
+3. **UPC Uniqueness**: Barcodes increment sequentially per prefix stream (`HUCK-XXXX`, `PDXGL-XXXX`) and expand to 5+ digits as needed.

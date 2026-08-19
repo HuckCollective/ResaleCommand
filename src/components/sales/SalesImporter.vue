@@ -321,6 +321,7 @@ const executeImport = async () => {
 
       if (isSoldOrPaid) {
         updatePayload.status = 'sold';
+        updatePayload.resalePrice = row.listedPrice;
         updatePayload.soldPrice = row.salePrice;
         updatePayload.saleId = batchId;
       }
@@ -333,6 +334,7 @@ const executeImport = async () => {
         await databases.createDocument(DB_ID, SALES_COL, ID.unique(), {
           tenantId: item.tenantId,
           soNumber: `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+          orderId: item.upc || row.extractedSku || `IMP-${Date.now()}`,
           totalGross: row.salePrice,
           totalNet: row.salePrice * 0.9, // Approximation, should be actual
           status: 'Completed',

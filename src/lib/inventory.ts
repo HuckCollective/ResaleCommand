@@ -47,7 +47,42 @@ export interface ExtraItemData {
     saleId?: string;
     locationId?: string;
     upc?: string;
+    upcPrefix?: string;
     locationSku?: string;
+}
+
+export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string): Promise<string> {
+    const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
+    try {
+        const queries = [
+            Query.startsWith('upc', cleanPrefix),
+            Query.orderDesc('$createdAt'),
+            Query.limit(50)
+        ];
+        if (teamId) {
+            queries.push(Query.equal('tenantId', teamId));
+        }
+
+        const resp = await databases.listDocuments(DB_ID, getCollectionId(), queries).catch(() => ({ documents: [] }));
+        let maxIndex = 0;
+
+        for (const doc of resp.documents) {
+            const u = (doc as any).upc;
+            if (u && typeof u === 'string' && u.startsWith(cleanPrefix)) {
+                const numPart = u.replace(cleanPrefix, '');
+                const num = parseInt(numPart, 10);
+                if (!isNaN(num) && num > maxIndex) {
+                    maxIndex = num;
+                }
+            }
+        }
+
+        maxIndex++;
+        return `${cleanPrefix}${maxIndex.toString().padStart(4, '0')}`;
+    } catch (err) {
+        console.warn('Auto UPC query fallback:', err);
+        return `${cleanPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+    }
 }
 
 export function getSafeRawAnalysis(item: any): string | null {
@@ -178,7 +213,6 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         if (extraData.resalePrice) extraInfo.push(`Resale: $${extraData.resalePrice}`);
         if (extraData.maxBuyPrice) extraInfo.push(`Max Buy: $${extraData.maxBuyPrice}`);
         if (extraData.sourcingLocation) extraInfo.push(`Location: ${extraData.sourcingLocation}`);
-        if (extraData.storageLocation) extraInfo.push(`Bin: ${extraData.storageLocation}`);
         if (extraData.orderId) extraInfo.push(`Order #: ${extraData.orderId}`);
         if (imageId) extraInfo.push(`[MAIN IMAGE ID: ${imageId}]`);
         if (galleryIds.length > 0) extraInfo.push(`[GALLERY IDS: ${galleryIds.join(', ')}]`);
@@ -302,6 +336,18 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             safeNotes = safeNotes.substring(0, 800);
         }
 
+        // Guaranteed UPC barcode generation for all created and imported items (Goodwill, thrift receipts, POs)
+        let finalUpc = extraData.upc;
+        if (!finalUpc) {
+            const prefix = extraData.upcPrefix || 'HUCK-';
+            try {
+                finalUpc = await generateAutoUpc(prefix, teamId);
+            } catch {
+                const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
+                finalUpc = `${cleanPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+            }
+        }
+
         const scoutObj = extraData.scoutData || (itemData && (itemData.price_breakdown || itemData.comparables) ? itemData : null);
         const doc: any = {
             title: itemData.title,
@@ -327,7 +373,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             purchaseId: extraData.purchaseId || undefined,
             saleId: extraData.saleId || undefined,
             locationId: extraData.locationId || undefined,
-            upc: extraData.upc || undefined,
+            upc: finalUpc,
             locationSku: extraData.locationSku || undefined,
             rawAnalysis: extraData.rawAnalysis !== undefined 
                 ? (extraData.rawAnalysis === '' ? null : extraData.rawAnalysis)
@@ -509,6 +555,8 @@ export async function deleteInventoryItem(documentId: string) {
     }
 }
 
+export const updateItemInInventory = updateInventoryItem;
+
 export async function updateInventoryItem(documentId: string, updates: Partial<ExtraItemData>) {
     try {
         // 1. Fetch current document to safely update notes
@@ -546,11 +594,17 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         if (updates.title) data.title = updates.title;
         if (updates.description) data.marketDescription = updates.description;
         if (updates.components !== undefined) data.components = updates.components;
-        if (updates.quantity !== undefined) data.quantity = updates.quantity;
+        if (updates.quantity !== undefined) {
+            const q = Number(updates.quantity);
+            if (!isNaN(q) && q >= 1) {
+                data.quantity = q;
+            }
+        }
         if (updates.parentLotId !== undefined) data.parentLotId = updates.parentLotId;
         if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
         if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
         if (updates.upc !== undefined) data.upc = updates.upc;
+        if (updates.locationSku !== undefined) data.locationSku = updates.locationSku === '' ? null : updates.locationSku;
 
         // --- Handle File Uploads & Update Notes ---
 
@@ -674,7 +728,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
 
         if (updates.storageLocation !== undefined) {
             data.storageLocation = updates.storageLocation === '' ? null : updates.storageLocation;
-            updateNoteValue('Bin', updates.storageLocation);
+            // Note: We no longer update the Bin fallback in notes, as storageLocation is a dedicated field.
         }
         
         if (updates.sellingLocations !== undefined) {

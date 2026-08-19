@@ -258,7 +258,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 // Global Inventory State
-const { inventoryItems, fetchInventory } = useInventory();
+const { inventoryItems, fetchInventory, getNextUpc } = useInventory();
 const { currentTeam } = useAuth();
 
 const processing = ref(false);
@@ -388,6 +388,7 @@ const markSingleStatus = async (id, status, payloadData = null) => {
                 soldPrice: payloadData.soldPrice || 0,
                 commissionPaid: payloadData.commissionPaid || 0,
                 parentLotId: parentDoc.$id,
+                upc: parentDoc.upc || (getNextUpc ? getNextUpc('HUCK-') : undefined),
                 quantity: 1,
                 tenantId: parentDoc.tenantId || null,
                 userId: parentDoc.userId || null,
@@ -498,6 +499,7 @@ const manualLinkSync = async (csvRow, idx) => {
                 soldPrice: updatePayload.soldPrice || 0,
                 commissionPaid: updatePayload.commissionPaid || 0,
                 parentLotId: dbItem.$id,
+                upc: dbItem.upc || (getNextUpc ? getNextUpc('HUCK-') : undefined),
                 quantity: 1,
                 tenantId: dbItem.tenantId || null,
                 userId: dbItem.userId || null,

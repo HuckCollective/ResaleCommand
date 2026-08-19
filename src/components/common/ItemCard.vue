@@ -108,8 +108,14 @@ const titleClass = computed(() => props.compact ? 'text-xs h-[2.5em]' : 'text-ba
 
 // --- COMPUTED DATA ---
 const title = computed(() => props.item.title || props.item.identity || props.item.itemName || "Untitled Item");
-const locationText = computed(() => props.item.binLocation || props.item.purchaseLocation || '');
-const tags = computed(() => props.item.sellingLocations || props.item.salesChannel || []);
+const locationText = computed(() => props.item.storageLocation || props.item.binLocation || props.item.purchaseLocation || '');
+const tags = computed(() => {
+    const raw = props.item.sellingLocations || props.item.salesChannel || [];
+    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const currentLoc = (locationText.value || '').trim().toLowerCase();
+    // Filter out tags that duplicate the single item location
+    return list.filter(t => t && String(t).trim().toLowerCase() !== currentLoc);
+});
 
 const statusText = computed(() => {
     const s = props.item.status || 'received';

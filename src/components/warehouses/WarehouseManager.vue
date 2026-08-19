@@ -145,6 +145,26 @@
         </div>
         <div class="modal-backdrop" @click="closeEditor"></div>
       </div>
+
+      <!-- Delete Confirmation Modal -->
+      <div v-if="warehouseToDelete" class="modal modal-open z-50">
+        <div class="modal-box max-w-sm border border-base-200 shadow-2xl p-6 bg-base-100">
+          <div class="flex items-start gap-3">
+            <div class="p-2.5 rounded-2xl bg-error/10 text-error shrink-0">
+              <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <h3 class="font-bold text-lg leading-tight">Delete {{ warehouseToDelete.name }}?</h3>
+              <p class="text-xs opacity-75 mt-1.5">Are you sure you want to delete this location? This action cannot be undone.</p>
+            </div>
+          </div>
+          <div class="modal-action mt-6 flex justify-end gap-2 border-t border-base-200 pt-3">
+            <button class="btn btn-sm btn-ghost" @click="warehouseToDelete = null">Cancel</button>
+            <button class="btn btn-sm btn-error text-white font-bold" @click="executeDelete">Delete Location</button>
+          </div>
+        </div>
+        <div class="modal-backdrop" @click="warehouseToDelete = null"></div>
+      </div>
     </Teleport>
   </div>
 </template>
@@ -154,26 +174,28 @@ import { ref, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { warehousesApi } from '../../lib/warehouses';
+import { addToast } from '../../stores/toast';
 import type { WarehouseDocument, WarehouseData } from '../../lib/warehouses';
 
 const { currentTeam: team } = useAuth();
 
 const warehouses = ref<WarehouseDocument[]>([]);
-const loading = ref(true);
-const error = ref('');
-const saving = ref(false);
+const loading = ref<boolean>(false);
+const saving = ref<boolean>(false);
+const error = ref<string>('');
+const isEditing = ref<boolean>(false);
+const activeWarehouse = ref<WarehouseDocument | null>(null);
+const warehouseToDelete = ref<WarehouseDocument | null>(null);
 
-const isModalOpen = ref(false);
-const isEditing = ref(false);
 const editForm = ref<WarehouseData>({
   name: '',
-  type: 'On-Site',
-  commissionRate: 0,
+  type: 'Consignment Booth',
+  address: '',
+  description: '',
+  commissionRate: 15,
   monthlyRent: 0,
-  categories: '',
-  tenantId: ''
+  isDefault: false
 });
-const editingId = ref<string | null>(null);
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -187,75 +209,80 @@ const fetchWarehouses = async () => {
     warehouses.value = await warehousesApi.listWarehouses(team.value.$id);
   } catch (err: any) {
     console.error('Error fetching warehouses:', err);
-    error.value = err.message || 'Failed to load warehouses';
+    error.value = err.message || 'Failed to load locations';
   } finally {
     loading.value = false;
   }
 };
 
-const openEditor = (warehouse?: WarehouseDocument) => {
-  if (warehouse) {
-    isEditing.value = true;
-    editingId.value = warehouse.$id;
-    editForm.value = {
-      name: warehouse.name,
-      type: warehouse.type,
-      commissionRate: warehouse.commissionRate || 0,
-      monthlyRent: warehouse.monthlyRent || 0,
-      categories: warehouse.categories || warehouse.niche || '',
-      tenantId: warehouse.tenantId
-    };
-  } else {
-    isEditing.value = false;
-    editingId.value = null;
-    editForm.value = {
-      name: '',
-      type: 'On-Site',
-      commissionRate: 0,
-      monthlyRent: 0,
-      categories: '',
-      tenantId: team.value?.$id || ''
-    };
-  }
-  isModalOpen.value = true;
+const openCreateModal = () => {
+  isEditing.value = false;
+  activeWarehouse.value = {} as any; // Trigger modal
+  editForm.value = {
+    name: '',
+    type: 'Consignment Booth',
+    address: '',
+    description: '',
+    commissionRate: 15,
+    monthlyRent: 0,
+    isDefault: warehouses.value.length === 0
+  };
+};
+
+const openEditModal = (warehouse: WarehouseDocument) => {
+  isEditing.value = true;
+  activeWarehouse.value = warehouse;
+  editForm.value = {
+    name: warehouse.name,
+    type: warehouse.type,
+    address: warehouse.address || '',
+    description: warehouse.description || '',
+    commissionRate: warehouse.commissionRate ?? 15,
+    monthlyRent: warehouse.monthlyRent ?? 0,
+    isDefault: warehouse.isDefault ?? false
+  };
 };
 
 const closeEditor = () => {
-  isModalOpen.value = false;
+  activeWarehouse.value = null;
 };
 
 const saveWarehouse = async () => {
   if (!team.value) return;
   saving.value = true;
   try {
-    editForm.value.tenantId = team.value.$id;
-    editForm.value.commissionRate = Number(editForm.value.commissionRate) || 0;
-    editForm.value.monthlyRent = Number(editForm.value.monthlyRent) || 0;
-
-    if (isEditing.value && editingId.value) {
-      await warehousesApi.updateWarehouse(editingId.value, editForm.value);
+    if (isEditing.value && activeWarehouse.value) {
+      await warehousesApi.updateWarehouse(activeWarehouse.value.$id, editForm.value);
+      addToast({ type: 'success', message: 'Location updated successfully!' });
     } else {
-      await warehousesApi.createWarehouse(editForm.value);
+      await warehousesApi.createWarehouse(editForm.value, team.value.$id);
+      addToast({ type: 'success', message: 'Location created successfully!' });
     }
     closeEditor();
     await fetchWarehouses();
   } catch (err: any) {
     console.error('Error saving warehouse:', err);
-    alert(err.message || 'Failed to save location');
+    addToast({ type: 'error', message: err.message || 'Failed to save location' });
   } finally {
     saving.value = false;
   }
 };
 
-const confirmDelete = async (warehouse: WarehouseDocument) => {
-  if (confirm(`Are you sure you want to delete ${warehouse.name}? This action cannot be undone.`)) {
-    try {
-      await warehousesApi.deleteWarehouse(warehouse.$id);
-      await fetchWarehouses();
-    } catch (err: any) {
-      console.error('Error deleting warehouse:', err);
-      alert(err.message || 'Failed to delete location');
-    }
+const confirmDelete = (warehouse: WarehouseDocument) => {
+  warehouseToDelete.value = warehouse;
+};
+
+const executeDelete = async () => {
+  if (!warehouseToDelete.value) return;
+  const name = warehouseToDelete.value.name;
+  try {
+    await warehousesApi.deleteWarehouse(warehouseToDelete.value.$id);
+    warehouseToDelete.value = null;
+    await fetchWarehouses();
+    addToast({ type: 'info', message: `Deleted location ${name}.` });
+  } catch (err: any) {
+    console.error('Error deleting warehouse:', err);
+    addToast({ type: 'error', message: err.message || 'Failed to delete location' });
   }
 };
 

@@ -91,8 +91,8 @@
 
                 <div class="grid grid-cols-2 gap-4">
                     <div class="form-control">
-                        <label class="label"><span class="label-text">Bin / Location</span></label>
-                        <input v-model="form.bin" type="text" placeholder="e.g. Bin A-2" class="input input-bordered w-full" />
+                        <label class="label"><span class="label-text">Physical Location</span></label>
+                        <input v-model="form.storageLocation" type="text" placeholder="e.g. Bin A-2, Shelf 4" class="input input-bordered w-full" />
                     </div>
                     <div class="form-control">
                         <label class="label"><span class="label-text">Quantity</span></label>
@@ -165,7 +165,7 @@ const form = reactive({
     title: '',
     cost: '',
     listPrice: '',
-    bin: '',
+    storageLocation: '',
     description: '',
     quantity: 1
 });
@@ -284,7 +284,7 @@ async function saveItem() {
             title: form.title,
             cost: parseFloat(form.cost) || 0,
             resalePrice: form.listPrice, 
-            storageLocation: form.bin,
+            storageLocation: form.storageLocation,
             conditionNotes: form.description,
             status: 'acquired', 
             keywords: [],
@@ -303,7 +303,7 @@ async function saveItem() {
         form.title = '';
         form.cost = '';
         form.listPrice = '';
-        form.bin = '';
+        form.storageLocation = '';
         form.description = '';
         form.quantity = 1;
         images.value = [];

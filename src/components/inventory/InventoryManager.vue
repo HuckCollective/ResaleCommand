@@ -62,20 +62,32 @@
                             </label>
                         </div>
                     </div>
-                    <!-- Row 2: Search bar + Add New + Generate UPCs + Import dropdown + Export dropdown -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <!-- Quick Search Input -->
-                        <div class="relative flex-1 min-w-[220px] max-w-sm sm:max-w-md">
-                            <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
+                    <!-- Row 2: Dedicated Search Bar & Quick Filters -->
+                    <div class="flex flex-col sm:flex-row gap-3 mb-3">
+                        <div class="relative w-full sm:flex-1 sm:max-w-md shrink-0">
+                            <Icon icon="solar:magnifer-linear" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
                             <input 
                                 type="text" 
                                 v-model="searchQuery" 
-                                placeholder="Search title, UPC, #0735, bin..." 
-                                class="input input-sm input-bordered w-full pl-9 pr-8 text-xs bg-base-100 font-mono shadow-sm" 
+                                placeholder="Search title, UPC, location, keyword..." 
+                                class="input input-bordered w-full pl-10 pr-10 bg-base-100 font-mono shadow-sm h-12 text-base sm:h-10 sm:text-sm" 
                             />
-                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100" title="Clear search">✕</button>
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100" title="Clear search">✕</button>
                         </div>
+                        
+                        <!-- Quick Status Chips (Mobile Scrollable) -->
+                        <div class="flex overflow-x-auto gap-2 pb-1 sm:pb-0 items-center w-full" style="scrollbar-width: none; -ms-overflow-style: none;">
+                            <button @click="filterStatus = 'all'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'all' ? 'badge-primary' : 'badge-ghost badge-outline'">All</button>
+                            <button @click="filterStatus = 'tracked'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'tracked' ? 'badge-primary' : 'badge-ghost badge-outline'">Tracked</button>
+                            <button @click="filterStatus = 'acquired'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'acquired' ? 'badge-primary' : 'badge-ghost badge-outline'">Acquired</button>
+                            <button @click="filterStatus = 'received'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'received' ? 'badge-primary' : 'badge-ghost badge-outline'">Received</button>
+                            <button @click="filterStatus = 'placed'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'placed' ? 'badge-primary' : 'badge-ghost badge-outline'">Placed</button>
+                            <button @click="filterStatus = 'sold'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'sold' ? 'badge-primary' : 'badge-ghost badge-outline'">Sold</button>
+                        </div>
+                    </div>
 
+                    <!-- Row 3: Action Buttons (Add, Gen UPC, Import, Export) -->
+                    <div class="flex flex-wrap items-center gap-2">
                         <!-- Add New -->
                         <button class="btn btn-sm btn-primary gap-1.5 flex-1 sm:flex-none" @click="openAdd">
                             <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
@@ -228,13 +240,33 @@
                                 </div>
 
                                 <!-- Location -->
-                                <div class="join" v-if="orgPlacedLocations && orgPlacedLocations.length > 0">
-                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content">
+                                <div class="join">
+                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-[140px]">
                                         <option value="" disabled selected>Set Location...</option>
-                                        <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                        <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                        <option value="__custom__">+ Custom Location...</option>
                                     </select>
-                                    <button class="btn btn-xs btn-secondary join-item" @click="applyBulkLocation" :disabled="!bulkLocationTarget || processingBulkLoc">
+                                    <input 
+                                        v-if="bulkLocationTarget === '__custom__'"
+                                        type="text" 
+                                        v-model="bulkCustomLocation"
+                                        placeholder="Type location..." 
+                                        class="input input-xs input-bordered join-item w-28 bg-base-100 text-xs font-bold" 
+                                    />
+                                    <button class="btn btn-xs btn-secondary join-item" @click="applyBulkLocation" :disabled="(!bulkLocationTarget || (bulkLocationTarget === '__custom__' && !bulkCustomLocation.trim())) || processingBulkLoc">
                                         <span v-if="processingBulkLoc" class="loading loading-spinner loading-xs"></span>
+                                        <span v-else>Apply</span>
+                                    </button>
+                                </div>
+
+                                <!-- Channel -->
+                                <div class="join">
+                                    <select v-model="bulkChannelTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-[140px]">
+                                        <option value="" disabled selected>Set Channel...</option>
+                                        <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
+                                    </select>
+                                    <button class="btn btn-xs btn-primary join-item" @click="applyBulkChannel" :disabled="!bulkChannelTarget || processingBulkChannel">
+                                        <span v-if="processingBulkChannel" class="loading loading-spinner loading-xs"></span>
                                         <span v-else>Apply</span>
                                     </button>
                                 </div>
@@ -245,6 +277,11 @@
                                 </button>
                                 <button v-if="selectedItems.length >= 2" class="btn btn-xs btn-secondary gap-1" @click="openCombineModal">
                                     <Icon icon="solar:link-minimalistic-bold" class="w-3.5 h-3.5" /> Combine
+                                </button>
+
+                                <!-- Reassign UPC to HUCK- -->
+                                <button class="btn btn-xs btn-outline btn-primary gap-1" @click="bulkReassignUpc('HUCK-')" :disabled="processingBulk">
+                                    <Icon icon="solar:barcode-bold" class="w-3.5 h-3.5" /> Reassign to HUCK-
                                 </button>
 
                                 <!-- Export selected -->
@@ -291,17 +328,15 @@
                 </div>
 
             <!-- ACTIVE LOCATION FILTER BANNER -->
-            <div v-if="filterBinLocation" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
-                <div class="flex items-center gap-2">
-                    <Icon icon="solar:map-point-bold" class="w-5 h-5 text-info shrink-0" />
-                    <div class="text-sm">
-                        <span class="font-bold">Filtered by Location:</span>
-                        <span class="badge badge-neutral ml-1.5 font-bold">{{ filterBinLocation }}</span>
-                        <span class="opacity-75 text-xs ml-2">({{ filteredInventory.length }} item{{ filteredInventory.length === 1 ? '' : 's' }} found)</span>
-                    </div>
+            <div v-if="filterBinLocation || filterChannel" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
+                <div class="flex items-center gap-2 text-xs flex-wrap">
+                    <Icon icon="solar:filter-linear" class="w-5 h-5 shrink-0" />
+                    <span>Filtering by:</span>
+                    <span v-if="filterBinLocation" class="badge badge-neutral ml-1 font-bold">Location: {{ filterBinLocation }}</span>
+                    <span v-if="filterChannel" class="badge badge-neutral ml-1 font-bold">Channel: {{ filterChannel }}</span>
                 </div>
-                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''">
-                    <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" /> Show All Locations
+                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''; filterChannel = ''">
+                    <Icon icon="solar:close-circle-linear" class="w-3 h-3" /> Clear
                 </button>
             </div>
 
@@ -366,7 +401,7 @@
 
                         <div class="form-control w-full">
                             <label class="label pt-0"><span class="label-text font-bold text-[10px] uppercase opacity-70">Search</span></label>
-                            <input type="text" v-model="searchQuery" placeholder="Search title, UPC, #0735, bin..." class="input input-bordered input-sm w-full font-mono text-xs shadow-inner" />
+                            <input type="text" v-model="searchQuery" placeholder="Search title, UPC, #0735, physical location..." class="input input-bordered input-sm w-full font-mono text-xs shadow-inner" />
                         </div>
 
                         <div class="form-control w-full">
@@ -405,6 +440,13 @@
                                 <select v-model="filterBinLocation" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
                                     <option value="">All Locations</option>
                                     <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                </select>
+                            </div>
+                            <div class="form-control w-full mt-2">
+                                <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Sales Channel</span></label>
+                                <select v-model="filterChannel" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
+                                    <option value="">All Channels</option>
+                                    <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
                                 </select>
                             </div>
                         <div class="form-control w-full mt-4 border-t border-base-300/50 pt-3">
@@ -1026,6 +1068,7 @@ const scrollToTop = () => {
 };
 const filterKeywords = ref([]);
 const filterBinLocation = ref('');
+const filterChannel = ref('');
 const filterLotType = ref('all');
 const filterFlaggedLocated = ref(false);
 const orgPlacedLocations = ref([]);
@@ -1052,16 +1095,19 @@ const allAvailableLocations = computed(() => {
     const set = new Set();
     (orgPlacedLocations.value || []).forEach(l => l && set.add(String(l).trim()));
     (warehouseLocations.value || []).forEach(l => l && set.add(String(l).trim()));
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+});
+
+const allAvailableChannels = computed(() => {
+    const set = new Set();
     (inventoryItems.value || []).forEach(item => {
-        if (item.storageLocation) set.add(String(item.storageLocation).trim());
-        if (item.purchaseLocation) set.add(String(item.purchaseLocation).trim());
         if (Array.isArray(item.sellingLocations)) {
             item.sellingLocations.forEach(l => l && set.add(String(l).trim()));
         } else if (typeof item.sellingLocations === 'string' && item.sellingLocations) {
             set.add(String(item.sellingLocations).trim());
         }
     });
-    if (filterBinLocation.value) set.add(String(filterBinLocation.value).trim());
+    if (filterChannel.value) set.add(String(filterChannel.value).trim());
     return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
 });
 
@@ -1142,7 +1188,21 @@ const filteredInventory = computed(() => {
             if (item.parentLotId || (item.quantity > 1) || (item.title && item.title.toLowerCase().startsWith('lot of'))) return false;
         }
 
-        // Filter by Location (Storage bin or selling location booth)
+        // Filter by Sales Channel
+        if (filterChannel.value) {
+            const rawTarget = filterChannel.value.trim().toLowerCase();
+            const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
+            const matchesLoc = (val) => {
+                if (!val) return false;
+                if (Array.isArray(val)) return val.some(v => matchesLoc(v));
+                const str = String(val).trim().toLowerCase();
+                const cleanStr = str.replace(/[^a-z0-9]/g, '');
+                return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
+            };
+            if (!matchesLoc(item.sellingLocations)) return false;
+        }
+
+        // Filter by Location (Physical location or selling booth)
         if (filterBinLocation.value) {
             const rawTarget = filterBinLocation.value.trim().toLowerCase();
             const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
@@ -1249,7 +1309,10 @@ const openPreview = (item) => {
 const selectedItems = ref([]);
 const bulkStatusTarget = ref('');
 const bulkLocationTarget = ref('');
+const bulkCustomLocation = ref('');
 const processingBulkLoc = ref(false);
+const bulkChannelTarget = ref('');
+const processingBulkChannel = ref(false);
 const bulkOpen = ref(false);
 
 watch(selectedItems, (newVal, oldVal) => {
@@ -1292,88 +1355,208 @@ const handleGenerateUpcs = async () => {
     }
 };
 
-const applyBulkStatus = async () => {
-    if (!bulkStatusTarget.value || selectedItems.value.length === 0) return;
-    
+const bulkReassignUpc = async (prefix = 'HUCK-') => {
+    if (selectedItems.value.length === 0) return;
+    const count = selectedItems.value.length;
+    const confirmed = await confirmDialog(
+        `Reassign to ${prefix} UPCs`,
+        `Are you sure you want to assign/replace barcodes for ${count} selected items with sequential "${prefix}" barcodes?`,
+        'Reassign',
+        'cancel'
+    );
+    if (!confirmed) return;
+
     processingBulk.value = true;
-    const targetStatus = bulkStatusTarget.value;
-    const idsToUpdate = [...selectedItems.value];
-    
     try {
-        // Run updates in parallel
-        let autoCalcCount = 0;
-        const promises = idsToUpdate.map(id => {
-             const item = inventoryItems.value.find(i => i.$id === id);
-             let updates = { status: targetStatus };
-             
-             if (targetStatus === 'sold' && item) {
-                 const currentSoldPrice = item.soldPrice || '';
-                 const rp = parseFloat(item.resalePrice || item.listPrice || 0);
-                 if (!currentSoldPrice && rp > 0) {
-                     updates.soldPrice = parseFloat((rp * 0.85).toFixed(2));
-                     autoCalcCount++;
-                 }
-             }
-             return updateInventoryItem(id, updates);
-        });
-        
-        await Promise.all(promises);
-        
-        // Optimistically update local state so we don't need a full refetch immediately
-        inventoryItems.value.forEach(item => {
-            if (idsToUpdate.includes(item.$id)) {
-                item.status = targetStatus;
-                
-                if (targetStatus === 'sold') {
-                    const currentSoldPrice = item.soldPrice || '';
-                    const rp = parseFloat(item.resalePrice || item.listPrice || 0);
-                    if (!currentSoldPrice && rp > 0) {
-                         item.soldPrice = parseFloat((rp * 0.85).toFixed(2));
-                    }
-                }
+        let updated = 0;
+        for (const id of selectedItems.value) {
+            const item = inventoryItems.value.find(i => i.$id === id);
+            if (item) {
+                const newUpc = getNextUpc(prefix);
+                await updateInventoryItem(id, { upc: newUpc });
+                item.upc = newUpc;
+                updated++;
             }
-        });
-        
-        // Reset selection
-        selectedItems.value = [];
-        bulkStatusTarget.value = '';
-        
-        let msg = 'Bulk update applied.';
-        if (autoCalcCount > 0) msg += ` Auto-filled Sold Price for ${autoCalcCount} item(s).`;
-        addToast({ type: 'success', message: msg });
+        }
+        addToast({ type: 'success', message: `Successfully updated ${updated} items to "${prefix}" UPCs!` });
     } catch (e) {
-        addToast({ type: 'error', message: "Failed to apply bulk update: " + e.message });
+        console.error('Bulk UPC update error:', e);
+        addToast({ type: 'error', message: 'Failed to reassign UPCs: ' + e.message });
     } finally {
         processingBulk.value = false;
     }
 };
 
-const applyBulkLocation = async () => {
-    if (!bulkLocationTarget.value || selectedItems.value.length === 0) return;
+const applyBulkStatus = async () => {
+    if (!bulkStatusTarget.value || selectedItems.value.length === 0) return;
     
-    processingBulkLoc.value = true;
-    const targetLoc = bulkLocationTarget.value;
-    const idsToUpdate = [...selectedItems.value];
+    processingBulk.value = true;
+    const targetStatus = bulkStatusTarget.value;
+    const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const total = itemsToUpdate.length;
+    let successCount = 0;
+    let autoCalcCount = 0;
+    
+    const { showLoader, hideLoader } = useLoader();
+    showLoader("Updating Status...", {
+        step: `Setting status to "${targetStatus}" for ${total} items...`,
+        progress: 0,
+        cancelable: false
+    });
     
     try {
-        const promises = idsToUpdate.map(id => updateInventoryItem(id, { storageLocation: targetLoc }));
-        await Promise.all(promises);
-        
-        // Optimistically update local state
-        inventoryItems.value.forEach(item => {
-            if (idsToUpdate.includes(item.$id)) {
-                item.storageLocation = targetLoc;
+        for (let idx = 0; idx < total; idx++) {
+            const item = itemsToUpdate[idx];
+            const percent = Math.round(((idx + 1) / total) * 100);
+            
+            showLoader("Updating Status...", {
+                step: `Item ${idx + 1} of ${total}: "${(item.title || 'Item').substring(0, 28)}..." (${percent}%)`,
+                progress: percent,
+                cancelable: false
+            });
+            
+            const updates = { status: targetStatus };
+            if (targetStatus === 'sold' && item) {
+                const currentSoldPrice = item.soldPrice || '';
+                const rp = parseFloat(item.resalePrice || item.listPrice || 0);
+                if (!currentSoldPrice && rp > 0) {
+                    updates.soldPrice = parseFloat((rp * 0.85).toFixed(2));
+                    autoCalcCount++;
+                }
             }
-        });
+            
+            await updateInventoryItem(item.$id, updates);
+            Object.assign(item, updates);
+            successCount++;
+            
+            if (total > 5) await new Promise(r => setTimeout(r, 80));
+        }
         
-        // Reset selection
+        selectedItems.value = [];
+        bulkStatusTarget.value = '';
+        
+        let msg = `Successfully updated status for ${successCount} items.`;
+        if (autoCalcCount > 0) msg += ` Auto-filled Sold Price for ${autoCalcCount} item(s).`;
+        addToast({ type: 'success', message: msg });
+    } catch (e) {
+        console.error("Bulk status error:", e);
+        addToast({ type: 'error', message: "Failed to apply bulk update: " + e.message });
+    } finally {
+        processingBulk.value = false;
+        const { hideLoader } = useLoader();
+        hideLoader();
+    }
+};
+
+const applyBulkLocation = async () => {
+    const rawTarget = bulkLocationTarget.value === '__custom__' ? bulkCustomLocation.value.trim() : bulkLocationTarget.value;
+    if (!rawTarget || selectedItems.value.length === 0) return;
+    
+    processingBulkLoc.value = true;
+    const targetLoc = rawTarget;
+    const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const total = itemsToUpdate.length;
+    let successCount = 0;
+    
+    const { showLoader, hideLoader } = useLoader();
+    showLoader("Updating Location...", {
+        step: `Moving ${total} items to "${targetLoc}"...`,
+        progress: 0,
+        cancelable: false
+    });
+    
+    try {
+        for (let idx = 0; idx < total; idx++) {
+            const item = itemsToUpdate[idx];
+            const percent = Math.round(((idx + 1) / total) * 100);
+            
+            showLoader("Updating Location...", {
+                step: `Item ${idx + 1} of ${total}: "${(item.title || 'Item').substring(0, 28)}..." -> ${targetLoc} (${percent}%)`,
+                progress: percent,
+                cancelable: false
+            });
+            
+            const updates = {
+                storageLocation: targetLoc
+            };
+            
+            // If item status is scouted, acquired, or received, update status to placed
+            if (['scouted', 'acquired', 'received'].includes(item.status)) {
+                updates.status = 'placed';
+            }
+            
+            await updateInventoryItem(item.$id, updates);
+            Object.assign(item, updates);
+            successCount++;
+            
+            if (total > 5) await new Promise(r => setTimeout(r, 80));
+        }
+        
         selectedItems.value = [];
         bulkLocationTarget.value = '';
-        addToast({ type: 'success', message: 'Bulk location updated.' });
+        bulkCustomLocation.value = '';
+        processingBulkLoc.value = false;
+        hideLoader();
+        addToast({ type: 'success', message: `Successfully updated location for ${successCount} items to "${targetLoc}".` });
     } catch (e) {
+        console.error("Bulk location error:", e);
         addToast({ type: 'error', message: "Failed to apply bulk location update: " + e.message });
     } finally {
         processingBulkLoc.value = false;
+        const { hideLoader } = useLoader();
+        hideLoader();
+    }
+};
+
+const applyBulkChannel = async () => {
+    if (!bulkChannelTarget.value || selectedItems.value.length === 0) return;
+    
+    processingBulkChannel.value = true;
+    const targetChannel = bulkChannelTarget.value;
+    const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const total = itemsToUpdate.length;
+    let successCount = 0;
+    
+    const { showLoader, hideLoader } = useLoader();
+    showLoader("Updating Channel...", {
+        step: `Adding ${total} items to "${targetChannel}"...`,
+        progress: 0,
+        cancelable: false
+    });
+    
+    try {
+        for (let idx = 0; idx < total; idx++) {
+            const item = itemsToUpdate[idx];
+            const percent = Math.round(((idx + 1) / total) * 100);
+            
+            showLoader("Updating Channel...", {
+                step: `Item ${idx + 1} of ${total}: "${(item.title || 'Item').substring(0, 28)}..." -> ${targetChannel} (${percent}%)`,
+                progress: percent,
+                cancelable: false
+            });
+            
+            // Add to sellingLocations if not already there
+            const existingChannels = Array.isArray(item.sellingLocations) ? item.sellingLocations : (item.sellingLocations ? [item.sellingLocations] : []);
+            if (!existingChannels.includes(targetChannel)) {
+                const updates = {
+                    sellingLocations: [...existingChannels, targetChannel]
+                };
+                
+                await updateInventoryItem(item.$id, updates);
+                const localItem = inventoryItems.value.find(i => i.$id === item.$id);
+                if (localItem) localItem.sellingLocations = updates.sellingLocations;
+            }
+            successCount++;
+        }
+        addToast({ type: 'success', message: `Added channel "${targetChannel}" to ${successCount} items.` });
+        
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to bulk update channels.' });
+        console.error(e);
+    } finally {
+        bulkChannelTarget.value = '';
+        processingBulkChannel.value = false;
+        hideLoader();
     }
 };
 
@@ -2022,7 +2205,7 @@ const submitDeconstruct = async () => {
                 cost: costPerUnit,
                 status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
                 sourcingLocation: "", // Clear sourcing location for child
-                storageLocation: parent.storageLocation || (parent.conditionNotes ? (parent.conditionNotes.match(/Bin:[ \t]*([^\n\r]+)/i) || [])[1] : null),
+                storageLocation: parent.storageLocation,
                 imageId: childImageId,
                 galleryImageIds: [], // Clear gallery images
                 keywords: parent.keywords,

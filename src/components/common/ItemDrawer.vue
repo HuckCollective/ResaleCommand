@@ -270,11 +270,15 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                      <div class="form-control w-full">
-                        <label class="label"><span class="label-text">Bin Location</span></label>
-                        <input type="text" list="org-bin-locations" v-model="editForm.storageLocation" class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200" placeholder="Type or select..." />
-                        <datalist id="org-bin-locations">
-                            <option v-for="loc in orgPlacedLocations" :key="loc" :value="loc"></option>
-                        </datalist>
+                        <SingleSelectDropdown 
+                            v-model="editForm.storageLocation" 
+                            label="Physical Location" 
+                            labelClass="font-bold"
+                            inputClass="bg-base-200 focus:bg-base-100 focus:ring-1 focus:ring-primary/30 transition-colors duration-200"
+                            placeholder="e.g. Memory Den, Bin A-1..."
+                            :options="allLocations"
+                            :allowCustom="true"
+                        />
                     </div>
                     
                      <div class="form-control w-full">
@@ -587,11 +591,9 @@
                 </div>
 
                 <div class="space-y-4">
-                    <TagInput 
+                    <MultiSelectDropdown 
                         v-model="editForm.sellingLocations" 
                         label="Sales Channels" 
-                        type="sellingLocations" 
-                        badgeClass="badge-primary" 
                     />
                     <div class="form-control bg-base-200/50 p-3 rounded-lg border border-base-300/50 -mt-2">
                         <label class="label cursor-pointer justify-start gap-3 py-0">
@@ -853,6 +855,8 @@ import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
 import ScannerWidget from './ScannerWidget.vue';
 import TagInput from './TagInput.vue';
+import MultiSelectDropdown from './MultiSelectDropdown.vue';
+import SingleSelectDropdown from './SingleSelectDropdown.vue';
 import { saveItemToInventory, getCollectionId } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
@@ -869,6 +873,13 @@ const { showLoader, hideLoader, updateLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
 const orgWarehouses = ref([]);
+
+const allLocations = computed(() => {
+    const set = new Set();
+    if (orgPlacedLocations.value) orgPlacedLocations.value.forEach(l => l && set.add(String(l).trim()));
+    if (orgWarehouses.value) orgWarehouses.value.forEach(w => w?.name && set.add(String(w.name).trim()));
+    return Array.from(set).filter(Boolean).sort();
+});
 
 const fetchLocations = async () => {
     if (!currentTeam.value) return;
@@ -1725,7 +1736,7 @@ const initForm = () => {
         editForm.soldPrice = formatMoney(i.soldPrice);
         editForm.estLow = formatMoney(i.estLow || getNoteValue(i.conditionNotes, 'Est. Low', true));
         editForm.estHigh = formatMoney(i.estHigh || getNoteValue(i.conditionNotes, 'Est. High', true));
-        editForm.storageLocation = i.storageLocation || getNoteValue(i.conditionNotes, 'Bin') || '';
+        editForm.storageLocation = i.storageLocation || '';
         editForm.sourcingLocation = i.sourcingLocation || getNoteValue(i.conditionNotes, 'Location') || '';
         editForm.orderId = i.orderId || getNoteValue(i.conditionNotes, 'Order #') || getNoteValue(i.conditionNotes, 'Imported from Order #') || '';
         editForm.status = i.status || 'acquired';

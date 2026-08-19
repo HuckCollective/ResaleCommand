@@ -144,7 +144,7 @@
                 </div>
                 
                  <div class="form-control w-full">
-                    <label class="label"><span class="label-text opacity-70">Storage / Bin Location</span></label>
+                     <label class="label"><span class="label-text opacity-70">Physical Location</span></label>
                     <input v-model="storageLocation" type="text" class="input input-bordered w-full" placeholder="e.g. Front Cart, Blue Bin, Shelf 3" />
                 </div>
 
@@ -1487,9 +1487,6 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
             if (receiptId) {
                  noteDetails += `\n[RECEIPT: ${receiptId}]`;
             }
-            if (storageLocation.value) {
-                 noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
-            }
 
             const updatePayload: any = {
                 identity: item.identity,
@@ -1643,9 +1640,6 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  if (receiptId) {
                       noteDetails += `\n[RECEIPT: ${receiptId}]`;
                  }
-                 if (storageLocation.value) {
-                      noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
-                 }
                  
                  const itemPayload: any = {
                      identity: subItemName,
@@ -1679,9 +1673,6 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              }
              if (receiptId) {
                   noteDetails += `\n[RECEIPT: ${receiptId}]`;
-             }
-             if (storageLocation.value) {
-                  noteDetails = `[BIN: ${storageLocation.value}]\n` + noteDetails;
              }
 
              const itemPayload: any = {
