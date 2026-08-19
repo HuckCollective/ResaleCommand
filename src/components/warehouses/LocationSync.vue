@@ -149,11 +149,25 @@ const splitCsvLine = (line) => {
       else if (match[2] !== undefined) result.push(match[2]);
       if (regex.lastIndex === match.index) regex.lastIndex++;
   }
+  if (line.endsWith(',')) result.push('');
   return result;
 };
 
+const escapeCsv = (str) => {
+    if (str === null || str === undefined) return '';
+    const s = String(str).replace(/"/g, '""').replace(/\n/g, ' ');
+    if (s.includes(',') || s.includes('"') || s.startsWith(' ') || s.endsWith(' ')) {
+        return `"${s}"`;
+    }
+    return s;
+};
+
 const parseCsv = (csvText) => {
-  const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+  // Strip BOM if present
+  if (csvText.charCodeAt(0) === 0xFEFF) {
+    csvText = csvText.substring(1);
+  }
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length < 2) {
     addToast({ type: 'error', message: 'CSV file is empty or invalid.' });
     isProcessing.value = false;
@@ -236,11 +250,11 @@ const executeSync = async () => {
         const upcToInject = row.mappedItem.upc || row.mappedItem.$id;
         // Escape quotes if needed
         if (upcIdx !== -1) {
-             cols[upcIdx] = upcToInject.includes(',') ? `"${upcToInject}"` : upcToInject;
+             cols[upcIdx] = upcToInject;
         }
       }
       
-      finalCsv += cols.map(c => c?.includes(',') ? `"${c}"` : c).join(',') + '\n';
+      finalCsv += cols.map(c => escapeCsv(c)).join(',') + '\n';
     }
 
     // Download file

@@ -379,9 +379,9 @@ const parseMemoryDenProducts = (csvText) => {
   }
 
   // Store exact raw headers to rebuild CSV perfectly
-  rawHeaders.value = splitCsvLine(lines[0]);
+  rawHeaders.value = lines[0];
   
-  const headers = rawHeaders.value.map(h => h?.trim().toLowerCase().replace(/"/g, ''));
+  const headers = splitCsvLine(lines[0]).map(h => h?.trim().toLowerCase().replace(/"/g, ''));
   const idIdx = headers.findIndex(h => h === 'product id');
   const skuIdx = headers.findIndex(h => h === 'sku');
   const upcIdx = headers.findIndex(h => h === 'upc');
@@ -490,7 +490,7 @@ const executeSync = async () => {
     const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'inventory';
 
     const finalCsvRows = [];
-    finalCsvRows.push(rawHeaders.value.map(h => escapeCsv(h)).join(','));
+    finalCsvRows.push(rawHeaders.value);
 
     // Process all mapped items
     for (const row of parsedRows.value) {
