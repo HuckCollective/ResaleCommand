@@ -1122,7 +1122,12 @@ const processCsvFile = (file: File) => {
 
   reader.onload = (event) => {
     try {
-      const text = event.target?.result as string;
+      let text = event.target?.result as string;
+
+      if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.substring(1);
+      }
+
       if (!text) {
         addToast({ type: 'error', message: 'Could not read CSV file.' });
         isParsing.value = false;
@@ -1820,12 +1825,21 @@ const executeSync = async () => {
 
       let newLines: string[] = [];
 
+      const escapeCsv = (str: any) => {
+        if (str === null || str === undefined) return '';
+        const s = String(str).replace(/"/g, '""').replace(/\n/g, ' ');
+        if (s.includes(',') || s.includes('"') || s.startsWith(' ') || s.endsWith(' ')) {
+            return `"${s}"`;
+        }
+        return s;
+      };
+
       if (upcIdx === -1) {
         newLines.push(`${rawCsvLines.value[0]},"UPC"`);
         for (let i = 1; i < rawCsvLines.value.length; i++) {
           const rowData = syncRows.value.find(r => r.originalLineIndex === i);
           const assignedUpc = rowData?.mappedItem?.upc || '';
-          newLines.push(`${rawCsvLines.value[i]},"${assignedUpc}"`);
+          newLines.push(`${rawCsvLines.value[i]},${escapeCsv(assignedUpc)}`);
         }
       } else {
         newLines.push(rawCsvLines.value[0]);
@@ -1835,7 +1849,7 @@ const executeSync = async () => {
           if (rowData?.mappedItem?.upc) {
             cols[upcIdx] = rowData.mappedItem.upc;
           }
-          newLines.push(cols.map(c => `"${c.replace(/"/g, '""')}"`).join(','));
+          newLines.push(cols.map(c => escapeCsv(c)).join(','));
         }
       }
 
