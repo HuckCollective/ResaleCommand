@@ -2,7 +2,7 @@
  * Export utilities for generating marketplace-specific CSV formats.
  */
 
-export type ExportFormat = 'generic' | 'ebay' | 'poshmark';
+export type ExportFormat = 'generic' | 'ebay' | 'poshmark' | 'ricochet';
 
 /**
  * Helper to escape CSV strings
@@ -145,6 +145,77 @@ export function generatePoshmarkCsv(items: any[]): string {
             item.resalePrice || item.estValue || '', // Price
             '0', // Original Price
             item.$id // SKU
+        ];
+    });
+
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(val => escapeCsv(val)).join(','))
+        .join('\n');
+
+    return csvContent;
+}
+
+/**
+ * Generate Ricochet Consign New Inventory Import CSV
+ * Placeholder headers - User needs to provide exact template headers
+ */
+export function generateRicochetCsv(items: any[]): string {
+    // These are PLACEHOLDER headers. Ricochet is extremely strict and requires exact headers.
+    const headers = [
+        'Product ID',
+        'SKU',
+        'UPC',
+        'Name',
+        'Category',
+        'Collections',
+        'Brand',
+        'Split / Cost',
+        'Agreed Price',
+        'Aged Price',
+        'Tax Rate',
+        'Short description',
+        'Online Description',
+        'Consignor',
+        'Department',
+        'In stock',
+        'Quantity',
+        'Inventory',
+        'Consignor %'
+    ];
+
+    const rows = items.map(item => {
+        let desc = item.conditionNotes || '';
+        if (item.rawAnalysis) {
+            try {
+                const ai = JSON.parse(item.rawAnalysis);
+                const aiObj = Array.isArray(ai) ? ai[0] : ai;
+                if (aiObj && aiObj.condition_notes) {
+                    desc = aiObj.condition_notes + '\n\n' + desc;
+                }
+            } catch (e) {}
+        }
+
+        const price = item.resalePrice || item.estValue || '';
+        return [
+            '', // Product ID (leave blank for new items)
+            item.$id, // SKU
+            item.upc || '', // UPC
+            (item.title || '').substring(0, 80), // Name
+            '', // Category
+            '', // Collections
+            '', // Brand
+            item.cost || '0', // Split / Cost
+            price, // Agreed Price
+            price, // Aged Price
+            '', // Tax Rate
+            desc, // Short description
+            '', // Online Description
+            '', // Consignor
+            '', // Department
+            '', // In stock (Date)
+            item.quantity || 1, // Quantity
+            'In Stock', // Inventory Status
+            '' // Consignor %
         ];
     });
 

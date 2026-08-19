@@ -168,8 +168,20 @@
                                 </li>
                                 <li>
                                     <button class="flex items-start gap-3 py-2" @click="exportCsv('poshmark')">
-                                        <Icon icon="solar:hanger-linear" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">Poshmark Bulk</div></div>
+                                        <Icon icon="simple-icons:poshmark" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
+                                        <div>
+                                            <div class="font-bold text-sm">Poshmark Bulk Listing</div>
+                                            <div class="text-xs opacity-60">Poshmark standard CSV</div>
+                                        </div>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('ricochet')">
+                                        <Icon icon="solar:shop-bold-duotone" class="w-5 h-5 mt-0.5 shrink-0 text-info" />
+                                        <div>
+                                            <div class="font-bold text-sm">MemoryDen New Items (Ricochet)</div>
+                                            <div class="text-xs opacity-60">Retail import format</div>
+                                        </div>
                                     </button>
                                 </li>
                                 <li class="disabled opacity-40 cursor-not-allowed">
@@ -713,7 +725,7 @@ import TagInput from '../common/TagInput.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { isAlphaMode } from '../../stores/env';
-import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, downloadCsv } from '../../lib/exportUtils';
+import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { warehousesApi } from '../../lib/warehouses';
 
 const isBundleModalOpen = ref(false);
@@ -754,6 +766,8 @@ function exportCsv(format = 'generic') {
         csvContent = generateEbayCsv(itemsToExport);
     } else if (format === 'poshmark') {
         csvContent = generatePoshmarkCsv(itemsToExport);
+    } else if (format === 'ricochet') {
+        csvContent = generateRicochetCsv(itemsToExport);
     } else {
         csvContent = generateGenericCsv(itemsToExport);
     }

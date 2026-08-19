@@ -275,12 +275,18 @@ const splitCsvLine = (line: string) => {
       else if (match[2] !== undefined) result.push(match[2]);
       if (regex.lastIndex === match.index) regex.lastIndex++;
   }
+  // If the line ended with a comma, we need to push an empty string for the last column
+  if (line.endsWith(',')) result.push('');
   return result;
 };
 
 const escapeCsv = (str: any) => {
     if (str === null || str === undefined) return '';
-    return `"${String(str).replace(/"/g, '""').replace(/\n/g, ' ')}"`;
+    const s = String(str).replace(/"/g, '""').replace(/\n/g, ' ');
+    if (s.includes(',') || s.includes('"') || s.startsWith(' ') || s.endsWith(' ')) {
+        return `"${s}"`;
+    }
+    return s;
 };
 
 const ignoreItemAndClose = () => {
@@ -360,7 +366,12 @@ const handleFileUpload = (event: Event) => {
 };
 
 const parseMemoryDenProducts = (csvText) => {
-  const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+  // Strip BOM if present
+  if (csvText.charCodeAt(0) === 0xFEFF) {
+    csvText = csvText.substring(1);
+  }
+  
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length < 2) {
     addToast({ type: 'error', message: 'CSV is empty or invalid.' });
     isProcessing.value = false;
