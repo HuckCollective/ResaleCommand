@@ -1826,12 +1826,8 @@ const executeSync = async () => {
       let newLines: string[] = [];
 
       const escapeCsv = (str: any) => {
-        if (str === null || str === undefined) return '';
-        const s = String(str).replace(/"/g, '""').replace(/\n/g, ' ');
-        if (s.includes(',') || s.includes('"') || s.startsWith(' ') || s.endsWith(' ')) {
-            return `"${s}"`;
-        }
-        return s;
+        if (str === null || str === undefined) return '""';
+        return `"${String(str).replace(/"/g, '""').replace(/\n/g, ' ')}"`;
       };
 
       if (upcIdx === -1) {
