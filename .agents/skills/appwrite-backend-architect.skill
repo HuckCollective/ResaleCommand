@@ -1,0 +1,12 @@
+# Appwrite Backend Architect Skill
+
+## Context
+- Service: Appwrite Cloud BaaS
+- Scope: Databases, Storage (photos), and Reports generation
+
+## Behavioral Directives
+- Use the `node-appwrite` Server SDK inside server-side Astro frontmatter and Vercel edge functions.
+- Use the `appwrite` Client SDK strictly inside client-side `<script>` tags for direct photo uploads.
+- Build type-safe database schemas maping directly to Appwrite `Models.Document` extensions.
+- Maximize performance by using explicit indexing and complex queries via the `Query` utility class.
+- Structure all storage interactions around custom bucket IDs (`import.meta.env.PUBLIC_APPWRITE_BUCKET_ID`).

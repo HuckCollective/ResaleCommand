@@ -345,7 +345,9 @@ function parseCSV(text: string) {
                 itemId: -1,
                 price: -1,
                 shipping: -1,
-                handling: -1, // Added Handling
+                handling: -1,
+                tax: -1,
+                fee: -1,
                 orderId: -1,
                 image: -1
             };
@@ -412,7 +414,9 @@ function parseCSV(text: string) {
                 map.orderId = headers.findIndex(h => h.includes('order'));
                 map.price = headers.findIndex(h => h.includes('price'));
                 map.shipping = headers.findIndex(h => h.includes('shipping'));
-                map.handling = headers.findIndex(h => h.includes('handling')); // Explicit handling check
+                map.handling = headers.findIndex(h => h.includes('handling'));
+                map.tax = headers.findIndex(h => h === 'tax');
+                map.fee = headers.findIndex(h => h === 'additional fee' || h.includes('fee'));
                 map.image = headers.findIndex(h => ['image', 'photo', 'url'].some(k => h.includes(k)));
             } else {
                 // 2. FUZZY MATCHING (Fallback)
@@ -422,7 +426,9 @@ function parseCSV(text: string) {
                  map.itemId = findCol(['item #', 'item id', 'order #', 'order number', 'order id', 'listing id'], ['title', 'price', 'item name'], 'id');
                  map.price = findCol(['price', 'amount', 'winning bid', 'sale price', 'cost', 'paid'], ['shipping', 'tax', 'total']);
                  map.shipping = findCol(['shipping', 'ship cost', 'postage'], ['handling']);
-                 map.handling = findCol(['handling', 'processing', 'fee', 'tax'], ['shipping']); // Separate handling column
+                 map.handling = findCol(['handling', 'processing'], ['shipping']); 
+                 map.tax = findCol(['tax'], []);
+                 map.fee = findCol(['fee', 'additional fee'], []);
                  map.orderId = findCol(['order #', 'order number', 'invoice', 'order'], ['item']);
                  map.image = findCol(['image', 'photo', 'picture', 'url', 'link'], []);
             } // End else
@@ -507,13 +513,17 @@ function parseCSV(text: string) {
                 const priceStr = map.price !== -1 ? (cols[map.price] || '0') : '0';
                 const shipStr = map.shipping !== -1 ? (cols[map.shipping] || '0') : '0';
                 const handlingStr = map.handling !== -1 ? (cols[map.handling] || '0') : '0';
+                const taxStr = map.tax !== -1 ? (cols[map.tax] || '0') : '0';
+                const feeStr = map.fee !== -1 ? (cols[map.fee] || '0') : '0';
                 
                 const price = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
                 const shippingBase = parseFloat(shipStr.replace(/[^0-9.]/g, '')) || 0;
                 const handling = parseFloat(handlingStr.replace(/[^0-9.]/g, '')) || 0;
+                const tax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+                const fee = parseFloat(feeStr.replace(/[^0-9.]/g, '')) || 0;
                 
-                // Sum Shipping + Handling
-                const totalShipping = shippingBase + handling;
+                // Sum Shipping + Handling + Tax + Fee
+                const totalShipping = shippingBase + handling + tax + fee;
 
                 const imageUrl = map.image !== -1 ? (cols[map.image] || '') : '';
 

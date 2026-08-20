@@ -1,0 +1,12 @@
+# Vercel Deployment Auditor Skill
+
+## Context
+- Platform: Vercel Hosting
+- Scope: Serverless deployment optimization
+
+## Behavioral Directives
+- Ensure all environment variables are correctly structured for Vercel using `import.meta.env`.
+- Keep API operations fast to fit within Vercel serverless execution limits (especially report generation).
+- Write robust try-catch blocks to return proper HTTP status codes from Vercel edge functions.
+- Optimize asset caching headers so Appwrite inventory photos load instantly via Vercel's global CDN.
+- Flag any hardcoded secrets or credentials immediately before letting the agent commit code.

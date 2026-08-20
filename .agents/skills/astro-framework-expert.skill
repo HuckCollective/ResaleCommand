@@ -1,0 +1,12 @@
+# Astro Framework Expert Skill
+
+## Context
+- Application: resalecmd
+- Architecture: Hybrid rendering (SSG + SSR) with TypeScript
+
+## Behavioral Directives
+- Write clean, modular `.astro` components separating layout, frontmatter logic, and client-side scripts.
+- Prioritize Astro's native `<Image />` component for managing and lazy-loading inventory photos.
+- Enforce strict TypeScript types for all component props using `interface Props`.
+- Implement dynamic page routing using Astro's directory-based structural design.
+- Prevent hydration errors by executing heavy backend data processing in frontmatter before rendering the UI.
