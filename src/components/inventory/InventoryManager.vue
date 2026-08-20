@@ -219,7 +219,7 @@
                                 <span class="text-sm font-semibold">Select items to take action</span>
                                 <span class="text-xs opacity-50">{{ filteredInventory.length }} in view</span>
                             </label>
-                            <button class="btn btn-xs btn-ghost gap-1 opacity-60 hover:opacity-100" @click="exportCsv">
+                            <button class="btn btn-xs btn-ghost gap-1 opacity-60 hover:opacity-100" @click="() => exportCsv('generic')">
                                 <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export All
                             </button>
                         </div>
@@ -297,7 +297,7 @@
                                 </button>
 
                                 <!-- Export selected -->
-                                <button class="btn btn-xs btn-success gap-1 ml-auto" @click="exportCsv">
+                                <button class="btn btn-xs btn-success gap-1 ml-auto" @click="() => exportCsv('generic')">
                                     <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export {{ selectedItems.length }}
                                 </button>
                             </div>
@@ -752,6 +752,10 @@ const postExportPlatform = ref('');
 const postExportItems = ref([]);
 
 function exportCsv(format = 'generic') {
+    // Safety check just in case it receives an event
+    if (typeof format !== 'string') {
+        format = 'generic';
+    }
     const itemsToExport = selectedItems.value.length > 0
         ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
         : filteredInventory.value;
