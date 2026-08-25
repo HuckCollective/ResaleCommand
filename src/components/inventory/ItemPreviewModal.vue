@@ -161,31 +161,31 @@
                             
                             <!-- Pricing Grid -->
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4" v-if="parsedScoutData.price_breakdown">
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-base-300 shadow-xs">
-                                    <span class="text-[10px] uppercase font-bold text-info mb-1 tracking-wider">Mint</span>
-                                    <span class="font-mono font-bold text-sm">{{ parsedScoutData.price_breakdown.mint || '-' }}</span>
+                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                    <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.mint || '-' }}</span>
                                 </div>
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
-                                    <span class="text-[10px] uppercase font-bold text-primary mb-1 tracking-wider">Fair</span>
-                                    <span class="font-mono font-bold text-base text-primary">{{ parsedScoutData.price_breakdown.fair || '-' }}</span>
+                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
+                                    <span class="badge badge-xs font-bold bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.fair || '-' }}</span>
                                 </div>
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-base-300 shadow-xs">
-                                    <span class="text-[10px] uppercase font-bold text-error opacity-80 mb-1 tracking-wider">Poor</span>
-                                    <span class="font-mono font-bold text-sm opacity-80">{{ parsedScoutData.price_breakdown.poor || '-' }}</span>
+                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                    <span class="badge badge-xs font-bold bg-error/20 text-error border-error/40 mb-1">POOR</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.poor || '-' }}</span>
                                 </div>
-                                <div v-if="parsedScoutData.price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-3 rounded-xl border border-secondary/30 shadow-xs">
-                                    <span class="text-[10px] uppercase font-bold text-secondary mb-1 tracking-wider">Boutique</span>
-                                    <span class="font-mono font-bold text-sm text-secondary">{{ parsedScoutData.price_breakdown.boutique_premium || '-' }}</span>
+                                <div v-if="parsedScoutData.price_breakdown.boutique_premium" class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs">
+                                    <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.boutique_premium || '-' }}</span>
                                 </div>
                             </div>
                             
                             <!-- Comparables -->
                             <div v-if="parsedScoutData.comparables && parsedScoutData.comparables.length" class="mt-4 border-t border-base-300 pt-4">
-                                 <div class="text-[10px] uppercase font-bold opacity-50 tracking-widest mb-2">Recent Comps</div>
+                                 <div class="text-[10px] uppercase font-bold opacity-60 tracking-widest mb-2">Recent Comps</div>
                                  <ul class="space-y-2">
-                                     <li v-for="comp in parsedScoutData.comparables" :key="comp.name" class="flex justify-between items-center text-xs p-2 rounded-lg bg-base-200/50 border border-base-300">
-                                         <span class="truncate pr-4 w-4/5 font-medium">{{ comp.name }}</span>
-                                         <span class="font-mono font-bold shrink-0 text-primary">{{ comp.price }}</span>
+                                     <li v-for="comp in parsedScoutData.comparables" :key="comp.name" class="flex justify-between items-center text-xs p-2 rounded-lg bg-base-200/50 border border-base-300 gap-2">
+                                         <span class="font-medium text-base-content break-words flex-1">{{ comp.name }}</span>
+                                         <span class="font-mono font-bold shrink-0 text-success text-right">{{ comp.price }}</span>
                                      </li>
                                  </ul>
                             </div>
@@ -213,22 +213,28 @@
                                 <div class="text-sm md:text-base font-extrabold text-base-content leading-snug break-words">
                                     {{ sellingRecommendation.bestPlatform }}
                                 </div>
-                                <p v-if="sellingRecommendation.rationale" class="text-xs opacity-80 leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
+                                <p v-if="sellingRecommendation.rationale" class="text-xs opacity-85 leading-relaxed mt-0.5 whitespace-pre-wrap break-words text-base-content">
                                     {{ sellingRecommendation.rationale }}
                                 </p>
                             </div>
 
-                            <!-- Channel Comparison Cards -->
-                            <div v-if="sellingRecommendation.channels && sellingRecommendation.channels.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-                                <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/50 p-3 rounded-xl border border-base-300 flex flex-col justify-between">
-                                    <div>
-                                        <div class="flex justify-between items-center mb-1 gap-1">
-                                            <span class="font-bold text-xs truncate">{{ ch.name }}</span>
-                                            <span v-if="ch.recommendation" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary/20 text-secondary border border-secondary/30 shrink-0">{{ ch.recommendation }}</span>
+                            <!-- Channel Comparison Cards (2-line layout with full channel name & readable badge) -->
+                            <div v-if="sellingRecommendation.channels && sellingRecommendation.channels.length" class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                                <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/60 p-3.5 rounded-xl border border-base-300 flex flex-col justify-between space-y-2.5">
+                                    <div class="space-y-1.5">
+                                        <!-- Line 1: Full Channel Name -->
+                                        <div class="font-extrabold text-sm text-base-content leading-snug break-words">
+                                            {{ ch.name }}
                                         </div>
-                                        <div class="text-xs font-mono font-bold text-success">{{ ch.est_price || '-' }}</div>
+                                        <!-- Line 2: Recommendation Note / Strategy Pill -->
+                                        <div v-if="ch.recommendation" class="text-xs text-base-content/85 leading-snug bg-base-100 p-2 rounded-lg border border-base-300 font-medium break-words">
+                                            💡 {{ ch.recommendation }}
+                                        </div>
+                                        <div class="text-sm font-mono font-black text-success pt-0.5">
+                                            {{ ch.est_price || '-' }}
+                                        </div>
                                     </div>
-                                    <div class="text-[11px] opacity-70 mt-2 flex justify-between items-center border-t border-base-300 pt-1.5 font-mono">
+                                    <div class="text-xs opacity-80 flex justify-between items-center border-t border-base-300 pt-2 font-mono">
                                         <span>Net Payout:</span>
                                         <span class="font-bold text-base-content">{{ ch.net_payout || '-' }}</span>
                                     </div>

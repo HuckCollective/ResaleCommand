@@ -540,21 +540,21 @@
 
                                     <!-- SUGGESTED VALUATION MATRIX (2x2 Grid) -->
                                     <div v-if="scoutTotalRange || scoutItemsArray[0]?.price_breakdown" class="grid grid-cols-2 gap-2 pt-1">
-                                        <div class="flex flex-col items-center bg-base-100 p-2.5 rounded-xl border border-base-300 shadow-xs">
-                                            <span class="text-[9px] uppercase font-bold text-success tracking-wider mb-0.5">Mint</span>
-                                            <span class="font-mono font-bold text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
+                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                            <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
+                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-base-100 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
-                                            <span class="text-[9px] uppercase font-bold text-primary tracking-wider mb-0.5">Fair</span>
-                                            <span class="font-mono font-bold text-xs sm:text-sm text-primary">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
+                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
+                                            <span class="badge badge-xs font-bold bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
+                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-base-100 p-2.5 rounded-xl border border-base-300 shadow-xs">
-                                            <span class="text-[9px] uppercase font-bold text-error tracking-wider mb-0.5">Poor</span>
-                                            <span class="font-mono font-bold text-xs sm:text-sm opacity-80">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
+                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                            <span class="badge badge-xs font-bold bg-error/20 text-error border-error/40 mb-1">POOR</span>
+                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-secondary/10 p-2.5 rounded-xl border border-secondary/30 shadow-xs">
-                                            <span class="text-[9px] uppercase font-bold text-secondary tracking-wider mb-0.5">Boutique</span>
-                                            <span class="font-mono font-bold text-xs sm:text-sm text-secondary">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
+                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs">
+                                            <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
+                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
                                         </div>
                                     </div>
 
@@ -565,36 +565,43 @@
                                                 <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
                                                 Lot Market Strategy & Liquidation
                                             </span>
-                                            <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.sell_through_velocity" class="badge badge-xs badge-info font-bold">
+                                            <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.sell_through_velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
                                                 ⚡ {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).sell_through_velocity }}
                                             </span>
                                         </div>
                                         
                                         <!-- Recommended Channel Banner -->
-                                        <div class="bg-primary/10 p-3 rounded-xl border border-primary/20 flex flex-col gap-1.5">
-                                            <div class="text-[10px] uppercase tracking-wider font-extrabold text-primary flex items-center gap-1">
+                                        <div class="bg-primary/10 border border-primary/25 rounded-xl p-3 flex flex-col gap-1.5">
+                                            <div class="text-[10px] uppercase font-bold text-primary tracking-wider flex items-center gap-1">
                                                 <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Recommended Channel:
                                             </div>
                                             <div class="font-extrabold text-xs sm:text-sm text-base-content leading-snug break-words">
                                                 {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).best_platform }}
                                             </div>
-                                            <p v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale" class="text-xs opacity-80 leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
+                                            <p v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale" class="text-xs opacity-85 leading-relaxed mt-0.5 whitespace-pre-wrap break-words text-base-content">
                                                 {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale }}
                                             </p>
                                         </div>
 
-                                        <!-- Channel Comparisons / Trade-Offs -->
+                                        <!-- Channel Comparisons / Trade-Offs (2-line layout with full channel name & readable pill) -->
                                         <div v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.channels?.length" class="space-y-1.5 pt-1">
                                             <div class="text-[10px] font-bold uppercase opacity-60">Channel Trade-Offs</div>
                                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                <div v-for="(ch, cIdx) in (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).channels" :key="cIdx" class="bg-base-200/50 p-2 rounded-lg border border-base-300 text-xs">
-                                                    <div class="flex justify-between items-center font-bold">
-                                                        <span class="truncate">{{ ch.name }}</span>
-                                                        <span class="text-success font-mono">{{ ch.est_price || '-' }}</span>
+                                                <div v-for="(ch, cIdx) in (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).channels" :key="cIdx" class="bg-base-200/60 p-2.5 rounded-xl border border-base-300 flex flex-col justify-between space-y-1.5 text-xs">
+                                                    <div class="space-y-1">
+                                                        <div class="font-extrabold text-xs text-base-content leading-snug break-words">
+                                                            {{ ch.name }}
+                                                        </div>
+                                                        <div v-if="ch.recommendation" class="text-[10px] text-base-content/85 leading-snug bg-base-100 p-1.5 rounded-lg border border-base-300 font-medium break-words">
+                                                            💡 {{ ch.recommendation }}
+                                                        </div>
+                                                        <div class="text-xs font-mono font-black text-success pt-0.5">
+                                                            {{ ch.est_price || '-' }}
+                                                        </div>
                                                     </div>
-                                                    <div class="text-[10px] opacity-70 mt-1 flex justify-between font-mono">
+                                                    <div class="text-[10px] opacity-80 flex justify-between items-center border-t border-base-300 pt-1.5 font-mono">
                                                         <span>Net Payout:</span>
-                                                        <span class="font-bold">{{ ch.net_payout || '-' }}</span>
+                                                        <span class="font-bold text-base-content">{{ ch.net_payout || '-' }}</span>
                                                     </div>
                                                 </div>
                                             </div>
