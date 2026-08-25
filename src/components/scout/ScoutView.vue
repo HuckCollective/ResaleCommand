@@ -16,7 +16,7 @@
     </div>
 
     <!-- MAIN CONTENT AREA -->
-    <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-screen-xl mx-auto">
+    <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto">
         
 
         <!-- 1. INPUT SECTION -->
@@ -195,7 +195,7 @@
                         <div class="w-full md:w-1/2 flex flex-col justify-between h-full space-y-4">
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono font-bold">Scouted Listing</span>
+                                    <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono">Scouted Listing</span>
                                     <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                                 </div>
                                 <h2 class="text-xl md:text-2xl font-black text-base-content tracking-tight leading-tight mb-2">{{ item.identity || 'Unidentified Item' }}</h2>
@@ -434,7 +434,7 @@
                                 {{ kw }}
                                 <button @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">✕</button>
                             </span>
-                            <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-[80px]" @keydown.enter.prevent="addKeyword(item, $event)" />
+                            <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-20" @keydown.enter.prevent="addKeyword(item, $event)" />
                         </div>
                     </div>
 

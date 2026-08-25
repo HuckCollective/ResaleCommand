@@ -120,7 +120,7 @@
                         <div class="flex flex-wrap items-center gap-4 text-sm opacity-60 font-mono">
                             <span v-if="locationText" class="flex gap-1 items-center badge badge-outline">
                                 <Icon icon="solar:map-point-linear" /> 
-                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-[200px] md:max-w-[400px]" :title="locationText">
+                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-50 md:max-w-100" :title="locationText">
                                     {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
                                     <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
                                 </a>
@@ -217,7 +217,7 @@
                                     </thead>
                                     <tbody>
                                         <tr v-for="child in childItems" :key="child.$id" class="hover:bg-base-200/50 transition-colors">
-                                            <td class="font-bold truncate max-w-[200px]">
+                                            <td class="font-bold truncate max-w-50">
                                                 <a :href="'/item/' + child.$id" class="text-primary hover:underline">{{ child.title }}</a>
                                             </td>
                                             <td>
@@ -242,7 +242,7 @@
                     <div v-if="parsedScoutData" class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm text-base-content overflow-hidden">
                         <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
                             <span>AI Scout Report</span>
-                            <span v-if="parsedScoutData.identity" class="truncate max-w-[200px] normal-case opacity-70">{{ parsedScoutData.identity }}</span>
+                            <span v-if="parsedScoutData.identity" class="truncate max-w-50 normal-case opacity-70">{{ parsedScoutData.identity }}</span>
                         </div>
                         <div class="p-4 space-y-4">
                             
@@ -296,42 +296,37 @@
 
                     <!-- Where to Sell / Platform Recommendations -->
                     <div class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm overflow-hidden text-base-content">
-                        <div class="bg-base-200/60 p-3 border-b border-base-200 text-xs font-bold uppercase tracking-wider flex justify-between items-center">
+                        <div class="bg-base-200/60 p-3 border-b border-base-200 text-xs font-bold uppercase tracking-wider flex justify-between items-center gap-2">
                             <span class="flex items-center gap-1.5 text-primary">
                                 <Icon icon="solar:shop-2-bold" class="w-4 h-4" />
                                 Where to Sell (Channel Suggestions)
                             </span>
-                            <span v-if="sellingRecommendation.bestPlatform" class="badge badge-sm badge-primary font-bold">
-                                {{ sellingRecommendation.bestPlatform }}
+                            <span v-if="sellingRecommendation.velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
+                                ⚡ {{ sellingRecommendation.velocity }}
                             </span>
                         </div>
                         
                         <div class="p-4 space-y-3">
                             <!-- Top Platform & Rationale -->
-                            <div class="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                <div>
-                                    <div class="text-[10px] uppercase font-bold text-primary opacity-80 tracking-wider">Top Recommended Channel</div>
-                                    <div class="text-sm md:text-base font-extrabold text-base-content mt-0.5">
-                                        {{ sellingRecommendation.bestPlatform }}
-                                    </div>
-                                    <p v-if="sellingRecommendation.rationale" class="text-xs opacity-75 mt-1 leading-relaxed">
-                                        {{ sellingRecommendation.rationale }}
-                                    </p>
+                            <div class="bg-primary/10 border border-primary/25 rounded-xl p-3.5 flex flex-col gap-1.5">
+                                <div class="text-[10px] uppercase font-bold text-primary tracking-wider flex items-center gap-1">
+                                    <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Top Recommended Channel:
                                 </div>
-                                <div v-if="sellingRecommendation.velocity" class="shrink-0">
-                                    <span class="badge badge-sm badge-outline font-bold text-xs bg-base-100 shadow-xs">
-                                        ⚡ Velocity: {{ sellingRecommendation.velocity }}
-                                    </span>
+                                <div class="text-sm md:text-base font-extrabold text-base-content leading-snug break-words">
+                                    {{ sellingRecommendation.bestPlatform }}
                                 </div>
+                                <p v-if="sellingRecommendation.rationale" class="text-xs opacity-80 leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
+                                    {{ sellingRecommendation.rationale }}
+                                </p>
                             </div>
 
                             <!-- Channel Comparison Cards -->
                             <div v-if="sellingRecommendation.channels && sellingRecommendation.channels.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
                                 <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/50 p-3 rounded-lg border border-base-300 flex flex-col justify-between">
                                     <div>
-                                        <div class="flex justify-between items-center mb-1">
+                                        <div class="flex justify-between items-center mb-1 gap-1">
                                             <span class="font-bold text-xs truncate">{{ ch.name }}</span>
-                                            <span v-if="ch.recommendation" class="badge badge-xs badge-secondary">{{ ch.recommendation }}</span>
+                                            <span v-if="ch.recommendation" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary/20 text-secondary border border-secondary/30 shrink-0">{{ ch.recommendation }}</span>
                                         </div>
                                         <div class="text-xs font-mono font-bold text-success">{{ ch.est_price || '-' }}</div>
                                     </div>
@@ -357,6 +352,24 @@
                         <p class="italic text-lg">No additional description available.</p>
                     </div>
                 </div>
+            </div>
+
+            <!-- Sticky Bottom Dock: DaisyUI Dock Specification -->
+            <div class="dock dock-bottom sticky bottom-0 z-30 bg-base-200/95 backdrop-blur-md border-t border-base-300">
+                <button type="button" @click="copyShareLink" title="Share Item Link">
+                    <Icon icon="solar:link-linear" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Share</span>
+                </button>
+
+                <a v-if="user" :href="'/inventory?edit=' + item.$id" class="text-primary font-bold" title="Edit Inventory Item">
+                    <Icon icon="solar:pen-bold" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Edit</span>
+                </a>
+
+                <a href="/inventory" title="Return to Inventory">
+                    <Icon icon="solar:box-minimalistic-linear" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Inventory</span>
+                </a>
             </div>
         </div>
     </div>
@@ -812,11 +825,11 @@ const statusText = computed(() => {
 
 const statusBadgeClass = computed(() => {
     const s = item.value?.status;
-    if (s === 'received' || s === 'scouted') return 'badge-info';
-    if (s === 'acquired') return 'badge-secondary';
-    if (s === 'placed') return 'badge-success';
-    if (s === 'sold') return 'badge-neutral';
-    return 'badge-ghost';
+    if (s === 'received' || s === 'scouted') return 'bg-info/20 text-info border border-info/40 font-bold';
+    if (s === 'acquired') return 'bg-secondary/20 text-secondary border border-secondary/40 font-bold';
+    if (s === 'placed') return 'bg-success/20 text-success border border-success/40 font-bold';
+    if (s === 'sold') return 'bg-neutral/30 text-base-content/80 border border-base-300 font-bold';
+    return 'bg-base-200 text-base-content/80 border border-base-300 font-bold';
 });
 
 const updatingStatus = ref(false);

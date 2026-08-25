@@ -465,7 +465,7 @@
           <button 
             v-if="unmatchedCount > 0"
             type="button"
-            class="btn btn-xs bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-sm gap-1.5 border-none"
+            class="btn btn-xs bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-sm gap-1.5 border-none"
             :disabled="isAiMatching || isBulkQuickAdding"
             @click="triggerAiMatching"
             title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks"
@@ -520,7 +520,7 @@
                 <th>CSV Product Title</th>
                 <th class="w-24 text-right">Agreed Price</th>
                 <th class="w-32 text-right text-success">Net Made (Take-Home)</th>
-                <th class="min-w-[340px]">Map to ResaleCommand Inventory Item</th>
+                <th class="min-w-85">Map to ResaleCommand Inventory Item</th>
               </tr>
             </thead>
             <tbody>
@@ -573,7 +573,7 @@
                 </td>
 
                 <!-- CSV Name (Editable if unmapped) -->
-                <td class="text-xs max-w-[280px]">
+                <td class="text-xs max-w-70">
                   <div v-if="row.isEditing" class="flex items-center gap-1">
                     <input 
                       type="text" 

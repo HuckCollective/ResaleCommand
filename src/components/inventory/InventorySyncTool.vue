@@ -80,7 +80,7 @@
                       <Icon icon="solar:magic-stick-3-bold" class="w-3 h-3" /> AI
                     </span>
                     <span class="badge badge-sm badge-outline">{{ row.mappedItem.upc || 'NO UPC' }}</span>
-                    <span class="truncate max-w-[200px] text-sm">{{ row.mappedItem.title }}</span>
+                    <span class="truncate max-w-50 text-sm">{{ row.mappedItem.title }}</span>
                     <button class="btn btn-xs btn-ghost text-error ml-auto" @click="row.mappedItem = null; row.isAiMatch = false; row.isIgnored = false">✕</button>
                   </div>
                   <div v-else-if="row.isIgnored" class="flex items-center gap-2">
@@ -159,7 +159,7 @@
                   </div>
                 </td>
                 <td class="text-sm">
-                  <div class="font-medium truncate max-w-[300px]">{{ item.title }}</div>
+                  <div class="font-medium truncate max-w-75">{{ item.title }}</div>
                 </td>
                 <td class="text-right">
                   <span v-if="timesMapped(item) > 0" class="text-xs text-warning mr-2">

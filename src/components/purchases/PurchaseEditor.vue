@@ -144,7 +144,7 @@
                         <span class="font-bold text-sm">{{ res.title }}</span>
                         <span class="font-mono text-xs opacity-60">{{ res.identity }}</span>
                       </span>
-                      <span class="flex-shrink-0 flex items-center gap-2">
+                      <span class="shrink-0 flex items-center gap-2">
                         <span v-if="res.purchaseId" class="badge badge-warning badge-xs">Linked</span>
                         <span class="btn btn-xs btn-primary shadow-sm" :class="{'loading': linkingItem === res.$id}">Add</span>
                       </span>
@@ -203,7 +203,7 @@
                   <td class="font-mono text-xs opacity-70">
                     <a :href="`/item/${item.$id}`" class="link" target="_blank">{{ item.identity }}</a>
                   </td>
-                  <td class="max-w-[300px] truncate" :title="item.title">{{ item.title }}</td>
+                  <td class="max-w-75 truncate" :title="item.title">{{ item.title }}</td>
                   <td class="font-mono font-medium">${{ (item.cost || 0).toFixed(2) }}</td>
                   <td>
                     <div class="badge badge-sm badge-ghost">{{ item.status || 'acquired' }}</div>

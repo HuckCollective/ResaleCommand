@@ -1,5 +1,5 @@
 <template>
-    <div v-if="localShow" :class="['fixed inset-0 z-[9999] backdrop-blur-md flex flex-col items-center justify-center transition-opacity', activeBackgroundColor, fadeOut ? 'opacity-0 duration-700' : 'duration-0']">
+    <div v-if="localShow" :class="['fixed inset-0 z-9999 backdrop-blur-md flex flex-col items-center justify-center transition-opacity', activeBackgroundColor, fadeOut ? 'opacity-0 duration-700' : 'duration-0']">
         <div class="relative w-48 h-48 flex flex-col items-center">
             <!-- Berries falling -->
             <Icon :icon="activeBerries[0]" :class="['berry berry-fall w-5 h-5 absolute', activeBerryColor]" style="left: 20%; top: -30px; animation-delay: 0s;" />

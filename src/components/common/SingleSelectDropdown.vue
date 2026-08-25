@@ -10,7 +10,7 @@
             </div>
             
             <ul tabindex="0" class="dropdown-content z-[100] menu p-2 shadow-xl bg-base-100 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto border border-base-300 mt-1">
-                <li v-if="options.length === 0" class="disabled opacity-50 px-4 py-2 text-sm">
+                <li v-if="!options || options.length === 0" class="disabled opacity-50 px-4 py-2 text-sm">
                     No predefined locations found.
                 </li>
                 <li v-for="opt in combinedOptions" :key="opt">
@@ -32,22 +32,26 @@
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 
-const props = defineProps<{
-    modelValue: string;
+const props = withDefaults(defineProps<{
+    modelValue?: string;
     label?: string;
     placeholder?: string;
-    options: string[];
+    options?: string[];
     allowCustom?: boolean;
     labelClass?: string;
     inputClass?: string;
-}>();
+}>(), {
+    modelValue: '',
+    options: () => [],
+    allowCustom: true
+});
 
 const emit = defineEmits(['update:modelValue']);
 const customInput = ref('');
 const dropdownRef = ref<HTMLElement | null>(null);
 
 const combinedOptions = computed(() => {
-    const opts = [...props.options];
+    const opts = [...(props.options || [])];
     if (props.modelValue && !opts.includes(props.modelValue)) {
         opts.unshift(props.modelValue);
     }

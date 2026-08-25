@@ -104,7 +104,7 @@
                                 <Icon icon="solar:import-linear" class="w-4 h-4" /> Import
                                 <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
                             </div>
-                            <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
                                 <li>
                                     <button class="flex items-start gap-3 py-2" @click="showImport = true">
                                         <Icon icon="solar:document-text-linear" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
@@ -142,7 +142,7 @@
                                 <Icon icon="solar:export-linear" class="w-4 h-4" /> Export
                                 <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
                             </div>
-                            <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
                                 <li>
                                     <a href="/inventory/sync" class="flex items-start gap-3 py-2">
                                         <Icon icon="solar:synchronize-bold-duotone" class="w-5 h-5 mt-0.5 shrink-0 text-secondary" />
@@ -253,7 +253,7 @@
 
                                 <!-- Location -->
                                 <div class="join">
-                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-[140px]">
+                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35">
                                         <option value="" disabled selected>Set Location...</option>
                                         <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
                                         <option value="__custom__">+ Custom Location...</option>
@@ -273,7 +273,7 @@
 
                                 <!-- Channel -->
                                 <div class="join">
-                                    <select v-model="bulkChannelTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-[140px]">
+                                    <select v-model="bulkChannelTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35">
                                         <option value="" disabled selected>Set Channel...</option>
                                         <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
                                     </select>
@@ -600,7 +600,7 @@
                             <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm" :class="{'ring-1 ring-secondary': item.$id === combinePrimaryId}">
                                 <div class="flex flex-col min-w-0">
                                     <div class="flex items-center gap-1.5">
-                                        <span class="font-medium truncate max-w-[200px]" :class="item.$id === combinePrimaryId ? 'text-secondary font-bold' : ''">
+                                        <span class="font-medium truncate max-w-50" :class="item.$id === combinePrimaryId ? 'text-secondary font-bold' : ''">
                                             {{ item.title }}
                                         </span>
                                         <span v-if="item.$id === combinePrimaryId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Primary</span>
@@ -1325,6 +1325,9 @@ const openPreview = (item) => {
 
 // Bulk Selection State
 const selectedItems = ref([]);
+const selectedItemsObjects = computed(() => {
+    return inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+});
 const bulkStatusTarget = ref('');
 const bulkLocationTarget = ref('');
 const bulkCustomLocation = ref('');

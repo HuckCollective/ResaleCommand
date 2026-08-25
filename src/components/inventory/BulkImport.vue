@@ -53,7 +53,7 @@
     </div>
 
     <!-- FULLSCREEN HUCKLEBERRY LOADER -->
-    <div v-else class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-secondary/90 backdrop-blur-sm p-4">
+    <div v-else class="fixed inset-0 z-100 flex flex-col items-center justify-center bg-secondary/90 backdrop-blur-sm p-4">
         <div class="max-w-2xl w-full flex flex-col items-center">
             
             <!-- Huckleberry Animation -->
@@ -62,7 +62,7 @@
                 <Icon icon="solar:document-add-bold-duotone" class="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-12 text-secondary-content/90 drop-shadow-md animate-[fall_1.5s_ease-in_infinite]" />
                 <Icon icon="solar:database-bold-duotone" class="absolute top-12 left-[30%] w-10 h-10 text-secondary-content/70 drop-shadow-md animate-[fall_2s_ease-in_infinite_0.5s]" />
                 <Icon icon="solar:file-download-bold-duotone" class="absolute top-8 left-[70%] w-8 h-8 text-secondary-content/80 drop-shadow-md animate-[fall_1.8s_ease-in_infinite_0.2s]" />
-                <div class="absolute inset-x-4 bottom-4 h-16 bg-gradient-to-t from-secondary/50 to-transparent rounded-b-3xl -z-10"></div>
+                <div class="absolute inset-x-4 bottom-4 h-16 bg-linear-to-t from-secondary/50 to-transparent rounded-b-3xl -z-10"></div>
             </div>
 
             <h2 class="text-3xl font-black text-secondary-content mb-2 tracking-tight">Processing Items...</h2>

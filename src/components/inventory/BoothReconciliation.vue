@@ -190,7 +190,7 @@
                                     <td class="font-mono text-xs opacity-50">{{ row['SKU'] || row['ID'] || '-' }}</td>
                                     <td><span class="badge badge-error badge-outline">{{ row['Inventory'] || row['Status'] || row['State'] || 'Unknown' }}</span></td>
                                     <td>
-                                        <div class="flex gap-2 items-center min-w-[300px]">
+                                        <div class="flex gap-2 items-center min-w-75">
                                             <select v-model="manualLinkSelections[idx]" class="select select-bordered select-xs w-full max-w-xs bg-base-200 font-mono text-xs truncate">
                                                 <option :value="undefined">Select stranded DB item...</option>
                                                 

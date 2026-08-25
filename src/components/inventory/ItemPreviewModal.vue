@@ -7,30 +7,60 @@
         
         <div v-if="item" class="modal-box w-full max-w-none h-full max-h-none min-h-screen rounded-none flex flex-col p-0 overflow-hidden bg-base-100 shadow-none relative">
             
-            <!-- Sticky Header: status + minimal actions -->
-            <div class="navbar bg-base-200 border-b border-base-300 min-h-12 sticky top-0 z-20 px-3 gap-2">
-                <!-- Status badge (left) -->
-                <div class="flex-1 flex items-center gap-2 min-w-0">
-                    <div class="badge badge-lg font-bold uppercase shrink-0" :class="statusBadgeClass">
-                        {{ statusText }}
+            <!-- Sticky Header: Status + Wrapped Title + Share & Close Actions -->
+            <div class="navbar bg-base-200/95 backdrop-blur-md border-b border-base-300 min-h-14 sticky top-0 z-30 px-3 md:px-5 py-2 flex items-center justify-between gap-3 shadow-xs">
+                <!-- Left: Status Badge & Wrapped Title -->
+                <div class="flex-1 min-w-0 pr-2">
+                    <div class="flex items-center gap-1.5 flex-wrap mb-1">
+                        <div class="badge badge-sm font-bold uppercase shrink-0" :class="statusBadgeClass">
+                            {{ statusText }}
+                        </div>
+                        <span v-if="item.upc" class="badge badge-sm font-mono font-bold bg-base-100 border-base-300 text-xs">
+                            <Icon icon="solar:barcode-bold" class="w-3 h-3 mr-1 text-primary" />{{ item.upc }}
+                        </span>
+                        <span v-if="item.locationSku || item.sku" class="badge badge-sm font-mono font-bold bg-secondary/15 text-secondary border-secondary/30 text-xs">
+                            SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                        </span>
                     </div>
-                    <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="hidden sm:flex gap-1 items-center">
-                        <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm badge-outline">{{ chan }}</span>
-                    </span>
+                    <h2 class="font-extrabold text-sm sm:text-base leading-snug break-words text-base-content line-clamp-2 md:line-clamp-none">
+                        {{ title }}
+                    </h2>
                 </div>
-                <!-- Right actions: Share icon + overflow menu + close -->
-                <div class="flex-none flex items-center gap-1">
-                    <!-- Share: icon only on mobile -->
-                    <button class="btn btn-sm btn-ghost btn-square" @click="copyShareLink" title="Copy Share Link">
+
+                <!-- Right Actions: Share, Edit (Desktop), Close X -->
+                <div class="flex-none flex items-center gap-1.5 shrink-0">
+                    <button class="btn btn-sm btn-ghost btn-circle" @click="copyShareLink" title="Copy Share Link">
                         <Icon icon="solar:link-linear" class="w-4 h-4" />
                     </button>
-                    <!-- Edit Item: desktop only (mobile has sticky bottom bar) -->
-                    <button class="btn btn-sm btn-primary gap-1.5 hidden lg:flex" @click="emit('edit', item); close()">
+                    <button class="btn btn-sm btn-primary gap-1.5 hidden md:flex font-bold shadow-xs" @click="emit('edit', item); close()">
                         <Icon icon="solar:pen-bold" class="w-4 h-4" /> Edit Item
                     </button>
+                    <button class="btn btn-sm btn-circle btn-neutral shadow-sm" @click="close" title="Close Preview">
+                        ✕
+                    </button>
+                </div>
+            </div>
 
-                    <!-- Close -->
-                    <button class="btn btn-sm btn-circle btn-ghost" @click="close">✕</button>
+            <!-- Top Reseller Financial Summary Bar (Costs to Top) -->
+            <div class="bg-base-200 border-b border-base-300 px-3 md:px-6 py-2.5 grid grid-cols-3 sm:grid-cols-4 gap-2 text-center text-xs z-20">
+                <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs flex flex-col justify-center">
+                    <span class="text-[10px] uppercase font-extrabold opacity-60">Est. Resale</span>
+                    <span class="text-base sm:text-xl font-black text-success font-mono">{{ formatCurrency(estValue) }}</span>
+                </div>
+                <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs flex flex-col justify-center">
+                    <span class="text-[10px] uppercase font-extrabold opacity-60">Buy Cost</span>
+                    <span class="text-sm sm:text-lg font-bold font-mono">{{ formatCurrency(paidValue) }}</span>
+                </div>
+                <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs flex flex-col justify-center">
+                    <span class="text-[10px] uppercase font-extrabold opacity-60">Est. Profit</span>
+                    <span class="text-sm sm:text-lg font-extrabold font-mono" :class="netProfit >= 0 ? 'text-success' : 'text-error'">
+                        {{ netProfit >= 0 ? '+' : '' }}{{ formatCurrency(netProfit) }}
+                        <span v-if="profitMargin !== null" class="text-[10px] block opacity-80 font-sans font-bold">({{ profitMargin }}%)</span>
+                    </span>
+                </div>
+                <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs hidden sm:flex flex-col justify-center">
+                    <span class="text-[10px] uppercase font-extrabold opacity-60">Storage Bin</span>
+                    <span class="text-xs font-bold truncate max-w-full font-mono">{{ item.storageLocation || 'Unassigned' }}</span>
                 </div>
             </div>
 
@@ -73,83 +103,50 @@
                             <img :src="img" class="w-full h-full object-cover" />
                         </button>
                     </div>
-                    
-                    <!-- Pricing Summary Box under images on Desktop -->
-                    <div class="p-6 bg-base-200 flex-1 flex-col justify-end hidden lg:flex border-t border-base-300">
-                         <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-300">
-                             <div class="flex justify-between items-end mb-2">
-                                <span class="text-xs uppercase font-bold opacity-60">Estimated Resale Value</span>
-                                <span class="text-2xl font-black text-success tracking-tight">{{ formatCurrency(estValue) }}</span>
-                             </div>
-                             <div class="flex justify-between items-end pb-3 border-b border-base-200 mb-3">
-                                <span class="text-xs uppercase font-bold opacity-60">Cost Basis</span>
-                                <span class="text-lg font-bold opacity-80 font-mono">{{ formatCurrency(paidValue) }}</span>
-                             </div>
-                             <div class="flex justify-between items-center text-xs opacity-60 font-mono">
-                                 <span>Max Buy Target:</span>
-                                 <span>{{ formatCurrency(props.item.maxBuyPrice) }}</span>
-                             </div>
-                         </div>
-                    </div>
                 </div>
 
                 <!-- Right Column: Details -->
-                <div class="w-full lg:w-7/12 p-6 md:p-8 space-y-6 bg-base-100">
+                <div class="w-full lg:w-7/12 p-5 md:p-8 space-y-6 bg-base-100">
                     
-                    <div>
-                        <h1 class="text-2xl md:text-3xl font-bold leading-tight mb-2">{{ title }}</h1>
-                        <div class="flex items-center gap-2 flex-wrap text-sm font-mono mb-2">
-                            <span v-if="item.upc" class="badge badge-sm font-mono font-bold bg-base-200 border-base-300 text-base-content" title="UPC">
-                                <Icon icon="solar:barcode-minimalistic-bold" class="w-3.5 h-3.5 mr-1 text-primary" />UPC: {{ item.upc }}
-                            </span>
-                            <span v-if="item.locationSku || item.sku" class="badge badge-sm font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary" title="Location SKU">
-                                <Icon icon="solar:tag-bold" class="w-3 h-3 mr-1" />SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}
-                            </span>
-                            <span v-if="locationText" class="flex gap-1 items-center opacity-60">
-                                <Icon icon="solar:map-point-linear" /> 
-                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-[200px] md:max-w-[400px]" :title="locationText">
-                                    {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
-                                    <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
-                                </a>
-                                <span v-else>{{ locationText }}</span>
-                            </span>
-                            <span v-if="item.$id" class="opacity-40">ID: {{ item.$id.slice(-6) }}</span>
-                        </div>
-                    </div>
-
-                    <!-- Mobile Pricing Box (Hidden on Desktop) -->
-                    <div class="lg:hidden bg-base-200 rounded-xl p-4 shadow-sm border border-base-300">
-                        <div class="flex justify-between items-end mb-2">
-                            <span class="text-xs uppercase font-bold opacity-60">Est. Resale</span>
-                            <span class="text-xl font-black text-success">{{ formatCurrency(estValue) }}</span>
-                        </div>
-                        <div class="flex justify-between items-end mb-2">
-                            <span class="text-xs uppercase font-bold opacity-60">Cost</span>
-                            <span class="text-base font-bold opacity-80 font-mono">{{ formatCurrency(paidValue) }}</span>
-                        </div>
-                        <div class="flex justify-between items-end pt-2 border-t border-base-300">
-                            <span class="text-[10px] uppercase font-bold opacity-40">Max Buy Target</span>
-                            <span class="text-sm font-bold opacity-60 font-mono">{{ formatCurrency(item.maxBuyPrice) }}</span>
-                        </div>
+                    <!-- Location, Provenance & Meta Row -->
+                    <div class="flex items-center gap-3 flex-wrap text-xs font-mono bg-base-200/50 p-3 rounded-xl border border-base-300">
+                        <span v-if="locationText" class="flex gap-1.5 items-center">
+                            <Icon icon="solar:map-point-bold" class="text-primary w-4 h-4" /> 
+                            <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-50 md:max-w-100" :title="locationText">
+                                {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
+                                <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
+                            </a>
+                            <span v-else class="font-bold text-base-content">{{ locationText }}</span>
+                        </span>
+                        <span v-if="item.orderId" class="badge badge-sm badge-ghost font-mono">
+                            Order #{{ item.orderId }}
+                        </span>
+                        <span v-if="item.$id" class="opacity-50 ml-auto">ID: {{ item.$id.slice(-6) }}</span>
                     </div>
 
                     <!-- Condition Notes -->
-                    <div v-if="cleanConditionNotes" class="bg-warning/10 border-l-4 border-warning p-4 rounded-r-lg">
-                        <h3 class="font-bold text-warning-content text-sm uppercase mb-1">Condition Notes</h3>
-                        <p class="whitespace-pre-wrap text-sm leading-relaxed text-warning-content/80">{{ cleanConditionNotes }}</p>
+                    <div v-if="cleanConditionNotes" class="bg-warning/10 border-l-4 border-warning p-4 rounded-r-xl">
+                        <h3 class="font-bold text-warning-content text-xs uppercase mb-1 flex items-center gap-1.5">
+                            <Icon icon="solar:notes-bold" class="w-4 h-4" />
+                            Condition & Internal Notes
+                        </h3>
+                        <p class="whitespace-pre-wrap text-sm leading-relaxed text-warning-content/90">{{ cleanConditionNotes }}</p>
                     </div>
 
                     <!-- Scout Data Output -->
-                    <div v-if="parsedScoutData" class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm text-base-content overflow-hidden">
-                        <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
-                            <span>AI Scout Report</span>
-                            <span v-if="parsedScoutData.identity" class="truncate max-w-[200px] normal-case opacity-70">{{ parsedScoutData.identity }}</span>
+                    <div v-if="parsedScoutData" class="mt-4 bg-base-100 rounded-2xl border border-base-300 shadow-sm text-base-content overflow-hidden">
+                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase tracking-wider flex justify-between items-center">
+                            <span class="flex items-center gap-1.5 text-primary">
+                                <Icon icon="solar:magic-stick-bold" class="w-4 h-4" />
+                                AI Scout Report
+                            </span>
+                            <span v-if="parsedScoutData.identity" class="truncate max-w-50 normal-case opacity-70">{{ parsedScoutData.identity }}</span>
                         </div>
                         <div class="p-4 space-y-4">
                             
                             <!-- Red Flags -->
-                            <div v-if="parsedScoutData.red_flags && parsedScoutData.red_flags.length" class="bg-warning/20 border border-warning/50 rounded-lg p-3 text-warning-content text-sm flex gap-2 items-start shadow-inner">
-                                <span class="text-error font-black mt-0.5">▶</span>
+                            <div v-if="parsedScoutData.red_flags && parsedScoutData.red_flags.length" class="bg-warning/20 border border-warning/50 rounded-xl p-3 text-warning-content text-sm flex gap-2 items-start shadow-inner">
+                                <span class="text-error font-black mt-0.5">🚩</span>
                                 <div>
                                     <span class="font-bold mr-1">Flags:</span> 
                                     {{ parsedScoutData.red_flags.join('. ') }}
@@ -163,32 +160,32 @@
                             </div>
                             
                             <!-- Pricing Grid -->
-                            <div class="grid grid-cols-2 gap-2 mt-4" v-if="parsedScoutData.price_breakdown">
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-lg border border-base-200 shadow-sm">
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4" v-if="parsedScoutData.price_breakdown">
+                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-base-300 shadow-xs">
                                     <span class="text-[10px] uppercase font-bold text-info mb-1 tracking-wider">Mint</span>
                                     <span class="font-mono font-bold text-sm">{{ parsedScoutData.price_breakdown.mint || '-' }}</span>
                                 </div>
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-lg border border-primary/30 shadow-sm ring-1 ring-primary/10">
+                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
                                     <span class="text-[10px] uppercase font-bold text-primary mb-1 tracking-wider">Fair</span>
-                                    <span class="font-mono font-bold text-[15px]">{{ parsedScoutData.price_breakdown.fair || '-' }}</span>
+                                    <span class="font-mono font-bold text-base text-primary">{{ parsedScoutData.price_breakdown.fair || '-' }}</span>
                                 </div>
-                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-lg border border-base-200 shadow-sm">
-                                    <span class="text-[10px] uppercase font-bold text-error opacity-70 mb-1 tracking-wider">Poor</span>
+                                <div class="flex flex-col items-center bg-base-100 p-3 rounded-xl border border-base-300 shadow-xs">
+                                    <span class="text-[10px] uppercase font-bold text-error opacity-80 mb-1 tracking-wider">Poor</span>
                                     <span class="font-mono font-bold text-sm opacity-80">{{ parsedScoutData.price_breakdown.poor || '-' }}</span>
                                 </div>
-                                <div v-if="parsedScoutData.price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-3 rounded-lg border border-secondary/30 shadow-sm">
+                                <div v-if="parsedScoutData.price_breakdown.boutique_premium" class="flex flex-col items-center bg-secondary/10 p-3 rounded-xl border border-secondary/30 shadow-xs">
                                     <span class="text-[10px] uppercase font-bold text-secondary mb-1 tracking-wider">Boutique</span>
-                                    <span class="font-mono font-bold text-sm opacity-90">{{ parsedScoutData.price_breakdown.boutique_premium || '-' }}</span>
+                                    <span class="font-mono font-bold text-sm text-secondary">{{ parsedScoutData.price_breakdown.boutique_premium || '-' }}</span>
                                 </div>
                             </div>
                             
                             <!-- Comparables -->
-                            <div v-if="parsedScoutData.comparables && parsedScoutData.comparables.length" class="mt-4 border-t border-base-200 pt-4">
-                                 <div class="text-[10px] uppercase font-bold opacity-40 tracking-widest mb-2">Comps</div>
+                            <div v-if="parsedScoutData.comparables && parsedScoutData.comparables.length" class="mt-4 border-t border-base-300 pt-4">
+                                 <div class="text-[10px] uppercase font-bold opacity-50 tracking-widest mb-2">Recent Comps</div>
                                  <ul class="space-y-2">
-                                     <li v-for="comp in parsedScoutData.comparables" :key="comp.name" class="flex justify-between items-center text-sm group">
-                                         <span class="truncate pr-4 w-4/5 opacity-80 group-hover:opacity-100 transition-opacity">{{ comp.name }}</span>
-                                         <span class="font-mono font-bold shrink-0">{{ comp.price }}</span>
+                                     <li v-for="comp in parsedScoutData.comparables" :key="comp.name" class="flex justify-between items-center text-xs p-2 rounded-lg bg-base-200/50 border border-base-300">
+                                         <span class="truncate pr-4 w-4/5 font-medium">{{ comp.name }}</span>
+                                         <span class="font-mono font-bold shrink-0 text-primary">{{ comp.price }}</span>
                                      </li>
                                  </ul>
                             </div>
@@ -196,43 +193,38 @@
                     </div>
 
                     <!-- Where to Sell / Platform Recommendations -->
-                    <div class="mt-4 bg-base-100 rounded-xl border border-base-200 shadow-sm overflow-hidden text-base-content">
-                        <div class="bg-base-200/60 p-3 border-b border-base-200 text-xs font-bold uppercase tracking-wider flex justify-between items-center">
+                    <div class="mt-4 bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden text-base-content">
+                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase tracking-wider flex justify-between items-center gap-2">
                             <span class="flex items-center gap-1.5 text-primary">
                                 <Icon icon="solar:shop-2-bold" class="w-4 h-4" />
                                 Where to Sell (Channel Suggestions)
                             </span>
-                            <span v-if="sellingRecommendation.bestPlatform" class="badge badge-sm badge-primary font-bold">
-                                {{ sellingRecommendation.bestPlatform }}
+                            <span v-if="sellingRecommendation.velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
+                                ⚡ {{ sellingRecommendation.velocity }}
                             </span>
                         </div>
                         
                         <div class="p-4 space-y-3">
                             <!-- Top Platform & Rationale -->
-                            <div class="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                <div>
-                                    <div class="text-[10px] uppercase font-bold text-primary opacity-80 tracking-wider">Top Recommended Channel</div>
-                                    <div class="text-sm md:text-base font-extrabold text-base-content mt-0.5">
-                                        {{ sellingRecommendation.bestPlatform }}
-                                    </div>
-                                    <p v-if="sellingRecommendation.rationale" class="text-xs opacity-75 mt-1 leading-relaxed">
-                                        {{ sellingRecommendation.rationale }}
-                                    </p>
+                            <div class="bg-primary/10 border border-primary/25 rounded-xl p-3.5 flex flex-col gap-1.5">
+                                <div class="text-[10px] uppercase font-bold text-primary tracking-wider flex items-center gap-1">
+                                    <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Top Recommended Channel:
                                 </div>
-                                <div v-if="sellingRecommendation.velocity" class="shrink-0">
-                                    <span class="badge badge-sm badge-outline font-bold text-xs bg-base-100 shadow-xs">
-                                        ⚡ Velocity: {{ sellingRecommendation.velocity }}
-                                    </span>
+                                <div class="text-sm md:text-base font-extrabold text-base-content leading-snug break-words">
+                                    {{ sellingRecommendation.bestPlatform }}
                                 </div>
+                                <p v-if="sellingRecommendation.rationale" class="text-xs opacity-80 leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
+                                    {{ sellingRecommendation.rationale }}
+                                </p>
                             </div>
 
                             <!-- Channel Comparison Cards -->
                             <div v-if="sellingRecommendation.channels && sellingRecommendation.channels.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-                                <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/50 p-3 rounded-lg border border-base-300 flex flex-col justify-between">
+                                <div v-for="(ch, cIdx) in sellingRecommendation.channels" :key="cIdx" class="bg-base-200/50 p-3 rounded-xl border border-base-300 flex flex-col justify-between">
                                     <div>
-                                        <div class="flex justify-between items-center mb-1">
+                                        <div class="flex justify-between items-center mb-1 gap-1">
                                             <span class="font-bold text-xs truncate">{{ ch.name }}</span>
-                                            <span v-if="ch.recommendation" class="badge badge-xs badge-secondary">{{ ch.recommendation }}</span>
+                                            <span v-if="ch.recommendation" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary/20 text-secondary border border-secondary/30 shrink-0">{{ ch.recommendation }}</span>
                                         </div>
                                         <div class="text-xs font-mono font-bold text-success">{{ ch.est_price || '-' }}</div>
                                     </div>
@@ -246,8 +238,8 @@
                     </div>
 
                     <!-- Lot Contents -->
-                    <div v-if="childItems.length > 0" class="mt-6 border border-base-200 rounded-xl overflow-hidden bg-base-100 shadow-sm">
-                        <div class="bg-base-200/50 p-3 border-b border-base-200 text-xs font-bold uppercase opacity-60 flex justify-between items-center">
+                    <div v-if="childItems.length > 0" class="mt-6 border border-base-300 rounded-2xl overflow-hidden bg-base-100 shadow-sm">
+                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase opacity-80 flex justify-between items-center">
                             <span>Bundle Contents ({{ childItems.length }})</span>
                         </div>
                         <ul class="divide-y divide-base-200">
@@ -262,7 +254,7 @@
                     </div>
 
                     <!-- Description / Scout Report -->
-                    <div v-if="item.description" class="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-4 prose-a:text-primary pb-8">
+                    <div v-if="item.marketDescription || item.description" class="prose prose-sm max-w-none prose-headings:font-bold prose-headings:mt-4 prose-a:text-primary pb-8">
                         <div class="divider text-xs uppercase opacity-50 font-bold tracking-widest mt-0">Full Details</div>
                         <div v-html="renderedDescription" class="whitespace-pre-wrap"></div>
                     </div>
@@ -270,37 +262,29 @@
                         <div class="divider text-xs uppercase opacity-50 font-bold tracking-widest mt-0">AI Scout Report</div>
                         <div v-html="scoutMarkdownText" class="whitespace-pre-wrap"></div>
                     </div>
-                    <div v-if="!item.description && !scoutMarkdownText" class="text-center py-12 opacity-40">
+                    <div v-if="!(item.marketDescription || item.description) && !scoutMarkdownText" class="text-center py-12 opacity-40">
                         <p class="italic text-lg">No additional description available.</p>
                     </div>
 
                 </div>
             </div>
 
-            <!-- Sticky Bottom Bar: Always shown on bottom of preview screen -->
-            <div class="sticky bottom-0 z-30 bg-base-200/95 backdrop-blur-md border-t border-base-300 p-3 px-4 flex justify-between items-center gap-3 shadow-lg">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="flex flex-col">
-                        <span class="font-bold text-sm truncate max-w-[200px] sm:max-w-xs md:max-w-md">{{ title }}</span>
-                        <div class="flex items-center gap-2 text-xs opacity-70 font-mono">
-                            <span v-if="item.upc" class="font-bold text-primary">{{ item.upc }}</span>
-                            <span v-if="item.locationSku || item.sku" class="text-secondary font-bold">SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}</span>
-                            <span class="text-success font-bold font-mono">{{ formatCurrency(estValue) }}</span>
-                        </div>
-                    </div>
-                </div>
+            <!-- Sticky Bottom Dock: DaisyUI Dock Specification -->
+            <div class="dock dock-bottom sticky bottom-0 z-30 bg-base-200/95 backdrop-blur-md border-t border-base-300">
+                <button type="button" @click="copyShareLink" title="Share Item Link">
+                    <Icon icon="solar:link-linear" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Share</span>
+                </button>
 
-                <div class="flex items-center gap-2 shrink-0">
-                    <button class="btn btn-ghost btn-sm" @click="copyShareLink" title="Copy Share Link">
-                        <Icon icon="solar:link-linear" class="w-4 h-4 mr-1" /> Share
-                    </button>
-                    <button class="btn btn-primary btn-sm md:btn-md gap-2 font-bold shadow-md shadow-primary/20" @click="emit('edit', item); close()">
-                        <Icon icon="solar:pen-bold" class="w-4 h-4 md:w-5 md:h-5" /> Edit Item
-                    </button>
-                    <button class="btn btn-ghost btn-sm btn-circle" @click="close" title="Close">
-                        ✕
-                    </button>
-                </div>
+                <button v-if="canUserEdit" type="button" class="text-primary font-bold" @click="emit('edit', item); close()" title="Edit Inventory Item">
+                    <Icon icon="solar:pen-bold" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Edit</span>
+                </button>
+
+                <button type="button" @click="close" title="Close Preview">
+                    <Icon icon="solar:close-circle-linear" class="w-5 h-5 mb-0.5" />
+                    <span class="dock-label">Close</span>
+                </button>
             </div>
         </div>
     </dialog>
@@ -313,9 +297,18 @@ import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
+import { useAuth } from '../../composables/useAuth';
+
+const { user } = useAuth();
 
 const props = defineProps({
-    item: { type: Object, default: null } // The item to preview. If null, modal is fully hidden.
+    item: { type: Object, default: null }, // The item to preview. If null, modal is fully hidden.
+    canEdit: { type: Boolean, default: undefined }
+});
+
+const canUserEdit = computed(() => {
+    if (props.canEdit !== undefined) return props.canEdit;
+    return !!user.value;
 });
 
 const emit = defineEmits(['close', 'edit', 'deconstruct']);
@@ -445,16 +438,17 @@ const statusText = computed(() => {
 
 const statusBadgeClass = computed(() => {
     const s = props.item?.status;
-    if (s === 'received' || s === 'scouted') return 'badge-info';
-    if (s === 'acquired') return 'badge-secondary';
-    if (s === 'placed') return 'badge-success';
-    if (s === 'sold') return 'badge-neutral';
-    return 'badge-ghost';
+    if (s === 'received' || s === 'scouted') return 'bg-info/20 text-info border border-info/40 font-bold';
+    if (s === 'acquired') return 'bg-secondary/20 text-secondary border border-secondary/40 font-bold';
+    if (s === 'placed') return 'bg-success/20 text-success border border-success/40 font-bold';
+    if (s === 'sold') return 'bg-neutral/30 text-base-content/80 border border-base-300 font-bold';
+    return 'bg-base-200 text-base-content/80 border border-base-300 font-bold';
 });
 
 const renderedDescription = computed(() => {
-    if (!props.item?.description) return '';
-    return marked.parse(props.item.description);
+    const desc = props.item?.marketDescription || props.item?.description;
+    if (!desc) return '';
+    return marked.parse(desc);
 });
 
 const cleanConditionNotes = computed(() => {
@@ -599,6 +593,22 @@ const paidValue = computed(() => {
     if (props.item.cost && parseFloat(props.item.cost) > 0) return props.item.cost;
     if (props.item.purchasePrice && parseFloat(props.item.purchasePrice) > 0) return props.item.purchasePrice;
     return getNoteValue(props.item.conditionNotes, 'Paid', true) || 0;
+});
+
+const netProfit = computed(() => {
+    const rev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const c = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    if (rev === 0 && c === 0) return 0;
+    return rev - c;
+});
+
+const profitMargin = computed(() => {
+    const rev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const c = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    if (rev > 0 && c >= 0) {
+        return Math.round(((rev - c) / rev) * 100);
+    }
+    return null;
 });
 
 const formatCurrency = (val) => {

@@ -114,7 +114,7 @@
 
                         <div v-for="item in order.items" :key="item.id" class="flex gap-3 items-start p-2 hover:bg-base-200 rounded-lg transition-colors border border-transparent hover:border-base-300">
                             <!-- Image Preview -->
-                            <div class="w-12 h-12 bg-base-200 rounded flex-shrink-0 overflow-hidden relative border border-base-300">
+                            <div class="w-12 h-12 bg-base-200 rounded shrink-0 overflow-hidden relative border border-base-300">
                                 <img v-if="item.imageUrl" :src="item.imageUrl" class="w-full h-full object-cover" @error="item.imageError = true" />
                                 <div v-else class="flex items-center justify-center w-full h-full opacity-30"><Icon icon="solar:gallery-linear" class="w-6 h-6" /></div>
                             </div>

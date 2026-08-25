@@ -44,10 +44,10 @@
            <div class="dropdown dropdown-end">
               <div tabindex="0" role="button" class="btn btn-outline btn-sm gap-2 border-base-300 hover:border-primary-focus">
                  <Icon icon="solar:users-group-two-rounded-linear" class="w-4 h-4 text-primary" />
-                 <span class="max-w-[120px] truncate font-semibold">{{ currentTeam ? currentTeam.name : 'Personal Inventory' }}</span>
+                 <span class="max-w-30 truncate font-semibold">{{ currentTeam ? currentTeam.name : 'Personal Inventory' }}</span>
                  <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60" />
               </div>
-              <ul tabindex="0" class="dropdown-content z-[50] menu p-2 shadow bg-base-100 rounded-box w-56 space-y-1">
+              <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-56 space-y-1">
                   <!-- Workspaces Header -->
                   <span class="text-[10px] uppercase font-bold opacity-50 tracking-wider px-3 py-1 border-b border-base-200/50 mb-1">Workspaces</span>
                   
@@ -169,12 +169,12 @@
 
       <!-- Mobile Menu Backdrop -->
       <Transition name="fade">
-        <div v-if="openMobile" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]" @click="openMobile = false"></div>
+        <div v-if="openMobile" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-100" @click="openMobile = false"></div>
       </Transition>
 
       <!-- Mobile Menu Side Drawer -->
       <Transition name="slide">
-        <div v-if="openMobile" class="fixed top-0 right-0 h-full w-[85%] max-w-[320px] bg-base-100 border-l border-base-300 shadow-2xl z-[101] flex flex-col justify-between overflow-y-auto">
+        <div v-if="openMobile" class="fixed top-0 right-0 h-full w-[85%] max-w-[320px] bg-base-100 border-l border-base-300 shadow-2xl z-101 flex flex-col justify-between overflow-y-auto">
             <!-- Header -->
             <div class="p-6 pb-4 flex justify-between items-center border-b border-base-200">
                 <span class="text-xl font-bold text-primary">Resale Command</span>

@@ -96,7 +96,7 @@
                 <td>
                   <div v-if="row.mappedItem" class="flex items-center gap-2">
                     <span class="badge badge-sm badge-outline font-mono font-bold">{{ row.mappedItem.upc || 'NO UPC' }}</span>
-                    <span class="truncate max-w-[200px] text-sm">{{ row.mappedItem.title }}</span>
+                    <span class="truncate max-w-50 text-sm">{{ row.mappedItem.title }}</span>
                     <button class="btn btn-xs btn-ghost text-error ml-auto" @click="row.mappedItem = null">✕</button>
                   </div>
                   <select v-else class="select select-bordered select-sm w-full max-w-xs" v-model="row.mappedItem">
