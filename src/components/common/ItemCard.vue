@@ -1,51 +1,45 @@
 <template>
-    <div class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary transition-colors group relative cursor-pointer overflow-hidden flex flex-col"
+    <div class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
          :class="containerClass"
          @click="$emit('click-card', item)">
         
         <!-- Image Area -->
-        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-90 transition-opacity flex-none" :class="imageClass">
-            <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" />
+        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-square sm:aspect-4/3 w-full">
+            <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" loading="lazy" />
             <div v-else class="flex flex-col items-center justify-center w-full h-full opacity-30 bg-base-300 p-2">
-                <Icon icon="solar:box-linear" class="w-12 h-12" />
+                <Icon icon="solar:box-linear" class="w-10 h-10" />
             </div>
             
-            <!-- Top Gradient Overlay (Title, Checkbox, Status) -->
-            <div class="absolute top-0 left-0 right-0 p-2 z-10 text-white flex flex-col gap-1 min-h-[50%] pointer-events-none" :class="headerBgClass">
-                <div class="flex justify-between items-start w-full">
-                    <!-- Left: Slot for Checkbox/Menu & Badges -->
-                    <div class="pointer-events-auto shrink-0 z-20 flex items-center gap-1.5">
-                        <slot name="absolute-top-left"></slot>
-                        
-                        <div v-if="item.parentLotId" class="badge badge-xs sm:badge-sm bg-base-300/80 border-base-100/50 text-white font-bold backdrop-blur-sm shadow-sm opacity-90" title="Extracted from Lot">
-                            <Icon icon="solar:link-minimalistic-bold" class="w-3 h-3 sm:mr-1" /> <span class="hidden sm:inline">Extracted</span>
-                        </div>
-                        <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="badge badge-xs sm:badge-sm bg-base-300/80 border-base-100/50 text-white font-bold backdrop-blur-sm shadow-sm opacity-90" title="Bulk Lot">
-                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3 sm:mr-1" /> 
-                            <span>Lot <span v-if="item.quantity > 1">x{{ item.quantity }}</span><span v-else class="hidden sm:inline">Lot</span></span>
-                        </div>
-                    </div>
+            <!-- Top Overlay Badges -->
+            <div class="absolute top-0 left-0 right-0 p-1.5 z-10 flex justify-between items-start pointer-events-none bg-linear-to-b from-black/60 via-black/20 to-transparent">
+                <!-- Left: Checkbox + Lot badges -->
+                <div class="pointer-events-auto shrink-0 flex items-center gap-1">
+                    <slot name="absolute-top-left"></slot>
                     
-                    <!-- Right: Status Badge -->
-                    <div class="badge rounded shadow-sm font-bold opacity-100 border-none pointer-events-auto shrink-0" :class="statusBadgeClass">
-                        {{ statusText }}
+                    <div v-if="item.parentLotId" class="badge badge-xs bg-black/60 backdrop-blur-xs text-white border-white/20 font-bold" title="Extracted from Lot">
+                        <Icon icon="solar:link-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-accent" />
+                        <span>Extracted</span>
+                    </div>
+                    <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="badge badge-xs bg-black/60 backdrop-blur-xs text-white border-white/20 font-bold" title="Bulk Lot">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-warning" /> 
+                        <span>Lot<span v-if="item.quantity > 1" class="ml-0.5">x{{ item.quantity }}</span></span>
                     </div>
                 </div>
                 
-                <!-- Title -->
-                <h2 class="font-bold leading-tight line-clamp-3 drop-shadow-md mt-1 pointer-events-auto text-shadow" :class="titleClass">
-                    {{ title }}
-                </h2>
+                <!-- Right: Status Badge -->
+                <div class="badge badge-xs rounded shadow-xs font-bold border-none pointer-events-auto uppercase text-[10px]" :class="statusBadgeClass">
+                    {{ statusText }}
+                </div>
             </div>
             
             <!-- ROI Meter Bar overlaid on bottom of image -->
-            <div class="absolute bottom-0 left-0 right-0 h-6 bg-black/50 backdrop-blur-sm overflow-hidden flex items-center">
-                <div :class="[profitColor, profitWidth]" class="h-full transition-all duration-500 opacity-90"></div>
-                <div class="absolute inset-0 flex justify-between items-center px-2 font-bold z-10 text-[9px] text-white pointer-events-none drop-shadow-md">
-                    <span class="opacity-90 tracking-wider text-shadow">Cost: {{ formatCurrency(paidValue) }}</span>
+            <div class="absolute bottom-0 left-0 right-0 h-5 bg-black/60 backdrop-blur-xs overflow-hidden flex items-center">
+                <div :class="[profitColor, profitWidth]" class="h-full transition-all duration-500 opacity-80"></div>
+                <div class="absolute inset-0 flex justify-between items-center px-1.5 font-bold z-10 text-[9px] text-white pointer-events-none drop-shadow-xs">
+                    <span class="opacity-90">Cost: {{ formatCurrency(paidValue) }}</span>
                     <span>
-                        <span class="opacity-90 text-shadow">Est: {{ formatCurrency(estValue) }}</span>
-                        <span v-if="roi !== null" class="ml-1 opacity-100 border-l border-white/30 pl-1 text-shadow">ROI: {{ roi }}%</span>
+                        <span class="opacity-90">Est: {{ formatCurrency(estValue) }}</span>
+                        <span v-if="roi !== null" class="ml-1 opacity-100 border-l border-white/30 pl-1">ROI: {{ roi }}%</span>
                     </span>
                 </div>
             </div>
@@ -54,33 +48,44 @@
         </figure>
 
         <!-- Body Area -->
-        <div class="card-body p-2 pt-1 pb-1 gap-1 flex-1 flex flex-col justify-end">
-            <!-- UPC & Location SKU Identifiers -->
-            <div v-if="item.upc || item.locationSku || item.sku" class="flex gap-1.5 flex-wrap items-center my-0.5">
-                <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/85" title="UPC">
-                    <Icon icon="solar:barcode-minimalistic-bold" class="w-3 h-3 mr-0.5 text-primary" />{{ item.upc }}
-                </span>
-                <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary" title="Location / Memory Den SKU">
-                    <Icon icon="solar:tag-bold" class="w-2.5 h-2.5 mr-0.5" />{{ (item.locationSku || item.sku).replace(/^'/, '') }}
-                </span>
+        <div class="card-body p-2.5 gap-1.5 flex-1 flex flex-col justify-between">
+            <!-- Title & Identifiers -->
+            <div>
+                <h2 class="font-bold leading-snug line-clamp-2 text-xs group-hover:text-primary transition-colors mb-1" :title="title">
+                    {{ title }}
+                </h2>
+
+                <!-- UPC & Location SKU Identifiers -->
+                <div v-if="item.upc || item.locationSku || item.sku" class="flex gap-1 flex-wrap items-center">
+                    <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/80 text-[10px] px-1.5" title="UPC">
+                        <Icon icon="solar:barcode-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-primary" />{{ item.upc }}
+                    </span>
+                    <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5" title="Location SKU">
+                        <Icon icon="solar:tag-bold" class="w-2.5 h-2.5 mr-0.5" />{{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                    </span>
+                </div>
             </div>
 
-            <!-- Subtitle/Location Slot -->
-            <div v-if="locationText" class="text-xs opacity-60 truncate"><Icon icon="solar:map-point-linear" class="w-3 h-3 inline mr-1" />{{ locationText }}</div>
-            
-            <!-- Tags/Sales Channels -->
-            <div v-if="tags && tags.length > 0" class="flex gap-1 flex-wrap mt-1">
-                <span v-for="tag in tags" :key="tag" class="badge badge-[10px] px-1 py-0 shadow-sm border-base-200"
-                      :class="{'bg-secondary/20 text-secondary': tag.toLowerCase().includes('ebay'), 'bg-primary/20 text-primary': tag.toLowerCase().includes('poshmark'), 'badge-outline opacity-70': !tag.toLowerCase().includes('ebay') && !tag.toLowerCase().includes('poshmark')}">
-                    <Icon v-if="tag.toLowerCase().includes('ebay')" icon="solar:tag-price-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
-                    <Icon v-else-if="tag.toLowerCase().includes('poshmark')" icon="solar:hanger-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
-                    {{ tag }}
-                </span>
-            </div>
-            
+            <div>
+                <!-- Location & Channels -->
+                <div v-if="locationText" class="text-[11px] opacity-60 truncate flex items-center gap-1 mb-0.5">
+                    <Icon icon="solar:map-point-linear" class="w-3 h-3 inline shrink-0" />
+                    <span>{{ locationText }}</span>
+                </div>
+                
+                <!-- Tags/Sales Channels -->
+                <div v-if="tags && tags.length > 0" class="flex gap-1 flex-wrap mb-1">
+                    <span v-for="tag in tags" :key="tag" class="badge badge-[10px] px-1.5 py-0 shadow-2xs border-base-200"
+                          :class="{'bg-secondary/20 text-secondary': tag.toLowerCase().includes('ebay'), 'bg-primary/20 text-primary': tag.toLowerCase().includes('poshmark'), 'badge-outline opacity-70': !tag.toLowerCase().includes('ebay') && !tag.toLowerCase().includes('poshmark')}">
+                        <Icon v-if="tag.toLowerCase().includes('ebay')" icon="solar:tag-price-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
+                        <Icon v-else-if="tag.toLowerCase().includes('poshmark')" icon="solar:hanger-bold-duotone" class="w-2.5 h-2.5 mr-0.5" />
+                        {{ tag }}
+                    </span>
+                </div>
 
-            <!-- Footer Actions Slot (e.g., Quick Add, Delete) -->
-            <slot name="actions"></slot>
+                <!-- Footer Actions Slot -->
+                <slot name="actions"></slot>
+            </div>
         </div>
     </div>
 </template>

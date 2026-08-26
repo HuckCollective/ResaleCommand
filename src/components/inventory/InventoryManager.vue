@@ -36,229 +36,65 @@
                 </div>
             </div>
         </div>
-
         <!-- MAIN INVENTORY SECTION -->
         <div class="drawer lg:drawer-open">
             <input id="inventory-sidebar" type="checkbox" class="drawer-toggle" />
             
-            <div class="drawer-content flex flex-col pb-8 lg:pl-6 pt-1">
-                <!-- Mobile Toggle & Header -->
-                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 pt-3 pb-2 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-                    <!-- Row 1: Title + filter toggle -->
-                    <div class="flex items-center justify-between gap-2 mb-2">
-                        <div class="flex-1 min-w-0">
-                            <h1 class="text-2xl font-bold text-base-content tracking-tight leading-none">Inventory</h1>
-                            <p v-if="insightFilter" class="text-xs text-warning flex items-center gap-1 mt-0.5">
-                                <Icon icon="solar:lightbulb-bolt-bold-duotone" class="w-3 h-3" />
-                                AI Filter: {{ insightFilter.replace(/_/g, ' ') }}
-                                <button class="btn btn-xs btn-ghost text-error px-1 h-auto min-h-0 py-0" @click="insightFilter = ''; filterStatus = 'all'">✕</button>
-                            </p>
+            <div class="drawer-content flex flex-col pb-8 lg:pl-5 pt-0 min-w-0">
+                <!-- COMPACT SINGLE-ROW STICKY HEADER -->
+                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2.5 mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-xs">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <!-- Left: Page Title & Item Count -->
+                        <div class="shrink-0 flex items-center gap-1.5">
+                            <h1 class="text-lg sm:text-xl font-bold tracking-tight text-base-content leading-none">Inventory</h1>
+                            <span class="badge badge-sm badge-neutral font-mono font-bold">{{ filteredInventory.length }}</span>
+                            <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span v-if="loading" class="loading loading-spinner loading-sm"></span>
-                            <!-- Filter toggle — mobile only -->
-                            <label for="inventory-sidebar" class="btn btn-sm btn-square btn-ghost lg:hidden border border-base-200 bg-base-100 shadow-sm" title="Filters">
-                                <Icon icon="solar:filter-linear" class="w-5 h-5" />
-                            </label>
-                        </div>
-                    </div>
-                    <!-- Row 2: Dedicated Search Bar & Quick Filters -->
-                    <div class="flex flex-col sm:flex-row gap-3 mb-3">
-                        <div class="relative w-full sm:flex-1 sm:max-w-md shrink-0">
-                            <Icon icon="solar:magnifer-linear" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none" />
+
+                        <!-- Center: Full-width Omnibox Search -->
+                        <div class="relative flex-1 min-w-0">
+                            <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
                             <input 
                                 type="text" 
                                 v-model="searchQuery" 
-                                placeholder="Search title, UPC, location, keyword..." 
-                                class="input input-bordered w-full pl-10 pr-10 bg-base-100 font-mono shadow-sm h-12 text-base sm:h-10 sm:text-sm" 
+                                placeholder="Search title, UPC, PO, vendor, location..." 
+                                class="input input-bordered input-sm w-full pl-9 pr-9 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                             />
-                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100" title="Clear search">✕</button>
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-sm w-8 h-8 min-h-8 absolute right-0.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
                         </div>
-                        
-                        <!-- Quick Status Chips (Mobile Scrollable) -->
-                        <div class="flex overflow-x-auto gap-2 pb-1 sm:pb-0 items-center w-full" style="scrollbar-width: none; -ms-overflow-style: none;">
-                            <button @click="filterStatus = 'all'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'all' ? 'badge-primary' : 'badge-ghost badge-outline'">All</button>
-                            <button @click="filterStatus = 'tracked'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'tracked' ? 'badge-primary' : 'badge-ghost badge-outline'">Tracked</button>
-                            <button @click="filterStatus = 'acquired'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'acquired' ? 'badge-primary' : 'badge-ghost badge-outline'">Acquired</button>
-                            <button @click="filterStatus = 'received'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'received' ? 'badge-primary' : 'badge-ghost badge-outline'">Received</button>
-                            <button @click="filterStatus = 'placed'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'placed' ? 'badge-primary' : 'badge-ghost badge-outline'">Placed</button>
-                            <button @click="filterStatus = 'sold'" class="badge badge-lg whitespace-nowrap cursor-pointer transition-colors" :class="filterStatus === 'sold' ? 'badge-primary' : 'badge-ghost badge-outline'">Sold</button>
+
+                        <!-- Right: Quick Add + Mobile Filter Drawer Toggle -->
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button class="btn btn-sm btn-primary gap-1 hidden sm:inline-flex shadow-xs" @click="openAdd">
+                                <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add
+                            </button>
+                            <label for="inventory-sidebar" class="btn btn-sm btn-ghost border border-base-300 bg-base-100 lg:hidden gap-1.5 shadow-xs" title="Open Filters & Tools">
+                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4 h-4 text-primary" />
+                                <span class="text-xs font-bold">Filters</span>
+                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-primary font-bold">{{ activeFilterCount }}</span>
+                            </label>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Row 3: Action Buttons (Add, Gen UPC, Import, Export) -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <!-- Add New -->
-                        <button class="btn btn-sm btn-primary gap-1.5 flex-1 sm:flex-none" @click="openAdd">
-                            <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
-                        </button>
-                        
-                        <!-- Generate UPCs Dropdown -->
-                        <div class="dropdown hidden sm:inline-block">
-                            <div tabindex="0" role="button" class="btn btn-sm btn-outline btn-secondary gap-1.5 font-bold">
-                                <Icon icon="solar:barcode-read-linear" class="w-4 h-4" /> Generate UPCs
-                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
-                            </div>
-                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
-                                <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing Items:</li>
-                                <li>
-                                    <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-2">
-                                        <span class="font-mono font-bold text-primary">HUCK-0001</span>
-                                        <span class="badge badge-xs badge-primary">Auto-fill</span>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-2">
-                                        <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
-                                        <span class="badge badge-xs badge-secondary">Auto-fill</span>
-                                    </button>
-                                </li>
-                                <li v-for="p in knownOrgPrefixes.filter(x => !['HUCK-', 'PDXGL-'].includes(x))" :key="p">
-                                    <button @click="handleGenerateUpcs(p)" class="flex items-center justify-between py-2">
-                                        <span class="font-mono font-bold">{{ p }}0001</span>
-                                        <span class="badge badge-xs badge-ghost">Auto-fill</span>
-                                    </button>
-                                </li>
-                                <div class="divider my-1"></div>
-                                <li>
-                                    <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-2 text-xs">
-                                        <Icon icon="solar:pen-new-square-linear" class="w-4 h-4" />
-                                        <span>Custom Prefix...</span>
-                                    </button>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <!-- Import dropdown -->
-                        <div class="dropdown flex-1 sm:flex-none">
-                            <div tabindex="0" role="button" class="btn btn-sm btn-outline gap-1.5 w-full">
-                                <Icon icon="solar:import-linear" class="w-4 h-4" /> Import
-                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
-                            </div>
-                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="showImport = true">
-                                        <Icon icon="solar:document-text-linear" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
-                                        <div>
-                                            <div class="font-bold text-sm">ShopGoodwill CSV</div>
-                                            <div class="text-xs opacity-60">Import bought &amp; shipped items</div>
-                                        </div>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="showReconciliation = true">
-                                        <Icon icon="solar:refresh-circle-linear" class="w-5 h-5 mt-0.5 shrink-0 text-accent" />
-                                        <div>
-                                            <div class="font-bold text-sm">Booth Sync</div>
-                                            <div class="text-xs opacity-60">Reconcile booth inventory</div>
-                                        </div>
-                                    </button>
-                                </li>
-                                <div class="divider my-1"></div>
-                                <li class="disabled opacity-40 cursor-not-allowed">
-                                    <span class="flex items-start gap-3 py-2">
-                                        <Icon icon="solar:plug-circle-linear" class="w-5 h-5 mt-0.5 shrink-0" />
-                                        <div>
-                                            <div class="font-bold text-sm flex items-center gap-2">Add Integration <span class="badge badge-xs">Soon</span></div>
-                                            <div class="text-xs opacity-60">eBay, Poshmark &amp; more</div>
-                                        </div>
-                                    </span>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <!-- Export dropdown -->
-                        <div class="dropdown dropdown-end flex-1 sm:flex-none">
-                            <div tabindex="0" role="button" class="btn btn-sm btn-outline gap-1.5 w-full">
-                                <Icon icon="solar:export-linear" class="w-4 h-4" /> Export
-                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
-                            </div>
-                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
-                                <li>
-                                    <a href="/inventory/sync" class="flex items-start gap-3 py-2">
-                                        <Icon icon="solar:synchronize-bold-duotone" class="w-5 h-5 mt-0.5 shrink-0 text-secondary" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">MemoryDen Sync</div></div>
-                                    </a>
-                                </li>
-                                <div class="divider my-1"></div>
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('generic')">
-                                        <Icon icon="solar:file-download-linear" class="w-5 h-5 mt-0.5 shrink-0 text-success" />
-                                        <div>
-                                            <div class="font-bold text-sm">Export Generic CSV</div>
-                                            <div class="text-xs opacity-60">{{ selectedItems.length > 0 ? selectedItems.length + ' selected items' : 'All ' + filteredInventory.length + ' filtered items' }}</div>
-                                        </div>
-                                    </button>
-                                </li>
-                                <div class="divider my-1"></div>
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('ebay')">
-                                        <Icon icon="solar:tag-price-linear" class="w-5 h-5 mt-0.5 shrink-0 text-secondary" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">eBay Bulk Upload</div></div>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('poshmark')">
-                                        <Icon icon="simple-icons:poshmark" class="w-5 h-5 mt-0.5 shrink-0 text-primary" />
-                                        <div>
-                                            <div class="font-bold text-sm">Poshmark Bulk Listing</div>
-                                            <div class="text-xs opacity-60">Poshmark standard CSV</div>
-                                        </div>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-3 py-2" @click="exportCsv('ricochet')">
-                                        <Icon icon="solar:shop-bold-duotone" class="w-5 h-5 mt-0.5 shrink-0 text-info" />
-                                        <div>
-                                            <div class="font-bold text-sm">MemoryDen New Items (Ricochet)</div>
-                                            <div class="text-xs opacity-60">Retail import format</div>
-                                        </div>
-                                    </button>
-                                </li>
-                                <li class="disabled opacity-40 cursor-not-allowed">
-                                    <span class="flex items-start gap-3 py-2">
-                                        <Icon icon="solar:shop-linear" class="w-5 h-5 mt-0.5 shrink-0" />
-                                        <div><div class="font-bold text-sm flex items-center gap-2">Export to Booth <span class="badge badge-xs">Soon</span></div></div>
-                                    </span>
-                                </li>
-                            </ul>
-                        </div>
+                <!-- ACTIVE FILTERS SUMMARY BANNER -->
+                <div v-if="activeFilterCount > 0" class="alert alert-info py-2 px-3 shadow-xs flex items-center justify-between gap-2 mb-3 text-xs rounded-xl">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <Icon icon="solar:filter-linear" class="w-4 h-4 shrink-0" />
+                        <span class="font-semibold">Active Filters:</span>
+                        <span v-if="filterStatus !== 'all'" class="badge badge-sm badge-neutral font-bold capitalize">{{ filterStatus }}</span>
+                        <span v-if="insightFilter" class="badge badge-sm badge-warning font-bold">{{ insightFilter.replace(/_/g, ' ') }}</span>
+                        <span v-if="filterUpcPrefix" class="badge badge-sm badge-neutral font-mono font-bold">UPC: {{ filterUpcPrefix === '__missing__' ? 'No Barcode' : filterUpcPrefix }}</span>
+                        <span v-if="filterBinLocation" class="badge badge-sm badge-neutral font-bold">Loc: {{ filterBinLocation }}</span>
+                        <span v-if="filterChannel" class="badge badge-sm badge-neutral font-bold">Channel: {{ filterChannel }}</span>
+                        <span v-if="filterLotType !== 'all'" class="badge badge-sm badge-neutral font-bold">{{ filterLotType.replace('_only', '') }}</span>
+                        <span v-if="filterFlaggedLocated" class="badge badge-sm badge-neutral font-bold">Placed &amp; Located</span>
+                        <span v-if="searchQuery" class="badge badge-sm badge-neutral font-mono truncate max-w-32 font-bold">"{{ searchQuery }}"</span>
                     </div>
-
-                    <!-- QUICK FILTERS ROW -->
-                    <div class="flex flex-wrap items-center gap-2 mt-3 -mb-2">
-                        <span class="text-[10px] font-bold uppercase opacity-60 ml-1">Quick Filters:</span>
-                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-primary/10 border-primary text-primary font-bold': insightFilter === 'ready_to_list'}" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
-                            <Icon icon="solar:checklist-linear" class="w-3.5 h-3.5" /> Ready to List
-                        </button>
-                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-error/10 border-error text-error font-bold': insightFilter === 'missing_photos'}" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
-                            <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Missing Photos
-                        </button>
-                        <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-warning/10 border-warning text-warning-content font-bold': insightFilter === 'missing_est_value'}" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
-                            <Icon icon="solar:dollar-linear" class="w-3.5 h-3.5" /> Missing Pricing
-                        </button>
-                        <!-- UPC Prefix Quick Chips (All detected prefixes) -->
-                        <button 
-                            v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 8)" 
-                            :key="p.prefix"
-                            class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3 font-mono" 
-                            :class="{'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/40': filterUpcPrefix === p.prefix}" 
-                            @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
-                            :title="'Filter by ' + p.prefix + ' barcodes'"
-                        >
-                            <Icon icon="solar:barcode-linear" class="w-3.5 h-3.5" /> {{ p.prefix }}
-                            <span class="text-[9px] opacity-60">({{ p.count }})</span>
-                        </button>
-                        <button 
-                            v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')"
-                            class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" 
-                            :class="{'bg-error/10 border-error text-error font-bold shadow-xs': filterUpcPrefix === '__missing__'}" 
-                            @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
-                            title="Filter items with missing UPC"
-                        >
-                            <Icon icon="solar:danger-circle-linear" class="w-3.5 h-3.5" /> No Barcode
-                        </button>
-                    </div>
+                    <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold shrink-0" @click="clearAllFilters">
+                        <Icon icon="solar:close-circle-linear" class="w-3.5 h-3.5" /> Clear All
+                    </button>
+                </div>
 
                     <!-- SMART SELECTION / PIPELINE BAR -->
                     <div class="mt-2 rounded-xl border transition-all duration-200"
@@ -406,40 +242,17 @@
                             </div>
                         </div>
                     </div>
-                </div>
 
-            <!-- ACTIVE LOCATION / UPC FILTER BANNER -->
-            <div v-if="filterBinLocation || filterChannel || filterUpcPrefix" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
-                <div class="flex items-center gap-2 text-xs flex-wrap">
-                    <Icon icon="solar:filter-linear" class="w-5 h-5 shrink-0" />
-                    <span>Filtering by:</span>
-                    <span v-if="filterBinLocation" class="badge badge-neutral ml-1 font-bold">Location: {{ filterBinLocation }}</span>
-                    <span v-if="filterChannel" class="badge badge-neutral ml-1 font-bold">Channel: {{ filterChannel }}</span>
-                    <span v-if="filterUpcPrefix" class="badge badge-neutral ml-1 font-mono font-bold">UPC: {{ filterUpcPrefix === '__missing__' ? 'No UPC' : filterUpcPrefix }}</span>
-                </div>
-                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''; filterChannel = ''; filterUpcPrefix = ''">
-                    <Icon icon="solar:close-circle-linear" class="w-3 h-3" /> Clear
-                </button>
-            </div>
-
-            <!-- DEBUG / ERROR ALERT -->
-            <div v-if="error" class="alert alert-error mb-4">
-                <span>Error: {{ error }}</span>
-                <button class="btn btn-xs" @click="fetchInventory('')">Retry</button>
-            </div>
-            
             <div v-if="filteredInventory.length === 0 && !loading && !error" class="text-center py-12 bg-base-200 rounded-xl border-dashed border-2 border-base-300">
-                <p class="text-lg opacity-60 mb-4">No items in inventory.</p>
+                <p class="text-lg opacity-60 mb-4">No items in inventory matching your filters.</p>
+                <button class="btn btn-sm btn-outline" @click="clearAllFilters">Clear Filters</button>
             </div>
             
             <div v-else>
-
-
-
-
-                <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
+                <!-- RESPONSIVE 2-COLUMN MOBILE / MULTI-COLUMN DESKTOP GRID -->
+                <div class="grid gap-2.5 sm:gap-3 md:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                     <ItemCard 
-                        v-for="item in filteredInventory" 
+                        v-for="item in displayedInventory" 
                         :key="item.$id" 
                         :item="item"
                         :compact="true"
@@ -447,78 +260,255 @@
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
                         
                         <template #absolute-top-left>
-                            <div class="z-20">
-                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-sm checkbox-primary shadow-sm cursor-pointer border-none bg-white/50 ring-1 ring-white/30" @click.stop />
-                            </div>
+                            <!-- Expanded 40x40px hit area for reliable one-tap selection (Fitts's Law) -->
+                            <label class="z-20 p-2.5 -m-2 flex items-center justify-center cursor-pointer touch-manipulation active:scale-90 transition-transform" @click.stop title="Select Item">
+                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-sm checkbox-primary shadow-xs cursor-pointer border-none bg-white/80 ring-1 ring-white/50" />
+                            </label>
                         </template>
 
                         <template #actions>
-                            <div class="join w-full mt-1 pt-1 border-t border-base-200/50 z-10" @click.stop>
-                                <button @click="copyShareLink(item.$id)" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100"><Icon icon="solar:link-linear" class="w-4 h-4 inline" /> Share</button>
-                                <button @click="openEdit(item)" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100"><Icon icon="solar:pen-linear" class="w-4 h-4 inline" /> Edit</button>
-                                <button @click="confirmDelete(item.$id)" class="btn btn-ghost btn-xs join-item flex-1 text-error opacity-80 hover:opacity-100 hover:bg-error/10" :disabled="processingId === item.$id">
+                            <div class="grid grid-cols-3 gap-1 w-full mt-1.5 pt-1.5 border-t border-base-200/60 z-10" @click.stop>
+                                <button @click="copyShareLink(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold opacity-75 hover:opacity-100 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Copy shareable link">
+                                    <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Share</span>
+                                </button>
+                                <button @click="openEdit(item)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold opacity-80 hover:opacity-100 hover:text-primary active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Edit item">
+                                    <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Edit</span>
+                                </button>
+                                <button @click="confirmDelete(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold text-error opacity-80 hover:opacity-100 hover:bg-error/10 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" :disabled="processingId === item.$id" title="Delete item">
                                     <span v-if="processingId === item.$id" class="loading loading-spinner loading-xs"></span>
-                                    <span v-else><Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4 inline" /> Delete</span>
+                                    <span v-else><Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Del</span></span>
                                 </button>
                             </div>
                         </template>
                     </ItemCard>
-            </div> <!-- End grid -->
+                </div>
+
+                <!-- Infinite Scroll Sentinel & Load More Trigger -->
+                <div ref="loadMoreSentinel" class="py-6 flex justify-center items-center w-full" v-if="displayedInventory.length < filteredInventory.length">
+                    <button class="btn btn-sm btn-ghost gap-2 font-bold opacity-70 hover:opacity-100 touch-manipulation active:scale-95" @click="loadMoreItems">
+                        <span class="loading loading-spinner loading-xs text-primary"></span>
+                        <span class="text-xs">Loading more items ({{ displayedInventory.length }} of {{ filteredInventory.length }})...</span>
+                    </button>
+                </div>
             </div> <!-- End v-else -->
 
-            <!-- ALL ITEMS LOADED (Pagination Removed) -->
+            <!-- ALL ITEMS LOADED -->
             </div> <!-- End drawer-content -->
 
-            <!-- Sidebar Filters -->
+            <!-- LEFT COMMAND & FILTERS SIDEBAR -->
             <div class="drawer-side z-50 lg:z-auto">
                 <label for="inventory-sidebar" aria-label="close sidebar" class="drawer-overlay"></label> 
-                <div class="p-4 w-72 min-h-full bg-base-100 lg:bg-transparent border-r lg:border-transparent border-base-200 text-base-content flex flex-col gap-6 lg:p-0">
+                <div class="p-4 w-72 lg:w-64 min-h-full bg-base-100 lg:bg-transparent border-r lg:border-transparent border-base-200 text-base-content flex flex-col gap-3.5 lg:p-0">
+                    
+                    <!-- Mobile Drawer Header -->
                     <div class="flex lg:hidden justify-between items-center pb-2 border-b border-base-200">
-                        <span class="font-bold text-lg">Filters</span>
+                        <span class="font-bold text-base flex items-center gap-1.5">
+                            <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5 text-primary" /> Inventory Tools
+                        </span>
                         <label for="inventory-sidebar" class="btn btn-sm btn-circle btn-ghost">✕</label>
                     </div>
 
-                    <div class="bg-base-200/50 rounded-xl p-4 border border-base-200 flex flex-col gap-4 shadow-sm">
-                        <h3 class="font-bold border-b border-base-300 pb-2 hidden lg:block">Filters & Search</h3>
+                    <!-- 1. Primary Action & Tool Hub -->
+                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-2">
+                        <button class="btn btn-sm btn-primary w-full gap-1.5 font-bold shadow-xs" @click="openAdd">
+                            <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New Item
+                        </button>
+                        
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <!-- Generate UPCs Dropdown -->
+                            <div class="dropdown">
+                                <div tabindex="0" role="button" class="btn btn-xs btn-outline btn-secondary gap-1 w-full font-bold">
+                                    <Icon icon="solar:barcode-read-linear" class="w-3.5 h-3.5" /> UPCs
+                                </div>
+                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
+                                    <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing:</li>
+                                    <li>
+                                        <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-1.5">
+                                            <span class="font-mono font-bold text-primary">HUCK-0001</span>
+                                            <span class="badge badge-xs badge-primary">Auto</span>
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-1.5">
+                                            <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
+                                            <span class="badge badge-xs badge-secondary">Auto</span>
+                                        </button>
+                                    </li>
+                                    <li v-for="p in knownOrgPrefixes.filter(x => !['HUCK-', 'PDXGL-'].includes(x))" :key="p">
+                                        <button @click="handleGenerateUpcs(p)" class="flex items-center justify-between py-1.5">
+                                            <span class="font-mono font-bold">{{ p }}0001</span>
+                                            <span class="badge badge-xs badge-ghost">Auto</span>
+                                        </button>
+                                    </li>
+                                    <div class="divider my-1"></div>
+                                    <li>
+                                        <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-1.5 text-xs">
+                                            <Icon icon="solar:pen-new-square-linear" class="w-3.5 h-3.5" />
+                                            <span>Custom Prefix...</span>
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
 
-                        <div class="form-control w-full">
-                            <label class="label pt-0"><span class="label-text font-bold text-[10px] uppercase opacity-70">Search</span></label>
-                            <input type="text" v-model="searchQuery" placeholder="Search title, UPC, #0735, physical location..." class="input input-bordered input-sm w-full font-mono text-xs shadow-inner" />
-                        </div>
-
-                        <div class="form-control w-full">
-                            <label class="label"><span class="label-text font-bold text-[10px] uppercase opacity-70">Status</span></label>
-                            <select v-model="filterStatus" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100">
-                                <option value="all">All Items</option>
-                                <option value="tracked">Tracked</option>
-                                <option value="acquired">Acquired</option>
-                                <option value="received">Received</option>
-                                <option value="placed">Placed</option>
-                                <option value="sold">Sold</option>
-                                <option value="combined">Combined</option>
-                            </select>
-                        </div>
-
-                        <div class="form-control w-full">
-                            <label class="label"><span class="label-text font-bold text-[10px] uppercase opacity-70">UPC / Barcode Prefix</span></label>
-                            <select v-model="filterUpcPrefix" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 font-mono">
-                                <option value="">All Barcodes / UPCs</option>
-                                <option v-for="p in allAvailableUpcPrefixes" :key="p.prefix" :value="p.prefix">{{ p.label }}</option>
-                            </select>
-                            <div class="mt-1 flex items-center gap-1" v-if="filterUpcPrefix && filterUpcPrefix !== '__missing__'">
-                                <input 
-                                    type="text" 
-                                    v-model="filterUpcPrefix" 
-                                    placeholder="Custom prefix (e.g. HUCK-, RC-)..." 
-                                    class="input input-bordered input-xs font-mono w-full bg-base-100" 
-                                />
-                                <button class="btn btn-xs btn-ghost" @click="filterUpcPrefix = ''">✕</button>
+                            <!-- Import Dropdown -->
+                            <div class="dropdown">
+                                <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full">
+                                    <Icon icon="solar:import-linear" class="w-3.5 h-3.5" /> Import
+                                </div>
+                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
+                                    <li>
+                                        <button class="flex items-start gap-2 py-2" @click="showImport = true">
+                                            <Icon icon="solar:document-text-linear" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                                            <div>
+                                                <div class="font-bold text-xs">ShopGoodwill CSV</div>
+                                                <div class="text-[10px] opacity-60">Bought &amp; shipped items</div>
+                                            </div>
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button class="flex items-start gap-2 py-2" @click="showReconciliation = true">
+                                            <Icon icon="solar:refresh-circle-linear" class="w-4 h-4 mt-0.5 shrink-0 text-accent" />
+                                            <div>
+                                                <div class="font-bold text-xs">Booth Sync</div>
+                                                <div class="text-[10px] opacity-60">Reconcile booth inventory</div>
+                                            </div>
+                                        </button>
+                                    </li>
+                                </ul>
                             </div>
                         </div>
-                        
+
+                        <!-- Export Dropdown -->
+                        <div class="dropdown w-full">
+                            <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full justify-between">
+                                <span class="flex items-center gap-1"><Icon icon="solar:export-linear" class="w-3.5 h-3.5" /> Export Data</span>
+                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3 opacity-60" />
+                            </div>
+                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                                <li>
+                                    <a href="/inventory/sync" class="flex items-start gap-2 py-1.5">
+                                        <Icon icon="solar:synchronize-bold-duotone" class="w-4 h-4 mt-0.5 shrink-0 text-secondary" />
+                                        <span class="font-bold text-xs">MemoryDen Sync</span>
+                                    </a>
+                                </li>
+                                <div class="divider my-1"></div>
+                                <li>
+                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('generic')">
+                                        <Icon icon="solar:file-download-linear" class="w-4 h-4 mt-0.5 shrink-0 text-success" />
+                                        <span class="font-bold text-xs">Generic CSV</span>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('ebay')">
+                                        <Icon icon="solar:tag-price-linear" class="w-4 h-4 mt-0.5 shrink-0 text-secondary" />
+                                        <span class="font-bold text-xs">eBay Bulk Upload</span>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('poshmark')">
+                                        <Icon icon="simple-icons:poshmark" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                                        <span class="font-bold text-xs">Poshmark CSV</span>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('ricochet')">
+                                        <Icon icon="solar:shop-bold-duotone" class="w-4 h-4 mt-0.5 shrink-0 text-info" />
+                                        <span class="font-bold text-xs">Ricochet POS (MemoryDen)</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 2. Status Pipeline Navigation -->
+                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs">
+                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5 px-1">Status Pipeline</div>
+                        <ul class="menu menu-xs p-0 gap-0.5 w-full">
+                            <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
+                            <li><button :class="{'active font-bold text-secondary': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
+                            <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
+                            <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
+                            <li><button :class="{'active font-bold text-primary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
+                            <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
+                        </ul>
+                    </div>
+
+                    <!-- 3. AI Health Insights -->
+                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-1.5">
+                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1 flex items-center justify-between">
+                            <span>AI Health Insights</span>
+                            <button v-if="insightFilter" class="text-[9px] text-error font-bold" @click="insightFilter = ''">Clear</button>
+                        </div>
+                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
+                            <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
+                            <span class="badge badge-xs">{{ readyToListCount }}</span>
+                        </button>
+                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
+                            <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
+                            <span class="badge badge-xs">{{ missingPhotosCount }}</span>
+                        </button>
+                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
+                            <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
+                            <span class="badge badge-xs">{{ missingPricingCount }}</span>
+                        </button>
+                    </div>
+
+                    <!-- 4. Barcodes & Prefixes -->
+                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-1.5">
+                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1 flex items-center justify-between">
+                            <span>Barcodes &amp; Prefixes</span>
+                            <button v-if="filterUpcPrefix" class="text-[9px] text-error font-bold" @click="filterUpcPrefix = ''">Clear</button>
+                        </div>
+                        <div class="flex flex-wrap gap-1">
+                            <button 
+                                v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
+                                :key="p.prefix" 
+                                class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
+                                :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
+                                @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
+                            >
+                                {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
+                            </button>
+                            <button 
+                                v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
+                                class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2" 
+                                :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
+                                @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
+                            >
+                                No Barcode
+                            </button>
+                        </div>
+                        <input 
+                            type="text" 
+                            v-model="filterUpcPrefix" 
+                            placeholder="Custom prefix..." 
+                            class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
+                        />
+                    </div>
+
+                    <!-- 5. Advanced Filters (Location, Channel, Lot, Keywords) -->
+                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-2.5">
+                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1">Location &amp; Channels</div>
+
                         <div class="form-control w-full">
-                            <label class="label"><span class="label-text font-bold text-[10px] uppercase opacity-70">Lot Filtering</span></label>
-                            <select v-model="filterLotType" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100">
+                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
+                            <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100">
+                                <option value="">All Locations</option>
+                                <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                            </select>
+                        </div>
+
+                        <div class="form-control w-full">
+                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
+                            <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100">
+                                <option value="">All Channels</option>
+                                <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
+                            </select>
+                        </div>
+
+                        <div class="form-control w-full">
+                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
+                            <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100">
                                 <option value="all">All Items</option>
                                 <option value="lots_only">Parent Lots Only</option>
                                 <option value="extracted_only">Extracted Children Only</option>
@@ -527,35 +517,21 @@
                         </div>
 
                         <div class="form-control w-full">
-                            <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Keywords</span></label>
+                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Keywords</span></label>
                             <TagInput 
                                 v-model="filterKeywords" 
                                 type="keyword" 
                                 placeholder="Any..." 
                                 badgeClass="badge-secondary" 
                             />
-                            <div class="form-control w-full mt-2">
-                                <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Location</span></label>
-                                <select v-model="filterBinLocation" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
-                                    <option value="">All Locations</option>
-                                    <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
-                                </select>
-                            </div>
-                            <div class="form-control w-full mt-2">
-                                <label class="label pt-0 -mb-2"><span class="label-text font-bold text-[10px] uppercase opacity-70">Sales Channel</span></label>
-                                <select v-model="filterChannel" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 mt-2">
-                                    <option value="">All Channels</option>
-                                    <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
-                                </select>
-                            </div>
-                        <div class="form-control w-full mt-4 border-t border-base-300/50 pt-3">
-                            <label class="label cursor-pointer justify-start gap-3 pt-0">
-                                <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-primary checkbox-sm" />
-                                <span class="label-text font-bold text-xs select-none">Only Placed & Located</span>
-                            </label>
-                            <p class="text-[10px] opacity-50 px-1 -mt-1 leading-tight">Filters to only show items with status 'placed' that have a storage location or at least one selling location.</p>
                         </div>
-                    </div>
+
+                        <div class="form-control w-full border-t border-base-300/50 pt-2">
+                            <label class="label cursor-pointer justify-start gap-2 pt-0 pb-0">
+                                <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-primary checkbox-xs" />
+                                <span class="label-text font-bold text-xs select-none">Only Placed &amp; Located</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -796,7 +772,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '../../lib/inventory';
 import BulkImport from './BulkImport.vue';
@@ -1362,6 +1338,63 @@ watch(currentTeam, (n) => {
 // Lifecycle
 const cartItems = computed(() => inventoryItems.value.filter(i => i.status === 'scouted'));
 
+const countByStatus = (status) => {
+    return (inventoryItems.value || []).filter(i => i.status === status).length;
+};
+
+const readyToListCount = computed(() => {
+    return (inventoryItems.value || []).filter(item => {
+        if (!['acquired', 'received'].includes(item.status)) return false;
+        if (!item.title || item.title.trim() === '') return false;
+        const hasPrice = item.resalePrice || item.estValue || item.listPrice;
+        if (!hasPrice) return false;
+        const hasPhoto = item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0) || (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:')));
+        return !!hasPhoto;
+    }).length;
+});
+
+const missingPhotosCount = computed(() => {
+    return (inventoryItems.value || []).filter(item => {
+        if (item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0)) return false;
+        if (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:'))) return false;
+        return true;
+    }).length;
+});
+
+const missingPricingCount = computed(() => {
+    return (inventoryItems.value || []).filter(item => {
+        if (item.status === 'sold' || item.status === 'scouted') return false;
+        return !item.resalePrice && !item.estValue && !item.listPrice;
+    }).length;
+});
+
+const activeFilterCount = computed(() => {
+    let c = 0;
+    if (filterStatus.value !== 'all') c++;
+    if (filterUpcPrefix.value) c++;
+    if (filterBinLocation.value) c++;
+    if (filterChannel.value) c++;
+    if (filterLotType.value !== 'all') c++;
+    if (filterFlaggedLocated.value) c++;
+    if (filterKeywords.value && filterKeywords.value.length > 0) c++;
+    if (insightFilter.value) c++;
+    if (searchQuery.value) c++;
+    return c;
+});
+
+const clearAllFilters = () => {
+    filterStatus.value = 'all';
+    filterUpcPrefix.value = '';
+    filterBinLocation.value = '';
+    filterChannel.value = '';
+    filterLotType.value = 'all';
+    filterFlaggedLocated.value = false;
+    filterKeywords.value = [];
+    insightFilter.value = '';
+    searchQuery.value = '';
+    filterPurchaseId.value = '';
+};
+
 // The true "base" total of items that would be shown without any user filters applied
 // (excluding items that are hidden by default like cart items, tracked, and combined items)
 const baseInventoryCount = computed(() => {
@@ -1571,6 +1604,48 @@ const filteredInventory = computed(() => {
         
         return true;
     });
+});
+
+// Progressive / Chunked Rendering for Lightning-Fast Instant Filter Speeds (<10ms)
+const displayLimit = ref(40);
+const displayedInventory = computed(() => {
+    return filteredInventory.value.slice(0, displayLimit.value);
+});
+
+// Reset display limit when any filter or query changes
+watch([filterStatus, filterUpcPrefix, filterBinLocation, filterChannel, filterLotType, filterFlaggedLocated, filterKeywords, insightFilter, searchQuery, filterPurchaseId], () => {
+    displayLimit.value = 40;
+});
+
+const loadMoreSentinel = ref(null);
+let infiniteScrollObserver = null;
+
+const loadMoreItems = () => {
+    if (displayLimit.value < filteredInventory.value.length) {
+        displayLimit.value += 40;
+    }
+};
+
+onMounted(() => {
+    if (typeof IntersectionObserver !== 'undefined') {
+        infiniteScrollObserver = new IntersectionObserver((entries) => {
+            if (entries[0]?.isIntersecting) {
+                loadMoreItems();
+            }
+        }, { rootMargin: '600px' });
+        
+        watch(loadMoreSentinel, (el) => {
+            if (el && infiniteScrollObserver) {
+                infiniteScrollObserver.observe(el);
+            }
+        }, { immediate: true });
+    }
+});
+
+onUnmounted(() => {
+    if (infiniteScrollObserver) {
+        infiniteScrollObserver.disconnect();
+    }
 });
 
 const cartGroups = computed(() => {

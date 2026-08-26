@@ -1,11 +1,11 @@
 <template>
-    <dialog ref="previewModal" class="modal">
+    <dialog ref="previewModal" class="modal modal-bottom sm:modal-middle p-0 m-0 w-full h-full max-h-none max-w-none">
         <!-- Close overlay -->
         <form method="dialog" class="modal-backdrop">
             <button @click="close">close</button>
         </form>
         
-        <div v-if="item" class="modal-box w-full max-w-none h-full max-h-none min-h-screen rounded-none flex flex-col p-0 overflow-hidden bg-base-100 shadow-none relative">
+        <div v-if="item" class="modal-box w-full max-w-none h-dvh max-h-dvh rounded-none flex flex-col p-0 overflow-hidden bg-base-100 shadow-none relative">
             
             <!-- Sticky Header: Status + Wrapped Title + Share & Close Actions -->
             <div class="navbar bg-base-200/95 backdrop-blur-md border-b border-base-300 min-h-14 sticky top-0 z-30 px-3 md:px-5 py-2 flex items-center justify-between gap-3 shadow-xs">
@@ -275,21 +275,21 @@
                 </div>
             </div>
 
-            <!-- Sticky Bottom Dock: DaisyUI Dock Specification -->
-            <div class="dock dock-bottom sticky bottom-0 z-30 bg-base-200/95 backdrop-blur-md border-t border-base-300">
-                <button type="button" @click="copyShareLink" title="Share Item Link">
-                    <Icon icon="solar:link-linear" class="w-5 h-5 mb-0.5" />
-                    <span class="dock-label">Share</span>
+            <!-- Static Bottom Dock: DaisyUI Dock Specification with Robust Flex Support -->
+            <div class="dock dock-bottom shrink-0 z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-lg py-1.5 px-4 flex items-center justify-around">
+                <button type="button" class="flex flex-col items-center justify-center gap-0.5 text-xs py-1 px-4 opacity-75 hover:opacity-100 hover:text-primary transition-all cursor-pointer" @click="copyShareLink" title="Share Item Link">
+                    <Icon icon="solar:link-linear" class="w-5 h-5" />
+                    <span class="dock-label font-bold text-[11px]">Share</span>
                 </button>
 
-                <button v-if="canUserEdit" type="button" class="text-primary font-bold" @click="emit('edit', item); close()" title="Edit Inventory Item">
-                    <Icon icon="solar:pen-bold" class="w-5 h-5 mb-0.5" />
-                    <span class="dock-label">Edit</span>
+                <button v-if="canUserEdit" type="button" class="flex flex-col items-center justify-center gap-0.5 text-xs py-1 px-5 text-primary font-bold hover:opacity-80 transition-all cursor-pointer" @click="emit('edit', item); close()" title="Edit Inventory Item">
+                    <Icon icon="solar:pen-bold" class="w-5 h-5" />
+                    <span class="dock-label font-bold text-[11px]">Edit</span>
                 </button>
 
-                <button type="button" @click="close" title="Close Preview">
-                    <Icon icon="solar:close-circle-linear" class="w-5 h-5 mb-0.5" />
-                    <span class="dock-label">Close</span>
+                <button type="button" class="flex flex-col items-center justify-center gap-0.5 text-xs py-1 px-4 text-error opacity-80 hover:opacity-100 transition-all cursor-pointer" @click="close" title="Close Preview">
+                    <Icon icon="solar:close-circle-linear" class="w-5 h-5" />
+                    <span class="dock-label font-bold text-[11px]">Close</span>
                 </button>
             </div>
         </div>
