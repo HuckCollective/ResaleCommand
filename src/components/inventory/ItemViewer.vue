@@ -1018,7 +1018,13 @@ const proxify = (url) => {
     return url;
 };
 
-const getAssetUrl = (id) => `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+const getAssetUrl = (id) => {
+    if (!id) return '';
+    if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
+        return proxify(id);
+    }
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+};
 
 const gallery = computed(() => {
     if (!item.value) return [];

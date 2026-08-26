@@ -178,6 +178,81 @@
                                         </button>
                                     </div>
                                 </div>
+
+                                <!-- 📸 Fetched Listing Photos Tray (Pick & Add) -->
+                                <div v-if="fetchedImages && fetchedImages.length > 0" class="bg-base-100 rounded-xl p-3 border border-primary/40 shadow-md space-y-2.5 transition-all">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="badge badge-primary badge-sm font-bold shadow-xs">{{ fetchedImages.length }}</span>
+                                            <span class="text-xs font-bold text-base-content">Fetched Photos Available</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <button 
+                                                type="button" 
+                                                @click="addAllFetchedImages" 
+                                                class="btn btn-xs btn-primary gap-1 font-bold shadow-xs"
+                                                title="Add all fetched photos to gallery"
+                                            >
+                                                <Icon icon="solar:gallery-add-bold" class="w-3.5 h-3.5" />
+                                                <span>Add All</span>
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                @click="fetchedImages = []" 
+                                                class="btn btn-xs btn-ghost btn-circle opacity-60 hover:opacity-100"
+                                                title="Dismiss fetched photos"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Image Grid -->
+                                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-56 overflow-y-auto p-1.5 rounded-lg bg-base-200/60 border border-base-300">
+                                        <div 
+                                            v-for="(imgUrl, idx) in fetchedImages" 
+                                            :key="idx"
+                                            class="group relative aspect-square rounded-lg border border-base-300 overflow-hidden bg-base-100 shadow-xs hover:border-primary transition-all flex items-center justify-center cursor-pointer"
+                                        >
+                                            <img 
+                                                :src="proxify(typeof imgUrl === 'string' ? imgUrl : imgUrl.url)" 
+                                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                                loading="lazy"
+                                            />
+                                            
+                                            <!-- Downloading Spinner Overlay -->
+                                            <div 
+                                                v-if="downloadingImageUrls[typeof imgUrl === 'string' ? imgUrl : imgUrl.url]" 
+                                                class="absolute inset-0 bg-base-300/80 backdrop-blur-xs flex items-center justify-center z-20"
+                                            >
+                                                <span class="loading loading-spinner loading-xs text-primary"></span>
+                                            </div>
+
+                                            <!-- Hover Actions -->
+                                            <div class="absolute inset-0 bg-neutral/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1 z-10">
+                                                <button 
+                                                    type="button"
+                                                    class="btn btn-xs btn-primary w-full text-[10px] h-6 min-h-0 px-1 font-bold shadow-xs gap-0.5"
+                                                    @click.stop="selectFetchedImage(typeof imgUrl === 'string' ? imgUrl : imgUrl.url, false)"
+                                                    title="Add to gallery"
+                                                >
+                                                    <Icon icon="solar:add-circle-bold" class="w-3 h-3" />
+                                                    <span>+ Gallery</span>
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    class="btn btn-xs btn-warning w-full text-[10px] h-6 min-h-0 px-1 font-bold shadow-xs gap-0.5"
+                                                    @click.stop="selectFetchedImage(typeof imgUrl === 'string' ? imgUrl : imgUrl.url, true)"
+                                                    title="Set as main photo"
+                                                >
+                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
+                                                    <span>Set Main</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-[10px] text-base-content/60 text-center font-medium">Click <strong>+ Gallery</strong> to add or <strong>Set Main ⭐</strong> to pick photo</p>
+                                </div>
                             </div>
 
                             <!-- 3. 🛡️ ACQUISITION & BASE COST (PROTECTED / LOCKABLE) -->
@@ -1236,6 +1311,7 @@ const suggestedDescriptionStr = computed(() => {
 const scoutMdText = ref(null);
 const scoutQuery = ref('');
 const fetchedImages = ref([]);
+const downloadingImageUrls = ref({});
 const fetchingImages = ref(false);
 const analyzing = ref(false);
 const analysisStatus = ref('');
@@ -1244,7 +1320,13 @@ const saveIndividually = ref(false);
 const generatingDescription = ref(false);
 
 const getAssetUrl = (id) => {
-    if (!id || !BUCKET) return '';
+    if (!id) return '';
+    if (typeof id === 'string') {
+        if (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/')) {
+            return proxify(id);
+        }
+    }
+    if (!BUCKET) return '';
     try {
         return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
     } catch (e) { return ''; }
@@ -1438,6 +1520,12 @@ const allAvailableGalleryUrls = computed(() => {
     if (editForm.existingGalleryIds) {
         editForm.existingGalleryIds.forEach(id => {
             const u = getAssetUrl(id);
+            if (u && !urls.includes(u)) urls.push(u);
+        });
+    }
+    if (editGalleryBuffer.value) {
+        editGalleryBuffer.value.forEach(file => {
+            const u = getObjectUrl(file);
             if (u && !urls.includes(u)) urls.push(u);
         });
     }
@@ -1845,15 +1933,31 @@ const urlToFile = async (url, filename) => {
     }
 };
 
-const selectFetchedImage = async (url) => {
-    const filename = url.split('/').pop().split('?')[0] || "downloaded.jpg";
-    const file = await urlToFile(url, filename);
-    if (file) {
-        editGalleryBuffer.value.push(file);
-        if (!actualMainPhoto.value.file && !editForm.imageId && !actualMainPhoto.value.url) {
-            mainPhotoSelection.value = { type: 'new', val: editGalleryBuffer.value.length - 1 };
+const selectFetchedImage = async (url, asMain = false) => {
+    if (!url) return;
+    downloadingImageUrls.value = { ...downloadingImageUrls.value, [url]: true };
+    try {
+        const filename = url.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+        const file = await urlToFile(url, filename);
+        if (file) {
+            editGalleryBuffer.value.push(file);
+            const newIdx = editGalleryBuffer.value.length - 1;
+            if (asMain || (!actualMainPhoto.value.file && !editForm.imageId && !actualMainPhoto.value.url)) {
+                mainPhotoSelection.value = { type: 'new', val: newIdx };
+            }
+            // Remove the selected image from fetchedImages
+            fetchedImages.value = fetchedImages.value.filter((img) => (typeof img === 'string' ? img : img.url) !== url);
+            addToast({ type: 'success', message: asMain ? "Added & set as main photo ⭐" : "Photo added to gallery!" });
+        } else {
+            addToast({ type: 'error', message: "Could not download image." });
         }
-    } else addToast({ type: 'error', message: "Could not download image." });
+    } catch (e) {
+        addToast({ type: 'error', message: "Download failed: " + e.message });
+    } finally {
+        const updated = { ...downloadingImageUrls.value };
+        delete updated[url];
+        downloadingImageUrls.value = updated;
+    }
 };
 
 const addAllFetchedImages = async () => {
@@ -1864,12 +1968,27 @@ const addAllFetchedImages = async () => {
         cancelable: false
     });
     const toAdd = [...fetchedImages.value];
+    let successCount = 0;
     for (const imgItem of toAdd) {
-        await selectFetchedImage(imgItem.url || imgItem);
+        const url = typeof imgItem === 'string' ? imgItem : (imgItem.url || '');
+        if (!url) continue;
+        const filename = url.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+        const file = await urlToFile(url, filename);
+        if (file) {
+            editGalleryBuffer.value.push(file);
+            if (!actualMainPhoto.value.file && !editForm.imageId && !actualMainPhoto.value.url) {
+                mainPhotoSelection.value = { type: 'new', val: editGalleryBuffer.value.length - 1 };
+            }
+            successCount++;
+        }
     }
     fetchedImages.value = [];
     hideLoader();
-    addToast({ type: 'success', message: 'Added all scraped photos to gallery!' });
+    if (successCount > 0) {
+        addToast({ type: 'success', message: `Added ${successCount} photo${successCount > 1 ? 's' : ''} to gallery!` });
+    } else {
+        addToast({ type: 'error', message: 'Failed to download fetched photos.' });
+    }
 };
 
 let scoutAbortController = new AbortController();

@@ -35,14 +35,18 @@ export const POST: APIRoute = async ({ request }) => {
                     if (data && (data.title || data.itemName)) {
                         const imgServer = data.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
                         const images: string[] = [];
+                        const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
+                        
+                        if (data.imageURL) {
+                            const mainImg = fixUrl(data.imageURL);
+                            if (mainImg) images.push(mainImg);
+                        }
+
                         if (data.imageUrlString) {
                             data.imageUrlString.split(';').forEach((p: string) => {
                                 const clean = p.trim().replace(/\\/g, '/');
                                 if (clean) images.push(imgServer + clean);
                             });
-                        } else if (data.imageURL) {
-                            const fixUrl = (u: string) => u ? (u.startsWith('//') ? 'https:' + u : u) : '';
-                            images.push(fixUrl(data.imageURL));
                         }
                         
                         return new Response(JSON.stringify({ 

@@ -1,0 +1,12 @@
+# daisyUI v5 & Tailwind UI Expert Skill
+
+## Context
+- Application: resalecmd
+- Stack: Astro, Vue 3.5, daisyUI 5, Tailwind CSS 4
+
+## Behavioral Directives
+- **Component-First Styling**: Use daisyUI v5 semantic component classes (`btn`, `card`, `modal`, `drawer`, `join`, `dropdown`, `input-bordered`, `badge`) instead of repetitive low-level utility chains.
+- **Theme-Safe Color Tokens**: Always use semantic background & text tokens (`bg-base-100`, `bg-base-200`, `bg-base-300`, `text-base-content`, `text-primary`, `badge-success`, `text-warning`) to guarantee seamless light/dark mode compatibility.
+- **Interactive Forms & Controls**: Structure input groups with `.join` and `.join-item` for sleek unified borders.
+- **Micro-Interactions & Spinners**: Use `loading loading-spinner loading-xs` for async state indicators and DaisyUI badges for inventory statuses.
+- **Responsive Layouts**: Combine DaisyUI with Tailwind responsive prefixes (`modal-bottom sm:modal-middle`, `grid-cols-2 sm:grid-cols-4`).

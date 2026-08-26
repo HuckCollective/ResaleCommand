@@ -1657,7 +1657,13 @@ const getImageUrl = (item) => {
     return getAssetUrl(id);
 };
 
-const getAssetUrl = (id) => `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+const getAssetUrl = (id) => {
+    if (!id) return '';
+    if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
+        return proxify(id);
+    }
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+};
 const getObjectUrl = (file) => URL.createObjectURL(file);
 const formatCurrency = (val) => {
     if(!val) return '-';
