@@ -39,22 +39,26 @@
               </div>
             </th>
             <th class="hidden md:table-cell">Status</th>
+            <th class="text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading && purchases.length === 0">
-            <td colspan="6" class="text-center py-12">
+            <td colspan="7" class="text-center py-12">
               <span class="loading loading-spinner loading-lg text-primary"></span>
             </td>
           </tr>
           <tr v-else-if="purchases.length === 0">
-            <td colspan="6" class="text-center py-12 text-base-content/50">
+            <td colspan="7" class="text-center py-12 text-base-content/50">
               No purchases found matching your criteria.
             </td>
           </tr>
           <tr v-else v-for="purchase in purchases" :key="purchase.$id" class="hover:bg-base-200/20 transition-colors">
             <td class="font-bold">
-              <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover">{{ purchase.poNumber || 'Pending' }}</a>
+              <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1">
+                <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                {{ purchase.poNumber || 'Pending' }}
+              </a>
             </td>
             <td class="font-mono text-sm opacity-75">
               <a v-if="purchase.vendor?.toLowerCase() === 'shopgoodwill'" 
@@ -63,9 +67,7 @@
                  class="link link-hover flex items-center gap-1"
                  title="Open in ShopGoodwill">
                 {{ purchase.orderId }}
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
+                <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
               </a>
               <span v-else>{{ purchase.orderId }}</span>
             </td>
@@ -77,6 +79,21 @@
             <td class="hidden md:table-cell">
               <div class="badge" :class="getStatusClass(purchase.status)">
                 {{ purchase.status || 'Pending' }}
+              </div>
+            </td>
+            <td class="text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <a 
+                  :href="`/inventory?search=${encodeURIComponent(purchase.orderId || purchase.poNumber || '')}`" 
+                  class="btn btn-xs btn-outline btn-secondary gap-1"
+                  title="View all items for this order in Inventory"
+                >
+                  <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
+                  <span>Items</span>
+                </a>
+                <a :href="`/purchases/${purchase.$id}`" class="btn btn-xs btn-ghost btn-square" title="View Purchase Details">
+                  <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+                </a>
               </div>
             </td>
           </tr>
@@ -105,6 +122,7 @@ import { ref, onMounted } from 'vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { Query } from 'appwrite';
 import { useLoader } from '../../composables/useLoader';
+import { Icon } from '@iconify/vue';
 
 const { showLoader, hideLoader } = useLoader();
 showLoader("Loading Purchases...");

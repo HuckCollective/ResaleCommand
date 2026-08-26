@@ -114,8 +114,27 @@
       <!-- Items Section (Only visible if Editing) -->
       <div v-if="isEdit" class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="card-title text-xl">Linked Items ({{ items.length }})</h2>
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 border-b border-base-200 pb-3">
+            <div>
+              <h2 class="card-title text-xl flex items-center gap-2">
+                <Icon icon="solar:box-bold-duotone" class="w-6 h-6 text-primary" />
+                <span>Linked Items &amp; Lots ({{ items.length }})</span>
+              </h2>
+              <p class="text-xs opacity-60 mt-0.5">
+                Total Landed Inventory: ${{ items.reduce((acc, i) => acc + (Number(i.cost) || 0), 0).toFixed(2) }}
+              </p>
+            </div>
+            
+            <div class="flex items-center gap-2">
+              <a 
+                :href="`/inventory?search=${encodeURIComponent(form.orderId || form.poNumber || '')}`" 
+                class="btn btn-sm btn-outline btn-secondary gap-1.5 shadow-sm font-bold"
+                title="Open and filter all these items in Inventory Manager"
+              >
+                <Icon icon="solar:magnifer-linear" class="w-4 h-4" />
+                <span>View in Inventory</span>
+              </a>
+            </div>
           </div>
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -130,8 +149,8 @@
                     @input="handleItemSearch" 
                     @focus="showDropdown = true"
                     @blur="setTimeout(() => showDropdown = false, 200)"
-                    placeholder="Search inventory by title or ID..." 
-                    class="input input-bordered w-full pr-10"
+                    placeholder="Search inventory by title, UPC, or ID..." 
+                    class="input input-bordered w-full pr-10 text-sm"
                   />
                   <span v-if="isSearching" class="absolute right-3 loading loading-spinner loading-sm text-primary"></span>
                 </div>
@@ -142,7 +161,7 @@
                     <a @click="linkItem(res)" class="flex justify-between items-center gap-4 hover:bg-base-200">
                       <span class="truncate max-w-[80%] flex flex-col">
                         <span class="font-bold text-sm">{{ res.title }}</span>
-                        <span class="font-mono text-xs opacity-60">{{ res.identity }}</span>
+                        <span class="font-mono text-xs opacity-60">{{ res.upc || res.identity || res.$id }}</span>
                       </span>
                       <span class="shrink-0 flex items-center gap-2">
                         <span v-if="res.purchaseId" class="badge badge-warning badge-xs">Linked</span>
@@ -152,7 +171,7 @@
                   </li>
                 </ul>
                 
-                <div v-else-if="showDropdown && itemSearchQuery.length >= 2 && !isSearching" class="absolute left-0 right-0 z-50 mt-1 p-4 bg-base-100 rounded-box shadow-xl border border-base-300 text-center opacity-70">
+                <div v-else-if="showDropdown && itemSearchQuery.length >= 2 && !isSearching" class="absolute left-0 right-0 z-50 mt-1 p-4 bg-base-100 rounded-box shadow-xl border border-base-300 text-center opacity-70 text-xs">
                   No items found.
                 </div>
               </div>
@@ -166,13 +185,13 @@
                   type="text" 
                   v-model="newItem.title" 
                   placeholder="Item Title" 
-                  class="input input-bordered w-full" 
+                  class="input input-bordered w-full text-sm" 
                 />
                 <div class="flex gap-2">
-                  <label class="input input-bordered flex items-center gap-2 grow">
+                  <label class="input input-bordered flex items-center gap-2 grow text-sm">
                     $ <input type="number" step="0.01" v-model.number="newItem.cost" class="grow w-full" placeholder="Cost" />
                   </label>
-                  <button @click="quickCreateItem" class="btn btn-primary shrink-0" :disabled="creatingItem || !newItem.title">
+                  <button @click="quickCreateItem" class="btn btn-primary shrink-0 text-sm font-bold" :disabled="creatingItem || !newItem.title">
                     <span v-if="creatingItem" class="loading loading-spinner loading-xs"></span>
                     Create & Link
                   </button>
@@ -184,35 +203,66 @@
           <div v-if="loadingItems" class="py-8 text-center">
             <span class="loading loading-spinner loading-md text-primary"></span>
           </div>
-          <div v-else-if="items.length === 0" class="py-8 text-center opacity-50 border-2 border-dashed border-base-300 rounded-box">
+          <div v-else-if="items.length === 0" class="py-8 text-center opacity-50 border-2 border-dashed border-base-300 rounded-box text-sm">
             No items are linked to this purchase yet.
           </div>
           <div v-else class="overflow-x-auto border border-base-200 rounded-box">
             <table class="table table-sm table-zebra w-full">
               <thead>
                 <tr>
-                  <th>Item ID</th>
-                  <th>Title</th>
+                  <th class="w-16">Photo</th>
+                  <th>Item Details</th>
                   <th>Cost (Landed)</th>
+                  <th>Resale Price</th>
                   <th>Status</th>
-                  <th>Actions</th>
+                  <th class="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in items" :key="item.$id">
-                  <td class="font-mono text-xs opacity-70">
-                    <a :href="`/item/${item.$id}`" class="link" target="_blank">{{ item.identity }}</a>
-                  </td>
-                  <td class="max-w-75 truncate" :title="item.title">{{ item.title }}</td>
-                  <td class="font-mono font-medium">${{ (item.cost || 0).toFixed(2) }}</td>
+                <tr v-for="item in items" :key="item.$id" class="hover:bg-base-200/50">
                   <td>
-                    <div class="badge badge-sm badge-ghost">{{ item.status || 'acquired' }}</div>
+                    <div class="w-12 h-12 rounded-lg overflow-hidden bg-base-200 border border-base-300 flex items-center justify-center shrink-0">
+                      <img 
+                        v-if="getItemImage(item)" 
+                        :src="getItemImage(item)" 
+                        class="w-full h-full object-cover" 
+                        alt="Item Thumbnail"
+                        @error="$event.target.style.display = 'none'" 
+                      />
+                      <Icon v-else icon="solar:gallery-wide-bold" class="w-5 h-5 opacity-30" />
+                    </div>
                   </td>
                   <td>
-                    <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
-                      <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
-                      Unlink
-                    </button>
+                    <div class="flex flex-col gap-0.5">
+                      <span class="font-bold text-sm text-base-content">{{ item.title }}</span>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
+                        <span v-else-if="item.identity" class="font-mono text-xs opacity-60">{{ item.identity }}</span>
+                        <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
+                        <span v-if="item.parentLotId" class="badge badge-xs badge-accent">Extracted Component</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="font-mono font-medium">${{ (Number(item.cost) || 0).toFixed(2) }}</td>
+                  <td class="font-mono font-medium text-success">
+                    {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : '-') }}
+                  </td>
+                  <td>
+                    <div class="badge badge-sm" :class="item.status === 'sold' ? 'badge-success' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost')">
+                      {{ item.status || 'acquired' }}
+                    </div>
+                  </td>
+                  <td class="text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="btn btn-xs btn-outline btn-primary gap-1" @click="openEditItem(item)">
+                        <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
+                        <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
+                        <span v-else>Unlink</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -261,25 +311,35 @@
                       </div>
                   </li>
               </ul>
-             <div class="text-right font-bold mt-4 text-lg">
-                Total Expenses: <span class="text-warning">${{ totalExpenses.toFixed(2) }}</span>
-             </div>
+              <div class="text-right font-bold mt-4 text-lg">
+                 Total Expenses: <span class="text-warning">${{ totalExpenses.toFixed(2) }}</span>
+              </div>
           </div>
         </div>
       </div>
     </template>
+
+    <!-- Item Edit Drawer -->
+    <ItemDrawer 
+      v-if="activeEditItem" 
+      :item="activeEditItem" 
+      :isOpen="!!activeEditItem" 
+      @close="closeEditDrawer" 
+      @saved="handleSavedItem" 
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { purchasesAPI } from '../../lib/purchases';
-import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInventory } from '../../lib/inventory';
+import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInventory, updateInventoryItem, BUCKET_ID } from '../../lib/inventory';
 import { databases, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
+import ItemDrawer from '../common/ItemDrawer.vue';
 
 const { currentTeam } = useAuth();
 const { showLoader, hideLoader } = useLoader();
@@ -290,6 +350,50 @@ const props = defineProps({
         default: null
     }
 });
+
+const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
+const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
+const BUCKET = BUCKET_ID;
+
+const proxify = (url) => {
+    if (!url) return null;
+    if (typeof url !== 'string') return url;
+    if (url.startsWith('blob:') || url.startsWith('data:') || url.includes('/api/proxy-image')) return url;
+    if (url.includes('/storage/buckets/')) return url;
+    if (url.startsWith('http')) return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    return url;
+};
+
+const getAssetUrl = (id) => {
+    if (!id) return '';
+    if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
+        return proxify(id);
+    }
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+};
+
+const getItemImage = (item) => {
+    if (!item) return null;
+    if (item.imageId) return getAssetUrl(item.imageId);
+    if (item.galleryImageIds && item.galleryImageIds.length > 0) return getAssetUrl(item.galleryImageIds[0]);
+    if (item.conditionNotes) {
+        const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
+        if (match) return getAssetUrl(match[1].split(',')[0].trim());
+    }
+    return null;
+};
+
+const activeEditItem = ref(null);
+const openEditItem = (item) => {
+    activeEditItem.value = item;
+};
+const closeEditDrawer = () => {
+    activeEditItem.value = null;
+};
+const handleSavedItem = async () => {
+    activeEditItem.value = null;
+    await loadLinkedItems();
+};
 
 const isEdit = computed(() => !!props.purchaseId);
 const editMode = ref(!props.purchaseId);
@@ -379,7 +483,7 @@ onMounted(async () => {
 const loadLinkedItems = async () => {
     loadingItems.value = true;
     try {
-        items.value = await getItemsByPurchaseId(props.purchaseId);
+        items.value = await getItemsByPurchaseId(props.purchaseId, form.value.orderId, form.value.poNumber);
         
         // Auto-fill subtotal from items if it's currently 0 or missing
         if (!form.value.subtotal) {

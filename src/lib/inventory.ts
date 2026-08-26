@@ -429,17 +429,54 @@ export async function getInventoryItems(teamId?: string) {
     }
 }
 
-export async function getItemsByPurchaseId(purchaseId: string) {
+export async function getItemsByPurchaseId(purchaseId: string, orderId?: string, poNumber?: string) {
     try {
-        const response = await databases.listDocuments(
-            DB_ID,
-            getCollectionId(),
-            [
-                Query.equal('purchaseId', purchaseId),
-                Query.limit(100)
-            ]
-        );
-        return response.documents;
+        const itemMap = new Map<string, any>();
+        
+        // 1. Direct query by purchaseId
+        if (purchaseId) {
+            try {
+                const response = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('purchaseId', purchaseId),
+                        Query.limit(200)
+                    ]
+                );
+                response.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+        }
+
+        // 2. Query by orderId / cartId if provided
+        if (orderId && orderId.trim()) {
+            const clean = orderId.trim();
+            try {
+                const resCart = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('cartId', clean),
+                        Query.limit(200)
+                    ]
+                );
+                resCart.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+
+            try {
+                const resIdent = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('identity', clean),
+                        Query.limit(200)
+                    ]
+                );
+                resIdent.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+        }
+
+        return Array.from(itemMap.values());
     } catch (error) {
         console.error("Error fetching items by purchase:", error);
         return [];

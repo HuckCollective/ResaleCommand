@@ -93,10 +93,41 @@
                             <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New
                         </button>
                         
-                        <!-- Generate UPCs -->
-                        <button class="btn btn-sm btn-outline btn-secondary gap-1.5 hidden sm:flex tooltip tooltip-bottom" data-tip="Generate missing UPCs" @click="handleGenerateUpcs">
-                            <Icon icon="solar:barcode-read-linear" class="w-4 h-4" /> Generate UPCs
-                        </button>
+                        <!-- Generate UPCs Dropdown -->
+                        <div class="dropdown hidden sm:inline-block">
+                            <div tabindex="0" role="button" class="btn btn-sm btn-outline btn-secondary gap-1.5 font-bold">
+                                <Icon icon="solar:barcode-read-linear" class="w-4 h-4" /> Generate UPCs
+                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3" />
+                            </div>
+                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
+                                <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing Items:</li>
+                                <li>
+                                    <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-2">
+                                        <span class="font-mono font-bold text-primary">HUCK-0001</span>
+                                        <span class="badge badge-xs badge-primary">Auto-fill</span>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-2">
+                                        <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
+                                        <span class="badge badge-xs badge-secondary">Auto-fill</span>
+                                    </button>
+                                </li>
+                                <li v-for="p in knownOrgPrefixes.filter(x => !['HUCK-', 'PDXGL-'].includes(x))" :key="p">
+                                    <button @click="handleGenerateUpcs(p)" class="flex items-center justify-between py-2">
+                                        <span class="font-mono font-bold">{{ p }}0001</span>
+                                        <span class="badge badge-xs badge-ghost">Auto-fill</span>
+                                    </button>
+                                </li>
+                                <div class="divider my-1"></div>
+                                <li>
+                                    <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-2 text-xs">
+                                        <Icon icon="solar:pen-new-square-linear" class="w-4 h-4" />
+                                        <span>Custom Prefix...</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
 
                         <!-- Import dropdown -->
                         <div class="dropdown flex-1 sm:flex-none">
@@ -206,6 +237,27 @@
                         <button class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" :class="{'bg-warning/10 border-warning text-warning-content font-bold': insightFilter === 'missing_est_value'}" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
                             <Icon icon="solar:dollar-linear" class="w-3.5 h-3.5" /> Missing Pricing
                         </button>
+                        <!-- UPC Prefix Quick Chips (All detected prefixes) -->
+                        <button 
+                            v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 8)" 
+                            :key="p.prefix"
+                            class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3 font-mono" 
+                            :class="{'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/40': filterUpcPrefix === p.prefix}" 
+                            @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
+                            :title="'Filter by ' + p.prefix + ' barcodes'"
+                        >
+                            <Icon icon="solar:barcode-linear" class="w-3.5 h-3.5" /> {{ p.prefix }}
+                            <span class="text-[9px] opacity-60">({{ p.count }})</span>
+                        </button>
+                        <button 
+                            v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')"
+                            class="badge badge-outline gap-1 hover:bg-base-200 cursor-pointer transition-colors px-2 py-3" 
+                            :class="{'bg-error/10 border-error text-error font-bold shadow-xs': filterUpcPrefix === '__missing__'}" 
+                            @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
+                            title="Filter items with missing UPC"
+                        >
+                            <Icon icon="solar:danger-circle-linear" class="w-3.5 h-3.5" /> No Barcode
+                        </button>
                     </div>
 
                     <!-- SMART SELECTION / PIPELINE BAR -->
@@ -291,10 +343,27 @@
                                     <Icon icon="solar:link-minimalistic-bold" class="w-3.5 h-3.5" /> Combine
                                 </button>
 
-                                <!-- Reassign UPC to HUCK- -->
-                                <button class="btn btn-xs btn-outline btn-primary gap-1" @click="bulkReassignUpc('HUCK-')" :disabled="processingBulk">
-                                    <Icon icon="solar:barcode-bold" class="w-3.5 h-3.5" /> Reassign to HUCK-
-                                </button>
+                                <!-- Reassign / Set UPC Prefix -->
+                                <div class="join">
+                                    <select v-model="bulkUpcPrefixTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35 font-mono">
+                                        <option value="" disabled selected>Set UPC Prefix...</option>
+                                        <option value="HUCK-">HUCK-</option>
+                                        <option value="PDXGL-">PDXGL-</option>
+                                        <option v-for="p in allAvailableUpcPrefixes.filter(x => !['HUCK-', 'PDXGL-', '__missing__', '__numeric__'].includes(x.prefix))" :key="p.prefix" :value="p.prefix">{{ p.prefix }}</option>
+                                        <option value="__custom__">+ Custom...</option>
+                                    </select>
+                                    <input 
+                                        v-if="bulkUpcPrefixTarget === '__custom__'"
+                                        type="text" 
+                                        v-model="bulkCustomUpcPrefix"
+                                        placeholder="PREFIX-" 
+                                        class="input input-xs input-bordered join-item w-24 bg-base-100 text-xs font-mono font-bold uppercase" 
+                                    />
+                                    <button class="btn btn-xs btn-primary join-item font-bold" @click="applyBulkUpc" :disabled="(!bulkUpcPrefixTarget || (bulkUpcPrefixTarget === '__custom__' && !bulkCustomUpcPrefix.trim())) || processingBulk">
+                                        <span v-if="processingBulk" class="loading loading-spinner loading-xs"></span>
+                                        <span v-else>Apply</span>
+                                    </button>
+                                </div>
 
                                 <!-- Export selected -->
                                 <button class="btn btn-xs btn-success gap-1 ml-auto" @click="() => exportCsv('generic')">
@@ -339,15 +408,16 @@
                     </div>
                 </div>
 
-            <!-- ACTIVE LOCATION FILTER BANNER -->
-            <div v-if="filterBinLocation || filterChannel" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
+            <!-- ACTIVE LOCATION / UPC FILTER BANNER -->
+            <div v-if="filterBinLocation || filterChannel || filterUpcPrefix" class="alert alert-info py-2.5 px-4 shadow-sm flex items-center justify-between gap-2 mb-4">
                 <div class="flex items-center gap-2 text-xs flex-wrap">
                     <Icon icon="solar:filter-linear" class="w-5 h-5 shrink-0" />
                     <span>Filtering by:</span>
                     <span v-if="filterBinLocation" class="badge badge-neutral ml-1 font-bold">Location: {{ filterBinLocation }}</span>
                     <span v-if="filterChannel" class="badge badge-neutral ml-1 font-bold">Channel: {{ filterChannel }}</span>
+                    <span v-if="filterUpcPrefix" class="badge badge-neutral ml-1 font-mono font-bold">UPC: {{ filterUpcPrefix === '__missing__' ? 'No UPC' : filterUpcPrefix }}</span>
                 </div>
-                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''; filterChannel = ''">
+                <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold" @click="filterBinLocation = ''; filterChannel = ''; filterUpcPrefix = ''">
                     <Icon icon="solar:close-circle-linear" class="w-3 h-3" /> Clear
                 </button>
             </div>
@@ -427,6 +497,23 @@
                                 <option value="sold">Sold</option>
                                 <option value="combined">Combined</option>
                             </select>
+                        </div>
+
+                        <div class="form-control w-full">
+                            <label class="label"><span class="label-text font-bold text-[10px] uppercase opacity-70">UPC / Barcode Prefix</span></label>
+                            <select v-model="filterUpcPrefix" class="select select-bordered select-sm w-full text-xs shadow-sm bg-base-100 font-mono">
+                                <option value="">All Barcodes / UPCs</option>
+                                <option v-for="p in allAvailableUpcPrefixes" :key="p.prefix" :value="p.prefix">{{ p.label }}</option>
+                            </select>
+                            <div class="mt-1 flex items-center gap-1" v-if="filterUpcPrefix && filterUpcPrefix !== '__missing__'">
+                                <input 
+                                    type="text" 
+                                    v-model="filterUpcPrefix" 
+                                    placeholder="Custom prefix (e.g. HUCK-, RC-)..." 
+                                    class="input input-bordered input-xs font-mono w-full bg-base-100" 
+                                />
+                                <button class="btn btn-xs btn-ghost" @click="filterUpcPrefix = ''">✕</button>
+                            </div>
                         </div>
                         
                         <div class="form-control w-full">
@@ -1066,13 +1153,26 @@ const runAutoGenerateDescriptions = async () => {
 };
 
 onMounted(() => {
-    // Check URL for AI Insight filters
+    // Check URL for AI Insight filters & search / order params
     const params = new URLSearchParams(window.location.search);
     if (params.has('insightFilter')) {
         insightFilter.value = params.get('insightFilter') || '';
         if (insightFilter.value) {
             bulkOpen.value = true;
         }
+    }
+    if (params.has('search')) {
+        searchQuery.value = params.get('search') || '';
+    } else if (params.has('orderId')) {
+        searchQuery.value = params.get('orderId') || '';
+    } else if (params.has('po')) {
+        searchQuery.value = params.get('po') || '';
+    }
+    if (params.has('upcPrefix')) {
+        filterUpcPrefix.value = params.get('upcPrefix') || '';
+    }
+    if (params.has('status')) {
+        filterStatus.value = params.get('status') || 'all';
     }
 });
 
@@ -1087,6 +1187,7 @@ const scrollToTop = () => {
 const filterKeywords = ref([]);
 const filterBinLocation = ref('');
 const filterChannel = ref('');
+const filterUpcPrefix = ref('');
 const filterLotType = ref('all');
 const filterFlaggedLocated = ref(false);
 const orgPlacedLocations = ref([]);
@@ -1127,6 +1228,107 @@ const allAvailableChannels = computed(() => {
     });
     if (filterChannel.value) set.add(String(filterChannel.value).trim());
     return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+});
+
+const knownOrgPrefixes = computed(() => {
+    const prefixes = new Set(['HUCK-', 'PDXGL-']);
+    if (currentTeam.value?.prefs?.upcPrefix) {
+        let p = currentTeam.value.prefs.upcPrefix.trim().toUpperCase();
+        if (!p.endsWith('-') && !/^\d+$/.test(p)) p += '-';
+        prefixes.add(p);
+    }
+    if (user.value?.prefs?.upcPrefix) {
+        let p = user.value.prefs.upcPrefix.trim().toUpperCase();
+        if (!p.endsWith('-') && !/^\d+$/.test(p)) p += '-';
+        prefixes.add(p);
+    }
+    return Array.from(prefixes);
+});
+
+const allAvailableUpcPrefixes = computed(() => {
+    const map = new Map();
+    // Pre-populate with known organization prefixes
+    knownOrgPrefixes.value.forEach(p => map.set(p, 0));
+
+    let missingCount = 0;
+    let numericOnlyCount = 0;
+
+    (inventoryItems.value || []).forEach(item => {
+        if (item.status === 'scouted') return;
+        const code = (item.upc || item.locationSku || item.sku || '').trim().toUpperCase();
+        
+        if (!code) {
+            missingCount++;
+            return;
+        }
+
+        // Check against known org prefixes first (e.g. HUCK-, PDXGL-)
+        let matchedKnown = false;
+        for (const kp of knownOrgPrefixes.value) {
+            if (code.startsWith(kp)) {
+                map.set(kp, (map.get(kp) || 0) + 1);
+                matchedKnown = true;
+                break;
+            }
+        }
+        if (matchedKnown) return;
+
+        // 1. Hyphenated prefix: e.g. "RC-045", "SGW-999" -> "RC-", "SGW-"
+        const hyphenMatch = code.match(/^([A-Za-z0-9]+-)/);
+        if (hyphenMatch) {
+            const prefix = hyphenMatch[1].toUpperCase();
+            map.set(prefix, (map.get(prefix) || 0) + 1);
+            return;
+        }
+
+        // 2. Letters followed by numbers: e.g. "HUCK0123", "PDXGL045", "RC45"
+        const alphaNumMatch = code.match(/^([A-Za-z]+)\d+/);
+        if (alphaNumMatch) {
+            const prefix = alphaNumMatch[1].toUpperCase();
+            map.set(prefix, (map.get(prefix) || 0) + 1);
+            return;
+        }
+
+        // 3. Pure numeric barcode (standard retail UPC): e.g. "012345678901"
+        if (/^\d+$/.test(code)) {
+            numericOnlyCount++;
+            return;
+        }
+
+        // 4. Other custom code (take leading 4 chars)
+        const customPrefix = code.length > 6 ? code.substring(0, 4).toUpperCase() : code.toUpperCase();
+        map.set(customPrefix, (map.get(customPrefix) || 0) + 1);
+    });
+    
+    // Sort so known org prefixes come first, then by count
+    const list = Array.from(map.entries()).map(([prefix, count]) => ({
+        prefix,
+        label: `${prefix} (${count})`,
+        count
+    })).sort((a, b) => {
+        const aKnown = knownOrgPrefixes.value.includes(a.prefix);
+        const bKnown = knownOrgPrefixes.value.includes(b.prefix);
+        if (aKnown && !bKnown) return -1;
+        if (!aKnown && bKnown) return 1;
+        return b.count - a.count;
+    });
+
+    if (numericOnlyCount > 0) {
+        list.push({
+            prefix: '__numeric__',
+            label: `Retail / Numeric Barcodes (${numericOnlyCount})`,
+            count: numericOnlyCount
+        });
+    }
+
+    if (missingCount > 0) {
+        list.push({
+            prefix: '__missing__',
+            label: `No Barcode / Missing (${missingCount})`,
+            count: missingCount
+        });
+    }
+    return list;
 });
 
 watch(currentTeam, (n) => { 
@@ -1259,11 +1461,31 @@ const filteredInventory = computed(() => {
             if (!hasAllKeywords) return false;
         }
 
+        // Filter by UPC / Barcode Prefix
+        if (filterUpcPrefix.value) {
+            const code = (item.upc || item.locationSku || item.sku || '').trim().toUpperCase();
+            if (filterUpcPrefix.value === '__missing__') {
+                if (code !== '') return false;
+            } else if (filterUpcPrefix.value === '__numeric__') {
+                if (!code || !/^\d+$/.test(code)) return false;
+            } else {
+                const target = filterUpcPrefix.value.toUpperCase();
+                if (!code.startsWith(target) && !code.includes(target)) return false;
+            }
+        }
+
         // Filter by Search (Free text, UPC, SKU, Numeric suffix, Title, etc.)
         if (searchQuery.value) {
             const rawQuery = searchQuery.value.trim();
             const query = rawQuery.toLowerCase();
             const numericDigits = rawQuery.replace(/\D/g, '');
+            const itemUpc = (item.upc || item.sku || '').toLowerCase();
+
+            // Explicit prefix query like 'upc:huck-' or 'barcode:0012'
+            if (query.startsWith('upc:') || query.startsWith('barcode:')) {
+                const target = query.replace(/^(upc|barcode):/, '').trim();
+                return itemUpc.includes(target);
+            }
 
             const titleMatch = (item.title || item.itemName || '').toLowerCase().includes(query);
             const idMatch = (item.$id || '').toLowerCase().includes(query);
@@ -1272,9 +1494,6 @@ const filteredInventory = computed(() => {
             const orderMatch = (item.orderId || item.sourceOrderId || '').toLowerCase().includes(query);
             const notesMatch = (item.conditionNotes || item.marketDescription || '').toLowerCase().includes(query);
             const keywordMatch = Array.isArray(item.keywords) && item.keywords.some(k => k.toLowerCase().includes(query));
-            
-            // UPC / SKU Matching
-            const itemUpc = (item.upc || item.sku || '').toLowerCase();
             const upcMatch = itemUpc.includes(query);
 
             // Numeric Suffix & Partial Number Matching (e.g. searching "0735" or "735" matches "HUCK-0735")
@@ -1334,6 +1553,8 @@ const bulkCustomLocation = ref('');
 const processingBulkLoc = ref(false);
 const bulkChannelTarget = ref('');
 const processingBulkChannel = ref(false);
+const bulkUpcPrefixTarget = ref('');
+const bulkCustomUpcPrefix = ref('');
 const bulkOpen = ref(false);
 
 watch(selectedItems, (newVal, oldVal) => {
@@ -1353,16 +1574,16 @@ const toggleAll = (event) => {
     }
 };
 
-const handleGenerateUpcs = async () => {
-    const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
+    const prefix = targetPrefix || currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
     const missingCount = inventoryItems.value.filter(i => !i.upc).length;
     if (missingCount === 0) {
         addToast({ type: 'info', message: 'All items already have a UPC!' });
         return;
     }
     const confirmed = await confirmDialog(
-        `Generate UPCs`,
-        `You have ${missingCount} items without a UPC. This will automatically assign a unique ID (e.g. ${prefix}0001) to each of them. Continue?`,
+        `Generate ${prefix} UPCs`,
+        `You have ${missingCount} items without a UPC. This will automatically assign unique sequential IDs (e.g. ${prefix}0001) to each of them. Continue?`,
         'Generate',
         'cancel'
     );
@@ -1370,10 +1591,30 @@ const handleGenerateUpcs = async () => {
     
     try {
         const count = await generateUpcs(prefix);
-        addToast({ type: 'success', message: `Successfully generated ${count} UPCs!` });
+        addToast({ type: 'success', message: `Successfully generated ${count} "${prefix}" UPCs!` });
     } catch (e) {
         addToast({ type: 'error', message: e.message || 'Failed to generate UPCs' });
     }
+};
+
+const handleCustomGenerateUpcs = async () => {
+    const custom = window.prompt("Enter custom UPC Prefix (e.g. MYORG-):");
+    if (!custom || !custom.trim()) return;
+    let clean = custom.trim().toUpperCase();
+    if (!clean.endsWith('-') && !/^\d+$/.test(clean)) clean += '-';
+    await handleGenerateUpcs(clean);
+};
+
+const applyBulkUpc = async () => {
+    let target = bulkUpcPrefixTarget.value;
+    if (target === '__custom__') {
+        target = bulkCustomUpcPrefix.value?.trim().toUpperCase();
+        if (target && !target.endsWith('-') && !/^\d+$/.test(target)) target += '-';
+    }
+    if (!target) return;
+    await bulkReassignUpc(target);
+    bulkUpcPrefixTarget.value = '';
+    bulkCustomUpcPrefix.value = '';
 };
 
 const bulkReassignUpc = async (prefix = 'HUCK-') => {
