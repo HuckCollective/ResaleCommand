@@ -1678,6 +1678,81 @@ const getImageUrl = (itemData) => {
     return id ? getAssetUrl(id) : null;
 };
 
+const lotChildren = ref([]);
+const parentLot = ref(null);
+const loadingLot = ref(false);
+const creatingChild = ref(false);
+
+const newChild = reactive({
+    title: '',
+    cost: '',
+    resalePrice: '',
+    status: 'acquired',
+    soldPrice: ''
+});
+
+const lotDashboardItem = computed(() => parentLot.value || props.item);
+const lotSoldChildren = computed(() => (lotChildren.value || []).filter(c => c.status === 'sold'));
+const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice) || 0), 0));
+const lotROI = computed(() => lotRealizedRevenue.value - Number(lotDashboardItem.value?.cost || 0));
+
+async function fetchLotChildren() {
+    if (!props.item || !props.item.$id) return;
+    loadingLot.value = true;
+    try {
+        const targetParentId = props.item.parentLotId || props.item.$id;
+        const res = await databases.listDocuments(DB_ID, getCollectionId(), [
+            Query.equal('parentLotId', targetParentId),
+            Query.limit(100)
+        ]);
+        lotChildren.value = res.documents || [];
+    } catch (e) {
+        console.error("Failed to fetch lot items:", e);
+    } finally {
+        loadingLot.value = false;
+    }
+}
+
+const uncombining = ref(false);
+const uncombineLot = async () => {
+    if (!props.item || !props.item.$id) return;
+    const count = lotChildren.value.length;
+    const confirmMsg = count > 0 
+        ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined master lot.`
+        : `Uncombine and remove this master lot?`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    uncombining.value = true;
+    showLoader("Rolling back lot...", {
+        step: "Restoring original items & removing master lot...",
+        progress: 50,
+        cancelable: false
+    });
+
+    try {
+        // 1. Restore all child / constituent items
+        for (const child of lotChildren.value) {
+            await databases.updateDocument(DB_ID, getCollectionId(), child.$id, {
+                parentLotId: null,
+                status: (child.status === 'combined' || child.status === 'archived') ? 'acquired' : child.status
+            });
+        }
+
+        // 2. Delete the master lot document
+        await databases.deleteDocument(DB_ID, getCollectionId(), props.item.$id);
+
+        addToast({ type: 'success', message: `Successfully rolled back lot and restored ${count} items!` });
+        emit('uncombined');
+        emit('close');
+    } catch (e) {
+        addToast({ type: 'error', message: 'Rollback failed: ' + e.message });
+    } finally {
+        uncombining.value = false;
+        hideLoader();
+    }
+};
+
 const initForm = () => {
     // If editing existing item, start with acquisition details locked to prevent fat-finger / AI overwrites
     isAcquisitionUnlocked.value = !props.item;
@@ -2320,81 +2395,6 @@ const applyBundleSuggestions = () => {
         editForm.description = suggestedDescriptionStr.value;
     }
     addToast({ type: 'success', message: 'Applied AI suggestions to listing form.' });
-};
-
-const lotChildren = ref([]);
-const parentLot = ref(null);
-const loadingLot = ref(false);
-const creatingChild = ref(false);
-
-const newChild = reactive({
-    title: '',
-    cost: '',
-    resalePrice: '',
-    status: 'acquired',
-    soldPrice: ''
-});
-
-const lotDashboardItem = computed(() => parentLot.value || props.item);
-const lotSoldChildren = computed(() => lotChildren.value.filter(c => c.status === 'sold'));
-const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice) || 0), 0));
-const lotROI = computed(() => lotRealizedRevenue.value - Number(lotDashboardItem.value?.cost || 0));
-
-const fetchLotChildren = async () => {
-    if (!props.item || !props.item.$id) return;
-    loadingLot.value = true;
-    try {
-        const targetParentId = props.item.parentLotId || props.item.$id;
-        const res = await databases.listDocuments(DB_ID, getCollectionId(), [
-            Query.equal('parentLotId', targetParentId),
-            Query.limit(100)
-        ]);
-        lotChildren.value = res.documents;
-    } catch (e) {
-        console.error("Failed to fetch lot items:", e);
-    } finally {
-        loadingLot.value = false;
-    }
-};
-
-const uncombining = ref(false);
-const uncombineLot = async () => {
-    if (!props.item || !props.item.$id) return;
-    const count = lotChildren.value.length;
-    const confirmMsg = count > 0 
-        ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined master lot.`
-        : `Uncombine and remove this master lot?`;
-    
-    if (!window.confirm(confirmMsg)) return;
-
-    uncombining.value = true;
-    showLoader("Rolling back lot...", {
-        step: "Restoring original items & removing master lot...",
-        progress: 50,
-        cancelable: false
-    });
-
-    try {
-        // 1. Restore all child / constituent items
-        for (const child of lotChildren.value) {
-            await databases.updateDocument(DB_ID, getCollectionId(), child.$id, {
-                parentLotId: null,
-                status: (child.status === 'combined' || child.status === 'archived') ? 'acquired' : child.status
-            });
-        }
-
-        // 2. Delete the master lot document
-        await databases.deleteDocument(DB_ID, getCollectionId(), props.item.$id);
-
-        addToast({ type: 'success', message: `Successfully rolled back lot and restored ${count} items!` });
-        emit('uncombined');
-        emit('close');
-    } catch (e) {
-        addToast({ type: 'error', message: 'Rollback failed: ' + e.message });
-    } finally {
-        uncombining.value = false;
-        hideLoader();
-    }
 };
 
 watch(mainTab, (newVal) => {
