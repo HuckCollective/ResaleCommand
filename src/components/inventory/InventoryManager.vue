@@ -1702,6 +1702,12 @@ const toggleAll = (event) => {
     }
 };
 
+const pruneFilteredOutSelections = () => {
+    // Retain only selected items that are still part of the current filtered inventory view
+    const visibleMatchingIds = new Set(filteredInventory.value.map(i => i.$id));
+    selectedItems.value = selectedItems.value.filter(id => visibleMatchingIds.has(id));
+};
+
 const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
     const prefix = targetPrefix || currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
     const missingCount = inventoryItems.value.filter(i => !i.upc).length;
@@ -1719,6 +1725,7 @@ const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
     
     try {
         const count = await generateUpcs(prefix);
+        pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Successfully generated ${count} "${prefix}" UPCs!` });
     } catch (e) {
         addToast({ type: 'error', message: e.message || 'Failed to generate UPCs' });
@@ -1768,6 +1775,7 @@ const bulkReassignUpc = async (prefix = 'HUCK-') => {
                 updated++;
             }
         }
+        pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Successfully updated ${updated} items to "${prefix}" UPCs!` });
     } catch (e) {
         console.error('Bulk UPC update error:', e);
@@ -1822,7 +1830,7 @@ const applyBulkStatus = async () => {
             if (total > 5) await new Promise(r => setTimeout(r, 80));
         }
         
-        selectedItems.value = [];
+        pruneFilteredOutSelections();
         bulkStatusTarget.value = '';
         
         let msg = `Successfully updated status for ${successCount} items.`;
@@ -1882,7 +1890,7 @@ const applyBulkLocation = async () => {
             if (total > 5) await new Promise(r => setTimeout(r, 80));
         }
         
-        selectedItems.value = [];
+        pruneFilteredOutSelections();
         bulkLocationTarget.value = '';
         bulkCustomLocation.value = '';
         processingBulkLoc.value = false;
@@ -1938,6 +1946,7 @@ const applyBulkChannel = async () => {
             }
             successCount++;
         }
+        pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Added channel "${targetChannel}" to ${successCount} items.` });
         
     } catch (e) {
