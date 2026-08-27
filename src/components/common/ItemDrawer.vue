@@ -322,8 +322,22 @@
                                             <input type="text" v-model="editForm.countryOfOrigin" placeholder="e.g. USA, Japan, Estate Sale" class="input input-bordered input-sm w-full text-xs bg-base-100" />
                                         </div>
                                         <div class="form-control">
-                                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Parent Lot ID</span></label>
-                                            <input type="text" :value="props.item?.parentLotId || 'None'" disabled class="input input-bordered input-sm w-full text-xs bg-base-200/60 font-mono opacity-70" />
+                                            <label class="label py-0.5 flex items-center justify-between">
+                                                <span class="label-text text-xs font-bold">Parent Lot ID</span>
+                                                <span v-if="editForm.parentLotId" class="badge badge-xs badge-secondary font-bold">Extracted</span>
+                                            </label>
+                                            <div class="join w-full shadow-xs">
+                                                <input type="text" :value="editForm.parentLotId || 'None'" disabled class="input input-bordered input-sm join-item grow text-xs bg-base-200/60 font-mono opacity-80" />
+                                                <button 
+                                                    v-if="editForm.parentLotId" 
+                                                    type="button" 
+                                                    @click="editForm.parentLotId = null; addToast({ type: 'info', message: 'Unlinked from parent lot! Click Save to confirm.' })" 
+                                                    class="btn btn-sm btn-outline btn-error join-item font-bold text-xs" 
+                                                    title="Unlink and make standalone"
+                                                >
+                                                    Unlink
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -414,6 +428,8 @@
                                             <option value="acquired">Acquired (Backlog)</option>
                                             <option value="received">Received</option>
                                             <option value="placed">Placed (In Booth)</option>
+                                            <option value="tracked">Tracked</option>
+                                            <option value="combined">Combined</option>
                                             <option value="sold">Sold</option>
                                             <option value="archived">Archived</option>
                                         </select>
@@ -803,6 +819,30 @@
 
                 <!-- LOT DASHBOARD TAB -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'lot'">
+                    <!-- Rollback / Uncombine Banner for Master Lots -->
+                    <div v-if="lotChildren && lotChildren.length > 0" class="bg-error/10 border border-error/30 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                        <div class="flex items-start sm:items-center gap-2 text-xs">
+                            <div class="w-7 h-7 rounded-lg bg-error/20 flex items-center justify-center text-error font-bold shrink-0 mt-0.5 sm:mt-0">
+                                <Icon icon="solar:history-bold" class="w-4 h-4" />
+                            </div>
+                            <div>
+                                <div class="font-extrabold text-base-content">Combined Master Lot ({{ lotChildren.length }} Items Linked)</div>
+                                <div class="text-[11px] opacity-70">Rollback to restore all original items as independent active inventory.</div>
+                            </div>
+                        </div>
+                        <button 
+                            type="button" 
+                            class="btn btn-xs btn-error font-bold shadow-xs gap-1 self-end sm:self-center shrink-0" 
+                            @click="uncombineLot" 
+                            :disabled="uncombining"
+                            title="Restore original items and remove master lot"
+                        >
+                            <span v-if="uncombining" class="loading loading-spinner loading-xs"></span>
+                            <Icon v-else icon="solar:restart-bold" class="w-3.5 h-3.5" />
+                            <span>Rollback &amp; Uncombine</span>
+                        </button>
+                    </div>
+
                     <div class="alert alert-secondary py-2 shadow-sm text-xs sm:text-sm">
                         <Icon icon="solar:box-linear" class="w-5 h-5 shrink-0" />
                         <span>Track items extracted from this box and calculated total lot ROI.</span>
@@ -1045,7 +1085,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'save', 'deconstruct']);
+const emit = defineEmits(['close', 'save', 'uncombined', 'deconstruct']);
 
 const mainTab = ref('details');
 const descTab = ref('edit');
@@ -1661,6 +1701,7 @@ const initForm = () => {
         editForm.sourcingLocation = i.sourcingLocation || getNoteValue(i.conditionNotes, 'Location') || '';
         editForm.orderId = i.orderId || getNoteValue(i.conditionNotes, 'Order #') || getNoteValue(i.conditionNotes, 'Imported from Order #') || '';
         editForm.status = i.status || 'acquired';
+        editForm.parentLotId = i.parentLotId || null;
         let desc = i.marketDescription || i.description || '';
         if (desc && typeof desc === 'string' && desc.trim().startsWith('{') && desc.includes('"identity"')) {
             desc = '';
@@ -1721,6 +1762,7 @@ const initForm = () => {
         editForm.sourcingLocation = '';
         editForm.orderId = '';
         editForm.status = 'acquired';
+        editForm.parentLotId = null;
         editForm.description = '';
         editForm.itemCondition = '';
         editForm.existingGalleryIds = [];
@@ -1743,6 +1785,7 @@ const initForm = () => {
         try { parsedComps = JSON.parse(props.item.components); } catch (e) {}
     }
     componentsList.value = parsedComps;
+    fetchLotChildren();
 };
 
 watch(() => props.item, initForm, { immediate: true });
@@ -2308,6 +2351,46 @@ const fetchLotChildren = async () => {
         console.error("Failed to fetch lot items:", e);
     } finally {
         loadingLot.value = false;
+    }
+};
+
+const uncombining = ref(false);
+const uncombineLot = async () => {
+    if (!props.item || !props.item.$id) return;
+    const count = lotChildren.value.length;
+    const confirmMsg = count > 0 
+        ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined master lot.`
+        : `Uncombine and remove this master lot?`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    uncombining.value = true;
+    showLoader("Rolling back lot...", {
+        step: "Restoring original items & removing master lot...",
+        progress: 50,
+        cancelable: false
+    });
+
+    try {
+        // 1. Restore all child / constituent items
+        for (const child of lotChildren.value) {
+            await databases.updateDocument(DB_ID, getCollectionId(), child.$id, {
+                parentLotId: null,
+                status: (child.status === 'combined' || child.status === 'archived') ? 'acquired' : child.status
+            });
+        }
+
+        // 2. Delete the master lot document
+        await databases.deleteDocument(DB_ID, getCollectionId(), props.item.$id);
+
+        addToast({ type: 'success', message: `Successfully rolled back lot and restored ${count} items!` });
+        emit('uncombined');
+        emit('close');
+    } catch (e) {
+        addToast({ type: 'error', message: 'Rollback failed: ' + e.message });
+    } finally {
+        uncombining.value = false;
+        hideLoader();
     }
 };
 

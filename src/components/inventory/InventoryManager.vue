@@ -596,7 +596,7 @@
         <!-- ----------------------------------------------------------- -->
         <!-- EDIT DRAWER -->
         <!-- ----------------------------------------------------------- -->
-        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" @close="closeEditDrawer" @save="saveEdit" @deconstruct="openDeconstructModal" />
+        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" @close="closeEditDrawer" @save="saveEdit" @uncombined="fetchInventory" @deconstruct="openDeconstructModal" />
 
         <!-- FULLSCREEN PREVIEW MODAL -->
         <ItemPreviewModal 
