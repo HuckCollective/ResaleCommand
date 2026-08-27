@@ -44,7 +44,7 @@
                             <Icon icon="solar:checklist-minimalistic-linear" class="w-4 h-4 mr-1.5 inline" /> Checklist / Verify
                         </a>
                         <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary': mainTab === 'lot'}" @click="mainTab = 'lot'">
-                            <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" /> Inbound Lot ({{ lotChildren.length }})
+                            <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" /> Inbound Lot ({{ lotChildren?.length || 0 }})
                         </a>
                     </div>
                 </div>
@@ -903,8 +903,8 @@
 
                     <!-- Extracted items list -->
                     <div class="space-y-2">
-                        <div class="font-bold text-xs uppercase tracking-wider border-b border-base-200 pb-1">Extracted Items ({{ lotChildren.length }})</div>
-                        <div v-if="lotChildren.length === 0" class="text-center opacity-50 py-8 border-2 border-dashed rounded-xl border-base-300 text-xs">
+                        <div class="font-bold text-xs uppercase tracking-wider border-b border-base-200 pb-1">Extracted Items ({{ lotChildren?.length || 0 }})</div>
+                        <div v-if="!lotChildren || lotChildren.length === 0" class="text-center opacity-50 py-8 border-2 border-dashed rounded-xl border-base-300 text-xs">
                             No child items extracted yet.
                         </div>
                         <div v-for="child in lotChildren" :key="child.$id" class="flex justify-between items-center bg-base-200/70 p-2.5 rounded-xl border border-base-300 text-xs">
