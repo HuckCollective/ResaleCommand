@@ -721,13 +721,13 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         
         if (updates.existingGalleryIds !== undefined) {
             // Frontend is explicitly telling us what gallery IDs to KEEP
-            currentGalleryIds = [...updates.existingGalleryIds];
+            currentGalleryIds = Array.isArray(updates.existingGalleryIds) ? [...updates.existingGalleryIds] : [];
         } else {
             // Fallback for partial updates
-            const galleryMatch = notes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
+            const galleryMatch = notes ? notes.match(/\[GALLERY IDS: ([^\]]+)\]/i) : null;
             if (galleryMatch) {
                 currentGalleryIds = galleryMatch[1].split(',').map((s: string) => s.trim()).filter((s: string) => s);
-            } else if (currentDoc.galleryImageIds) {
+            } else if (currentDoc.galleryImageIds && Array.isArray(currentDoc.galleryImageIds)) {
                 currentGalleryIds = [...currentDoc.galleryImageIds];
             }
         }
@@ -799,8 +799,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         if (updates.estHigh !== undefined) updateNoteValue('Est. High', updates.estHigh === '' ? '' : `$${parseFloat(updates.estHigh.toString()).toFixed(2)}`);
         if (updates.boutiquePrice !== undefined) updateNoteValue('Boutique', updates.boutiquePrice === '' ? '' : `$${parseFloat(updates.boutiquePrice.toString()).toFixed(2)}`);
 
-        if (updates.itemCondition !== undefined) {
-            const mdText = updates.itemCondition;
+        if (updates.itemCondition !== undefined && updates.itemCondition !== null) {
+            const mdText = typeof updates.itemCondition === 'string' ? updates.itemCondition : '';
             const shortCondition = mdText ? mdText.split('\n')[0].substring(0, 100).trim() : '';
             updateNoteValue('Condition', shortCondition);
             

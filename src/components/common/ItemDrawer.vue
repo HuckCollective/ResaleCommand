@@ -1858,10 +1858,10 @@ const saveEdit = async () => {
         cancelable: false
     });
     try {
-        let finalGallery = [...editGalleryBuffer.value];
+        let finalGallery = Array.isArray(editGalleryBuffer.value) ? [...editGalleryBuffer.value] : [];
         let finalImageFile = null;
-        if (actualMainPhoto.value.type === 'new' && editGalleryBuffer.value[actualMainPhoto.value.idx]) {
-             finalImageFile = editGalleryBuffer.value[actualMainPhoto.value.idx];
+        if (actualMainPhoto.value.type === 'new' && finalGallery[actualMainPhoto.value.idx]) {
+             finalImageFile = finalGallery[actualMainPhoto.value.idx];
              finalGallery.splice(actualMainPhoto.value.idx, 1);
         }
 
@@ -1871,8 +1871,11 @@ const saveEdit = async () => {
             imageId: actualMainPhoto.value.id || null,
             imageFile: finalImageFile,
             galleryFiles: finalGallery,
-            scoutData: scoutResult.value,
-            components: componentsList.value.length > 0 ? JSON.stringify(componentsList.value) : null
+            existingGalleryIds: Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : [],
+            scoutData: scoutResult.value || null,
+            components: (componentsList.value && Array.isArray(componentsList.value) && componentsList.value.length > 0) 
+                ? JSON.stringify(componentsList.value) 
+                : null
         };
         emit('save', payload);
     } catch (e) {
