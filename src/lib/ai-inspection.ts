@@ -153,40 +153,42 @@ export async function inspectSinglePhoto(
     if (!imagePart) return null;
 
     const prompt = `
-You are a master resale appraiser and vintage media/collectibles expert performing high-precision inspection of Photo #${image.index + 1}.
+You are a master resale appraiser and multi-category inventory expert performing high-precision inspection of Photo #${image.index + 1}.
 
 Lot Context:
 ${context?.title ? `Lot Title: ${context.title}` : ''}
 ${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
 
 TASK:
-1. READ ALL VISIBLE TEXT (OCR): Read exact titles, issue dates (month/year), volume/issue numbers, barcodes, brand tags, and artist signatures (e.g. Moebius, Richard Corben, H.R. Giger, Frank Frazetta, Bernie Wrightson).
+1. READ ALL VISIBLE TEXT (OCR):
+   - Brand names, clothing tags, labels, sizes, materials (e.g. 100% Cotton, Leather, Silk, Gore-Tex), model numbers, dates, titles, barcodes, and maker signatures.
 2. EXTRACT EVERY DISTINCT VISIBLE ITEM:
-   - If this image shows multiple magazines, comics, or items laid out, extract EVERY SINGLE VISIBLE ISSUE as an entry in the "items" array.
-   - For EACH magazine/item, pinpoint:
-     * Exact name with Month & Year (e.g. "Heavy Metal Magazine - April 1977 (Vol. 1 No. 1 - Premiere Issue)")
-     * Is this a Key / High-Value Issue? (Premiere issues, early 1977-1981 runs, famous cover artists like Giger/Moebius, special anniversary editions).
+   - If this image shows multiple items (e.g. clothing garments, magazines, tools, video games, toys, jewelry, collectibles), extract EVERY SINGLE VISIBLE PIECE as an entry in the "items" array.
+   - For EACH individual item, pinpoint:
+     * Full specific title (e.g. "Vintage Nike Embroidered Swoosh Hoodie Size L", "Heavy Metal Magazine April 1977 Vol 1 #1", "Levi's 501 Made in USA Denim Jeans 34x32")
+     * Identity / Short Name (e.g. "Nike Hoodie L", "Heavy Metal Apr 1977", "Levi's 501 Jeans")
+     * Key Attributes (brand, size, model, year, material, color)
+     * Is this a Key / High-Value Standout Item? (Rare vintage, designer brand, premiere issue, discontinued classic)
      * Individual estimated resale value.
-   - If this image is a close-up of a single item, return that single item in the "items" array.
-3. If this is an overall pile where individual covers are not readable, return general detected items with best estimates.
+   - If this image is a close-up of a single item or garment tag, return that single item in the "items" array.
+3. If this is an overall overview photo showing a group or pile of items, extract all distinguishable pieces with best estimates.
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "Full specific title (e.g. Heavy Metal Magazine - April 1977 Vol 1 #1)",
-      "identity": "Heavy Metal Apr 1977 #1",
-      "issue_date": "April 1977",
+      "name": "Full descriptive title with brand/model/size/date",
+      "identity": "Short recognizable name",
       "is_key_issue": true,
-      "detected_text": "Text read from cover/spine",
-      "condition": "Used/Good, Minor spine wear, etc.",
-      "estimated_value": "$60 - $100",
+      "detected_text": "Text read from tags, labels, or covers",
+      "condition": "Used/Good, NWT, Minor flaw, etc.",
+      "estimated_value": "$25 - $45",
       "price_breakdown": {
-         "mint": "$120 - $160",
-         "fair": "$60 - $80",
-         "poor": "$30 - $45",
-         "boutique_premium": "$85 - $110"
+         "mint": "$50 - $75",
+         "fair": "$25 - $40",
+         "poor": "$12 - $20",
+         "boutique_premium": "$35 - $55"
       },
       "red_flags": []
     }
@@ -301,7 +303,7 @@ export async function inspectPhotoGallery(
     }));
 
     const synthesisPrompt = `
-You are a master vintage collectibles and resale appraiser performing lot reconciliation, key-issue identification, and pricing strategy.
+You are a master multi-category resale appraiser and inventory valuation expert performing lot cataloging, individual piece identification, and pricing strategy for modern & vintage lots (apparel/clothing bundles, electronics, collectibles, media, jewelry, antiques, etc.).
 
 ORIGINAL LISTING & LOT CONTEXT:
 - Listing Title: "${context?.title || 'Multi-Item Lot'}"
@@ -317,27 +319,22 @@ Organization Physical Booths & Locations:
 ${locationsSummary}
 
 CRITICAL RULES FOR "lot_items" STRUCTURING:
-0. ACCURATE PHYSICAL COUNT & OVERVIEW DEDUPLICATION:
-   - The lot contains approximately ${context?.quantity || '35'} physical issues in total.
-   - Beware that some photos are group overview shots showing all magazines laid out together, while subsequent photos are close-ups of those exact same issues. DO NOT double-count issues that appear in both overview photos and close-up photos!
-   - The generated title and catalog must reflect the true ~${context?.quantity || '35'}-issue count (e.g. "Vintage Heavy Metal Magazine Lot: ${context?.quantity || '35'} Issues (1981-2012) Featuring Richard Corben, Olivia, Druuna...").
-1. PRESERVE & HIGHLIGHT HIGH-VALUE / KEY ISSUES INDIVIDUALLY:
-   - Identify ANY standout high-value items (e.g. Heavy Metal 1977 premiere issues, 1978-1981 Moebius/Giger/Frazetta covers, rare specials worth $30-$100+ each).
-   - NEVER bury a high-value or key issue inside a generic reader bundle! High-value items MUST be listed as individual standalone entries in "lot_items" with their specific issue date, title, and premium booth price.
-2. GROUP REMAINING COPIES INTO LOGICAL TIERS / MULTI-PACKS:
-   - For standard reading copies or consecutive runs, create curated multi-quantity bundle entries (e.g. "Mid-80s Run 5-Pack", "1990s Reader Lot (Qty: 10)").
-   - Ensure the total item count across standalone entries and bundled quantities accounts for the collection.
-3. ACCURATE PRICING & BOOTH STRATEGY:
-   - Provide realistic sold-comp prices for physical antique mall booths (e.g. Memory Den) and eBay.
-   - For Memory Den physical booth, recommend bagging & boarding key issues with prominent date/artist tags.
+0. FULL RECONCILIATION & ITEM CATALOGING:
+   - You MUST include EVERY distinct discovered piece/item in the "lot_items" array (${uniqueComponents.length} items identified).
+   - Every individual item MUST have its own entry in "lot_items" with its exact name/brand/size/model/date (e.g. "Vintage Nike Swoosh Hoodie (Size L)", "Levi's 501 Made in USA Denim Jeans 34x32", "Heavy Metal Magazine Spring 2005", etc.), estimated value, price_breakdown, condition, and image_index.
+   - NEVER omit or collapse items from the "lot_items" array — all ${uniqueComponents.length} items must be present so they appear in the Bundle Components interface.
+1. STANDOUT HIGH-VALUE KEYS:
+   - Accurately identify standout high-value items (e.g. designer or vintage clothing, rare premiere issues, high-end electronics) and reflect their premium boutique price.
+2. ACCURATE PRICING & SALES STRATEGY:
+   - Provide realistic sold-comp prices for physical booths/antique malls (e.g. Memory Den), online marketplaces (eBay/Poshmark/Mercari), and storefronts.
 
 OUTPUT STRICT JSON format:
 {
-  "identity": "Unified lot identity (e.g. Vintage Heavy Metal Magazine Master Collection)",
-  "title": "Comprehensive SEO title accurately listing key highlights and lot count",
-  "keywords": ["Heavy Metal Magazine", "Moebius", "Richard Corben", "HR Giger", "Vintage Comics", "Fantasy Art"],
+  "identity": "Unified lot identity (e.g. Vintage 90s Nike & Streetwear Apparel Collection)",
+  "title": "Comprehensive SEO title accurately listing key brand highlights, sizes, and lot count",
+  "keywords": ["Vintage", "Apparel", "Streetwear", "Collectibles", "Fashion"],
   "condition_notes": "Summary of overall condition across the collection",
-  "country_of_origin": "USA / France",
+  "country_of_origin": "USA",
   "red_flags": [],
   "price_breakdown": {
     "mint": "$280 - $380",
@@ -351,30 +348,30 @@ OUTPUT STRICT JSON format:
     "current_asking_price": "${context?.cost ? `$${context.cost}` : '$50.00'}",
     "max_bid": 120,
     "max_landed_cost": 150,
-    "advice": "High profit potential by selling key issues individually at the booth and bundling the rest."
+    "advice": "High profit potential by selling standout brand pieces individually and bundling basics."
   },
   "market_report": {
-    "best_platform": "Memory Den Physical Booth & eBay",
-    "platform_rationale": "High-value key issues sell best individually in a booth or eBay; standard issues move fastest in 3-5 issue themed bundles.",
+    "best_platform": "Memory Den Physical Booth & eBay / Poshmark",
+    "platform_rationale": "Standout brand pieces sell best individually in a booth or online; basics move fastest in curated bundles.",
     "sell_through_velocity": "Fast to Moderate (1-3 weeks)",
-    "target_buyer": "Vintage sci-fi/fantasy collectors, comic enthusiasts, retro art fans",
+    "target_buyer": "Vintage fashion collectors, everyday buyers, retro enthusiasts",
     "channels": [
        { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
-       { "name": "eBay Online", "est_price": "$210.00", "net_payout": "~$165.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Keys" }
+       { "name": "eBay / Poshmark", "est_price": "$210.00", "net_payout": "~$165.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Items" }
     ]
   },
   "lot_items": [
     {
-      "name": "Heavy Metal Magazine - April 1977 Vol 1 #1 (Premiere Issue)",
-      "identity": "Heavy Metal Apr 1977 #1",
+      "name": "Vintage Nike Embroidered Swoosh Hoodie (Size L)",
+      "identity": "Nike Hoodie L",
       "condition": "Used/Good",
-      "estimated_value": "$65 - $95",
+      "estimated_value": "$45 - $65",
       "image_index": 0,
       "price_breakdown": {
-        "mint": "$120 - $160",
-        "fair": "$65 - $95",
-        "poor": "$35 - $50",
-        "boutique_premium": "$85 - $110"
+        "mint": "$75 - $100",
+        "fair": "$45 - $65",
+        "poor": "$20 - $35",
+        "boutique_premium": "$60 - $80"
       },
       "red_flags": []
     }
@@ -406,7 +403,7 @@ OUTPUT STRICT JSON format:
                     red_flags: item.red_flags || []
                 };
             })
-            : candidateComponents.map(c => ({
+            : uniqueComponents.map(c => ({
                 name: c.name || c.identity,
                 identity: c.identity || c.name,
                 estimated_value: c.estimated_value || "$15 - $25",
@@ -437,14 +434,24 @@ OUTPUT STRICT JSON format:
                 confidence: "Medium"
             },
             market_report: {
-                best_platform: "eBay Online",
-                platform_rationale: "Online marketplaces provide strong reach for individual component items.",
+                best_platform: "Memory Den Booth & eBay",
+                platform_rationale: "Online marketplaces and physical booths provide strong reach for individual component items.",
                 sell_through_velocity: "Moderate (2-4 weeks)",
                 channels: [
-                    { name: "eBay Online", est_price: "$100.00", net_payout: "~$80.00", speed: "Medium", recommendation: "Recommended" }
+                    { name: "Memory Den Booth", est_price: "$120.00", net_payout: "~$95.00", speed: "Fast", recommendation: "Recommended" },
+                    { name: "eBay Online", est_price: "$100.00", net_payout: "~$80.00", speed: "Medium", recommendation: "Online Channel" }
                 ]
             },
-            lot_items: candidateComponents
+            lot_items: uniqueComponents.map(c => ({
+                name: c.name || c.identity,
+                identity: c.identity || c.name,
+                estimated_value: c.estimated_value || "$15 - $25",
+                condition: c.condition || "Used/Good",
+                image_index: c.image_index,
+                image_url: images[c.image_index]?.url || images[c.image_index]?.base64 || undefined,
+                price_breakdown: c.price_breakdown,
+                red_flags: c.red_flags || []
+            }))
         };
     }
 }
