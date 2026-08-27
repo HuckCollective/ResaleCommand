@@ -88,53 +88,59 @@ export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string)
 export function getSafeRawAnalysis(item: any): string | null {
     if (!item) return null;
     try {
-        let str = JSON.stringify(item);
+        let str = typeof item === 'string' ? item : JSON.stringify(item);
         if (str.length <= 4900) return str;
         
+        const parsedObj = typeof item === 'string' ? JSON.parse(item) : item;
         const processItem = (obj: any) => {
             if (!obj) return obj;
             const pruned = { ...obj };
-            if (pruned.comparables && pruned.comparables.length > 3) {
-                pruned.comparables = pruned.comparables.slice(0, 3);
+            if (pruned.comparables && pruned.comparables.length > 2) {
+                pruned.comparables = pruned.comparables.slice(0, 2);
             }
-            if (pruned.lot_items && pruned.lot_items.length > 5) {
-                pruned.lot_items = pruned.lot_items.slice(0, 5);
+            if (pruned.lot_items && Array.isArray(pruned.lot_items)) {
+                pruned.lot_items = pruned.lot_items.map((li: any) => ({
+                    name: li.name || li.identity,
+                    estimated_value: li.estimated_value,
+                    price_breakdown: li.price_breakdown,
+                    condition: li.condition,
+                    image_index: li.image_index
+                }));
             }
             return pruned;
         };
 
         let pruned;
-        if (Array.isArray(item)) {
-            pruned = item.map(processItem);
-        } else if (item.items && Array.isArray(item.items)) {
-            pruned = { ...item, items: item.items.map(processItem) };
+        if (Array.isArray(parsedObj)) {
+            pruned = parsedObj.map(processItem);
+        } else if (parsedObj.items && Array.isArray(parsedObj.items)) {
+            pruned = { ...parsedObj, items: parsedObj.items.map(processItem) };
         } else {
-            pruned = processItem(item);
+            pruned = processItem(parsedObj);
         }
         
         str = JSON.stringify(pruned);
         if (str.length <= 4900) return str;
 
-        // Absolute fallback: keep only main fields
+        // Strict fallback: compress lot_items to essential metadata
         const fallbackObj = (obj: any) => ({
             identity: obj.identity,
             title: obj.title,
             price_breakdown: obj.price_breakdown,
-            shipping_info: obj.shipping_info,
             purchase_strategy: obj.purchase_strategy,
-            condition_notes: obj.condition_notes,
-            keywords: obj.keywords,
-            country_of_origin: obj.country_of_origin,
-            lot_items: obj.lot_items ? obj.lot_items.map((li: any) => ({ identity: li.identity, price_breakdown: li.price_breakdown })) : undefined
+            market_report: obj.market_report ? { best_platform: obj.market_report.best_platform, channels: obj.market_report.channels } : undefined,
+            lot_items: obj.lot_items && Array.isArray(obj.lot_items) 
+                ? obj.lot_items.slice(0, 25).map((li: any) => ({
+                    name: (li.name || li.identity || '').substring(0, 60),
+                    estimated_value: li.estimated_value,
+                    fair: li.price_breakdown?.fair
+                })) 
+                : undefined
         });
 
-        if (Array.isArray(item)) {
-            return JSON.stringify(item.map(fallbackObj));
-        } else if (item.items && Array.isArray(item.items)) {
-            return JSON.stringify({ ...item, items: item.items.map(fallbackObj) });
-        } else {
-            return JSON.stringify(fallbackObj(item));
-        }
+        let fallbackStr = JSON.stringify(Array.isArray(parsedObj) ? parsedObj.map(fallbackObj) : fallbackObj(parsedObj));
+        if (fallbackStr.length <= 4900) return fallbackStr;
+        return fallbackStr.substring(0, 4900);
     } catch (e) {
         return null;
     }
@@ -153,6 +159,13 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         let imageId: string | null = extraData.imageId || null;
 
         // 1. Upload Image (FORCED ATTEMPT) - Only if not already provided
+        const publicFilePermissions = [
+            Permission.read(Role.any()),
+            Permission.write(Role.users()),
+            Permission.update(Role.users()),
+            Permission.delete(Role.users())
+        ];
+
         if (!imageId && imageFile) {
             console.log(`[Inventory] FORCING Upload of: ${imageFile.name} (${imageFile.type}, ${imageFile.size} bytes)`);
             try {
@@ -160,7 +173,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 const upload = await storage.createFile(
                     BUCKET_ID || 'item_images', // Fallback
                     ID.unique(),
-                    imageFile
+                    imageFile,
+                    publicFilePermissions
                 );
                 imageId = upload.$id;
                 console.log(`[Inventory] Image Upload Success: ${imageId}`);
@@ -178,7 +192,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 const upload = await storage.createFile(
                      BUCKET_ID,
                      ID.unique(),
-                     extraData.receiptFile
+                     extraData.receiptFile,
+                     publicFilePermissions
                 );
                 receiptImageId = upload.$id;
             } catch (e) {
@@ -197,7 +212,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         if (extraData.galleryFiles && extraData.galleryFiles.length > 0 && BUCKET_ID) {
             try {
                 const uploads = await Promise.all(extraData.galleryFiles.map(file => 
-                    storage.createFile(BUCKET_ID, ID.unique(), file)
+                    storage.createFile(BUCKET_ID, ID.unique(), file, publicFilePermissions)
                 ));
                 galleryIds = uploads.map(u => u.$id);
             } catch (e) {
@@ -365,9 +380,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             sourcingLocation: extraData.sourcingLocation || undefined,
             storageLocation: extraData.storageLocation || undefined,
             cartId: extraData.cartId || undefined,
-            marketDescription: extraData.marketDescription || undefined,
+            marketDescription: extraData.marketDescription ? String(extraData.marketDescription).substring(0, 4900) : undefined,
             keywords: Array.isArray(extraData.keywords) ? extraData.keywords : (extraData.scoutData && Array.isArray(extraData.scoutData.keywords) ? extraData.scoutData.keywords : undefined),
-            components: extraData.components || undefined,
+            components: extraData.components ? (typeof extraData.components === 'string' ? extraData.components.substring(0, 4900) : JSON.stringify(extraData.components).substring(0, 4900)) : undefined,
             quantity: extraData.quantity || 1,
             parentLotId: extraData.parentLotId || undefined,
             purchaseId: extraData.purchaseId || undefined,
@@ -376,7 +391,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             upc: finalUpc,
             locationSku: extraData.locationSku || undefined,
             rawAnalysis: extraData.rawAnalysis !== undefined 
-                ? (extraData.rawAnalysis === '' ? null : extraData.rawAnalysis)
+                ? (extraData.rawAnalysis === '' ? null : getSafeRawAnalysis(extraData.rawAnalysis))
                 : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
         };
 
@@ -600,6 +615,24 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         const currentDoc = await databases.getDocument(DB_ID, getCollectionId(), documentId);
         let notes = currentDoc.conditionNotes || '';
 
+        // If user explicitly provided new internal / condition notes, merge or replace the base text while preserving system bracket tags
+        if (updates.conditionNotes !== undefined || updates.condition_notes !== undefined) {
+            const rawNewNotes = (updates.conditionNotes !== undefined ? updates.conditionNotes : updates.condition_notes) || '';
+            // Extract existing bracket tags like [MAIN IMAGE ID: ...], [GALLERY IDS: ...], [SCOUT_REPORT_ID: ...], [SCOUT_REPORT_MD: ...]
+            const bracketTags = notes.match(/\[[A-Z0-9_ ]+:[^\]]+\]/gi) || [];
+            let cleanNewNotes = rawNewNotes;
+            // Strip any bracket tags from user text to avoid duplicate tags
+            bracketTags.forEach(tag => {
+                cleanNewNotes = cleanNewNotes.replace(tag, '');
+            });
+            cleanNewNotes = cleanNewNotes.trim();
+            if (bracketTags.length > 0) {
+                notes = cleanNewNotes + (cleanNewNotes ? '\n\n' : '') + bracketTags.join('\n');
+            } else {
+                notes = cleanNewNotes;
+            }
+        }
+
         // Helper to update or append values in notes
         const updateNoteValue = (key: string, value: string) => {
             // Escape key for regex usage (e.g. "Est. Low" -> "Est\. Low")
@@ -629,8 +662,14 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         // Handle Status (This exists in schema)
         if (updates.status) data.status = updates.status;
         if (updates.title) data.title = updates.title;
-        if (updates.description) data.marketDescription = updates.description;
-        if (updates.components !== undefined) data.components = updates.components;
+        if (updates.description) {
+            const descStr = String(updates.description);
+            data.marketDescription = descStr.length > 4900 ? descStr.substring(0, 4900) : descStr;
+        }
+        if (updates.components !== undefined) {
+            const compStr = typeof updates.components === 'string' ? updates.components : JSON.stringify(updates.components);
+            data.components = compStr && compStr.length > 4900 ? compStr.substring(0, 4900) : compStr;
+        }
         if (updates.quantity !== undefined) {
             const q = Number(updates.quantity);
             if (!isNaN(q) && q >= 1) {
@@ -647,14 +686,24 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
 
         // Receipt
         if (updates.receiptFile && BUCKET_ID) {
-             const upload = await storage.createFile(BUCKET_ID, ID.unique(), updates.receiptFile);
+             const upload = await storage.createFile(BUCKET_ID, ID.unique(), updates.receiptFile, [
+                 Permission.read(Role.any()),
+                 Permission.write(Role.users()),
+                 Permission.update(Role.users()),
+                 Permission.delete(Role.users())
+             ]);
              updateTagValue('RECEIPT ID', upload.$id);
         }
 
         // Main Image
         let newMainUploadId: string | null = null;
         if (updates.imageFile && BUCKET_ID) {
-             const upload = await storage.createFile(BUCKET_ID, ID.unique(), updates.imageFile);
+             const upload = await storage.createFile(BUCKET_ID, ID.unique(), updates.imageFile, [
+                 Permission.read(Role.any()),
+                 Permission.write(Role.users()),
+                 Permission.update(Role.users()),
+                 Permission.delete(Role.users())
+             ]);
              data.imageId = upload.$id;
              newMainUploadId = upload.$id;
              updateTagValue('MAIN IMAGE ID', upload.$id);
@@ -686,7 +735,12 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         // Upload new gallery files
         if (updates.galleryFiles && updates.galleryFiles.length > 0 && BUCKET_ID) {
             const uploads = await Promise.all(updates.galleryFiles.map(file => 
-                storage.createFile(BUCKET_ID, ID.unique(), file)
+                storage.createFile(BUCKET_ID, ID.unique(), file, [
+                    Permission.read(Role.any()),
+                    Permission.write(Role.users()),
+                    Permission.update(Role.users()),
+                    Permission.delete(Role.users())
+                ])
             ));
             const newIds = uploads.map(u => u.$id);
             currentGalleryIds = [...currentGalleryIds, ...newIds];
@@ -889,7 +943,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         data.conditionNotes = notes;
 
         if (updates.rawAnalysis !== undefined) {
-            data.rawAnalysis = updates.rawAnalysis === '' ? null : updates.rawAnalysis;
+            data.rawAnalysis = updates.rawAnalysis === '' ? null : getSafeRawAnalysis(updates.rawAnalysis);
         } else if (updates.scoutData) {
             const raw = getSafeRawAnalysis(updates.scoutData);
             if (raw) data.rawAnalysis = raw;

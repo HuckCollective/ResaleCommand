@@ -638,8 +638,27 @@
 
                     <!-- Suggested Title -->
                     <div class="form-control w-full">
-                        <label class="label"><span class="label-text font-bold opacity-70">Lot Title</span></label>
+                        <div class="flex items-center justify-between pb-1">
+                            <label class="label-text font-bold opacity-70">Lot Title</label>
+                            <span class="text-[10px] text-secondary font-bold uppercase tracking-wider flex items-center gap-1">
+                                <Icon icon="solar:magic-stick-3-bold" class="w-3 h-3" /> Smart Suggested
+                            </span>
+                        </div>
                         <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Lot Name" />
+                        
+                        <!-- Quick Title Suggestions -->
+                        <div v-if="combineTitleSuggestions.length > 0" class="flex flex-wrap gap-1.5 mt-2">
+                            <button 
+                                v-for="(sug, idx) in combineTitleSuggestions" 
+                                :key="idx" 
+                                type="button" 
+                                class="badge badge-sm py-2.5 px-3 cursor-pointer transition-all hover:badge-secondary text-xs"
+                                :class="combineTitle === sug ? 'badge-secondary font-bold shadow-sm' : 'badge-ghost border-base-300 opacity-80'"
+                                @click="combineTitle = sug"
+                            >
+                                {{ sug }}
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Cost & Resale row -->
@@ -1031,51 +1050,59 @@ const runAutoFetchPhotos = async () => {
     bulkTotal.value = itemsToProcess.length;
     bulkProgress.value = 0;
 
-    for (const item of itemsToProcess) {
-        bulkProgress.value++;
-        const url = item.sourcingLocation || item.orderId;
-        if (!url || !url.startsWith('http')) {
-            skippedCount++;
-            continue;
-        }
+    // Process in parallel batches of 4 for 4x faster fetching
+    const batchSize = 4;
+    for (let i = 0; i < itemsToProcess.length; i += batchSize) {
+        const batch = itemsToProcess.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (item) => {
+            const url = item.sourcingLocation || item.orderId;
+            if (!url || !url.startsWith('http')) {
+                skippedCount++;
+                bulkProgress.value++;
+                return;
+            }
 
-        try {
-            const res = await fetch('/api/extract-images', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
-            });
+            try {
+                const res = await fetch('/api/extract-images', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
 
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success && data.images && data.images.length > 0) {
-                    const uploadRes = await fetch('/api/upload-remote-image', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: data.images[0] })
-                    });
-                    
-                    if (uploadRes.ok) {
-                        const uploadData = await uploadRes.json();
-                        if (uploadData.success && uploadData.fileId) {
-                            const newGallery = [...(item.galleryImageIds || []), uploadData.fileId];
-                            await updateInventoryItem(item.$id, { 
-                                galleryImageIds: newGallery,
-                                imageId: item.imageId || uploadData.fileId
-                            });
-                            item.galleryImageIds = newGallery;
-                            if(!item.imageId) item.imageId = uploadData.fileId;
-                            successCount++;
-                            continue;
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.images && data.images.length > 0) {
+                        const uploadRes = await fetch('/api/upload-remote-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: data.images[0] })
+                        });
+                        
+                        if (uploadRes.ok) {
+                            const uploadData = await uploadRes.json();
+                            if (uploadData.success && uploadData.fileId) {
+                                const newGallery = [...(item.galleryImageIds || []), uploadData.fileId];
+                                await updateInventoryItem(item.$id, { 
+                                    galleryImageIds: newGallery,
+                                    imageId: item.imageId || uploadData.fileId
+                                });
+                                item.galleryImageIds = newGallery;
+                                if(!item.imageId) item.imageId = uploadData.fileId;
+                                successCount++;
+                                bulkProgress.value++;
+                                return;
+                            }
                         }
                     }
                 }
+                skippedCount++;
+            } catch (e) {
+                console.error("Failed to fetch/upload image for", item.$id, e);
+                skippedCount++;
+            } finally {
+                bulkProgress.value++;
             }
-            skippedCount++;
-        } catch (e) {
-            console.error("Failed to fetch/upload image for", item.$id, e);
-            skippedCount++;
-        }
+        }));
     }
 
     isEstimating.value = false;
@@ -2040,7 +2067,7 @@ const getAssetUrl = (id) => {
     if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
         return proxify(id);
     }
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
 };
 const getObjectUrl = (file) => URL.createObjectURL(file);
 const formatCurrency = (val) => {
@@ -2651,10 +2678,81 @@ const submitDeconstruct = async () => {
 
 const combineModal = ref(null);
 const combineTitle = ref('');
+const combineTitleSuggestions = ref([]);
 const combineCost = ref(0);
 const combineTotalUnits = ref(1);
 const combinePrimaryId = ref(null);
 const savingCombine = ref(false);
+
+function generateSmartLotTitle(items, totalQty) {
+    if (!items || items.length === 0) return { defaultTitle: `Master Lot (Qty: ${totalQty})`, suggestions: [] };
+
+    // Clean individual title noise (e.g., "12pc", "Lot of 5", "Auction", SGW tags)
+    const cleanTitles = items.map(i => {
+        let t = (i.title || '').trim();
+        t = t.replace(/^(lot of \d+|\d+\s*(?:pc|pcs|items?|piece|pieces|count|mags?|magazines?))\s*[:-]?\s*/gi, '');
+        t = t.replace(/\s*\(?(?:lot of \d+|\d+\s*(?:pc|pcs|items?|piece|pieces|count))\)?/gi, '');
+        t = t.replace(/\[[^\]]*\]/g, ''); // remove [tags]
+        t = t.replace(/\b\d{6,}\b/g, ''); // remove long random numeric IDs
+        return t.trim();
+    }).filter(t => t.length > 0);
+
+    // Token analysis for common keywords across all titles
+    const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'vintage', 'rare', 'lot', 'set', 'pcs', 'piece', 'pieces', 'items', 'mixed', 'collection', 'huge', 'great', 'condition']);
+    const tokenLists = cleanTitles.map(t => 
+        t.toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 2 && !stopWords.has(w))
+    );
+
+    // Find words common across all items
+    const commonTokens = (tokenLists[0] || []).filter(token => 
+        tokenLists.every(list => list.includes(token))
+    );
+
+    let theme = '';
+    if (commonTokens.length > 0) {
+        // Look for common continuous phrase in original title
+        const primaryClean = cleanTitles[0];
+        const phraseRegex = new RegExp(commonTokens.join('\\s+'), 'i');
+        const match = primaryClean.match(phraseRegex);
+        if (match) {
+            theme = match[0];
+        } else {
+            theme = commonTokens.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+    } else {
+        // Fallback to shared brand/category or primary clean title
+        const sharedBrand = items.find(i => i.brand)?.brand;
+        const sharedCat = items.find(i => i.category)?.category;
+        theme = sharedBrand || sharedCat || cleanTitles[0] || 'Items';
+    }
+
+    // Capitalize words nicely
+    theme = theme.replace(/\b\w/g, l => l.toUpperCase()).trim();
+
+    // Generate formatted suggestions
+    const suggestions = [];
+    
+    // Suggestion 1: Clean Subject (Lot of X)
+    suggestions.push(`${theme} (Lot of ${totalQty})`);
+    
+    // Suggestion 2: Combined Lot of X: Theme
+    suggestions.push(`Combined Lot of ${totalQty}: ${theme}`);
+    
+    // Suggestion 3: Mega Lot: Theme (X Items)
+    suggestions.push(`${theme} Mega Lot (${totalQty} Items)`);
+
+    // If 2-3 short distinct titles, offer combined titles
+    if (cleanTitles.length >= 2 && cleanTitles.length <= 3) {
+        const shortNames = cleanTitles.map(t => t.length > 22 ? t.slice(0, 20) + '...' : t).join(' + ');
+        suggestions.push(`${shortNames} (Lot of ${totalQty})`);
+    }
+
+    const defaultTitle = suggestions[0] || `Master Lot of ${totalQty} Items`;
+    return { defaultTitle, suggestions };
+}
 
 const openCombineModal = () => {
     const items = selectedItemsObjects.value;
@@ -2662,14 +2760,28 @@ const openCombineModal = () => {
     
     // Choose the first item as default primary
     combinePrimaryId.value = items[0].$id;
-    combineTitle.value = items[0].title;
     
-    // Calculate total cost and total quantity
+    // Calculate total cost and total quantity (parsing embedded counts like "12pc", "Lot of 10", "8 Issues")
     const totalCost = items.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
-    const totalQty = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+    const totalQty = items.reduce((sum, i) => {
+        let q = parseInt(i.quantity);
+        if (isNaN(q) || q <= 1) {
+            const titleMatch = (i.title || '').match(/(?:lot of\s*(\d+)|\b(\d+)\s*(?:pc|pcs|items?|piece|pieces|mags?|magazines?|issues?)\b)/i);
+            if (titleMatch) {
+                const parsed = parseInt(titleMatch[1] || titleMatch[2], 10);
+                if (!isNaN(parsed) && parsed > 1) return sum + parsed;
+            }
+        }
+        return sum + (q > 0 ? q : 1);
+    }, 0);
     
     combineCost.value = parseFloat(totalCost.toFixed(2));
     combineTotalUnits.value = totalQty;
+
+    // Generate smart lot title and quick suggestion chips
+    const { defaultTitle, suggestions } = generateSmartLotTitle(items, totalQty);
+    combineTitle.value = defaultTitle;
+    combineTitleSuggestions.value = suggestions;
     
     if (combineModal.value) {
         combineModal.value.showModal();
@@ -2677,9 +2789,16 @@ const openCombineModal = () => {
 };
 
 const onCombinePrimaryChange = () => {
+    // Keep user customized title or regenerate with new primary context
     const primaryItem = selectedItemsObjects.value.find(i => i.$id === combinePrimaryId.value);
     if (primaryItem) {
-        combineTitle.value = primaryItem.title;
+        // Re-generate suggestions prioritizing this primary item if needed
+        const items = [
+            primaryItem,
+            ...selectedItemsObjects.value.filter(i => i.$id !== combinePrimaryId.value)
+        ];
+        const { suggestions } = generateSmartLotTitle(items, combineTotalUnits.value);
+        combineTitleSuggestions.value = suggestions;
     }
 };
 

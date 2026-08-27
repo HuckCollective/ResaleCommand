@@ -251,6 +251,6 @@ const imageUrl = computed(() => {
         return `/api/proxy-image?url=${encodeURIComponent(id)}`;
     }
     
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
 });
 </script>

@@ -17,6 +17,7 @@ export interface InspectionContext {
 export interface ComponentItem {
     name: string;
     identity: string;
+    quantity?: number;
     estimated_value: string;
     condition: string;
     image_index: number;
@@ -123,7 +124,10 @@ export async function inspectSinglePhoto(
                 if (projectId) headers['X-Appwrite-Project'] = projectId;
                 if (apiKey) headers['X-Appwrite-Key'] = apiKey;
             }
-            const res = await fetch(fetchUrl, { headers });
+            const res = await fetch(fetchUrl, { 
+                headers,
+                signal: AbortSignal.timeout(6000)
+            });
             if (!res.ok) {
                 console.error(`[ai-inspection] Failed to fetch image ${image.url} - Status ${res.status}`);
                 return null;
@@ -149,37 +153,44 @@ export async function inspectSinglePhoto(
     if (!imagePart) return null;
 
     const prompt = `
-You are a master resale appraiser performing high-precision inspection of a SINGLE photo (Photo #${image.index + 1}).
+You are a master resale appraiser and vintage media/collectibles expert performing high-precision inspection of Photo #${image.index + 1}.
 
-Item context (if available):
-${context?.title ? `Title: ${context.title}` : ''}
-${context?.notes ? `Notes/Listing: ${context.notes}` : ''}
+Lot Context:
+${context?.title ? `Lot Title: ${context.title}` : ''}
+${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
 
 TASK:
-1. READ ALL VISIBLE TEXT (OCR): Read box names, character titles, barcodes, brand tags, copyright years, model numbers.
-2. IDENTIFY THE SPECIFIC PHYSICAL OBJECT:
-   - If it's a Harry Potter / Wizarding World wand: identify the EXACT character (Hermione Granger Illuminating Wand, Ron Weasley Wand, Dumbledore Elder Wand, Sirius Black, Snape, Harry Potter, etc.) by reading box labels and examining the handle/shaft carvings.
-   - If it's a boxed DVD/Media set: read the exact title (e.g. "Harry Potter Complete 8-Film Collection DVD Set").
-   - If it's clothing/action figure/game: identify exact brand, character, or edition.
-3. IS THIS AN OVERVIEW / PILE SHOT?
-   - If this image shows multiple different items laid out together in a group pile, set "is_group_overview": true.
-   - If this image is a dedicated close-up of ONE specific item or boxed unit, set "is_group_overview": false.
+1. READ ALL VISIBLE TEXT (OCR): Read exact titles, issue dates (month/year), volume/issue numbers, barcodes, brand tags, and artist signatures (e.g. Moebius, Richard Corben, H.R. Giger, Frank Frazetta, Bernie Wrightson).
+2. EXTRACT EVERY DISTINCT VISIBLE ITEM:
+   - If this image shows multiple magazines, comics, or items laid out, extract EVERY SINGLE VISIBLE ISSUE as an entry in the "items" array.
+   - For EACH magazine/item, pinpoint:
+     * Exact name with Month & Year (e.g. "Heavy Metal Magazine - April 1977 (Vol. 1 No. 1 - Premiere Issue)")
+     * Is this a Key / High-Value Issue? (Premiere issues, early 1977-1981 runs, famous cover artists like Giger/Moebius, special anniversary editions).
+     * Individual estimated resale value.
+   - If this image is a close-up of a single item, return that single item in the "items" array.
+3. If this is an overall pile where individual covers are not readable, return general detected items with best estimates.
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
-  "detected_text": "Exact text read from box/tag",
-  "name": "Full specific name of the item (e.g. Hermione Granger's Wand with Illuminating Tip)",
-  "identity": "Distinct identity",
-  "condition": "Used/Good, Mint in Box, Damaged packaging, etc.",
-  "estimated_value": "$25 - $35",
-  "price_breakdown": {
-     "mint": "$35 - $50",
-     "fair": "$25 - $35",
-     "poor": "$10 - $20",
-     "boutique_premium": "$40 - $60"
-  },
-  "red_flags": ["Untested illuminating tip", "Box creasing"]
+  "items": [
+    {
+      "name": "Full specific title (e.g. Heavy Metal Magazine - April 1977 Vol 1 #1)",
+      "identity": "Heavy Metal Apr 1977 #1",
+      "issue_date": "April 1977",
+      "is_key_issue": true,
+      "detected_text": "Text read from cover/spine",
+      "condition": "Used/Good, Minor spine wear, etc.",
+      "estimated_value": "$60 - $100",
+      "price_breakdown": {
+         "mint": "$120 - $160",
+         "fair": "$60 - $80",
+         "poor": "$30 - $45",
+         "boutique_premium": "$85 - $110"
+      },
+      "red_flags": []
+    }
+  ]
 }
 `;
 
@@ -191,9 +202,18 @@ OUTPUT STRICT JSON:
 
         const text = result.response.text();
         const parsed = cleanAndParseJSON(text);
-        parsed.image_index = image.index;
-        parsed.image_url = image.url;
-        return parsed;
+        const rawItems = Array.isArray(parsed.items) ? parsed.items : (parsed.name ? [parsed] : []);
+        
+        return {
+            image_index: image.index,
+            image_url: image.url,
+            is_group_overview: parsed.is_group_overview || false,
+            items: rawItems.map((it: any) => ({
+                ...it,
+                image_index: image.index,
+                image_url: image.url
+            }))
+        };
     } catch (e: any) {
         console.error(`[ai-inspection] Error inspecting photo #${image.index + 1}:`, e.message);
         return null;
@@ -214,9 +234,9 @@ export async function inspectPhotoGallery(
 
     if (onProgress) onProgress(`Step 1 of 3: Scanning ${images.length} photos with per-item OCR...`, 15);
 
-    // 1. Inspect each photo individually (in parallel batches of 3 to optimize speed & prevent rate limits)
+    // 1. Inspect each photo in parallel batches of 8 for high throughput
     const inspectionResults: any[] = [];
-    const batchSize = 3;
+    const batchSize = 8;
     for (let i = 0; i < images.length; i += batchSize) {
         const batch = images.slice(i, i + batchSize);
         const batchPromises = batch.map(img => inspectSinglePhoto(img, context));
@@ -228,20 +248,28 @@ export async function inspectPhotoGallery(
         }
     }
 
-    if (onProgress) onProgress(`Step 2 of 3: Synthesizing lot components & verifying 1:1 photo matches...`, 70);
+    if (onProgress) onProgress(`Step 2 of 3: Cataloging all distinct issues & identifying key collectibles...`, 70);
 
-    // Filter out pure group overview shots if we have dedicated close-up shots
-    const closeUpShots = inspectionResults.filter(r => !r.is_group_overview);
-    const candidateComponents = closeUpShots.length > 0 ? closeUpShots : inspectionResults;
+    // Flatten all extracted items from all photos
+    const allExtractedItems: any[] = [];
+    for (const res of inspectionResults) {
+        if (res.items && Array.isArray(res.items)) {
+            allExtractedItems.push(...res.items);
+        }
+    }
 
-    // Deduplicate any items that might have been photographed twice (e.g. front and back)
+    // Deduplicate only truly identical items/issues (e.g. front and back of the exact same month/year)
     const uniqueComponents: ComponentItem[] = [];
-    const seenNames = new Set<string>();
+    const seenIssueKeys = new Set<string>();
 
-    for (const comp of candidateComponents) {
-        const simplifiedKey = (comp.name || comp.identity || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (!seenNames.has(simplifiedKey) && simplifiedKey.length > 0) {
-            seenNames.add(simplifiedKey);
+    for (const comp of allExtractedItems) {
+        // Construct a unique key based on title + issue date / number
+        const issueKey = (comp.name || comp.identity || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+            
+        if (issueKey.length > 2 && !seenIssueKeys.has(issueKey)) {
+            seenIssueKeys.add(issueKey);
             uniqueComponents.push({
                 name: comp.name || comp.identity,
                 identity: comp.identity || comp.name,
@@ -256,93 +284,97 @@ export async function inspectPhotoGallery(
         }
     }
 
-    if (onProgress) onProgress(`Step 3 of 3: Computing market strategy & platform payouts...`, 85);
+    if (onProgress) onProgress(`Step 3 of 3: Structuring lot valuation & memory den booth pricing...`, 85);
 
     // 2. Synthesize overarching lot report, platform recommendations, and perform strict item deduplication
     const locationsSummary = context?.locations?.length 
         ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
         : "None provided";
 
-    const candidateSummary = candidateComponents.map(c => ({
+    const candidateSummary = uniqueComponents.map(c => ({
         photo_index: c.image_index,
         detected_text: c.detected_text || c.ocr_detected_text || "",
         name: c.name || c.identity,
         condition: c.condition,
         estimated_value: c.estimated_value,
-        is_group_overview: c.is_group_overview
+        is_key_issue: (c as any).is_key_issue || false
     }));
 
     const synthesisPrompt = `
-You are a master resale appraiser performing multi-item lot reconciliation and pricing.
+You are a master vintage collectibles and resale appraiser performing lot reconciliation, key-issue identification, and pricing strategy.
 
 ORIGINAL LISTING & LOT CONTEXT:
 - Listing Title: "${context?.title || 'Multi-Item Lot'}"
 - Explicit Stated Quantity: ${context?.quantity || 'Not specified'}
 - Sourcing Location / URL: "${context?.sourcingLocation || 'N/A'}"
-- Lot Notes / Sourcing Breakdown: "${context?.notes || 'N/A'}"
+- Prior Research & Lot Notes: "${context?.notes || 'N/A'}"
 - Total Landed Cost: ${context?.cost ? `$${context.cost}` : 'Unknown'}
 
-PHOTO INSPECTION CANDIDATES (${images.length} photos scanned):
+DISCOVERED ITEMS ACROSS PHOTOS (${uniqueComponents.length} distinct items identified):
 ${JSON.stringify(candidateSummary, null, 2)}
 
 Organization Physical Booths & Locations:
 ${locationsSummary}
 
-CRITICAL RULES FOR "lot_items" DEDUPLICATION & RECONCILIATION:
-1. STRICT PHYSICAL COUNT MATCHING:
-   - Check the listing title, notes, and stated quantity (e.g. if the title is "Dungeons & Dragons 4th Edition 4 Book Lot", the lot has EXACTLY 4 distinct books).
-   - If the listing specifies an exact count (e.g. 4 books, 3 wands + 1 DVD set), the output "lot_items" list MUST match the true distinct physical items (e.g. exactly 4 distinct books).
-2. PHOTO DEDUPLICATION (MULTI-ANGLE / SPINE / BACK COVER SHOTS):
-   - Multiple photos often show the SAME physical object from different perspectives (e.g. Photo 1: front cover of Book A, Photo 2: back cover of Book A, Photo 3: spine of Book A, Photo 4: group pile).
-   - Consolidate all photos of the same physical book/object into ONE entry.
-   - For each distinct item, assign "image_index" to the SINGLE BEST representative front/cover photo index (0 to ${images.length - 1}).
-3. PRESERVE BASE COST SPLITTING:
-   - Returning false duplicates or phantom items will divide the user's base purchase cost across non-existent items. Every item in "lot_items" MUST be a genuine, distinct, physically separate unit.
+CRITICAL RULES FOR "lot_items" STRUCTURING:
+0. ACCURATE PHYSICAL COUNT & OVERVIEW DEDUPLICATION:
+   - The lot contains approximately ${context?.quantity || '35'} physical issues in total.
+   - Beware that some photos are group overview shots showing all magazines laid out together, while subsequent photos are close-ups of those exact same issues. DO NOT double-count issues that appear in both overview photos and close-up photos!
+   - The generated title and catalog must reflect the true ~${context?.quantity || '35'}-issue count (e.g. "Vintage Heavy Metal Magazine Lot: ${context?.quantity || '35'} Issues (1981-2012) Featuring Richard Corben, Olivia, Druuna...").
+1. PRESERVE & HIGHLIGHT HIGH-VALUE / KEY ISSUES INDIVIDUALLY:
+   - Identify ANY standout high-value items (e.g. Heavy Metal 1977 premiere issues, 1978-1981 Moebius/Giger/Frazetta covers, rare specials worth $30-$100+ each).
+   - NEVER bury a high-value or key issue inside a generic reader bundle! High-value items MUST be listed as individual standalone entries in "lot_items" with their specific issue date, title, and premium booth price.
+2. GROUP REMAINING COPIES INTO LOGICAL TIERS / MULTI-PACKS:
+   - For standard reading copies or consecutive runs, create curated multi-quantity bundle entries (e.g. "Mid-80s Run 5-Pack", "1990s Reader Lot (Qty: 10)").
+   - Ensure the total item count across standalone entries and bundled quantities accounts for the collection.
+3. ACCURATE PRICING & BOOTH STRATEGY:
+   - Provide realistic sold-comp prices for physical antique mall booths (e.g. Memory Den) and eBay.
+   - For Memory Den physical booth, recommend bagging & boarding key issues with prominent date/artist tags.
 
 OUTPUT STRICT JSON format:
 {
-  "identity": "Unified lot identity",
-  "title": "Comprehensive SEO title accurately listing the distinct items",
-  "keywords": ["Dungeons & Dragons", "4th Edition", "D&D", "Books", "Wizards of the Coast"],
-  "condition_notes": "Summary of overall condition across the distinct items",
-  "country_of_origin": "Unknown",
+  "identity": "Unified lot identity (e.g. Vintage Heavy Metal Magazine Master Collection)",
+  "title": "Comprehensive SEO title accurately listing key highlights and lot count",
+  "keywords": ["Heavy Metal Magazine", "Moebius", "Richard Corben", "HR Giger", "Vintage Comics", "Fantasy Art"],
+  "condition_notes": "Summary of overall condition across the collection",
+  "country_of_origin": "USA / France",
   "red_flags": [],
   "price_breakdown": {
-    "mint": "$120 - $160",
-    "fair": "$80 - $120",
-    "poor": "$40 - $60",
-    "boutique_premium": "$130 - $180",
+    "mint": "$280 - $380",
+    "fair": "$180 - $260",
+    "poor": "$90 - $140",
+    "boutique_premium": "$220 - $320",
     "confidence": "High"
   },
   "purchase_strategy": {
     "verdict": "CHASE_AUCTION",
-    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$25.00'}",
-    "max_bid": 60,
-    "max_landed_cost": 85,
-    "advice": "Solid profit margin when split into individual sales."
+    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$50.00'}",
+    "max_bid": 120,
+    "max_landed_cost": 150,
+    "advice": "High profit potential by selling key issues individually at the booth and bundling the rest."
   },
   "market_report": {
-    "best_platform": "Physical Booth or eBay",
-    "platform_rationale": "Detailed comparison of physical booth vs online liquidity and net profit.",
-    "sell_through_velocity": "Moderate (2-4 weeks)",
-    "target_buyer": "Target customer description",
+    "best_platform": "Memory Den Physical Booth & eBay",
+    "platform_rationale": "High-value key issues sell best individually in a booth or eBay; standard issues move fastest in 3-5 issue themed bundles.",
+    "sell_through_velocity": "Fast to Moderate (1-3 weeks)",
+    "target_buyer": "Vintage sci-fi/fantasy collectors, comic enthusiasts, retro art fans",
     "channels": [
-       { "name": "eBay Online", "est_price": "$110.00", "net_payout": "~$88.00 after fees/shipping", "speed": "Fast", "recommendation": "Fastest Liquidity" },
-       { "name": "Physical Booth", "est_price": "$130.00", "net_payout": "~$104.00 after commission", "speed": "Medium", "recommendation": "Highest Net Profit" }
+       { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
+       { "name": "eBay Online", "est_price": "$210.00", "net_payout": "~$165.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Keys" }
     ]
   },
   "lot_items": [
     {
-      "name": "Exact distinct item name (e.g. D&D 4e Dungeon Master's Guide)",
-      "identity": "Distinct book/item title",
+      "name": "Heavy Metal Magazine - April 1977 Vol 1 #1 (Premiere Issue)",
+      "identity": "Heavy Metal Apr 1977 #1",
       "condition": "Used/Good",
-      "estimated_value": "$25 - $35",
+      "estimated_value": "$65 - $95",
       "image_index": 0,
       "price_breakdown": {
-        "mint": "$35 - $45",
-        "fair": "$25 - $35",
-        "poor": "$15 - $20",
-        "boutique_premium": "$40 - $50"
+        "mint": "$120 - $160",
+        "fair": "$65 - $95",
+        "poor": "$35 - $50",
+        "boutique_premium": "$85 - $110"
       },
       "red_flags": []
     }

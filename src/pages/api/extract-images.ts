@@ -28,7 +28,8 @@ export const POST: APIRoute = async ({ request }) => {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                         'Origin': 'https://shopgoodwill.com',
                         'Referer': 'https://shopgoodwill.com/'
-                    }
+                    },
+                    signal: AbortSignal.timeout(20000)
                 });
                 if (apiRes.ok) {
                     const data = await apiRes.json();
@@ -75,7 +76,8 @@ export const POST: APIRoute = async ({ request }) => {
         const response = await fetch(scrapeUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
+            },
+            signal: AbortSignal.timeout(20000)
         });
 
         if (!response.ok) {

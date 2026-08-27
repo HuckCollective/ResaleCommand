@@ -12,6 +12,7 @@ const loaderBerryColor = ref("");
 const loaderBackgroundColor = ref("");
 const loaderCancelable = ref(true);
 let activeOnCancel: (() => void) | null = null;
+let safetyTimer: any = null;
 
 export function useLoader() {
     const showLoader = (
@@ -39,6 +40,14 @@ export function useLoader() {
         loaderCancelable.value = options?.cancelable !== false;
         activeOnCancel = options?.onCancel || null;
         globalLoading.value = true;
+
+        // Safety fallback: If loader is active for more than 5s, always ensure user can cancel/dismiss it
+        if (safetyTimer) clearTimeout(safetyTimer);
+        safetyTimer = setTimeout(() => {
+            if (globalLoading.value) {
+                loaderCancelable.value = true;
+            }
+        }, 5000);
     };
     
     const triggerCancel = () => {
@@ -47,6 +56,10 @@ export function useLoader() {
     };
     
     const hideLoader = () => {
+        if (safetyTimer) {
+            clearTimeout(safetyTimer);
+            safetyTimer = null;
+        }
         globalLoading.value = false;
         // Reset to default
         loaderMessage.value = "Picking, Counting, Shipping or Finding...";

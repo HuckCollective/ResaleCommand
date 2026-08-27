@@ -1164,6 +1164,7 @@ const editForm = reactive({
     orderId: '',
     status: 'acquired',
     description: '',
+    condition_notes: '',
     itemCondition: '',
     existingGalleryIds: [],
     sellingLocations: [],
@@ -1665,6 +1666,14 @@ const initForm = () => {
             desc = '';
         }
         editForm.description = desc; 
+        
+        // Clean and populate user internal notes
+        const rawNotes = i.conditionNotes || i.condition_notes || '';
+        editForm.condition_notes = rawNotes
+            .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
+            .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
+            .trim();
+
         editForm.itemCondition = getNoteValue(i.conditionNotes, 'Condition') || '';
         editForm.existingGalleryIds = i.galleryImageIds || [];
         editForm.sellingLocations = i.sellingLocations || [];
@@ -1815,6 +1824,7 @@ const saveEdit = async () => {
 
         const payload = {
             ...editForm,
+            conditionNotes: editForm.condition_notes,
             imageId: actualMainPhoto.value.id || null,
             imageFile: finalImageFile,
             galleryFiles: finalGallery,
@@ -1890,17 +1900,31 @@ const fetchSourceData = async () => {
     const idMatch = url.match(/item\/(\d+)/i) || url.match(/^(\d+)$/);
     if(idMatch) finalUrl = idMatch[1];
 
+    let fetchImageAbort = new AbortController();
+
     showLoader("Fetching Source Data...", {
         step: "Scraping photos and listing metadata...",
         progress: 50,
         basket: 'solar:cloud-download-bold-duotone',
-        cancelable: false
+        cancelable: true,
+        onCancel: () => {
+            fetchImageAbort.abort();
+            fetchingImages.value = false;
+        }
     });
 
     try {
+        const timeoutSignal = AbortSignal.timeout(25000);
+        // Combine abort controller and timeout
+        const combinedSignal = (typeof AbortSignal.any === 'function') 
+            ? AbortSignal.any([fetchImageAbort.signal, timeoutSignal])
+            : fetchImageAbort.signal;
+
         const res = await fetch('/api/extract-images', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: finalUrl })
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: finalUrl }),
+            signal: combinedSignal
         });
         const data = await res.json();
         if (data.success && data.images.length > 0) {
@@ -1912,9 +1936,13 @@ const fetchSourceData = async () => {
             }
             if (data.title && (!editForm.title || editForm.title.trim().length < 4)) editForm.title = data.title;
             addToast({ type: 'success', message: `Fetched ${data.images?.length || 0} photos!` });
+        } else {
+            addToast({ type: 'error', message: data.error || "Failed to parse photos from source." });
         }
     } catch (e) {
-        addToast({ type: 'error', message: "Failed to fetch source data: " + e.message });
+        if (e.name !== 'AbortError') {
+            addToast({ type: 'error', message: "Failed to fetch source data: " + (e.message || "Request timed out") });
+        }
     } finally {
         fetchingImages.value = false;
         hideLoader();
@@ -2023,32 +2051,23 @@ const analyzeExistingItem = async () => {
             reader.readAsDataURL(blob);
         });
 
-        // 1. Convert new buffered images
-        const resizePromises = editGalleryBuffer.value.slice(0, 8).map(async (file) => {
+        // 1. Convert new buffered images (support up to 30 photos for multi-lot decomposition)
+        const resizePromises = editGalleryBuffer.value.slice(0, 30).map(async (file) => {
             try { return await resize(file); } catch (e) { return null; }
         });
         const resizedLocal = (await Promise.all(resizePromises)).filter(Boolean);
         base64Images.push(...resizedLocal);
 
-        // 2. Convert existing Appwrite photos to base64
+        // 2. Add existing Appwrite gallery photos as remote URLs
         if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
-            const existingPromises = editForm.existingGalleryIds.slice(0, 8).map(async (id) => {
-                try {
-                    const u = getAssetUrl(id);
-                    const res = await fetch(u);
-                    if (res.ok) {
-                        const blob = await res.blob();
-                        return await resize(blob);
-                    }
-                } catch (e) { return null; }
-                return null;
+            editForm.existingGalleryIds.forEach(id => {
+                const u = getAssetUrl(id);
+                if (u && !remoteUrls.includes(u)) remoteUrls.push(u);
             });
-            const existingConverted = (await Promise.all(existingPromises)).filter(Boolean);
-            base64Images.push(...existingConverted);
         }
 
         // 3. Fallback to main photo url if needed
-        if (base64Images.length === 0 && actualMainPhoto.value.url) {
+        if (base64Images.length === 0 && remoteUrls.length === 0 && actualMainPhoto.value.url) {
             let url = actualMainPhoto.value.url;
             if (url.startsWith('data:') || url.startsWith('blob:')) {
                 try { const res = await fetch(url); base64Images.push(await resize(await res.blob())); } catch (e) {}
@@ -2140,18 +2159,50 @@ const analyzeExistingItem = async () => {
         // A. Lot items inspection result
         if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
             scoutResult.value = data;
-            let desc = `**📦 LOT BREAKDOWN (${data.lot_items.length} Items):**\n\n`;
-            data.lot_items.forEach((item, idx) => {
-                desc += `**${idx+1}. ${item.name || item.identity}** — Est: ${item.estimated_value || 'N/A'}\n`;
-                if(item.condition) desc += `- Condition: ${item.condition}\n`;
-                if(item.ocr_detected_text) desc += `- OCR Read: ${item.ocr_detected_text}\n`;
-            });
-            if (data.market_report) {
-                desc += `\n**Market Strategy:** Best Channel: ${data.market_report.best_platform}\n`;
-                if (data.market_report.platform_rationale) desc += `${data.market_report.platform_rationale}\n`;
+            let desc = `--- 📦 MASTER LOT APPRAISAL & BOOTH STRATEGY (${data.lot_items.length} Cataloged Items) ---\n\n`;
+            if (data.title) desc += `**Suggested Title:** ${data.title}\n\n`;
+            if (data.condition_notes) desc += `**Condition Overview:** ${data.condition_notes}\n\n`;
+
+            if (data.price_breakdown) {
+                desc += `**💰 Total Collection Valuation:**\n`;
+                if (data.price_breakdown.mint) desc += `- **Mint / High-Grade:** ${data.price_breakdown.mint}\n`;
+                if (data.price_breakdown.fair) desc += `- **Fair / Market Average:** ${data.price_breakdown.fair}\n`;
+                if (data.price_breakdown.boutique_premium) desc += `- **Boutique / Antique Mall:** ${data.price_breakdown.boutique_premium}\n`;
+                if (data.price_breakdown.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
+                desc += `\n`;
             }
+
+            if (data.market_report) {
+                desc += `**🏪 Market Strategy & Sales Channels:**\n`;
+                if (data.market_report.best_platform) desc += `- **Primary Recommendation:** ${data.market_report.best_platform}\n`;
+                if (data.market_report.platform_rationale) desc += `- **Strategy Rationale:** ${data.market_report.platform_rationale}\n`;
+                if (data.market_report.channels && Array.isArray(data.market_report.channels)) {
+                    data.market_report.channels.forEach(ch => {
+                        desc += `  * **${ch.name}:** ${ch.est_price} (${ch.recommendation || ''}) — Net Payout: ${ch.net_payout || ''}\n`;
+                    });
+                }
+                desc += `\n`;
+            }
+
+            if (data.purchase_strategy) {
+                desc += `**🎯 Sourcing & Profit Assessment:**\n`;
+                if (data.purchase_strategy.verdict) desc += `- **Verdict:** ${data.purchase_strategy.verdict}\n`;
+                if (data.purchase_strategy.advice) desc += `- **Advice:** ${data.purchase_strategy.advice}\n\n`;
+            }
+
+            desc += `**🔍 Cataloged Items & Pricing Tiers:**\n`;
+            data.lot_items.forEach((item, idx) => {
+                desc += `\n**${idx+1}. ${item.name || item.identity}**\n`;
+                if (item.estimated_value) desc += `   - **Est. Resale:** ${item.estimated_value}\n`;
+                if (item.price_breakdown && item.price_breakdown.fair) {
+                    desc += `   - **Pricing Matrix:** Fair ${item.price_breakdown.fair} | Mint ${item.price_breakdown.mint || '-'} | Boutique ${item.price_breakdown.boutique_premium || '-'}\n`;
+                }
+                if (item.condition) desc += `   - **Condition:** ${item.condition}\n`;
+                if (item.ocr_detected_text) desc += `   - **Cover Markings:** ${item.ocr_detected_text}\n`;
+            });
+
             scoutMdText.value = desc.trim();
-            addToast({ type: 'success', message: `Identified ${data.lot_items.length} items in lot!` });
+            addToast({ type: 'success', message: `Identified ${data.lot_items.length} items/groups in lot!` });
         } 
         // B. Standard / Multi-item result
         else if (data.items && data.items.length > 0) {

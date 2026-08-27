@@ -25,6 +25,14 @@
                     </ul>
                 </div>
                 <div class="flex-none gap-2 flex items-center">
+                    <button v-if="item && item.status !== 'sold'" 
+                            class="btn btn-xs btn-accent font-bold shadow-sm"
+                            :disabled="analyzing"
+                            @click="runDeepInspection">
+                        <span v-if="analyzing" class="loading loading-spinner loading-xs mr-1"></span>
+                        <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5 mr-1" /> 
+                        {{ analyzing ? 'Inspecting Lot...' : 'AI Deep Search' }}
+                    </button>
                     <button v-if="item && (item.quantity > 1 || childItems.length > 0) && item.status !== 'sold' && !item.parentLotId" 
                             class="btn btn-xs btn-secondary font-bold shadow-sm"
                             @click="openUnpackModal">
@@ -343,6 +351,35 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Lot / Bundle Contents -->
+                    <div v-if="childItems.length > 0" class="mt-6 border border-base-300 rounded-2xl overflow-hidden bg-base-100 shadow-sm">
+                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase opacity-80 flex justify-between items-center">
+                            <span class="flex items-center gap-1.5">
+                                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
+                                Decomposed Lot Items ({{ childItems.length }})
+                            </span>
+                            <span class="badge badge-sm font-mono font-bold bg-base-300">Total Landed: ${{ originalLotCost.toFixed(2) }}</span>
+                        </div>
+                        <ul class="divide-y divide-base-200">
+                            <li v-for="child in childItems" :key="child.$id" class="p-3 flex justify-between items-center hover:bg-base-200/30 transition-colors gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <a :href="'/item/' + child.$id" class="font-bold text-xs sm:text-sm truncate block hover:text-primary transition-colors">
+                                        {{ child.title }}
+                                    </a>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span v-if="child.upc" class="badge badge-xs font-mono bg-base-200">{{ child.upc }}</span>
+                                        <span v-if="child.quantity > 1" class="text-[10px] font-bold opacity-60">Qty: {{ child.quantity }}</span>
+                                        <span class="badge badge-xs badge-outline opacity-75">{{ child.status }}</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end shrink-0 font-mono text-xs">
+                                    <span v-if="child.resalePrice" class="font-black text-success">${{ Number(child.resalePrice).toFixed(2) }}</span>
+                                    <span class="text-[10px] opacity-60">Cost: ${{ Number(child.cost || 0).toFixed(2) }}</span>
+                                </div>
+                            </li>
+                        </ul>
                     </div>
 
                     <!-- Description / Scout Report -->
