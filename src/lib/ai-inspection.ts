@@ -161,34 +161,43 @@ ${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
 
 TASK:
 1. READ ALL VISIBLE TEXT (OCR):
-   - Brand names, clothing tags, labels, sizes, materials (e.g. 100% Cotton, Leather, Silk, Gore-Tex), model numbers, dates, titles, barcodes, and maker signatures.
-2. EXTRACT EVERY DISTINCT VISIBLE ITEM:
-   - If this image shows multiple items (e.g. clothing garments, magazines, tools, video games, toys, jewelry, collectibles), extract EVERY SINGLE VISIBLE PIECE as an entry in the "items" array.
-   - For EACH individual item, pinpoint:
-     * Full specific title (e.g. "Vintage Nike Embroidered Swoosh Hoodie Size L", "Heavy Metal Magazine April 1977 Vol 1 #1", "Levi's 501 Made in USA Denim Jeans 34x32")
-     * Identity / Short Name (e.g. "Nike Hoodie L", "Heavy Metal Apr 1977", "Levi's 501 Jeans")
-     * Key Attributes (brand, size, model, year, material, color)
-     * Is this a Key / High-Value Standout Item? (Rare vintage, designer brand, premiere issue, discontinued classic)
-     * Individual estimated resale value.
-   - If this image is a close-up of a single item or garment tag, return that single item in the "items" array.
-3. If this is an overall overview photo showing a group or pile of items, extract all distinguishable pieces with best estimates.
+   - Brand names, clothing tags, labels, sizes, materials (e.g. 100% Cotton, 100% Wool, Genuine Leather, Silk, Gore-Tex, Goodyear Welt), model numbers, dates, issue numbers, titles, barcodes, and maker signatures.
+
+2. MULTI-CATEGORY TREND & STANDOUT VALUE IDENTIFICATION:
+   Actively evaluate whether any item belongs to high-velocity resale trends, archival heritage, cult subcultures, or rare collectible categories:
+   - **Apparel & Workwear Standouts**:
+     * *Heritage & Vintage*: Carhartt (Detroit jackets, double-knee, Aztec/Santa Fe), Levi's (Made in USA, Orange Tab, Big E, selvedge, 501/517), Patagonia (Synchilla, Deep Pile, Retro-X fleece), The North Face (Nuptse 700, Mountain Light Gore-Tex), Pendleton (100% Wool Board Shirts), Filson, Champion Reverse Weave.
+     * *Trending Aesthetics & Contemporary*: Free People, Reformation, Lululemon (Align, Scuba, Define), Dôen, Realisation Par, Aritzia, Sezane, Arc'teryx, Stüssy.
+     * *Alt, Goth, Y2K & Grunge Subcultures*: Tripp NYC, Lip Service, Demonia, Killstar, Vivienne Westwood, vintage single-stitch band/tour tees, heavy leather motorcycle jackets.
+   - **Footwear & Shoes Standouts**:
+     * Dr. Martens (Made in England, Jadon/Sinclair platform, vintage 1460), Birkenstock (Boston clogs, Arizona, Shearling), Red Wing Heritage (Iron Ranger, Moc Toe), Blundstone, Salomon (XT-6, ACS Pro), New Balance (990v3/v5/v6, 1906, 2002R), Nike (Jordan 1/4, Dunk, ACG, Air Max 95/97).
+   - **Books, RPGs, Comics & Magazines**:
+     * Heavy Metal Magazine (1977 premiere #1, Moebius, H.R. Giger, Frazetta, Olivia, Richard Corben, Boris Vallejo, rare special editions).
+     * Dungeons & Dragons (TSR 1st Edition, 3.5e rare supplements, premium reprints), Frank Herbert Dune series, vintage sci-fi/fantasy first editions, graphic novel omnibuses.
+   - **Electronics, Audio & Collectibles**:
+     * Vintage analog cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, vintage video games (Nintendo, Sega, PlayStation), LEGO Star Wars/Bionicle titans.
+
+3. EXTRACT EVERY DISTINCT VISIBLE ITEM:
+   - If this image shows multiple distinct items, extract each one into the "items" array.
+   - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true' and specify why in attributes.
+   - If this image is a detail photo of a tag, label, zipper, book spine, or page edges of an existing item, specify 'is_detail_shot: true'.
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "Full descriptive title with brand/model/size/date",
+      "name": "Full descriptive title with brand/model/size/date/edition",
       "identity": "Short recognizable name",
       "is_key_issue": true,
-      "detected_text": "Text read from tags, labels, or covers",
+      "detected_text": "Text read from tags, labels, covers, or hallmarks",
       "condition": "Used/Good, NWT, Minor flaw, etc.",
-      "estimated_value": "$25 - $45",
+      "estimated_value": "$35 - $65",
       "price_breakdown": {
-         "mint": "$50 - $75",
-         "fair": "$25 - $40",
-         "poor": "$12 - $20",
-         "boutique_premium": "$35 - $55"
+         "mint": "$60 - $95",
+         "fair": "$35 - $60",
+         "poor": "$18 - $30",
+         "boutique_premium": "$45 - $75"
       },
       "red_flags": []
     }
@@ -323,11 +332,20 @@ CRITICAL RULES FOR "lot_items" RECONCILIATION:
    - Stated Listing Physical Quantity: ${context?.quantity || 'Auto-detect from photos'}.
    - If the listing title or context specifies a count (e.g. "Set of 6 Books", "Lot of 6", or Quantity = 6), the "lot_items" array **MUST CONTAIN EXACTLY THAT NUMBER OF ITEMS** (e.g. exactly 6 items, NOT 7 or 8).
    - Photos of page edges, book stacks, backs of books, or packaging/boxes are DETAIL/CONTEXT photos, NOT additional items! Never invent an extra item from a page edge or stack photo.
-   - If 6 distinct books are present in the lot, return EXACTLY the 6 distinct books in "lot_items".
-1. STANDOUT HIGH-VALUE KEYS:
-   - Accurately identify standout high-value items (e.g. designer or vintage clothing, rare premiere issues, high-end electronics) and reflect their premium boutique price.
-2. ACCURATE PRICING & SALES STRATEGY:
-   - Provide realistic sold-comp prices for physical booths/antique malls (e.g. Memory Den), online marketplaces (eBay/Poshmark/Mercari), and storefronts.
+1. STANDOUT HIGH-VALUE KEYS & CHERRY-PICK STRATEGY:
+   - Identify ANY standout high-value pieces (e.g. Carhartt/Patagonia/Pendleton/Free People/Dr. Martens apparel, Heavy Metal/Moebius/Giger/TSR 1st edition books, rare collectibles).
+   - In the overarching title and condition notes, prominent standout brands, artists, or editions MUST be highlighted (e.g. "Featuring Moebius Cover Art & 1977 Premiere", "Featuring Vintage Carhartt Detroit Jacket & Pendleton Wool").
+   - For standalone key items worth >= $25–$35 individual resale, reflect their full standalone boutique price in their "price_breakdown" and recommend in "purchase_strategy.advice" whether to cherry-pick them for individual booth/eBay sales or sell as a high-ticket collection.
+2. ACCURATE PRICING & BOOTH STRATEGY:
+   - Provide realistic sold-comp prices for physical antique mall booths (e.g. Memory Den), online marketplaces (eBay/Poshmark/Mercari), and storefronts.
+   - Enforce realistic individual resale floors (individual collectible books/magazines/garments have a minimum $8–$15 floor rather than bulk clearance pricing).
+
+3. MEMORY DEN 3-TIER PROFITABILITY GROUPING STRATEGY:
+   Group magazines, books, and lot items by profitability into 3 pricing tiers for optimal physical booth ROI (Memory Den):
+   - **Tier 1: High Value / Rare Standouts** (Individual Sale): Bag & board premiere #1 issues, iconic cover artists (Moebius, Giger, Frazetta, Olivia, Corben), or rare 1st editions at **$25 - $65+ each**.
+   - **Tier 2: Mid-Tier Collectibles** (Individual or 2-3 Packs): Solid 80s/90s run issues and popular titles priced at **$12 - $22 each**.
+   - **Tier 3: Multi-Quantity Reading Copies** (Value Bundles): Standard reader copies bundled into 3-5 issue packs at **$24 - $45 per bundle** ($6-$8/unit) for fast booth turnover.
+   Incorporate this exact 3-tier merchandising recommendation in the "market_report.platform_rationale" and "purchase_strategy.advice".
 
 OUTPUT STRICT JSON format:
 {
