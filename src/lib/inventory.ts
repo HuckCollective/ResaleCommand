@@ -88,61 +88,59 @@ export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string)
 export function getSafeRawAnalysis(item: any): string | null {
     if (!item) return null;
     try {
-        let str = typeof item === 'string' ? item : JSON.stringify(item);
-        if (str.length <= 4900) return str;
-        
         const parsedObj = typeof item === 'string' ? JSON.parse(item) : item;
-        const processItem = (obj: any) => {
-            if (!obj) return obj;
-            const pruned = { ...obj };
-            if (pruned.comparables && pruned.comparables.length > 2) {
-                pruned.comparables = pruned.comparables.slice(0, 2);
-            }
-            if (pruned.lot_items && Array.isArray(pruned.lot_items)) {
-                pruned.lot_items = pruned.lot_items.map((li: any) => ({
-                    name: li.name || li.identity,
-                    estimated_value: li.estimated_value,
-                    price_breakdown: li.price_breakdown,
-                    condition: li.condition,
-                    image_index: li.image_index
-                }));
-            }
-            return pruned;
+        if (!parsedObj) return null;
+
+        // Clean and compact items to ensure ALL constituent items (e.g. 32+, 50+) are preserved
+        const cleanLotItem = (li: any) => {
+            if (!li) return null;
+            return {
+                name: (li.name || li.title || li.identity || '').trim(),
+                identity: li.identity || undefined,
+                is_key_issue: li.is_key_issue || undefined,
+                condition: li.condition || undefined,
+                estimated_value: li.estimated_value || undefined,
+                price_breakdown: li.price_breakdown ? {
+                    mint: li.price_breakdown.mint || undefined,
+                    fair: li.price_breakdown.fair || undefined,
+                    poor: li.price_breakdown.poor || undefined,
+                    boutique_premium: li.price_breakdown.boutique_premium || undefined
+                } : undefined,
+                image_index: li.image_index !== undefined ? li.image_index : undefined,
+                image: li.image || li.image_url || undefined
+            };
         };
 
-        let pruned;
-        if (Array.isArray(parsedObj)) {
-            pruned = parsedObj.map(processItem);
-        } else if (parsedObj.items && Array.isArray(parsedObj.items)) {
-            pruned = { ...parsedObj, items: parsedObj.items.map(processItem) };
-        } else {
-            pruned = processItem(parsedObj);
-        }
-        
-        str = JSON.stringify(pruned);
-        if (str.length <= 4900) return str;
+        const compactData = (obj: any) => {
+            if (!obj || typeof obj !== 'object') return obj;
+            const res: any = {
+                identity: obj.identity || obj.title,
+                title: obj.title,
+                price_breakdown: obj.price_breakdown,
+                purchase_strategy: obj.purchase_strategy,
+                market_report: obj.market_report ? {
+                    best_platform: obj.market_report.best_platform,
+                    sell_through_velocity: obj.market_report.sell_through_velocity,
+                    platform_rationale: obj.market_report.platform_rationale,
+                    target_buyer: obj.market_report.target_buyer
+                } : undefined
+            };
 
-        // Strict fallback: compress lot_items to essential metadata
-        const fallbackObj = (obj: any) => ({
-            identity: obj.identity,
-            title: obj.title,
-            price_breakdown: obj.price_breakdown,
-            purchase_strategy: obj.purchase_strategy,
-            market_report: obj.market_report ? { best_platform: obj.market_report.best_platform, channels: obj.market_report.channels } : undefined,
-            lot_items: obj.lot_items && Array.isArray(obj.lot_items) 
-                ? obj.lot_items.slice(0, 25).map((li: any) => ({
-                    name: (li.name || li.identity || '').substring(0, 60),
-                    estimated_value: li.estimated_value,
-                    fair: li.price_breakdown?.fair
-                })) 
-                : undefined
-        });
+            // PRESERVE 100% OF ALL CONSTITUENT ITEMS (Never slice or truncate item count!)
+            if (Array.isArray(obj.lot_items)) {
+                res.lot_items = obj.lot_items.map(cleanLotItem).filter(Boolean);
+            } else if (Array.isArray(obj.items)) {
+                res.lot_items = obj.items.map(cleanLotItem).filter(Boolean);
+            }
 
-        let fallbackStr = JSON.stringify(Array.isArray(parsedObj) ? parsedObj.map(fallbackObj) : fallbackObj(parsedObj));
-        if (fallbackStr.length <= 4900) return fallbackStr;
-        return fallbackStr.substring(0, 4900);
+            return res;
+        };
+
+        const compacted = Array.isArray(parsedObj) ? parsedObj.map(compactData) : compactData(parsedObj);
+        return JSON.stringify(compacted);
     } catch (e) {
-        return null;
+        // Fallback to original string if JSON parsing fails
+        return typeof item === 'string' ? item : JSON.stringify(item);
     }
 }
 
@@ -540,23 +538,26 @@ export async function linkItemToPurchase(itemId: string, purchaseId: string | nu
 
 export function getAssociatedFileIds(item: any): Map<string, string> {
     const fileMap = new Map<string, string>();
+    if (!item || typeof item !== 'object') return fileMap;
 
     // A. Check Standard Fields (Main Bucket)
     if (item.imageId) fileMap.set(item.imageId, BUCKET_ID);
     if (item.receiptImageId) fileMap.set(item.receiptImageId, BUCKET_ID);
     if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
-        item.galleryImageIds.forEach((id: string) => fileMap.set(id, BUCKET_ID));
+        item.galleryImageIds.forEach((id: string) => {
+            if (id) fileMap.set(id, BUCKET_ID);
+        });
     }
 
     // B. Check Notes for "Safe Mode" IDs
-    if (item.conditionNotes) {
+    if (item.conditionNotes && typeof item.conditionNotes === 'string') {
         // Main Image
         const mainMatch = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
-        if (mainMatch) fileMap.set(mainMatch[1].trim(), BUCKET_ID);
+        if (mainMatch && mainMatch[1]) fileMap.set(mainMatch[1].trim(), BUCKET_ID);
 
         // Gallery
         const galleryMatch = item.conditionNotes.match(/\[GALLERY IDS: ([^\]]+)\]/i);
-        if (galleryMatch) {
+        if (galleryMatch && galleryMatch[1]) {
             galleryMatch[1].split(',').forEach((s: string) => {
                 const id = s.trim();
                 if (id) fileMap.set(id, BUCKET_ID);
@@ -565,15 +566,15 @@ export function getAssociatedFileIds(item: any): Map<string, string> {
 
         // Receipt
         const receiptMatch = item.conditionNotes.match(/\[RECEIPT ID: ([^\]]+)\]/i);
-        if (receiptMatch) fileMap.set(receiptMatch[1].trim(), BUCKET_ID);
+        if (receiptMatch && receiptMatch[1]) fileMap.set(receiptMatch[1].trim(), BUCKET_ID);
 
         // Scout Report (Reports Bucket)
         const scoutMatch = item.conditionNotes.match(/\[SCOUT_REPORT_ID: ([^\]]+)\]/i);
-        if (scoutMatch) fileMap.set(scoutMatch[1].trim(), REPORTS_BUCKET_ID);
+        if (scoutMatch && scoutMatch[1] && REPORTS_BUCKET_ID) fileMap.set(scoutMatch[1].trim(), REPORTS_BUCKET_ID);
         
         // MD File (Reports Bucket)
         const mdMatch = item.conditionNotes.match(/\[SCOUT_REPORT_MD: ([^\]]+)\]/i);
-        if (mdMatch) fileMap.set(mdMatch[1].trim(), REPORTS_BUCKET_ID);
+        if (mdMatch && mdMatch[1] && REPORTS_BUCKET_ID) fileMap.set(mdMatch[1].trim(), REPORTS_BUCKET_ID);
     }
     
     return fileMap;
@@ -609,18 +610,22 @@ export async function deleteInventoryItem(documentId: string) {
 
 export const updateItemInInventory = updateInventoryItem;
 
-export async function updateInventoryItem(documentId: string, updates: Partial<ExtraItemData>) {
+export async function updateInventoryItem(documentId: string, updates: Partial<any>) {
+    if (!DB_ID) {
+        throw new Error("Missing PUBLIC_APPWRITE_DB_ID in .env");
+    }
+
     try {
         // 1. Fetch current document to safely update notes
         const currentDoc = await databases.getDocument(DB_ID, getCollectionId(), documentId);
-        let notes = currentDoc.conditionNotes || '';
+        let notes = currentDoc?.conditionNotes || '';
 
         // If user explicitly provided new internal / condition notes, merge or replace the base text while preserving system bracket tags
         if (updates.conditionNotes !== undefined || updates.condition_notes !== undefined) {
             const rawNewNotes = (updates.conditionNotes !== undefined ? updates.conditionNotes : updates.condition_notes) || '';
             // Extract existing bracket tags like [MAIN IMAGE ID: ...], [GALLERY IDS: ...], [SCOUT_REPORT_ID: ...], [SCOUT_REPORT_MD: ...]
-            const bracketTags = notes.match(/\[[A-Z0-9_ ]+:[^\]]+\]/gi) || [];
-            let cleanNewNotes = rawNewNotes;
+            const bracketTags = (notes && typeof notes === 'string') ? (notes.match(/\[[A-Z0-9_ ]+:[^\]]+\]/gi) || []) : [];
+            let cleanNewNotes = typeof rawNewNotes === 'string' ? rawNewNotes : String(rawNewNotes || '');
             // Strip any bracket tags from user text to avoid duplicate tags
             bracketTags.forEach(tag => {
                 cleanNewNotes = cleanNewNotes.replace(tag, '');
@@ -635,25 +640,29 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
 
         // Helper to update or append values in notes
         const updateNoteValue = (key: string, value: string) => {
+            if (!notes) notes = '';
+            const safeVal = value === null || value === undefined ? '' : String(value);
             // Escape key for regex usage (e.g. "Est. Low" -> "Est\. Low")
             const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             // Use [ \t]* to prevent matching \n and eating the next line
             const regex = new RegExp(`^${escapedKey}:[ \\t]*(.*)$`, 'mi');
             
             if (regex.test(notes)) {
-                notes = notes.replace(regex, () => `${key}: ${value}`);
+                notes = notes.replace(regex, () => `${key}: ${safeVal}`);
             } else {
-                notes = notes + `\n${key}: ${value}`;
+                notes = notes + (notes ? '\n' : '') + `${key}: ${safeVal}`;
             }
         };
 
         // Helper for bracket tags [TAG: Value]
         const updateTagValue = (tag: string, value: string) => {
+            if (!notes) notes = '';
+            const safeVal = value === null || value === undefined ? '' : String(value);
             const regex = new RegExp(`\\[${tag}:[ \\t]*([^\\]]+)\\]`, 'i');
             if (regex.test(notes)) {
-                notes = notes.replace(regex, () => `[${tag}: ${value}]`);
+                notes = notes.replace(regex, () => `[${tag}: ${safeVal}]`);
             } else {
-                notes = notes + `\n\n[${tag}: ${value}]`;
+                notes = notes + (notes ? '\n\n' : '') + `[${tag}: ${safeVal}]`;
             }
         };
 
@@ -667,8 +676,12 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             data.marketDescription = descStr.length > 4900 ? descStr.substring(0, 4900) : descStr;
         }
         if (updates.components !== undefined) {
-            const compStr = typeof updates.components === 'string' ? updates.components : JSON.stringify(updates.components);
-            data.components = compStr && compStr.length > 4900 ? compStr.substring(0, 4900) : compStr;
+            if (updates.components === null || updates.components === '') {
+                data.components = null;
+            } else {
+                const compStr = typeof updates.components === 'string' ? updates.components : JSON.stringify(updates.components);
+                data.components = compStr && compStr.length > 4900 ? compStr.substring(0, 4900) : compStr;
+            }
         }
         if (updates.quantity !== undefined) {
             const q = Number(updates.quantity);
@@ -727,7 +740,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
             const galleryMatch = notes ? notes.match(/\[GALLERY IDS: ([^\]]+)\]/i) : null;
             if (galleryMatch) {
                 currentGalleryIds = galleryMatch[1].split(',').map((s: string) => s.trim()).filter((s: string) => s);
-            } else if (currentDoc.galleryImageIds && Array.isArray(currentDoc.galleryImageIds)) {
+            } else if (currentDoc?.galleryImageIds && Array.isArray(currentDoc.galleryImageIds)) {
                 currentGalleryIds = [...currentDoc.galleryImageIds];
             }
         }
@@ -761,43 +774,69 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         // Helper to handle clearing or updating both Schema and Notes
         // Since some users might expect data inside notes vs schema
         if (updates.cost !== undefined) {
-             if (updates.cost === '') {
+             if (updates.cost === '' || updates.cost === null) {
                  data.cost = null; // Clear from schema
                  updateNoteValue('Paid', ''); // We could remove the line, but blanking works
              } else {
-                 data.cost = parseFloat(updates.cost.toString()); 
-                 updateNoteValue('Paid', `$${data.cost.toFixed(2)}`);
+                 const num = parseFloat(String(updates.cost));
+                 data.cost = isNaN(num) ? null : num; 
+                 if (data.cost !== null) updateNoteValue('Paid', `$${data.cost.toFixed(2)}`);
              }
         }
         
         if (updates.resalePrice !== undefined) {
-             if (updates.resalePrice === '') {
+             if (updates.resalePrice === '' || updates.resalePrice === null) {
                  data.resalePrice = null;
                  updateNoteValue('Resale', '');
              } else {
-                 data.resalePrice = parseFloat(updates.resalePrice.toString());
-                 updateNoteValue('Resale', `$${data.resalePrice.toFixed(2)}`);
+                 const num = parseFloat(String(updates.resalePrice));
+                 data.resalePrice = isNaN(num) ? null : num;
+                 if (data.resalePrice !== null) updateNoteValue('Resale', `$${data.resalePrice.toFixed(2)}`);
              }
         }
         
         if (updates.soldPrice !== undefined) {
-             if (updates.soldPrice === '') {
+             if (updates.soldPrice === '' || updates.soldPrice === null) {
                  data.soldPrice = null;
                  updateNoteValue('Sold', '');
              } else {
-                 data.soldPrice = parseFloat(updates.soldPrice.toString());
-                 updateNoteValue('Sold', `$${data.soldPrice.toFixed(2)}`);
+                 const num = parseFloat(String(updates.soldPrice));
+                 data.soldPrice = isNaN(num) ? null : num;
+                 if (data.soldPrice !== null) updateNoteValue('Sold', `$${data.soldPrice.toFixed(2)}`);
              }
         }
 
         if (updates.sourcingLocation !== undefined) {
-            data.sourcingLocation = updates.sourcingLocation === '' ? null : updates.sourcingLocation;
-            updateNoteValue('Location', updates.sourcingLocation);
+            data.sourcingLocation = (updates.sourcingLocation === '' || updates.sourcingLocation === null) ? null : String(updates.sourcingLocation);
+            updateNoteValue('Location', data.sourcingLocation || '');
         }
 
-        if (updates.estLow !== undefined) updateNoteValue('Est. Low', updates.estLow === '' ? '' : `$${parseFloat(updates.estLow.toString()).toFixed(2)}`);
-        if (updates.estHigh !== undefined) updateNoteValue('Est. High', updates.estHigh === '' ? '' : `$${parseFloat(updates.estHigh.toString()).toFixed(2)}`);
-        if (updates.boutiquePrice !== undefined) updateNoteValue('Boutique', updates.boutiquePrice === '' ? '' : `$${parseFloat(updates.boutiquePrice.toString()).toFixed(2)}`);
+        if (updates.estLow !== undefined) {
+            if (updates.estLow === '' || updates.estLow === null) {
+                updateNoteValue('Est. Low', '');
+            } else {
+                const num = parseFloat(String(updates.estLow));
+                updateNoteValue('Est. Low', isNaN(num) ? '' : `$${num.toFixed(2)}`);
+            }
+        }
+
+        if (updates.estHigh !== undefined) {
+            if (updates.estHigh === '' || updates.estHigh === null) {
+                updateNoteValue('Est. High', '');
+            } else {
+                const num = parseFloat(String(updates.estHigh));
+                updateNoteValue('Est. High', isNaN(num) ? '' : `$${num.toFixed(2)}`);
+            }
+        }
+
+        if (updates.boutiquePrice !== undefined) {
+            if (updates.boutiquePrice === '' || updates.boutiquePrice === null) {
+                updateNoteValue('Boutique', '');
+            } else {
+                const num = parseFloat(String(updates.boutiquePrice));
+                updateNoteValue('Boutique', isNaN(num) ? '' : `$${num.toFixed(2)}`);
+            }
+        }
 
         if (updates.itemCondition !== undefined && updates.itemCondition !== null) {
             const mdText = typeof updates.itemCondition === 'string' ? updates.itemCondition : '';
@@ -823,7 +862,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
         }
         
         if (updates.sellingLocations !== undefined) {
-            data.sellingLocations = updates.sellingLocations;
+            data.sellingLocations = Array.isArray(updates.sellingLocations) ? updates.sellingLocations : [];
         }
 
         if (updates.keywords !== undefined) {
@@ -832,14 +871,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<E
 
         if (updates.orderId !== undefined) {
             // No top-level orderId column in standard flow, but save to notes
-            updateNoteValue('Order #', updates.orderId);
-        }
-        
-        if (updates.estLow !== undefined) {
-            updateNoteValue('Est. Low', updates.estLow === '' ? '' : `$${parseFloat(updates.estLow).toFixed(2)}`);
-        }
-        if (updates.estHigh !== undefined) {
-            updateNoteValue('Est. High', updates.estHigh === '' ? '' : `$${parseFloat(updates.estHigh).toFixed(2)}`);
+            updateNoteValue('Order #', updates.orderId ? String(updates.orderId) : '');
         }
         
         // Save Scout Data (Base64 encoded JSON to avoid regex issues)

@@ -58,9 +58,9 @@ const { title = siteConfig.title, description, image } = Astro.props;
   </div>
 
   <MarkdownModal />
-  <HuckleberryLoader client:load />
-  <ToastContainer client:load />
-  <ConfirmContainer client:load />
+  <HuckleberryLoader client:only="vue" />
+  <ToastContainer client:only="vue" />
+  <ConfirmContainer client:only="vue" />
   <script>
     import { initAuth } from "../lib/store";
 

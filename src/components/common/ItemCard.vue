@@ -235,12 +235,13 @@ const profitWidth = computed(() => {
 // --- IMAGE HELPERS ---
 const imageUrl = computed(() => {
     const item = props.item;
+    if (!item) return null;
     let id = item.imageId;
-    if (!id && item.galleryImageIds?.length > 0) id = item.galleryImageIds[0];
+    if (!id && Array.isArray(item.galleryImageIds) && item.galleryImageIds.length > 0) id = item.galleryImageIds[0];
     
-    if (!id && item.conditionNotes) {
+    if (!id && item.conditionNotes && typeof item.conditionNotes === 'string') {
          const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-         if (match) id = match[1].split(',')[0].trim();
+         if (match && match[1]) id = match[1].split(',')[0].trim();
     }
     
     if (!id) return null;

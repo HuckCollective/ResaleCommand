@@ -566,7 +566,7 @@
                                                             <span v-else class="text-base-content font-bold text-xs sm:text-sm truncate">{{ resultItem.identity || resultItem.item || 'Unknown Item' }}</span>
                                                         </div>
                                                         
-                                                        <!-- Photo Swap Controls -->
+                                                        <!-- Photo Swap & Delete Controls -->
                                                         <div class="flex items-center gap-0.5 shrink-0 bg-base-200/80 rounded px-1 py-0.5 border border-base-300">
                                                             <button v-if="idx > 0" @click.stop="swapComponentPhotos(idx, idx - 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item above">
                                                                 <Icon icon="solar:arrow-up-linear" class="w-3.5 h-3.5" />
@@ -574,16 +574,22 @@
                                                             <button v-if="idx < scoutItemsArray.length - 1" @click.stop="swapComponentPhotos(idx, idx + 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item below">
                                                                 <Icon icon="solar:arrow-down-linear" class="w-3.5 h-3.5" />
                                                             </button>
+                                                            <button @click.stop="removeScoutComponent(idx)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/40 hover:text-error ml-0.5" title="Remove duplicate/unwanted item">
+                                                                <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
+                                                            </button>
                                                         </div>
                                                     </div>
 
-                                                    <!-- Condition Line: Clean neutral badge + subtitle -->
-                                                    <div class="flex items-center gap-1.5 flex-wrap">
-                                                        <span class="badge badge-neutral badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded">
-                                                            {{ (resultItem.condition || 'Used/Good').split(' - ')[0].replace(/^Used\//i, '') }}
+                                                    <!-- Condition Line & Standout Key Badge -->
+                                                    <div class="flex items-start gap-1.5 flex-wrap">
+                                                        <span class="badge badge-neutral badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded shrink-0">
+                                                            {{ getConditionGrade(resultItem.condition) }}
                                                         </span>
-                                                        <span v-if="(resultItem.condition || '').includes(' - ')" class="text-[11px] text-base-content/60 italic truncate max-w-full">
-                                                            {{ resultItem.condition.split(' - ').slice(1).join(' - ') }}
+                                                        <span v-if="resultItem.is_key_issue" class="badge badge-warning badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded shrink-0">
+                                                            ★ Key Standout
+                                                        </span>
+                                                        <span v-if="getConditionNotes(resultItem.condition)" class="text-[11px] text-base-content/70 italic leading-snug flex-1 min-w-0">
+                                                            {{ getConditionNotes(resultItem.condition) }}
                                                         </span>
                                                     </div>
 
@@ -1530,6 +1536,22 @@ function formatPriceRange(val) {
     return val;
 }
 
+const getConditionGrade = (cond) => {
+    if (!cond || typeof cond !== 'string') return 'Good';
+    const match = cond.match(/^(NWT|NWOT|New With Tags|New|Like New|Very Good|Used\/Good|Good|Fair|Poor|Acceptable)/i);
+    if (match) return match[1].replace(/^Used\//i, '');
+    return cond.split(/[,;\-—\n]/)[0].trim().replace(/^Used\//i, '') || 'Good';
+};
+
+const getConditionNotes = (cond) => {
+    if (!cond || typeof cond !== 'string') return '';
+    const grade = getConditionGrade(cond);
+    let notes = cond.replace(new RegExp(`^(Used\\/)?${grade}`, 'i'), '')
+                    .replace(/^[,;\-—\s:]+/, '')
+                    .trim();
+    return notes;
+};
+
 const shippingCosts = computed(() => {
     if (scoutResult.value && scoutResult.value.shipping_info) {
         const sInfo = scoutResult.value.shipping_info;
@@ -1620,6 +1642,23 @@ const swapComponentPhotos = (idxA, idxB) => {
     cropPreviews.value[idxB] = tempCrop;
 };
 
+const removeScoutComponent = (idx) => {
+    if (!scoutResult.value) return;
+    if (scoutResult.value.lot_items && Array.isArray(scoutResult.value.lot_items)) {
+        scoutResult.value.lot_items.splice(idx, 1);
+    } else if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) {
+        scoutResult.value.items.splice(idx, 1);
+    } else if (Array.isArray(scoutResult.value)) {
+        if (scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
+            scoutResult.value[0].lot_items.splice(idx, 1);
+        } else {
+            scoutResult.value.splice(idx, 1);
+        }
+    }
+    delete cropPreviews.value[idx];
+    addToast({ type: 'info', message: 'Item removed from lot components.' });
+};
+
 const generateCropPreviews = async (items) => {
     if (!items || items.length === 0) return;
     const galleryUrls = allAvailableGalleryUrls.value;
@@ -1664,11 +1703,12 @@ const getNoteValue = (notes, key, isCurrency = false) => {
 };
 
 const getImageUrl = (itemData) => {
+    if (!itemData || typeof itemData !== 'object') return null;
     let id = itemData.imageId;
-    if (!id && itemData.galleryImageIds?.length > 0) id = itemData.galleryImageIds[0];
-    if (!id && itemData.conditionNotes) {
+    if (!id && Array.isArray(itemData.galleryImageIds) && itemData.galleryImageIds.length > 0) id = itemData.galleryImageIds[0];
+    if (!id && itemData.conditionNotes && typeof itemData.conditionNotes === 'string') {
          const match = itemData.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-         if (match) id = match[1].split(',')[0].trim();
+         if (match && match[1]) id = match[1].split(',')[0].trim();
     }
     return id ? getAssetUrl(id) : null;
 };
