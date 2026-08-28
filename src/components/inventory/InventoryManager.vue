@@ -1606,6 +1606,8 @@ const filteredInventory = computed(() => {
             const sourcingMatch = (item.sourcingLocation || '').toLowerCase().includes(query);
             const locSkuMatch = (item.locationSku || '').toLowerCase().includes(query);
             const notesMatch = (item.conditionNotes || item.marketDescription || '').toLowerCase().includes(query);
+            const rawAnalysisMatch = (item.rawAnalysis || '').toLowerCase().includes(query);
+            const componentsMatch = (item.components || '').toLowerCase().includes(query);
             const keywordMatch = Array.isArray(item.keywords) && item.keywords.some(k => k.toLowerCase().includes(query));
             const upcMatch = itemUpc.includes(query);
 
@@ -1624,7 +1626,7 @@ const filteredInventory = computed(() => {
                 }
             }
 
-            if (!titleMatch && !idMatch && !identityMatch && !binMatch && !keywordMatch && !orderMatch && !cartMatch && !purchaseMatch && !sourcingMatch && !locSkuMatch && !notesMatch && !upcMatch && !numericMatch) {
+            if (!titleMatch && !idMatch && !identityMatch && !binMatch && !keywordMatch && !orderMatch && !cartMatch && !purchaseMatch && !sourcingMatch && !locSkuMatch && !notesMatch && !rawAnalysisMatch && !componentsMatch && !upcMatch && !numericMatch) {
                 return false;
             }
         }

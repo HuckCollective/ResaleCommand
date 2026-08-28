@@ -18,13 +18,42 @@ The Resale Command AI inspection engine automatically evaluates every lot agains
 
 | Pricing Tier | Item Classification | Pricing Target | Merchandising & Display Strategy |
 | :--- | :--- | :--- | :--- |
-| **🌟 Tier 1: Standout Keys & Rare Issues** | Premiere #1 issues, iconic cover artists (Moebius, Giger, Frazetta, Olivia, Corben), 1st printings, designer vintage (Carhartt Detroit, Levi's Made in USA, Pendleton). | **$25.00 – $65.00+ each** | **Bag & Board individually** with premium tags for booth showcase or individual high-value eBay listings. |
-| **📦 Tier 2: Mid-Tier Collectibles & Themed Sets** | Solid 80s/90s run issues, complete author trilogies (*Dragonlance Chronicles*, *Icewind Dale*), recognizable brand apparel. | **$12.00 – $22.00 each** (or **$35.00 – $60.00 / set**) | Display individually on booth shelves or bundle into **2–3 issue themed collector sets**. |
-| **🛒 Tier 3: Reader Copies & Value Bundles** | High-print common issues, mild wear reader copies, everyday basics. | **$24.00 – $45.00 / bundle** ($6.00 – $8.00 / unit) | Bundle into **3–6 piece grab-bags / multi-packs** to drive fast volume turnover in the booth. |
+| **🌟 Tier 1: Standout Keys & Rare Issues** | Premiere #1 issues, iconic cover artists (Moebius, Giger, Frazetta, Olivia, Corben, Frezzato, Nicollet), 1st printings, designer vintage (Carhartt Detroit, Levi's Made in USA, Pendleton). | **$25.00 – $65.00+ each** | **Single High-Dollar Tag**: Bag & Board individually with custom dedicated barcode tags for showcase/feature display. |
+| **📦 Tier 2: Mid-Tier Collectibles & Themed Sets** | Solid 80s/90s run issues, complete author trilogies (*Dragonlance*, *Icewind Dale*), recognizable brand apparel. | **$12.00 – $22.00 each** (or **$35.00 – $60.00 / set**) | **Multi-Quantity Tagging**: Create a single multi-qty listing in Memory Den software (e.g. Qty: 15 @ $16/ea) and print identical bulk stickers to tag the entire stack in 1 minute. |
+| **🛒 Tier 3: Reader Copies & Value Bundles** | High-print common issues, mild wear reader copies, everyday basics. | **$24.00 – $45.00 / bundle** ($6.00 – $8.00 / unit) | **Multi-Qty Floor Bins or 3-Packs**: Tag as multi-qty $8.00 reader copies or bag into 3–5 issue grab-bags at $22.00/pack for fast impulse turnover. |
 
 ---
 
-## 3. Step-by-Step Curation Workflow in Resale Command
+## 3. The Physical Booth Operations & POS Tagging Pipeline (Memory Den)
+
+This is the standard physical booth lifecycle for Resale Command:
+
+```mermaid
+graph TD
+    A[1. Master Lot Ingested] --> B[2. AI 3-Tier Inspection]
+    B --> C1[Tier 1: Split into Standout Singles]
+    B --> C2[Tier 2: Split into Multi-Qty Run SKU]
+    B --> C3[Tier 3: Split into Multi-Qty or 3-Packs]
+    C1 --> D[3. Upload to Memory Den Software]
+    C2 --> D
+    C3 --> D
+    D --> E[4. Print Barcode Labels & Tag Items]
+    E --> F[5. Stock Booth Shelves & Bins]
+```
+
+1. **Master Lot Ingestion**: Record total lot buy cost ($X.XX) and intake all photos.
+2. **AI Inspection & Standardized Naming**: AI assigns `[Tier 1: Standout Key]`, `[Tier 2: Mid-Tier]`, or `[Tier 3: Reader Pack]` with exact dates/artists.
+3. **Deconstruct / Split-Off**:
+   - Split off **Tier 1 Standouts** as single high-value inventory items.
+   - Split off **Tier 2 Mid-Tier** items as a multi-quantity listing (e.g., Qty: 15 @ $16/ea).
+   - Split off **Tier 3 Readers** as multi-quantity ($8/ea) or pre-bagged 3-packs.
+4. **Sync / Upload to Memory Den Software**: Export/upload SKUs into the antique mall POS.
+5. **Batch Label Printing & Tagging**: Print barcode price tags in bulk and tag physical items.
+6. **Reconciliation**: When booth sales import via CSV, Resale Command matches the sold tags back to your inventory and tracks realized net profit.
+
+---
+
+## 4. Step-by-Step Curation Workflow in Resale Command
 
 ```mermaid
 graph TD

@@ -169,26 +169,29 @@ TASK:
      * *Heritage & Vintage*: Carhartt (Detroit jackets, double-knee, Aztec/Santa Fe), Levi's (Made in USA, Orange Tab, Big E, selvedge, 501/517), Patagonia (Synchilla, Deep Pile, Retro-X fleece), The North Face (Nuptse 700, Mountain Light Gore-Tex), Pendleton (100% Wool Board Shirts), Filson, Champion Reverse Weave.
      * *Trending Aesthetics & Contemporary*: Free People, Reformation, Lululemon (Align, Scuba, Define), Dôen, Realisation Par, Aritzia, Sezane, Arc'teryx, Stüssy.
      * *Alt, Goth, Y2K & Grunge Subcultures*: Tripp NYC, Lip Service, Demonia, Killstar, Vivienne Westwood, vintage single-stitch band/tour tees, heavy leather motorcycle jackets.
-   - **Footwear & Shoes Standouts**:
-     * Dr. Martens (Made in England, Jadon/Sinclair platform, vintage 1460), Birkenstock (Boston clogs, Arizona, Shearling), Red Wing Heritage (Iron Ranger, Moc Toe), Blundstone, Salomon (XT-6, ACS Pro), New Balance (990v3/v5/v6, 1906, 2002R), Nike (Jordan 1/4, Dunk, ACG, Air Max 95/97).
+   - **Apparel & Workwear Standouts**: Carhartt, Levi's, Patagonia, The North Face, Pendleton, Filson, Arc'teryx, Stüssy.
+   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, Jadon/Sinclair platform, vintage 1460), Birkenstock (Boston clogs, Arizona, Shearling), Red Wing Heritage (Iron Ranger, Moc Toe), Blundstone, Salomon (XT-6, ACS Pro), New Balance (990v3/v5/v6, 1906, 2002R), Nike (Jordan 1/4, Dunk, ACG, Air Max 95/97).
    - **Books, RPGs, Comics & Magazines**:
      * Heavy Metal Magazine (1977 premiere #1, Moebius, H.R. Giger, Frazetta, Olivia, Richard Corben, Boris Vallejo, rare special editions).
      * Dungeons & Dragons (TSR 1st Edition, 3.5e rare supplements, premium reprints), Frank Herbert Dune series, vintage sci-fi/fantasy first editions, graphic novel omnibuses.
    - **Electronics, Audio & Collectibles**:
      * Vintage analog cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, vintage video games (Nintendo, Sega, PlayStation), LEGO Star Wars/Bionicle titans.
 
-3. EXTRACT EVERY DISTINCT VISIBLE ITEM:
+3. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
    - If this image shows multiple distinct items, extract each one into the "items" array.
-   - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true' and specify why in attributes.
-   - If this image is a detail photo of a tag, label, zipper, book spine, or page edges of an existing item, specify 'is_detail_shot: true'.
+   - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
+   - Format "name" strictly with one of these 3 tier prefixes:
+     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (Keys, #1 issues, Moebius, Giger, Frazetta, Tim Leary, Nicollet -> $25 - $65+)
+     * '[Tier 2: Mid-Tier Run] Brand/Series - Date/Vol - Artist/Model' (Solid 80s/90s run issues, Frezzato, complete arcs -> $12 - $22)
+     * '[Tier 3: Reader Pack] Brand/Series - Date/Vol - General Feature' (Late 90s/2000s common monthly issues, standard non-key readers, shelf wear -> $6 - $10)
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "Full descriptive title with brand/model/size/date/edition",
-      "identity": "Short recognizable name",
+      "name": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "identity": "Heavy Metal Magazine Oct 1977",
       "is_key_issue": true,
       "detected_text": "Text read from tags, labels, covers, or hallmarks",
       "condition": "Used/Good, NWT, Minor flaw, etc.",
@@ -218,23 +221,41 @@ OUTPUT STRICT JSON:
         return {
             image_index: image.index,
             image_url: image.url,
-            is_group_overview: parsed.is_group_overview || false,
-            items: rawItems.map((it: any) => ({
-                ...it,
-                image_index: image.index,
-                image_url: image.url
-            }))
+            items: rawItems.map((item: any) => {
+                const isKey = item.is_key_issue || item.name?.includes('Tier 1') || false;
+                const isReader = item.name?.includes('Tier 3') || false;
+                return {
+                    name: item.name || item.identity || "Inspected Piece",
+                    identity: item.identity || item.name || "Inspected Piece",
+                    is_key_issue: isKey,
+                    detected_text: item.detected_text || "",
+                    condition: item.condition || "Used/Good",
+                    estimated_value: item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22"),
+                    price_breakdown: item.price_breakdown || {
+                        mint: isKey ? "$60 - $95" : isReader ? "$10 - $15" : "$20 - $30",
+                        fair: isKey ? "$35 - $60" : isReader ? "$6 - $10" : "$14 - $22",
+                        poor: isKey ? "$18 - $30" : isReader ? "$3 - $5" : "$8 - $12",
+                        boutique_premium: isKey ? "$45 - $75" : isReader ? "$8 - $12" : "$16 - $25"
+                    },
+                    red_flags: item.red_flags || [],
+                    image_index: image.index,
+                    image_url: image.url
+                };
+            })
         };
     } catch (e: any) {
-        console.error(`[ai-inspection] Error inspecting photo #${image.index + 1}:`, e.message);
+        console.error(`[ai-inspection] Single photo extraction failed on img ${image.index}:`, e.message);
         return null;
     }
 }
 
+export const inspectPhotoGallery = inspectLotWithGemini;
+
 /**
- * Inspect an entire gallery of photos, deduplicating overview shots and matching each distinct component item to its best photo.
+ * Inspect a full multi-item lot, performing parallel photo scanning,
+ * strict item deduplication, and overarching Memory Den 3-tier synthesis.
  */
-export async function inspectPhotoGallery(
+export async function inspectLotWithGemini(
     images: InspectionImage[],
     context?: InspectionContext,
     onProgress?: (step: string, percent?: number) => void
@@ -243,7 +264,7 @@ export async function inspectPhotoGallery(
         throw new Error("No images provided for inspection");
     }
 
-    if (onProgress) onProgress(`Step 1 of 3: Scanning ${images.length} photos with per-item OCR...`, 15);
+    if (onProgress) onProgress(`Step 1 of 3: Scanning ${images.length} photos with per-item OCR & tier classification...`, 15);
 
     // 1. Inspect each photo in parallel batches of 8 for high throughput
     const inspectionResults: any[] = [];
@@ -254,12 +275,12 @@ export async function inspectPhotoGallery(
         const batchResults = await Promise.all(batchPromises);
         inspectionResults.push(...batchResults.filter(Boolean));
         if (onProgress) {
-            const pct = Math.round(15 + ((i + batch.length) / images.length) * 50);
+            const pct = Math.round(15 + ((i + batch.length) / images.length) * 55);
             onProgress(`Step 1 of 3: Analyzed photo ${Math.min(i + batch.length, images.length)} of ${images.length}...`, pct);
         }
     }
 
-    if (onProgress) onProgress(`Step 2 of 3: Cataloging all distinct issues & identifying key collectibles...`, 70);
+    if (onProgress) onProgress(`Step 2 of 3: Cataloging distinct issues into 3 profitability tiers...`, 75);
 
     // Flatten all extracted items from all photos
     const allExtractedItems: any[] = [];
@@ -269,14 +290,14 @@ export async function inspectPhotoGallery(
         }
     }
 
-    // Deduplicate only truly identical items/issues (e.g. front and back of the exact same month/year)
+    // Deduplicate only truly identical items/issues
     const uniqueComponents: ComponentItem[] = [];
     const seenIssueKeys = new Set<string>();
 
     for (const comp of allExtractedItems) {
-        // Construct a unique key based on title + issue date / number
         const issueKey = (comp.name || comp.identity || '')
             .toLowerCase()
+            .replace(/\[tier \d[^\]]*\]/i, '')
             .replace(/[^a-z0-9]/g, '');
             
         if (issueKey.length > 2 && !seenIssueKeys.has(issueKey)) {
@@ -284,7 +305,7 @@ export async function inspectPhotoGallery(
             uniqueComponents.push({
                 name: comp.name || comp.identity,
                 identity: comp.identity || comp.name,
-                estimated_value: comp.estimated_value || comp.price_breakdown?.fair || "$15 - $25",
+                estimated_value: comp.estimated_value || "$15 - $25",
                 condition: comp.condition || "Used/Good",
                 image_index: comp.image_index,
                 image_url: comp.image_url,
@@ -295,71 +316,59 @@ export async function inspectPhotoGallery(
         }
     }
 
-    if (onProgress) onProgress(`Step 3 of 3: Structuring lot valuation & memory den booth pricing...`, 85);
+    if (onProgress) onProgress(`Step 3 of 3: Synthesizing Memory Den booth pricing & liquidation strategy...`, 90);
 
-    // 2. Synthesize overarching lot report, platform recommendations, and perform strict item deduplication
+    // 2. Synthesize overarching lot report & strategy with lightweight output (Fast & Cost-Effective)
     const locationsSummary = context?.locations?.length 
         ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
         : "None provided";
 
-    const candidateSummary = uniqueComponents.map(c => ({
-        photo_index: c.image_index,
-        detected_text: c.detected_text || c.ocr_detected_text || "",
-        name: c.name || c.identity,
+    const candidateSummary = uniqueComponents.map((c, i) => ({
+        index: i + 1,
+        title: c.name || c.identity,
         condition: c.condition,
-        estimated_value: c.estimated_value,
-        is_key_issue: (c as any).is_key_issue || false
+        estimated_value: c.estimated_value
     }));
 
     const synthesisPrompt = `
-You are a master multi-category resale appraiser and inventory valuation expert performing lot cataloging, individual piece identification, and pricing strategy for modern & vintage lots (apparel/clothing bundles, electronics, collectibles, media, jewelry, antiques, etc.).
+You are a master multi-category resale appraiser and inventory valuation expert performing overarching lot consolidation, deduplication, and physical booth pricing strategy for Memory Den and online marketplaces.
 
 ORIGINAL LISTING & LOT CONTEXT:
 - Listing Title: "${context?.title || 'Multi-Item Lot'}"
-- Explicit Stated Quantity: ${context?.quantity || 'Not specified'}
+- Physical Lot Stated Count: ${context?.quantity || 'Auto-detect (approx 25-35 distinct items)'}
 - Sourcing Location / URL: "${context?.sourcingLocation || 'N/A'}"
-- Prior Research & Lot Notes: "${context?.notes || 'N/A'}"
-- Total Landed Cost: ${context?.cost ? `$${context.cost}` : 'Unknown'}
+- Total Landed Purchase Cost: ${context?.cost ? `$${context.cost}` : 'Not provided'}
 
-DISCOVERED ITEMS ACROSS PHOTOS (${uniqueComponents.length} distinct items identified):
+RAW CANDIDATE DETECTIONS ACROSS ALL PHOTOS (${uniqueComponents.length} raw photo detections):
 ${JSON.stringify(candidateSummary, null, 2)}
 
 Organization Physical Booths & Locations:
 ${locationsSummary}
 
-CRITICAL RULES FOR "lot_items" RECONCILIATION:
-0. EXACT PHYSICAL ITEM COUNT & DEDUPLICATION:
-   - Stated Listing Physical Quantity: ${context?.quantity || 'Auto-detect from photos'}.
-   - If the listing title or context specifies a count (e.g. "Set of 6 Books", "Lot of 6", or Quantity = 6), the "lot_items" array **MUST CONTAIN EXACTLY THAT NUMBER OF ITEMS** (e.g. exactly 6 items, NOT 7 or 8).
-   - Photos of page edges, book stacks, backs of books, or packaging/boxes are DETAIL/CONTEXT photos, NOT additional items! Never invent an extra item from a page edge or stack photo.
-1. STANDOUT HIGH-VALUE KEYS & CHERRY-PICK STRATEGY:
-   - Identify ANY standout high-value pieces (e.g. Carhartt/Patagonia/Pendleton/Free People/Dr. Martens apparel, Heavy Metal/Moebius/Giger/TSR 1st edition books, rare collectibles).
-   - In the overarching title and condition notes, prominent standout brands, artists, or editions MUST be highlighted (e.g. "Featuring Moebius Cover Art & 1977 Premiere", "Featuring Vintage Carhartt Detroit Jacket & Pendleton Wool").
-   - For standalone key items worth >= $25–$35 individual resale, reflect their full standalone boutique price in their "price_breakdown" and recommend in "purchase_strategy.advice" whether to cherry-pick them for individual booth/eBay sales or sell as a high-ticket collection.
-2. ACCURATE PRICING & BOOTH STRATEGY:
-   - Provide realistic sold-comp prices for physical antique mall booths (e.g. Memory Den), online marketplaces (eBay/Poshmark/Mercari), and storefronts.
-   - Enforce realistic individual resale floors (individual collectible books/magazines/garments have a minimum $8–$15 floor rather than bulk clearance pricing).
+CRITICAL RECONCILIATION & TIER SORTING RULES:
+1. MERGE DUPLICATE PHOTO DETECTIONS TO EXACT PHYSICAL COUNT:
+   - The raw candidate list contains multiple photos of the same physical items (e.g. overview photos, detail shots, edge overlap).
+   - Consolidate and merge duplicates down to the EXACT physical count of distinct magazines/items. Do NOT output duplicates!
+2. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
+   - **FIRST: [Tier 1: Standout Key]** (Premiere #1 issues, iconic cover artists like Moebius, Giger, Frazetta, Tim Leary, Nicollet, rare 1st editions -> $25 - $65+ each).
+   - **SECOND: [Tier 2: Mid-Tier Run]** (Solid 80s/90s run issues, Frezzato, complete storylines -> $12 - $22 each).
+   - **THIRD: [Tier 3: Reader Pack]** (Late 90s/2000s common monthly issues, non-key background issues, shelf wear copies -> $6 - $10 each or $22 - $35 in 3-packs).
+3. STANDARDIZED TITLE FORMAT:
+   - Every item name in "lot_items" must be formatted as: '[Tier Name] Full Series - Exact Month Year (Vol/No) - Key Feature/Artist'.
 
-3. MEMORY DEN 3-TIER PROFITABILITY GROUPING STRATEGY:
-   Group magazines, books, and lot items by profitability into 3 pricing tiers for optimal physical booth ROI (Memory Den):
-   - **Tier 1: High Value / Rare Standouts** (Individual Sale): Bag & board premiere #1 issues, iconic cover artists (Moebius, Giger, Frazetta, Olivia, Corben), or rare 1st editions at **$25 - $65+ each**.
-   - **Tier 2: Mid-Tier Collectibles** (Individual or 2-3 Packs): Solid 80s/90s run issues and popular titles priced at **$12 - $22 each**.
-   - **Tier 3: Multi-Quantity Reading Copies** (Value Bundles): Standard reader copies bundled into 3-5 issue packs at **$24 - $45 per bundle** ($6-$8/unit) for fast booth turnover.
-   Incorporate this exact 3-tier merchandising recommendation in the "market_report.platform_rationale" and "purchase_strategy.advice".
-
-OUTPUT STRICT JSON format:
+OUTPUT STRICT JSON:
 {
-  "identity": "Unified lot identity (e.g. Vintage 90s Nike & Streetwear Apparel Collection)",
-  "title": "Comprehensive SEO title accurately listing key brand highlights, sizes, and lot count",
-  "keywords": ["Vintage", "Apparel", "Streetwear", "Collectibles", "Fashion"],
+  "identity": "Unified lot identity (e.g. Vintage 70s-90s Heavy Metal Magazine Collection)",
+  "title": "Comprehensive SEO title incorporating key issue dates, artist highlights, and lot count",
+  "keywords": ["Vintage", "Collectibles", "Magazines", "Fantasy Art"],
   "condition_notes": "Summary of overall condition across the collection",
   "country_of_origin": "USA",
   "red_flags": [],
   "price_breakdown": {
-    "mint": "$280 - $380",
-    "fair": "$180 - $260",
-    "poor": "$90 - $140",
-    "boutique_premium": "$220 - $320",
+    "mint": "$320 - $450",
+    "fair": "$220 - $310",
+    "poor": "$110 - $160",
+    "boutique_premium": "$260 - $360",
     "confidence": "High"
   },
   "purchase_strategy": {
@@ -367,30 +376,30 @@ OUTPUT STRICT JSON format:
     "current_asking_price": "${context?.cost ? `$${context.cost}` : '$50.00'}",
     "max_bid": 120,
     "max_landed_cost": 150,
-    "advice": "High profit potential by selling standout brand pieces individually and bundling basics."
+    "advice": "High profit potential: sell Tier 1 keys individually in booth showcase, multi-tag Tier 2 runs at $16/ea, and box Tier 3 readers in $22 3-packs."
   },
   "market_report": {
     "best_platform": "Memory Den Physical Booth & eBay / Poshmark",
-    "platform_rationale": "Standout brand pieces sell best individually in a booth or online; basics move fastest in curated bundles.",
-    "sell_through_velocity": "Fast to Moderate (1-3 weeks)",
-    "target_buyer": "Vintage fashion collectors, everyday buyers, retro enthusiasts",
+    "platform_rationale": "Standouts sell best in showcase; mid-tier runs move quickly with multi-quantity tags; readers clear fast in floor grab-bags.",
+    "sell_through_velocity": "Fast (1-2 weeks)",
+    "target_buyer": "Vintage pop culture collectors, fantasy art fans, booth flippers",
     "channels": [
-       { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
-       { "name": "eBay / Poshmark", "est_price": "$210.00", "net_payout": "~$165.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Items" }
+       { "name": "Memory Den Booth", "est_price": "$280.00", "net_payout": "~$225.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
+       { "name": "eBay / Online", "est_price": "$250.00", "net_payout": "~$195.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Items" }
     ]
   },
   "lot_items": [
     {
-      "name": "Vintage Nike Embroidered Swoosh Hoodie (Size L)",
-      "identity": "Nike Hoodie L",
+      "name": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "identity": "Heavy Metal Magazine Oct 1977",
       "condition": "Used/Good",
-      "estimated_value": "$45 - $65",
+      "estimated_value": "$35 - $65",
       "image_index": 0,
       "price_breakdown": {
-        "mint": "$75 - $100",
-        "fair": "$45 - $65",
-        "poor": "$20 - $35",
-        "boutique_premium": "$60 - $80"
+        "mint": "$65 - $95",
+        "fair": "$35 - $65",
+        "poor": "$18 - $30",
+        "boutique_premium": "$45 - $75"
       },
       "red_flags": []
     }
@@ -407,14 +416,17 @@ OUTPUT STRICT JSON format:
         const synthText = synthResult.response.text();
         const parsedSynth = cleanAndParseJSON(synthText);
 
-        // Ensure image_url is populated for each lot item from the image_index
+        // Map reconciled items and ensure image_url and tier sorting
         const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
             ? parsedSynth.lot_items.map((item: any) => {
                 const imgIdx = (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length) ? item.image_index : 0;
+                const isKey = item.name?.includes('Tier 1') || false;
+                const isReader = item.name?.includes('Tier 3') || false;
                 return {
                     name: item.name || item.identity || "Component Item",
                     identity: item.identity || item.name || "Component Item",
-                    estimated_value: item.estimated_value || item.price_breakdown?.fair || "$15 - $25",
+                    is_key_issue: isKey,
+                    estimated_value: item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22"),
                     condition: item.condition || "Used/Good",
                     image_index: imgIdx,
                     image_url: images[imgIdx]?.url || images[imgIdx]?.base64 || undefined,
@@ -432,6 +444,17 @@ OUTPUT STRICT JSON format:
                 price_breakdown: c.price_breakdown,
                 red_flags: c.red_flags || []
             }));
+
+        // Sort items by Tier order: Tier 1 -> Tier 2 -> Tier 3
+        finalLotItems.sort((a, b) => {
+            const getRank = (name: string) => {
+                if (name.includes('Tier 1')) return 1;
+                if (name.includes('Tier 2')) return 2;
+                if (name.includes('Tier 3')) return 3;
+                return 4;
+            };
+            return getRank(a.name || '') - getRank(b.name || '');
+        });
 
         return {
             ...parsedSynth,
