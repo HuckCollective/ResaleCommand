@@ -546,27 +546,28 @@
                                                     </div>
                                                 </div>
 
-                                                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                                                <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+                                                    <!-- Title & Swap -->
                                                     <div class="flex items-center justify-between gap-1.5 w-full">
-                                                        <div class="flex items-center gap-1 flex-1 min-w-0">
-                                                            <span class="text-error font-extrabold text-xs shrink-0">{{ idx + 1 }}.</span>
+                                                        <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                                            <span class="text-primary font-black text-xs shrink-0">{{ idx + 1 }}.</span>
                                                             <input 
                                                                 v-if="resultItem.name !== undefined"
                                                                 v-model="resultItem.name" 
-                                                                class="input input-xs input-ghost font-bold text-base-content leading-snug p-0 focus:input-bordered focus:px-2 w-full text-left truncate" 
+                                                                class="input input-xs bg-transparent font-bold text-xs sm:text-sm text-base-content hover:bg-base-200/70 focus:bg-base-200 px-1 py-0 rounded w-full truncate border-none focus:outline-none" 
                                                                 :placeholder="resultItem.title || resultItem.identity || 'Item Name'"
                                                             />
                                                             <input 
                                                                 v-else-if="resultItem.title !== undefined"
                                                                 v-model="resultItem.title" 
-                                                                class="input input-xs input-ghost font-bold text-base-content leading-snug p-0 focus:input-bordered focus:px-2 w-full text-left truncate" 
+                                                                class="input input-xs bg-transparent font-bold text-xs sm:text-sm text-base-content hover:bg-base-200/70 focus:bg-base-200 px-1 py-0 rounded w-full truncate border-none focus:outline-none" 
                                                                 :placeholder="resultItem.identity || 'Item Name'"
                                                             />
-                                                            <span v-else class="text-base-content font-bold leading-snug text-left truncate">{{ resultItem.identity || resultItem.item || 'Unknown Item' }}</span>
+                                                            <span v-else class="text-base-content font-bold text-xs sm:text-sm truncate">{{ resultItem.identity || resultItem.item || 'Unknown Item' }}</span>
                                                         </div>
                                                         
                                                         <!-- Photo Swap Controls -->
-                                                        <div class="flex items-center gap-0.5 shrink-0 bg-base-200/60 rounded px-1 py-0.5 border border-base-300/50">
+                                                        <div class="flex items-center gap-0.5 shrink-0 bg-base-200/80 rounded px-1 py-0.5 border border-base-300">
                                                             <button v-if="idx > 0" @click.stop="swapComponentPhotos(idx, idx - 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item above">
                                                                 <Icon icon="solar:arrow-up-linear" class="w-3.5 h-3.5" />
                                                             </button>
@@ -576,40 +577,34 @@
                                                         </div>
                                                     </div>
 
-                                                    <div class="flex">
-                                                        <span class="badge badge-outline badge-primary badge-xs py-0.5 px-1.5 font-semibold text-[10px]">{{ resultItem.condition || 'Used/Good' }}</span>
+                                                    <!-- Condition Line: Clean neutral badge + subtitle -->
+                                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                                        <span class="badge badge-neutral badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded">
+                                                            {{ (resultItem.condition || 'Used/Good').split(' - ')[0].replace(/^Used\//i, '') }}
+                                                        </span>
+                                                        <span v-if="(resultItem.condition || '').includes(' - ')" class="text-[11px] text-base-content/60 italic truncate max-w-full">
+                                                            {{ resultItem.condition.split(' - ').slice(1).join(' - ') }}
+                                                        </span>
                                                     </div>
 
-                                                    <!-- Price Breakdown with Clean Text Wrapping for Mobile -->
-                                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] opacity-80 border-t border-base-200 pt-1.5 mt-0.5 break-words">
-                                                        <template v-if="resultItem.price_breakdown?.poor">
-                                                            <span>Poor: <strong class="text-error font-mono">{{ formatPriceRange(resultItem.price_breakdown.poor) }}</strong></span>
-                                                            <span class="opacity-30">|</span>
-                                                        </template>
-                                                        <template v-if="resultItem.price_breakdown?.fair">
-                                                            <span>Fair: <strong class="text-primary font-mono">{{ formatPriceRange(resultItem.price_breakdown.fair) }}</strong></span>
-                                                            <span class="opacity-30">|</span>
-                                                        </template>
-                                                        <template v-if="resultItem.price_breakdown?.mint">
-                                                            <span>Mint: <strong class="text-success font-mono">{{ formatPriceRange(resultItem.price_breakdown.mint) }}</strong></span>
-                                                            <span class="opacity-30">|</span>
-                                                        </template>
-                                                        <template v-if="resultItem.price_breakdown?.boutique_premium">
-                                                            <span>Boutique: <strong class="text-secondary font-mono">{{ formatPriceRange(resultItem.price_breakdown.boutique_premium) }}</strong></span>
-                                                            <span class="opacity-30">|</span>
-                                                        </template>
-                                                        <template v-if="(!resultItem.price_breakdown?.poor && !resultItem.price_breakdown?.fair && !resultItem.price_breakdown?.mint) && resultItem.estimated_value">
-                                                            <span>Est. Resale: <strong class="text-primary font-mono">{{ formatPriceRange(resultItem.estimated_value) }}</strong></span>
-                                                            <span class="opacity-30">|</span>
-                                                        </template>
+                                                    <!-- Clean High-Contrast Price Badges -->
+                                                    <div class="flex flex-wrap items-center gap-1.5 text-[11px] pt-1 mt-0.5 border-t border-base-200/80">
+                                                        <span v-if="resultItem.price_breakdown?.fair" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
+                                                            Fair: <strong class="text-primary font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.fair) }}</strong>
+                                                        </span>
+                                                        <span v-if="resultItem.price_breakdown?.boutique_premium" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
+                                                            Boutique: <strong class="text-secondary font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.boutique_premium) }}</strong>
+                                                        </span>
+                                                        <span v-if="resultItem.price_breakdown?.mint" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
+                                                            Mint: <strong class="text-success font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.mint) }}</strong>
+                                                        </span>
+                                                        <span v-if="(!resultItem.price_breakdown?.fair && !resultItem.price_breakdown?.boutique_premium) && resultItem.estimated_value" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
+                                                            Est: <strong class="text-primary font-mono font-bold">{{ formatPriceRange(resultItem.estimated_value) }}</strong>
+                                                        </span>
                                                         
-                                                        <template v-if="editForm.cost && !isNaN(parseFloat(editForm.cost))">
-                                                            <span>Split Cost: <strong class="text-warning font-mono">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong></span>
-                                                            <template v-if="shippingCosts.total > 0">
-                                                                <span class="opacity-30">|</span>
-                                                                <span>Landed: <strong class="text-error font-mono">${{ ((parseFloat(editForm.cost) + shippingCosts.total) / scoutItemsArray.length).toFixed(2) }}</strong></span>
-                                                            </template>
-                                                        </template>
+                                                        <span v-if="editForm.cost && !isNaN(parseFloat(editForm.cost))" class="bg-warning/15 text-warning px-1.5 py-0.5 rounded font-medium ml-auto">
+                                                            Split Cost: <strong class="font-mono font-bold">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong>
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </li>
@@ -2224,7 +2219,9 @@ const analyzeExistingItem = async () => {
         }
 
         const totalPhotos = base64Images.length + remoteUrls.length;
-        const apiEndpoint = totalPhotos > 1 ? '/api/inspect-lot' : '/api/identify-item';
+        const isLot = (Number(editForm.quantity || props.item?.quantity || 1) > 1) || 
+                      (/\b(lot|bundle|collection|set\s+of|pack\s+of|pair)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
+        const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
         showLoader("Analyzing with AI Deep Research...", {
             step: `Step 1 of 4: Preparing & optimizing ${totalPhotos} photos...`,
@@ -2367,10 +2364,54 @@ const analyzeExistingItem = async () => {
                     report += `\n**Comparables:**\n`; 
                     item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status || 'Sold'}]\n`); 
                 }
-                if(item.keywords && item.keywords.length > 0) report += `\n**Keywords:** ${item.keywords.join(', ')}\n`;
                 scoutMdText.value = report.trim();
                 addToast({ type: 'success', message: 'AI Analysis complete!' });
             }
+        }
+        // C. Overarching Lot Report (Fallback when lot_items is empty or response is a single comprehensive appraisal object)
+        else if (data && (data.identity || data.title || data.price_breakdown || data.purchase_strategy || data.market_report)) {
+            scoutResult.value = data;
+            let desc = `--- 📦 LOT APPRAISAL & BOOTH STRATEGY ---\n\n`;
+            if (data.title) desc += `**Suggested Title:** ${data.title}\n\n`;
+            if (data.condition_notes) desc += `**Condition Overview:** ${data.condition_notes}\n\n`;
+
+            if (data.price_breakdown) {
+                desc += `**💰 Total Valuation:**\n`;
+                if (data.price_breakdown.mint) desc += `- **Mint / High-Grade:** ${data.price_breakdown.mint}\n`;
+                if (data.price_breakdown.fair) desc += `- **Fair / Market Average:** ${data.price_breakdown.fair}\n`;
+                if (data.price_breakdown.boutique_premium) desc += `- **Boutique / Antique Mall:** ${data.price_breakdown.boutique_premium}\n`;
+                if (data.price_breakdown.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
+                desc += `\n`;
+            }
+
+            if (data.market_report) {
+                desc += `**🏪 Market Strategy & Sales Channels:**\n`;
+                if (data.market_report.best_platform) desc += `- **Primary Recommendation:** ${data.market_report.best_platform}\n`;
+                if (data.market_report.platform_rationale) desc += `- **Strategy Rationale:** ${data.market_report.platform_rationale}\n`;
+                if (data.market_report.channels && Array.isArray(data.market_report.channels)) {
+                    data.market_report.channels.forEach(ch => {
+                        desc += `  * **${ch.name}:** ${ch.est_price} (${ch.recommendation || ''}) — Net Payout: ${ch.net_payout || ''}\n`;
+                    });
+                }
+                desc += `\n`;
+            }
+
+            if (data.purchase_strategy) {
+                desc += `**🎯 Sourcing & Profit Assessment:**\n`;
+                if (data.purchase_strategy.verdict) desc += `- **Verdict:** ${data.purchase_strategy.verdict}\n`;
+                if (data.purchase_strategy.advice) desc += `- **Advice:** ${data.purchase_strategy.advice}\n\n`;
+            }
+
+            if (data.red_flags && Array.isArray(data.red_flags) && data.red_flags.length > 0) {
+                desc += `**🚩 Inspection Flags:**\n`;
+                data.red_flags.forEach(flag => {
+                    desc += `- ${flag}\n`;
+                });
+                desc += `\n`;
+            }
+
+            scoutMdText.value = desc.trim();
+            addToast({ type: 'success', message: 'Lot valuation intelligence generated!' });
         }
     } catch (e) {
         if (e.name !== 'AbortError') {

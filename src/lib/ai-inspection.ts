@@ -318,11 +318,12 @@ ${JSON.stringify(candidateSummary, null, 2)}
 Organization Physical Booths & Locations:
 ${locationsSummary}
 
-CRITICAL RULES FOR "lot_items" STRUCTURING:
-0. FULL RECONCILIATION & ITEM CATALOGING:
-   - You MUST include EVERY distinct discovered piece/item in the "lot_items" array (${uniqueComponents.length} items identified).
-   - Every individual item MUST have its own entry in "lot_items" with its exact name/brand/size/model/date (e.g. "Vintage Nike Swoosh Hoodie (Size L)", "Levi's 501 Made in USA Denim Jeans 34x32", "Heavy Metal Magazine Spring 2005", etc.), estimated value, price_breakdown, condition, and image_index.
-   - NEVER omit or collapse items from the "lot_items" array — all ${uniqueComponents.length} items must be present so they appear in the Bundle Components interface.
+CRITICAL RULES FOR "lot_items" RECONCILIATION:
+0. EXACT PHYSICAL ITEM COUNT & DEDUPLICATION:
+   - Stated Listing Physical Quantity: ${context?.quantity || 'Auto-detect from photos'}.
+   - If the listing title or context specifies a count (e.g. "Set of 6 Books", "Lot of 6", or Quantity = 6), the "lot_items" array **MUST CONTAIN EXACTLY THAT NUMBER OF ITEMS** (e.g. exactly 6 items, NOT 7 or 8).
+   - Photos of page edges, book stacks, backs of books, or packaging/boxes are DETAIL/CONTEXT photos, NOT additional items! Never invent an extra item from a page edge or stack photo.
+   - If 6 distinct books are present in the lot, return EXACTLY the 6 distinct books in "lot_items".
 1. STANDOUT HIGH-VALUE KEYS:
    - Accurately identify standout high-value items (e.g. designer or vintage clothing, rare premiere issues, high-end electronics) and reflect their premium boutique price.
 2. ACCURATE PRICING & SALES STRATEGY:
