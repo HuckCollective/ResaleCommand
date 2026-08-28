@@ -2279,15 +2279,22 @@ const analyzeExistingItem = async () => {
         });
 
         progressTimer = setInterval(() => {
-            progressVal = Math.min(95, progressVal + 5);
-            let stepMsg = "Step 2 of 4: Scanning visual signatures & markings...";
-            if (progressVal >= 40 && progressVal < 70) {
-                stepMsg = "Step 3 of 4: Evaluating secondary market pricing & comps...";
-            } else if (progressVal >= 70) {
-                stepMsg = "Step 4 of 4: Structuring valuation matrix & market report...";
+            if (progressVal < 45) {
+                progressVal += 6;
+            } else if (progressVal < 75) {
+                progressVal += 4;
+            } else if (progressVal < 90) {
+                progressVal += 2;
+            }
+
+            let stepMsg = `Step 2 of 3: Scanning ${totalPhotos} photos with high-speed OCR...`;
+            if (progressVal >= 50 && progressVal < 80) {
+                stepMsg = "Step 2 of 3: Cataloging distinct issues & pricing tiers...";
+            } else if (progressVal >= 80) {
+                stepMsg = "Step 3 of 3: Consolidating lot appraisal & Memory Den booth strategy...";
             }
             updateLoader("Analyzing with AI Deep Research...", stepMsg, progressVal);
-        }, 1200);
+        }, 1000);
 
         const response = await fetch(apiEndpoint, {
             method: 'POST',

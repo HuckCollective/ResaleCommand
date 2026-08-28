@@ -113,7 +113,12 @@ export async function inspectSinglePhoto(
         };
     } else if (image.url) {
         try {
-            const fetchUrl = image.url.startsWith('http') ? image.url : `http://localhost:4321${image.url}`;
+            let fetchUrl = image.url.startsWith('http') ? image.url : `http://localhost:4321${image.url}`;
+            // High-speed Appwrite image pipeline: fetch optimized 1400px WebP preview instead of 8MB raw file
+            if (fetchUrl.includes('/storage/buckets/') && fetchUrl.includes('/view')) {
+                fetchUrl = fetchUrl.replace(/\/view(\?.*)?$/, '/preview?width=1400&height=1400&output=webp&quality=85');
+            }
+
             const headers: Record<string, string> = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
@@ -160,28 +165,27 @@ ${context?.title ? `Lot Title: ${context.title}` : ''}
 ${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
 
 TASK:
-1. READ ALL VISIBLE TEXT (OCR):
-   - Brand names, clothing tags, labels, sizes, materials (e.g. 100% Cotton, 100% Wool, Genuine Leather, Silk, Gore-Tex, Goodyear Welt), model numbers, dates, issue numbers, titles, barcodes, and maker signatures.
+1. READ ALL VISIBLE TEXT, TITLES & COVER BLURBS (OCR):
+   - Brand names, clothing tags, labels, sizes, materials, model numbers, dates, issue numbers, titles, barcodes, and maker signatures.
+   - COVER CALLOUTS & INTERVIEW BLURBS (CRITICAL):
+     Carefully scan and read smaller cover blurbs, banners, and callouts (e.g. "Tim Leary Interview", "Frank Frazetta - Fire and Ice", "Moebius", "Nicollet", "Death Dealer", "H.R. Giger", "Berni Wrightson", "Richard Corben", "Boris Vallejo", "Keepers of the Maser / Frezzato").
+   - If a piece features a famous artist, iconic character, or historical interview (like Tim Leary, Frazetta Fire and Ice, Moebius), ALWAYS mark 'is_key_issue: true' and assign to '[Tier 1: Standout Key]'.
 
 2. MULTI-CATEGORY TREND & STANDOUT VALUE IDENTIFICATION:
    Actively evaluate whether any item belongs to high-velocity resale trends, archival heritage, cult subcultures, or rare collectible categories:
-   - **Apparel & Workwear Standouts**:
-     * *Heritage & Vintage*: Carhartt (Detroit jackets, double-knee, Aztec/Santa Fe), Levi's (Made in USA, Orange Tab, Big E, selvedge, 501/517), Patagonia (Synchilla, Deep Pile, Retro-X fleece), The North Face (Nuptse 700, Mountain Light Gore-Tex), Pendleton (100% Wool Board Shirts), Filson, Champion Reverse Weave.
-     * *Trending Aesthetics & Contemporary*: Free People, Reformation, Lululemon (Align, Scuba, Define), Dôen, Realisation Par, Aritzia, Sezane, Arc'teryx, Stüssy.
-     * *Alt, Goth, Y2K & Grunge Subcultures*: Tripp NYC, Lip Service, Demonia, Killstar, Vivienne Westwood, vintage single-stitch band/tour tees, heavy leather motorcycle jackets.
-   - **Apparel & Workwear Standouts**: Carhartt, Levi's, Patagonia, The North Face, Pendleton, Filson, Arc'teryx, Stüssy.
-   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, Jadon/Sinclair platform, vintage 1460), Birkenstock (Boston clogs, Arizona, Shearling), Red Wing Heritage (Iron Ranger, Moc Toe), Blundstone, Salomon (XT-6, ACS Pro), New Balance (990v3/v5/v6, 1906, 2002R), Nike (Jordan 1/4, Dunk, ACG, Air Max 95/97).
+   - **Apparel & Workwear Standouts**: Carhartt, Levi's (Made in USA, Big E, Orange Tab), Patagonia (Synchilla, Retro-X), The North Face (Nuptse), Pendleton (100% Wool), Filson, Arc'teryx, Stüssy, Tripp NYC.
+   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, platform, 1460), Birkenstock (Boston, Arizona), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6), Nike (Jordan 1/4, Dunk).
    - **Books, RPGs, Comics & Magazines**:
      * Heavy Metal Magazine (1977 premiere #1, Moebius, H.R. Giger, Frazetta, Olivia, Richard Corben, Boris Vallejo, rare special editions).
-     * Dungeons & Dragons (TSR 1st Edition, 3.5e rare supplements, premium reprints), Frank Herbert Dune series, vintage sci-fi/fantasy first editions, graphic novel omnibuses.
+     * Dungeons & Dragons (TSR 1st Edition, 3.5e rare supplements), Frank Herbert Dune series, vintage sci-fi first editions.
    - **Electronics, Audio & Collectibles**:
-     * Vintage analog cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, vintage video games (Nintendo, Sega, PlayStation), LEGO Star Wars/Bionicle titans.
+     * Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, retro video games (Nintendo, Sega, PS1/PS2), LEGO titans.
 
 3. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
    - If this image shows multiple distinct items, extract each one into the "items" array.
    - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
    - Format "name" strictly with one of these 3 tier prefixes:
-     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (Keys, #1 issues, Moebius, Giger, Frazetta, Tim Leary, Nicollet -> $25 - $65+)
+     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (Keys, #1 issues, Moebius, Giger, Frazetta Fire & Ice, Tim Leary, Nicollet -> $25 - $65+)
      * '[Tier 2: Mid-Tier Run] Brand/Series - Date/Vol - Artist/Model' (Solid 80s/90s run issues, Frezzato, complete arcs -> $12 - $22)
      * '[Tier 3: Reader Pack] Brand/Series - Date/Vol - General Feature' (Late 90s/2000s common monthly issues, standard non-key readers, shelf wear -> $6 - $10)
 
@@ -266,9 +270,9 @@ export async function inspectLotWithGemini(
 
     if (onProgress) onProgress(`Step 1 of 3: Scanning ${images.length} photos with per-item OCR & tier classification...`, 15);
 
-    // 1. Inspect each photo in parallel batches of 8 for high throughput
+    // 1. Inspect all photos concurrently in full parallel batches of 25 for maximum speed
     const inspectionResults: any[] = [];
-    const batchSize = 8;
+    const batchSize = 25;
     for (let i = 0; i < images.length; i += batchSize) {
         const batch = images.slice(i, i + batchSize);
         const batchPromises = batch.map(img => inspectSinglePhoto(img, context));
@@ -390,18 +394,10 @@ OUTPUT STRICT JSON:
   },
   "lot_items": [
     {
-      "name": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
-      "identity": "Heavy Metal Magazine Oct 1977",
-      "condition": "Used/Good",
-      "estimated_value": "$35 - $65",
-      "image_index": 0,
-      "price_breakdown": {
-        "mint": "$65 - $95",
-        "fair": "$35 - $65",
-        "poor": "$18 - $30",
-        "boutique_premium": "$45 - $75"
-      },
-      "red_flags": []
+      "title": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "val": "$35 - $65",
+      "cond": "Good",
+      "img": 0
     }
   ]
 }
@@ -419,18 +415,46 @@ OUTPUT STRICT JSON:
         // Map reconciled items and ensure image_url and tier sorting
         const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
             ? parsedSynth.lot_items.map((item: any) => {
-                const imgIdx = (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length) ? item.image_index : 0;
-                const isKey = item.name?.includes('Tier 1') || false;
-                const isReader = item.name?.includes('Tier 3') || false;
+                const titleStr = item.title || item.name || item.identity || "Component Item";
+                const isKey = titleStr.includes('Tier 1') || item.is_key_issue || false;
+                const isReader = titleStr.includes('Tier 3') || false;
+                const valStr = item.val || item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22");
+                const condStr = item.cond || item.condition || "Used/Good";
+                const imgIdx = (typeof item.img === 'number' && item.img >= 0 && item.img < images.length)
+                    ? item.img
+                    : (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length ? item.image_index : 0);
+
+                let pb = item.price_breakdown;
+                if (!pb) {
+                    const matches = valStr.match(/\$?(\d+)\s*-\s*\$?(\d+)/);
+                    if (matches) {
+                        const low = parseInt(matches[1], 10);
+                        const high = parseInt(matches[2], 10);
+                        pb = {
+                            fair: `$${low} - $${high}`,
+                            mint: `$${Math.round(high * 1.35)} - $${Math.round(high * 1.6)}`,
+                            poor: `$${Math.max(1, Math.round(low * 0.5))} - $${Math.round(low * 0.75)}`,
+                            boutique_premium: `$${Math.round(high * 1.15)} - $${Math.round(high * 1.35)}`
+                        };
+                    } else {
+                        pb = {
+                            fair: valStr,
+                            mint: isKey ? "$65 - $95" : isReader ? "$10 - $15" : "$20 - $30",
+                            poor: isKey ? "$18 - $30" : isReader ? "$3 - $5" : "$8 - $12",
+                            boutique_premium: isKey ? "$45 - $75" : isReader ? "$8 - $12" : "$16 - $25"
+                        };
+                    }
+                }
+
                 return {
-                    name: item.name || item.identity || "Component Item",
-                    identity: item.identity || item.name || "Component Item",
+                    name: titleStr,
+                    identity: titleStr.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim(),
                     is_key_issue: isKey,
-                    estimated_value: item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22"),
-                    condition: item.condition || "Used/Good",
+                    estimated_value: valStr,
+                    condition: condStr,
                     image_index: imgIdx,
                     image_url: images[imgIdx]?.url || images[imgIdx]?.base64 || undefined,
-                    price_breakdown: item.price_breakdown,
+                    price_breakdown: pb,
                     red_flags: item.red_flags || []
                 };
             })
