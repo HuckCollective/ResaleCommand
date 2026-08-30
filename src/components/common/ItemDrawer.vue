@@ -492,10 +492,24 @@
                                         </div>
                                     </div>
 
-                                    <!-- Report Ready Badge -->
-                                    <span v-if="scoutResult" class="badge badge-xs badge-primary font-bold">Report Ready</span>
-                                    <span v-else-if="analyzing" class="badge badge-xs badge-warning font-bold animate-pulse">Analyzing...</span>
-                                    <span v-else class="badge badge-xs badge-ghost opacity-60">Not Scanned</span>
+                                    <div class="flex items-center gap-2">
+                                        <!-- Dedicated Re-Scan Button -->
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-xs btn-primary gap-1 font-bold shadow-xs hover:scale-105 transition-all" 
+                                            @click="analyzeExistingItem"
+                                            :disabled="analyzing"
+                                        >
+                                            <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
+                                            <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
+                                            <span>{{ scoutResult ? '⚡ Re-Scan with AI' : '⚡ Scan with AI' }}</span>
+                                        </button>
+
+                                        <!-- Report Ready Badge -->
+                                        <span v-if="scoutResult" class="badge badge-xs badge-primary font-bold">Report Ready</span>
+                                        <span v-else-if="analyzing" class="badge badge-xs badge-warning font-bold animate-pulse">Analyzing...</span>
+                                        <span v-else class="badge badge-xs badge-ghost opacity-60">Not Scanned</span>
+                                    </div>
                                 </div>
 
                                 <!-- Loading Animation -->
@@ -738,9 +752,13 @@
                                 </div>
 
                                 <!-- Empty State Prompt -->
-                                <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 opacity-60 text-xs space-y-1">
-                                    <Icon icon="solar:magic-stick-linear" class="w-6 h-6 mx-auto opacity-70" />
-                                    <p class="font-medium">No AI report yet. Click "AI Deep Research" below to appraise this item.</p>
+                                <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 text-xs space-y-2.5">
+                                    <Icon icon="solar:magic-stick-linear" class="w-6 h-6 mx-auto opacity-70 text-primary" />
+                                    <p class="font-medium opacity-70">No AI report yet. Scan your photos & market comps to appraise this lot.</p>
+                                    <button type="button" class="btn btn-sm btn-primary font-bold shadow-xs gap-1.5" @click="analyzeExistingItem" :disabled="analyzing">
+                                        <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                                        <span>⚡ Run AI Deep Scout</span>
+                                    </button>
                                 </div>
                             </div>
 
