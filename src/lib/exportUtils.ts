@@ -157,65 +157,56 @@ export function generatePoshmarkCsv(items: any[]): string {
 
 /**
  * Generate Ricochet Consign New Inventory Import CSV
- * Placeholder headers - User needs to provide exact template headers
+ * Exact official template matching ricoconsign.com (Consigned Inventory)
  */
 export function generateRicochetCsv(items: any[]): string {
-    // These are PLACEHOLDER headers. Ricochet is extremely strict and requires exact headers.
     const headers = [
-        'Product ID',
         'SKU',
-        'UPC',
-        'Name',
-        'Category',
-        'Collections',
-        'Brand',
-        'Split / Cost',
-        'Agreed Price',
-        'Aged Price',
-        'Tax Rate',
-        'Short description',
-        'Online Description',
-        'Consignor',
-        'Department',
-        'In stock',
+        'Item Title',
+        'Description ',
+        'Web Description',
+        'Price',
         'Quantity',
-        'Inventory',
-        'Consignor %'
+        'In-Stock Date',
+        'Category',
+        'Brand'
     ];
+
+    const todayStr = new Date().toLocaleDateString('en-US'); // e.g. 8/30/2026
 
     const rows = items.map(item => {
         let desc = item.conditionNotes || '';
+        let webDesc = item.marketDescription || '';
+        let brandStr = '';
+        let catStr = 'Vintage Collectibles';
+
         if (item.rawAnalysis) {
             try {
                 const ai = JSON.parse(item.rawAnalysis);
                 const aiObj = Array.isArray(ai) ? ai[0] : ai;
                 if (aiObj && aiObj.condition_notes) {
-                    desc = aiObj.condition_notes + '\n\n' + desc;
+                    desc = aiObj.condition_notes;
+                }
+                if (aiObj && aiObj.keywords && Array.isArray(aiObj.keywords) && aiObj.keywords.length > 0) {
+                    brandStr = aiObj.keywords[0];
+                    catStr = aiObj.keywords[1] || catStr;
                 }
             } catch (e) {}
         }
 
-        const price = item.resalePrice || item.estValue || '';
+        const price = item.resalePrice || item.estValue || '0';
+        const cleanPrice = typeof price === 'number' ? price.toFixed(2) : String(price).replace(/[^0-9.]/g, '') || '0.00';
+
         return [
-            '', // Product ID (leave blank for new items)
-            item.$id, // SKU
-            item.upc || '', // UPC
-            (item.title || '').substring(0, 80), // Name
-            '', // Category
-            '', // Collections
-            '', // Brand
-            item.cost || '0', // Split / Cost
-            price, // Agreed Price
-            price, // Aged Price
-            '', // Tax Rate
-            desc, // Short description
-            '', // Online Description
-            '', // Consignor
-            '', // Department
-            '', // In stock (Date)
+            item.upc || item.sku || item.$id, // SKU
+            (item.title || 'Inventory Item').substring(0, 100), // Item Title
+            desc.replace(/[\r\n]+/g, ' ').substring(0, 250), // Description 
+            (webDesc || desc).replace(/[\r\n]+/g, ' ').substring(0, 500), // Web Description
+            cleanPrice, // Price (no $)
             item.quantity || 1, // Quantity
-            'In Stock', // Inventory Status
-            '' // Consignor %
+            todayStr, // In-Stock Date
+            catStr, // Category
+            brandStr || 'Vintage' // Brand
         ];
     });
 
