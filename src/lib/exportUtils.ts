@@ -199,14 +199,14 @@ export function generateRicochetCsv(items: any[]): string {
 
         return [
             item.upc || item.sku || item.$id, // SKU
-            (item.title || 'Inventory Item').substring(0, 100), // Item Title
-            desc.replace(/[\r\n]+/g, ' ').substring(0, 250), // Description 
-            (webDesc || desc).replace(/[\r\n]+/g, ' ').substring(0, 500), // Web Description
+            (item.title || 'Inventory Item').replace(/["\\]/g, '').substring(0, 100), // Item Title
+            desc.replace(/[\r\n"\\]+/g, ' ').substring(0, 250), // Description 
+            (webDesc || desc).replace(/[\r\n"\\]+/g, ' ').substring(0, 500), // Web Description
             cleanPrice, // Price (no $)
             item.quantity || 1, // Quantity
             todayStr, // In-Stock Date
-            catStr, // Category
-            brandStr || 'Vintage' // Brand
+            '', // Category (leave blank so Ricochet uses default/consignor category without format errors)
+            (brandStr || 'Vintage').replace(/["\\]/g, '') // Brand
         ];
     });
 
