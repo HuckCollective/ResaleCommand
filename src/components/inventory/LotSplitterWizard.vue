@@ -883,21 +883,19 @@ async function executeSplit() {
           const mainImgId = extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
           const individualPrice = item.customPrice || tier.targetPrice;
           await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
-            tenantId: orgId,
+            tenantId: orgId || undefined,
             upc: itemUpc,
-            title: item.title,
+            title: (item.title || 'Split Item').slice(0, 250),
+            identity: (item.title || itemUpc).slice(0, 950),
             cost: Number(unitCost.toFixed(2)),
-            purchasePrice: Number(unitCost.toFixed(2)),
             resalePrice: Number(individualPrice.toFixed(2)),
             quantity: 1,
-            condition: item.condition || 'Used/Good',
-            conditionNotes: `Split from master lot: ${parent.title || 'Lot'}`,
+            conditionNotes: `Split from master lot: ${parent.title || 'Lot'}`.slice(0, 950),
             imageId: mainImgId || undefined,
             storageLocation: parent.storageLocation || 'Unsorted',
             sourcingLocation: parent.sourcingLocation || '',
-            parentLotId: parent.$id || parent.id || undefined,
-            purchaseId: parent.purchaseId || undefined,
-            status: 'active'
+            parentLotId: parentDocId || undefined,
+            status: 'placed'
           });
           createdCount++;
         }
@@ -908,21 +906,19 @@ async function executeSplit() {
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
-          tenantId: orgId,
+          tenantId: orgId || undefined,
           upc: itemUpc,
-          title: `${tier.name} (Lot of ${tierItems.length})`,
+          title: `${tier.name} (Lot of ${tierItems.length})`.slice(0, 250),
+          identity: `${tier.name} (Lot of ${tierItems.length})`.slice(0, 950),
           cost: Number(unitCost.toFixed(2)),
-          purchasePrice: Number(unitCost.toFixed(2)),
           resalePrice: Number(tier.targetPrice.toFixed(2)),
           quantity: tierItems.length,
-          condition: 'Used/Good',
-          conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`,
+          conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
           storageLocation: parent.storageLocation || 'Unsorted',
           sourcingLocation: parent.sourcingLocation || '',
-          parentLotId: parent.$id || parent.id || undefined,
-          purchaseId: parent.purchaseId || undefined,
-          status: 'active'
+          parentLotId: parentDocId || undefined,
+          status: 'placed'
         });
         createdCount++;
       } else if (tier.mode === 'bundle') {
@@ -934,21 +930,19 @@ async function executeSplit() {
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
-          tenantId: orgId,
+          tenantId: orgId || undefined,
           upc: itemUpc,
-          title: `${tier.name} - Bundle Set of ${tierItems.length}`,
+          title: `${tier.name} - Bundle Set of ${tierItems.length}`.slice(0, 250),
+          identity: `${tier.name} - Bundle Set of ${tierItems.length}`.slice(0, 950),
           cost: Number(totalBundleCost.toFixed(2)),
-          purchasePrice: Number(totalBundleCost.toFixed(2)),
           resalePrice: Number(bundleTotal.toFixed(2)),
           quantity: 1,
-          condition: 'Used/Good',
-          conditionNotes: `Curated Mini-Lot Set:\n${issueListNotes}`,
+          conditionNotes: `Curated Mini-Lot Set:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
           storageLocation: parent.storageLocation || 'Unsorted',
           sourcingLocation: parent.sourcingLocation || '',
-          parentLotId: parent.$id || parent.id || undefined,
-          purchaseId: parent.purchaseId || undefined,
-          status: 'active'
+          parentLotId: parentDocId || undefined,
+          status: 'placed'
         });
         createdCount++;
       }
