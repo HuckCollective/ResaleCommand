@@ -514,10 +514,9 @@
                                                 <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
                                                 Bundle Components ({{ scoutItemsArray.length }} Items)
                                             </span>
-                                            <button v-if="item" type="button" class="btn btn-xs btn-primary font-bold shadow-xs gap-1" @click="deconstructAiLot" :disabled="extractingLot">
-                                                <span v-if="extractingLot" class="loading loading-spinner loading-xs"></span>
-                                                <Icon v-else icon="solar:scissors-linear" class="w-3.5 h-3.5" />
-                                                <span>⚡ Deconstruct Lot</span>
+                                            <button v-if="item" type="button" class="btn btn-xs btn-primary font-bold shadow-xs gap-1" @click="isLotSplitterOpen = true">
+                                                <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
+                                                <span>✨ Multi-Tier Lot Splitter</span>
                                             </button>
                                         </div>
 
