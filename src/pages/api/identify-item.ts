@@ -404,10 +404,10 @@ export const ALL: APIRoute = async ({ request }) => {
                     await fetchAndAddImage(json.imageUrl);
                 }
                 
-                // Allow passing an array of remote URLs (e.g. from Appwrite)
+                // Allow passing an array of remote URLs (e.g. from Appwrite) - Full Lot Support up to 40 photos
                 if (Array.isArray(json.remoteImageUrls)) {
-                    scrapedImages = json.remoteImageUrls.slice(0, 12);
-                    const promises = json.remoteImageUrls.slice(0, 12 - imageParts.length).map((imgUrl: string) => fetchAndAddImage(imgUrl));
+                    scrapedImages = json.remoteImageUrls.slice(0, 40);
+                    const promises = json.remoteImageUrls.slice(0, 40 - imageParts.length).map((imgUrl: string) => fetchAndAddImage(imgUrl));
                     await Promise.all(promises);
                 }
                 
@@ -508,7 +508,7 @@ export const ALL: APIRoute = async ({ request }) => {
                              
                              if (imgUrls.length > 0) {
                                  successfulImageUrl = imgUrls[0];
-                                 scrapedImages = imgUrls.slice(0, 5);
+                                 scrapedImages = imgUrls.slice(0, 40);
                              }
 
                              // Calculate Shipping if zipCode is provided
@@ -570,9 +570,9 @@ export const ALL: APIRoute = async ({ request }) => {
                              // Prepend to user notes
                              userNotes = contextText + userNotes;
                              
-                             // ONLY fetch external images if the client didn't provide any
+                             // Fetch all external lot photos up to 40 images for deep multi-issue analysis
                              if (imageParts.length === 0 && imgUrls.length > 0) {
-                                 const promises = imgUrls.slice(0, 3).map(u => fetchAndAddImage(u));
+                                 const promises = imgUrls.slice(0, 40).map(u => fetchAndAddImage(u));
                                  await Promise.all(promises);
                              }
                         } else {
