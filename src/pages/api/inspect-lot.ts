@@ -9,31 +9,43 @@ export const POST: APIRoute = async ({ request }) => {
         const { images, remoteImageUrls, base64Images, title, notes, cost, quantity, sourcingLocation, locations } = body;
 
         const preparedImages: InspectionImage[] = [];
+        let imgIdx = 0;
 
+        // 1. Process direct base64 / raw images
         if (Array.isArray(images) && images.length > 0) {
-            images.forEach((img: any, idx: number) => {
+            images.forEach((img: any) => {
                 if (typeof img === 'string') {
                     if (img.startsWith('data:')) {
-                        preparedImages.push({ base64: img, index: idx });
+                        preparedImages.push({ base64: img, index: imgIdx++ });
                     } else {
-                        preparedImages.push({ url: img, index: idx });
+                        preparedImages.push({ url: img, index: imgIdx++ });
                     }
                 } else if (img && typeof img === 'object') {
                     preparedImages.push({
                         url: img.url,
                         base64: img.base64,
                         mimeType: img.mimeType,
-                        index: img.index !== undefined ? img.index : idx
+                        index: img.index !== undefined ? img.index : imgIdx++
                     });
                 }
             });
-        } else if (Array.isArray(remoteImageUrls) && remoteImageUrls.length > 0) {
-            remoteImageUrls.forEach((url: string, idx: number) => {
-                preparedImages.push({ url, index: idx });
+        }
+
+        // 2. Process remote gallery URLs (e.g. from Appwrite / S3)
+        if (Array.isArray(remoteImageUrls) && remoteImageUrls.length > 0) {
+            remoteImageUrls.forEach((url: string) => {
+                if (url && typeof url === 'string' && !preparedImages.some(p => p.url === url)) {
+                    preparedImages.push({ url, index: imgIdx++ });
+                }
             });
-        } else if (Array.isArray(base64Images) && base64Images.length > 0) {
-            base64Images.forEach((base64: string, idx: number) => {
-                preparedImages.push({ base64, index: idx });
+        }
+
+        // 3. Process explicit base64Images array if provided
+        if (Array.isArray(base64Images) && base64Images.length > 0) {
+            base64Images.forEach((base64: string) => {
+                if (base64 && !preparedImages.some(p => p.base64 === base64)) {
+                    preparedImages.push({ base64, index: imgIdx++ });
+                }
             });
         }
 

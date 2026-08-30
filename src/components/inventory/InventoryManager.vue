@@ -2879,9 +2879,8 @@ const submitCombine = async () => {
             .map(i => `[Merged Item: ${i.title} - Cost: $${Number(i.cost || 0).toFixed(2)}, Qty: ${i.quantity || 1}]\n${i.conditionNotes || ''}`.trim())
             .filter(n => n.length > 0);
         
-        if (otherNotesList.length > 0) {
-            combinedNotes += `\n\n--- MERGED ITEMS NOTES ---\n` + otherNotesList.join('\n\n');
-        }
+        // Clean sourcing URL from combined notes so AI scans strictly use the combined photo gallery
+        combinedNotes = combinedNotes.replace(/Location:\s*https?:\/\/[^\s\n]+/gi, '').trim();
 
         // Calculate combined resale price
         const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.listPrice || 0) || 0), 0);
@@ -2891,14 +2890,14 @@ const submitCombine = async () => {
             cost: combineCost.value,
             resalePrice: totalResale ? totalResale.toFixed(2) : undefined,
             status: primaryItem.status || 'acquired',
-            sourcingLocation: primaryItem.sourcingLocation || 'Combined Lot',
+            sourcingLocation: 'Combined Lot', // Fresh custom lot: no old auction URL
             storageLocation: primaryItem.storageLocation,
             imageId: mainImageId,
             galleryImageIds: combinedGallery,
             keywords: Array.from(new Set(items.flatMap(i => i.keywords || []))),
             quantity: combineTotalUnits.value,
             parentLotId: null,
-            rawAnalysis: primaryItem.rawAnalysis || null
+            rawAnalysis: null // Clear stale analysis so AI runs a fresh comprehensive lot appraisal
         };
         
         const combinedLotDoc = await saveItemToInventory(

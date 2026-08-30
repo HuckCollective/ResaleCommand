@@ -167,27 +167,29 @@ ${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
 TASK:
 1. READ ALL VISIBLE TEXT, TITLES & COVER BLURBS (OCR):
    - Brand names, clothing tags, labels, sizes, materials, model numbers, dates, issue numbers, titles, barcodes, and maker signatures.
-   - COVER CALLOUTS & INTERVIEW BLURBS (CRITICAL):
-     Carefully scan and read smaller cover blurbs, banners, and callouts (e.g. "Tim Leary Interview", "Frank Frazetta - Fire and Ice", "Moebius", "Nicollet", "Death Dealer", "H.R. Giger", "Berni Wrightson", "Richard Corben", "Boris Vallejo", "Keepers of the Maser / Frezzato").
-   - If a piece features a famous artist, iconic character, or historical interview (like Tim Leary, Frazetta Fire and Ice, Moebius), ALWAYS mark 'is_key_issue: true' and assign to '[Tier 1: Standout Key]'.
+   - COVER CALLOUTS, ARTISTS & INTERVIEW BLURBS (CRITICAL):
+     Carefully scan and read all cover blurbs, banner text, and artist credits (e.g. "Tim Leary Interview", "Frank Frazetta - Fire and Ice", "Moebius", "Nicollet", "Death Dealer", "H.R. Giger", "Berni Wrightson", "Richard Corben", "Boris Vallejo", "Simon Bisley", "Olivia", "Enki Bilal", "Philippe Druillet", "Juan Gimenez", "Paolo Eleuteri Serpieri", "Milo Manara", "Frezzato", "Chris Achilleos", "Angus McKie").
+   - VINTAGE RARITY RULE:
+     * ANY 1977–1983 early vintage issue (Vol 1 - Vol 7) is inherently rare and sought-after. ALWAYS classify as '[Tier 1: Standout Key]'.
+     * ANY issue featuring iconic artists or cultural interviews (Tim Leary, Frazetta, Moebius, Corben, Giger, Bisley, Manara, Serpieri) MUST be classified as '[Tier 1: Standout Key]'.
 
 2. MULTI-CATEGORY TREND & STANDOUT VALUE IDENTIFICATION:
    Actively evaluate whether any item belongs to high-velocity resale trends, archival heritage, cult subcultures, or rare collectible categories:
-   - **Apparel & Workwear Standouts**: Carhartt, Levi's (Made in USA, Big E, Orange Tab), Patagonia (Synchilla, Retro-X), The North Face (Nuptse), Pendleton (100% Wool), Filson, Arc'teryx, Stüssy, Tripp NYC.
-   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, platform, 1460), Birkenstock (Boston, Arizona), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6), Nike (Jordan 1/4, Dunk).
+   - **Apparel & Workwear Standouts**: Carhartt (Detroit jackets, double-knee), Levi's (Made in USA, Big E, Orange Tab, 501), Patagonia (Synchilla, Retro-X, Deep Pile), The North Face (1996 Nuptse), Pendleton (100% Virgin Wool board shirts), Filson (Mackinaw), Arc'teryx, Stüssy, Tripp NYC.
+   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, platform, 1460, Mary Janes), Birkenstock (Boston, Arizona suede), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6, 1906R), Nike (Jordan 1/4, Dunk, ACG).
    - **Books, RPGs, Comics & Magazines**:
-     * Heavy Metal Magazine (1977 premiere #1, Moebius, H.R. Giger, Frazetta, Olivia, Richard Corben, Boris Vallejo, rare special editions).
-     * Dungeons & Dragons (TSR 1st Edition, 3.5e rare supplements), Frank Herbert Dune series, vintage sci-fi first editions.
+     * Heavy Metal Magazine: 1977 premiere #1, 1970s/80s golden era (Moebius, Giger, Frazetta, Olivia, Corben, Vallejo, Manara, Serpieri, Bisley, special editions).
+     * Dungeons & Dragons (TSR 1st/2nd Edition, 3.5e rare supplements), Frank Herbert Dune vintage paperbacks, vintage sci-fi first editions.
    - **Electronics, Audio & Collectibles**:
-     * Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, retro video games (Nintendo, Sega, PS1/PS2), LEGO titans.
+     * Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica, Yashica T4), Sony Walkman, retro video games (Nintendo NES/SNES/N64, Sega, PS1/PS2, Game Boy), LEGO modulars/titans.
 
 3. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
    - If this image shows multiple distinct items, extract each one into the "items" array.
    - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
    - Format "name" strictly with one of these 3 tier prefixes:
-     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (Keys, #1 issues, Moebius, Giger, Frazetta Fire & Ice, Tim Leary, Nicollet -> $25 - $65+)
-     * '[Tier 2: Mid-Tier Run] Brand/Series - Date/Vol - Artist/Model' (Solid 80s/90s run issues, Frezzato, complete arcs -> $12 - $22)
-     * '[Tier 3: Reader Pack] Brand/Series - Date/Vol - General Feature' (Late 90s/2000s common monthly issues, standard non-key readers, shelf wear -> $6 - $10)
+     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (1977-1983 issues, #1s, iconic artists Moebius/Giger/Frazetta/Corben/Bisley/Leary/Manara -> $28 - $65+)
+     * '[Tier 2: Mid-Tier Run] Brand/Series - Date/Vol - Artist/Storyline' (Solid 1984-1996 run issues, Frezzato, Druillet, Gimenez, Caza, complete storylines -> $14 - $24)
+     * '[Tier 3: Reader Pack] Brand/Series - Date/Vol - General Feature' (Late 1999-2015 common monthly back issues, or copies with noticeable cover wear/creasing -> $6 - $10)
 
 OUTPUT STRICT JSON:
 {
