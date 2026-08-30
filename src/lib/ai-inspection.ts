@@ -332,8 +332,10 @@ export async function inspectLotWithGemini(
     const candidateSummary = uniqueComponents.map((c, i) => ({
         index: i + 1,
         title: c.name || c.identity,
+        is_standout_key: c.is_key_issue || c.name?.includes('Tier 1') || false,
         condition: c.condition,
-        estimated_value: c.estimated_value
+        estimated_value: c.estimated_value,
+        detected_text: c.detected_text || ''
     }));
 
     const synthesisPrompt = `
@@ -354,14 +356,14 @@ ${locationsSummary}
 CRITICAL RECONCILIATION & TIER SORTING RULES:
 1. PRESERVE DETECTED ISSUES & PREVENT DOWNGRADING STANDOUT KEYS:
    - You MUST preserve all specific issues, dates, and artist highlights detected in the raw photo scans. Do NOT replace them with generic placeholder text.
-   - DO NOT downgrade Tier 1 Standout Keys into Tier 3 Readers!
-   - Every issue from 1977–1983 (Vol 1 - Vol 7) or featuring Moebius, Frazetta, H.R. Giger, Tim Leary, Richard Corben, Boris Vallejo, Olivia, Simon Bisley, Milo Manara, Serpieri, or Enki Bilal MUST be kept in **[Tier 1: Standout Key]** ($28 - $65+).
+   - DO NOT downgrade items marked 'is_standout_key: true' into Tier 3 Readers!
+   - Every issue with famous artists, cultural interviews, rare brands, or early golden era dates MUST be kept in **[Tier 1: Standout Key]** ($28 - $65+).
 2. MERGE DUPLICATE PHOTO DETECTIONS TO EXACT PHYSICAL COUNT:
    - Consolidate and merge multi-photo duplicates down to the EXACT physical count of distinct items (approx ${context?.quantity || '30-35'} items).
 3. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
-   - **FIRST: [Tier 1: Standout Key]** (1977-1983 golden era issues, #1s, legendary artists & historical interviews -> $28 - $65+ each).
-   - **SECOND: [Tier 2: Mid-Tier Run]** (Solid 1984-1996 regular issues, Frezzato Keepers of the Maser, complete story arcs -> $14 - $24 each).
-   - **THIRD: [Tier 3: Reader Pack]** (ONLY late 1999-2010s common monthly issues or copies with noticeable cover creases/shelf wear -> $6 - $10 each).
+   - **FIRST: [Tier 1: Standout Key]** (Rare vintage, #1s, iconic artists/brands, top trending items -> $28 - $65+ each).
+   - **SECOND: [Tier 2: Mid-Tier Run]** (Solid regular run issues, core brand staples, complete story arcs -> $14 - $24 each).
+   - **THIRD: [Tier 3: Reader Pack]** (ONLY common mass-market back issues or copies with noticeable cover creases/shelf wear -> $6 - $10 each).
 4. STANDARDIZED TITLE FORMAT:
    - Every item name in "lot_items" must be formatted as: '[Tier Name] Full Series - Exact Month Year (Vol/No) - Key Feature/Artist'.
 
@@ -420,14 +422,26 @@ OUTPUT STRICT JSON:
         // Map reconciled items and ensure image_url and tier sorting
         const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
             ? parsedSynth.lot_items.map((item: any) => {
-                const titleStr = item.title || item.name || item.identity || "Component Item";
-                const isKey = titleStr.includes('Tier 1') || item.is_key_issue || false;
-                const isReader = titleStr.includes('Tier 3') || false;
-                const valStr = item.val || item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22");
-                const condStr = item.cond || item.condition || "Used/Good";
+                let titleStr = item.title || item.name || item.identity || "Component Item";
                 const imgIdx = (typeof item.img === 'number' && item.img >= 0 && item.img < images.length)
                     ? item.img
                     : (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length ? item.image_index : 0);
+
+                // Match with raw component detection to ensure zero standout loss
+                const rawMatch = uniqueComponents.find((c: any) => c.image_index === imgIdx) || uniqueComponents[imgIdx];
+                const rawWasKey = rawMatch?.is_key_issue || rawMatch?.name?.includes('Tier 1');
+                
+                let isKey = titleStr.includes('Tier 1') || item.is_key_issue || rawWasKey || false;
+                
+                // If raw detection was a standout key, enforce Tier 1 title & valuation
+                if (rawWasKey && !titleStr.includes('Tier 1')) {
+                    titleStr = `[Tier 1: Standout Key] ${titleStr.replace(/\[Tier \d[^\]]*\]\s*/i, '')}`;
+                    isKey = true;
+                }
+
+                let isReader = !isKey && titleStr.includes('Tier 3');
+                let valStr = item.val || item.estimated_value || (isKey ? (rawMatch?.estimated_value || "$28 - $65") : isReader ? "$6 - $10" : "$14 - $24");
+                const condStr = item.cond || item.condition || rawMatch?.condition || "Used/Good";
 
                 let pb = item.price_breakdown;
                 if (!pb) {
