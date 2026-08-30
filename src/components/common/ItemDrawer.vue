@@ -68,6 +68,17 @@
                                         Item Title & Identity
                                     </label>
                                     <div class="flex items-center gap-1.5">
+                                        <!-- Persistent Multi-Tier Lot Splitter Button -->
+                                        <button 
+                                            v-if="props.item && (Number(editForm.quantity || props.item.quantity || 1) > 1 || (scoutItemsArray && scoutItemsArray.length > 1) || editForm.title?.toLowerCase().includes('lot') || editForm.title?.toLowerCase().includes('bundle'))"
+                                            type="button" 
+                                            class="btn btn-xs btn-primary gap-1 font-bold shadow-xs hover:scale-105 transition-all"
+                                            @click="isLotSplitterOpen = true"
+                                        >
+                                            <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
+                                            <span>✨ Multi-Tier Splitter</span>
+                                        </button>
+
                                         <span v-if="props.item?.sku || props.item?.upc" class="badge badge-sm font-mono font-bold bg-base-300">
                                             {{ props.item.sku || props.item.upc }}
                                         </span>
@@ -1322,11 +1333,16 @@ const scoutItemsArray = computed(() => {
     if (scoutResult.value.lot_items && Array.isArray(scoutResult.value.lot_items)) {
         return scoutResult.value.lot_items;
     }
-    if (Array.isArray(scoutResult.value) && scoutResult.value.length === 1 && scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
-        return scoutResult.value[0].lot_items;
+    if (Array.isArray(scoutResult.value)) {
+        if (scoutResult.value.length === 1 && scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
+            return scoutResult.value[0].lot_items;
+        }
+        if (scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
+            return scoutResult.value[0].lot_items;
+        }
+        return scoutResult.value;
     }
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) return scoutResult.value.items;
-    if (Array.isArray(scoutResult.value)) return scoutResult.value;
     return [scoutResult.value];
 });
 
@@ -1905,7 +1921,7 @@ const initForm = () => {
         if (i.rawAnalysis) {
             try {
                 const parsed = JSON.parse(i.rawAnalysis);
-                scoutResult.value = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
+                scoutResult.value = parsed;
             } catch (e) {}
         }
 
