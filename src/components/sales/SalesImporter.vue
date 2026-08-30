@@ -25,7 +25,7 @@
 
         <input 
           type="file" 
-          accept=".csv" 
+          accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
           class="file-input file-input-bordered file-input-primary w-full max-w-xs" 
           @change="handleFileUpload" 
           :disabled="isProcessing || platform !== 'memoryden'"

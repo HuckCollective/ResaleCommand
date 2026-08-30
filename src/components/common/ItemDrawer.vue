@@ -1010,6 +1010,14 @@
                     <button>close</button>
                 </form>
             </dialog>
+
+            <!-- Dynamic Lot Splitter Wizard -->
+            <LotSplitterWizard 
+                :isOpen="isLotSplitterOpen" 
+                :lotItem="lotSplitterItemData" 
+                @close="isLotSplitterOpen = false" 
+                @completed="onLotSplitCompleted" 
+            />
         </div>
     </Teleport>
 </template>
@@ -1021,6 +1029,7 @@ import ScannerWidget from './ScannerWidget.vue';
 import TagInput from './TagInput.vue';
 import MultiSelectDropdown from './MultiSelectDropdown.vue';
 import SingleSelectDropdown from './SingleSelectDropdown.vue';
+import LotSplitterWizard from '../inventory/LotSplitterWizard.vue';
 import { saveItemToInventory, getCollectionId } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
@@ -1094,6 +1103,28 @@ const scoutTab = ref('edit');
 const processing = ref(false);
 const isAcquisitionUnlocked = ref(false);
 const showMdModal = ref(false);
+const isLotSplitterOpen = ref(false);
+
+const lotSplitterItemData = computed(() => {
+    if (!props.item) return null;
+    return {
+        ...props.item,
+        cost: editForm.cost || props.item.cost,
+        purchasePrice: editForm.purchasePrice || props.item.purchasePrice,
+        title: editForm.title || props.item.title,
+        quantity: editForm.quantity || props.item.quantity,
+        rawAnalysis: scoutResult.value || props.item.rawAnalysis,
+        components: (scoutItemsArray.value && scoutItemsArray.value.length > 0) ? scoutItemsArray.value : props.item.components,
+        images: (allAvailableGalleryUrls.value && allAvailableGalleryUrls.value.length > 0) ? allAvailableGalleryUrls.value : props.item.images
+    };
+});
+
+const onLotSplitCompleted = async () => {
+    isLotSplitterOpen.value = false;
+    emit('save');
+    emit('uncombined');
+    closeDrawer();
+};
 
 const openMdModal = () => {
     if (scoutMdText.value) {
@@ -2537,50 +2568,9 @@ const createChildItem = async () => {
     }
 };
 
-const deconstructAiLot = async () => {
-    if (!props.item || !scoutItemsArray.value || scoutItemsArray.value.length === 0) return;
-    extractingLot.value = true;
-    try {
-        const count = scoutItemsArray.value.length;
-        const totalCost = parseFloat(editForm.cost || 0);
-        const unitCost = count > 0 ? parseFloat((totalCost / count).toFixed(2)) : 0;
-
-        for (const [idx, lotItem] of scoutItemsArray.value.entries()) {
-            const title = lotItem.name || lotItem.identity || lotItem.title || `Item ${idx + 1}`;
-            const estVal = parsePrice(lotItem.estimated_value || lotItem.price_breakdown?.fair || 0);
-
-            const extraData = {
-                cost: unitCost,
-                resalePrice: estVal || 0,
-                status: 'acquired',
-                sourcingLocation: editForm.sourcingLocation,
-                orderId: editForm.orderId,
-                storageLocation: editForm.storageLocation,
-                quantity: 1,
-                parentLotId: props.item.$id,
-                purchaseId: props.item.purchaseId || null
-            };
-
-            await saveItemToInventory(
-                { 
-                    title: title, 
-                    identity: Math.random().toString(36).substring(2, 10), 
-                    condition_notes: `AI Lot Extraction (${idx + 1}/${count}) from ${props.item.title || props.item.$id}` 
-                },
-                null,
-                extraData,
-                currentTeam.value?.$id
-            );
-        }
-
-        mainTab.value = 'lot';
-        await fetchLotChildren();
-        addToast({ type: 'success', message: `Successfully deconstructed ${count} items into inventory!` });
-    } catch (e) {
-        addToast({ type: 'error', message: 'Failed to deconstruct lot: ' + e.message });
-    } finally {
-        extractingLot.value = false;
-    }
+const deconstructAiLot = () => {
+    if (!props.item) return;
+    isLotSplitterOpen.value = true;
 };
 
 const sellOneQuantity = async () => {

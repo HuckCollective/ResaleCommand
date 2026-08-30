@@ -7,22 +7,25 @@
             <a class="tab rounded-full" :class="{ 'tab-active': importMethod === 'paste' }" @click="importMethod = 'paste'">Paste Text</a>
         </div>
 
-        <!-- Option A: File -->
+        <!-- Option A: File (Mobile-First Native Label) -->
         <div v-if="importMethod === 'file'" class="flex-1 flex flex-col items-center justify-center space-y-4">
-            <!-- Hidden file input triggered by button ref -->
-            <input type="file" ref="fileInputRef" class="hidden" @change="handleFileUpload" />
-            <button
-                type="button"
-                @click="fileInputRef?.click()"
-                class="w-full flex flex-col items-center justify-center px-6 pt-8 pb-8 border-2 border-primary border-dashed rounded-xl cursor-pointer hover:bg-base-200 active:bg-base-300 transition-colors gap-3"
+            <label
+                class="w-full flex flex-col items-center justify-center px-6 pt-8 pb-8 border-2 border-primary border-dashed rounded-xl cursor-pointer hover:bg-base-200 active:bg-base-300 transition-colors gap-3 select-none"
             >
+                <input 
+                    type="file" 
+                    ref="fileInputRef" 
+                    class="sr-only" 
+                    @change="handleFileUpload" 
+                    accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
+                />
                 <Icon icon="solar:upload-linear" class="h-12 w-12 text-primary" />
                 <div class="text-center">
                     <div class="font-bold text-primary text-base">Tap to select CSV file</div>
-                    <p class="text-xs text-gray-400 mt-1">ShopGoodwill Exports</p>
+                    <p class="text-xs text-gray-400 mt-1">ShopGoodwill Exports (.csv, .xlsx)</p>
                 </div>
                 <div v-if="selectedFileName" class="badge badge-primary badge-sm mt-1">{{ selectedFileName }}</div>
-            </button>
+            </label>
         </div>
 
         <!-- Option B: Paste -->

@@ -2219,8 +2219,45 @@ const submitCheckout = async () => {
 };
 
 //---------------------------------------------------------
-// EDIT DRAWER LOGIC
+// EDIT DRAWER LOGIC & URL DEEP-LINKING (?upc=HUCK-2251)
 //---------------------------------------------------------
+
+function syncUrlWithDrawer(item) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (item) {
+        const identifier = item.upc || item.sku || item.$id;
+        if (identifier) url.searchParams.set('upc', identifier);
+    } else {
+        url.searchParams.delete('upc');
+        url.searchParams.delete('item');
+        url.searchParams.delete('sku');
+        url.searchParams.delete('id');
+    }
+    window.history.replaceState({}, '', url.toString());
+}
+
+function checkUrlForDirectItemOpen() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    if (!target || !inventoryItems.value || inventoryItems.value.length === 0) return;
+    
+    const cleanTarget = target.trim().toLowerCase();
+    const found = inventoryItems.value.find(i => 
+        (i.upc && i.upc.toLowerCase() === cleanTarget) ||
+        (i.sku && i.sku.toLowerCase() === cleanTarget) ||
+        i.$id === target.trim()
+    );
+    if (found && !isEditDrawerOpen.value) {
+        openEdit(found);
+    }
+}
+
+// Check URL param whenever inventory items load
+watch(inventoryItems, () => {
+    checkUrlForDirectItemOpen();
+}, { immediate: true });
 
 const openAdd = () => {
     activeItem.value = null; // Create Mode
@@ -2230,10 +2267,12 @@ const openAdd = () => {
 const openEdit = (item) => {
     activeItem.value = item;
     isEditDrawerOpen.value = true;
+    syncUrlWithDrawer(item);
 };
 
 const closeEditDrawer = () => {
     isEditDrawerOpen.value = false;
+    syncUrlWithDrawer(null);
 };
 
 const saveEdit = async (payload) => {

@@ -150,8 +150,20 @@ Stores Purchase Orders (POs) and vendor lot receipts.
 
 ---
 
+## 📜 Schema Changelog & Migration History
+
+| Date | Collection | Change / Migration | Details |
+|---|---|---|---|
+| **2026-08-30** | `items` & `items_dev` | **Added Index `parentLotId_idx`** | Created `key` index on `parentLotId` to support real-time lot hierarchy lookups, child deconstruction tracking, and duplicate prevention. |
+| **2026-08-30** | `items` & `items_dev` | **PO Traceability & Cost Anchoring** | Linked `purchaseId` and `parentLotId` across all split child SKUs to guarantee immutable landed PO cost basis. |
+| **2026-08-29** | `sales` & `sales_dev` | **Added Index `idx_warehouseId` & `idx_saleId`** | Enabled fast sales order grouping and consignment payout reconciliation per booth location. |
+
+---
+
 ## 📚 Related Documentation
+- [Booth Operations & Lot Splitting SOP](file:///c:/Users/15034/Projects/ResaleCommand/docs/BOOTH_OPERATIONS_SOP.md)
 - [Location Sync & Consignment Mapping Guide](file:///c:/Users/15034/Projects/ResaleCommand/docs/LOCATION_SYNC_GUIDE.md)
 - [Data Ingestion Guide](file:///c:/Users/15034/Projects/ResaleCommand/docs/DATA_INGESTION.md)
 - [Inventory Workflow](file:///c:/Users/15034/Projects/ResaleCommand/docs/INVENTORY_WORKFLOW.md)
 - [Pricing Logic](file:///c:/Users/15034/Projects/ResaleCommand/docs/pricing_logic.md)
+

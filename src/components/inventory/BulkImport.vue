@@ -14,15 +14,17 @@
                 </p>
                 
                 <div class="form-control w-full">
-                    <input type="file" ref="fileInputRef" class="hidden" @change="handleFileUpload" accept=".csv,.xlsx,.xls" />
-                    <button 
-                        type="button"
-                        @click="fileInputRef?.click()"
-                        class="btn btn-outline btn-primary w-full gap-2 h-auto py-4 flex-col"
-                    >
+                    <label class="btn btn-outline btn-primary w-full gap-2 h-auto py-4 flex-col cursor-pointer select-none">
+                        <input 
+                            type="file" 
+                            ref="fileInputRef" 
+                            class="sr-only" 
+                            @change="handleFileUpload" 
+                            accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
+                        />
                         <Icon icon="solar:upload-linear" class="w-8 h-8" />
                         <span class="font-bold">{{ selectedFileName || 'Tap to select file (CSV/XLSX)' }}</span>
-                    </button>
+                    </label>
                 </div>
 
                 <div class="form-control w-full">

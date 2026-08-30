@@ -1,19 +1,19 @@
 # Universal Physical Booth Operations & Multi-Item Lot Curation SOP
 
-This rule defines the core domain logic, accounting integrity, and standard operating procedures for managing physical antique mall booths (e.g., **Memory Den**) and multi-item lot curation across **all resale categories** in **Resale Command**.
+This standard operating procedure documents the end-to-end workflow for purchasing, inspecting, splitting, tagging, and synchronizing bulk lots across **all resale categories** (Magazines, Action Figures, Miniatures, Model Airplanes, Die-Cast, Video Games, Apparel) with physical antique mall booths (**Memory Den**) in **Resale Command**.
 
 ---
 
 ## 1. Universal Multi-Category Merchandising
 
-This framework applies universally across any bulk collectible or inventory category:
+This framework applies universally across any bulk lot:
 
 | Category | 🌟 Tier 1: Standout Keys (Single High-Ticket) | 📦 Tier 2: Mid-Tier Runs (Multi-Qty Bulk SKU) | 🛒 Tier 3: Floor / Reader / Parts (Impulse & Grab-Bags) |
 | :--- | :--- | :--- | :--- |
-| **Vintage Magazines / Comics** | Key Issues (Oct 1977 Tim Leary, #1s, Moebius/Frazetta covers) @ $35–$65+ | 80s/90s Complete Runs @ $14–$20/ea (Multi-Qty Qty: 30) | Reader Copies / Floor Bins @ $6–$8/ea or 3-Packs |
-| **Action Figures & Toys** | Rare Grail / Complete Figures (Boba Fett, J97, Mint on Card) @ $45–$150+ | Loose Complete Figures @ $12–$18/ea (Multi-Qty Qty: 25) | Beater Figures / Incomplete / Parts Bins @ $4–$6/ea |
+| **Action Figures & Toys** | Rare Grail / Complete Figures (Boba Fett, Mint on Card) @ $45–$150+ | Loose Complete Figures @ $12–$18/ea (Multi-Qty Qty: 25) | Beater Figures / Incomplete / Parts Bins @ $4–$6/ea |
 | **Miniatures & Tabletop** *(Warhammer, D&D)* | Rare OOP Lead Characters / Pro-Painted HQ Units @ $35–$80+ | Standard Squad Units @ $8–$14/ea (Multi-Qty Qty: 40) | Unpainted Sprues / Bits Box / Grab-Bags @ $5/ea |
 | **Model Airplanes & Die-Cast** | Mint-in-Box 1:72 Diecast Bombers / Rare Liveries @ $45–$120+ | Loose Complete Display Fighters @ $15–$25/ea (Multi-Qty) | Minor Flawed / Scratch-and-Dent / Parts @ $6–$8/ea |
+| **Vintage Magazines / Comics** | Key Issues (Oct 1977 Tim Leary, #1s, Moebius/Frazetta covers) @ $35–$65+ | 80s/90s Complete Runs @ $14–$20/ea (Multi-Qty Qty: 30) | Reader Copies / Floor Bins @ $6–$8/ea or 3-Packs |
 | **Video Games & Cartridges** | CIB Rare RPGs / 1st Party Classics @ $40–$100+ | Loose Popular Cartridges @ $15–$25/ea (Multi-Qty Qty: 30) | Sports Games / Filler / As-Is Discs @ $3–$5/ea |
 | **Vintage Apparel & Denim** | Selvedge / Big E / Carhartt Detroit / 90s Tees @ $45–$150+ | Standard Flannels / Vintage Western Shirts @ $18–$28/ea | Clearance Rack / Minor Stain Bargains @ $8–$12/ea |
 
