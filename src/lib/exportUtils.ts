@@ -163,7 +163,7 @@ export function generateRicochetCsv(items: any[]): string {
     const headers = [
         'SKU',
         'Item Title',
-        'Description ',
+        'Description',
         'Web Description',
         'Price',
         'Quantity',

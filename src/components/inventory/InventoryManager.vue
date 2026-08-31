@@ -107,9 +107,40 @@
                                 <span class="text-sm font-semibold">Select items to take action</span>
                                 <span class="text-xs opacity-50">{{ filteredInventory.length }} in view</span>
                             </label>
-                            <button class="btn btn-xs btn-ghost gap-1 opacity-60 hover:opacity-100" @click="() => exportCsv('generic')">
-                                <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export All
-                            </button>
+                            
+                            <!-- Export All Dropdown -->
+                            <div class="dropdown dropdown-end">
+                                <div tabindex="0" role="button" class="btn btn-xs btn-ghost gap-1 opacity-80 hover:opacity-100 border border-base-300 bg-base-100 font-bold">
+                                    <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export All ▾
+                                </div>
+                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
+                                    <li>
+                                        <a @click="exportCsv('ricochet')" class="text-primary hover:bg-primary/10">
+                                            <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
+                                            <span>Memory Den (Ricochet)</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a @click="exportCsv('ebay')">
+                                            <Icon icon="solar:tag-price-linear" class="w-4 h-4 text-warning" />
+                                            <span>eBay Seller Hub</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a @click="exportCsv('poshmark')">
+                                            <Icon icon="solar:hanger-linear" class="w-4 h-4 text-secondary" />
+                                            <span>Poshmark</span>
+                                        </a>
+                                    </li>
+                                    <div class="divider my-0.5"></div>
+                                    <li>
+                                        <a @click="exportCsv('generic')">
+                                            <Icon icon="solar:document-text-linear" class="w-4 h-4" />
+                                            <span>Generic CSV</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
 
                         <!-- State B: Items selected — inline action pipeline -->
@@ -201,10 +232,39 @@
                                     </button>
                                 </div>
 
-                                <!-- Export selected -->
-                                <button class="btn btn-xs btn-success gap-1 ml-auto" @click="() => exportCsv('generic')">
-                                    <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export {{ selectedItems.length }}
-                                </button>
+                                <!-- Export selected Dropdown -->
+                                <div class="dropdown dropdown-end ml-auto">
+                                    <div tabindex="0" role="button" class="btn btn-xs btn-success gap-1 font-bold shadow-xs">
+                                        <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export ({{ selectedItems.length }}) ▾
+                                    </div>
+                                    <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
+                                        <li>
+                                            <a @click="exportCsv('ricochet')" class="text-primary hover:bg-primary/10">
+                                                <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
+                                                <span>Memory Den (Ricochet)</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a @click="exportCsv('ebay')">
+                                                <Icon icon="solar:tag-price-linear" class="w-4 h-4 text-warning" />
+                                                <span>eBay Seller Hub</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a @click="exportCsv('poshmark')">
+                                                <Icon icon="solar:hanger-linear" class="w-4 h-4 text-secondary" />
+                                                <span>Poshmark</span>
+                                            </a>
+                                        </li>
+                                        <div class="divider my-0.5"></div>
+                                        <li>
+                                            <a @click="exportCsv('generic')">
+                                                <Icon icon="solar:document-text-linear" class="w-4 h-4" />
+                                                <span>Generic CSV</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
 
                             <!-- Admin Auto-Heal row (only when insight filter active) -->
