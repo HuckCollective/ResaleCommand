@@ -708,7 +708,7 @@
                                         <div class="flex items-center justify-between border-b border-base-200 pb-2">
                                             <span class="text-xs font-bold flex items-center gap-1.5 text-primary">
                                                 <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
-                                                Lot Market Strategy & Liquidation
+                                                {{ scoutItemsArray.length > 1 ? 'Lot Market Strategy & Liquidation' : 'Market Strategy & Sales Channels' }}
                                             </span>
                                             <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.sell_through_velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
                                                 ⚡ {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).sell_through_velocity }}
@@ -2494,11 +2494,11 @@ const analyzeExistingItem = async () => {
 
         const totalPhotos = base64Images.length + remoteUrls.length;
         const isLot = (Number(editForm.quantity || props.item?.quantity || 1) > 1) || 
-                      (/\b(lot|bundle|collection|set\s+of|pack\s+of|pair)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
+                      (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
         const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
         showLoader("Analyzing with AI Deep Research...", {
-            step: `Step 1 of 4: Preparing & optimizing ${totalPhotos} photos...`,
+            step: isLot ? `Step 1 of 3: Scanning ${totalPhotos} photos for lot cataloging...` : `Step 1 of 3: Scanning item visual details & title...`,
             progress: progressVal,
             basket: 'solar:archive-minimalistic-bold-duotone',
             berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
@@ -2521,11 +2521,9 @@ const analyzeExistingItem = async () => {
                 progressVal += 2;
             }
 
-            let stepMsg = `Step 2 of 3: Scanning ${totalPhotos} photos with high-speed OCR...`;
-            if (progressVal >= 50 && progressVal < 80) {
-                stepMsg = "Step 2 of 3: Cataloging distinct issues & pricing tiers...";
-            } else if (progressVal >= 80) {
-                stepMsg = "Step 3 of 3: Consolidating lot appraisal & Memory Den booth strategy...";
+            let stepMsg = isLot ? `Step 2 of 3: Cataloging distinct issues & components...` : `Step 2 of 3: Searching market comparables & sold history...`;
+            if (progressVal >= 80) {
+                stepMsg = isLot ? `Step 3 of 3: Consolidating lot appraisal & split strategy...` : `Step 3 of 3: Calculating fair resale pricing & condition...`;
             }
             updateLoader("Analyzing with AI Deep Research...", stepMsg, progressVal);
         }, 1000);

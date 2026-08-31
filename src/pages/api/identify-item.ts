@@ -420,7 +420,7 @@ export const ALL: APIRoute = async ({ request }) => {
                         desc += `)`;
                         return desc;
                     }).join('; ');
-                    userNotes = `[Organization Sales Channels & Location Niches: ${locNames}]\n\n` + userNotes;
+                    userNotes = userNotes ? `${userNotes}\n\n[Organization Sales Channels: ${locNames}]` : `[Organization Sales Channels: ${locNames}]`;
                 }
 
             } catch (e) {
@@ -807,16 +807,12 @@ export const ALL: APIRoute = async ({ request }) => {
           (If a URL is provided in notes, visit it or infer details from it if possible, otherwise rely on general knowledge of such items).
           
           TASK:
-          1. Detect if the listing is a bundle lot (multiple distinct items sold together under a single price, e.g. a clothing lot, box of books, bundle of games).
-          2. If it is a bundle lot, return a SINGLE item in the 'items' array representing the entire lot.
-          3. For a bundle lot:
-             - The 'identity' and 'title' should describe the overall lot (e.g. "Free People Tops M Lot of 4").
-             - The 'price_breakdown' should estimate the resale value of the ENTIRE lot combined if sold together, OR the sum of individual values.
-             - The 'purchase_strategy' should evaluate the entire lot against the asking price.
-             - Include a 'lot_items' array containing each individual item within the lot, specified as:
-                 - 'name': Specific description of the component item.
-                 - 'estimated_value': Resale value of this component if sold individually (e.g., "$25 - $35").
-                 - 'condition': Inferred condition of this component.
+          1. SINGLE ITEM VS BUNDLE LOT DETECTION:
+             - SINGLE ITEM (Default): If the photo/listing depicts a single individual item (e.g. 1 book, 1 jacket, 1 game cartridge/disc, 1 toy, 1 pair of shoes, 1 collectible), identify this exact single item in the 'items' array. DO NOT create 'lot_items' and DO NOT split its chapters, pages, or features into bundle components.
+             - BUNDLE LOT (Only if multiple distinct items exist): Only if the photo or notes clearly depict a lot/collection/bundle of multiple distinct products sold together under one price (e.g. a box of 10 magazines, 4 shirts, a set of 5 figures):
+               * Return a SINGLE summary item in 'items' describing the entire lot (e.g. "Heavy Metal Magazine 1980s Lot of 10").
+               * In 'price_breakdown', estimate the total value of the entire combined lot.
+               * Populate the 'lot_items' array breaking down each distinct individual product in the bundle.
 
           CRITICAL PRICING & IDENTIFICATION RULES:
           - PRICING MODEL & CONDITION MODIFIERS (Align with ResaleCommand Standards):
