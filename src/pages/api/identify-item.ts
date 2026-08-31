@@ -949,9 +949,20 @@ export const ALL: APIRoute = async ({ request }) => {
         
         const response = await result.response;
         
-        const taskResponse = response.text();
+        let taskResponse = '';
+        try {
+            taskResponse = response.text();
+        } catch (textErr: any) {
+            console.warn('[Gemini] response.text() failed, inspecting candidate parts:', textErr);
+            const candidate = response.candidates?.[0];
+            const parts = candidate?.content?.parts || [];
+            taskResponse = parts.map((p: any) => p.text || '').join('').trim();
+            if (!taskResponse) {
+                throw new Error(`Model response blocked (${candidate?.finishReason || 'Unknown'}). Please retry with clearer photos.`);
+            }
+        }
         
-        // Clean up potential markdown code blocks \`\`\`json ... \`\`\`
+        // Clean up potential markdown code blocks ```json ... ```
         let cleanedResponse = taskResponse.replace(/```json|```/g, '').trim();
 
         // Inject fetched image URLs and shipping info into response if available
