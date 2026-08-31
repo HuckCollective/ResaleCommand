@@ -179,7 +179,8 @@ onUnmounted(() => {
 });
 
 defineExpose({
-    startCamera
+    startCamera,
+    stopCamera
 });
 
 </script>

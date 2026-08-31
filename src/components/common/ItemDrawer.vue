@@ -43,8 +43,11 @@
                         <a role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-primary': mainTab === 'verify'}" @click="mainTab = 'verify'">
                             <Icon icon="solar:checklist-minimalistic-linear" class="w-4 h-4 mr-1.5 inline" /> Checklist / Verify
                         </a>
-                        <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary': mainTab === 'lot'}" @click="mainTab = 'lot'">
-                            <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" /> Inbound Lot ({{ lotChildren?.length || 0 }})
+                        <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary font-bold': mainTab === 'lot'}" @click="mainTab = 'lot'">
+                            <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" />
+                            <span v-if="props.item?.parentLotId">Lot Lineage</span>
+                            <span v-else-if="lotChildren?.length > 0">Lot Hub ({{ lotChildren.length }})</span>
+                            <span v-else>Lot Tools</span>
                         </a>
                     </div>
                 </div>
@@ -60,6 +63,31 @@
                         <!-- ================================================================= -->
                         <div class="lg:col-span-6 space-y-5">
                             
+                            <!-- 🔗 Subtle Lot Connection Badges (Clean & Compact) -->
+                            <div v-if="props.item?.parentLotId" class="flex items-center justify-between bg-primary/10 border border-primary/25 rounded-2xl px-3.5 py-2 text-xs shadow-2xs">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <Icon icon="solar:link-circle-bold" class="w-4 h-4 text-primary shrink-0" />
+                                    <span class="opacity-70 text-[11px] shrink-0">Extracted From:</span>
+                                    <strong class="truncate font-mono text-base-content">{{ parentItem?.title || parentItem?.upc || props.item.parentLotId }}</strong>
+                                </div>
+                                <button type="button" @click="mainTab = 'lot'" class="btn btn-ghost btn-xs text-primary font-bold hover:underline shrink-0 gap-1">
+                                    <span>Lot Hub</span>
+                                    <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                                </button>
+                            </div>
+
+                            <div v-else-if="lotChildren.length > 0" class="flex items-center justify-between bg-secondary/10 border border-secondary/25 rounded-2xl px-3.5 py-2 text-xs shadow-2xs">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary shrink-0" />
+                                    <span class="opacity-70 text-[11px] shrink-0">Master Lot:</span>
+                                    <strong class="font-bold text-secondary">{{ lotChildren.length }} Split Listings Active</strong>
+                                </div>
+                                <button type="button" @click="mainTab = 'lot'" class="btn btn-ghost btn-xs text-secondary font-bold hover:underline shrink-0 gap-1">
+                                    <span>Manage in Lot Hub</span>
+                                    <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                                </button>
+                            </div>
+
                             <!-- 1. 🏷️ TITLE & IDENTITY (TOP PRIORITY) -->
                             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
                                 <div class="flex justify-between items-center">
@@ -159,10 +187,12 @@
 
                                 <!-- Photo Actions: Upload, Camera, and Sourcing URL Fetcher -->
                                 <div class="grid grid-cols-2 gap-2">
-                                    <button @click="$refs.fileInput.click()" class="btn btn-sm btn-outline text-xs">
+                                    <button type="button" @click="fileInput?.click()" class="btn btn-sm btn-outline text-xs">
                                         <Icon icon="solar:gallery-add-linear" class="w-4 h-4 mr-1" /> Upload
                                     </button>
-                                    <button @click="$refs.scannerWidget.startCamera()" class="btn btn-sm btn-outline text-xs">
+                                    <input type="file" ref="fileInput" multiple accept="image/*" class="hidden" @change="handleFileSelect" />
+                                    
+                                    <button type="button" @click="scannerWidget?.startCamera()" class="btn btn-sm btn-outline text-xs">
                                         <Icon icon="solar:camera-linear" class="w-4 h-4 mr-1" /> Camera
                                     </button>
                                 </div>
@@ -323,7 +353,18 @@
                                             </div>
                                         </div>
                                         <div class="form-control">
-                                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Order / Invoice #</span></label>
+                                            <label class="label py-0.5 flex items-center justify-between">
+                                                <span class="label-text text-xs font-bold">Order / Invoice #</span>
+                                                <a 
+                                                    v-if="editForm.orderId" 
+                                                    :href="`/purchases?search=${encodeURIComponent(editForm.orderId)}`" 
+                                                    target="_blank" 
+                                                    class="text-[10px] text-primary font-bold hover:underline flex items-center gap-0.5"
+                                                    title="Open PO in Purchases"
+                                                >
+                                                    <Icon icon="solar:link-minimalistic-bold" class="w-3 h-3" /> View PO
+                                                </a>
+                                            </label>
                                             <input type="text" v-model="editForm.orderId" placeholder="e.g. SGW-84920" class="input input-bordered input-sm w-full font-mono text-xs bg-base-100" />
                                         </div>
                                     </div>
@@ -504,18 +545,6 @@
                                     </div>
 
                                     <div class="flex items-center gap-2">
-                                        <!-- Dedicated Re-Scan Button -->
-                                        <button 
-                                            type="button" 
-                                            class="btn btn-xs btn-primary gap-1 font-bold shadow-xs hover:scale-105 transition-all" 
-                                            @click="analyzeExistingItem"
-                                            :disabled="analyzing"
-                                        >
-                                            <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
-                                            <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                                            <span>{{ scoutResult ? '⚡ Re-Scan with AI' : '⚡ Scan with AI' }}</span>
-                                        </button>
-
                                         <!-- Report Ready Badge -->
                                         <span v-if="scoutResult" class="badge badge-xs badge-primary font-bold">Report Ready</span>
                                         <span v-else-if="analyzing" class="badge badge-xs badge-warning font-bold animate-pulse">Analyzing...</span>
@@ -763,13 +792,10 @@
                                 </div>
 
                                 <!-- Empty State Prompt -->
-                                <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 text-xs space-y-2.5">
-                                    <Icon icon="solar:magic-stick-linear" class="w-6 h-6 mx-auto opacity-70 text-primary" />
-                                    <p class="font-medium opacity-70">No AI report yet. Scan your photos & market comps to appraise this lot.</p>
-                                    <button type="button" class="btn btn-sm btn-primary font-bold shadow-xs gap-1.5" @click="analyzeExistingItem" :disabled="analyzing">
-                                        <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-                                        <span>⚡ Run AI Deep Scout</span>
-                                    </button>
+                                <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 text-xs space-y-1.5 bg-base-100/50">
+                                    <Icon icon="solar:magic-stick-3-bold-duotone" class="w-7 h-7 mx-auto text-primary/50" />
+                                    <p class="font-bold text-xs text-base-content/80">Ready for AI Deep Research</p>
+                                    <p class="text-[11px] opacity-60 max-w-xs mx-auto">Use the <strong>AI Deep Research</strong> button in the bottom dock to scout photos, comps, and prices.</p>
                                 </div>
                             </div>
 
@@ -848,118 +874,232 @@
 
                 <!-- LOT DASHBOARD TAB -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'lot'">
-                    <!-- Rollback / Uncombine Banner for Master Lots -->
-                    <div v-if="lotChildren && lotChildren.length > 0" class="bg-error/10 border border-error/30 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-                        <div class="flex items-start sm:items-center gap-2 text-xs">
-                            <div class="w-7 h-7 rounded-lg bg-error/20 flex items-center justify-center text-error font-bold shrink-0 mt-0.5 sm:mt-0">
-                                <Icon icon="solar:history-bold" class="w-4 h-4" />
-                            </div>
-                            <div>
-                                <div class="font-extrabold text-base-content">Combined Master Lot ({{ lotChildren.length }} Items Linked)</div>
-                                <div class="text-[11px] opacity-70">Rollback to restore all original items as independent active inventory.</div>
-                            </div>
-                        </div>
-                        <button 
-                            type="button" 
-                            class="btn btn-xs btn-error font-bold shadow-xs gap-1 self-end sm:self-center shrink-0" 
-                            @click="uncombineLot" 
-                            :disabled="uncombining"
-                            title="Restore original items and remove master lot"
-                        >
-                            <span v-if="uncombining" class="loading loading-spinner loading-xs"></span>
-                            <Icon v-else icon="solar:restart-bold" class="w-3.5 h-3.5" />
-                            <span>Rollback &amp; Uncombine</span>
-                        </button>
-                    </div>
-
-                    <div class="alert alert-secondary py-2 shadow-sm text-xs sm:text-sm">
-                        <Icon icon="solar:box-linear" class="w-5 h-5 shrink-0" />
-                        <span>Track items extracted from this box and calculated total lot ROI.</span>
-                    </div>
-
-                    <div class="stats stats-horizontal shadow-sm w-full bg-base-200 border border-base-300 text-xs">
-                        <div class="stat px-3 py-2">
-                            <div class="stat-title text-[10px] font-bold">Box Cost</div>
-                            <div class="stat-value text-base">${{ Number(lotDashboardItem?.cost || 0).toFixed(2) }}</div>
-                        </div>
-                        <div class="stat px-3 py-2">
-                            <div class="stat-title text-[10px] font-bold">Realized Revenue</div>
-                            <div class="stat-value text-base text-success">${{ lotRealizedRevenue.toFixed(2) }}</div>
-                        </div>
-                        <div class="stat px-3 py-2">
-                            <div class="stat-title text-[10px] font-bold">Net ROI</div>
-                            <div class="stat-value text-base" :class="lotROI >= 0 ? 'text-success' : 'text-error'">
-                                {{ lotROI >= 0 ? '+' : '' }}${{ lotROI.toFixed(2) }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Inline Child Item Extractor Form -->
-                    <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3">
-                        <div class="font-bold text-xs uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                            <Icon icon="solar:add-circle-bold" class="w-4 h-4 text-primary" />
-                            Extract & Add Item from Lot
-                        </div>
-                        <div class="space-y-2">
-                            <input type="text" v-model="newChild.title" placeholder="Item Title / Model / Description..." class="input input-bordered input-sm w-full text-xs font-semibold bg-base-100" />
-                            <div class="grid grid-cols-3 gap-2">
-                                <div class="relative">
-                                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                    <input type="number" step="0.01" v-model="newChild.cost" placeholder="Cost" class="input input-bordered input-sm w-full pl-5 font-mono text-xs bg-base-100" title="Cost Basis Allocation" />
+                    
+                    <!-- A. IF VIEWING AN EXTRACTED CHILD ITEM -->
+                    <div v-if="props.item?.parentLotId" class="space-y-4">
+                        <!-- Parent Lot Hero Card -->
+                        <div class="bg-base-200/70 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
+                            <div class="flex items-center justify-between border-b border-base-300 pb-2.5">
+                                <div class="flex items-center gap-2 text-xs font-bold text-primary">
+                                    <Icon icon="solar:link-circle-bold" class="w-4 h-4" />
+                                    <span>Parent Master Lot Origin</span>
                                 </div>
-                                <div class="relative">
-                                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                    <input type="number" step="0.01" v-model="newChild.resalePrice" placeholder="List Price" class="input input-bordered input-sm w-full pl-5 font-mono text-xs bg-base-100" title="Resale List Price" />
+                                <span class="badge badge-xs badge-secondary font-bold font-mono">{{ parentItem?.upc || props.item.parentLotId }}</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <img 
+                                        v-if="parentItem?.imageId" 
+                                        :src="getAssetUrl(parentItem.imageId)" 
+                                        class="w-14 h-14 object-cover rounded-xl border border-base-300 shrink-0 bg-base-100" 
+                                    />
+                                    <div v-else class="w-14 h-14 rounded-xl bg-base-100 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
+                                        <Icon icon="solar:box-minimalistic-bold" class="w-6 h-6" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <h4 class="font-bold text-xs sm:text-sm truncate text-base-content">{{ parentItem?.title || 'Parent Lot' }}</h4>
+                                        <div class="flex items-center gap-2 mt-1 flex-wrap text-xs">
+                                            <span class="opacity-60 font-mono">Box Cost: <strong class="text-base-content">${{ Number(parentItem?.cost || 0).toFixed(2) }}</strong></span>
+                                            <a v-if="parentItem?.orderId" :href="`/purchases?search=${encodeURIComponent(parentItem.orderId)}`" target="_blank" class="badge badge-xs badge-info font-bold gap-0.5 hover:underline">
+                                                <Icon icon="solar:link-minimalistic-bold" class="w-2.5 h-2.5" /> PO: {{ parentItem.orderId }}
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
-                                <select v-model="newChild.status" class="select select-bordered select-sm w-full text-xs bg-base-100">
-                                    <option value="acquired">Acquired</option>
-                                    <option value="received">Received</option>
-                                    <option value="placed">Placed</option>
-                                    <option value="sold">Sold</option>
-                                </select>
+                                <button 
+                                    type="button" 
+                                    class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs shrink-0" 
+                                    @click="parentItem ? $emit('selectItem', parentItem) : null"
+                                    :disabled="!parentItem"
+                                >
+                                    <Icon icon="solar:arrow-left-bold" class="w-4 h-4" />
+                                    <span>Open Parent</span>
+                                </button>
                             </div>
-                            <div v-if="newChild.status === 'sold'" class="relative">
-                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs text-success">$</span>
-                                <input type="number" step="0.01" v-model="newChild.soldPrice" placeholder="Actual Sold Price..." class="input input-bordered input-sm w-full pl-5 font-mono text-xs bg-base-100 border-success" />
+                        </div>
+
+                        <!-- Sibling Items extracted from same lot -->
+                        <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
+                            <div class="flex items-center justify-between border-b border-base-300 pb-2">
+                                <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
+                                    <Icon icon="solar:documents-bold" class="w-3.5 h-3.5 text-secondary" />
+                                    All Sibling Items in this Lot Batch ({{ lotChildren.length }})
+                                </h4>
+                                <a :href="`/inventory?parentLotId=${props.item.parentLotId}`" class="btn btn-xs btn-outline btn-neutral font-bold gap-1">
+                                    <Icon icon="solar:filter-bold" class="w-3 h-3" /> View in Table
+                                </a>
                             </div>
-                            <button class="btn btn-primary btn-sm w-full font-bold shadow-xs" @click="createChildItem" :disabled="!newChild.title.trim() || creatingChild">
-                                <span v-if="creatingChild" class="loading loading-spinner loading-xs"></span>
-                                <Icon v-else icon="solar:add-circle-linear" class="w-4 h-4 mr-1" />
-                                Add Item to Lot
+                            
+                            <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+                                <div 
+                                    v-for="child in lotChildren" 
+                                    :key="child.$id" 
+                                    class="bg-base-100 p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-xs transition-all cursor-pointer group"
+                                    :class="child.$id === props.item.$id ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-base-300 hover:border-primary/50'"
+                                    @click="$emit('selectItem', child)"
+                                >
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        <img 
+                                            v-if="child.imageId" 
+                                            :src="getAssetUrl(child.imageId)" 
+                                            class="w-9 h-9 object-cover rounded-lg border border-base-300 shrink-0 bg-base-200" 
+                                        />
+                                        <div v-else class="w-9 h-9 rounded-lg bg-base-200 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
+                                            <Icon icon="solar:document-bold" class="w-4 h-4" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="badge badge-xs badge-ghost font-mono font-bold">{{ child.upc || 'NO-UPC' }}</span>
+                                                <span v-if="child.quantity > 1" class="badge badge-xs badge-accent font-bold">Qty: {{ child.quantity }}</span>
+                                                <span v-if="child.$id === props.item.$id" class="badge badge-xs badge-primary font-bold">Current</span>
+                                                <span v-else class="badge badge-xs" :class="child.status === 'sold' ? 'badge-success' : 'badge-ghost'">{{ child.status }}</span>
+                                            </div>
+                                            <p class="text-xs font-bold truncate text-base-content mt-0.5 group-hover:text-primary transition-colors">{{ child.title }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <span class="text-xs font-bold text-success font-mono">${{ Number(child.resalePrice || 0).toFixed(2) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B. IF VIEWING A MASTER LOT -->
+                    <div v-else class="space-y-4">
+                        <!-- Top Action Toolbar -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 bg-base-200/80 p-3 rounded-2xl border border-base-300 shadow-xs">
+                            <div class="flex items-center gap-2">
+                                <button 
+                                    type="button" 
+                                    class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs hover:scale-105 transition-all"
+                                    @click="isLotSplitterOpen = true"
+                                >
+                                    <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                                    <span>✨ Multi-Tier Lot Splitter</span>
+                                </button>
+                                <a 
+                                    :href="`/inventory?parentLotId=${props.item?.$id}`" 
+                                    class="btn btn-sm btn-outline btn-secondary gap-1 font-bold shadow-xs"
+                                >
+                                    <Icon icon="solar:filter-bold" class="w-3.5 h-3.5" />
+                                    <span>View in Main Table</span>
+                                </a>
+                            </div>
+
+                            <!-- Rollback / Uncombine Button -->
+                            <button 
+                                v-if="lotChildren && lotChildren.length > 0"
+                                type="button" 
+                                class="btn btn-xs btn-outline btn-error font-bold gap-1 shrink-0" 
+                                @click="uncombineLot" 
+                                :disabled="uncombining"
+                                title="Restore original items and remove master lot"
+                            >
+                                <span v-if="uncombining" class="loading loading-spinner loading-xs"></span>
+                                <Icon v-else icon="solar:restart-bold" class="w-3 h-3" />
+                                <span>Rollback Lot</span>
                             </button>
                         </div>
-                    </div>
 
-                    <!-- Extracted items list -->
-                    <div class="space-y-2">
-                        <div class="font-bold text-xs uppercase tracking-wider border-b border-base-200 pb-1">Extracted Items ({{ lotChildren?.length || 0 }})</div>
-                        <div v-if="!lotChildren || lotChildren.length === 0" class="text-center opacity-50 py-8 border-2 border-dashed rounded-xl border-base-300 text-xs">
-                            No child items extracted yet.
+                        <!-- Financial ROI Stats -->
+                        <div class="stats stats-horizontal shadow-xs w-full bg-base-200/80 border border-base-300 text-xs">
+                            <div class="stat px-3 py-2.5">
+                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Box Cost</div>
+                                <div class="stat-value text-sm sm:text-base font-mono">${{ Number(lotDashboardItem?.cost || 0).toFixed(2) }}</div>
+                            </div>
+                            <div class="stat px-3 py-2.5">
+                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Listed Value</div>
+                                <div class="stat-value text-sm sm:text-base text-primary font-mono">${{ totalSplitResaleValue.toFixed(2) }}</div>
+                            </div>
+                            <div class="stat px-3 py-2.5">
+                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Realized Sales</div>
+                                <div class="stat-value text-sm sm:text-base text-success font-mono">${{ lotRealizedRevenue.toFixed(2) }}</div>
+                            </div>
+                            <div class="stat px-3 py-2.5">
+                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Net Profit</div>
+                                <div class="stat-value text-sm sm:text-base font-mono font-bold" :class="lotROI >= 0 ? 'text-success' : 'text-error'">
+                                    {{ lotROI >= 0 ? '+' : '' }}${{ lotROI.toFixed(2) }}
+                                </div>
+                            </div>
                         </div>
-                        <div v-for="child in lotChildren" :key="child.$id" class="flex justify-between items-center bg-base-200/70 p-2.5 rounded-xl border border-base-300 text-xs">
-                            <span class="font-bold truncate max-w-55">{{ child.title }}</span>
-                            <div class="flex items-center gap-2">
-                                <span class="badge badge-xs" :class="child.status === 'sold' ? 'badge-success' : 'badge-ghost'">{{ child.status }}</span>
-                                <span class="font-mono font-bold">${{ Number(child.soldPrice || child.resalePrice || 0).toFixed(2) }}</span>
+
+                        <!-- Split Child Inventory List -->
+                        <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
+                            <div class="flex items-center justify-between border-b border-base-300 pb-2.5">
+                                <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
+                                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
+                                    Split Child Listings ({{ lotChildren.length }} Items)
+                                </h4>
+                                <span class="text-[11px] opacity-60">Active inventory listings</span>
+                            </div>
+
+                            <div v-if="!lotChildren || lotChildren.length === 0" class="text-center py-8 border-2 border-dashed border-base-300 rounded-xl">
+                                <Icon icon="solar:box-linear" class="w-8 h-8 text-base-content/30 mx-auto mb-1.5" />
+                                <p class="text-xs font-bold opacity-70">No split items created yet.</p>
+                                <p class="text-[11px] opacity-50 mt-0.5">Use the Multi-Tier Lot Splitter above to deconstruct this lot.</p>
+                            </div>
+
+                            <div v-else class="space-y-2 max-h-96 overflow-y-auto pr-1">
+                                <div 
+                                    v-for="child in lotChildren" 
+                                    :key="child.$id" 
+                                    class="bg-base-100 p-2.5 rounded-xl border border-base-300 flex items-center justify-between gap-3 shadow-xs hover:border-primary/50 transition-all cursor-pointer group"
+                                    @click="$emit('selectItem', child)"
+                                    title="Click to open this child item"
+                                >
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        <img 
+                                            v-if="child.imageId" 
+                                            :src="getAssetUrl(child.imageId)" 
+                                            class="w-10 h-10 object-cover rounded-lg border border-base-300 shrink-0 bg-base-200" 
+                                        />
+                                        <div v-else class="w-10 h-10 rounded-lg bg-base-200 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
+                                            <Icon icon="solar:document-bold" class="w-4 h-4" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="badge badge-xs badge-ghost font-mono font-bold">{{ child.upc || 'NO-UPC' }}</span>
+                                                <span v-if="child.quantity > 1" class="badge badge-xs badge-accent font-bold">Qty: {{ child.quantity }}</span>
+                                                <span class="badge badge-xs" :class="child.status === 'sold' ? 'badge-success' : 'badge-primary'">{{ child.status }}</span>
+                                            </div>
+                                            <p class="text-xs font-bold truncate text-base-content mt-0.5 group-hover:text-primary transition-colors">{{ child.title }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0 flex items-center gap-3">
+                                        <div>
+                                            <span class="text-xs font-bold text-success font-mono block">${{ Number(child.resalePrice || 0).toFixed(2) }}</span>
+                                            <span class="text-[10px] opacity-60 font-mono block">Cost: ${{ Number(child.cost || 0).toFixed(2) }}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-xs btn-ghost btn-circle text-primary group-hover:bg-primary group-hover:text-primary-content transition-all">
+                                            <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- FOOTER (Sticky Action Toolbar - Clean & Focused) -->
-                <div class="p-3 sm:px-6 pb-safe border-t border-base-200 flex flex-row justify-between items-center bg-base-100 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] gap-3 shrink-0">
-                    <div>
-                        <button class="btn btn-secondary btn-sm sm:btn-md shadow-sm gap-1.5 font-bold" @click="analyzeExistingItem" :disabled="analyzing || (!actualMainPhoto.url && !editForm.sourcingLocation && !editForm.title && !editForm.condition_notes && (!editForm.existingGalleryIds || editForm.existingGalleryIds.length === 0))">
+                <!-- FOOTER (Sticky Action Toolbar - daisyUI v5 Dock Pattern) -->
+                <div class="p-3 sm:px-6 pb-safe border-t border-base-300 flex flex-row justify-between items-center bg-base-200/90 backdrop-blur-md z-30 shadow-lg gap-3 shrink-0">
+                    <div class="flex items-center gap-2">
+                        <button 
+                            class="btn btn-secondary btn-sm shadow-xs gap-1.5 font-bold hover:scale-105 transition-all" 
+                            @click="analyzeExistingItem" 
+                            :disabled="analyzing || (!actualMainPhoto.url && !editForm.sourcingLocation && !editForm.title && !editForm.condition_notes && (!editForm.existingGalleryIds || editForm.existingGalleryIds.length === 0))"
+                        >
                             <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
-                            <Icon v-else icon="solar:magic-stick-linear" class="w-4 h-4" />
-                            <span class="hidden sm:inline">{{ analyzing ? (analysisStatus || 'Analyzing...') : 'AI Deep Research' }}</span>
-                            <span class="sm:hidden">{{ analyzing ? 'Scouting...' : 'Research' }}</span>
+                            <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                            <span class="hidden sm:inline">{{ analyzing ? (analysisStatus || 'Analyzing...') : (scoutResult ? '⚡ Re-Run AI Research' : '✨ AI Deep Research') }}</span>
+                            <span class="sm:hidden">{{ analyzing ? 'Scouting...' : 'AI Research' }}</span>
                         </button>
                     </div>
 
                     <div class="flex items-center gap-2">
-                        <button class="btn btn-ghost btn-sm sm:btn-md" @click="closeDrawer">Cancel</button>
-                        <button class="btn btn-primary btn-sm sm:btn-md font-bold px-6 shadow-md" @click="saveEdit" :disabled="processing">
+                        <button class="btn btn-ghost btn-sm" @click="closeDrawer">Cancel</button>
+                        <button class="btn btn-primary btn-sm font-bold px-6 shadow-md" @click="saveEdit" :disabled="processing">
                             <span v-if="processing" class="loading loading-spinner loading-xs mr-1"></span>
                             <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 mr-1" />
                             Save Item
@@ -1046,6 +1186,15 @@
                 @close="isLotSplitterOpen = false" 
                 @completed="onLotSplitCompleted" 
             />
+
+            <!-- Camera / Photo Scanner (Reusing exact same component as Scout) -->
+            <ScannerWidget 
+                ref="scannerWidget" 
+                :photos="editGalleryBuffer" 
+                :hide-all-triggers="true" 
+                @photos-captured="handleCapturedPhotos" 
+                @remove-photo="removeGalleryItem($event, false)" 
+            />
         </div>
     </Teleport>
 </template>
@@ -1123,7 +1272,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'save', 'uncombined', 'deconstruct']);
+const emit = defineEmits(['close', 'save', 'uncombined', 'deconstruct', 'selectItem']);
 
 const mainTab = ref('details');
 const descTab = ref('edit');
@@ -1778,7 +1927,7 @@ const getImageUrl = (itemData) => {
 };
 
 const lotChildren = ref([]);
-const parentLot = ref(null);
+const parentItem = ref(null);
 const loadingLot = ref(false);
 const creatingChild = ref(false);
 
@@ -1790,18 +1939,36 @@ const newChild = reactive({
     soldPrice: ''
 });
 
-const lotDashboardItem = computed(() => parentLot.value || props.item);
+const lotDashboardItem = computed(() => parentItem.value || props.item);
 const lotSoldChildren = computed(() => (lotChildren.value || []).filter(c => c.status === 'sold'));
 const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice) || 0), 0));
 const lotROI = computed(() => lotRealizedRevenue.value - Number(lotDashboardItem.value?.cost || 0));
+const totalSplitResaleValue = computed(() => {
+    return (lotChildren.value || []).reduce((sum, c) => sum + (Number(c.resalePrice || 0) * Number(c.quantity || 1)), 0);
+});
 
 async function fetchLotChildren() {
     if (!props.item || !props.item.$id) return;
     loadingLot.value = true;
+    parentItem.value = null;
+    lotChildren.value = [];
+
     try {
+        // 1. If this is a child item, fetch its parent lot
+        if (props.item.parentLotId) {
+            try {
+                const pDoc = await databases.getDocument(DB_ID, getCollectionId(), props.item.parentLotId);
+                parentItem.value = pDoc;
+            } catch (pErr) {
+                console.warn("Could not fetch parent lot doc:", pErr);
+            }
+        }
+
+        // 2. Fetch all child items belonging to this lot
         const targetParentId = props.item.parentLotId || props.item.$id;
         const res = await databases.listDocuments(DB_ID, getCollectionId(), [
             Query.equal('parentLotId', targetParentId),
+            Query.orderAsc('upc'),
             Query.limit(100)
         ]);
         lotChildren.value = res.documents || [];
@@ -2094,12 +2261,15 @@ const handleFileSelect = (e) => {
 };
 
 const handleCapturedPhotos = (files) => {
-    Array.from(files).forEach(file => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.isArray(files) ? files : Array.from(files);
+    fileList.forEach(file => {
         editGalleryBuffer.value.push(file);
         if (!actualMainPhoto.value.file && !editForm.imageId && !actualMainPhoto.value.url) {
             mainPhotoSelection.value = { type: 'new', val: editGalleryBuffer.value.length - 1 };
         }
     });
+    addToast({ type: 'success', message: `Added ${fileList.length} photo(s) to gallery!` });
 };
 
 const fetchSourceData = async () => {
