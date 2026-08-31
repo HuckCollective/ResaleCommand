@@ -94,6 +94,10 @@ export function getSafeRawAnalysis(item: any): string | null {
         // Clean and compact items to ensure ALL constituent items (e.g. 32+, 50+) are preserved
         const cleanLotItem = (li: any) => {
             if (!li) return null;
+            // Never allow large base64 image strings inside rawAnalysis JSON
+            const cleanImg = (li.image || li.image_url || '');
+            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:image') && cleanImg.length < 500 ? cleanImg : undefined;
+
             return {
                 name: (li.name || li.title || li.identity || '').trim(),
                 identity: li.identity || undefined,
@@ -107,17 +111,22 @@ export function getSafeRawAnalysis(item: any): string | null {
                     boutique_premium: li.price_breakdown.boutique_premium || undefined
                 } : undefined,
                 image_index: li.image_index !== undefined ? li.image_index : undefined,
-                image: li.image || li.image_url || undefined
+                image: safeImg
             };
         };
 
         const compactData = (obj: any) => {
             if (!obj || typeof obj !== 'object') return obj;
+            const cleanImg = (obj.image || obj.image_url || '');
+            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:image') && cleanImg.length < 500 ? cleanImg : undefined;
+
             const res: any = {
                 identity: obj.identity || obj.title,
                 title: obj.title,
                 price_breakdown: obj.price_breakdown,
                 purchase_strategy: obj.purchase_strategy,
+                condition_notes: obj.condition_notes ? String(obj.condition_notes).substring(0, 1000) : undefined,
+                image: safeImg,
                 market_report: obj.market_report ? {
                     best_platform: obj.market_report.best_platform,
                     sell_through_velocity: obj.market_report.sell_through_velocity,
@@ -136,11 +145,30 @@ export function getSafeRawAnalysis(item: any): string | null {
             return res;
         };
 
-        const compacted = Array.isArray(parsedObj) ? parsedObj.map(compactData) : compactData(parsedObj);
-        return JSON.stringify(compacted);
+        let compacted = Array.isArray(parsedObj) ? parsedObj.map(compactData) : compactData(parsedObj);
+        let resultStr = JSON.stringify(compacted);
+
+        // Ensure we NEVER exceed Appwrite 65,000 character limit
+        if (resultStr.length > 60000) {
+            console.warn(`[Inventory] rawAnalysis length (${resultStr.length}) exceeds 60,000 chars. Compacting further...`);
+            if (Array.isArray(compacted)) {
+                compacted.forEach((c: any) => {
+                    if (c.lot_items) c.lot_items.forEach((li: any) => { delete li.image; });
+                });
+            } else if (compacted && compacted.lot_items) {
+                compacted.lot_items.forEach((li: any) => { delete li.image; });
+            }
+            resultStr = JSON.stringify(compacted);
+            if (resultStr.length > 60000) {
+                resultStr = resultStr.substring(0, 60000);
+            }
+        }
+
+        return resultStr;
     } catch (e) {
-        // Fallback to original string if JSON parsing fails
-        return typeof item === 'string' ? item : JSON.stringify(item);
+        // Fallback to safe substring if JSON parsing fails
+        const s = typeof item === 'string' ? item : JSON.stringify(item);
+        return s.length > 60000 ? s.substring(0, 60000) : s;
     }
 }
 
