@@ -154,6 +154,35 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
     else console.log(`[Inventory] NO Image File passed.`);
 
     try {
+        // Deduplication check: Do not create duplicate item if identity or sourcingLocation already exists in inventory
+        const rawIdentity = typeof itemData?.identity === 'object' ? JSON.stringify(itemData.identity) : itemData?.identity;
+        const targetIdentity = (rawIdentity || '').trim();
+        const targetSourcing = (extraData.sourcingLocation || '').trim();
+
+        if (targetIdentity || targetSourcing) {
+            try {
+                const dedupQueries: any[] = [Query.limit(1)];
+                if (teamId) dedupQueries.push(Query.equal('tenantId', teamId));
+                
+                let existingItem: any = null;
+                if (targetIdentity) {
+                    const idRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('identity', targetIdentity)]);
+                    if (idRes.documents.length > 0) existingItem = idRes.documents[0];
+                }
+                if (!existingItem && targetSourcing) {
+                    const srcRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('sourcingLocation', targetSourcing)]);
+                    if (srcRes.documents.length > 0) existingItem = srcRes.documents[0];
+                }
+
+                if (existingItem) {
+                    console.log(`[Inventory] Deduplication: Item already exists (${existingItem.$id}, UPC: ${existingItem.upc}). Skipping duplicate creation.`);
+                    return existingItem;
+                }
+            } catch (dedupErr) {
+                console.warn('[Inventory] Deduplication query warning:', dedupErr);
+            }
+        }
+
         let imageId: string | null = extraData.imageId || null;
 
         // 1. Upload Image (FORCED ATTEMPT) - Only if not already provided

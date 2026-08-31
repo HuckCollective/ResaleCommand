@@ -118,20 +118,25 @@ const submit = async () => {
         const firstItem = props.items[0];
         const newBundleId = ID.unique();
         const combinedCost = totalCost.value;
+        const sharedPurchaseId = props.items.find(i => i.purchaseId)?.purchaseId || null;
+        const sourceIdentities = props.items.map(i => i.identity || i.upc || i.$id).filter(Boolean);
+        const sourceLocations = props.items.map(i => i.sourcingLocation).filter(Boolean);
 
         // 1. Create the Bundle Parent Item
         const bundleDoc = {
             title: form.title,
             identity: `BUNDLE-${Date.now().toString().slice(-6)}`,
             description: form.description,
-            conditionNotes: `Bundled ${props.items.length} items together.`,
+            conditionNotes: `Bundled ${props.items.length} items together.\nSources: ${sourceIdentities.join(', ')}`,
             status: 'listed',
             cost: combinedCost, // Sum of child costs
             quantity: 1, // The bundle is 1 unit for sale
             tenantId: firstItem.tenantId || null,
             userId: firstItem.userId || null,
             storageLocation: form.storageLocation || null,
-            estHigh: form.estHigh || null
+            estHigh: form.estHigh || null,
+            purchaseId: sharedPurchaseId,
+            sourcingLocation: sourceLocations.length > 0 ? sourceLocations[0] : null
         };
         
         Object.keys(bundleDoc).forEach(key => bundleDoc[key] === undefined && delete bundleDoc[key]);
