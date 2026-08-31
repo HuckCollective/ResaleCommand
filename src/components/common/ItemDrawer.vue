@@ -685,21 +685,41 @@
 
                                     <!-- SUGGESTED VALUATION MATRIX (2x2 Grid) -->
                                     <div v-if="scoutTotalRange || scoutItemsArray[0]?.price_breakdown" class="grid grid-cols-2 gap-2 pt-1">
-                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                        <div 
+                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-success/60 hover:bg-success/5 transition-all group"
+                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.mint.formatted : scoutItemsArray[0]?.price_breakdown?.mint)"
+                                            title="Click to apply Mint price"
+                                        >
                                             <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
+                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-success font-bold mt-0.5">Use Price ↵</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
+                                        <div 
+                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20 cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
+                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.fair.formatted : scoutItemsArray[0]?.price_breakdown?.fair)"
+                                            title="Click to apply Fair market price"
+                                        >
                                             <span class="badge badge-xs font-bold bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
+                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-primary font-bold mt-0.5">Use Price ↵</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                        <div 
+                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-error/60 hover:bg-error/5 transition-all group"
+                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.poor.formatted : scoutItemsArray[0]?.price_breakdown?.poor)"
+                                            title="Click to apply Poor / Clearance price"
+                                        >
                                             <span class="badge badge-xs font-bold bg-error/20 text-error border-error/40 mb-1">POOR</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
+                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-error font-bold mt-0.5">Use Price ↵</span>
                                         </div>
-                                        <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs">
+                                        <div 
+                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs cursor-pointer hover:border-secondary hover:bg-secondary/5 transition-all group"
+                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.boutique.formatted : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
+                                            title="Click to apply Boutique / Antique Mall price"
+                                        >
                                             <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
+                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-secondary font-bold mt-0.5">Use Price ↵</span>
                                         </div>
                                     </div>
 
@@ -1651,6 +1671,14 @@ const parsePriceRange = (p) => {
     return { low: val, high: val, mid: val };
 };
 
+const applyPriceTier = (priceVal) => {
+    const p = parsePrice(priceVal);
+    if (p > 0) {
+        editForm.resalePrice = p.toFixed(2);
+        addToast({ type: 'success', message: `Applied List Price: $${p.toFixed(2)}` });
+    }
+};
+
 const scoutTotalRange = computed(() => {
     if (!scoutItemsArray.value || scoutItemsArray.value.length === 0) return null;
     
@@ -2466,9 +2494,14 @@ const analyzeExistingItem = async () => {
             }
         }
 
-        let contextNotes = editForm.condition_notes || '';
+        let cleanCondition = (editForm.condition_notes || '')
+            .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
+            .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
+            .replace(/(Paid|Resale|Sold|Location|Est\. Low|Est\. High|Condition|Order #):[^\n]*/gi, '')
+            .trim();
+        let contextNotes = cleanCondition;
         if (editForm.description) contextNotes += (contextNotes ? '\n\n' : '') + `Existing Description: ${editForm.description}`;
-        if (editForm.title) contextNotes = `Current Title: ${editForm.title}\n\n` + contextNotes;
+        if (editForm.title && editForm.title.trim().toLowerCase() !== 'untitled item') contextNotes = `Current Title: ${editForm.title}\n\n` + contextNotes;
         if (editForm.sourcingLocation) contextNotes += `\n\nSourcing URL: ${editForm.sourcingLocation}`;
 
         // Clear previous results
@@ -2615,6 +2648,30 @@ const analyzeExistingItem = async () => {
             } else {
                 scoutResult.value = data.items[0];
                 const item = scoutResult.value;
+                
+                // Auto-fill title if untitled or empty
+                if ((!editForm.title || editForm.title.trim().toLowerCase() === 'untitled item') && (item.title || item.identity)) {
+                    editForm.title = item.title || item.identity;
+                }
+
+                // Auto-fill list price if empty or 0
+                if ((!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') && item.price_breakdown) {
+                    const fairPrice = parsePrice(item.price_breakdown.fair || item.price_breakdown.mint);
+                    if (fairPrice > 0) {
+                        editForm.resalePrice = fairPrice.toFixed(2);
+                    }
+                }
+                const priceRange = parsePriceRange(item.price_breakdown?.fair || item.price_breakdown?.mint);
+                if (priceRange.low > 0 || priceRange.high > 0) {
+                    if (!editForm.estLow) editForm.estLow = priceRange.low.toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = priceRange.high.toFixed(2);
+                }
+                if (!editForm.condition_notes && item.condition_notes) {
+                    editForm.condition_notes = item.condition_notes;
+                }
+                if ((!editForm.keywords || editForm.keywords.length === 0) && item.keywords?.length > 0) {
+                    editForm.keywords = [...item.keywords];
+                }
                 
                 let report = `--- 🕵️ SCOUT REPORT ---\n\n`;
                 if(item.title) report += `**Title:** ${item.title}\n\n`;
