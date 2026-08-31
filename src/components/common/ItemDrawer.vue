@@ -561,26 +561,6 @@
                                 <!-- Report Contents -->
                                 <div v-else-if="scoutResult" class="space-y-4">
                                     
-                                    <!-- MULTI-ITEM LOT BANNER (Tiers managed in Lot Hub) -->
-                                    <div v-if="scoutItemsArray.length > 1" class="bg-primary/10 border border-primary/30 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-xs">
-                                        <div class="flex items-center gap-2.5 min-w-0">
-                                            <div class="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
-                                                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-                                            </div>
-                                            <div class="min-w-0">
-                                                <div class="font-bold text-xs text-base-content flex items-center gap-1.5">
-                                                    <span>Multi-Item Lot</span>
-                                                    <span class="badge badge-xs badge-primary font-bold">{{ scoutItemsArray.length }} Items</span>
-                                                </div>
-                                                <p class="text-[11px] opacity-70 truncate">Constituent components & splitting in Lot Hub</p>
-                                            </div>
-                                        </div>
-                                        <button type="button" class="btn btn-xs btn-primary font-bold shadow-xs shrink-0 gap-1" @click="mainTab = 'lots'">
-                                            <span>Lot Hub</span>
-                                            <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
-                                        </button>
-                                    </div>
-
                                     <!-- SOURCING STRATEGY VERDICT CARD -->
                                     <div v-if="scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
                                         'border-success bg-success/10': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
@@ -600,13 +580,55 @@
                                                     'text-primary': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
                                                 }">{{ String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}</h4>
                                             </div>
-                                            <div v-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
+                                            <div v-if="scoutPurchaseStrategy.current_asking_price && !String(scoutPurchaseStrategy.current_asking_price).includes('No Asking Price')" class="badge badge-sm font-bold bg-base-100 border border-base-300">
+                                                Asking/Bid: {{ scoutPurchaseStrategy.current_asking_price }}
+                                            </div>
+                                            <div v-else-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
                                                 Max Bid: ${{ scoutPurchaseStrategy.max_bid }}
                                             </div>
                                         </div>
                                         <p v-if="scoutPurchaseStrategy.advice" class="text-xs opacity-90 leading-relaxed font-medium">
                                             {{ scoutPurchaseStrategy.advice }}
                                         </p>
+                                    </div>
+
+                                    <!-- VISUAL CONDITION ASSESSMENT (Matching Scout) -->
+                                    <div v-if="scoutItemsArray[0]?.condition_notes" class="bg-base-200 p-3 border border-base-300 rounded-xl">
+                                        <div class="font-bold text-xs mb-1 opacity-70 uppercase tracking-wide flex items-center gap-1.5">
+                                            <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5" />
+                                            <span>Visual Condition Assessment</span>
+                                        </div>
+                                        <p class="text-xs font-medium opacity-90 leading-relaxed">{{ scoutItemsArray[0].condition_notes }}</p>
+                                    </div>
+
+                                    <!-- BUNDLE COMPONENTS (Matching Scout layout 1-to-1) -->
+                                    <div v-if="scoutItemsArray.length > 1" class="bg-base-200 border border-base-300 rounded-xl p-3.5">
+                                        <div class="font-bold text-xs uppercase tracking-wider mb-2.5 flex items-center justify-between text-primary">
+                                            <div class="flex items-center gap-1.5">
+                                                <Icon icon="solar:box-linear" class="w-4 h-4" />
+                                                <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
+                                            </div>
+                                            <button v-if="item" type="button" class="btn btn-xs btn-outline btn-primary font-bold shadow-xs gap-1" @click="mainTab = 'lots'">
+                                                <span>Lot Hub ➔</span>
+                                            </button>
+                                        </div>
+                                        <ul class="space-y-2 text-xs font-medium">
+                                            <li v-for="(subItem, subIdx) in scoutItemsArray" :key="subIdx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex flex-col gap-1 shadow-xs">
+                                                <div class="flex justify-between items-start gap-2 w-full">
+                                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
+                                                    <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5">{{ subItem.condition }}</span>
+                                                </div>
+                                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1.5 mt-0.5">
+                                                    <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value || formatPriceRange(subItem.price_breakdown?.fair) || '-' }}</strong></span>
+                                                    <span class="opacity-30">|</span>
+                                                    <span>Max Buy: <strong class="text-success">${{ calculateMaxBuy(subItem) }}</strong></span>
+                                                    <span class="opacity-30">|</span>
+                                                    <span>Max Bid: <strong class="text-secondary">${{ calculateSubItemMaxBid(subItem, scoutResult) }}</strong></span>
+                                                    <span v-if="editForm.cost && Number(editForm.cost) > 0" class="opacity-30">|</span>
+                                                    <span v-if="editForm.cost && Number(editForm.cost) > 0">Split Cost Basis: <strong class="text-warning">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong></span>
+                                                </div>
+                                            </li>
+                                        </ul>
                                     </div>
 
                                     <!-- AI Found Image Thumbnail (Single Item) -->
@@ -1621,6 +1643,25 @@ const applyPriceTier = (priceVal) => {
         editForm.resalePrice = p.toFixed(2);
         addToast({ type: 'success', message: `Applied List Price: $${p.toFixed(2)}` });
     }
+};
+
+const calculateMaxBuy = (itemOrVal) => {
+    let fairPrice = 0;
+    if (typeof itemOrVal === 'string' || typeof itemOrVal === 'number') {
+        fairPrice = parsePrice(itemOrVal);
+    } else if (itemOrVal?.price_breakdown?.fair) {
+        fairPrice = parsePrice(itemOrVal.price_breakdown.fair);
+    } else if (itemOrVal?.estimated_value) {
+        fairPrice = parsePrice(itemOrVal.estimated_value);
+    }
+    if (fairPrice <= 0) return 0;
+    return Math.max(0, Math.round(fairPrice * 0.4 - 5));
+};
+
+const calculateSubItemMaxBid = (subItem, parentItem) => {
+    const maxBuy = calculateMaxBuy(subItem);
+    if (maxBuy <= 0) return 0;
+    return Math.max(0, Math.round(maxBuy * 0.85));
 };
 
 const scoutTotalRange = computed(() => {
