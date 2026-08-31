@@ -561,126 +561,62 @@
                                 <!-- Report Contents -->
                                 <div v-else-if="scoutResult" class="space-y-4">
                                     
-                                    <!-- MULTI-ITEM LOT: BUNDLE COMPONENTS -->
-                                    <div v-if="scoutItemsArray.length > 1" class="space-y-3">
-                                        <div class="flex items-center justify-between border-b border-base-300 pb-2">
-                                            <span class="text-xs font-bold uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                                                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
-                                                Bundle Components ({{ scoutItemsArray.length }} Items)
-                                            </span>
-                                            <button v-if="item" type="button" class="btn btn-xs btn-primary font-bold shadow-xs gap-1" @click="isLotSplitterOpen = true">
-                                                <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                                                <span>✨ Multi-Tier Lot Splitter</span>
-                                            </button>
+                                    <!-- MULTI-ITEM LOT BANNER (Tiers managed in Lot Hub) -->
+                                    <div v-if="scoutItemsArray.length > 1" class="bg-primary/10 border border-primary/30 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-xs">
+                                        <div class="flex items-center gap-2.5 min-w-0">
+                                            <div class="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                                                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div class="font-bold text-xs text-base-content flex items-center gap-1.5">
+                                                    <span>Multi-Item Lot</span>
+                                                    <span class="badge badge-xs badge-primary font-bold">{{ scoutItemsArray.length }} Items</span>
+                                                </div>
+                                                <p class="text-[11px] opacity-70 truncate">Constituent components & splitting in Lot Hub</p>
+                                            </div>
                                         </div>
-
-                                        <ul class="space-y-2.5">
-                                            <li v-for="(resultItem, idx) in scoutItemsArray" :key="idx" class="bg-base-100 p-2.5 rounded-xl border border-base-300 flex items-start gap-2.5 shadow-xs hover:border-primary/50 transition-colors">
-                                                <!-- Interactive Preview Thumbnail with Photo Picker -->
-                                                <div 
-                                                    @click.stop="openPhotoPicker(idx)"
-                                                    class="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden border border-base-300 bg-base-200 shadow-inner flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary relative group transition-all" 
-                                                    title="Click to select / change photo"
-                                                >
-                                                    <img 
-                                                        v-if="cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])" 
-                                                        :src="cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])" 
-                                                        class="w-full h-full object-cover" 
-                                                        alt="Item preview" 
-                                                        @error="$event.target.style.display = 'none'; $event.target.nextElementSibling?.classList.remove('hidden')" 
-                                                    />
-                                                    <div :class="{'hidden': cropPreviews[idx] || resultItem.image || resultItem.image_url || (resultItem.image_index !== undefined && allAvailableGalleryUrls[resultItem.image_index])}" class="flex flex-col items-center justify-center text-base-content/40 p-1">
-                                                        <Icon icon="solar:gallery-wide-bold" class="w-5 h-5" />
-                                                        <span class="text-[8px] font-bold">Pick</span>
-                                                    </div>
-                                                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
-                                                        <Icon icon="solar:gallery-edit-linear" class="w-4 h-4" />
-                                                        <span class="text-[8px] font-bold mt-0.5">Change</span>
-                                                    </div>
-                                                </div>
-
-                                                <div class="flex-1 flex flex-col gap-1.5 min-w-0">
-                                                    <!-- Title & Swap -->
-                                                    <div class="flex items-center justify-between gap-1.5 w-full">
-                                                        <div class="flex items-center gap-1.5 flex-1 min-w-0">
-                                                            <span class="text-primary font-black text-xs shrink-0">{{ idx + 1 }}.</span>
-                                                            <input 
-                                                                v-if="resultItem.name !== undefined"
-                                                                v-model="resultItem.name" 
-                                                                class="input input-xs bg-transparent font-bold text-xs sm:text-sm text-base-content hover:bg-base-200/70 focus:bg-base-200 px-1 py-0 rounded w-full truncate border-none focus:outline-none" 
-                                                                :placeholder="resultItem.title || resultItem.identity || 'Item Name'"
-                                                            />
-                                                            <input 
-                                                                v-else-if="resultItem.title !== undefined"
-                                                                v-model="resultItem.title" 
-                                                                class="input input-xs bg-transparent font-bold text-xs sm:text-sm text-base-content hover:bg-base-200/70 focus:bg-base-200 px-1 py-0 rounded w-full truncate border-none focus:outline-none" 
-                                                                :placeholder="resultItem.identity || 'Item Name'"
-                                                            />
-                                                            <span v-else class="text-base-content font-bold text-xs sm:text-sm truncate">{{ resultItem.identity || resultItem.item || 'Unknown Item' }}</span>
-                                                        </div>
-                                                        
-                                                        <!-- Photo Swap & Delete Controls -->
-                                                        <div class="flex items-center gap-0.5 shrink-0 bg-base-200/80 rounded px-1 py-0.5 border border-base-300">
-                                                            <button v-if="idx > 0" @click.stop="swapComponentPhotos(idx, idx - 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item above">
-                                                                <Icon icon="solar:arrow-up-linear" class="w-3.5 h-3.5" />
-                                                            </button>
-                                                            <button v-if="idx < scoutItemsArray.length - 1" @click.stop="swapComponentPhotos(idx, idx + 1)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/70 hover:text-primary" title="Swap photo with item below">
-                                                                <Icon icon="solar:arrow-down-linear" class="w-3.5 h-3.5" />
-                                                            </button>
-                                                            <button @click.stop="removeScoutComponent(idx)" class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-base-content/40 hover:text-error ml-0.5" title="Remove duplicate/unwanted item">
-                                                                <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Condition Line & Standout Key Badge -->
-                                                    <div class="flex items-start gap-1.5 flex-wrap">
-                                                        <span class="badge badge-neutral badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded shrink-0">
-                                                            {{ getConditionGrade(resultItem.condition) }}
-                                                        </span>
-                                                        <span v-if="resultItem.is_key_issue" class="badge badge-warning badge-xs font-bold text-[10px] px-1.5 py-0.5 rounded shrink-0">
-                                                            ★ Key Standout
-                                                        </span>
-                                                        <span v-if="getConditionNotes(resultItem.condition)" class="text-[11px] text-base-content/70 italic leading-snug flex-1 min-w-0">
-                                                            {{ getConditionNotes(resultItem.condition) }}
-                                                        </span>
-                                                    </div>
-
-                                                    <!-- Clean High-Contrast Price Badges -->
-                                                    <div class="flex flex-wrap items-center gap-1.5 text-[11px] pt-1 mt-0.5 border-t border-base-200/80">
-                                                        <span v-if="resultItem.price_breakdown?.fair" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
-                                                            Fair: <strong class="text-primary font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.fair) }}</strong>
-                                                        </span>
-                                                        <span v-if="resultItem.price_breakdown?.boutique_premium" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
-                                                            Boutique: <strong class="text-secondary font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.boutique_premium) }}</strong>
-                                                        </span>
-                                                        <span v-if="resultItem.price_breakdown?.mint" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
-                                                            Mint: <strong class="text-success font-mono font-bold">{{ formatPriceRange(resultItem.price_breakdown.mint) }}</strong>
-                                                        </span>
-                                                        <span v-if="(!resultItem.price_breakdown?.fair && !resultItem.price_breakdown?.boutique_premium) && resultItem.estimated_value" class="bg-base-200/80 px-1.5 py-0.5 rounded text-base-content/90 font-medium">
-                                                            Est: <strong class="text-primary font-mono font-bold">{{ formatPriceRange(resultItem.estimated_value) }}</strong>
-                                                        </span>
-                                                        
-                                                        <span v-if="editForm.cost && !isNaN(parseFloat(editForm.cost))" class="bg-warning/15 text-warning px-1.5 py-0.5 rounded font-medium ml-auto">
-                                                            Split Cost: <strong class="font-mono font-bold">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong>
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </li>
-                                        </ul>
+                                        <button type="button" class="btn btn-xs btn-primary font-bold shadow-xs shrink-0 gap-1" @click="mainTab = 'lots'">
+                                            <span>Lot Hub</span>
+                                            <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                                        </button>
                                     </div>
 
-                                    <!-- SINGLE ITEM LAYOUT -->
-                                    <div v-else-if="scoutItemsArray.length === 1" class="space-y-3">
-                                        <!-- AI Found Image Thumbnail -->
-                                        <div v-if="scoutItemsArray[0].image" class="mb-2 flex justify-center">
-                                            <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-xl shadow-md border border-base-300" alt="AI Found Item" @error="$event.target.style.display = 'none'" />
+                                    <!-- SOURCING STRATEGY VERDICT CARD -->
+                                    <div v-if="scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
+                                        'border-success bg-success/10': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
+                                        'border-error bg-error/10': scoutPurchaseStrategy.verdict === 'PASS',
+                                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
+                                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
+                                    }">
+                                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                                            <div class="flex items-center gap-2">
+                                                <Icon icon="solar:magic-stick-bold" class="w-5 h-5 text-success" v-if="['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)" />
+                                                <Icon icon="solar:stop-circle-bold" class="w-5 h-5 text-error" v-else-if="scoutPurchaseStrategy.verdict === 'PASS'" />
+                                                <Icon icon="solar:eye-bold" class="w-5 h-5 text-warning" v-else />
+                                                <h4 class="font-black text-sm uppercase tracking-wider" :class="{
+                                                    'text-success': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
+                                                    'text-error': scoutPurchaseStrategy.verdict === 'PASS',
+                                                    'text-warning': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
+                                                    'text-primary': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
+                                                }">{{ String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}</h4>
+                                            </div>
+                                            <div v-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
+                                                Max Bid: ${{ scoutPurchaseStrategy.max_bid }}
+                                            </div>
                                         </div>
+                                        <p v-if="scoutPurchaseStrategy.advice" class="text-xs opacity-90 leading-relaxed font-medium">
+                                            {{ scoutPurchaseStrategy.advice }}
+                                        </p>
+                                    </div>
 
-                                        <!-- Red Flags -->
-                                        <div v-if="scoutItemsArray[0].red_flags && scoutItemsArray[0].red_flags.length > 0" class="alert alert-warning shadow-xs p-2.5 text-xs">
-                                            <span class="font-bold"><Icon icon="solar:danger-triangle-bold" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutItemsArray[0].red_flags.join(', ') }}
-                                        </div>
+                                    <!-- AI Found Image Thumbnail (Single Item) -->
+                                    <div v-if="scoutItemsArray.length === 1 && scoutItemsArray[0].image" class="mb-2 flex justify-center">
+                                        <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-xl shadow-md border border-base-300" alt="AI Found Item" @error="$event.target.style.display = 'none'" />
+                                    </div>
+
+                                    <!-- Red Flags -->
+                                    <div v-if="scoutItemsArray[0]?.red_flags && scoutItemsArray[0].red_flags.length > 0" class="alert alert-warning shadow-xs p-2.5 text-xs">
+                                        <span class="font-bold"><Icon icon="solar:danger-triangle-bold" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutItemsArray[0].red_flags.join(', ') }}
                                     </div>
 
                                     <!-- SUGGESTED VALUATION MATRIX (2x2 Grid) -->
@@ -1526,6 +1462,14 @@ const suggestedTitleStr = computed(() => {
     if (Array.isArray(scoutResult.value) && scoutResult.value.length > 0) {
         return scoutResult.value[0].title || scoutResult.value[0].identity || null;
     }
+    return null;
+});
+
+const scoutPurchaseStrategy = computed(() => {
+    if (!scoutResult.value) return null;
+    if (scoutResult.value.purchase_strategy) return scoutResult.value.purchase_strategy;
+    if (Array.isArray(scoutResult.value) && scoutResult.value[0]?.purchase_strategy) return scoutResult.value[0].purchase_strategy;
+    if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items[0]?.purchase_strategy) return scoutResult.value.items[0].purchase_strategy;
     return null;
 });
 
