@@ -143,91 +143,117 @@
     <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
     <div class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="table w-full">
-          <thead class="bg-base-200/50">
+        <table class="table table-zebra w-full">
+          <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">
             <tr>
-              <th>PO Number</th>
-              <th>External ID</th>
-              <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('date')">
-                <div class="flex items-center gap-1">
+              <th class="w-40 py-3.5 px-4 whitespace-nowrap">PO Number</th>
+              <th class="w-44 py-3.5 px-4 whitespace-nowrap">External ID</th>
+              <th class="w-32 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('date')">
+                <div class="flex items-center gap-1.5">
                   Date
-                  <span v-if="sortBy === 'date'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-if="sortBy === 'date'" class="text-xs font-black">{{ sortDesc ? '▼' : '▲' }}</span>
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th>Vendor</th>
-              <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
-                <div class="flex items-center gap-1">
+              <th class="w-40 py-3.5 px-4 whitespace-nowrap">Vendor</th>
+              <th class="w-28 py-3.5 px-4 whitespace-nowrap text-right cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
+                <div class="flex items-center justify-end gap-1.5">
                   Total
-                  <span v-if="sortBy === 'total'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-if="sortBy === 'total'" class="text-xs font-black">{{ sortDesc ? '▼' : '▲' }}</span>
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th>Status</th>
-              <th class="text-right">Actions</th>
+              <th class="w-32 py-3.5 px-4 whitespace-nowrap text-center">Status</th>
+              <th class="w-60 py-3.5 px-4 whitespace-nowrap text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/20 transition-colors">
-              <td class="font-bold">
-                <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1">
+            <tr v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/40 transition-colors">
+              <!-- PO Number -->
+              <td class="py-3 px-4 font-bold whitespace-nowrap">
+                <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1.5 font-mono text-sm">
                   <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-                  {{ purchase.poNumber || 'Pending' }}
+                  <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
                 </a>
               </td>
-              <td class="font-mono text-sm opacity-75">
+
+              <!-- External ID -->
+              <td class="py-3 px-4 font-mono text-xs opacity-85 whitespace-nowrap">
                 <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
                    :href="getSgwUrl(purchase.orderId)" 
                    target="_blank" 
-                   class="link link-hover flex items-center gap-1"
+                   class="link link-primary link-hover flex items-center gap-1 font-bold"
                    title="Open in ShopGoodwill">
-                  {{ purchase.orderId }}
-                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
+                  <span>#{{ purchase.orderId }}</span>
+                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
                 </a>
                 <a v-else-if="purchase.orderId?.startsWith('http')"
                    :href="purchase.orderId"
                    target="_blank"
-                   class="link link-hover flex items-center gap-1 text-primary"
+                   class="link link-hover flex items-center gap-1 text-primary truncate max-w-[160px]"
                    title="Open External URL">
-                  {{ purchase.orderId.length > 35 ? purchase.orderId.substring(0, 32) + '...' : purchase.orderId }}
-                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
+                  <span class="truncate">{{ purchase.orderId.length > 25 ? purchase.orderId.substring(0, 22) + '...' : purchase.orderId }}</span>
+                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
                 </a>
-                <span v-else>{{ purchase.orderId }}</span>
+                <span v-else class="truncate max-w-[160px] inline-block">{{ purchase.orderId || '—' }}</span>
               </td>
-              <td>{{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}</td>
-              <td>
-                <div class="badge badge-ghost">{{ purchase.vendor || 'Unknown' }}</div>
+
+              <!-- Date -->
+              <td class="py-3 px-4 text-xs font-medium whitespace-nowrap">
+                {{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}
               </td>
-              <td class="font-mono font-medium">${{ (purchase.grandTotal || 0).toFixed(2) }}</td>
-              <td>
-                <div class="badge" :class="getStatusClass(purchase.status)">
+
+              <!-- Vendor -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div class="badge badge-ghost font-bold text-xs truncate max-w-[140px]">
+                  {{ purchase.vendor || 'Unknown' }}
+                </div>
+              </td>
+
+              <!-- Total -->
+              <td class="py-3 px-4 font-mono font-black text-sm text-right whitespace-nowrap text-base-content">
+                ${{ (purchase.grandTotal || 0).toFixed(2) }}
+              </td>
+
+              <!-- Status -->
+              <td class="py-3 px-4 text-center whitespace-nowrap">
+                <div class="badge badge-sm font-bold uppercase tracking-wider text-[10px]" :class="getStatusClass(purchase.status)">
                   {{ purchase.status || 'Pending' }}
                 </div>
               </td>
-              <td class="text-right">
+
+              <!-- Actions -->
+              <td class="py-3 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
                   <a 
                     :href="`/purchases/ingest?poId=${purchase.$id}`"
-                    class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-sm"
+                    class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-xs px-2.5 h-8 rounded-lg"
                     title="Ingest, Price & Tag Haul"
                   >
                     <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
                     <span>Ingest</span>
                   </a>
+
                   <a 
                     :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
-                    class="btn btn-xs btn-outline btn-secondary gap-1"
+                    class="btn btn-xs btn-outline btn-secondary font-bold gap-1 px-2.5 h-8 rounded-lg"
                     title="View all items for this order in Inventory"
                   >
                     <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                     <span>Items</span>
                   </a>
-                  <a :href="`/purchases/${purchase.$id}`" class="btn btn-xs btn-ghost btn-square" title="View Purchase Details">
+
+                  <a 
+                    :href="`/purchases/${purchase.$id}`" 
+                    class="btn btn-xs btn-ghost hover:bg-base-200 btn-square h-8 w-8 rounded-lg" 
+                    title="View Purchase Details"
+                  >
                     <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
                   </a>
+
                   <button 
                     @click="deletePurchaseOrder(purchase)" 
-                    class="btn btn-xs btn-ghost btn-square text-error hover:bg-error/10" 
+                    class="btn btn-xs btn-ghost text-error hover:bg-error/10 btn-square h-8 w-8 rounded-lg" 
                     title="Delete this Purchase Order"
                   >
                     <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
