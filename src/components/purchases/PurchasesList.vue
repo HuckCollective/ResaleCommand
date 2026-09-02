@@ -1,163 +1,243 @@
 <template>
-  <div class="card bg-base-100 shadow-xl border border-base-200">
-    <div class="p-4 border-b border-base-200 bg-base-100 flex items-center justify-between gap-4 sticky top-0 z-10 shadow-sm rounded-t-2xl">
-      <div class="flex gap-2 flex-1 max-w-md">
-        <input 
-          type="text" 
-          v-model="searchQuery" 
-          @keyup.enter="handleSearch"
-          placeholder="Search PO Number, External ID, or Vendor..." 
-          class="input input-sm sm:input-md input-bordered w-full"
-        />
-        <button class="btn btn-sm sm:btn-md btn-primary" @click="handleSearch" :disabled="loading">
-          <span v-if="loading" class="loading loading-spinner loading-xs"></span>
-          Search
-        </button>
-        <button v-if="searchQuery" class="btn btn-sm sm:btn-md btn-ghost" @click="clearSearch" :disabled="loading">
-          Clear
-        </button>
-      </div>
-
-      <div class="flex items-center gap-2 flex-wrap">
-        <button 
-          @click="cleanEmptyPurchases" 
-          class="btn btn-sm btn-ghost text-warning hover:bg-warning/10 font-bold gap-1.5 shadow-xs"
-          :disabled="cleaningEmpty"
-          title="Scan and delete purchase orders that have 0 items"
-        >
-          <Icon icon="solar:broom-bold-duotone" class="w-4 h-4" />
-          <span>{{ cleaningEmpty ? 'Cleaning...' : 'Clean Empty Orders' }}</span>
-        </button>
-
-        <button 
-          v-if="undoBatch" 
-          @click="handleUndoImport" 
-          class="btn btn-sm btn-outline btn-error font-black gap-1.5 shadow-xs"
-          :disabled="processingUndo"
-          title="Roll back all items & POs created in the last import session"
-        >
-          <Icon icon="solar:restart-bold" class="w-4 h-4" />
-          <span>{{ processingUndo ? 'Rolling back...' : `Rollback Last Import (${(undoBatch.items?.length || 0) + (undoBatch.purchases?.length || 0)})` }}</span>
-        </button>
-
-        <button @click="showImportModal = true" class="btn btn-sm btn-outline btn-primary font-black gap-2 shadow-xs">
-          <Icon icon="solar:upload-track-bold-duotone" class="w-4 h-4" />
-          Import SGW Report
-        </button>
-        <div class="text-xs font-bold opacity-60 hidden sm:block">
-          {{ filteredPurchases.length }} Order(s)
+  <div class="space-y-4">
+    <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & MOBILE-FIRST) -->
+    <div class="card bg-base-100 shadow-md border border-base-200 p-3 sm:p-4">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        
+        <!-- DaisyUI Connected Search Input + Button Group (.join) -->
+        <div class="join w-full shadow-xs">
+          <div class="relative flex-1 join-item">
+            <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
+            <input 
+              type="text" 
+              v-model="searchQuery" 
+              @keyup.enter="handleSearch"
+              placeholder="Search PO Number, External Order ID, Vendor..." 
+              class="input input-bordered join-item w-full pl-10 pr-9 text-sm min-h-[44px]"
+            />
+            <button 
+              v-if="searchQuery" 
+              @click="clearSearch" 
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 min-h-[28px] min-w-[28px]"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          </div>
+          
+          <button 
+            @click="handleSearch" 
+            class="btn btn-primary join-item text-primary-content font-black px-4 min-h-[44px] shrink-0 gap-1.5 active:scale-95 transition-all"
+            :disabled="loading"
+            title="Execute Search"
+          >
+            <Icon icon="solar:magnifer-bold" class="w-4 h-4" />
+            <span class="hidden sm:inline">Search</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="table w-full">
-        <thead class="bg-base-200/50">
-          <tr>
-            <th>PO Number</th>
-            <th>External ID</th>
-            <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('date')">
-              <div class="flex items-center gap-1">
-                Date
-                <span v-if="sortBy === 'date'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
-                <span v-else class="text-xs opacity-20">▼</span>
-              </div>
-            </th>
-            <th class="hidden md:table-cell">Vendor</th>
-            <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
-              <div class="flex items-center gap-1">
-                Total
-                <span v-if="sortBy === 'total'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
-                <span v-else class="text-xs opacity-20">▼</span>
-              </div>
-            </th>
-            <th class="hidden md:table-cell">Status</th>
-            <th class="text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading && purchases.length === 0">
-            <td colspan="7" class="text-center py-12">
-              <span class="loading loading-spinner loading-lg text-primary"></span>
-            </td>
-          </tr>
-          <tr v-else-if="filteredPurchases.length === 0">
-            <td colspan="7" class="text-center py-12 text-base-content/50">
-              No purchases found matching your criteria.
-            </td>
-          </tr>
-          <tr v-else v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/20 transition-colors">
-            <td class="font-bold">
-              <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1">
-                <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-                {{ purchase.poNumber || 'Pending' }}
-              </a>
-            </td>
-            <td class="font-mono text-sm opacity-75">
-              <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
-                 :href="getSgwUrl(purchase.orderId)" 
-                 target="_blank" 
-                 class="link link-hover flex items-center gap-1"
-                 title="Open in ShopGoodwill">
-                {{ purchase.orderId }}
-                <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
-              </a>
-              <a v-else-if="purchase.orderId?.startsWith('http')"
-                 :href="purchase.orderId"
-                 target="_blank"
-                 class="link link-hover flex items-center gap-1 text-primary"
-                 title="Open External URL">
-                {{ purchase.orderId.length > 35 ? purchase.orderId.substring(0, 32) + '...' : purchase.orderId }}
-                <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
-              </a>
-              <span v-else>{{ purchase.orderId }}</span>
-            </td>
-            <td>{{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}</td>
-            <td class="hidden md:table-cell">
-              <div class="badge badge-ghost">{{ purchase.vendor || 'Unknown' }}</div>
-            </td>
-            <td class="font-mono font-medium">${{ (purchase.grandTotal || 0).toFixed(2) }}</td>
-            <td class="hidden md:table-cell">
-              <div class="badge" :class="getStatusClass(purchase.status)">
-                {{ purchase.status || 'Pending' }}
-              </div>
-            </td>
-            <td class="text-right">
-              <div class="flex items-center justify-end gap-1.5">
-                <a 
-                  :href="`/purchases/ingest?poId=${purchase.$id}`"
-                  class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-sm"
-                  title="Ingest, Price & Tag Haul"
-                >
-                  <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                  <span>Ingest</span>
-                </a>
-                <a 
-                  :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
-                  class="btn btn-xs btn-outline btn-secondary gap-1"
-                  title="View all items for this order in Inventory"
-                >
-                  <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
-                  <span>Items</span>
-                </a>
-                <a :href="`/purchases/${purchase.$id}`" class="btn btn-xs btn-ghost btn-square" title="View Purchase Details">
-                  <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
-                </a>
-                <button 
-                  @click="deletePurchaseOrder(purchase)" 
-                  class="btn btn-xs btn-ghost btn-square text-error hover:bg-error/10" 
-                  title="Delete this Purchase Order"
-                >
-                  <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- LOADING STATE -->
+    <div v-if="loading && purchases.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+      <span class="text-xs font-bold opacity-60">Loading Purchases...</span>
+    </div>
 
-      <!-- Bottom scroll spacer so bottom-most rows are never covered by dock -->
-      <div class="h-28"></div>
+    <!-- EMPTY STATE -->
+    <div v-else-if="filteredPurchases.length === 0" class="card bg-base-100 shadow-md border border-base-200 p-8 text-center space-y-2">
+      <Icon icon="solar:box-minimalistic-linear" class="w-12 h-12 mx-auto text-base-content/30" />
+      <h3 class="font-bold text-base">No Purchases Found</h3>
+      <p class="text-xs text-base-content/60">No purchases match your search or filter criteria.</p>
+    </div>
+
+    <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
+    <div v-else class="block md:hidden space-y-3">
+      <div 
+        v-for="purchase in filteredPurchases" 
+        :key="purchase.$id"
+        class="card bg-base-100 shadow-md border border-base-200/80 hover:border-primary/40 transition-all rounded-2xl p-3.5 space-y-3"
+      >
+        <!-- Card Header: PO Number + Price + Status -->
+        <div class="flex items-start justify-between gap-2">
+          <div class="space-y-0.5">
+            <a :href="`/purchases/${purchase.$id}`" class="link link-primary font-black text-base flex items-center gap-1.5">
+              <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 shrink-0 text-primary" />
+              <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
+            </a>
+            <div class="text-[11px] font-medium opacity-60 flex items-center gap-1">
+              <Icon icon="solar:calendar-linear" class="w-3 h-3" />
+              <span>{{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}</span>
+            </div>
+          </div>
+
+          <div class="text-right space-y-1">
+            <div class="font-mono font-black text-lg text-base-content leading-none">
+              ${{ (purchase.grandTotal || 0).toFixed(2) }}
+            </div>
+            <div class="badge badge-sm font-bold" :class="getStatusClass(purchase.status)">
+              {{ purchase.status || 'Pending' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Vendor & External Order ID -->
+        <div class="flex items-center justify-between gap-2 bg-base-200/50 rounded-xl px-3 py-2 text-xs">
+          <div class="flex items-center gap-1.5 text-base-content/80 font-bold truncate">
+            <Icon icon="solar:shop-2-linear" class="w-3.5 h-3.5 shrink-0 opacity-60" />
+            <span class="truncate">{{ purchase.vendor || 'Unknown Vendor' }}</span>
+          </div>
+
+          <div class="shrink-0 font-mono text-[11px]">
+            <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
+               :href="getSgwUrl(purchase.orderId)" 
+               target="_blank" 
+               class="link link-primary font-bold flex items-center gap-1"
+               title="Open in ShopGoodwill">
+              #{{ purchase.orderId }}
+              <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60" />
+            </a>
+            <span v-else class="opacity-60">#{{ purchase.orderId || '—' }}</span>
+          </div>
+        </div>
+
+        <!-- Touch Actions: Ingest, Items, Details, Delete -->
+        <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
+          <a 
+            :href="`/purchases/ingest?poId=${purchase.$id}`"
+            class="btn btn-sm btn-primary text-primary-content font-black flex-1 rounded-xl shadow-xs gap-1.5 min-h-[38px]"
+            title="Ingest & Tag Haul"
+          >
+            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
+            <span>Ingest</span>
+          </a>
+
+          <a 
+            :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
+            class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1 min-h-[38px]"
+            title="View Items in Inventory"
+          >
+            <Icon icon="solar:box-minimalistic-linear" class="w-4 h-4" />
+            <span>Items</span>
+          </a>
+
+          <a 
+            :href="`/purchases/${purchase.$id}`" 
+            class="btn btn-sm btn-ghost bg-base-200/50 hover:bg-base-200 btn-square rounded-xl min-h-[38px] w-10" 
+            title="View Details"
+          >
+            <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+          </a>
+
+          <button 
+            @click="deletePurchaseOrder(purchase)" 
+            class="btn btn-sm btn-ghost text-error hover:bg-error/10 btn-square rounded-xl min-h-[38px] w-10" 
+            title="Delete this Purchase Order"
+          >
+            <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
+    <div class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="table w-full">
+          <thead class="bg-base-200/50">
+            <tr>
+              <th>PO Number</th>
+              <th>External ID</th>
+              <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('date')">
+                <div class="flex items-center gap-1">
+                  Date
+                  <span v-if="sortBy === 'date'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
+                </div>
+              </th>
+              <th>Vendor</th>
+              <th class="cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
+                <div class="flex items-center gap-1">
+                  Total
+                  <span v-if="sortBy === 'total'" class="text-xs">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
+                </div>
+              </th>
+              <th>Status</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/20 transition-colors">
+              <td class="font-bold">
+                <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1">
+                  <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                  {{ purchase.poNumber || 'Pending' }}
+                </a>
+              </td>
+              <td class="font-mono text-sm opacity-75">
+                <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
+                   :href="getSgwUrl(purchase.orderId)" 
+                   target="_blank" 
+                   class="link link-hover flex items-center gap-1"
+                   title="Open in ShopGoodwill">
+                  {{ purchase.orderId }}
+                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
+                </a>
+                <a v-else-if="purchase.orderId?.startsWith('http')"
+                   :href="purchase.orderId"
+                   target="_blank"
+                   class="link link-hover flex items-center gap-1 text-primary"
+                   title="Open External URL">
+                  {{ purchase.orderId.length > 35 ? purchase.orderId.substring(0, 32) + '...' : purchase.orderId }}
+                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-50" />
+                </a>
+                <span v-else>{{ purchase.orderId }}</span>
+              </td>
+              <td>{{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}</td>
+              <td>
+                <div class="badge badge-ghost">{{ purchase.vendor || 'Unknown' }}</div>
+              </td>
+              <td class="font-mono font-medium">${{ (purchase.grandTotal || 0).toFixed(2) }}</td>
+              <td>
+                <div class="badge" :class="getStatusClass(purchase.status)">
+                  {{ purchase.status || 'Pending' }}
+                </div>
+              </td>
+              <td class="text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                  <a 
+                    :href="`/purchases/ingest?poId=${purchase.$id}`"
+                    class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-sm"
+                    title="Ingest, Price & Tag Haul"
+                  >
+                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                    <span>Ingest</span>
+                  </a>
+                  <a 
+                    :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
+                    class="btn btn-xs btn-outline btn-secondary gap-1"
+                    title="View all items for this order in Inventory"
+                  >
+                    <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
+                    <span>Items</span>
+                  </a>
+                  <a :href="`/purchases/${purchase.$id}`" class="btn btn-xs btn-ghost btn-square" title="View Purchase Details">
+                    <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+                  </a>
+                  <button 
+                    @click="deletePurchaseOrder(purchase)" 
+                    class="btn btn-xs btn-ghost btn-square text-error hover:bg-error/10" 
+                    title="Delete this Purchase Order"
+                  >
+                    <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Floating Scroll to Top & Count FAB (Floats in bottom-right corner out of the content area) -->
