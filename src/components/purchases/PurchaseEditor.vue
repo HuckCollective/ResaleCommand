@@ -12,7 +12,7 @@
               <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
               <a v-if="isEdit" :href="'/purchases/ingest?poId=' + purchaseId" 
                  class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black gap-1.5 shadow-md">
-                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" /> Ingest & Tag Haul
+                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" /> Unbox & Receive Haul
               </a>
             </div>
             <div class="form-control" v-if="isEdit">
@@ -212,67 +212,123 @@
           <div v-else-if="items.length === 0" class="py-8 text-center opacity-50 border-2 border-dashed border-base-300 rounded-box text-sm">
             No items are linked to this purchase yet.
           </div>
-          <div v-else class="overflow-x-auto border border-base-200 rounded-box">
-            <table class="table table-sm table-zebra w-full">
-              <thead>
-                <tr>
-                  <th class="w-16">Photo</th>
-                  <th>Item Details</th>
-                  <th>Cost (Landed)</th>
-                  <th>Resale Price</th>
-                  <th>Status</th>
-                  <th class="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in items" :key="item.$id" class="hover:bg-base-200/50">
-                  <td>
-                    <div class="w-12 h-12 rounded-lg overflow-hidden bg-base-200 border border-base-300 flex items-center justify-center shrink-0">
-                      <img 
-                        v-if="getItemImage(item)" 
-                        :src="getItemImage(item)" 
-                        class="w-full h-full object-cover" 
-                        alt="Item Thumbnail"
-                        @error="$event.target.style.display = 'none'" 
-                      />
-                      <Icon v-else icon="solar:gallery-wide-bold" class="w-5 h-5 opacity-30" />
-                    </div>
-                  </td>
-                  <td>
-                    <div class="flex flex-col gap-0.5">
-                      <span class="font-bold text-sm text-base-content">{{ item.title }}</span>
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
-                        <span v-else-if="item.identity" class="font-mono text-xs opacity-60">{{ item.identity }}</span>
-                        <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
-                        <span v-if="item.parentLotId" class="badge badge-xs badge-accent">Extracted Component</span>
+          <div v-else class="space-y-3">
+            <!-- Receiving & AI Toolbar -->
+            <div class="flex flex-wrap items-center justify-between gap-2 p-3 bg-base-200/80 rounded-xl border border-base-300">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-base-content uppercase tracking-wider">
+                  {{ items.length }} Line Item(s)
+                </span>
+                <span class="badge badge-sm badge-neutral font-mono font-bold">
+                  Landed Cost: ${{ itemsTotalCost.toFixed(2) }}
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap">
+                <button 
+                  v-if="itemsWithPhotosCount > 0" 
+                  @click="runBatchAiDeepReceive" 
+                  class="btn btn-xs btn-primary text-primary-content font-bold gap-1 shadow-xs"
+                  :disabled="batchAiRunning"
+                >
+                  <span v-if="batchAiRunning" class="loading loading-spinner loading-xs"></span>
+                  <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
+                  AI Deep Receive Photos ({{ itemsWithPhotosCount }})
+                </button>
+
+                <button 
+                  v-if="hasUnreceivedItems" 
+                  @click="receiveAllToStock('Memory Den (MD1)')" 
+                  class="btn btn-xs btn-success text-success-content font-bold gap-1 shadow-xs"
+                >
+                  <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                  Receive All to In-Stock
+                </button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto border border-base-200 rounded-box">
+              <table class="table table-sm table-zebra w-full">
+                <thead>
+                  <tr>
+                    <th class="w-16">Photo</th>
+                    <th>Item Details</th>
+                    <th>Cost (Landed)</th>
+                    <th>Resale Price</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in items" :key="item.$id" class="hover:bg-base-200/50">
+                    <td>
+                      <div class="w-12 h-12 rounded-lg overflow-hidden bg-base-200 border border-base-300 flex items-center justify-center shrink-0">
+                        <img 
+                          v-if="getItemImage(item)" 
+                          :src="getItemImage(item)" 
+                          class="w-full h-full object-cover" 
+                          alt="Item Thumbnail"
+                          @error="$event.target.style.display = 'none'" 
+                        />
+                        <Icon v-else icon="solar:gallery-wide-bold" class="w-5 h-5 opacity-30" />
                       </div>
-                    </div>
-                  </td>
-                  <td class="font-mono font-medium">${{ (Number(item.cost) || 0).toFixed(2) }}</td>
-                  <td class="font-mono font-medium text-success">
-                    {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : '-') }}
-                  </td>
-                  <td>
-                    <div class="badge badge-sm" :class="item.status === 'sold' ? 'badge-success' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost')">
-                      {{ item.status || 'acquired' }}
-                    </div>
-                  </td>
-                  <td class="text-right">
-                    <div class="flex items-center justify-end gap-1.5">
-                      <button class="btn btn-xs btn-outline btn-primary gap-1" @click="openEditItem(item)">
-                        <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
-                      <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
-                        <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
-                        <span v-else>Unlink</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    </td>
+                    <td>
+                      <div class="flex flex-col gap-0.5">
+                        <span class="font-bold text-sm text-base-content">{{ item.title }}</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
+                          <span v-else-if="item.identity" class="font-mono text-xs opacity-60">{{ item.identity }}</span>
+                          <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
+                          <span v-if="item.parentLotId" class="badge badge-xs badge-accent">Extracted Component</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="font-mono font-medium">${{ (Number(item.cost) || 0).toFixed(2) }}</td>
+                    <td class="font-mono font-medium text-success">
+                      {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : '-') }}
+                    </td>
+                    <td>
+                      <div class="badge badge-sm" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost'))">
+                        {{ item.status || 'acquired' }}
+                      </div>
+                    </td>
+                    <td class="text-right">
+                      <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                        <button 
+                          v-if="getItemImage(item)" 
+                          class="btn btn-xs btn-outline btn-secondary font-bold gap-1" 
+                          @click="runItemAiDeepReceive(item)" 
+                          :disabled="aiProcessingId === item.$id"
+                          title="Run AI Deep Identification on Photo"
+                        >
+                          <span v-if="aiProcessingId === item.$id" class="loading loading-spinner loading-xs"></span>
+                          <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
+                          <span>AI Receive</span>
+                        </button>
+                        <button 
+                          v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
+                          class="btn btn-xs btn-ghost text-success hover:bg-success/20 font-bold gap-0.5" 
+                          @click="receiveToStock(item)"
+                          title="Mark In-Stock"
+                        >
+                          <Icon icon="solar:check-circle-linear" class="w-3.5 h-3.5" />
+                          <span>Receive</span>
+                        </button>
+                        <button class="btn btn-xs btn-outline btn-primary gap-1 font-bold" @click="openEditItem(item)">
+                          <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
+                          <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
+                          <span v-else>Unlink</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -339,7 +395,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { purchasesAPI } from '../../lib/purchases';
-import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInventory, updateInventoryItem, BUCKET_ID } from '../../lib/inventory';
+import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInventory, updateInventoryItem, BUCKET_ID, getCollectionId } from '../../lib/inventory';
 import { databases, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
@@ -383,6 +439,7 @@ const getAssetUrl = (id) => {
 const getItemImage = (item) => {
     if (!item) return null;
     if (item.imageId) return getAssetUrl(item.imageId);
+    if (item.imageUrl) return getAssetUrl(item.imageUrl);
     if (item.galleryImageIds && item.galleryImageIds.length > 0) return getAssetUrl(item.galleryImageIds[0]);
     if (item.conditionNotes) {
         const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
@@ -431,6 +488,136 @@ const computedGrandTotal = computed(() => {
 
 // Items State
 const items = ref([]);
+const itemsWithPhotosCount = computed(() => items.value.filter(i => getItemImage(i)).length);
+const itemsTotalCost = computed(() => items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0));
+const hasUnreceivedItems = computed(() => items.value.some(i => i.status !== 'in-stock' && i.status !== 'placed' && i.status !== 'sold'));
+const batchAiRunning = ref(false);
+const aiProcessingId = ref(null);
+
+const runItemAiDeepReceive = async (item) => {
+    const imgUrl = getItemImage(item);
+    if (!imgUrl) {
+        addToast('No photo available for this item to run AI Deep Receive', 'warning');
+        return;
+    }
+    aiProcessingId.value = item.$id;
+    showLoader('AI Deep Receiving item...', { step: 'Identifying item, estimating boutique price & tag' });
+    try {
+        const res = await fetch('/api/identify-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                imageUrl: imgUrl,
+                title: item.title,
+                notes: `Landed cost: $${item.cost || 0}. Please enrich title, suggest boutique booth retail price, category, brand, and tag_title (30-42 chars max).`
+            })
+        });
+        const data = await res.json();
+        if (data.items && data.items.length > 0) {
+            const detected = data.items[0];
+            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+            const collId = getCollectionId();
+            
+            let suggestedPrice = item.resalePrice || (item.cost ? Math.round(item.cost * 3.5) : 0);
+            if (detected.price_breakdown?.boutique_premium) {
+                const matches = detected.price_breakdown.boutique_premium.match(/([0-9.]+)/);
+                if (matches) suggestedPrice = parseFloat(matches[1]);
+            }
+
+            const updates = {
+                title: detected.title || item.title,
+                tag_title: (detected.tag_title || detected.title || '').slice(0, 42),
+                brand: detected.brand || item.brand || '',
+                category: detected.category || item.category || '',
+                resalePrice: suggestedPrice,
+                condition: detected.condition_notes || item.condition || ''
+            };
+            Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
+            
+            await databases.updateDocument(DB_ID, collId, item.$id, updates);
+            addToast(`AI Deep Received: ${updates.tag_title || updates.title}`, 'success');
+            await loadLinkedItems();
+        } else {
+            addToast('AI could not identify item from photo.', 'warning');
+        }
+    } catch (e) {
+        console.error('AI Deep Receive failed:', e);
+        addToast('AI Deep Receive failed: ' + e.message, 'error');
+    } finally {
+        hideLoader();
+        aiProcessingId.value = null;
+    }
+};
+
+const runBatchAiDeepReceive = async () => {
+    const itemsWithPhotos = items.value.filter(i => getItemImage(i));
+    if (itemsWithPhotos.length === 0) {
+        addToast('No items with photos to AI receive in this purchase.', 'info');
+        return;
+    }
+    batchAiRunning.value = true;
+    showLoader(`AI Deep Receiving ${itemsWithPhotos.length} items...`);
+    let count = 0;
+    for (const item of itemsWithPhotos) {
+        try {
+            await runItemAiDeepReceive(item);
+            count++;
+        } catch (e) {
+            console.warn(e);
+        }
+    }
+    hideLoader();
+    batchAiRunning.value = false;
+    addToast(`AI Deep Received ${count} item(s)!`, 'success');
+};
+
+const receiveToStock = async (item, location = 'Memory Den (MD1)') => {
+    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+    const collId = getCollectionId();
+    try {
+        await databases.updateDocument(DB_ID, collId, item.$id, {
+            status: 'in-stock',
+            storageLocation: item.storageLocation || location
+        });
+        addToast(`Received "${item.tag_title || item.title}" into stock!`, 'success');
+        await loadLinkedItems();
+    } catch (e) {
+        addToast(`Failed to receive item: ${e.message}`, 'error');
+    }
+};
+
+const receiveAllToStock = async (location = 'Memory Den (MD1)') => {
+    if (items.value.length === 0) return;
+    const ok = await confirmDialog(
+        `Receive all ${items.value.length} items into active stock (${location})?`,
+        'Receive Haul to Stock',
+        'Receive All',
+        'Cancel'
+    );
+    if (!ok) return;
+
+    showLoader('Activating items to in-stock inventory...');
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const collId = getCollectionId();
+        await Promise.all(items.value.map(item => 
+            databases.updateDocument(DB_ID, collId, item.$id, {
+                status: 'in-stock',
+                storageLocation: item.storageLocation || location
+            })
+        ));
+        if (props.purchaseId) {
+            await purchasesAPI.updatePurchase(props.purchaseId, { status: 'Received' });
+            form.value.status = 'Received';
+        }
+        addToast(`All ${items.value.length} items are now In-Stock!`, 'success');
+        await loadLinkedItems();
+    } catch (e) {
+        addToast(`Failed to activate items: ${e.message}`, 'error');
+    } finally {
+        hideLoader();
+    }
+};
 const loadingItems = ref(false);
 const itemSearchQuery = ref('');
 const searchResults = ref([]);

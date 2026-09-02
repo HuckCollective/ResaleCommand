@@ -42,6 +42,10 @@ export const purchasesAPI = {
         return res.documents.length > 0 ? res.documents[0] : null;
     },
     
+    async getPurchase(documentId: string) {
+        return await databases.getDocument(DB_ID, getPurchasesCollectionId(), documentId);
+    },
+
     async deletePurchase(documentId: string) {
         return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), documentId);
     },

@@ -7,7 +7,7 @@
         <div class="flex-1 w-full max-w-2xl space-y-1.5">
           <div class="flex items-center gap-2">
             <span class="badge badge-primary text-primary-content font-black text-xs uppercase tracking-wider px-2.5 py-1">
-              Haul Ingestion Wizard
+              Haul Intake & Receiving
             </span>
             <span v-if="poNumber" class="text-xs font-mono font-bold opacity-60">{{ poNumber }}</span>
             <span v-else class="badge badge-ghost badge-sm text-[10px] font-bold opacity-60">Draft PO</span>
@@ -34,9 +34,9 @@
 
         <!-- Wizard Step Indicators -->
         <div class="steps steps-horizontal text-xs font-bold w-full md:w-auto shrink-0">
-          <button @click="currentStep = 1" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 1 }">1. Review</button>
-          <button @click="currentStep = 2" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 2 }">2. AI Enrich & Price</button>
-          <button @click="currentStep = 3" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 3 }">3. Route & Tags</button>
+          <button @click="currentStep = 1" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 1 }">1. Haul & Cost</button>
+          <button @click="currentStep = 2" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 2 }">2. Unbox & AI Receive</button>
+          <button @click="currentStep = 3" class="step cursor-pointer" :class="{ 'step-primary': currentStep >= 3 }">3. Route & Deploy</button>
         </div>
       </div>
     </div>
@@ -45,13 +45,13 @@
     <div v-if="currentStep === 1" class="p-4 sm:p-6 space-y-5">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
-          <h3 class="text-lg font-extrabold text-base-content">Step 1: Ingest & Confirm Lines</h3>
-          <p class="text-xs opacity-70">Choose how to load items into this Purchase Order, then review cost basis.</p>
+          <h3 class="text-lg font-extrabold text-base-content">Step 1: Haul Overview & Cost Basis</h3>
+          <p class="text-xs opacity-70">Review purchase order line items and verify landed cost allocations.</p>
         </div>
       </div>
 
-      <!-- Sourcing Options: 3 Ways to Ingest -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-base-200/60 rounded-2xl border border-base-300">
+      <!-- Sourcing Options: 3 Ways to Ingest (Only shown when starting a fresh PO with 0 items) -->
+      <div v-if="items.length === 0" class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-base-200/60 rounded-2xl border border-base-300">
         <!-- Option 1: Scan Physical Receipt -->
         <a href="/purchases/speed-entry" class="flex items-center gap-3 p-3 rounded-xl bg-base-100 border border-base-300 hover:border-warning cursor-pointer transition-all shadow-xs group">
           <div class="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
@@ -86,6 +86,28 @@
         </button>
       </div>
 
+      <!-- Loaded PO Banner (Shown when items are already loaded from a PO) -->
+      <div v-else class="flex items-center justify-between gap-3 p-3.5 bg-success/10 border border-success/25 rounded-2xl">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-success text-success-content flex items-center justify-center font-black text-sm shrink-0">
+            ✓
+          </div>
+          <div>
+            <h4 class="font-black text-xs sm:text-sm text-base-content">
+              Loaded {{ items.length }} Line Item(s) from {{ poNumber || 'Purchase Order' }}
+            </h4>
+            <p class="text-[11px] opacity-70">
+              Landed cost is already allocated. Ready for unboxing photos & pricing!
+            </p>
+          </div>
+        </div>
+
+        <button @click="currentStep = 2" class="btn btn-sm btn-primary text-primary-content font-black rounded-xl shadow-xs gap-1.5 shrink-0">
+          <span>Go to AI Pricing</span>
+          <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+        </button>
+      </div>
+
       <!-- Order Filter Toolbar & Bulk Actions -->
       <div v-if="items.length > 0" class="flex flex-wrap items-center justify-between gap-3 p-3 bg-base-200/60 rounded-2xl border border-base-300">
         <div class="flex items-center gap-2">
@@ -106,6 +128,9 @@
               <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
               Fetch Real SGW Titles
             </template>
+          </button>
+          <button @click="addLineItem" class="btn btn-xs btn-outline btn-secondary font-bold gap-1">
+            <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" /> + Add Line
           </button>
           <button @click="clearAllItems" class="btn btn-xs btn-ghost text-error hover:bg-error/20 font-bold gap-1">
             <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" /> Clear All
@@ -189,18 +214,32 @@
     <div v-if="currentStep === 2" class="p-4 sm:p-6 space-y-6">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
-          <h3 class="text-lg font-extrabold text-base-content">Step 2: Photo Verification & AI Boutique Pricing</h3>
-          <p class="text-xs opacity-70">Snap a photo for each item to auto-generate tag titles, boutique pricing, and channel routing.</p>
+          <h3 class="text-lg font-extrabold text-base-content">Step 2: Unbox, Inspect & AI Boutique Pricing</h3>
+          <p class="text-xs opacity-70">Snap/verify photos, run AI Deep Receive to enrich titles and prices, or open full ItemDrawer for lot splitting.</p>
         </div>
 
-        <!-- Global Markup Multiplier Quick Bar -->
-        <div class="flex items-center gap-1.5 bg-base-200 p-1 rounded-xl border border-base-300 text-xs font-bold">
-          <span class="opacity-60 px-2">Apply Markup:</span>
-          <button v-for="mult in [2.5, 3.0, 3.5, 4.0, 5.0]" :key="mult" 
-                  @click="applyGlobalMarkup(mult)" 
-                  class="btn btn-xs btn-ghost hover:btn-primary hover:text-primary-content font-black">
-            {{ mult }}x
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- AI Deep Receive All Button -->
+          <button 
+            v-if="itemsWithPhotos.length > 0" 
+            @click="runBatchAiEnrich" 
+            class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-extrabold gap-1.5 shadow-sm"
+            :disabled="batchEnriching"
+          >
+            <span v-if="batchEnriching" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
+            <span>AI Deep Receive All ({{ itemsWithPhotos.length }})</span>
           </button>
+
+          <!-- Global Markup Multiplier Quick Bar -->
+          <div class="flex items-center gap-1.5 bg-base-200 p-1 rounded-xl border border-base-300 text-xs font-bold">
+            <span class="opacity-60 px-2">Markup:</span>
+            <button v-for="mult in [2.5, 3.0, 3.5, 4.0, 5.0]" :key="mult" 
+                    @click="applyGlobalMarkup(mult)" 
+                    class="btn btn-xs btn-ghost hover:btn-primary hover:text-primary-content font-black">
+              {{ mult }}x
+            </button>
+          </div>
         </div>
       </div>
 
@@ -210,19 +249,33 @@
              class="p-4 rounded-2xl bg-base-200/70 border border-base-300 space-y-3.5 shadow-sm">
           
           <!-- Card Header -->
-          <div class="flex items-start justify-between gap-2">
+          <div class="flex items-start justify-between gap-2 flex-wrap">
             <div class="flex items-center gap-2">
               <span class="badge badge-sm badge-neutral text-neutral-content font-mono font-bold">#{{ idx + 1 }}</span>
               <span class="text-xs font-bold opacity-60">Cost: ${{ (item.cost || 0).toFixed(2) }}</span>
             </div>
 
-            <!-- Destination Selector Pill -->
-            <select v-model="item.destination" class="select select-bordered select-xs font-extrabold text-xs">
-              <option value="memory_den">🏢 Memory Den (MD1)</option>
-              <option value="dustytiger">🐯 DustyTiger (DUSTY)</option>
-              <option value="backstock">📦 Backstock (Bin)</option>
-              <option value="online">🌐 Online (eBay/Poshmark)</option>
-            </select>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <!-- Full Edit in ItemDrawer Button -->
+              <button 
+                v-if="item.id" 
+                type="button" 
+                @click="openItemDrawer(item)" 
+                class="btn btn-ghost btn-xs text-primary font-bold gap-1 border border-base-300 hover:bg-base-100"
+                title="Open full ItemDrawer with Lot Tools, Checklist, & Detailed Specs"
+              >
+                <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
+                <span class="text-[11px]">Full Edit & Lots</span>
+              </button>
+
+              <!-- Destination Selector Pill -->
+              <select v-model="item.destination" class="select select-bordered select-xs font-extrabold text-xs">
+                <option value="memory_den">🏢 Memory Den (MD1)</option>
+                <option value="dustytiger">🐯 DustyTiger (DUSTY)</option>
+                <option value="backstock">📦 Backstock (Bin)</option>
+                <option value="online">🌐 Online (eBay/Poshmark)</option>
+              </select>
+            </div>
           </div>
 
           <!-- Photo Attachment Area -->
@@ -364,26 +417,27 @@
             <Icon icon="solar:check-circle-bold" class="w-5 h-5" /> Ready for Active Inventory
           </h4>
           <p class="text-xs opacity-80">
-            Completing ingestion promotes {{ resaleItems.length }} items to <strong>In-Stock</strong> and closes this Purchase Order.
+            Completing intake promotes {{ resaleItems.length }} items to <strong>In-Stock</strong> and closes this Purchase Order.
           </p>
         </div>
         <button @click="completeIngestion" :disabled="completing" 
                 class="btn btn-success text-success-content font-black gap-2 shadow-lg w-full sm:w-auto">
           <span v-if="completing" class="loading loading-spinner loading-sm"></span>
           <template v-else>
-            <Icon icon="solar:disk-bold" class="w-5 h-5" /> Complete Ingestion & Activate Inventory
+            <Icon icon="solar:disk-bold" class="w-5 h-5" /> Complete Intake & Activate Inventory
           </template>
         </button>
       </div>
 
     </div>
 
-    <!-- Proven Bulk Import Modal from Inventory -->
-    <BulkImport 
-      v-if="showBulkImportModal" 
-      :isOpen="showBulkImportModal" 
-      @close="showBulkImportModal = false" 
-      @complete="onBulkImportComplete" 
+    <!-- Full ItemDrawer for Deep Editing & Lot Splitting -->
+    <ItemDrawer 
+      v-if="activeDrawerDoc" 
+      :item="activeDrawerDoc" 
+      :isOpen="!!activeDrawerDoc" 
+      @close="activeDrawerDoc = null" 
+      @saved="handleDrawerSaved" 
     />
   </div>
 </template>
@@ -392,11 +446,65 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
-import { databases, ID, Query } from '../../lib/appwrite';
+import { databases, storage, ID, Query } from '../../lib/appwrite';
 import { purchasesAPI } from '../../lib/purchases';
-import { saveItemToInventory } from '../../lib/inventory';
+import { saveItemToInventory, getItemsByPurchaseId, getCollectionId } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from '../inventory/BulkImport.vue';
+import ItemDrawer from '../common/ItemDrawer.vue';
+
+const activeDrawerDoc = ref<any>(null);
+const openingDrawer = ref(false);
+
+const openItemDrawer = async (item: IngestionItem) => {
+  if (!item.id) {
+    addToast('Item must be saved or loaded from a purchase order to open full ItemDrawer.', 'info');
+    return;
+  }
+  openingDrawer.value = true;
+  showLoader('Opening ItemDrawer & Lot Hub...');
+  try {
+    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+    const collId = getCollectionId();
+    const doc = await databases.getDocument(DB_ID, collId, item.id);
+    activeDrawerDoc.value = doc;
+  } catch (err: any) {
+    console.error('Failed to load item doc:', err);
+    addToast(`Could not open item: ${err.message}`, 'error');
+  } finally {
+    hideLoader();
+    openingDrawer.value = false;
+  }
+};
+
+const handleDrawerSaved = async (savedDoc: any) => {
+  if (savedDoc && savedDoc.$id) {
+    const matching = items.value.find(i => i.id === savedDoc.$id);
+    if (matching) {
+      matching.title = savedDoc.title || matching.title;
+      matching.tagTitle = savedDoc.tag_title || matching.tagTitle;
+      matching.cost = Number(savedDoc.cost) || matching.cost;
+      matching.price = Number(savedDoc.resalePrice || savedDoc.price) || matching.price;
+      matching.brand = savedDoc.brand || matching.brand;
+      matching.category = savedDoc.category || matching.category;
+      matching.sku = savedDoc.identity || savedDoc.upc || matching.sku;
+      if (savedDoc.imageId) matching.imagePreview = getItemImageUrl(savedDoc.imageId);
+    }
+  }
+  activeDrawerDoc.value = null;
+  addToast('Item updated from ItemDrawer!', 'success');
+};
+
+const getItemImageUrl = (imageId: string) => {
+  if (!imageId) return null;
+  if (imageId.startsWith('http')) return imageId;
+  const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item-photos';
+  try {
+    return storage.getFilePreview(BUCKET_ID, imageId, 400, 400).toString();
+  } catch (e) {
+    return null;
+  }
+};
 
 const props = defineProps<{
   poId?: string;
@@ -744,17 +852,30 @@ const handleItemPhotoUpload = (e: Event, item: IngestionItem) => {
   reader.readAsDataURL(file);
 };
 
+const itemsWithPhotos = computed(() => resaleItems.value.filter(i => i.imagePreview || i.imageBase64));
+const batchEnriching = ref(false);
+
 const runItemAiEnrich = async (item: IngestionItem) => {
-  if (!item.imageBase64) return;
+  const hasImage = item.imageBase64 || item.imagePreview;
+  if (!hasImage) {
+    addToast('Please attach or snap a photo first to run AI Deep Receive.', 'info');
+    return;
+  }
   item.analyzing = true;
   try {
+    const payload: any = {
+      notes: `Existing cost: $${item.cost || 0}. Please enrich title, suggest boutique booth retail price, category, brand, and tag_title (30-42 chars max).`
+    };
+    if (item.imageBase64) {
+      payload.image = item.imageBase64;
+    } else if (item.imagePreview) {
+      payload.imageUrl = item.imagePreview;
+    }
+
     const res = await fetch('/api/identify-item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image: item.imageBase64,
-        notes: `Existing cost: $${item.cost || 0}. Please enrich title, suggest boutique booth retail price, category, brand, and tag_title (30-42 chars max).`
-      })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (data.items && data.items.length > 0) {
@@ -779,6 +900,27 @@ const runItemAiEnrich = async (item: IngestionItem) => {
   } finally {
     item.analyzing = false;
   }
+};
+
+const runBatchAiEnrich = async () => {
+  if (itemsWithPhotos.value.length === 0) {
+    addToast('No items with photos to AI enrich.', 'info');
+    return;
+  }
+  batchEnriching.value = true;
+  showLoader(`AI Deep Receiving ${itemsWithPhotos.value.length} items...`);
+  let count = 0;
+  for (const item of itemsWithPhotos.value) {
+    try {
+      await runItemAiEnrich(item);
+      count++;
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+  hideLoader();
+  batchEnriching.value = false;
+  addToast(`AI Deep Received ${count} item(s)!`, 'success');
 };
 
 const downloadRicochetCsv = () => {
@@ -811,27 +953,42 @@ const completeIngestion = async () => {
   showLoader('Activating In-Stock Inventory & Closing PO...', { step: 'Deploying items to active inventory' });
   try {
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-    const collId = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
+    const collId = getCollectionId();
 
-    // Create active inventory records
-    const savePromises = resaleItems.value.map(item => {
-      return saveItemToInventory(
-        {
+    // Update existing items or create new active inventory records
+    const savePromises = resaleItems.value.map(async item => {
+      if (item.id) {
+        const updateData: any = {
           title: item.title,
-          tag_title: item.tagTitle || item.title.slice(0, 42),
-          identity: item.sku,
-          category: item.category,
-          brand: item.brand
-        },
-        null,
-        {
           cost: item.cost || 0,
-          price: item.price || 0,
-          quantity: item.quantity || 1,
+          resalePrice: item.price || 0,
           status: 'in-stock',
-          location: item.destination
-        }
-      );
+          storageLocation: item.destination,
+          identity: item.sku,
+          brand: item.brand,
+          category: item.category
+        };
+        Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+        return await databases.updateDocument(DB_ID, collId, item.id, updateData);
+      } else {
+        return await saveItemToInventory(
+          {
+            title: item.title,
+            tag_title: item.tagTitle || item.title.slice(0, 42),
+            identity: item.sku,
+            category: item.category,
+            brand: item.brand
+          },
+          null,
+          {
+            cost: item.cost || 0,
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            status: 'in-stock',
+            location: item.destination
+          }
+        );
+      }
     });
 
     await Promise.all(savePromises);
@@ -847,14 +1004,14 @@ const completeIngestion = async () => {
       });
     }
 
-    addToast(`Successfully ingested and activated ${resaleItems.value.length} items in inventory!`, 'success');
+    addToast(`Successfully received and activated ${resaleItems.value.length} items in inventory!`, 'success');
     emit('completed');
     setTimeout(() => {
       window.location.href = '/inventory';
     }, 1200);
   } catch (err: any) {
-    console.error('Ingestion failed:', err);
-    addToast(`Ingestion error: ${err.message}`, 'error');
+    console.error('Intake failed:', err);
+    addToast(`Intake error: ${err.message}`, 'error');
   } finally {
     hideLoader();
     completing.value = false;
@@ -867,33 +1024,13 @@ onMounted(async () => {
   if (targetPoId) {
     showLoader('Loading Purchase Order...', { step: 'Fetching lines & items' });
     try {
-      const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-      const CARTS_COL = import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'purchases';
-      const poDoc: any = await databases.getDocument(DB_ID, CARTS_COL, targetPoId);
+      const poDoc: any = await purchasesAPI.getPurchase(targetPoId);
       if (poDoc) {
         poNumber.value = poDoc.poNumber || poDoc.$id;
         poVendor.value = poDoc.vendor || 'Goodwill Haul';
         
-        // Fetch linked items for this PO (check by purchaseId first, then by orderId)
-        const collId = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
-        let docs: any[] = [];
-        try {
-          const res = await databases.listDocuments(DB_ID, collId, [
-            Query.equal('purchaseId', targetPoId),
-            Query.limit(100)
-          ]);
-          docs = res.documents;
-        } catch (e) {}
-
-        if (docs.length === 0 && poDoc.orderId) {
-          try {
-            const res = await databases.listDocuments(DB_ID, collId, [
-              Query.equal('orderId', poDoc.orderId),
-              Query.limit(100)
-            ]);
-            docs = res.documents;
-          } catch (e) {}
-        }
+        // Fetch linked items for this PO using rock-solid helper getItemsByPurchaseId
+        const docs = await getItemsByPurchaseId(targetPoId, poDoc.orderId, poDoc.poNumber);
 
         if (docs.length > 0) {
           items.value = docs.map(d => ({
@@ -903,15 +1040,18 @@ onMounted(async () => {
             title: d.title || '',
             tagTitle: d.tag_title || d.title?.slice(0, 42) || '',
             cost: Number(d.cost) || 0,
-            price: Number(d.price) || (Number(d.cost) ? Number(d.cost) * 3.5 : 0),
+            price: Number(d.resalePrice || d.price) || (Number(d.cost) ? Math.round(Number(d.cost) * 3.5) : 0),
             quantity: Number(d.quantity) || 1,
             type: 'resale',
-            destination: (d.location || 'memory_den') as any,
+            destination: (d.storageLocation || d.location || 'memory_den') as any,
             category: d.category || '',
             brand: d.brand || '',
-            sku: d.identity || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
-            imagePreview: d.imageUrl || null
+            sku: d.identity || d.locationSku || d.upc || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
+            imagePreview: d.imageId ? getItemImageUrl(d.imageId) : (d.imageUrl || null)
           }));
+
+          // Automatically advance to Step 2 (AI Vision Enrich & Price & Unbox) since PO is already loaded!
+          currentStep.value = 2;
         }
       }
     } catch (err) {

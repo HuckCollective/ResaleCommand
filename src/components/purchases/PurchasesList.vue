@@ -106,10 +106,10 @@
           <a 
             :href="`/purchases/ingest?poId=${purchase.$id}`"
             class="btn btn-sm btn-primary text-primary-content font-black flex-1 rounded-xl shadow-xs gap-1.5 min-h-[38px]"
-            title="Ingest & Tag Haul"
+            title="Receive & Tag Haul"
           >
             <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-            <span>Ingest</span>
+            <span>Receive</span>
           </a>
 
           <a 
@@ -228,10 +228,10 @@
                   <a 
                     :href="`/purchases/ingest?poId=${purchase.$id}`"
                     class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-xs px-2.5 h-8 rounded-lg"
-                    title="Ingest, Price & Tag Haul"
+                    title="Receive, Price & Tag Haul"
                   >
                     <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                    <span>Ingest</span>
+                    <span>Receive</span>
                   </a>
 
                   <a 
