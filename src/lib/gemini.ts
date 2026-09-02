@@ -46,10 +46,18 @@ export const model = getApiKey() ? getModel() : null;
 
 // Helper to provide robust exponential backoff for generateContent calls with automatic fallback models
 export const generateContentWithBackoff = async (
-    request: any, 
+    modelOrRequest: any, 
+    maybeRequestOrRetries?: any,
     maxRetries = 10, 
     baseDelayMs = 2500
 ) => {
+    let requestPayload = modelOrRequest;
+    if (Array.isArray(maybeRequestOrRetries) || (maybeRequestOrRetries && typeof maybeRequestOrRetries === 'object' && ('contents' in maybeRequestOrRetries || 'inlineData' in maybeRequestOrRetries))) {
+        requestPayload = maybeRequestOrRetries;
+    } else if (typeof maybeRequestOrRetries === 'number') {
+        maxRetries = maybeRequestOrRetries;
+    }
+
     const candidateModels = ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"];
     let modelIdx = 0;
     
@@ -61,7 +69,7 @@ export const generateContentWithBackoff = async (
         const activeModel = getModel(currentModelName);
         
         try {
-            const result = await activeModel.generateContent(request);
+            const result = await activeModel.generateContent(requestPayload);
             // Verify candidate finishReason if blocked
             const candidate = result.response?.candidates?.[0];
             if (candidate?.finishReason === 'OTHER' || candidate?.finishReason === 'SAFETY') {

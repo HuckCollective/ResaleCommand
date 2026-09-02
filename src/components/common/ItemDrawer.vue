@@ -615,8 +615,11 @@
                                         <ul class="space-y-2 text-xs font-medium">
                                             <li v-for="(subItem, subIdx) in scoutItemsArray" :key="subIdx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex flex-col gap-1 shadow-xs">
                                                 <div class="flex justify-between items-start gap-2 w-full">
-                                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
-                                                    <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5">{{ subItem.condition }}</span>
+                                                    <div class="flex items-start gap-2">
+                                                        <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
+                                                        <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
+                                                    </div>
+                                                    <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5 shrink-0">{{ subItem.condition }}</span>
                                                 </div>
                                                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1.5 mt-0.5">
                                                     <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value || formatPriceRange(subItem.price_breakdown?.fair) || '-' }}</strong></span>

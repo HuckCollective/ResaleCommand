@@ -3,21 +3,17 @@ import ScoutView from "@components/scout/ScoutView.vue";
 import Layout from "@layouts/Layout.astro";
 ---
 
-<Layout title="Scout Tool | Resale Command">
-  <div class="container mx-auto px-4 py-8">
-    <div class="text-center mb-8">
-      <h1 class="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+<Layout title="Scout Tool | Resale Command" hideFooter={true}>
+  <div class="container mx-auto px-2 sm:px-4 py-4 sm:py-6 pb-24">
+    <div class="text-center mb-6">
+      <h1 class="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-1">
         Resale Scout
       </h1>
-      <p class="text-lg opacity-70">
+      <p class="text-sm sm:text-base opacity-70">
         AI-Powered Item Identification & Valuation
       </p>
     </div>
 
     <ScoutView client:only="vue" />
-    
-    <div class="mt-12 text-center text-sm opacity-50">
-      <p>Powered by Gemini AI</p>
-    </div>
   </div>
 </Layout>

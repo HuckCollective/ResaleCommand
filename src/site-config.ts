@@ -5,10 +5,10 @@ export const siteConfig = {
   githubRepo: "webvpro/resale-command"
 };
 
-// Feature flags examles
+// Feature flags
 export const featureFlags = {
   enableBetaFeatures: false,
-  enableImprint: true,
+  enableImprint: false,
   enableDataprotection: false,
 };
 

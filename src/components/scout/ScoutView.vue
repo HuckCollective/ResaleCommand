@@ -353,8 +353,11 @@
                         <ul class="space-y-2 text-xs font-medium">
                             <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
                                 <div class="flex justify-between items-start gap-3 w-full">
-                                    <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
-                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1">{{ subItem.condition }}</span>
+                                    <div class="flex items-start gap-2">
+                                        <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
+                                        <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
+                                    </div>
+                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ subItem.condition }}</span>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
                                     <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value }}</strong></span>
@@ -468,36 +471,53 @@
         @remove-photo="removeImage"
     />
 
-    <!-- BOTTOM DOCK NAV (Sticky to Viewport) -->
-    <div class="sticky bottom-0 z-40 flex h-20 bg-base-200 border-t border-base-300 w-full shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.15)]">
-        
-        <!-- Start New -->
-        <button @click="startNewScan" class="flex-1 flex flex-col items-center justify-center text-base-content/70 hover:bg-base-300 hover:text-base-content transition-colors pb-safe">
-            <span class="text-2xl leading-none mb-1"><Icon icon="solar:restart-linear" /></span>
-            <span class="font-bold tracking-wider uppercase text-[10px]">Start New</span>
-        </button>
+    <!-- BOTTOM DOCK NAV (Theme-Adaptive Tactile Action Bar) -->
+    <div class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
+        <div class="flex items-center gap-3 p-2 h-18 sm:h-20 transition-all duration-300"
+             :class="mode === 'bulk' ? 'max-w-md mx-auto' : 'max-w-2xl mx-auto'">
+            
+            <!-- 1. Start New (Clear / Reset - Theme Adaptive) -->
+            <button @click="startNewScan" 
+                    class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all">
+                <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
+                <span class="font-extrabold tracking-wider uppercase text-[10px]">Start New</span>
+            </button>
 
-        <!-- AI Scout Primary -->
-        <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
-                class="flex-1 flex flex-col items-center justify-center bg-primary text-primary-content hover:bg-primary/90 transition-colors border-x border-base-300 shadow-inner pb-safe"
-                :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
-            <span v-if="loading" class="loading loading-spinner loading-md"></span>
-            <template v-else>
-                <Icon icon="solar:magic-stick-3-bold-duotone" class="w-6 h-6 mb-1 drop-shadow-md" />
-                <span class="text-xs font-bold uppercase tracking-widest">{{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}</span>
-            </template>
-        </button>
+            <!-- 2. Primary Hero Action (Identify / Analyze - Theme Primary) -->
+            <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
+                    class="btn flex-[1.4] h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
+                    :class="(loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl))
+                            ? 'btn-ghost bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed'
+                            : 'btn-primary text-primary-content font-black shadow-lg border border-primary-content/25'"
+                    :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
+                <span v-if="loading" class="loading loading-spinner loading-md"></span>
+                <template v-else>
+                    <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
+                    <span class="text-xs font-black uppercase tracking-wider">
+                        {{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}
+                    </span>
+                </template>
+            </button>
 
-        <!-- Track All / Save -->
-        <button @click="saveAllItems" 
-                class="flex-1 flex flex-col items-center justify-center transition-colors pb-safe"
-                :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) ? 'bg-success/20 text-success' : (result && result.items && result.items.length > 0 ? 'bg-success text-success-content hover:bg-success/90' : 'text-base-content/30 cursor-not-allowed')"
-                :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
-            <span v-if="savingAll" class="loading loading-spinner mb-1"></span>
-            <span v-else class="text-2xl leading-none mb-1"><Icon icon="solar:disk-linear" /></span>
-            <span class="font-bold tracking-wider uppercase text-[10px]">Save</span>
-        </button>
-        
+            <!-- 3. Track All / Save (Theme Success / Readable Disabled) -->
+            <button @click="saveAllItems" 
+                    class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs active:scale-95"
+                    :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) 
+                            ? 'btn-success text-success-content font-black shadow-md' 
+                            : (result && result.items && result.items.length > 0 
+                               ? 'btn-success text-success-content font-black shadow-md animate-pulse' 
+                               : 'btn-ghost bg-base-300/40 text-base-content/50 border border-base-content/15 cursor-not-allowed')"
+                    :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
+                <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
+                <template v-else>
+                    <Icon icon="solar:disk-bold" class="w-5 h-5 opacity-80" />
+                    <span class="font-extrabold tracking-wider uppercase text-[10px]">
+                        {{ (result && result.items && result.items.length > 0) ? `Save (${result.items.length})` : 'Save' }}
+                    </span>
+                </template>
+            </button>
+
+        </div>
     </div>
   </div>
 </template>
@@ -1033,7 +1053,16 @@ function startNewScan() {
     userNotes.value = '';
     cost.value = '';
     isAcquired.value = false;
+    sourcingLocation.value = '';
+    storageLocation.value = '';
+    receiptFile.value = null;
+    error.value = null;
+    successMessage.value = null;
+    rescoutId.value = null;
+    if (fileInput.value) fileInput.value.value = '';
+    if (receiptInput.value) receiptInput.value.value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    addToast({ type: 'info', message: 'Scout cleared — ready for next item!' });
 }
 
 const savingAll = ref(false);

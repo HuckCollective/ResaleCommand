@@ -72,3 +72,43 @@ graph TD
 - Upload weekly Memory Den sales payout CSV via **Sales Importer**.
 - Memory Den register sales automatically decrement multi-quantity inventory quantities (e.g. 30 $\to$ 26) and mark sold singles as `Sold`.
 - Exact profit margins and net payouts (after the 12% booth commission) are calculated and recorded automatically.
+
+---
+
+## 3. Official Ricochet POS / Memory Den Upload Specifications
+
+When exporting inventory to Ricochet POS (`memoryden_ricochet_import.csv`), the file must adhere strictly to these 9 columns and constraints:
+
+### Required CSV Columns & Rules:
+
+| Column Header | Strict Constraints | Purpose & Behavior in Ricochet POS |
+| :--- | :--- | :--- |
+| **`SKU`** | Required, Unique, Alphanumeric (e.g. `HUCK-1303`). | Generates the scannable Code 128 / UPC barcode on physical price stickers. |
+| **`Item Title`** | **Max 40–45 characters**. No trailing spaces. Clean word boundary. | **Printed on the physical 1" x 2" thermal barcode sticker**. Must be concise and readable so it never truncates on physical labels. |
+| **`Description`** | Max 250 characters. No raw newlines. | Printed on customer sales receipts and consignor inventory audit reports. |
+| **`Web Description`**| Up to 500+ characters. Full keywords & SEO. | Uploaded to Memory Den's online store / Shopify web catalog. |
+| **`Price`** | Numeric decimal only (e.g. `65.00`). No `$` or commas. | Retail sale price at the register. |
+| **`Quantity`** | Integer $\ge 1$. | Stock level count (1 for singles, N for bulk choice bins). |
+| **`In-Stock Date`** | Date format `M/D/YYYY` (e.g. `9/1/2026`). | Tracks consignment aging and markdown schedules. |
+| **`Category`** | Leave blank string `""` unless mapping exact store taxonomy. | Avoids store taxonomy mismatch rejections on bulk import. |
+| **`Brand`** | Text string (e.g. `Heavy Metal`, `Carhartt`, `Kenner`). | Brand/maker filter in Ricochet inventory search. |
+
+### Golden Label Formatting Standard:
+- **Keys / Singles**: `[Brand/Item] - [Date/Issue/Model] [Key Modifier]` (e.g. `Heavy Metal Mag - Oct 1977 #7` or `Carhartt Detroit Jacket L`)
+- **Bulk Choice Bins**: `[Brand/Item] - Choice ($XX)` (e.g. `Heavy Metal Mag - 80s-90s Choice`)
+- **Clearance / Readers**: `[Brand/Item] - Reader / Clearance ($XX)` (e.g. `Heavy Metal Mag - Reader Copy`)
+
+### 4. Official Ricochet POS SKU vs. UPC Rule (Permanent Knowledge)
+- **Ricochet Auto-Generates SKU**: In Ricochet Consign, SKUs are automatically created/managed by Ricochet and cannot be directly customized or overwritten by consignors.
+- **CSV `SKU` Column Maps Directly to UPC in Ricochet**: Per Ricochet's official import specification: *"Ricochet automatically generates SKUs for your items. If you include a pre-existing SKU in your template, the system will assign that value to the **UPC field** instead."*
+- **Exact Behavior**: When we put our `item.upc` (`HUCK-1303`, `HUCK-1304`, etc.) under the CSV column header `SKU`, Ricochet imports our barcode directly into the item's **UPC field** in Ricochet, allowing Memory Den's barcode scanner to read our exact `HUCK-` barcodes at checkout.
+- **Template Compatibility**: The CSV header must remain `SKU` so Ricochet's CSV parser accepts the file and maps it into the Ricochet UPC field.
+
+### 5. Co-Op & Shared Booth Partners (Memory Den)
+- **The Huckleberry Co. (`HUCK-` Prefix)**: Primary vendor / founder inventory spanning curated vintage, apparel, comics, pop culture collectibles, music/CDs, and oddities.
+- **Portland Gaming Library (`PDXGL-` Prefix)**: Shared booth co-founder partner specializing in tabletop RPGs (AD&D modules, D&D books), tabletop games, board games, video games, and gaming memorabilia.
+- **Unified Inventory & Filtered Exports**: Both partners share the booth footprint while maintaining clear inventory ownership through distinct barcode prefixes (`HUCK-` and `PDXGL-`) and unified Ricochet POS exports.
+
+
+
+

@@ -2,12 +2,12 @@
 import { featureFlags } from "site-config";
 ---
 
-<footer class="my-20">
-  <div class="text-center text-sm text-slate-600 space-y-2">
-    <p>
+<footer class="mt-8 pt-4 pb-24 sm:pb-28 border-t border-base-300/40">
+  <div class="text-center text-xs text-base-content/60 space-y-1">
+    <p class="flex flex-wrap items-center justify-center gap-3">
       {
         featureFlags.enableImprint && (
-          <a class="hover:underline hover:text-primary-light" href="/imprint">
+          <a class="hover:underline hover:text-primary font-medium" href="/imprint">
             Imprint
           </a>
         )
@@ -15,17 +15,17 @@ import { featureFlags } from "site-config";
       {
         featureFlags.enableDataprotection && (
           <a
-            class="hover:underline hover:text-primary-light"
+            class="hover:underline hover:text-primary font-medium"
             href="/dataprotection">
-            Dataprotection
+            Privacy Policy
           </a>
         )
       }
 
-      <span class="block sm:inline">
+      <span>
         Copyright © {new Date().getFullYear()} Huckleberry Collective LLC
       </span>
     </p>
-    <div>Made by Huckleberry Productions</div>
+    <div class="text-[11px] opacity-75">Made by Huckleberry Productions</div>
   </div>
 </footer>

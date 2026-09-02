@@ -115,6 +115,7 @@ import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
+import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { storage } from '../../lib/appwrite';
@@ -154,7 +155,14 @@ onMounted(() => {
 
 const handleUndoImport = async () => {
     if (!undoBatch.value) return;
-    if (!confirm(`Are you sure you want to permanently delete the ${undoBatch.value.items?.length || 0} items, ${undoBatch.value.purchases?.length || 0} purchases, and ${undoBatch.value.assets?.length || 0} images created during the last import?`)) return;
+    const ok = await confirmDialog(
+        `Are you sure you want to permanently delete the ${undoBatch.value.items?.length || 0} items, ${undoBatch.value.purchases?.length || 0} purchases, and ${undoBatch.value.assets?.length || 0} images created during the last import?`,
+        'Rollback Last Import',
+        'Rollback',
+        'Cancel',
+        'btn-error'
+    );
+    if (!ok) return;
     
     processingUndo.value = true;
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
@@ -290,7 +298,7 @@ const preProcessLandedCosts = (rows) => {
             row._orderTotalHandling = orderTotalHandling;
             row._orderTotalTax = orderTotalTax;
             row._orderTotalFee = orderTotalFee;
-            row._orderDate = findCol(rKeys, ['order date', 'date']) ? row[findCol(rKeys, ['order date', 'date'])] : null;
+            row._orderDate = findCol(rKeys, ['order date', 'orderdate', 'shipped date', 'ship date', 'purchase date', 'paid date', 'end date', 'date', 'created']) ? row[findCol(rKeys, ['order date', 'orderdate', 'shipped date', 'ship date', 'purchase date', 'paid date', 'end date', 'date', 'created'])] : null;
             row._tracking = findCol(rKeys, ['tracking']) ? row[findCol(rKeys, ['tracking'])] : null;
             row._vendor = findCol(rKeys, ['seller', 'vendor']) ? row[findCol(rKeys, ['seller', 'vendor'])] : 'ShopGoodwill';
             
@@ -418,33 +426,76 @@ const processRows = async (rows) => {
         let mainImageLink = csvImage;
         let galleryLinks = [];
 
-        // 1. DUPLICATE CHECK & FIX EXISTING MODE
-        let existingDocs = [];
+        // 1. DUPLICATE CHECK & FIX EXISTING MODE (Comprehensive: identity, sku, orderId, sourcingLocation)
+        let isDuplicate = false;
+        let matchedDoc = null;
         try {
-            try {
-                const dbCheck = await databases.listDocuments(
-                    import.meta.env.PUBLIC_APPWRITE_DB_ID, 
-                    getCollectionId(),
-                    [ Query.equal('identity', itemId) ]
-                );
-                if (dbCheck.total > 0) existingDocs = dbCheck.documents;
-            } catch (e) {
-                const titleCheck = await databases.listDocuments(
-                    import.meta.env.PUBLIC_APPWRITE_DB_ID,
-                    getCollectionId(),
-                    [ Query.equal('title', title), Query.limit(100) ]
-                );
-                const match = titleCheck.documents.find(doc => doc.identity === itemId);
-                if (match) existingDocs = [match];
+            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
+            const COL_ID = getCollectionId();
+
+            // Check 1: identity exact match
+            const idCheck = await databases.listDocuments(DB_ID, COL_ID, [
+                Query.equal('identity', itemId),
+                Query.limit(5)
+            ]);
+            if (idCheck.total > 0) {
+                isDuplicate = true;
+                matchedDoc = idCheck.documents[0];
+            }
+
+            // Check 2: SGW- prefix in UPC match
+            if (!isDuplicate) {
+                try {
+                    const upcCheck = await databases.listDocuments(DB_ID, COL_ID, [
+                        Query.equal('upc', `SGW-${itemId}`),
+                        Query.limit(5)
+                    ]);
+                    if (upcCheck.total > 0) {
+                        isDuplicate = true;
+                        matchedDoc = upcCheck.documents[0];
+                    }
+                } catch(e) {}
+            }
+
+            // Check 3: Check sourcingLocation contains item ID (e.g. split / combined parent URLs)
+            if (!isDuplicate && itemId) {
+                try {
+                    const srcCheck = await databases.listDocuments(DB_ID, COL_ID, [
+                        Query.contains('sourcingLocation', itemId),
+                        Query.limit(5)
+                    ]);
+                    if (srcCheck.total > 0) {
+                        isDuplicate = true;
+                        matchedDoc = srcCheck.documents[0];
+                    }
+                } catch(e) {}
+            }
+
+            // Check 4: Check if Order ID already exists in Purchases & has items
+            if (!isDuplicate && orderId) {
+                try {
+                    const existingPO = await purchasesAPI.getPurchaseByOrderId(orderId);
+                    if (existingPO) {
+                        const purchaseItemCheck = await databases.listDocuments(DB_ID, COL_ID, [
+                            Query.equal('purchaseId', existingPO.$id),
+                            Query.limit(5)
+                        ]);
+                        if (purchaseItemCheck.total > 0) {
+                            isDuplicate = true;
+                            matchedDoc = purchaseItemCheck.documents[0];
+                        }
+                    }
+                } catch(e) {}
             }
         } catch (e) {
             console.warn("Duplicate check failed, proceeding w/ caution:", e);
         }
 
-        if (existingDocs.length > 0) {
-            logs.value.push(`⏭️ Skipped ${itemId} - Already exists in inventory.`);
+        if (isDuplicate) {
+            const itemLabel = matchedDoc?.title ? `"${matchedDoc.title.substring(0, 32)}..." (${itemId})` : itemId;
+            logs.value.push(`⏭️ Skipped duplicate: ${itemLabel} - Already in inventory/processed.`);
             progress.value = ((i + 1) / rows.length) * 100;
-            continue; // Skip creating or updating
+            continue; // Skip creating duplicate item or purchase
         }
 
         // 2. FETCH DETAILS (For New Items Only)
@@ -563,43 +614,43 @@ const processRows = async (rows) => {
 
         let notes = description + shippingNotes;
 
-        // 5. CREATE OR FETCH PURCHASE DOC
-        let dbPurchaseId = null;
-        if (orderId) {
-             if (createdPurchases.has(orderId)) {
-                  dbPurchaseId = createdPurchases.get(orderId);
-             } else {
-                  try {
-                      // Check if purchase exists first
-                      let existingPurchase = await purchasesAPI.getPurchaseByOrderId(orderId);
-                      if (!existingPurchase) {
-                           logs.value.push(`🧾 Creating Purchase Order ${orderId}...`);
-                           existingPurchase = await purchasesAPI.createPurchase({
-                               orderId: orderId,
-                               vendor: row._vendor,
-                               purchaseDate: row._orderDate ? new Date(row._orderDate).toISOString() : new Date().toISOString(),
-                               trackingNumber: row._tracking,
-                               subtotal: row._orderSubtotal,
-                               shippingTotal: row._orderTotalShipping,
-                               handlingTotal: row._orderTotalHandling,
-                               taxTotal: row._orderTotalTax,
-                               feeTotal: row._orderTotalFee,
-                               grandTotal: row._orderSubtotal + row._orderTotalShipping + row._orderTotalHandling + row._orderTotalTax + row._orderTotalFee,
-                               status: 'Pending'
-                           });
-                           currentImportBatch.purchases.push(existingPurchase.$id);
-                           persistBatch();
-                       }
-                       dbPurchaseId = existingPurchase.$id;
-                       createdPurchases.set(orderId, dbPurchaseId);
-                  } catch (e) {
-                      logs.value.push(`⚠️ Failed to create purchase record for ${orderId}: ${e.message}`);
-                  }
-             }
-        }
-
-        // 6. SAVE TO DB
+        // 5. CREATE OR FETCH PURCHASE DOC & SAVE ITEM
         try {
+            let dbPurchaseId = null;
+            if (orderId) {
+                if (createdPurchases.has(orderId)) {
+                    dbPurchaseId = createdPurchases.get(orderId);
+                } else {
+                    try {
+                        // Check if purchase exists first
+                        let existingPurchase = await purchasesAPI.getPurchaseByOrderId(orderId);
+                        if (!existingPurchase) {
+                            logs.value.push(`🧾 Creating Purchase Order ${orderId}...`);
+                            existingPurchase = await purchasesAPI.createPurchase({
+                                orderId: orderId,
+                                vendor: row._vendor,
+                                purchaseDate: row._orderDate ? new Date(row._orderDate).toISOString() : new Date().toISOString(),
+                                trackingNumber: row._tracking,
+                                subtotal: row._orderSubtotal,
+                                shippingTotal: row._orderTotalShipping,
+                                handlingTotal: row._orderTotalHandling,
+                                taxTotal: row._orderTotalTax,
+                                feeTotal: row._orderTotalFee,
+                                grandTotal: row._orderSubtotal + row._orderTotalShipping + row._orderTotalHandling + row._orderTotalTax + row._orderTotalFee,
+                                status: 'Pending'
+                            });
+                            currentImportBatch.purchases.push(existingPurchase.$id);
+                            persistBatch();
+                        }
+                        dbPurchaseId = existingPurchase.$id;
+                        createdPurchases.set(orderId, dbPurchaseId);
+                    } catch (e) {
+                        logs.value.push(`⚠️ Failed to create purchase record for ${orderId}: ${e.message}`);
+                    }
+                }
+            }
+
+            // 6. SAVE ITEM TO DB
             const itemToSave = {
                 title: title,
                 identity: itemId,
@@ -628,7 +679,7 @@ const processRows = async (rows) => {
                 persistBatch();
             }
 
-            logs.value.push(`✅ Imported: ${title.substring(0, 30)}... ${orderId ? '(with Order Link)' : ''}`);
+            logs.value.push(`✅ Imported: ${title.substring(0, 30)}... ${orderId ? `(Order #${orderId})` : ''}`);
             await new Promise(r => setTimeout(r, 6000));
         } catch (err) {
             logs.value.push(`❌ Error importing ${itemId}: ${JSON.stringify(err.message)}`);
@@ -637,8 +688,10 @@ const processRows = async (rows) => {
         progress.value = ((i + 1) / rows.length) * 100;
     }
     
-    logs.value.push('🎉 Import Complete!');
-    window.location.reload();
+    logs.value.push('🎉 Import Complete! Taking you to Purchases...');
+    emit('complete', currentImportBatch);
+    await new Promise(r => setTimeout(r, 1200));
+    window.location.href = '/purchases';
 };
 </script>
 <style>

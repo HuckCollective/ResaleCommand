@@ -104,9 +104,10 @@ description: Expert guidelines and best practices for building modern, responsiv
 
 ### Badges, Tooltips & Loaders
 ```html
-<!-- Badges -->
-<span class="badge badge-sm badge-success gap-1 font-bold">In Stock</span>
-<span class="badge badge-xs badge-neutral">Draft</span>
+<!-- Badges (CRITICAL: Always use whitespace-nowrap and explicit *-content contrast tokens) -->
+<span class="badge badge-sm badge-primary text-primary-content font-extrabold whitespace-nowrap px-2">AI Powered</span>
+<span class="badge badge-sm badge-success text-success-content gap-1 font-bold whitespace-nowrap">In Stock</span>
+<span class="badge badge-xs badge-neutral text-neutral-content whitespace-nowrap">Draft</span>
 
 <!-- Loading Spinners -->
 <span class="loading loading-spinner loading-xs text-primary"></span>
@@ -121,7 +122,11 @@ description: Expert guidelines and best practices for building modern, responsiv
 ---
 
 ## 3. Best Practices & Pro Tips
-1. **Responsive Modifiers**: Use `sm:`, `md:`, `lg:` with daisyUI classes (e.g. `modal-bottom sm:modal-middle`, `btn-block sm:btn-wide`).
-2. **Icon Alignment**: Combine daisyUI buttons with Iconify icons using `gap-1.5` or `gap-2` and `items-center`.
-3. **Avoid Duplicating Utilities**: Do not apply `border border-solid` when daisyUI components like `input-bordered` or `table` already provide baseline structure.
-4. **Theme Transitions**: Allow CSS variables to handle dark/light toggles smoothly without manual class toggles like `dark:bg-black`.
+1. **CRITICAL BADGE RULE**: Badges & small pills MUST always include `whitespace-nowrap` and explicit contrast tokens (`text-primary-content` on `badge-primary`, `text-secondary-content` on `badge-secondary`, `text-warning-content` on `badge-warning`). Never let multi-word badge text wrap inside fixed-height pills (`badge-xs`/`badge-sm`).
+2. **BUTTON THEME CONTRAST RULE**: Primary and colored action buttons MUST include explicit matching content tokens (`btn-primary text-primary-content font-black`, `btn-success text-success-content font-black`). This guarantees bold, high-contrast readability across all 35 DaisyUI themes (including pastel/neon themes like `synthwave`, `valentine`, `cyberpunk`, `retro`, and `dracula`).
+3. **DISABLED STATE ACCESSIBILITY**: Never rely on browser default disabled styles which create muddy/unreadable text on dark themes. Use explicit theme-adaptive tokens: `bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed` to ensure $\ge 3:1$ contrast ratio.
+4. **BOTTOM DOCK ERGONOMIC SPACING**: Group bottom action bar buttons into centered containers (`max-w-md mx-auto` for 2 buttons, `max-w-2xl mx-auto` for 3 buttons) to prevent buttons from stretching into massive empty slabs on wide desktop screens.
+5. **Responsive Modifiers**: Use `sm:`, `md:`, `lg:` with daisyUI classes (e.g. `modal-bottom sm:modal-middle`, `btn-block sm:btn-wide`).
+6. **Icon Alignment**: Combine daisyUI buttons with Iconify icons using `gap-1.5` or `gap-2` and `items-center`.
+7. **Avoid Duplicating Utilities**: Do not apply `border border-solid` when daisyUI components like `input-bordered` or `table` already provide baseline structure.
+8. **Theme Transitions**: Allow CSS variables to handle dark/light toggles smoothly without manual class toggles like `dark:bg-black`.

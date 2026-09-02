@@ -8,7 +8,13 @@
       <div class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body">
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-            <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
+            <div class="flex items-center gap-3">
+              <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
+              <a v-if="isEdit" :href="'/purchases/ingest?poId=' + purchaseId" 
+                 class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black gap-1.5 shadow-md">
+                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" /> Ingest & Tag Haul
+              </a>
+            </div>
             <div class="form-control" v-if="isEdit">
               <label class="label cursor-pointer gap-2 py-0">
                 <span class="label-text font-bold">Edit Mode</span>
@@ -338,6 +344,8 @@ import { databases, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
+import { confirmDialog } from '../../stores/confirm';
+import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 
@@ -531,14 +539,23 @@ const savePurchase = async () => {
 };
 
 const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this purchase? This action cannot be undone. Items and expenses will remain in the database but will no longer be linked to this PO.')) return;
+    const ok = await confirmDialog(
+        'Are you sure you want to delete this purchase? This action cannot be undone. Items and expenses will remain in the database but will no longer be linked to this PO.',
+        'Delete Purchase Order',
+        'Delete',
+        'Cancel',
+        'btn-error'
+    );
+    if (!ok) return;
+
     saving.value = true;
     try {
         await purchasesAPI.deletePurchase(props.purchaseId);
+        addToast('Purchase Order deleted', 'success');
         window.location.href = '/purchases';
     } catch (e) {
         console.error('Failed to delete purchase', e);
-        alert('Failed to delete: ' + e.message);
+        addToast('Failed to delete: ' + e.message, 'error');
     } finally {
         saving.value = false;
     }
@@ -580,10 +597,10 @@ const linkItem = async (item) => {
         // Force recalc subtotal when a new item is linked
         form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
         await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
-        
+        addToast(`Linked ${item.title || item.identity} to this PO`, 'success');
     } catch (e) {
         console.error(e);
-        alert('Failed to link item: ' + e.message);
+        addToast('Failed to link item: ' + e.message, 'error');
     } finally {
         linkingItem.value = null;
     }
@@ -591,7 +608,14 @@ const linkItem = async (item) => {
 
 const unlinkItem = async (item) => {
     if (linkingItem.value) return;
-    if (!confirm(`Are you sure you want to unlink ${item.identity}?`)) return;
+    const ok = await confirmDialog(
+        `Are you sure you want to unlink ${item.identity || item.title}?`,
+        'Unlink Item',
+        'Unlink',
+        'Cancel',
+        'btn-warning'
+    );
+    if (!ok) return;
     
     linkingItem.value = item.$id;
     try {
@@ -602,10 +626,10 @@ const unlinkItem = async (item) => {
         form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
         // Persist the new subtotal immediately
         await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
-        
+        addToast(`Unlinked ${item.identity || item.title}`, 'info');
     } catch (e) {
         console.error('Failed to unlink item', e);
-        alert('Failed to unlink item: ' + e.message);
+        addToast('Failed to unlink item: ' + e.message, 'error');
     } finally {
         linkingItem.value = null;
     }
@@ -632,9 +656,10 @@ const quickCreateItem = async () => {
         newItem.value.title = '';
         newItem.value.cost = null;
         await loadLinkedItems();
+        addToast('Item created and linked to PO', 'success');
     } catch (e) {
         console.error('Failed to quick create item', e);
-        alert('Failed to create item: ' + e.message);
+        addToast('Failed to create item: ' + e.message, 'error');
     } finally {
         creatingItem.value = false;
     }
@@ -675,16 +700,25 @@ const handleAddExpense = async () => {
         expenses.value.push(expense);
         newExpenseAmount.value = '';
         newExpenseNote.value = '';
+        addToast('Expense added', 'success');
     } catch (e) {
         console.error('Failed to add expense', e);
-        alert('Failed to add expense: ' + e.message);
+        addToast('Failed to add expense: ' + e.message, 'error');
     } finally {
         loadingExpenses.value = false;
     }
 };
 
 const handleRemoveExpense = async (expenseId) => {
-    if (!confirm('Are you sure you want to remove this expense?')) return;
+    const ok = await confirmDialog(
+        'Are you sure you want to remove this expense?',
+        'Remove Expense',
+        'Remove',
+        'Cancel',
+        'btn-error'
+    );
+    if (!ok) return;
+
     try {
         await databases.deleteDocument(
             import.meta.env.PUBLIC_APPWRITE_DB_ID,
@@ -692,9 +726,10 @@ const handleRemoveExpense = async (expenseId) => {
             expenseId
         );
         expenses.value = expenses.value.filter(e => e.$id !== expenseId);
+        addToast('Expense removed', 'info');
     } catch (e) {
         console.error('Failed to remove expense', e);
-        alert('Failed to remove expense: ' + e.message);
+        addToast('Failed to remove expense: ' + e.message, 'error');
     }
 };
 

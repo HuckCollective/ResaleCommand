@@ -1324,9 +1324,16 @@ onMounted(() => {
     }
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';
-    } else if (params.has('orderId')) {
+    }
+    if (params.has('purchaseId')) {
+        filterPurchaseId.value = params.get('purchaseId') || '';
+        filterPO.value = params.get('purchaseId') || '';
+    }
+    if (params.has('orderId')) {
+        if (!filterPurchaseId.value) filterPurchaseId.value = params.get('orderId') || '';
         filterPO.value = params.get('orderId') || '';
     } else if (params.has('po')) {
+        if (!filterPurchaseId.value) filterPurchaseId.value = params.get('po') || '';
         filterPO.value = params.get('po') || '';
     }
     if (params.has('parentLotId')) {

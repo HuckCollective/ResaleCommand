@@ -15,9 +15,10 @@ export interface Props {
   title?: string;
   description?: string;
   image?: string;
+  hideFooter?: boolean;
 }
 
-const { title = siteConfig.title, description, image } = Astro.props;
+const { title = siteConfig.title, description, image, hideFooter = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -46,7 +47,7 @@ const { title = siteConfig.title, description, image } = Astro.props;
       <main class="flex-1">
         <slot />
       </main>
-      <Footer />
+      {!hideFooter && <Footer />}
     </div>
 
     <div class="drawer-side z-[200]">

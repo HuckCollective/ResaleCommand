@@ -866,6 +866,18 @@ async function executeSplit() {
       console.warn('Auto UPC lookup fallback:', e);
     }
 
+    // Helper to get clean brand/subject for retail booth tags
+    const getCleanParentSubject = (parentTitle: string): string => {
+      return (parentTitle || 'Vintage Lot')
+        .replace(/^Combined Lot of \d+:\s*/i, '')
+        .replace(/^Lot of \d+:\s*/i, '')
+        .replace(/\b(Lot|Collection|Bundle)\b/gi, '')
+        .replace(/[:\-–—]\s*$/, '')
+        .trim() || 'Inventory Item';
+    };
+
+    const cleanSubject = getCleanParentSubject(parent.title);
+
     // 2. Create Documents for each tier
     let createdCount = 0;
 
@@ -884,6 +896,7 @@ async function executeSplit() {
           const individualPrice = item.customPrice || tier.targetPrice;
           await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
             tenantId: orgId || undefined,
+            purchaseId: parent.purchaseId || undefined,
             upc: itemUpc,
             title: (item.title || 'Split Item').slice(0, 250),
             identity: (item.title || itemUpc).slice(0, 950),
@@ -905,11 +918,18 @@ async function executeSplit() {
         const itemUpc = `${cleanPrefix}${currentUpcNum.toString().padStart(4, '0')}`;
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
+        
+        let retailTitle = `${cleanSubject} - Choice Issues`;
+        if (tier.id === 'tier-3' || tier.name.toLowerCase().includes('reader') || tier.name.toLowerCase().includes('clearance')) {
+          retailTitle = `${cleanSubject} - Reader / Clearance`;
+        }
+
         await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
+          purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
-          title: `${tier.name} (Lot of ${tierItems.length})`.slice(0, 250),
-          identity: `${tier.name} (Lot of ${tierItems.length})`.slice(0, 950),
+          title: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 250),
+          identity: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 950),
           cost: Number(unitCost.toFixed(2)),
           resalePrice: Number(tier.targetPrice.toFixed(2)),
           quantity: tierItems.length,
@@ -931,9 +951,10 @@ async function executeSplit() {
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
+          purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
-          title: `${tier.name} - Bundle Set of ${tierItems.length}`.slice(0, 250),
-          identity: `${tier.name} - Bundle Set of ${tierItems.length}`.slice(0, 950),
+          title: `${cleanSubject} - Set of ${tierItems.length}`.slice(0, 250),
+          identity: `${cleanSubject} - Set of ${tierItems.length}`.slice(0, 950),
           cost: Number(totalBundleCost.toFixed(2)),
           resalePrice: Number(bundleTotal.toFixed(2)),
           quantity: 1,

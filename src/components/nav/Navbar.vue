@@ -271,6 +271,10 @@
                         <button @click="logout(); openMobile = false" class="btn btn-error btn-sm w-full">Logout</button>
                     </template>
                 </div>
+
+                <div class="text-center text-[10px] opacity-40 pt-1">
+                    Copyright © {{ new Date().getFullYear() }} Huckleberry Collective LLC
+                </div>
             </div>
         </div>
       </Transition>

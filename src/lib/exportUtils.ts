@@ -194,12 +194,36 @@ export function generateRicochetCsv(items: any[]): string {
             } catch (e) {}
         }
 
-        const price = item.resalePrice || item.estValue || '0';
-        const cleanPrice = typeof price === 'number' ? price.toFixed(2) : String(price).replace(/[^0-9.]/g, '') || '0.00';
+        // Prioritize concise booth tag title for physical thermal sticker labels (<= 42 chars)
+        let tagTitle = item.tagTitle || item.tag_title || '';
+        if (!tagTitle && item.rawAnalysis) {
+            try {
+                const ai = JSON.parse(item.rawAnalysis);
+                const aiObj = Array.isArray(ai) ? ai[0] : ai;
+                if (aiObj && (aiObj.tag_title || aiObj.tagTitle)) {
+                    tagTitle = aiObj.tag_title || aiObj.tagTitle;
+                }
+            } catch (e) {}
+        }
+        
+        let finalTitle = tagTitle || item.title || 'Inventory Item';
+        // Clean up redundant symbols & phrases that clutter physical barcode tags
+        finalTitle = finalTitle
+            .replace(/["\\]/g, '')
+            .replace(/^[📦🛍️🏷️✨]\s*/, '')
+            .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
+            .trim();
+
+        // If longer than 45 chars, truncate at nearest clean word boundary
+        if (finalTitle.length > 45) {
+            const cut = finalTitle.substring(0, 42);
+            const lastSpace = cut.lastIndexOf(' ');
+            finalTitle = (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
+        }
 
         return [
             item.upc || item.sku || item.$id, // SKU
-            (item.title || 'Inventory Item').replace(/["\\]/g, '').substring(0, 100), // Item Title
+            finalTitle, // Item Title (cleanly fits physical barcode sticker)
             desc.replace(/[\r\n"\\]+/g, ' ').substring(0, 250), // Description 
             (webDesc || desc).replace(/[\r\n"\\]+/g, ' ').substring(0, 500), // Web Description
             cleanPrice, // Price (no $)

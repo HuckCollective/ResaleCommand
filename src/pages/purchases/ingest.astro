@@ -1,0 +1,19 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import HaulIngestionWizard from '../../components/purchases/HaulIngestionWizard.vue';
+---
+
+<Layout title="Haul Ingestion Wizard | Resale Command">
+  <div class="p-3 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+      <a href="/purchases" class="btn btn-ghost btn-sm font-bold gap-1 text-base-content/80">
+        ← Back to Purchases
+      </a>
+      <a href="/purchases/speed-entry" class="btn btn-ghost btn-sm font-bold gap-1 text-primary">
+        + Scan New Receipt
+      </a>
+    </div>
+    
+    <HaulIngestionWizard client:load />
+  </div>
+</Layout>

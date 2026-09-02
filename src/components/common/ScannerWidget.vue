@@ -33,6 +33,34 @@
                     </div>
                 </div>
                 
+                <!-- Receipt Alignment Guide Overlay -->
+                <div v-if="overlayMode === 'receipt'" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6 z-5">
+                    <div class="w-full max-w-xs sm:max-w-sm h-[60vh] border-2 border-dashed border-primary/80 rounded-2xl relative flex flex-col items-center justify-between p-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/10 backdrop-contrast-105">
+                        <!-- 4 Corner Brackets -->
+                        <div class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg"></div>
+                        <div class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg"></div>
+                        <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg"></div>
+                        <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg"></div>
+
+                        <!-- Top guide tag -->
+                        <div class="badge badge-primary font-bold text-xs shadow-md tracking-wide">
+                            RECEIPT TOP
+                        </div>
+
+                        <!-- Center hint -->
+                        <div class="text-center text-white/80 text-xs flex flex-col items-center gap-1 drop-shadow-md">
+                            <Icon icon="solar:bill-list-bold-duotone" class="w-8 h-8 opacity-90 text-primary" />
+                            <span class="font-bold">Align receipt inside frame</span>
+                            <span class="text-[10px] opacity-75">Keep flat & steady</span>
+                        </div>
+
+                        <!-- Bottom guide tag -->
+                        <div class="badge badge-primary font-bold text-xs shadow-md tracking-wide">
+                            RECEIPT BOTTOM
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Thumbnails (Bottom Left) -->
                 <div v-if="photos.length > 0" class="absolute bottom-32 left-4 right-4 flex gap-2 overflow-x-auto z-10 pointer-events-auto p-2">
                     <div v-for="(photo, idx) in photos" :key="idx" class="relative w-16 h-16 shrink-0 border-2 border-white/50 rounded-md overflow-hidden bg-black/50 shadow-lg group">
@@ -58,6 +86,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import { addToast } from '../../stores/toast';
 
 const props = defineProps({
     photos: {
@@ -75,6 +104,10 @@ const props = defineProps({
     maxPhotos: {
         type: Number,
         default: 0
+    },
+    overlayMode: {
+        type: String,
+        default: 'none' // 'none' | 'receipt' | 'item'
     }
 });
 
@@ -119,21 +152,32 @@ const startCamera = async () => {
         
         try {
             cameraStream.value = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: cameraFacing.value }
+                video: { 
+                    facingMode: cameraFacing.value,
+                    width: { ideal: 3840, min: 1920 },
+                    height: { ideal: 2160, min: 1080 }
+                }
             });
         } catch (facingError) {
-            // Fallback for laptops/desktops that don't have an 'environment' camera
-            console.warn("Requested facingMode not found, falling back to default camera");
-            cameraStream.value = await navigator.mediaDevices.getUserMedia({
-                video: true
-            });
+            // Fallback for laptops/desktops or cameras without 4K support
+            console.warn("Requested high-res/facingMode not found, falling back to standard video");
+            try {
+                cameraStream.value = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1920, min: 1280 },
+                        height: { ideal: 1080, min: 720 }
+                    }
+                });
+            } catch (fallbackErr) {
+                cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: true });
+            }
         }
 
         if (cameraVideoDialog.value) {
              cameraVideoDialog.value.srcObject = cameraStream.value;
         }
     } catch (err) {
-        alert("Could not access camera: " + err.message);
+        addToast({ type: 'error', message: "Could not access camera: " + err.message });
         stopCamera();
     }
 };
@@ -159,11 +203,17 @@ const capturePhoto = () => {
     const videoEl = cameraVideoDialog.value;
     if (!videoEl) return;
     const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth; 
-    canvas.height = videoEl.videoHeight;
-    canvas.getContext('2d').drawImage(videoEl, 0, 0);
+    canvas.width = videoEl.videoWidth || 1920; 
+    canvas.height = videoEl.videoHeight || 1080;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    }
     
     canvas.toBlob(blob => {
+        if (!blob) return;
         const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
         emit('photos-captured', [file]);
         
@@ -171,7 +221,7 @@ const capturePhoto = () => {
         const btn = document.activeElement;
         if(btn) btn.classList.add('scale-90');
         setTimeout(() => btn && btn.classList.remove('scale-90'), 100);
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 0.95);
 };
 
 onUnmounted(() => {
