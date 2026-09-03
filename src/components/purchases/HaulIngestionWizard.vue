@@ -63,16 +63,17 @@
           </div>
         </a>
 
-        <!-- Option 2: Upload CSV / SGW Report (Uses Proven BulkImport Modal) -->
-        <button type="button" @click="showBulkImportModal = true" class="flex items-center gap-3 p-3 rounded-xl bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all shadow-xs group text-left">
+        <!-- Option 2: Upload CSV / SGW Report -->
+        <label class="flex items-center gap-3 p-3 rounded-xl bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all shadow-xs group text-left">
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls,*/*" @change="handleCsvImport" class="hidden" />
           <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <Icon icon="solar:upload-track-bold-duotone" class="w-5 h-5" />
           </div>
           <div class="flex-1">
             <span class="text-xs font-black text-base-content block">2. Upload SGW / CSV</span>
-            <span class="text-[11px] opacity-60 block">Full SGW engine & live loader</span>
+            <span class="text-[11px] opacity-60 block">Instant CSV intake & landed cost</span>
           </div>
-        </button>
+        </label>
 
         <!-- Option 3: Add Line Manually -->
         <button @click="addLineItem" class="flex items-center gap-3 p-3 rounded-xl bg-base-100 border border-base-300 hover:border-secondary cursor-pointer transition-all shadow-xs group text-left">
@@ -431,6 +432,14 @@
 
     </div>
 
+    <!-- Bulk Import Modal -->
+    <BulkImport 
+      v-if="showBulkImportModal" 
+      :isOpen="showBulkImportModal" 
+      @close="showBulkImportModal = false" 
+      @complete="onBulkImportComplete" 
+    />
+
     <!-- Full ItemDrawer for Deep Editing & Lot Splitting -->
     <ItemDrawer 
       v-if="activeDrawerDoc" 
@@ -725,12 +734,12 @@ const handleCsvImport = async (e: Event) => {
     const taxIdx = header.findIndex(h => h.includes('tax'));
 
     // 1. Fetch Existing Items from Appwrite DB to ensure 100% deduplication
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale-command-db';
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
+    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+    const collId = getCollectionId();
     const existingDbIdentities = new Set<string>();
 
     try {
-      const dbCheck = await databases.listDocuments(DB_ID, ITEMS_COL, [
+      const dbCheck = await databases.listDocuments(DB_ID, collId, [
         Query.limit(5000),
         Query.select(['identity', 'sku', 'external_id'])
       ]);
@@ -824,6 +833,9 @@ const handleCsvImport = async (e: Event) => {
       if (parsedItems.some(i => i.itemId || /^\d{7,10}$/.test(i.title.trim()))) {
         fetchMissingSgwDetails();
       }
+
+      // Automatically advance to Step 2: Unbox & AI Receive!
+      currentStep.value = 2;
     } else {
       if (dbAlreadyExistsCount > 0) {
         addToast(`All ${dbAlreadyExistsCount} items in this report are already in your inventory! No new items to ingest.`, 'info');
