@@ -184,7 +184,7 @@
             <button type="button" @click="item.type = item.type === 'expense' ? 'resale' : 'expense'" 
                     class="badge badge-sm font-extrabold cursor-pointer transition-all"
                     :class="item.type === 'expense' ? 'badge-warning text-warning-content' : 'badge-primary text-primary-content'">
-              {{ item.type === 'expense' ? '💼 Expense' : '📦 Resale' }}
+              {{ item.type === 'expense' ? '💼 Expense' : '📦 Product' }}
             </button>
 
             <!-- Delete Line -->

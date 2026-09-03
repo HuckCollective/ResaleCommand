@@ -1,0 +1,31 @@
+---
+return Astro.redirect('/purchases?import=true');
+---
+
+<Layout title="Import ShopGoodwill Orders & CSV">
+  <div class="p-3 sm:p-6 md:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6 pb-24">
+    <div class="flex items-center gap-4">
+      <a href="/purchases" class="btn btn-ghost btn-sm font-bold gap-1 rounded-xl">
+        ← Back to Purchases
+      </a>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl border border-base-200">
+      <div class="card-body p-4 sm:p-6">
+        <div class="flex items-center gap-3 pb-4 border-b border-base-200 mb-4">
+          <div class="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-black text-base-content">ShopGoodwill & Order CSV Import</h2>
+            <p class="text-xs text-base-content/60">Upload your order CSV to calculate landed costs and import directly to inventory.</p>
+          </div>
+        </div>
+
+        <CsvImporter client:load />
+      </div>
+    </div>
+  </div>
+</Layout>

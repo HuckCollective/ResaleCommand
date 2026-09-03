@@ -278,8 +278,35 @@
       </div>
     </div>
 
-    <!-- Bulk Import Modal -->
-    <BulkImport v-if="showImportModal" @close="showImportModal = false" />
+    <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
+    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] transition-all">
+      <div class="max-w-2xl mx-auto flex items-center justify-between gap-2.5">
+        
+        <!-- Action 1: Speed Entry -->
+        <a href="/purchases/speed-entry" 
+           class="btn btn-sm sm:btn-md btn-warning text-warning-content font-extrabold flex-1 rounded-2xl shadow-xs active:scale-95 transition-all gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span class="text-xs sm:text-sm">Speed Entry</span>
+        </a>
+
+        <!-- Action 2: Import CSV (Regular Inventory BulkImport Modal) -->
+        <button 
+           type="button"
+           @click="showImportModal = true"
+           class="btn btn-sm sm:btn-md btn-primary text-primary-content font-black flex-[1.2] rounded-2xl shadow-md active:scale-95 transition-all gap-2 tracking-wide cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span class="text-xs sm:text-sm font-black">Import CSV</span>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Regular Bulk Import Modal (Identical to Inventory) -->
+    <BulkImport v-if="showImportModal" @close="showImportModal = false" @complete="showImportModal = false; loadPurchases();" />
   </div>
 </template>
 
@@ -578,6 +605,9 @@ onMounted(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';
+    }
+    if (params.get('import') === 'true') {
+        showImportModal.value = true;
     }
     checkUndoBatch();
     loadPurchases();

@@ -200,6 +200,7 @@ import Papa from 'papaparse';
 import { isAlphaMode } from '../../stores/env';
 import { Icon } from '@iconify/vue';
 import { useLoader } from '../../composables/useLoader';
+import { purchasesAPI } from '../../lib/purchases';
 
 const { showLoader, hideLoader } = useLoader();
 
@@ -629,6 +630,33 @@ async function importSelected() {
         
         console.log('[Import] Starting batch process for', total, 'items.');
 
+        // Pre-create or link Purchase Orders for each unique order in the CSV
+        const poMap: Record<string, string> = {};
+        for (const [oid, orderData] of Object.entries(orders.value)) {
+            if (!oid || oid === 'Unknown') continue;
+            try {
+                const existingPo: any = await purchasesAPI.getPurchaseByOrderId(oid);
+                if (existingPo) {
+                    poMap[oid] = existingPo.$id;
+                } else {
+                    const oData = orderData as any;
+                    const orderGrandTotal = oData.items.reduce((s: number, it: any) => s + (it.totalCost || 0), 0);
+                    const newPo = await purchasesAPI.createPurchase({
+                        orderId: oid,
+                        poNumber: `PO-${oid}`,
+                        vendor: 'ShopGoodwill',
+                        purchaseDate: new Date().toISOString().split('T')[0],
+                        grandTotal: orderGrandTotal,
+                        shippingTotal: oData.shippingTotal || 0,
+                        status: 'Received'
+                    });
+                    if (newPo?.$id) poMap[oid] = newPo.$id;
+                }
+            } catch (poErr) {
+                console.warn('[Import] Could not auto-create PO for order:', oid, poErr);
+            }
+        }
+
         for (let i = 0; i < total; i += CONCURRENCY) {
             if (isImportCanceled) {
                 addToast({ type: 'warning', message: 'Import canceled by user.' });
@@ -744,6 +772,9 @@ async function importSelected() {
                          cost: item.totalCost,
                          resalePrice: item.estimatedResale ? item.estimatedResale.toString() : undefined,
                          status: 'acquired' as const,
+                         location: 'backstock',
+                         orderId: item.orderId,
+                         purchaseId: item.orderId ? poMap[item.orderId] : undefined,
                          sourcingLocation: item.sourceLink ? item.sourceLink : 'ShopGoodwill'
                     };
                     if (finalImageId) {
@@ -793,7 +824,14 @@ async function importSelected() {
                 message: `Done! Created: ${completed}, Updated: ${updated}, Skipped: ${skipped}`, 
                 duration: 5000 
             });
-            setTimeout(() => window.location.reload(), 2000);
+            emit('imported');
+            setTimeout(() => {
+                if (window.location.pathname.includes('/purchases')) {
+                    window.location.href = '/purchases';
+                } else {
+                    window.location.reload();
+                }
+            }, 1800);
         }
         
     } catch (e: any) {

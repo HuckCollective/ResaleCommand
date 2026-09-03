@@ -21,7 +21,7 @@
           <!-- Mode Toggle Pill -->
           <div class="join bg-base-100 p-0.5 rounded-xl border border-base-300 w-full sm:w-auto shadow-inner">
             <button type="button" class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" :class="globalMode === 'mixed' ? 'btn-primary font-bold' : 'btn-ghost opacity-70'" @click="setGlobalMode('mixed')">
-              <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" /> Resale
+              <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" /> Product
             </button>
             <button type="button" class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" :class="globalMode === 'all_expense' ? 'btn-warning font-bold' : 'btn-ghost opacity-70'" @click="setGlobalMode('all_expense')">
               <Icon icon="solar:wallet-bold" class="w-3.5 h-3.5" /> 100% Expense
@@ -104,7 +104,7 @@
                       class="btn btn-xs rounded-full gap-1.5 px-3 py-1 font-bold transition-all shadow-2xs"
                       :class="item.type === 'expense' ? 'bg-warning/25 text-warning border border-warning/50 hover:bg-warning/35' : 'bg-primary/25 text-primary border border-primary/50 hover:bg-primary/35'">
                 <Icon :icon="item.type === 'expense' ? 'solar:wallet-bold' : 'solar:box-minimalistic-bold'" class="w-3.5 h-3.5" />
-                <span class="text-xs">{{ item.type === 'expense' ? 'Expense' : 'Resale' }}</span>
+                <span class="text-xs">{{ item.type === 'expense' ? 'Expense' : 'Product' }}</span>
               </button>
 
               <!-- Delete Button -->
@@ -198,7 +198,7 @@
                         class="btn btn-xs rounded-xl gap-1.5 transition-all w-28 font-bold"
                         :class="item.type === 'expense' ? 'bg-warning/20 text-warning border border-warning/50 hover:bg-warning/30' : 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30'">
                   <Icon :icon="item.type === 'expense' ? 'solar:wallet-bold' : 'solar:box-minimalistic-bold'" class="w-3.5 h-3.5" />
-                  <span class="text-xs">{{ item.type === 'expense' ? 'Expense' : 'Resale' }}</span>
+                  <span class="text-xs">{{ item.type === 'expense' ? 'Expense' : 'Product' }}</span>
                 </button>
               </td>
               <td class="text-center">
@@ -219,7 +219,7 @@
           </button>
           <div class="flex items-center gap-2">
             <span v-if="resaleItemsCount > 0" class="badge badge-md badge-primary badge-outline font-extrabold gap-1.5 py-3 px-3 rounded-xl">
-              📦 {{ resaleItemsCount }} Resale (${{ resaleTotal.toFixed(2) }})
+              📦 {{ resaleItemsCount }} Product (${{ resaleTotal.toFixed(2) }})
             </span>
             <span v-if="expenseItemsCount > 0" class="badge badge-md badge-warning badge-outline font-extrabold gap-1.5 py-3 px-3 rounded-xl">
               💼 {{ expenseItemsCount }} Expense (${{ expenseTotal.toFixed(2) }})

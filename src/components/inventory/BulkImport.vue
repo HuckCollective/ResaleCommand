@@ -660,6 +660,7 @@ const processRows = async (rows) => {
                 cost: price,
                 sourcingLocation: isOrderProxy && orderId ? `https://shopgoodwill.com/shopgoodwill/order/${orderId}` : `https://shopgoodwill.com/item/${itemId}`,
                 status: 'acquired',
+                location: 'backstock',
                 title: title,
                 orderId: orderId,
                 purchaseId: dbPurchaseId,

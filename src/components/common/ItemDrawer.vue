@@ -137,78 +137,179 @@
                                 </div>
                             </div>
 
-                            <!-- 2. 📸 PHOTOS & SOURCING URL FETCHER -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
+                            <!-- 2. 📸 PHOTOS & SOURCING MEDIA -->
+                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3.5">
                                 <div class="flex justify-between items-center">
                                     <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                                         <Icon icon="solar:gallery-bold" class="w-4 h-4 text-primary" />
                                         Photos & Sourcing Media
                                     </label>
-                                    <span class="text-[11px] opacity-60 font-medium">Click photo to set Main ⭐</span>
+                                    <span class="badge badge-sm badge-ghost font-mono text-[11px] font-bold">
+                                        {{ totalGalleryCount }} Photo{{ totalGalleryCount === 1 ? '' : 's' }}
+                                    </span>
                                 </div>
 
-                                <!-- Gallery Previews & Dropzone -->
-                                <div class="border-2 border-dashed rounded-xl p-2.5 transition-colors relative min-h-27.5 flex flex-col justify-center bg-base-100/60"
+                                <!-- A. Empty State (No Photos Yet) -->
+                                <div v-if="!editForm.existingGalleryIds?.length && !editGalleryBuffer.length" 
+                                     class="border-2 border-dashed border-base-300 rounded-2xl p-6 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-2"
                                      @dragenter.prevent="dragOver = true"
                                      @dragover.prevent="dragOver = true"
                                      @dragleave.prevent="onDragLeave"
                                      @drop.prevent="handleDrop"
-                                     :class="{'border-primary bg-primary/5': dragOver, 'border-base-300': !dragOver}">
-                                     
-                                    <div v-if="!editForm.existingGalleryIds?.length && !editGalleryBuffer.length" class="text-center py-4 opacity-50 pointer-events-none">
-                                        <Icon icon="solar:upload-minimalistic-linear" class="w-7 h-7 mx-auto mb-1 opacity-70" />
-                                        <span class="text-xs">Drag & drop photos or use buttons below</span>
+                                     @click="fileInput?.click()">
+                                    <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-1">
+                                        <Icon icon="solar:gallery-add-bold-duotone" class="w-7 h-7" />
                                     </div>
-                                    
-                                    <div v-else class="flex gap-2.5 items-center overflow-x-auto pb-1 w-full pointer-events-auto z-10">
-                                        <!-- Existing Appwrite Photos -->
-                                        <div v-for="id in editForm.existingGalleryIds" :key="id" 
-                                             class="relative w-20 h-20 shrink-0 group cursor-pointer transition-transform hover:scale-102" 
-                                             @click="setMainPhoto('existing', id)">
-                                            <img :src="getAssetUrl(id)" class="w-full h-full object-cover rounded-lg shadow-sm border border-base-300" :class="{'ring-3 ring-primary ring-inset': actualMainPhoto.id === id}"/>
-                                            <div v-if="actualMainPhoto.id === id" class="absolute -top-2 -left-2 text-xl drop-shadow-md z-20 text-warning">
-                                                <Icon icon="solar:star-bold" />
-                                            </div>
-                                            <button @click.stop="removeGalleryItem(id, true)" class="btn btn-xs btn-circle btn-error absolute -top-1.5 -right-1.5 w-4 h-4 min-h-0 text-[9px] flex items-center justify-center z-30 shadow hover:scale-110">✕</button>
+                                    <div class="font-bold text-xs text-base-content">Tap to upload or drag photos here</div>
+                                    <p class="text-[11px] opacity-60 max-w-xs">High-res photos will automatically attach to this item</p>
+                                </div>
+
+                                <!-- B. Populated State (Hero Main Photo + Smooth Thumbnails Filmstrip) -->
+                                <div v-else class="space-y-3">
+                                    <!-- 1. Hero Main Cover Photo Card -->
+                                    <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-base-300/40 shadow-sm group aspect-4/3 sm:aspect-16/9 max-h-64 flex items-center justify-center">
+                                        <img 
+                                            :src="actualMainPhoto.url" 
+                                            class="w-full h-full object-contain bg-black/10" 
+                                            alt="Main Cover Photo"
+                                        />
+                                        
+                                        <!-- Cover Photo Badges Overlay -->
+                                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20">
+                                            <span class="badge badge-warning text-warning-content font-black text-xs gap-1 shadow-md py-2.5 px-3 rounded-xl">
+                                                <Icon icon="solar:star-bold" class="w-3.5 h-3.5" />
+                                                Main Cover Photo
+                                            </span>
+                                        </div>
+
+                                        <!-- Top Right Action Controls -->
+                                        <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20">
+                                            <!-- Zoom Lightbox Button -->
+                                            <button 
+                                                type="button" 
+                                                class="btn btn-sm btn-circle bg-base-100/90 hover:bg-base-100 shadow-md text-base-content border border-base-300"
+                                                @click="openZoomPreview(actualMainPhoto.url)"
+                                                title="Zoom Full Resolution"
+                                            >
+                                                <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4" />
+                                            </button>
+                                            <!-- Remove Main Photo Button -->
+                                            <button 
+                                                type="button" 
+                                                class="btn btn-sm btn-circle btn-error text-error-content shadow-md"
+                                                @click="actualMainPhoto.type === 'existing' ? removeGalleryItem(actualMainPhoto.id, true) : removeGalleryItem(actualMainPhoto.idx, false)"
+                                                title="Remove this photo"
+                                            >
+                                                <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+                                            </button>
+                                        </div>
+
+                                        <div class="absolute bottom-2 inset-x-2 text-center pointer-events-none">
+                                            <span class="text-[11px] font-semibold text-white/90 bg-black/60 px-2.5 py-1 rounded-full backdrop-blur-xs">
+                                                Primary listing image shown on marketplace & tags
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. Supporting Gallery (Wrapping Grid - Zero Side Scroll) -->
+                                    <div v-if="totalGalleryCount > 1" class="space-y-1.5">
+                                        <div class="flex justify-between items-center px-1">
+                                            <span class="text-[11px] font-bold opacity-70">Supporting Photos (Tap to set as Main ⭐)</span>
+                                            <span class="text-[10px] opacity-50">{{ totalGalleryCount }} in gallery</span>
                                         </div>
                                         
-                                        <!-- New Buffered Uploads -->
-                                        <div v-for="(file, idx) in editGalleryBuffer" :key="idx" 
-                                             class="relative w-20 h-20 shrink-0 group cursor-pointer transition-transform hover:scale-102" 
-                                             @click="setMainPhoto('new', idx)">
-                                            <img :src="getObjectUrl(file)" class="w-full h-full object-cover rounded-lg shadow-sm border border-base-300" :class="{'ring-3 ring-primary ring-inset': actualMainPhoto.file === file}"/>
-                                            <div v-if="actualMainPhoto.file === file" class="absolute -top-2 -left-2 text-xl drop-shadow-md z-20 text-warning">
-                                                <Icon icon="solar:star-bold" />
+                                        <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 py-1 px-0.5">
+                                            <!-- Existing Appwrite Photos -->
+                                            <div 
+                                                v-for="(id, idx) in editForm.existingGalleryIds" 
+                                                :key="'exist_' + id" 
+                                                class="relative aspect-square w-full rounded-xl overflow-hidden border-2 bg-base-100 cursor-pointer transition-all active:scale-95 shadow-xs"
+                                                :class="actualMainPhoto.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
+                                                @click="setMainPhoto('existing', id)"
+                                            >
+                                                <img :src="getAssetUrl(id)" class="w-full h-full object-cover" />
+                                                
+                                                <!-- Index Pill -->
+                                                <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
+                                                    #{{ idx + 1 }}
+                                                </span>
+
+                                                <!-- Main Indicator -->
+                                                <div v-if="actualMainPhoto.id === id" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
+                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
+                                                </div>
+
+                                                <!-- Inner Delete Button (Safe from container clipping) -->
+                                                <button 
+                                                    type="button"
+                                                    @click.stop="removeGalleryItem(id, true)" 
+                                                    class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm"
+                                                    title="Remove photo"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
-                                            <button @click.stop="removeGalleryItem(idx, false)" class="btn btn-xs btn-circle btn-error absolute -top-1.5 -right-1.5 w-4 h-4 min-h-0 text-[9px] flex items-center justify-center z-30 shadow hover:scale-110">✕</button>
+
+                                            <!-- New Buffered Uploads -->
+                                            <div 
+                                                v-for="(file, idx) in editGalleryBuffer" 
+                                                :key="'new_' + idx" 
+                                                class="relative aspect-square w-full rounded-xl overflow-hidden border-2 bg-base-100 cursor-pointer transition-all active:scale-95 shadow-xs"
+                                                :class="actualMainPhoto.file === file ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
+                                                @click="setMainPhoto('new', idx)"
+                                            >
+                                                <img :src="getObjectUrl(file)" class="w-full h-full object-cover" />
+                                                
+                                                <!-- Index Pill -->
+                                                <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
+                                                    #{{ (editForm.existingGalleryIds?.length || 0) + idx + 1 }}
+                                                </span>
+
+                                                <!-- Main Indicator -->
+                                                <div v-if="actualMainPhoto.file === file" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
+                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
+                                                </div>
+
+                                                <!-- Inner Delete Button -->
+                                                <button 
+                                                    type="button"
+                                                    @click.stop="removeGalleryItem(idx, false)" 
+                                                    class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm"
+                                                    title="Remove photo"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Photo Actions: Upload, Camera, and Sourcing URL Fetcher -->
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button type="button" @click="fileInput?.click()" class="btn btn-sm btn-outline text-xs">
-                                        <Icon icon="solar:gallery-add-linear" class="w-4 h-4 mr-1" /> Upload
+                                <!-- 3. Photo Action Buttons (Upload & Camera) -->
+                                <div class="grid grid-cols-2 gap-2 pt-1">
+                                    <button type="button" @click="fileInput?.click()" class="btn btn-sm btn-outline text-xs rounded-xl font-bold gap-1.5 h-10">
+                                        <Icon icon="solar:gallery-add-bold" class="w-4 h-4 text-primary" />
+                                        Upload Photo(s)
                                     </button>
                                     <input type="file" ref="fileInput" multiple accept="image/*" class="hidden" @change="handleFileSelect" />
                                     
-                                    <button type="button" @click="scannerWidget?.startCamera()" class="btn btn-sm btn-outline text-xs">
-                                        <Icon icon="solar:camera-linear" class="w-4 h-4 mr-1" /> Camera
+                                    <button type="button" @click="scannerWidget?.startCamera()" class="btn btn-sm btn-outline text-xs rounded-xl font-bold gap-1.5 h-10">
+                                        <Icon icon="solar:camera-bold" class="w-4 h-4 text-secondary" />
+                                        Live Camera
                                     </button>
                                 </div>
 
-                                <!-- Always-Visible Sourcing URL & Image Scraper Bar -->
+                                <!-- 4. Sourcing URL & Image Scraper Bar -->
                                 <div class="form-control">
                                     <div class="join w-full shadow-xs">
                                         <input 
                                             type="text" 
                                             v-model="editForm.sourcingLocation" 
                                             placeholder="Paste ShopGoodwill Item # or Listing URL..." 
-                                            class="input input-bordered input-sm join-item grow font-mono text-xs bg-base-100" 
+                                            class="input input-bordered input-sm join-item grow font-mono text-xs bg-base-100 rounded-l-xl h-10" 
                                             @keydown.enter.prevent="fetchSourceData"
                                         />
                                         <button 
-                                            class="btn btn-primary btn-sm join-item shrink-0 gap-1 font-bold" 
+                                            class="btn btn-primary btn-sm join-item shrink-0 gap-1.5 font-bold rounded-r-xl h-10 px-4" 
                                             @click="fetchSourceData" 
                                             :disabled="!editForm.sourcingLocation || fetchingImages" 
                                             title="Fetch photos & metadata from listing"
@@ -248,12 +349,12 @@
                                         </div>
                                     </div>
 
-                                    <!-- Image Grid -->
-                                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-56 overflow-y-auto p-1.5 rounded-lg bg-base-200/60 border border-base-300">
+                                    <!-- Image Grid (Exact same thumbnail size & grid as supporting gallery) -->
+                                    <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-64 overflow-y-auto p-1.5 rounded-xl bg-base-200/60 border border-base-300">
                                         <div 
                                             v-for="(imgUrl, idx) in fetchedImages" 
                                             :key="idx"
-                                            class="group relative aspect-square rounded-lg border border-base-300 overflow-hidden bg-base-100 shadow-xs hover:border-primary transition-all flex items-center justify-center cursor-pointer"
+                                            class="group relative aspect-square w-full rounded-xl border-2 border-base-300 overflow-hidden bg-base-100 shadow-xs hover:border-primary transition-all flex items-center justify-center cursor-pointer"
                                         >
                                             <img 
                                                 :src="proxify(typeof imgUrl === 'string' ? imgUrl : imgUrl.url)" 
@@ -1176,6 +1277,28 @@
                 @photos-captured="handleCapturedPhotos" 
                 @remove-photo="removeGalleryItem($event, false)" 
             />
+
+            <!-- Full-Resolution Image Zoom Lightbox Modal -->
+            <dialog class="modal modal-middle z-50" :class="{ 'modal-open': !!previewZoomUrl }">
+                <div class="modal-box max-w-2xl p-4 bg-base-100 rounded-2xl shadow-2xl border border-base-300">
+                    <div class="flex items-center justify-between pb-2 border-b border-base-200">
+                        <span class="text-xs font-bold text-base-content flex items-center gap-1.5">
+                            <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4 text-primary" />
+                            Full-Resolution Photo Preview
+                        </span>
+                        <button type="button" @click="closeZoomPreview" class="btn btn-xs btn-circle btn-ghost">✕</button>
+                    </div>
+                    <div class="py-3 flex items-center justify-center max-h-[70vh] overflow-auto">
+                        <img v-if="previewZoomUrl" :src="previewZoomUrl" class="max-w-full max-h-[65vh] object-contain rounded-xl shadow-md" />
+                    </div>
+                    <div class="modal-action mt-2">
+                        <button type="button" class="btn btn-sm btn-primary w-full rounded-xl font-bold" @click="closeZoomPreview">Close Preview</button>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                    <button type="button" @click="closeZoomPreview">close</button>
+                </form>
+            </dialog>
         </div>
     </Teleport>
 </template>
@@ -1441,6 +1564,19 @@ const actualMainPhoto = computed(() => {
         return { file: null, url: null, type: 'none' };
     }
 });
+
+const totalGalleryCount = computed(() => {
+    return (editForm.existingGalleryIds?.length || 0) + (editGalleryBuffer.value?.length || 0);
+});
+
+const previewZoomUrl = ref(null);
+const openZoomPreview = (url) => {
+    if (!url) return;
+    previewZoomUrl.value = url;
+};
+const closeZoomPreview = () => {
+    previewZoomUrl.value = null;
+};
 
 const showOnStorefront = computed({
     get() {
@@ -2249,7 +2385,16 @@ const saveEdit = async () => {
     }
 };
 
-const removeGalleryItem = (idOrIdx, isExisting) => {
+const removeGalleryItem = async (idOrIdx, isExisting) => {
+    const confirmed = await confirmDialog(
+        'Are you sure you want to remove this photo from the item gallery?',
+        'Delete Photo',
+        'Delete',
+        'Keep Photo',
+        'btn-error'
+    );
+    if (!confirmed) return;
+
     if (isExisting) {
         editForm.existingGalleryIds = editForm.existingGalleryIds.filter(id => id !== idOrIdx);
     } else {
