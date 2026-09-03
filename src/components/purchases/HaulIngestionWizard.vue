@@ -13,15 +13,15 @@
             <span v-else class="badge badge-ghost badge-sm text-[10px] font-bold opacity-60">Draft PO</span>
           </div>
 
-          <!-- PO / Haul Name (Always Editable with Auto-Derive Magic Wand) -->
+          <!-- PO / Haul Name (Editable anytime) -->
           <div class="flex items-center gap-2 w-full">
             <input 
               type="text" 
               v-model="poVendor" 
-              placeholder="Name this Haul / PO (e.g. Goodwill Bins, ShopGoodwill #60407098...)" 
+              placeholder="Name this Haul (e.g. Goodwill Bins, Estate Sale...)" 
               class="input input-sm sm:input-md input-bordered font-black text-base sm:text-xl w-full bg-base-100/90 border-base-300 focus:border-primary"
             />
-            <button @click="autoDerivePoName" class="btn btn-sm sm:btn-md btn-ghost border border-base-300 bg-base-100 hover:bg-base-200 text-primary font-bold shrink-0 gap-1" title="Auto-Derive Name from Import / Order / Items">
+            <button @click="autoDerivePoName" class="btn btn-sm sm:btn-md btn-ghost border border-base-300 bg-base-100 hover:bg-base-200 text-primary font-bold shrink-0 gap-1" title="Auto-Derive Name">
               <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
               <span class="text-xs hidden sm:inline">Auto-Name</span>
             </button>
@@ -199,14 +199,13 @@
       <!-- Action Footer -->
       <div class="flex items-center justify-between pt-4 border-t border-base-300">
         <div class="text-xs opacity-70">
-          <span v-if="!poVendor.trim()" class="text-warning font-bold">⚠️ Enter Haul / PO Name to continue.</span>
-          <span v-else-if="items.length === 0" class="opacity-60">Add items to proceed.</span>
+          <span v-if="items.length === 0" class="opacity-60">Add or import items to proceed.</span>
           <span v-else>Ready to photograph & enrich <strong class="text-base-content">{{ resaleItems.length }} resale item(s)</strong>.</span>
         </div>
         <button @click="proceedToStep2" 
-                :disabled="items.length === 0 || !poVendor.trim()" 
+                :disabled="items.length === 0" 
                 class="btn btn-primary text-primary-content font-black gap-2 shadow-md">
-          Next: Deep AI Photo Enrich & Price <Icon icon="solar:arrow-right-bold" class="w-4 h-4" />
+          Next: Unbox & AI Receive <Icon icon="solar:arrow-right-bold" class="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -533,7 +532,7 @@ const onBulkImportComplete = () => {
 
 const currentStep = ref(1);
 const poNumber = ref('');
-const poVendor = ref(props.initialVendor || 'New Haul Ingestion');
+const poVendor = ref(props.initialVendor || '');
 const completing = ref(false);
 const { showLoader, hideLoader } = useLoader();
 
@@ -629,7 +628,7 @@ const items = ref<IngestionItem[]>(props.initialItems?.map(i => ({
   price: Number(i.price) || (Number(i.cost) ? Number(i.cost) * 3.5 : 0),
   quantity: Number(i.quantity) || 1,
   type: (i.type === 'expense' ? 'expense' : 'resale') as 'resale' | 'expense',
-  destination: (i.destination || 'memory_den') as 'memory_den' | 'dustytiger' | 'backstock' | 'online',
+  destination: (i.destination || 'backstock') as 'memory_den' | 'dustytiger' | 'backstock' | 'online',
   category: i.category || '',
   brand: i.brand || '',
   sku: i.sku || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -652,7 +651,7 @@ const addLineItem = () => {
     price: 0,
     quantity: 1,
     type: 'resale',
-    destination: 'memory_den',
+    destination: 'backstock',
     category: '',
     brand: '',
     sku: `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
@@ -691,8 +690,7 @@ const autoDerivePoName = () => {
 
 const proceedToStep2 = () => {
   if (!poVendor.value.trim()) {
-    addToast('Please name this Haul / PO in the header field above', 'warning');
-    return;
+    autoDerivePoName();
   }
   if (items.value.length === 0) {
     addToast('Please load or add at least 1 item line', 'warning');
@@ -796,7 +794,7 @@ const handleCsvImport = async (e: Event) => {
         price: landedCost > 0 ? Math.round(landedCost * 3.5) : 0,
         quantity: 1,
         type: 'resale',
-        destination: 'memory_den',
+        destination: 'backstock',
         orderId: rawOrderId || undefined,
         itemId: rawItemId || undefined,
         sku: rawItemId ? `SGW-${rawItemId.slice(-6)}` : `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
@@ -1055,7 +1053,7 @@ onMounted(async () => {
             price: Number(d.resalePrice || d.price) || (Number(d.cost) ? Math.round(Number(d.cost) * 3.5) : 0),
             quantity: Number(d.quantity) || 1,
             type: 'resale',
-            destination: (d.storageLocation || d.location || 'memory_den') as any,
+            destination: (d.storageLocation || d.location || 'backstock') as any,
             category: d.category || '',
             brand: d.brand || '',
             sku: d.identity || d.locationSku || d.upc || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,

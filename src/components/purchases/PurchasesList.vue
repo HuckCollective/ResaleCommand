@@ -104,12 +104,12 @@
         <!-- Touch Actions: Ingest, Items, Details, Delete -->
         <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
           <a 
-            :href="`/purchases/ingest?poId=${purchase.$id}`"
+            :href="`/purchases/${purchase.$id}`"
             class="btn btn-sm btn-primary text-primary-content font-black flex-1 rounded-xl shadow-xs gap-1.5 min-h-[38px]"
-            title="Receive & Tag Haul"
+            title="Open Purchase Order & Edit Items"
           >
-            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-            <span>Receive</span>
+            <Icon icon="solar:pen-bold" class="w-4 h-4" />
+            <span>Open PO</span>
           </a>
 
           <a 
@@ -226,12 +226,12 @@
               <td class="py-3 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
                   <a 
-                    :href="`/purchases/ingest?poId=${purchase.$id}`"
+                    :href="`/purchases/${purchase.$id}`"
                     class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-xs px-2.5 h-8 rounded-lg"
-                    title="Receive, Price & Tag Haul"
+                    title="Open Purchase Order & Edit Items"
                   >
-                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                    <span>Receive</span>
+                    <Icon icon="solar:pen-bold" class="w-3.5 h-3.5" />
+                    <span>Open PO</span>
                   </a>
 
                   <a 

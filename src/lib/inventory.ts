@@ -1038,8 +1038,6 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             if (raw) data.rawAnalysis = raw;
         }
 
-        console.log("DEBUG: Safe Mode Update keys:", Object.keys(data));
-        
         const response = await databases.updateDocument(
             DB_ID,
             getCollectionId(),
@@ -1058,9 +1056,14 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             }
             
             if (orphansToDelete.size > 0) {
-                console.log(`Deleting ${orphansToDelete.size} orphaned files from bucket...`);
                 await Promise.allSettled(Array.from(orphansToDelete.entries()).map(([fileId, bucketId]) => 
-                    storage.deleteFile(bucketId, fileId).catch(e => console.warn(`Failed to delete orphaned file ${fileId} from ${bucketId}:`, e))
+                    storage.deleteFile(bucketId, fileId).catch(e => {
+                        // 404 means the file was already deleted or doesn't exist - safely ignore
+                        if (e?.code === 404 || e?.message?.includes('could not be found')) {
+                            return null;
+                        }
+                        console.warn(`Failed to delete orphaned file ${fileId} from ${bucketId}:`, e);
+                    })
                 ));
             }
         } catch (cleanupErr) {

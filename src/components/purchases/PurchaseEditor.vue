@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8">
+  <div class="space-y-8 pb-32">
     <div v-if="loadingInit" class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
@@ -10,10 +10,6 @@
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
             <div class="flex items-center gap-3">
               <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
-              <a v-if="isEdit" :href="'/purchases/ingest?poId=' + purchaseId" 
-                 class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black gap-1.5 shadow-md">
-                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" /> Unbox & Receive Haul
-              </a>
             </div>
             <div class="form-control" v-if="isEdit">
               <label class="label cursor-pointer gap-2 py-0">
@@ -213,9 +209,9 @@
             No items are linked to this purchase yet.
           </div>
           <div v-else class="space-y-3">
-            <!-- Receiving & AI Toolbar -->
-            <div class="flex flex-wrap items-center justify-between gap-2 p-3 bg-base-200/80 rounded-xl border border-base-300">
-              <div class="flex items-center gap-2">
+            <!-- Receiving & Items Summary Toolbar -->
+            <div class="flex items-center justify-between gap-2 p-3 bg-base-200/80 rounded-xl border border-base-300">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-black text-base-content uppercase tracking-wider">
                   {{ items.length }} Line Item(s)
                 </span>
@@ -223,31 +219,107 @@
                   Landed Cost: ${{ itemsTotalCost.toFixed(2) }}
                 </span>
               </div>
+            </div>
 
-              <div class="flex items-center gap-2 flex-wrap">
-                <button 
-                  v-if="itemsWithPhotosCount > 0" 
-                  @click="runBatchAiDeepReceive" 
-                  class="btn btn-xs btn-primary text-primary-content font-bold gap-1 shadow-xs"
-                  :disabled="batchAiRunning"
-                >
-                  <span v-if="batchAiRunning" class="loading loading-spinner loading-xs"></span>
-                  <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
-                  AI Deep Receive Photos ({{ itemsWithPhotosCount }})
-                </button>
+            <!-- MOBILE VIEW: Tactile Ergonomic Cards (block md:hidden) -->
+            <div class="space-y-3 block md:hidden">
+              <div 
+                v-for="item in items" 
+                :key="'mob-' + item.$id" 
+                class="p-3.5 rounded-2xl bg-base-100 border border-base-300 shadow-xs space-y-3"
+              >
+                <!-- Top Row: Photo, Title, Badges -->
+                <div class="flex items-start gap-3">
+                  <div 
+                    class="w-16 h-16 rounded-xl overflow-hidden bg-base-200/80 border border-base-300 flex flex-col items-center justify-center shrink-0 relative cursor-pointer group" 
+                    @click="openEditItem(item)"
+                    title="Tap to open ItemDrawer"
+                  >
+                    <img 
+                      v-if="getItemImage(item) && !failedImages[item.$id]" 
+                      :src="getItemImage(item)" 
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                      alt="Item Thumbnail"
+                      @error="failedImages[item.$id] = true" 
+                    />
+                    <div v-else class="flex flex-col items-center justify-center text-center p-1 text-base-content/40">
+                      <Icon icon="solar:camera-broken" class="w-6 h-6" />
+                      <span class="text-[9px] font-bold mt-0.5 leading-none">No Photo</span>
+                    </div>
+                  </div>
 
-                <button 
-                  v-if="hasUnreceivedItems" 
-                  @click="receiveAllToStock('Memory Den (MD1)')" 
-                  class="btn btn-xs btn-success text-success-content font-bold gap-1 shadow-xs"
-                >
-                  <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                  Receive All to In-Stock
-                </button>
+                  <div class="flex-1 min-w-0 space-y-1">
+                    <h4 
+                      class="font-bold text-sm text-base-content leading-snug line-clamp-2 cursor-pointer hover:text-primary transition-colors"
+                      @click="openEditItem(item)"
+                    >
+                      {{ item.title }}
+                    </h4>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
+                      <span v-else-if="item.identity" class="font-mono text-[11px] opacity-60">{{ item.identity }}</span>
+                      <div class="badge badge-xs" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost'))">
+                        {{ item.status || 'acquired' }}
+                      </div>
+                      <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
+                      <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Financial Row: Landed Cost & Resale Price -->
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-base-200/60 text-xs">
+                  <div>
+                    <span class="opacity-60 block text-[10px] uppercase font-bold">Landed Cost</span>
+                    <span class="font-mono font-bold text-base-content text-sm">${{ (Number(item.cost) || 0).toFixed(2) }}</span>
+                  </div>
+                  <div class="text-right">
+                    <span class="opacity-60 block text-[10px] uppercase font-bold">Resale Price</span>
+                    <span class="font-mono font-extrabold text-success text-sm">
+                      {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : 'Not Set') }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Action Button Cluster -->
+                <div class="flex items-center gap-2 pt-1 border-t border-base-200">
+                  <button 
+                    class="btn btn-sm btn-primary text-primary-content font-black gap-1.5 flex-1 h-9 rounded-xl shadow-xs" 
+                    @click="openEditItem(item)"
+                    title="Open ItemDrawer with AI Deep Research, Lot Tools, and Details"
+                  >
+                    <Icon icon="solar:pen-linear" class="w-4 h-4" />
+                    <span>Update</span>
+                  </button>
+
+                  <button 
+                    v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
+                    class="btn btn-sm btn-success text-success-content font-bold gap-1 flex-1 h-9 rounded-xl shadow-xs" 
+                    @click="receiveToStock(item, 'Backstock')"
+                    title="Receive into Backstock"
+                  >
+                    <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+                    <span>Receive</span>
+                  </button>
+                  <div v-else class="badge badge-success badge-sm text-success-content font-bold gap-1 px-2.5 h-9 rounded-xl">
+                    <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                    <span>In-Stock</span>
+                  </div>
+
+                  <button 
+                    class="btn btn-sm btn-ghost text-error btn-square h-9 w-9 rounded-xl shrink-0" 
+                    @click="unlinkItem(item)" 
+                    :disabled="linkingItem === item.$id"
+                    title="Unlink Item"
+                  >
+                    <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div class="overflow-x-auto border border-base-200 rounded-box">
+            <!-- DESKTOP VIEW: Full Table (hidden md:block) -->
+            <div class="hidden md:block overflow-x-auto border border-base-200 rounded-box">
               <table class="table table-sm table-zebra w-full">
                 <thead>
                   <tr>
@@ -262,23 +334,35 @@
                 <tbody>
                   <tr v-for="item in items" :key="item.$id" class="hover:bg-base-200/50">
                     <td>
-                      <div class="w-12 h-12 rounded-lg overflow-hidden bg-base-200 border border-base-300 flex items-center justify-center shrink-0">
+                      <div 
+                        class="w-12 h-12 rounded-lg overflow-hidden bg-base-200/80 border border-base-300 flex flex-col items-center justify-center shrink-0 cursor-pointer relative group"
+                        @click="openEditItem(item)"
+                        title="Tap to open ItemDrawer"
+                      >
                         <img 
-                          v-if="getItemImage(item)" 
+                          v-if="getItemImage(item) && !failedImages[item.$id]" 
                           :src="getItemImage(item)" 
-                          class="w-full h-full object-cover" 
+                          class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
                           alt="Item Thumbnail"
-                          @error="$event.target.style.display = 'none'" 
+                          @error="failedImages[item.$id] = true" 
                         />
-                        <Icon v-else icon="solar:gallery-wide-bold" class="w-5 h-5 opacity-30" />
+                        <div v-else class="flex flex-col items-center justify-center text-center text-base-content/40">
+                          <Icon icon="solar:camera-broken" class="w-5 h-5" />
+                        </div>
                       </div>
                     </td>
                     <td>
                       <div class="flex flex-col gap-0.5">
-                        <span class="font-bold text-sm text-base-content">{{ item.title }}</span>
+                        <span 
+                          class="font-bold text-sm text-base-content cursor-pointer hover:text-primary transition-colors"
+                          @click="openEditItem(item)"
+                        >
+                          {{ item.title }}
+                        </span>
                         <div class="flex items-center gap-2 flex-wrap">
                           <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
                           <span v-else-if="item.identity" class="font-mono text-xs opacity-60">{{ item.identity }}</span>
+                          <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
                           <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
                           <span v-if="item.parentLotId" class="badge badge-xs badge-accent">Extracted Component</span>
                         </div>
@@ -296,28 +380,17 @@
                     <td class="text-right">
                       <div class="flex items-center justify-end gap-1.5 flex-wrap">
                         <button 
-                          v-if="getItemImage(item)" 
-                          class="btn btn-xs btn-outline btn-secondary font-bold gap-1" 
-                          @click="runItemAiDeepReceive(item)" 
-                          :disabled="aiProcessingId === item.$id"
-                          title="Run AI Deep Identification on Photo"
-                        >
-                          <span v-if="aiProcessingId === item.$id" class="loading loading-spinner loading-xs"></span>
-                          <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                          <span>AI Receive</span>
-                        </button>
-                        <button 
                           v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
                           class="btn btn-xs btn-ghost text-success hover:bg-success/20 font-bold gap-0.5" 
-                          @click="receiveToStock(item)"
-                          title="Mark In-Stock"
+                          @click="receiveToStock(item, 'Backstock')"
+                          title="Receive into Backstock"
                         >
                           <Icon icon="solar:check-circle-linear" class="w-3.5 h-3.5" />
                           <span>Receive</span>
                         </button>
                         <button class="btn btn-xs btn-outline btn-primary gap-1 font-bold" @click="openEditItem(item)">
                           <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
-                          <span>Edit</span>
+                          <span>Update</span>
                         </button>
                         <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
                           <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
@@ -336,20 +409,88 @@
       <!-- Operating Expenses Section -->
       <div v-if="isEdit" class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body">
-          <div class="flex justify-between items-center mb-4">
+          <div class="flex justify-between items-center mb-1">
             <h2 class="card-title text-xl">Operating Expenses</h2>
+            <button 
+              type="button"
+              @click="showTaxGuide = true" 
+              class="btn btn-xs btn-ghost text-info hover:bg-info/10 font-bold gap-1 rounded-xl"
+              title="View Resale Tax & Deductions Guide"
+            >
+              <Icon icon="solar:info-circle-bold" class="w-4 h-4" />
+              <span>Tax & Deductions Guide</span>
+            </button>
           </div>
-          <p class="text-sm opacity-70 -mt-3 mb-4">These are kept strictly separate from the Cost of Goods Sold (Subtotal/Shipping/Tax) for accurate accounting.</p>
+          <p class="text-xs sm:text-sm opacity-70 mb-4">These are kept strictly separate from the Cost of Goods Sold (Subtotal/Shipping/Tax) for accurate accounting.</p>
           
-          <div class="bg-base-200 p-4 rounded-box mb-6 relative">
-            <h3 class="font-bold mb-2 text-sm uppercase opacity-70">Add Misc Expense</h3>
-            <div class="flex gap-2">
-                <input v-model="newExpenseNote" class="input input-sm grow" placeholder="Note (e.g. Lunch, Gas)" />
-                <input v-model.number="newExpenseAmount" class="input input-sm w-32" type="number" step="0.01" placeholder="$ Amount" />
-                <button @click="handleAddExpense" class="btn btn-sm btn-neutral" :disabled="!newExpenseAmount || loadingExpenses">
-                   <span v-if="loadingExpenses" class="loading loading-spinner loading-xs"></span>
-                   Add Expense
+          <div class="bg-base-200 p-4 rounded-box mb-6 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="font-bold text-xs sm:text-sm uppercase opacity-70">Add Misc Expense</h3>
+              <!-- Smart Trip Type Indicator / Switcher -->
+              <div class="flex items-center gap-1 bg-base-100 p-0.5 rounded-lg border border-base-300 text-[11px] font-bold">
+                <button 
+                  type="button" 
+                  @click="expenseTypeOverride = 'online'" 
+                  class="btn btn-xs rounded-md" 
+                  :class="isOnlineTrip ? 'btn-primary font-black' : 'btn-ghost opacity-70'"
+                >
+                  🌐 Online Order
                 </button>
+                <button 
+                  type="button" 
+                  @click="expenseTypeOverride = 'in-person'" 
+                  class="btn btn-xs rounded-md" 
+                  :class="!isOnlineTrip ? 'btn-primary font-black' : 'btn-ghost opacity-70'"
+                >
+                  🚗 In-Person Trip
+                </button>
+              </div>
+            </div>
+
+            <!-- Smart Suggestions Chips -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] font-bold opacity-50">Quick Fill:</span>
+              <button 
+                v-for="sug in currentSuggestions" 
+                :key="sug.label"
+                type="button"
+                @click="applySuggestion(sug)"
+                class="badge badge-sm badge-ghost hover:badge-primary cursor-pointer font-bold text-[11px] transition-all"
+              >
+                {{ sug.label }}
+              </button>
+            </div>
+
+            <!-- Responsive Input Row (Never Busts Container) -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input 
+                v-model="newExpenseNote" 
+                class="input input-sm input-bordered grow text-xs sm:text-sm" 
+                :placeholder="isOnlineTrip ? 'e.g. Packing Boxes, Insurance' : 'e.g. Gas, Parking, Lunch'" 
+              />
+              <div class="flex items-center gap-1.5 shrink-0">
+                <label class="input input-sm input-bordered flex items-center gap-1 w-28 text-xs sm:text-sm">
+                  <span class="opacity-60 font-bold">$</span>
+                  <input 
+                    v-model.number="newExpenseAmount" 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="Amount" 
+                    class="w-full text-xs sm:text-sm font-mono" 
+                    @keydown.enter="handleAddExpense"
+                  />
+                </label>
+                <button 
+                  @click="handleAddExpense" 
+                  class="btn btn-sm btn-primary font-bold px-3 shrink-0 shadow-xs" 
+                  :disabled="!newExpenseAmount || loadingExpenses"
+                  title="Add Operating Expense"
+                >
+                  <span v-if="loadingExpenses" class="loading loading-spinner loading-xs"></span>
+                  <Icon v-else icon="solar:add-circle-bold" class="w-4 h-4" />
+                  <span class="text-xs">Add</span>
+                </button>
+              </div>
             </div>
           </div>
           
@@ -387,8 +528,105 @@
       :item="activeEditItem" 
       :isOpen="!!activeEditItem" 
       @close="closeEditDrawer" 
-      @saved="handleSavedItem" 
+      @save="handleSavedItem" 
     />
+
+    <!-- Resale Tax & Deductions Playbook Modal -->
+    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showTaxGuide }">
+      <div class="modal-box max-w-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-base-200 pb-2">
+          <div class="flex items-center gap-2">
+            <Icon icon="solar:calculator-bold-duotone" class="w-6 h-6 text-primary" />
+            <h3 class="font-black text-lg">Resale Tax & Deductions Playbook</h3>
+          </div>
+          <button class="btn btn-sm btn-circle btn-ghost" @click="showTaxGuide = false">✕</button>
+        </div>
+
+        <div class="space-y-3 text-xs sm:text-sm text-base-content/80 max-h-[65vh] overflow-y-auto pr-1">
+          <!-- Section 1 -->
+          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+              <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success" />
+              Pure Expense POs (Zero Inventory)
+            </h4>
+            <p class="leading-relaxed">A Purchase Order doesn't need resale items! POs for supplies (Uline, Amazon), booth fixtures (Home Depot, IKEA), software, or "dry" sourcing trips (where you bought 0 items but paid parking & gas) are 100% tax-deductible business operating expenses.</p>
+          </div>
+
+          <!-- Section 2 -->
+          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+              <Icon icon="solar:hand-money-bold" class="w-4 h-4 text-warning" />
+              Cash Purchases Without Receipts (IRS Cohan Rule)
+            </h4>
+            <p class="leading-relaxed">Under the IRS <em>Cohan Rule</em>, printed register receipts are not strictly required for cash buys (Craigslist, Marketplace, estate sales) as long as you log:</p>
+            <ul class="list-disc list-inside space-y-1 opacity-90 pl-1">
+              <li><strong>Date</strong> and <strong>Cash Amount Paid</strong></li>
+              <li><strong>Item Description</strong> (e.g. <em>"Vintage glass showcase and 2 chrome racks"</em>)</li>
+              <li><strong>Source/Vendor</strong> (e.g. <em>"Craigslist seller in Portland"</em>)</li>
+              <li><strong>Business Purpose</strong> (e.g. <em>"Display fixtures for Memory Den booth"</em>)</li>
+              <li><em>Pro-Tip: Snap a quick photo of the rack/case in your booth or backstock as proof!</em></li>
+            </ul>
+          </div>
+
+          <!-- Section 3 -->
+          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+              <Icon icon="solar:tag-bold" class="w-4 h-4 text-primary" />
+              Immediate 100% Write-Offs (De Minimis Safe Harbor)
+            </h4>
+            <p class="leading-relaxed">Under IRS Safe Harbor (§ 1.263(a)-1(f)), display racks, shelving, mannequins, and showcases under <strong>$2,500 each</strong> do not need to be depreciated over 7 years—they can be written off 100% in the current tax year!</p>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn btn-sm btn-primary font-bold px-6 rounded-xl" @click="showTaxGuide = false">Got It</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showTaxGuide = false">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
+    <div v-if="isEdit" class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
+      <div class="max-w-4xl mx-auto flex items-center justify-between gap-2.5">
+        <!-- Action 1: Delete PO -->
+        <button 
+          class="btn btn-sm btn-ghost text-error hover:bg-error/10 border border-error/20 font-bold rounded-2xl gap-1.5 h-10 px-3.5"
+          @click="handleDelete"
+          :disabled="saving"
+          title="Delete this Purchase Order"
+        >
+          <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+          <span class="text-xs sm:text-sm">Delete PO</span>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <!-- Action 2: Receive All to Backstock -->
+          <button 
+            v-if="hasUnreceivedItems" 
+            @click="receiveAllToStock('Backstock')" 
+            class="btn btn-sm btn-success text-success-content font-black rounded-2xl shadow-md gap-1.5 h-10 px-4 active:scale-95 transition-all"
+            title="Receive all unreceived items into Backstock"
+          >
+            <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+            <span class="text-xs sm:text-sm">Receive All</span>
+          </button>
+
+          <!-- Action 3: Save PO Changes (when in edit mode) -->
+          <button 
+            v-if="editMode" 
+            @click="savePurchase" 
+            :disabled="saving"
+            class="btn btn-sm btn-primary text-primary-content font-black rounded-2xl shadow-md gap-1.5 h-10 px-4 active:scale-95 transition-all"
+          >
+            <span v-if="saving" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
+            <span class="text-xs sm:text-sm">Save PO</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -448,6 +686,8 @@ const getItemImage = (item) => {
     return null;
 };
 
+const failedImages = ref({});
+
 const activeEditItem = ref(null);
 const openEditItem = (item) => {
     activeEditItem.value = item;
@@ -455,9 +695,29 @@ const openEditItem = (item) => {
 const closeEditDrawer = () => {
     activeEditItem.value = null;
 };
-const handleSavedItem = async () => {
-    activeEditItem.value = null;
-    await loadLinkedItems();
+const handleSavedItem = async (payload) => {
+    if (!activeEditItem.value) return;
+    const editingId = activeEditItem.value.$id;
+    showLoader("Saving Item...", {
+        step: "Uploading media & updating item...",
+        basket: 'solar:diskette-bold-duotone',
+        cancelable: false
+    });
+    try {
+        if (payload) {
+            await updateInventoryItem(editingId, payload);
+            delete failedImages.value[editingId];
+            addToast(`Item "${payload.title || activeEditItem.value.title}" saved successfully!`, 'success');
+        }
+    } catch (e) {
+        console.error("Failed to save item from drawer:", e);
+        addToast("Failed to save item: " + e.message, "error");
+    } finally {
+        hideLoader();
+        activeEditItem.value = null;
+        await loadLinkedItems();
+        delete failedImages.value[editingId];
+    }
 };
 
 const isEdit = computed(() => !!props.purchaseId);
@@ -485,6 +745,41 @@ const computedGrandTotal = computed(() => {
            (form.value.taxTotal || 0) + 
            (form.value.feeTotal || 0);
 });
+
+// --- Operating Expenses & Smart Suggestions State ---
+const expenses = ref([]);
+const loadingExpenses = ref(false);
+const newExpenseNote = ref('');
+const newExpenseAmount = ref('');
+const totalExpenses = computed(() => expenses.value.reduce((sum, e) => sum + (e.amount || 0), 0));
+
+const showTaxGuide = ref(false);
+const expenseTypeOverride = ref(null);
+const isOnlineTrip = computed(() => {
+    if (expenseTypeOverride.value) return expenseTypeOverride.value === 'online';
+    return (Number(form.value.shippingTotal || form.value.shippingCost || 0) > 0) || 
+           /goodwill|ebay|poshmark|mercari|online|auction/i.test(form.value.vendor || '');
+});
+
+const onlineExpenseSuggestions = [
+    { label: '📦 Packing Boxes', note: 'Packing Boxes & Supplies' },
+    { label: '🛡️ Insurance', note: 'Shipping Insurance Fee' },
+    { label: '🏷️ Mailers & Tape', note: 'Bubble Mailers & Tape' },
+    { label: '⚠️ Surcharge', note: 'Shipping / Handling Surcharge' }
+];
+
+const inPersonExpenseSuggestions = [
+    { label: '🚗 Gas & Mileage', note: 'Gas / Mileage for Trip' },
+    { label: '🅿️ Parking / Toll', note: 'Parking & Toll Fees' },
+    { label: '🍔 Lunch / Meals', note: 'Lunch / Sourcing Meals' },
+    { label: '🛒 Cart / Entry', note: 'Bins Cart / Estate Entry Fee' }
+];
+
+const currentSuggestions = computed(() => isOnlineTrip.value ? onlineExpenseSuggestions : inPersonExpenseSuggestions);
+
+const applySuggestion = (sug) => {
+    newExpenseNote.value = sug.note;
+};
 
 // Items State
 const items = ref([]);
@@ -571,7 +866,16 @@ const runBatchAiDeepReceive = async () => {
     addToast(`AI Deep Received ${count} item(s)!`, 'success');
 };
 
-const receiveToStock = async (item, location = 'Memory Den (MD1)') => {
+const receiveToStock = async (item, location = 'Backstock') => {
+    const ok = await confirmDialog(
+        `Receive "${item.tag_title || item.title}" into active inventory stored in Backstock? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
+        'Receive Item to Backstock',
+        'Receive to Backstock',
+        'Cancel',
+        'btn-success'
+    );
+    if (!ok) return;
+
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
     const collId = getCollectionId();
     try {
@@ -579,24 +883,25 @@ const receiveToStock = async (item, location = 'Memory Den (MD1)') => {
             status: 'in-stock',
             storageLocation: item.storageLocation || location
         });
-        addToast(`Received "${item.tag_title || item.title}" into stock!`, 'success');
+        addToast(`Received "${item.tag_title || item.title}" into Backstock!`, 'success');
         await loadLinkedItems();
     } catch (e) {
         addToast(`Failed to receive item: ${e.message}`, 'error');
     }
 };
 
-const receiveAllToStock = async (location = 'Memory Den (MD1)') => {
+const receiveAllToStock = async (location = 'Backstock') => {
     if (items.value.length === 0) return;
     const ok = await confirmDialog(
-        `Receive all ${items.value.length} items into active stock (${location})?`,
-        'Receive Haul to Stock',
-        'Receive All',
-        'Cancel'
+        `This will activate all ${items.value.length} item(s) in this Purchase Order to "In-Stock" status stored in Backstock, and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
+        'Receive Entire Haul to Backstock',
+        'Receive All to Backstock',
+        'Cancel',
+        'btn-success'
     );
     if (!ok) return;
 
-    showLoader('Activating items to in-stock inventory...');
+    showLoader('Activating items into Backstock...');
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
         const collId = getCollectionId();
@@ -610,7 +915,7 @@ const receiveAllToStock = async (location = 'Memory Den (MD1)') => {
             await purchasesAPI.updatePurchase(props.purchaseId, { status: 'Received' });
             form.value.status = 'Received';
         }
-        addToast(`All ${items.value.length} items are now In-Stock!`, 'success');
+        addToast(`All ${items.value.length} items are now In-Stock (Backstock)!`, 'success');
         await loadLinkedItems();
     } catch (e) {
         addToast(`Failed to activate items: ${e.message}`, 'error');
@@ -631,12 +936,6 @@ const newItem = ref({
     title: '',
     cost: null
 });
-
-const expenses = ref([]);
-const loadingExpenses = ref(false);
-const newExpenseNote = ref('');
-const newExpenseAmount = ref('');
-const totalExpenses = computed(() => expenses.value.reduce((sum, e) => sum + (e.amount || 0), 0));
 
 onMounted(async () => {
     if (isEdit.value) {
@@ -727,9 +1026,9 @@ const savePurchase = async () => {
 
 const handleDelete = async () => {
     const ok = await confirmDialog(
-        'Are you sure you want to delete this purchase? This action cannot be undone. Items and expenses will remain in the database but will no longer be linked to this PO.',
+        'Deleting this Purchase Order removes this inbound record from Resale Command. All linked inventory items and recorded expenses will remain safely preserved in your inventory, but will no longer be linked to this PO. This action cannot be undone.',
         'Delete Purchase Order',
-        'Delete',
+        'Delete Purchase Order',
         'Cancel',
         'btn-error'
     );
@@ -796,11 +1095,11 @@ const linkItem = async (item) => {
 const unlinkItem = async (item) => {
     if (linkingItem.value) return;
     const ok = await confirmDialog(
-        `Are you sure you want to unlink ${item.identity || item.title}?`,
-        'Unlink Item',
-        'Unlink',
+        `Remove "${item.tag_title || item.title}" from this Purchase Order? The item will still exist in your active inventory, but will no longer be linked to this PO's landed costs.`,
+        'Remove Item from PO',
+        'Remove Item',
         'Cancel',
-        'btn-warning'
+        'btn-error'
     );
     if (!ok) return;
     

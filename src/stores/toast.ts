@@ -12,9 +12,31 @@ export interface Toast {
 
 export const toasts = atom<Toast[]>([]);
 
-export const addToast = (toast: Omit<Toast, 'id'>) => {
+export const addToast = (
+    toastOrMessage: Omit<Toast, 'id'> | string, 
+    type: ToastType = 'info', 
+    customDuration?: number
+) => {
     const id = Math.random().toString(36).substring(2, 9);
     
+    let toast: Omit<Toast, 'id'>;
+    if (typeof toastOrMessage === 'string') {
+        toast = {
+            message: toastOrMessage,
+            type: type || 'info',
+            duration: customDuration
+        };
+    } else {
+        toast = toastOrMessage || { message: '', type: 'info' };
+    }
+
+    // De-duplicate: If an identical toast is already visible, don't stack duplicates
+    const current = toasts.get();
+    const existing = current.find(t => t.message === toast.message);
+    if (existing) {
+        return existing.id;
+    }
+
     // Set default duration if not provided
     let duration = toast.duration;
     if (duration === undefined) {
@@ -30,6 +52,8 @@ export const addToast = (toast: Omit<Toast, 'id'>) => {
             case 'loading':
                 duration = 0; // Loading toasts don't auto-dismiss by default
                 break;
+            default:
+                duration = 3000;
         }
     }
     

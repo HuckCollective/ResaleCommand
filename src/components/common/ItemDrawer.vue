@@ -1250,10 +1250,14 @@ const props = defineProps({
     item: {
         type: Object,
         default: null
+    },
+    isOpen: {
+        type: Boolean,
+        default: false
     }
 });
 
-const emit = defineEmits(['close', 'save', 'uncombined', 'deconstruct', 'selectItem']);
+const emit = defineEmits(['close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem']);
 
 const mainTab = ref('details');
 const descTab = ref('edit');
@@ -1280,6 +1284,7 @@ const lotSplitterItemData = computed(() => {
 const onLotSplitCompleted = async () => {
     isLotSplitterOpen.value = false;
     emit('save');
+    emit('saved');
     emit('uncombined');
     closeDrawer();
 };
@@ -2235,6 +2240,7 @@ const saveEdit = async () => {
                 : null
         };
         emit('save', payload);
+        emit('saved', payload);
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {
