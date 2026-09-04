@@ -32,6 +32,7 @@ export interface ExtraItemData {
     marketDescription?: string;
     itemCondition?: string;
     imageId?: string; // Pre-uploaded image ID
+    receiptImageId?: string; // Pre-uploaded receipt image ID
     estLow?: string;
     estHigh?: string;
     boutiquePrice?: string | number;
@@ -182,28 +183,27 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
     else console.log(`[Inventory] NO Image File passed.`);
 
     try {
-        // Deduplication check: Do not create duplicate item if identity or sourcingLocation already exists in inventory
+        // Deduplication check: Only skip if a truly distinct, non-generic identity already exists
         const rawIdentity = typeof itemData?.identity === 'object' ? JSON.stringify(itemData.identity) : itemData?.identity;
         const targetIdentity = (rawIdentity || '').trim();
-        const targetSourcing = (extraData.sourcingLocation || '').trim();
 
-        if (targetIdentity || targetSourcing) {
+        const isGenericIdentity = !targetIdentity || 
+            targetIdentity.toLowerCase() === 'unidentified item' || 
+            targetIdentity.toLowerCase() === 'receipt item' ||
+            targetIdentity.toLowerCase() === 'inspected piece';
+
+        // NOTE: Never deduplicate on sourcingLocation alone! Multiple items bought at the same store share sourcingLocation.
+        if (targetIdentity && !isGenericIdentity) {
             try {
                 const dedupQueries: any[] = [Query.limit(1)];
                 if (teamId) dedupQueries.push(Query.equal('tenantId', teamId));
                 
                 let existingItem: any = null;
-                if (targetIdentity) {
-                    const idRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('identity', targetIdentity)]);
-                    if (idRes.documents.length > 0) existingItem = idRes.documents[0];
-                }
-                if (!existingItem && targetSourcing) {
-                    const srcRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('sourcingLocation', targetSourcing)]);
-                    if (srcRes.documents.length > 0) existingItem = srcRes.documents[0];
-                }
+                const idRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('identity', targetIdentity)]);
+                if (idRes.documents.length > 0) existingItem = idRes.documents[0];
 
                 if (existingItem) {
-                    console.log(`[Inventory] Deduplication: Item already exists (${existingItem.$id}, UPC: ${existingItem.upc}). Skipping duplicate creation.`);
+                    console.log(`[Inventory] Deduplication: Item with identity "${targetIdentity}" already exists (${existingItem.$id}, UPC: ${existingItem.upc}). Skipping duplicate creation.`);
                     return existingItem;
                 }
             } catch (dedupErr) {
@@ -241,8 +241,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         } else if (!imageId) {
             console.log(`[Inventory] Skipping Image Upload - no file or existing imageId provided.`);
         }
-        let receiptImageId: string | null = null;
-        if (extraData.receiptFile && extraData.receiptFile.size > 0 && BUCKET_ID) {
+        let receiptImageId: string | null = extraData.receiptImageId || null;
+        if (!receiptImageId && extraData.receiptFile && extraData.receiptFile.size > 0 && BUCKET_ID) {
              try {
                 const upload = await storage.createFile(
                      BUCKET_ID,
@@ -419,9 +419,16 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         }
 
         const scoutObj = extraData.scoutData || (itemData && (itemData.price_breakdown || itemData.comparables) ? itemData : null);
+        let finalIdentity = typeof itemData?.identity === 'object' ? JSON.stringify(itemData.identity) : itemData?.identity;
+        if (!finalIdentity || !finalIdentity.trim()) {
+            const ts = Date.now().toString().slice(-6);
+            const rand = Math.floor(100 + Math.random() * 900);
+            finalIdentity = extraData.purchaseId ? `PO-${ts}-${rand}` : `ITEM-${ts}-${rand}`;
+        }
+
         const doc: any = {
             title: itemData.title,
-            identity: typeof itemData.identity === 'object' ? JSON.stringify(itemData.identity) : itemData.identity,
+            identity: finalIdentity,
             conditionNotes: safeNotes,
             status: extraData.status || 'acquired',
             tenantId: teamId || null,

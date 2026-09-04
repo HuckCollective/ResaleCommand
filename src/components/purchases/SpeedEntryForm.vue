@@ -227,7 +227,7 @@
           </div>
         </div>
         
-        <button class="btn btn-primary btn-md font-extrabold px-8 rounded-xl shadow-md w-full sm:w-auto text-sm" @click="submit" :disabled="saving || !poVendor || validItems.length === 0">
+        <button class="btn btn-primary btn-md font-extrabold px-8 rounded-xl shadow-md w-full sm:w-auto text-sm" @click="submit" :disabled="saving || validItems.length === 0">
           <span v-if="saving" class="loading loading-spinner loading-xs"></span>
           Save {{ validItems.length }} Line(s)
         </button>
@@ -244,20 +244,18 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
-import { saveItemToInventory } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
 import { useLoader } from '../../composables/useLoader';
 import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
-import { databases, ID } from '../../lib/appwrite';
-import { isAlphaMode } from '../../stores/env';
 import ScannerWidget from '../common/ScannerWidget.vue';
 
 const { currentTeam } = useAuth();
 const { activeCart, cartItems } = useCart();
 const { showLoader, hideLoader } = useLoader();
 const saving = ref(false);
+const lastScannedReceiptFile = ref(null);
 
 const poVendor = ref('');
 const poDate = ref(new Date().toISOString().split('T')[0]);
@@ -303,6 +301,7 @@ const toggleItemType = (index) => {
 const processReceiptFiles = async (fileList) => {
     if (!fileList || fileList.length === 0) return;
 
+    lastScannedReceiptFile.value = fileList[0];
     scanningReceipt.value = true;
     showLoader("Reading & Scanning Receipt...", {
         step: "AI is extracting store name, date, prices, and line items",
@@ -335,7 +334,11 @@ const processReceiptFiles = async (fileList) => {
 
         const parsed = await res.json();
         
-        if (parsed.vendor) poVendor.value = parsed.vendor;
+        if (parsed.vendor && parsed.vendor.trim()) {
+            poVendor.value = parsed.vendor.trim();
+        } else if (!poVendor.value || !poVendor.value.trim()) {
+            poVendor.value = 'Receipt Purchase';
+        }
         if (parsed.total) {
             const parsedTot = parseFloat(parsed.total);
             if (!isNaN(parsedTot) && parsedTot > 0) poTotal.value = parsedTot;
@@ -351,13 +354,30 @@ const processReceiptFiles = async (fileList) => {
         }
 
         if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
-            let mappedItems = parsed.items.map(i => ({
-                title: i.title || '',
-                cost: i.cost ? parseFloat(i.cost) : null,
-                quantity: i.quantity ? parseInt(i.quantity) : 1,
-                type: globalMode.value === 'all_expense' ? 'expense' : (isLikelyExpense(i.title) ? 'expense' : 'resale'),
-                linkedItemId: null
-            }));
+            // Number any identical items so each line is distinct and never flagged as a duplicate
+            const titleCounts = new Map();
+            parsed.items.forEach(i => {
+                const t = (i.title || 'Item').trim().toLowerCase();
+                titleCounts.set(t, (titleCounts.get(t) || 0) + 1);
+            });
+
+            const titleTracker = new Map();
+            let mappedItems = parsed.items.map((i, idx) => {
+                let cleanTitle = (i.title || `Item #${idx + 1}`).trim();
+                const norm = cleanTitle.toLowerCase();
+                if ((titleCounts.get(norm) || 0) > 1 && !/#\d+$/.test(cleanTitle)) {
+                    const count = (titleTracker.get(norm) || 0) + 1;
+                    titleTracker.set(norm, count);
+                    cleanTitle = `${cleanTitle} #${count}`;
+                }
+                return {
+                    title: cleanTitle,
+                    cost: i.cost ? parseFloat(i.cost) : null,
+                    quantity: i.quantity ? parseInt(i.quantity) : 1,
+                    type: globalMode.value === 'all_expense' ? 'expense' : (isLikelyExpense(cleanTitle) ? 'expense' : 'resale'),
+                    linkedItemId: null
+                };
+            });
             
             // Check for cart conflicts
             if (activeCart.value && cartItems.value.length > 0) {
@@ -498,110 +518,48 @@ const removeItem = (index) => {
 };
 
 const submit = async () => {
-    if (!poVendor.value || validItems.value.length === 0) return;
+    if (validItems.value.length === 0) {
+        addToast({ type: 'warning', message: "Please enter at least one line item before saving." });
+        return;
+    }
+    
     saving.value = true;
+    showLoader("Saving Purchase Order & Items...", {
+        step: `Saving ${validResaleItems.value.length} item(s) to inventory...`
+    });
     
     try {
-        const subtotal = resaleTotal.value;
-        const feeTotal = expenseTotal.value;
-        const total = poTotal.value || (subtotal + feeTotal);
-        
-        let purchaseId = null;
-        
-        // 1. Create Purchase OR Use Active Cart
-        if (activeCart.value) {
-            purchaseId = activeCart.value.$id;
-            // Complete the cart
-            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-            const CARTS_COL = import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'purchases';
-            await databases.updateDocument(DB_ID, CARTS_COL, purchaseId, {
-                status: 'Received',
-                vendor: poVendor.value,
-                subtotal: subtotal,
-                feeTotal: feeTotal,
-                grandTotal: total
+        const result = await purchasesAPI.savePurchaseOrder({
+            purchaseId: activeCart.value?.$id || null,
+            poNumber: activeCart.value?.poNumber || undefined,
+            vendor: poVendor.value.trim() || 'Receipt Purchase',
+            purchaseDate: poDate.value,
+            grandTotal: (poTotal.value !== '' && !isNaN(Number(poTotal.value))) ? Number(poTotal.value) : undefined,
+            tenantId: currentTeam.value?.$id || null,
+            receiptFile: lastScannedReceiptFile.value,
+            items: items.value
+        });
+
+        if (result.failedCount > 0) {
+            addToast({
+                type: 'warning',
+                message: `${result.failedCount} item(s) had issues saving, but Purchase Order was created successfully.`
             });
         } else {
-            const poPayload = {
-                vendor: poVendor.value,
-                purchaseDate: poDate.value,
-                status: 'Received',
-                subtotal: subtotal,
-                feeTotal: feeTotal,
-                grandTotal: total,
-                poNumber: `PO-${Date.now().toString().slice(-6)}`
-            };
-            const purchase = await purchasesAPI.createPurchase(poPayload);
-            purchaseId = purchase.$id;
+            addToast({
+                type: 'success',
+                message: `Successfully saved ${result.resaleCount} item(s) and ${result.expenseCount} expense(s)!`
+            });
         }
-        
-        // 2. Create or Update Resale Inventory Items
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
-            
-        const resalePromises = validResaleItems.value.map(async (item) => {
-            if (item.linkedItemId) {
-                // Update existing item from cart
-                return databases.updateDocument(DB_ID, collId, item.linkedItemId, {
-                    title: item.title,
-                    cost: item.cost || 0,
-                    quantity: item.quantity || 1,
-                    status: 'acquired'
-                });
-            } else {
-                // Create new item
-                const identity = 'PO-' + Date.now().toString().slice(-6) + '-' + Math.floor(Math.random() * 1000);
-                return saveItemToInventory(
-                    { title: item.title, identity },
-                    null,
-                    { 
-                        cost: item.cost || 0,
-                        quantity: item.quantity || 1,
-                        purchaseId: purchaseId,
-                        status: 'acquired'
-                    },
-                    currentTeam.value?.$id
-                );
-            }
-        });
 
-        // 3. Create Operating Expense Records
-        const expensePromises = validExpenseItems.value.map(async (exp) => {
-            const amount = (Number(exp.cost) || 0) * (Number(exp.quantity) || 1);
-            try {
-                return await databases.createDocument(
-                    DB_ID,
-                    'expenses',
-                    ID.unique(),
-                    {
-                        purchaseId: purchaseId,
-                        cartId: purchaseId,
-                        tenantId: currentTeam.value?.$id || 'personal',
-                        amount: amount,
-                        note: exp.title,
-                        date: new Date().toISOString()
-                    }
-                );
-            } catch (expErr) {
-                console.warn("Could not save to expenses collection:", expErr);
-            }
-        });
-        
-        await Promise.all([...resalePromises, ...expensePromises]);
-        
-        addToast({
-            type: 'success',
-            message: `Saved ${validResaleItems.value.length} inventory item(s) and ${validExpenseItems.value.length} expense(s)!`
-        });
-
-        // 4. Redirect to PO to view it
-        window.location.href = `/purchases/${purchaseId}`;
+        // Redirect to PO to view it
+        window.location.href = `/purchases/${result.purchaseId}`;
     } catch (err) {
         console.error("Failed to save speed entry:", err);
-        addToast({ type: 'error', message: "Failed to save: " + err.message });
+        addToast({ type: 'error', message: "Failed to save: " + (err.message || 'Unknown error') });
+    } finally {
         saving.value = false;
+        hideLoader();
     }
 };
 

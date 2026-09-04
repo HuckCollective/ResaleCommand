@@ -18,6 +18,9 @@
             </div>
         </div>
 
+        <!-- Native Camera Fallback (works on mobile over HTTP and when getUserMedia is restricted) -->
+        <input type="file" ref="nativeCameraFallback" accept="image/*" capture="environment" class="hidden" @change="handleFileSelect" />
+
         <dialog ref="cameraModal" class="modal">
             <div class="modal-box p-0 bg-black w-full max-w-none h-dvh max-h-none rounded-none flex flex-col overflow-hidden shadow-none relative">
                 <video ref="cameraVideoDialog" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline></video>
@@ -127,6 +130,7 @@ const getObjectUrl = (photo) => {
 
 const cameraVideoDialog = ref(null);
 const cameraModal = ref(null);
+const nativeCameraFallback = ref(null);
 const isCameraOpen = ref(false);
 const cameraStream = ref(null);
 const cameraFacing = ref('environment');
@@ -139,46 +143,54 @@ const handleFileSelect = (e) => {
 };
 
 const startCamera = async () => {
-    if (!cameraModal.value) return;
-    cameraModal.value.showModal();
-    isCameraOpen.value = true;
     try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error("Camera API is blocked. Please ensure you are on HTTPS or localhost.");
+            console.warn("Camera API not available on this origin, falling back to device camera input");
+            nativeCameraFallback.value?.click();
+            return;
         }
+
         if (cameraStream.value) {
             cameraStream.value.getTracks().forEach(track => track.stop());
+            cameraStream.value = null;
         }
-        
-        try {
-            cameraStream.value = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: cameraFacing.value,
-                    width: { ideal: 3840, min: 1920 },
-                    height: { ideal: 2160, min: 1080 }
-                }
-            });
-        } catch (facingError) {
-            // Fallback for laptops/desktops or cameras without 4K support
-            console.warn("Requested high-res/facingMode not found, falling back to standard video");
+
+        // Try progressive constraints: 1080p ideal, facingMode, fallback generic video
+        const constraintAttempts = [
+            { video: { facingMode: { ideal: cameraFacing.value }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+            { video: { facingMode: cameraFacing.value } },
+            { video: true }
+        ];
+
+        let stream = null;
+        for (const c of constraintAttempts) {
             try {
-                cameraStream.value = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 1920, min: 1280 },
-                        height: { ideal: 1080, min: 720 }
-                    }
-                });
-            } catch (fallbackErr) {
-                cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream = await navigator.mediaDevices.getUserMedia(c);
+                if (stream) break;
+            } catch (attemptErr) {
+                console.warn("Camera attempt failed:", c, attemptErr.name);
             }
         }
 
+        if (!stream) {
+            throw new Error("Unable to obtain camera stream");
+        }
+
+        cameraStream.value = stream;
+
+        if (cameraModal.value) {
+            cameraModal.value.showModal();
+        }
+        isCameraOpen.value = true;
+
         if (cameraVideoDialog.value) {
-             cameraVideoDialog.value.srcObject = cameraStream.value;
+            cameraVideoDialog.value.srcObject = cameraStream.value;
         }
     } catch (err) {
-        addToast({ type: 'error', message: "Could not access camera: " + err.message });
+        console.warn("Live viewfinder unavailable, falling back to native camera input:", err);
         stopCamera();
+        // Seamlessly trigger native device camera
+        nativeCameraFallback.value?.click();
     }
 };
 

@@ -42,8 +42,9 @@ Analyze the receipt image(s) with extreme precision. Extract:
    - DO NOT extract header text, customer rewards status, cashier greetings, or membership banners as items (e.g., "New Goodwill Plus Enrollee", "GP1017791401", "Rewards Member", "Cashier: 44202" are NOT purchased items).
    - Ignore disclaimer sub-lines (e.g. "Item Sold As Is. No Returns").
    - Ignore discounts/coupons from the items list (e.g. "5% off $20 ($3.35)") so only actual purchased items are listed, but ensure the final "total" reflects the net GRAND TOTAL paid.
+   - NUMBERED DUPLICATES: If multiple items on the receipt share the same generic description (e.g. multiple "Donated Goods", "Clothing", "Books", or identical items), number them in their title (e.g. "Donated Goods #1", "Donated Goods #2") so each line item is distinct and unique.
    - For every purchased item, output:
-     * title: Clean description (e.g. "Decor Glass/Metal - Yellow", "360 Stretch Active Mesh - Zones", "Books - Purple", "Paper Bag").
+     * title: Clean description (e.g. "Decor Glass/Metal - Yellow", "360 Stretch Active Mesh - Zones", "Books #1", "Paper Bag").
      * cost: Exact dollar cost for that specific line item (e.g. 24.99, 12.99, 2.99, 0.10).
      * quantity: Number of units (default 1).
 
@@ -103,6 +104,31 @@ Return a STRICT JSON object:
                 console.error("Gemini did not return valid JSON:", responseText);
                 return new Response(JSON.stringify({ error: "Failed to parse receipt correctly. Please try again." }), { status: 500 });
             }
+        }
+
+        // Deterministic post-processing: Ensure any duplicate or generic titles are clearly numbered
+        if (parsedJson && parsedJson.items && Array.isArray(parsedJson.items)) {
+            const titleFrequencies = new Map<string, number>();
+            for (const it of parsedJson.items) {
+                const norm = (it?.title || 'Item').trim().toLowerCase();
+                titleFrequencies.set(norm, (titleFrequencies.get(norm) || 0) + 1);
+            }
+
+            const titleTracker = new Map<string, number>();
+            parsedJson.items = parsedJson.items.map((it: any, idx: number) => {
+                let cleanTitle = (it?.title || `Item #${idx + 1}`).trim();
+                const norm = cleanTitle.toLowerCase();
+                if ((titleFrequencies.get(norm) || 0) > 1 && !/#\d+$/.test(cleanTitle)) {
+                    const count = (titleTracker.get(norm) || 0) + 1;
+                    titleTracker.set(norm, count);
+                    cleanTitle = `${cleanTitle} #${count}`;
+                }
+                return {
+                    ...it,
+                    title: cleanTitle,
+                    lineNumber: idx + 1
+                };
+            });
         }
 
         return new Response(JSON.stringify(parsedJson), {

@@ -5,109 +5,359 @@
     </div>
 
     <template v-else>
-      <div class="card bg-base-100 shadow-xl border border-base-200">
-        <div class="card-body">
-          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-            <div class="flex items-center gap-3">
-              <h2 class="card-title text-2xl m-0">{{ isEdit ? 'Purchase Details' : 'New Purchase Order' }}</h2>
+      <!-- COLLAPSIBLE PURCHASE SUMMARY & COST BREAKDOWN CARD -->
+      <div class="card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+        <!-- HEADER SUMMARY BAR (ALWAYS VISIBLE - CLICKABLE ACCORDION HEADER) -->
+        <div 
+          class="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-base-100 hover:bg-base-200/40 transition-colors select-none cursor-pointer"
+          :class="{ 'border-b border-base-200 bg-base-200/20': isExpanded }"
+          @click="toggleExpanded"
+        >
+          <!-- Left: PO Number, Vendor, Status Badge, Receipt Pill -->
+          <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <div class="w-6 h-6 flex items-center justify-center text-base-content/70">
+              <Icon :icon="isExpanded ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-5 h-5 transition-transform duration-200" />
             </div>
-            <div class="form-control" v-if="isEdit">
-              <label class="label cursor-pointer gap-2 py-0">
-                <span class="label-text font-bold">Edit Mode</span>
+
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-black text-base sm:text-lg text-primary tracking-tight">
+                {{ form.poNumber || (isEdit ? 'PO-PENDING' : 'New Purchase Order') }}
+              </span>
+              <span class="text-base-content/30 font-bold">•</span>
+              <span class="font-bold text-sm sm:text-base text-base-content">
+                {{ form.vendor || 'No Vendor' }}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="badge font-bold text-xs" :class="getStatusClass(form.status)">
+                {{ form.status || 'Draft' }}
+              </span>
+
+              <!-- Receipt Indicator Badge -->
+              <span 
+                v-if="form.receiptImageId" 
+                class="badge badge-sm badge-success/15 text-success border-success/30 font-semibold gap-1 py-2"
+                title="Receipt image is attached and linked to this PO"
+              >
+                <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" />
+                Receipt
+              </span>
+            </div>
+          </div>
+
+          <!-- Right: Grand Total Cost, Edit Mode Toggle, Expand Chevron -->
+          <div class="flex items-center justify-between md:justify-end gap-3 sm:gap-4 shrink-0">
+            <div class="flex items-baseline gap-1.5 bg-base-200/70 px-3 py-1.5 rounded-xl border border-base-300/60">
+              <span class="text-[11px] font-extrabold uppercase tracking-wider text-base-content/60">Cost</span>
+              <span class="font-mono font-black text-lg sm:text-xl text-primary">
+                ${{ computedGrandTotal.toFixed(2) }}
+              </span>
+            </div>
+
+            <div class="divider divider-horizontal my-0 hidden sm:flex"></div>
+
+            <!-- Edit Mode Toggle -->
+            <div v-if="isEdit" class="flex items-center" @click.stop>
+              <label class="label cursor-pointer gap-2 py-1 px-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-300/40 transition-colors">
+                <span class="label-text text-xs font-bold uppercase tracking-wider text-base-content/70">Edit</span>
                 <input type="checkbox" class="toggle toggle-primary toggle-sm" v-model="editMode" />
               </label>
             </div>
+
+            <div class="w-7 h-7 flex items-center justify-center text-base-content/60">
+              <Icon :icon="isExpanded ? 'solar:chevron-up-bold' : 'solar:chevron-down-bold'" class="w-5 h-5 transition-transform duration-200" />
+            </div>
           </div>
-          
-          <fieldset :disabled="isEdit && !editMode" class="border-0 p-0 m-0 min-w-0">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Left Column -->
-            <div class="space-y-4">
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">PO Number</span></label>
-                <input type="text" v-model="form.poNumber" class="input input-bordered w-full" placeholder="Auto-generated if left blank" />
+        </div>
+
+        <!-- EXPANDED CONTENT PANEL -->
+        <div v-if="isExpanded" class="card-body p-4 sm:p-6 space-y-6">
+          <!-- Hidden File Input for Receipt -->
+          <input type="file" ref="receiptFileInput" @change="handleReceiptFileChange" accept="image/*" class="hidden" />
+
+          <!-- 3-COLUMN RESPONSIVE LAYOUT (PO Details, Cost Breakdown, Receipt Image) -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- COLUMN 1: PO & Order Details (4 Cols on lg) -->
+            <div class="lg:col-span-4 space-y-4">
+              <div class="flex items-center justify-between pb-2 border-b border-base-200">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                  <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary" />
+                  <span>Order Information</span>
+                </h3>
+                <span v-if="isEdit && !editMode" class="badge badge-ghost badge-xs text-[10px] font-semibold opacity-60">
+                  Read Only
+                </span>
               </div>
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">Vendor</span></label>
-                <input type="text" v-model="form.vendor" class="input input-bordered w-full" placeholder="e.g. ShopGoodwill" />
+
+              <!-- When Read-Only (!editMode) -->
+              <div v-if="isEdit && !editMode" class="space-y-3 text-sm">
+                <div class="flex items-center justify-between py-1 border-b border-base-200/60">
+                  <span class="text-xs opacity-60 font-medium">PO Number</span>
+                  <span class="font-mono font-bold text-primary">{{ form.poNumber || 'Auto-generated' }}</span>
+                </div>
+                <div class="flex items-center justify-between py-1 border-b border-base-200/60">
+                  <span class="text-xs opacity-60 font-medium">Vendor</span>
+                  <span class="font-bold text-base-content">{{ form.vendor || 'None specified' }}</span>
+                </div>
+                <div class="flex items-center justify-between py-1 border-b border-base-200/60">
+                  <span class="text-xs opacity-60 font-medium">Order ID</span>
+                  <span class="font-mono text-xs">{{ form.orderId || 'None' }}</span>
+                </div>
+                <div class="flex items-center justify-between py-1 border-b border-base-200/60">
+                  <span class="text-xs opacity-60 font-medium">Date</span>
+                  <span class="font-semibold">{{ formatDate(form.purchaseDate) }}</span>
+                </div>
+                <div class="flex items-center justify-between py-1">
+                  <span class="text-xs opacity-60 font-medium">Status</span>
+                  <span class="badge font-bold text-xs" :class="getStatusClass(form.status)">
+                    {{ form.status || 'Draft' }}
+                  </span>
+                </div>
               </div>
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">External Order ID</span></label>
-                <input type="text" v-model="form.orderId" class="input input-bordered w-full" placeholder="Vendor Order ID" />
-              </div>
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">Purchase Date</span></label>
-                <input type="date" v-model="form.purchaseDate" class="input input-bordered w-full" />
-              </div>
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">Status</span></label>
-                <select v-model="form.status" class="select select-bordered w-full">
-                  <option value="Draft">Draft</option>
-                  <option value="Ordered">Ordered</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Received">Received</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Returned">Returned</option>
-                </select>
+
+              <!-- When Editable (editMode or New PO) -->
+              <div v-else class="space-y-3">
+                <div class="form-control w-full">
+                  <label class="label py-1"><span class="label-text text-xs font-semibold">PO Number</span></label>
+                  <input type="text" v-model="form.poNumber" class="input input-sm input-bordered w-full font-mono font-bold" placeholder="Auto-generated if left blank" />
+                </div>
+                <div class="form-control w-full">
+                  <label class="label py-1"><span class="label-text text-xs font-semibold">Vendor</span></label>
+                  <input type="text" v-model="form.vendor" class="input input-sm input-bordered w-full font-medium" placeholder="e.g. ShopGoodwill, Estate Sale" />
+                </div>
+                <div class="form-control w-full">
+                  <label class="label py-1"><span class="label-text text-xs font-semibold">External Order ID</span></label>
+                  <input type="text" v-model="form.orderId" class="input input-sm input-bordered w-full font-mono text-xs" placeholder="Vendor Order ID" />
+                </div>
+                <div class="form-control w-full">
+                  <label class="label py-1"><span class="label-text text-xs font-semibold">Purchase Date</span></label>
+                  <input type="date" v-model="form.purchaseDate" class="input input-sm input-bordered w-full" />
+                </div>
+                <div class="form-control w-full">
+                  <label class="label py-1"><span class="label-text text-xs font-semibold">Status</span></label>
+                  <select v-model="form.status" class="select select-sm select-bordered w-full font-bold">
+                    <option value="Draft">Draft</option>
+                    <option value="Ordered">Ordered</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Received">Received</option>
+                    <option value="Cancelled">Cancelled</option>
+                    <option value="Returned">Returned</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <!-- Right Column -->
-            <div class="space-y-4 bg-base-200 p-6 rounded-box">
-              <h3 class="font-bold text-lg mb-2 border-b border-base-300 pb-2">Cost Breakdown</h3>
-              <div class="form-control w-full">
-                <label class="label"><span class="label-text">Subtotal</span></label>
-                <label class="input input-bordered flex items-center gap-2 w-full">
-                  $ <input type="number" step="0.01" v-model.number="form.subtotal" class="grow w-full" />
-                </label>
+            <!-- COLUMN 2: Cost Breakdown (4 Cols on lg) -->
+            <div class="lg:col-span-4 bg-base-200/50 p-4 sm:p-5 rounded-2xl border border-base-300/60 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-base-300">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                  <Icon icon="solar:wallet-money-bold-duotone" class="w-4 h-4 text-secondary" />
+                  <span>Cost Breakdown</span>
+                </h3>
+                <span class="font-mono text-xs font-black text-primary">
+                  Total: ${{ computedGrandTotal.toFixed(2) }}
+                </span>
               </div>
-              <div class="grid grid-cols-2 gap-4">
-                <div class="form-control w-full">
-                  <label class="label"><span class="label-text">Shipping</span></label>
-                  <label class="input input-bordered flex items-center gap-2 w-full">
-                    $ <input type="number" step="0.01" v-model.number="form.shippingTotal" class="grow w-full" />
-                  </label>
+
+              <!-- When Read-Only (!editMode) -->
+              <div v-if="isEdit && !editMode" class="space-y-2.5 text-sm">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="opacity-70">Subtotal (Items):</span>
+                  <span class="font-mono font-semibold">${{ (Number(form.subtotal) || 0).toFixed(2) }}</span>
                 </div>
-                <div class="form-control w-full">
-                  <label class="label"><span class="label-text">Handling</span></label>
-                  <label class="input input-bordered flex items-center gap-2 w-full">
-                    $ <input type="number" step="0.01" v-model.number="form.handlingTotal" class="grow w-full" />
-                  </label>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="opacity-70">Shipping:</span>
+                  <span class="font-mono font-semibold">${{ (Number(form.shippingTotal) || 0).toFixed(2) }}</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="opacity-70">Handling:</span>
+                  <span class="font-mono font-semibold">${{ (Number(form.handlingTotal) || 0).toFixed(2) }}</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="opacity-70">Sales Tax:</span>
+                  <span class="font-mono font-semibold">${{ (Number(form.taxTotal) || 0).toFixed(2) }}</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="opacity-70">Fees:</span>
+                  <span class="font-mono font-semibold">${{ (Number(form.feeTotal) || 0).toFixed(2) }}</span>
+                </div>
+                
+                <div class="divider my-1.5"></div>
+                
+                <div class="flex justify-between items-center text-base font-black text-primary">
+                  <span>Grand Total</span>
+                  <span class="font-mono text-lg">${{ computedGrandTotal.toFixed(2) }}</span>
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-4">
+
+              <!-- When Editable (editMode or New PO) -->
+              <div v-else class="space-y-3">
                 <div class="form-control w-full">
-                  <label class="label"><span class="label-text">Tax</span></label>
-                  <label class="input input-bordered flex items-center gap-2 w-full">
-                    $ <input type="number" step="0.01" v-model.number="form.taxTotal" class="grow w-full" />
+                  <label class="label py-0.5"><span class="label-text text-xs font-semibold">Subtotal</span></label>
+                  <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
+                    <span class="opacity-50 text-xs">$</span>
+                    <input type="number" step="0.01" v-model.number="form.subtotal" class="grow w-full font-mono text-sm" />
                   </label>
                 </div>
-                <div class="form-control w-full">
-                  <label class="label"><span class="label-text">Fees</span></label>
-                  <label class="input input-bordered flex items-center gap-2 w-full">
-                    $ <input type="number" step="0.01" v-model.number="form.feeTotal" class="grow w-full" />
-                  </label>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="form-control w-full">
+                    <label class="label py-0.5"><span class="label-text text-xs font-semibold">Shipping</span></label>
+                    <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
+                      <span class="opacity-50 text-xs">$</span>
+                      <input type="number" step="0.01" v-model.number="form.shippingTotal" class="grow w-full font-mono text-sm" />
+                    </label>
+                  </div>
+                  <div class="form-control w-full">
+                    <label class="label py-0.5"><span class="label-text text-xs font-semibold">Handling</span></label>
+                    <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
+                      <span class="opacity-50 text-xs">$</span>
+                      <input type="number" step="0.01" v-model.number="form.handlingTotal" class="grow w-full font-mono text-sm" />
+                    </label>
+                  </div>
                 </div>
-              </div>
-              
-              <div class="divider"></div>
-              
-              <div class="flex justify-between items-center text-xl font-bold text-primary">
-                <span>Grand Total</span>
-                <span>${{ computedGrandTotal.toFixed(2) }}</span>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="form-control w-full">
+                    <label class="label py-0.5"><span class="label-text text-xs font-semibold">Tax</span></label>
+                    <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
+                      <span class="opacity-50 text-xs">$</span>
+                      <input type="number" step="0.01" v-model.number="form.taxTotal" class="grow w-full font-mono text-sm" />
+                    </label>
+                  </div>
+                  <div class="form-control w-full">
+                    <label class="label py-0.5"><span class="label-text text-xs font-semibold">Fees</span></label>
+                    <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
+                      <span class="opacity-50 text-xs">$</span>
+                      <input type="number" step="0.01" v-model.number="form.feeTotal" class="grow w-full font-mono text-sm" />
+                    </label>
+                  </div>
+                </div>
+                
+                <div class="divider my-1.5"></div>
+                
+                <div class="flex justify-between items-center text-base font-black text-primary">
+                  <span>Grand Total</span>
+                  <span class="font-mono text-lg">${{ computedGrandTotal.toFixed(2) }}</span>
+                </div>
               </div>
             </div>
+
+            <!-- COLUMN 3: Receipt Photo & AI Verification (4 Cols on lg) -->
+            <div class="lg:col-span-4 bg-base-200/30 p-4 sm:p-5 rounded-2xl border border-base-300/50 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-base-200">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+                  <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-accent" />
+                  <span>Receipt Photo</span>
+                </h3>
+                <span v-if="form.receiptImageId" class="badge badge-success badge-xs gap-1 font-bold">
+                  Attached
+                </span>
+                <span v-else class="badge badge-ghost badge-xs text-[10px] opacity-60">
+                  None Attached
+                </span>
+              </div>
+
+              <!-- Case A: Receipt Photo Exists -->
+              <div v-if="form.receiptImageId" class="space-y-3">
+                <div 
+                  class="relative w-full h-44 rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-sm group cursor-pointer flex items-center justify-center"
+                  @click="showReceiptLightbox = true"
+                  title="Click to zoom receipt"
+                >
+                  <img 
+                    :src="getAssetUrl(form.receiptImageId)" 
+                    alt="Attached Receipt" 
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white text-xs font-bold backdrop-blur-xs">
+                    <Icon icon="solar:magnifer-zoom-in-bold" class="w-5 h-5" />
+                    <span>Zoom In</span>
+                  </div>
+                  <span class="absolute top-2 left-2 badge badge-xs badge-neutral font-mono font-bold shadow-xs">
+                    IRS Record
+                  </span>
+                </div>
+
+                <!-- Action Controls: BEHIND EDIT TOGGLE -->
+                <div v-if="isEdit && editMode" class="flex flex-wrap gap-2 pt-1">
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline btn-primary font-bold gap-1 rounded-lg" 
+                    @click="receiptFileInput?.click()" 
+                    :disabled="uploadingReceipt || rescanningReceipt"
+                  >
+                    <Icon icon="solar:upload-track-bold-duotone" class="w-3.5 h-3.5" />
+                    <span>Replace</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline btn-secondary font-bold gap-1 rounded-lg" 
+                    @click="openCameraScanner" 
+                    :disabled="uploadingReceipt || rescanningReceipt"
+                  >
+                    <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
+                    <span>Scan Receipt</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-warning text-warning-content font-extrabold gap-1 rounded-lg shadow-xs" 
+                    @click="rescanReceipt" 
+                    :disabled="uploadingReceipt || rescanningReceipt"
+                  >
+                    <span v-if="rescanningReceipt" class="loading loading-spinner loading-xs"></span>
+                    <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
+                    <span>Rescan AI</span>
+                  </button>
+                </div>
+
+                <!-- Read-only controls when !editMode -->
+                <div v-else class="flex items-center justify-between text-xs pt-1 opacity-70">
+                  <button type="button" class="btn btn-xs btn-ghost gap-1 px-1 font-semibold" @click="showReceiptLightbox = true">
+                    <Icon icon="solar:eye-linear" class="w-3.5 h-3.5" /> View Full Size
+                  </button>
+                  <span class="text-[11px] italic">Toggle Edit to change photo</span>
+                </div>
+              </div>
+
+              <!-- Case B: No Receipt Attached -->
+              <div v-else class="py-6 px-3 text-center border-2 border-dashed border-base-300 rounded-xl space-y-2.5 bg-base-100/50">
+                <div class="w-9 h-9 mx-auto rounded-xl bg-base-200 flex items-center justify-center text-base-content/40">
+                  <Icon icon="solar:bill-cross-linear" class="w-5 h-5" />
+                </div>
+                <div class="text-xs">
+                  <div class="font-bold text-base-content">No Receipt Attached</div>
+                  <p class="opacity-60 text-[11px] mt-0.5 max-w-xs mx-auto">
+                    {{ editMode ? 'Upload or capture a photo of the paper receipt.' : 'Turn on Edit mode to upload or capture a receipt.' }}
+                  </p>
+                </div>
+                <!-- Upload buttons if editMode is active -->
+                <div v-if="editMode || !isEdit" class="flex justify-center gap-2 pt-1">
+                  <button type="button" class="btn btn-xs btn-primary font-bold gap-1 rounded-lg" @click="receiptFileInput?.click()">
+                    <Icon icon="solar:upload-track-bold-duotone" class="w-3.5 h-3.5" />
+                    Upload
+                  </button>
+                  <button type="button" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 rounded-lg" @click="openCameraScanner">
+                    <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
+                    Scan with Camera
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
-          </fieldset>
-          
-          <div v-if="!isEdit || editMode" class="card-actions justify-between items-center mt-8 border-t border-base-200 pt-6">
-            <button v-if="isEdit" class="btn btn-error btn-outline" @click="handleDelete" :disabled="saving">
+
+          <!-- Bottom Action Buttons (Delete / Save PO) inside card when Edit Mode is active -->
+          <div v-if="!isEdit || editMode" class="card-actions justify-between items-center pt-4 border-t border-base-200 mt-2">
+            <button v-if="isEdit" class="btn btn-sm btn-error btn-outline rounded-xl font-bold" @click="handleDelete" :disabled="saving">
+              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
               Delete Purchase
             </button>
             <div v-else></div> <!-- Spacer -->
-            <button class="btn btn-primary px-8" @click="savePurchase" :disabled="saving">
+            <button class="btn btn-sm btn-primary px-6 rounded-xl font-black gap-1.5 shadow-md" @click="savePurchase" :disabled="saving">
               <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-              {{ isEdit ? 'Save Changes' : 'Create Purchase' }}
+              <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
+              {{ isEdit ? 'Save PO Changes' : 'Create Purchase Order' }}
             </button>
           </div>
         </div>
@@ -587,6 +837,40 @@
       </form>
     </dialog>
 
+    <!-- Receipt Full-Size Lightbox Modal -->
+    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showReceiptLightbox }">
+      <div class="modal-box max-w-4xl p-3 sm:p-5 bg-base-100/95 backdrop-blur-xl border border-base-300 shadow-2xl rounded-3xl space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-base-200">
+          <div class="font-black text-sm sm:text-base flex items-center gap-2">
+            <Icon icon="solar:bill-list-bold-duotone" class="w-5 h-5 text-primary" />
+            <span>Receipt Photo — {{ form.poNumber || 'PO' }}</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showReceiptLightbox = false">✕</button>
+        </div>
+        <div class="flex items-center justify-center max-h-[72vh] overflow-auto bg-base-200/40 rounded-2xl p-2">
+          <img 
+            v-if="form.receiptImageId" 
+            :src="getAssetUrl(form.receiptImageId)" 
+            alt="Full Receipt" 
+            class="max-w-full max-h-[68vh] object-contain rounded-xl shadow-md" 
+          />
+        </div>
+        <div class="modal-action pt-2 border-t border-base-200 flex justify-between items-center m-0">
+          <button type="button" class="btn btn-sm btn-warning text-warning-content font-extrabold gap-1.5 rounded-xl shadow-xs" @click="showReceiptLightbox = false; rescanReceipt();">
+            <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
+            Rescan with AI
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showReceiptLightbox = false">Close</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showReceiptLightbox = false">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- In-App Camera Scanner Widget for live receipt photos with alignment viewfinder box -->
+    <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
+
     <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
     <div v-if="isEdit" class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
       <div class="max-w-4xl mx-auto flex items-center justify-between gap-2.5">
@@ -631,10 +915,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { purchasesAPI } from '../../lib/purchases';
-import { getItemsByPurchaseId, searchItems, linkItemToPurchase, saveItemToInventory, updateInventoryItem, BUCKET_ID, getCollectionId } from '../../lib/inventory';
-import { databases, ID } from '../../lib/appwrite';
+import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryItem, BUCKET_ID, getCollectionId } from '../../lib/inventory';
+import { databases, storage, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
@@ -642,6 +926,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import ScannerWidget from '../common/ScannerWidget.vue';
 
 const { currentTeam } = useAuth();
 const { showLoader, hideLoader } = useLoader();
@@ -656,6 +941,12 @@ const props = defineProps({
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const BUCKET = BUCKET_ID;
+
+const scannerWidget = ref(null);
+const receiptFileInput = ref(null);
+const uploadingReceipt = ref(false);
+const rescanningReceipt = ref(false);
+const showReceiptLightbox = ref(false);
 
 const proxify = (url) => {
     if (!url) return null;
@@ -722,8 +1013,42 @@ const handleSavedItem = async (payload) => {
 
 const isEdit = computed(() => !!props.purchaseId);
 const editMode = ref(!props.purchaseId);
+const isExpanded = ref(false);
 const loadingInit = ref(false);
 const saving = ref(false);
+
+const toggleExpanded = () => {
+    isExpanded.value = !isExpanded.value;
+};
+
+watch(editMode, (val) => {
+    if (val) {
+        isExpanded.value = true;
+    }
+});
+
+const getStatusClass = (status) => {
+    switch (status?.toLowerCase()) {
+        case 'pending': return 'badge-warning text-warning-content';
+        case 'ordered': return 'badge-info text-info-content';
+        case 'shipped': return 'badge-info text-info-content';
+        case 'received': return 'badge-success text-success-content';
+        case 'returned': return 'badge-error text-error-content';
+        case 'cancelled': return 'badge-error text-error-content';
+        default: return 'badge-ghost';
+    }
+};
+
+const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return 'N/A';
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+        return 'N/A';
+    }
+};
 
 const form = ref({
     poNumber: '',
@@ -735,7 +1060,8 @@ const form = ref({
     shippingTotal: 0,
     handlingTotal: 0,
     taxTotal: 0,
-    feeTotal: 0
+    feeTotal: 0,
+    receiptImageId: ''
 });
 
 const computedGrandTotal = computed(() => {
@@ -957,7 +1283,8 @@ onMounted(async () => {
                     shippingTotal: p.shippingTotal || 0,
                     handlingTotal: p.handlingTotal || 0,
                     taxTotal: p.taxTotal || 0,
-                    feeTotal: p.feeTotal || 0
+                    feeTotal: p.feeTotal || 0,
+                    receiptImageId: p.receiptImageId || ''
                 };
                 
                 await Promise.all([
@@ -973,6 +1300,172 @@ onMounted(async () => {
         }
     }
 });
+
+const processAndSaveReceiptFile = async (file) => {
+    if (!file) return;
+    uploadingReceipt.value = true;
+    showLoader("Uploading Receipt Photo...", {
+        step: "Saving receipt image to storage and linking to PO...",
+        cancelable: false
+    });
+    try {
+        const up = await storage.createFile(BUCKET_ID, ID.unique(), file);
+        form.value.receiptImageId = up.$id;
+        
+        // Save immediately to PO
+        if (props.purchaseId) {
+            await purchasesAPI.updatePurchase(props.purchaseId, {
+                receiptImageId: up.$id
+            });
+        }
+        
+        addToast("Receipt photo uploaded and linked to Purchase Order!", "success");
+        
+        // Prompt to rescan
+        const shouldRescan = await confirmDialog(
+            "Would you like to scan this receipt with AI right now to extract or verify vendor, date, and line items?",
+            "Rescan Receipt with AI?"
+        );
+        if (shouldRescan) {
+            await rescanReceipt();
+        }
+    } catch (e) {
+        console.error("Failed to upload receipt:", e);
+        addToast("Failed to upload receipt: " + e.message, "error");
+    } finally {
+        uploadingReceipt.value = false;
+        hideLoader();
+    }
+};
+
+const handleReceiptFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+        await processAndSaveReceiptFile(file);
+    }
+    if (event.target) event.target.value = '';
+};
+
+const handleCapturedReceiptPhotos = async (capturedPhotos) => {
+    if (!capturedPhotos || capturedPhotos.length === 0) return;
+    if (scannerWidget.value) {
+        scannerWidget.value.stopCamera();
+    }
+    await processAndSaveReceiptFile(capturedPhotos[0]);
+};
+
+const openCameraScanner = () => {
+    if (scannerWidget.value) {
+        scannerWidget.value.startCamera();
+    } else {
+        receiptFileInput.value?.click();
+    }
+};
+
+const rescanReceipt = async () => {
+    if (!form.value.receiptImageId) {
+        receiptFileInput.value?.click();
+        return;
+    }
+    rescanningReceipt.value = true;
+    showLoader("AI Reading & Analyzing Receipt...", {
+        step: "Extracting store name, date, totals, and line items...",
+        cancelable: false
+    });
+    try {
+        // Fetch the file as blob and convert to base64
+        const imgUrl = getAssetUrl(form.value.receiptImageId);
+        const resp = await fetch(imgUrl);
+        const blob = await resp.blob();
+        
+        const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+        
+        const res = await fetch('/api/parse-receipt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: [base64] })
+        });
+        
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `Server error (HTTP ${res.status})`);
+        }
+        
+        const parsed = await res.json();
+        
+        let updateMsg = [];
+        const updatePayload = {};
+        
+        if (parsed.vendor && parsed.vendor.trim()) {
+            form.value.vendor = parsed.vendor.trim();
+            updatePayload.vendor = parsed.vendor.trim();
+            updateMsg.push(`Vendor: ${parsed.vendor}`);
+        }
+        if (parsed.date) {
+            try {
+                const d = new Date(parsed.date);
+                if (!isNaN(d.getTime())) {
+                    form.value.purchaseDate = d.toISOString().split('T')[0];
+                    updatePayload.purchaseDate = d.toISOString();
+                    updateMsg.push(`Date: ${form.value.purchaseDate}`);
+                }
+            } catch(e) {}
+        }
+        if (parsed.total) {
+            const pTot = parseFloat(parsed.total);
+            if (!isNaN(pTot) && pTot > 0) {
+                form.value.subtotal = pTot;
+                updatePayload.subtotal = pTot;
+                updatePayload.grandTotal = pTot;
+                updateMsg.push(`Total: $${pTot.toFixed(2)}`);
+            }
+        }
+        
+        // Save PO header updates
+        if (Object.keys(updatePayload).length > 0) {
+            await purchasesAPI.updatePurchase(props.purchaseId, updatePayload);
+        }
+        
+        // Handle items
+        if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+            const addItems = await confirmDialog(
+                `Receipt scanned!\n\n${updateMsg.join(' • ')}\n\nFound ${parsed.items.length} line items on the receipt. Would you like to add any missing items to this Purchase Order?`,
+                "Add Receipt Items to PO?"
+            );
+            
+            if (addItems) {
+                showLoader("Adding Receipt Line Items to Inventory...", {
+                    step: `Saving ${parsed.items.length} items to inventory...`,
+                    cancelable: false
+                });
+                
+                await purchasesAPI.savePurchaseOrder({
+                    purchaseId: props.purchaseId,
+                    poNumber: form.value.poNumber,
+                    vendor: form.value.vendor || 'Receipt Purchase',
+                    tenantId: currentTeam.value?.$id || null,
+                    receiptImageId: form.value.receiptImageId || undefined,
+                    items: parsed.items
+                });
+                
+                await loadLinkedItems();
+            }
+        }
+        
+        addToast("Receipt rescanned successfully!", "success");
+    } catch (err) {
+        console.error("Failed to rescan receipt:", err);
+        addToast("Rescan failed: " + (err.message || 'Unknown error'), "error");
+    } finally {
+        rescanningReceipt.value = false;
+        hideLoader();
+    }
+};
 
 const loadLinkedItems = async () => {
     loadingItems.value = true;
