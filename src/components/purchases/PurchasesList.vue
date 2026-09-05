@@ -36,8 +36,8 @@
           </button>
         </div>
 
-        <!-- Sort Control Pills -->
-        <div class="flex items-center gap-1.5 flex-wrap pt-1 text-xs">
+        <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
+        <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-1 text-xs">
           <span class="font-bold opacity-60 mr-1 flex items-center gap-1">
             <Icon icon="solar:sort-vertical-linear" class="w-3.5 h-3.5" /> Sort:
           </span>
@@ -149,7 +149,7 @@
           </div>
         </div>
 
-        <!-- Touch Actions: Ingest, Items, Details, Delete -->
+        <!-- Touch Actions: Open PO, Items (with count), Delete -->
         <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
           <a 
             :href="`/purchases/${purchase.$id}`"
@@ -162,24 +162,19 @@
 
           <a 
             :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
-            class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1 min-h-[38px]"
+            class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1.5 min-h-[38px]"
             title="View Items in Inventory"
           >
             <Icon icon="solar:box-minimalistic-linear" class="w-4 h-4" />
             <span>Items</span>
-          </a>
-
-          <a 
-            :href="`/purchases/${purchase.$id}`" 
-            class="btn btn-sm btn-ghost bg-base-200/50 hover:bg-base-200 btn-square rounded-xl min-h-[38px] w-10" 
-            title="View Details"
-          >
-            <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+            <span class="badge badge-sm badge-secondary font-mono font-bold" v-if="getItemCount(purchase) > 0">
+              {{ getItemCount(purchase) }}
+            </span>
           </a>
 
           <button 
             @click="deletePurchaseOrder(purchase)" 
-            class="btn btn-sm btn-ghost text-error hover:bg-error/10 btn-square rounded-xl min-h-[38px] w-10" 
+            class="btn btn-sm btn-ghost text-error hover:bg-error/10 btn-square rounded-xl min-h-[38px] w-10 shrink-0" 
             title="Delete this Purchase Order"
           >
             <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
@@ -194,7 +189,13 @@
         <table class="table table-zebra w-full">
           <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">
             <tr>
-              <th class="w-40 py-3.5 px-4 whitespace-nowrap">PO Number</th>
+              <th class="w-40 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('po')">
+                <div class="flex items-center gap-1.5">
+                  PO Number
+                  <span v-if="sortBy === 'po'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
+                </div>
+              </th>
               <th class="w-36 py-3.5 px-4 whitespace-nowrap">External ID</th>
               <th class="w-36 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('created')">
                 <div class="flex items-center gap-1.5">
@@ -210,7 +211,13 @@
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="w-40 py-3.5 px-4 whitespace-nowrap">Vendor</th>
+              <th class="w-40 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('vendor')">
+                <div class="flex items-center gap-1.5">
+                  Vendor
+                  <span v-if="sortBy === 'vendor'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
+                </div>
+              </th>
               <th class="w-28 py-3.5 px-4 whitespace-nowrap text-right cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('total')">
                 <div class="flex items-center justify-end gap-1.5">
                   Total
@@ -304,14 +311,9 @@
                   >
                     <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                     <span>Items</span>
-                  </a>
-
-                  <a 
-                    :href="`/purchases/${purchase.$id}`" 
-                    class="btn btn-xs btn-ghost hover:bg-base-200 btn-square h-8 w-8 rounded-lg" 
-                    title="View Purchase Details"
-                  >
-                    <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+                    <span class="badge badge-xs badge-secondary font-mono font-bold" v-if="getItemCount(purchase) > 0">
+                      {{ getItemCount(purchase) }}
+                    </span>
                   </a>
 
                   <button 
@@ -385,16 +387,39 @@ import { Icon } from '@iconify/vue';
 import BulkImport from '../inventory/BulkImport.vue';
 
 import { usePurchases } from '../../composables/usePurchases';
+import { useInventory } from '../../composables/useInventory';
 
 const { showLoader, hideLoader } = useLoader();
 const { purchases, loading, fetchPurchases } = usePurchases();
+const { inventoryItems, fetchInventory } = useInventory();
+
+const purchaseItemCounts = computed(() => {
+    const counts = {};
+    for (const item of (inventoryItems.value || [])) {
+        const qty = Number(item.quantity) || 1;
+        if (item.purchaseId) {
+            counts[item.purchaseId] = (counts[item.purchaseId] || 0) + qty;
+        }
+        if (item.cartId && item.cartId !== item.purchaseId) {
+            counts[item.cartId] = (counts[item.cartId] || 0) + qty;
+        }
+    }
+    return counts;
+});
+
+const getItemCount = (purchase) => {
+    if (!purchase) return 0;
+    return purchaseItemCounts.value[purchase.$id] || 
+           (purchase.orderId ? purchaseItemCounts.value[purchase.orderId] : 0) || 
+           0;
+};
 
 const showImportModal = ref(false);
 const undoBatch = ref(null);
 const processingUndo = ref(false);
 
 const searchQuery = ref('');
-const sortBy = ref('created'); // 'created', 'po', 'date', 'total'
+const sortBy = ref('created'); // 'created', 'po', 'vendor', 'date', 'total'
 const sortDesc = ref(true);
 
 const toggleSort = (col) => {
@@ -457,6 +482,10 @@ const filteredPurchases = computed(() => {
             const da = new Date(a.purchaseDate || a.$createdAt || 0).getTime();
             const db = new Date(b.purchaseDate || b.$createdAt || 0).getTime();
             return sortDesc.value ? db - da : da - db;
+        } else if (sortBy.value === 'vendor') {
+            const va = (a.vendor || '').toLowerCase();
+            const vb = (b.vendor || '').toLowerCase();
+            return sortDesc.value ? vb.localeCompare(va) : va.localeCompare(vb);
         } else if (sortBy.value === 'total') {
             const ta = Number(a.grandTotal || 0);
             const tb = Number(b.grandTotal || 0);
@@ -471,7 +500,11 @@ const filteredPurchases = computed(() => {
 const loadPurchases = async () => {
     showLoader("Loading Purchases...");
     try {
-        await fetchPurchases();
+        const promises = [fetchPurchases()];
+        if (inventoryItems.value.length === 0) {
+            promises.push(fetchInventory());
+        }
+        await Promise.all(promises);
     } catch (e) {
         console.error('Failed to load purchases:', e);
     } finally {
