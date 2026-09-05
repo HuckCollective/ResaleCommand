@@ -141,6 +141,7 @@
                     <option value="Draft">Draft</option>
                     <option value="Ordered">Ordered</option>
                     <option value="Shipped">Shipped</option>
+                    <option value="Partial">Partial</option>
                     <option value="Received">Received</option>
                     <option value="Cancelled">Cancelled</option>
                     <option value="Returned">Returned</option>
@@ -1008,6 +1009,7 @@ const handleSavedItem = async (payload) => {
         activeEditItem.value = null;
         await loadLinkedItems();
         delete failedImages.value[editingId];
+        await checkAndSyncPoStatus();
     }
 };
 
@@ -1032,6 +1034,8 @@ const getStatusClass = (status) => {
         case 'pending': return 'badge-warning text-warning-content';
         case 'ordered': return 'badge-info text-info-content';
         case 'shipped': return 'badge-info text-info-content';
+        case 'partial':
+        case 'partially received': return 'badge-secondary text-secondary-content';
         case 'received': return 'badge-success text-success-content';
         case 'returned': return 'badge-error text-error-content';
         case 'cancelled': return 'badge-error text-error-content';
@@ -1192,6 +1196,37 @@ const runBatchAiDeepReceive = async () => {
     addToast(`AI Deep Received ${count} item(s)!`, 'success');
 };
 
+const checkAndSyncPoStatus = async () => {
+    if (!props.purchaseId || items.value.length === 0) return;
+
+    // Do not override if explicitly cancelled or returned
+    if (form.value.status === 'Cancelled' || form.value.status === 'Returned') return;
+
+    const total = items.value.length;
+    const received = items.value.filter(i => 
+        i.status === 'in-stock' || i.status === 'placed' || i.status === 'sold'
+    );
+
+    let newStatus = form.value.status;
+    if (received.length === total) {
+        newStatus = 'Received';
+    } else if (received.length > 0) {
+        newStatus = 'Partial';
+    } else if (form.value.status === 'Received' || form.value.status === 'Partial' || form.value.status === 'Partially Received') {
+        newStatus = 'Pending';
+    }
+
+    if (newStatus !== form.value.status) {
+        form.value.status = newStatus;
+        try {
+            await purchasesAPI.updatePurchase(props.purchaseId, { status: newStatus });
+            addToast(`PO status updated to "${newStatus}"`, 'success');
+        } catch (e) {
+            console.warn('Failed to auto-sync PO status:', e);
+        }
+    }
+};
+
 const receiveToStock = async (item, location = 'Backstock') => {
     const ok = await confirmDialog(
         `Receive "${item.tag_title || item.title}" into active inventory stored in Backstock? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
@@ -1211,6 +1246,7 @@ const receiveToStock = async (item, location = 'Backstock') => {
         });
         addToast(`Received "${item.tag_title || item.title}" into Backstock!`, 'success');
         await loadLinkedItems();
+        await checkAndSyncPoStatus();
     } catch (e) {
         addToast(`Failed to receive item: ${e.message}`, 'error');
     }
@@ -1243,6 +1279,7 @@ const receiveAllToStock = async (location = 'Backstock') => {
         }
         addToast(`All ${items.value.length} items are now In-Stock (Backstock)!`, 'success');
         await loadLinkedItems();
+        await checkAndSyncPoStatus();
     } catch (e) {
         addToast(`Failed to activate items: ${e.message}`, 'error');
     } finally {
@@ -1291,6 +1328,7 @@ onMounted(async () => {
                     loadLinkedItems(),
                     loadExpenses()
                 ]);
+                await checkAndSyncPoStatus();
                 initRealtime();
             }
         } catch (e) {
@@ -1344,15 +1382,18 @@ const initRealtime = () => {
         const itemsSub = client.subscribe(
             `databases.${DB_ID}.collections.${ITEMS_COL}.documents`,
             (response) => {
-                const isCreate = response.events.some(e => e.endsWith('.create'));
-                const isUpdate = response.events.some(e => e.endsWith('.update'));
-                const isDelete = response.events.some(e => e.endsWith('.delete'));
+                const isCreate = response.events.some(e => e.includes('.create'));
+                const isUpdate = response.events.some(e => e.includes('.update'));
+                const isDelete = response.events.some(e => e.includes('.delete'));
                 const doc = response.payload;
                 if (!doc || !doc.$id) return;
 
-                const belongsToPo = doc.purchaseId === props.purchaseId || 
-                    (form.value.orderId && doc.cartId === form.value.orderId) || 
-                    (form.value.poNumber && doc.cartId === form.value.poNumber);
+                const poIdStr = String(props.purchaseId || '').trim();
+                const belongsToPo = 
+                    (doc.purchaseId && String(doc.purchaseId).trim() === poIdStr) ||
+                    (doc.cartId && String(doc.cartId).trim() === poIdStr) ||
+                    (form.value.orderId && doc.cartId && String(doc.cartId).trim() === String(form.value.orderId).trim()) || 
+                    (form.value.poNumber && doc.cartId && String(doc.cartId).trim() === String(form.value.poNumber).trim());
 
                 if (isCreate && belongsToPo) {
                     if (!items.value.find(i => i.$id === doc.$id)) {
@@ -1380,13 +1421,15 @@ const initRealtime = () => {
         const expSub = client.subscribe(
             `databases.${DB_ID}.collections.expenses.documents`,
             (response) => {
-                const isCreate = response.events.some(e => e.endsWith('.create'));
-                const isUpdate = response.events.some(e => e.endsWith('.update'));
-                const isDelete = response.events.some(e => e.endsWith('.delete'));
+                const isCreate = response.events.some(e => e.includes('.create'));
+                const isUpdate = response.events.some(e => e.includes('.update'));
+                const isDelete = response.events.some(e => e.includes('.delete'));
                 const doc = response.payload;
                 if (!doc || !doc.$id) return;
 
-                const belongsToPo = doc.purchaseId === props.purchaseId || doc.cartId === props.purchaseId;
+                const poIdStr = String(props.purchaseId || '').trim();
+                const belongsToPo = (doc.purchaseId && String(doc.purchaseId).trim() === poIdStr) ||
+                                    (doc.cartId && String(doc.cartId).trim() === poIdStr);
 
                 if (isCreate && belongsToPo) {
                     if (!expenses.value.find(e => e.$id === doc.$id)) {
@@ -1696,6 +1739,7 @@ const linkItem = async (item) => {
         // Force recalc subtotal when a new item is linked
         form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
         await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
+        await checkAndSyncPoStatus();
         addToast(`Linked ${item.title || item.identity} to this PO`, 'success');
     } catch (e) {
         console.error(e);
@@ -1725,6 +1769,7 @@ const unlinkItem = async (item) => {
         form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
         // Persist the new subtotal immediately
         await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
+        await checkAndSyncPoStatus();
         addToast(`Unlinked ${item.identity || item.title}`, 'info');
     } catch (e) {
         console.error('Failed to unlink item', e);
@@ -1755,6 +1800,7 @@ const quickCreateItem = async () => {
         newItem.value.title = '';
         newItem.value.cost = null;
         await loadLinkedItems();
+        await checkAndSyncPoStatus();
         addToast('Item created and linked to PO', 'success');
     } catch (e) {
         console.error('Failed to quick create item', e);

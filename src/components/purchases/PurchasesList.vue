@@ -384,10 +384,11 @@ import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
 import BulkImport from '../inventory/BulkImport.vue';
 
-const { showLoader, hideLoader } = useLoader();
+import { usePurchases } from '../../composables/usePurchases';
 
-const purchases = ref([]);
-const loading = ref(true);
+const { showLoader, hideLoader } = useLoader();
+const { purchases, loading, fetchPurchases } = usePurchases();
+
 const showImportModal = ref(false);
 const undoBatch = ref(null);
 const processingUndo = ref(false);
@@ -468,21 +469,12 @@ const filteredPurchases = computed(() => {
 });
 
 const loadPurchases = async () => {
-    loading.value = true;
     showLoader("Loading Purchases...");
-    
     try {
-        const queries = [
-            Query.orderDesc('$createdAt'),
-            Query.limit(5000)
-        ];
-        
-        const res = await purchasesAPI.listPurchases(queries);
-        purchases.value = res.documents || [];
+        await fetchPurchases();
     } catch (e) {
         console.error('Failed to load purchases:', e);
     } finally {
-        loading.value = false;
         hideLoader();
     }
 };
@@ -545,6 +537,8 @@ const getStatusClass = (status) => {
         case 'pending': return 'badge-warning';
         case 'ordered': return 'badge-info';
         case 'shipped': return 'badge-info';
+        case 'partial':
+        case 'partially received': return 'badge-secondary';
         case 'received': return 'badge-success';
         case 'returned': return 'badge-error';
         case 'cancelled': return 'badge-error';
@@ -705,43 +699,6 @@ const cleanEmptyPurchases = async () => {
     }
 };
 
-let realtimeUnsubscribe = null;
-
-const initRealtime = () => {
-    if (realtimeUnsubscribe) return;
-    try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const PURCHASES_COL = getPurchasesCollectionId();
-        realtimeUnsubscribe = client.subscribe(
-            `databases.${DB_ID}.collections.${PURCHASES_COL}.documents`,
-            (response) => {
-                const isCreate = response.events.some(e => e.endsWith('.create'));
-                const isUpdate = response.events.some(e => e.endsWith('.update'));
-                const isDelete = response.events.some(e => e.endsWith('.delete'));
-                const doc = response.payload;
-                if (!doc || !doc.$id) return;
-
-                if (isCreate) {
-                    if (!purchases.value.find(p => p.$id === doc.$id)) {
-                        purchases.value.unshift(doc);
-                    }
-                } else if (isUpdate) {
-                    const idx = purchases.value.findIndex(p => p.$id === doc.$id);
-                    if (idx !== -1) {
-                        purchases.value[idx] = { ...purchases.value[idx], ...doc };
-                    } else {
-                        purchases.value.unshift(doc);
-                    }
-                } else if (isDelete) {
-                    purchases.value = purchases.value.filter(p => p.$id !== doc.$id);
-                }
-            }
-        );
-    } catch (rtErr) {
-        console.warn('[PurchasesList] Realtime subscription error:', rtErr);
-    }
-};
-
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
@@ -751,13 +708,6 @@ onMounted(() => {
         showImportModal.value = true;
     }
     checkUndoBatch();
-    loadPurchases().then(() => initRealtime());
-});
-
-onUnmounted(() => {
-    if (realtimeUnsubscribe) {
-        realtimeUnsubscribe();
-        realtimeUnsubscribe = null;
-    }
+    loadPurchases();
 });
 </script>

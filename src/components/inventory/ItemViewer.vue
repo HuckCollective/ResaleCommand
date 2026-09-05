@@ -506,9 +506,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
-import { databases, Query, ID } from '../../lib/appwrite';
+import { databases, Query, ID, client } from '../../lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { Icon } from '@iconify/vue';
@@ -803,11 +803,37 @@ onMounted(async () => {
             console.error("Failed to fetch child items:", err);
         }
         
+        // Realtime subscription for this item
+        try {
+            realtimeUnsub = client.subscribe(
+                `databases.${DB_ID}.collections.${collId}.documents.${props.itemId}`,
+                (response) => {
+                    const isUpdate = response.events.some(e => e.includes('.update'));
+                    const isDelete = response.events.some(e => e.includes('.delete'));
+                    if (isUpdate && response.payload) {
+                        item.value = { ...item.value, ...response.payload };
+                    } else if (isDelete) {
+                        error.value = "This item has been deleted.";
+                    }
+                }
+            );
+        } catch (rtErr) {
+            console.warn('[ItemViewer] Realtime subscription warning:', rtErr);
+        }
     } catch (err) {
         console.error("Failed to load item:", err);
         error.value = err.message || "Could not fetch this item. You may not have access, or it was deleted.";
     } finally {
         loading.value = false;
+    }
+});
+
+let realtimeUnsub = null;
+
+onUnmounted(() => {
+    if (realtimeUnsub) {
+        realtimeUnsub();
+        realtimeUnsub = null;
     }
 });
 

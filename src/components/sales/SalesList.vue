@@ -205,12 +205,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
 import { warehousesApi } from '../../lib/warehouses';
+import { client } from '../../lib/appwrite';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
 
@@ -342,6 +343,75 @@ const displayedSales = computed(() => {
   return list;
 });
 
+let salesUnsubscribe: (() => void) | null = null;
+let whUnsubscribe: (() => void) | null = null;
+
+const initSalesRealtime = () => {
+  if (salesUnsubscribe) return;
+  const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+
+  try {
+    salesUnsubscribe = client.subscribe(
+      `databases.${DB_ID}.collections.sales.documents`,
+      (response) => {
+        const isCreate = response.events.some(e => e.includes('.create'));
+        const isUpdate = response.events.some(e => e.includes('.update'));
+        const isDelete = response.events.some(e => e.includes('.delete'));
+        const doc = response.payload as any;
+        if (!doc || !doc.$id) return;
+
+        // Filter by tenant
+        if (currentTeam.value && doc.tenantId && doc.tenantId !== currentTeam.value.$id) {
+          return;
+        }
+
+        if (isCreate) {
+          if (!sales.value.find(s => s.$id === doc.$id)) {
+            sales.value.unshift(doc);
+          }
+        } else if (isUpdate) {
+          const idx = sales.value.findIndex(s => s.$id === doc.$id);
+          if (idx !== -1) {
+            sales.value[idx] = { ...sales.value[idx], ...doc };
+          } else {
+            sales.value.unshift(doc);
+          }
+        } else if (isDelete) {
+          sales.value = sales.value.filter(s => s.$id !== doc.$id);
+        }
+      }
+    );
+
+    whUnsubscribe = client.subscribe(
+      `databases.${DB_ID}.collections.warehouses.documents`,
+      (response) => {
+        const isCreate = response.events.some(e => e.includes('.create'));
+        const isUpdate = response.events.some(e => e.includes('.update'));
+        const isDelete = response.events.some(e => e.includes('.delete'));
+        const doc = response.payload as any;
+        if (!doc || !doc.$id) return;
+
+        if (currentTeam.value && doc.tenantId && doc.tenantId !== currentTeam.value.$id) return;
+
+        if (isCreate) {
+          if (!warehouses.value.find(w => w.$id === doc.$id)) {
+            warehouses.value.push(doc);
+          }
+        } else if (isUpdate) {
+          const idx = warehouses.value.findIndex(w => w.$id === doc.$id);
+          if (idx !== -1) {
+            warehouses.value[idx] = { ...warehouses.value[idx], ...doc };
+          }
+        } else if (isDelete) {
+          warehouses.value = warehouses.value.filter(w => w.$id !== doc.$id);
+        }
+      }
+    );
+  } catch (err) {
+    console.warn('[SalesList] Realtime subscription warning:', err);
+  }
+};
+
 const fetchData = async () => {
   if (!currentTeam.value) return;
   loading.value = true;
@@ -354,6 +424,7 @@ const fetchData = async () => {
     ]);
     sales.value = salesRes;
     warehouses.value = whRes;
+    initSalesRealtime();
   } catch (err: any) {
     console.error('Error fetching sales:', err);
     error.value = err.message || 'Failed to load sales data.';
@@ -366,8 +437,25 @@ onMounted(() => {
   if (currentTeam.value) fetchData();
 });
 
+onUnmounted(() => {
+  if (salesUnsubscribe) {
+    salesUnsubscribe();
+    salesUnsubscribe = null;
+  }
+  if (whUnsubscribe) {
+    whUnsubscribe();
+    whUnsubscribe = null;
+  }
+});
+
 watch(currentTeam, (n) => {
-  if (n) fetchData();
-  else { sales.value = []; warehouses.value = []; }
+  if (n) {
+    if (salesUnsubscribe) { salesUnsubscribe(); salesUnsubscribe = null; }
+    if (whUnsubscribe) { whUnsubscribe(); whUnsubscribe = null; }
+    fetchData();
+  } else {
+    sales.value = [];
+    warehouses.value = [];
+  }
 });
 </script>

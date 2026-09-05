@@ -1,13 +1,12 @@
 import { computed, ref } from 'vue';
 import { useInventory } from '../useInventory';
+import { usePurchases } from '../usePurchases';
 import { useLoader } from '../useLoader';
-import { purchasesAPI } from '../../lib/purchases';
-import { Query } from 'appwrite';
 
 export function useDashboardMetrics() {
     const { inventoryItems, loading, fetchInventory } = useInventory();
+    const { purchases, fetchPurchases } = usePurchases();
     const { hideLoader } = useLoader();
-    const purchases = ref<any[]>([]);
     
     // Default to true so Astro renders skeletons on the server!
     const isInitialLoading = ref(true);
@@ -133,9 +132,9 @@ export function useDashboardMetrics() {
             // @ts-ignore
             promises.push(fetchInventory(''));
         }
-        promises.push(purchasesAPI.listPurchases([Query.limit(5000)]).then(res => {
-            purchases.value = res.documents;
-        }).catch(console.error));
+        if (purchases.value.length === 0) {
+            promises.push(fetchPurchases());
+        }
         
         await Promise.all(promises);
         
