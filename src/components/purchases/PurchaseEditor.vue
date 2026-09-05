@@ -915,10 +915,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { purchasesAPI } from '../../lib/purchases';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryItem, BUCKET_ID, getCollectionId } from '../../lib/inventory';
-import { databases, storage, ID } from '../../lib/appwrite';
+import { databases, storage, client, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
@@ -1291,6 +1291,7 @@ onMounted(async () => {
                     loadLinkedItems(),
                     loadExpenses()
                 ]);
+                initRealtime();
             }
         } catch (e) {
             console.error('Failed to load purchase', e);
@@ -1299,6 +1300,125 @@ onMounted(async () => {
             hideLoader();
         }
     }
+});
+
+let realtimeUnsubscribes = [];
+
+const initRealtime = () => {
+    if (!props.purchaseId) return;
+    if (realtimeUnsubscribes.length > 0) return;
+    
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const PURCHASES_COL = getPurchasesCollectionId();
+        const ITEMS_COL = getCollectionId();
+
+        // 1. Live update Purchase Order header
+        const poSub = client.subscribe(
+            `databases.${DB_ID}.collections.${PURCHASES_COL}.documents.${props.purchaseId}`,
+            (response) => {
+                const doc = response.payload;
+                if (!doc || doc.$id !== props.purchaseId) return;
+                
+                if (!editMode.value) {
+                    form.value = {
+                        ...form.value,
+                        poNumber: doc.poNumber || form.value.poNumber,
+                        vendor: doc.vendor || form.value.vendor,
+                        orderId: doc.orderId || form.value.orderId,
+                        purchaseDate: doc.purchaseDate ? doc.purchaseDate.split('T')[0] : form.value.purchaseDate,
+                        status: doc.status || form.value.status,
+                        subtotal: doc.subtotal !== undefined ? doc.subtotal : form.value.subtotal,
+                        shippingTotal: doc.shippingTotal !== undefined ? doc.shippingTotal : form.value.shippingTotal,
+                        handlingTotal: doc.handlingTotal !== undefined ? doc.handlingTotal : form.value.handlingTotal,
+                        taxTotal: doc.taxTotal !== undefined ? doc.taxTotal : form.value.taxTotal,
+                        feeTotal: doc.feeTotal !== undefined ? doc.feeTotal : form.value.feeTotal,
+                        receiptImageId: doc.receiptImageId || form.value.receiptImageId
+                    };
+                }
+            }
+        );
+        realtimeUnsubscribes.push(poSub);
+
+        // 2. Live update items linked to this purchase
+        const itemsSub = client.subscribe(
+            `databases.${DB_ID}.collections.${ITEMS_COL}.documents`,
+            (response) => {
+                const isCreate = response.events.some(e => e.endsWith('.create'));
+                const isUpdate = response.events.some(e => e.endsWith('.update'));
+                const isDelete = response.events.some(e => e.endsWith('.delete'));
+                const doc = response.payload;
+                if (!doc || !doc.$id) return;
+
+                const belongsToPo = doc.purchaseId === props.purchaseId || 
+                    (form.value.orderId && doc.cartId === form.value.orderId) || 
+                    (form.value.poNumber && doc.cartId === form.value.poNumber);
+
+                if (isCreate && belongsToPo) {
+                    if (!items.value.find(i => i.$id === doc.$id)) {
+                        items.value.push(doc);
+                    }
+                } else if (isUpdate) {
+                    const idx = items.value.findIndex(i => i.$id === doc.$id);
+                    if (idx !== -1) {
+                        if (belongsToPo) {
+                            items.value[idx] = { ...items.value[idx], ...doc };
+                        } else {
+                            items.value.splice(idx, 1);
+                        }
+                    } else if (belongsToPo) {
+                        items.value.push(doc);
+                    }
+                } else if (isDelete) {
+                    items.value = items.value.filter(i => i.$id !== doc.$id);
+                }
+            }
+        );
+        realtimeUnsubscribes.push(itemsSub);
+
+        // 3. Live update expenses linked to this purchase
+        const expSub = client.subscribe(
+            `databases.${DB_ID}.collections.expenses.documents`,
+            (response) => {
+                const isCreate = response.events.some(e => e.endsWith('.create'));
+                const isUpdate = response.events.some(e => e.endsWith('.update'));
+                const isDelete = response.events.some(e => e.endsWith('.delete'));
+                const doc = response.payload;
+                if (!doc || !doc.$id) return;
+
+                const belongsToPo = doc.purchaseId === props.purchaseId || doc.cartId === props.purchaseId;
+
+                if (isCreate && belongsToPo) {
+                    if (!expenses.value.find(e => e.$id === doc.$id)) {
+                        expenses.value.push(doc);
+                    }
+                } else if (isUpdate) {
+                    const idx = expenses.value.findIndex(e => e.$id === doc.$id);
+                    if (idx !== -1) {
+                        if (belongsToPo) {
+                            expenses.value[idx] = { ...expenses.value[idx], ...doc };
+                        } else {
+                            expenses.value.splice(idx, 1);
+                        }
+                    } else if (belongsToPo) {
+                        expenses.value.push(doc);
+                    }
+                } else if (isDelete) {
+                    expenses.value = expenses.value.filter(e => e.$id !== doc.$id);
+                }
+            }
+        );
+        realtimeUnsubscribes.push(expSub);
+    } catch (rtErr) {
+        console.warn('[PurchaseEditor] Realtime subscription warning:', rtErr);
+    }
+};
+
+onUnmounted(() => {
+    realtimeUnsubscribes.forEach(unsub => {
+        try { unsub(); } catch {}
+    });
+    realtimeUnsubscribes = [];
 });
 
 const processAndSaveReceiptFile = async (file) => {

@@ -374,10 +374,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { purchasesAPI } from '../../lib/purchases';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { Query } from 'appwrite';
-import { databases, storage } from '../../lib/appwrite';
+import { databases, storage, client } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
@@ -705,6 +705,43 @@ const cleanEmptyPurchases = async () => {
     }
 };
 
+let realtimeUnsubscribe = null;
+
+const initRealtime = () => {
+    if (realtimeUnsubscribe) return;
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const PURCHASES_COL = getPurchasesCollectionId();
+        realtimeUnsubscribe = client.subscribe(
+            `databases.${DB_ID}.collections.${PURCHASES_COL}.documents`,
+            (response) => {
+                const isCreate = response.events.some(e => e.endsWith('.create'));
+                const isUpdate = response.events.some(e => e.endsWith('.update'));
+                const isDelete = response.events.some(e => e.endsWith('.delete'));
+                const doc = response.payload;
+                if (!doc || !doc.$id) return;
+
+                if (isCreate) {
+                    if (!purchases.value.find(p => p.$id === doc.$id)) {
+                        purchases.value.unshift(doc);
+                    }
+                } else if (isUpdate) {
+                    const idx = purchases.value.findIndex(p => p.$id === doc.$id);
+                    if (idx !== -1) {
+                        purchases.value[idx] = { ...purchases.value[idx], ...doc };
+                    } else {
+                        purchases.value.unshift(doc);
+                    }
+                } else if (isDelete) {
+                    purchases.value = purchases.value.filter(p => p.$id !== doc.$id);
+                }
+            }
+        );
+    } catch (rtErr) {
+        console.warn('[PurchasesList] Realtime subscription error:', rtErr);
+    }
+};
+
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
@@ -714,6 +751,13 @@ onMounted(() => {
         showImportModal.value = true;
     }
     checkUndoBatch();
-    loadPurchases();
+    loadPurchases().then(() => initRealtime());
+});
+
+onUnmounted(() => {
+    if (realtimeUnsubscribe) {
+        realtimeUnsubscribe();
+        realtimeUnsubscribe = null;
+    }
 });
 </script>
