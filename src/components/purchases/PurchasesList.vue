@@ -103,12 +103,16 @@
       >
         <!-- Card Header: PO Number + Price + Status -->
         <div class="flex items-start justify-between gap-2">
-          <div class="space-y-0.5">
-            <a :href="`/purchases/${purchase.$id}`" class="link link-primary font-black text-base flex items-center gap-1.5">
-              <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 shrink-0 text-primary" />
+          <div class="space-y-1">
+            <a 
+              :href="`/purchases/${purchase.$id}`" 
+              class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 rounded-lg inline-flex items-center"
+              title="Open Purchase Order"
+            >
+              <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
               <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
             </a>
-            <div class="text-[11px] font-medium opacity-70 flex items-center gap-2 flex-wrap">
+            <div class="text-[11px] font-medium opacity-70 flex items-center gap-2 flex-wrap pt-0.5">
               <span class="flex items-center gap-1" title="Purchase / Receipt Date">
                 <Icon icon="solar:calendar-linear" class="w-3 h-3 text-primary" />
                 <span>{{ formatDate(purchase.purchaseDate, purchase.$createdAt) }}</span>
@@ -149,17 +153,8 @@
           </div>
         </div>
 
-        <!-- Touch Actions: Open PO, Items (with count), Delete -->
+        <!-- Touch Actions: Items (with count), Delete -->
         <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
-          <a 
-            :href="`/purchases/${purchase.$id}`"
-            class="btn btn-sm btn-primary text-primary-content font-black flex-1 rounded-xl shadow-xs gap-1.5 min-h-[38px]"
-            title="Open Purchase Order & Edit Items"
-          >
-            <Icon icon="solar:pen-bold" class="w-4 h-4" />
-            <span>Open PO</span>
-          </a>
-
           <a 
             :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
             class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1.5 min-h-[38px]"
@@ -175,7 +170,7 @@
           <button 
             @click="deletePurchaseOrder(purchase)" 
             class="btn btn-sm btn-ghost text-error hover:bg-error/10 btn-square rounded-xl min-h-[38px] w-10 shrink-0" 
-            title="Delete this Purchase Order"
+            title="Delete Purchase Order"
           >
             <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
           </button>
@@ -226,15 +221,19 @@
                 </div>
               </th>
               <th class="w-32 py-3.5 px-4 whitespace-nowrap text-center">Status</th>
-              <th class="w-60 py-3.5 px-4 whitespace-nowrap text-right">Actions</th>
+              <th class="w-40 py-3.5 px-4 whitespace-nowrap text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/40 transition-colors">
-              <!-- PO Number -->
+              <!-- PO Number (Open PO Button with Code) -->
               <td class="py-3 px-4 font-bold whitespace-nowrap">
-                <a :href="`/purchases/${purchase.$id}`" class="link link-primary link-hover flex items-center gap-1.5 font-mono text-sm">
-                  <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                <a 
+                  :href="`/purchases/${purchase.$id}`" 
+                  class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 h-8 rounded-lg inline-flex items-center hover:scale-105 transition-transform"
+                  title="Open Purchase Order"
+                >
+                  <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
                   <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
                 </a>
               </td>
@@ -295,15 +294,6 @@
               <!-- Actions -->
               <td class="py-3 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
-                  <a 
-                    :href="`/purchases/${purchase.$id}`"
-                    class="btn btn-xs btn-primary text-primary-content font-black gap-1 shadow-xs px-2.5 h-8 rounded-lg"
-                    title="Open Purchase Order & Edit Items"
-                  >
-                    <Icon icon="solar:pen-bold" class="w-3.5 h-3.5" />
-                    <span>Open PO</span>
-                  </a>
-
                   <a 
                     :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
                     class="btn btn-xs btn-outline btn-secondary font-bold gap-1 px-2.5 h-8 rounded-lg"
