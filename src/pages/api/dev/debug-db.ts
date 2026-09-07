@@ -34,12 +34,23 @@ export const GET: APIRoute = async ({ request }) => {
     } catch {}
 
     try {
-        const cartsRes = await databases.listDocuments(DB_ID, CARTS_COL, [
+        const purchasesRes = await databases.listDocuments(DB_ID, 'purchases_dev', [
             Query.orderDesc('$createdAt'),
-            Query.limit(5)
+            Query.limit(5000)
         ]);
-        results.carts = cartsRes.documents.map(d => ({id: d.$id, status: d.status, itemCount: d.itemCount, source: d.source}));
-    } catch {}
+        results.purchases = purchasesRes.documents.map(d => ({
+            id: d.$id,
+            poNumber: d.poNumber,
+            vendor: d.vendor,
+            status: d.status,
+            tenantId: d.tenantId,
+            buyerId: d.buyerId,
+            subtotal: d.subtotal,
+            grandTotal: d.grandTotal
+        }));
+    } catch (e: any) {
+        results.purchasesError = e.message;
+    }
 
     return new Response(JSON.stringify(results, null, 2), {
         status: 200,

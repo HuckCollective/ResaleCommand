@@ -553,6 +553,34 @@ export async function getItemsByPurchaseId(purchaseId: string, orderId?: string,
             } catch (e) {}
         }
 
+        // 3. Query by poNumber if provided and distinct from orderId
+        if (poNumber && poNumber.trim() && poNumber.trim() !== orderId?.trim()) {
+            const cleanPo = poNumber.trim();
+            try {
+                const resPoCart = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('cartId', cleanPo),
+                        Query.limit(200)
+                    ]
+                );
+                resPoCart.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+
+            try {
+                const resPoPid = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('purchaseId', cleanPo),
+                        Query.limit(200)
+                    ]
+                );
+                resPoPid.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+        }
+
         return Array.from(itemMap.values());
     } catch (error) {
         console.error("Error fetching items by purchase:", error);

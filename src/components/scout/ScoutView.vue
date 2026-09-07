@@ -318,11 +318,15 @@
                            }">{{ item.purchase_strategy.verdict.replace('_', ' ') }}</h3>
                         </div>
                         
-                        <div v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" class="mb-2 inline-flex badge badge-neutral shadow-sm font-bold p-3">
-                            Asking/Bid: {{ item.purchase_strategy.current_asking_price }}
+                        <div 
+                            v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" 
+                            class="my-2.5 px-3 py-2 rounded-xl bg-base-300/80 border border-base-content/10 text-xs font-semibold text-base-content leading-snug flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2 break-words"
+                        >
+                            <span class="text-base-content/70 font-extrabold uppercase text-[10px] tracking-wider shrink-0">Asking / Bid:</span>
+                            <span class="text-base-content font-bold text-xs">{{ item.purchase_strategy.current_asking_price }}</span>
                         </div>
 
-                        <p class="text-sm font-medium leading-relaxed opacity-90">{{ item.purchase_strategy.advice }}</p>
+                        <p class="text-sm font-medium leading-relaxed opacity-90 mt-1">{{ item.purchase_strategy.advice }}</p>
 
                         <!-- Why Pay Up (Collector Catalyst) -->
                         <div v-if="item.why_pay_up" class="mt-3 p-3 rounded-lg bg-success/15 border border-success/30 text-xs">

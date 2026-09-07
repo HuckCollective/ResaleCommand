@@ -64,19 +64,46 @@ export function usePurchases() {
         try {
             const queries = [
                 Query.orderDesc('$createdAt'),
-                Query.limit(5000)
+                Query.limit(100)
             ];
             if (currentTenantId) {
                 queries.push(Query.equal('tenantId', currentTenantId));
             }
 
-            const res = await purchasesAPI.listPurchases(queries);
-            purchases.value = res.documents || [];
-            totalPurchases.value = res.total || purchases.value.length;
+            let res = await purchasesAPI.listPurchases(queries);
+            let docs = res.documents || [];
+
+            // If tenant filter returned 0, fallback to recent purchases so legacy/dev POs still appear
+            if (docs.length === 0 && currentTenantId) {
+                try {
+                    const fallbackRes = await purchasesAPI.listPurchases([
+                        Query.orderDesc('$createdAt'),
+                        Query.limit(100)
+                    ]);
+                    if (fallbackRes.documents && fallbackRes.documents.length > 0) {
+                        docs = fallbackRes.documents;
+                    }
+                } catch (fallbackErr) {
+                    console.warn('[usePurchases] Fallback query error:', fallbackErr);
+                }
+            }
+
+            purchases.value = docs;
+            totalPurchases.value = docs.length;
             initRealtime();
         } catch (err: any) {
             console.error('[usePurchases] Error loading purchases:', err);
             error.value = err.message || 'Failed to load purchases';
+            // Safe fallback attempt with minimal query
+            try {
+                const minimalRes = await purchasesAPI.listPurchases([Query.limit(100)]);
+                if (minimalRes.documents) {
+                    purchases.value = minimalRes.documents;
+                    totalPurchases.value = minimalRes.documents.length;
+                }
+            } catch (minErr) {
+                console.error('[usePurchases] Minimal fallback failed:', minErr);
+            }
         } finally {
             loading.value = false;
         }

@@ -74,11 +74,10 @@ export function useInventory() {
         showLoader("Loading Inventory...");
         
         try {
-            // Appwrite limit is max 5000 documents per request
             const queries = [
                 Query.orderDesc('$createdAt'),
                 Query.orderDesc('$id'), 
-                Query.limit(5000)
+                Query.limit(100)
             ];
 
             if (teamId) {

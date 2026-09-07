@@ -108,8 +108,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
@@ -333,6 +331,7 @@ const processCSV = async () => {
     };
 
     if (extension === 'xlsx' || extension === 'xls') {
+        const XLSX = await import('xlsx');
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
@@ -349,6 +348,8 @@ const processCSV = async () => {
         };
         reader.readAsArrayBuffer(file.value);
     } else {
+        const papaModule = await import('papaparse');
+        const Papa = papaModule.default || papaModule;
         Papa.parse(file.value, {
             header: true,
             skipEmptyLines: 'greedy',

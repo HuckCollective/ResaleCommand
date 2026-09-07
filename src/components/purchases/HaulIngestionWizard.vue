@@ -9,7 +9,16 @@
             <span class="badge badge-primary text-primary-content font-black text-xs uppercase tracking-wider px-2.5 py-1">
               Haul Intake & Receiving
             </span>
-            <span v-if="poNumber" class="text-xs font-mono font-bold opacity-60">{{ poNumber }}</span>
+            <a 
+              v-if="poNumber || targetPoId" 
+              :href="`/purchases/${poNumber || targetPoId}`" 
+              target="_blank" 
+              class="text-xs font-mono font-bold text-primary hover:underline inline-flex items-center gap-1"
+              title="Open Purchase Order Details"
+            >
+              <span>{{ poNumber || 'PO Details' }}</span>
+              <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 opacity-60" />
+            </a>
             <span v-else class="badge badge-ghost badge-sm text-[10px] font-bold opacity-60">Draft PO</span>
           </div>
 

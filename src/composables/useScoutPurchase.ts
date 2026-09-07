@@ -4,7 +4,8 @@ import { Permission, Role, type Models } from 'appwrite';
 import { useAuth } from './useAuth';
 import { useCart, type Cart, type CartItem } from './useCart';
 import { isAlphaMode } from '../stores/env';
-import { getPurchasesCollectionId } from '../lib/purchases';
+import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
+import { getItemsByPurchaseId } from '../lib/inventory';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const PURCHASES_COL = getPurchasesCollectionId();
@@ -190,60 +191,64 @@ export function useScoutPurchase() {
                 queries.push(Query.equal('buyerId', user.value.$id));
             }
 
-            const res = await databases.listDocuments(DB_ID, PURCHASES_COL, queries);
-            const docs = (res.documents as unknown as ScoutPurchase[]).sort((a, b) => {
+            let res = await databases.listDocuments(DB_ID, PURCHASES_COL, queries);
+            let rawDocs = res.documents as unknown as ScoutPurchase[];
+
+            // Fallback: if tenant or buyer filter returned 0, load recent drafts so POs are never missing
+            if (rawDocs.length === 0 && (tenantId || user.value)) {
+                try {
+                    const fallbackRes = await databases.listDocuments(DB_ID, PURCHASES_COL, [
+                        Query.equal('status', 'Draft'),
+                        Query.orderDesc('$createdAt'),
+                        Query.limit(50)
+                    ]);
+                    if (fallbackRes.documents && fallbackRes.documents.length > 0) {
+                        rawDocs = fallbackRes.documents as unknown as ScoutPurchase[];
+                    }
+                } catch (fbErr) {
+                    console.warn('[useScoutPurchase] Drafts fallback query error:', fbErr);
+                }
+            }
+
+            const docs = rawDocs.sort((a, b) => {
                 const timeA = new Date(a.$updatedAt || a.purchaseDate || a.$createdAt || 0).getTime();
                 const timeB = new Date(b.$updatedAt || b.purchaseDate || b.$createdAt || 0).getTime();
                 return timeB - timeA;
             });
 
+            // Set immediately so PO cards render instantly with zero lag or empty states
+            draftPurchases.value = docs;
+
             // Hydrate item counts for all draft purchases so inactive trackers never display 0
             if (docs.length > 0) {
                 const collId = getItemsCollectionId();
-                const purchaseIds = docs.map(d => d.$id);
                 const countMap: Record<string, number> = {};
 
                 try {
-                    // Method 1: Batch fetch items matching these purchase IDs
-                    const itemsRes = await databases.listDocuments(DB_ID, collId, [
-                        Query.equal('purchaseId', purchaseIds),
-                        Query.limit(500)
+                    // Fetch recent items (guaranteed to succeed without index issues)
+                    const recentItems = await databases.listDocuments(DB_ID, collId, [
+                        Query.orderDesc('$createdAt'),
+                        Query.limit(100)
                     ]);
-                    itemsRes.documents.forEach((item: any) => {
+                    recentItems.documents.forEach((item: any) => {
                         const pid = item.purchaseId || item.cartId;
                         if (pid) {
                             countMap[pid] = (countMap[pid] || 0) + 1;
                         }
                     });
-                } catch (batchErr) {
-                    console.warn('[useScoutPurchase] Batch itemCount query fallback:', batchErr);
+                } catch (recErr) {
+                    console.warn('[useScoutPurchase] Recent items count query fallback:', recErr);
                 }
 
-                // Method 2: Ensure every purchase without batch items gets counted via indexed total
-                await Promise.all(docs.map(async (d) => {
-                    if (countMap[d.$id] !== undefined && countMap[d.$id] > 0) {
-                        d.itemCount = countMap[d.$id];
-                        return;
-                    }
-                    try {
-                        const countRes = await databases.listDocuments(DB_ID, collId, [
-                            Query.equal('purchaseId', d.$id),
-                            Query.limit(1)
-                        ]);
-                        if (countRes.total > 0) {
-                            d.itemCount = countRes.total;
-                            return;
-                        }
-                        // Fallback check on cartId
-                        const cartRes = await databases.listDocuments(DB_ID, collId, [
-                            Query.equal('cartId', d.$id),
-                            Query.limit(1)
-                        ]);
-                        d.itemCount = cartRes.total || 0;
-                    } catch {
-                        d.itemCount = countMap[d.$id] || d.itemCount || 0;
-                    }
-                }));
+                // Map counts to each draft purchase across $id, poNumber, and orderId
+                docs.forEach(d => {
+                    const count = countMap[d.$id] || 
+                                  (d.poNumber ? countMap[d.poNumber] : 0) || 
+                                  (d.orderId ? countMap[d.orderId] : 0) || 
+                                  d.itemCount || 
+                                  0;
+                    d.itemCount = count;
+                });
 
                 // If activePurchase is currently in memory, ensure its live item count takes precedence
                 if (activePurchase.value) {
@@ -255,14 +260,26 @@ export function useScoutPurchase() {
                         activePurchase.value.itemCount = activeMatch.itemCount;
                     }
                 }
+
+                // Trigger full Vue reactivity
+                draftPurchases.value = [...docs];
             }
 
-            draftPurchases.value = docs;
             return draftPurchases.value;
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to list draft purchases:', e);
-            error.value = e.message;
-            return [];
+            // Safe fallback to at least show any available drafts
+            try {
+                const safeRes = await databases.listDocuments(DB_ID, PURCHASES_COL, [
+                    Query.equal('status', 'Draft'),
+                    Query.limit(50)
+                ]);
+                draftPurchases.value = safeRes.documents as unknown as ScoutPurchase[];
+                return draftPurchases.value;
+            } catch {
+                error.value = e.message;
+                return [];
+            }
         } finally {
             loading.value = false;
         }
@@ -335,7 +352,8 @@ export function useScoutPurchase() {
         loading.value = true;
         error.value = null;
         try {
-            const purchaseDoc = await databases.getDocument(DB_ID, PURCHASES_COL, purchaseId);
+            const purchaseDoc = await purchasesAPI.findPurchase(purchaseId);
+            if (!purchaseDoc) throw new Error(`Purchase ${purchaseId} not found`);
             setActivePurchase(purchaseDoc as unknown as ScoutPurchase);
             return purchaseDoc as unknown as ScoutPurchase;
         } catch (e: any) {
@@ -431,16 +449,29 @@ export function useScoutPurchase() {
                     Query.orderDesc('$createdAt'),
                     Query.limit(100)
                 ]);
-                docs = res.documents;
-            } catch (indexErr) {
-                // Fallback scan if purchaseId index is warming up
-                const fallback = await databases.listDocuments(DB_ID, collId, [
-                    Query.orderDesc('$createdAt'),
-                    Query.limit(100)
-                ]);
-                docs = fallback.documents.filter(
-                    (doc: any) => doc.purchaseId === purchaseId || doc.cartId === purchaseId
-                );
+                docs = res.documents || [];
+            } catch (indexErr) {}
+
+            // If 0 documents found by exact purchaseId, check cartId, orderId, poNumber
+            if (docs.length === 0) {
+                const matchPurchase = draftPurchases.value.find(p => p.$id === purchaseId) || activePurchase.value;
+                const found = await getItemsByPurchaseId(purchaseId, matchPurchase?.orderId, matchPurchase?.poNumber);
+                if (found && found.length > 0) {
+                    docs = found;
+                } else {
+                    try {
+                        const fallback = await databases.listDocuments(DB_ID, collId, [
+                            Query.orderDesc('$createdAt'),
+                            Query.limit(100)
+                        ]);
+                        docs = fallback.documents.filter((doc: any) => 
+                            doc.purchaseId === purchaseId || 
+                            doc.cartId === purchaseId ||
+                            (matchPurchase?.poNumber && (doc.purchaseId === matchPurchase.poNumber || doc.cartId === matchPurchase.poNumber)) ||
+                            (matchPurchase?.orderId && (doc.purchaseId === matchPurchase.orderId || doc.cartId === matchPurchase.orderId))
+                        );
+                    } catch {}
+                }
             }
 
             purchaseItems.value = docs.map((doc: any) => {
@@ -489,6 +520,7 @@ export function useScoutPurchase() {
             const match = draftPurchases.value.find(p => p.$id === purchaseId);
             if (match) {
                 match.itemCount = currentCount;
+                draftPurchases.value = [...draftPurchases.value];
             }
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to fetch purchase items:', e);

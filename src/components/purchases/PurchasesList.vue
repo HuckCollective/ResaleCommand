@@ -105,7 +105,7 @@
         <div class="flex items-start justify-between gap-2">
           <div class="space-y-1">
             <a 
-              :href="`/purchases/${purchase.$id}`" 
+              :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
               class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 rounded-lg inline-flex items-center"
               title="Open Purchase Order"
             >
@@ -229,7 +229,7 @@
               <!-- PO Number (Open PO Button with Code) -->
               <td class="py-3 px-4 font-bold whitespace-nowrap">
                 <a 
-                  :href="`/purchases/${purchase.$id}`" 
+                  :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
                   class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 h-8 rounded-lg inline-flex items-center hover:scale-105 transition-transform"
                   title="Open Purchase Order"
                 >
@@ -366,7 +366,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
@@ -374,7 +374,8 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
-import BulkImport from '../inventory/BulkImport.vue';
+
+const BulkImport = defineAsyncComponent(() => import('../inventory/BulkImport.vue'));
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';

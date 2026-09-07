@@ -8,6 +8,7 @@
     "inspect": "node scripts/inspect_schema.js",
     "start": "astro dev",
     "build": "astro build",
+    "lint": "node scripts/validate-templates.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

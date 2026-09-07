@@ -280,11 +280,21 @@
                                     </div>
                                     <div>
                                         <span class="text-[10px] opacity-50 block font-bold uppercase">Order #</span>
-                                        <span class="font-mono font-semibold truncate block" :title="editForm.orderId">{{ editForm.orderId || 'None' }}</span>
+                                        <a 
+                                            v-if="editForm.orderId || props.item?.purchaseId || props.item?.cartId" 
+                                            :href="`/purchases/${editForm.orderId || props.item?.purchaseId || props.item?.cartId}`" 
+                                            target="_blank" 
+                                            class="font-mono font-bold text-primary hover:underline truncate flex items-center gap-1 text-xs"
+                                            :title="`Open ${editForm.orderId || 'Purchase Order'} details`"
+                                        >
+                                            <span class="truncate">{{ editForm.orderId || 'View PO' }}</span>
+                                            <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 shrink-0 opacity-70" />
+                                        </a>
+                                        <span v-else class="font-mono font-semibold truncate block opacity-50">None</span>
                                     </div>
                                     <div class="col-span-2 sm:col-span-1 flex flex-col justify-center">
                                         <span class="text-[10px] opacity-50 block font-bold uppercase">Purchase Link</span>
-                                        <a v-if="props.item.purchaseId" :href="`/purchases/${props.item.purchaseId}`" target="_blank" class="text-primary link font-bold flex items-center gap-1 truncate text-xs">
+                                        <a v-if="props.item?.purchaseId || editForm.orderId || props.item?.cartId" :href="`/purchases/${props.item?.purchaseId || editForm.orderId || props.item?.cartId}`" target="_blank" class="text-primary link font-bold flex items-center gap-1 truncate text-xs">
                                             <Icon icon="solar:cart-bold" class="w-3.5 h-3.5 shrink-0" />
                                             <span>PO Details</span>
                                         </a>
@@ -530,8 +540,9 @@
                                                     'text-primary': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
                                                 }">{{ String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}</h4>
                                             </div>
-                                            <div v-if="scoutPurchaseStrategy.current_asking_price && !String(scoutPurchaseStrategy.current_asking_price).includes('No Asking Price')" class="badge badge-sm font-bold bg-base-100 border border-base-300">
-                                                Asking/Bid: {{ scoutPurchaseStrategy.current_asking_price }}
+                                            <div v-if="scoutPurchaseStrategy.current_asking_price && !String(scoutPurchaseStrategy.current_asking_price).includes('No Asking Price')" class="my-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-base-100 border border-base-300 flex flex-wrap items-center gap-1.5 leading-snug">
+                                                <span class="opacity-60 text-[10px] uppercase font-black">Asking/Bid:</span>
+                                                <span>{{ scoutPurchaseStrategy.current_asking_price }}</span>
                                             </div>
                                             <div v-else-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
                                                 Max Bid: ${{ scoutPurchaseStrategy.max_bid }}

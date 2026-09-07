@@ -104,6 +104,71 @@ export const purchasesAPI = {
         ]);
         return res.documents.length > 0 ? res.documents[0] : null;
     },
+
+    async getPurchaseByPoNumber(poNumber: string) {
+        if (!poNumber) return null;
+        try {
+            const res = await databases.listDocuments(DB_ID, getPurchasesCollectionId(), [
+                Query.equal('poNumber', poNumber.trim()),
+                Query.limit(1)
+            ]);
+            return res.documents.length > 0 ? res.documents[0] : null;
+        } catch {
+            return null;
+        }
+    },
+
+    /**
+     * Resolves a purchase document whether given an Appwrite document $id,
+     * a poNumber (e.g. 'PO-123456'), or an orderId (e.g. 'SC-123456' or SGW order #).
+     */
+    async findPurchase(identifier: string) {
+        if (!identifier) return null;
+        const cleanId = String(identifier).trim();
+
+        // 1. Try direct getDocument (Appwrite document ID lookup)
+        try {
+            const doc = await databases.getDocument(DB_ID, getPurchasesCollectionId(), cleanId);
+            if (doc) return doc;
+        } catch (err) {
+            // Not a valid doc ID or not found, fall through
+        }
+
+        // 2. Try poNumber query
+        try {
+            const poRes = await databases.listDocuments(DB_ID, getPurchasesCollectionId(), [
+                Query.equal('poNumber', cleanId),
+                Query.limit(1)
+            ]);
+            if (poRes.documents.length > 0) return poRes.documents[0];
+        } catch (err) {}
+
+        // 3. Try orderId query
+        try {
+            const orderRes = await databases.listDocuments(DB_ID, getPurchasesCollectionId(), [
+                Query.equal('orderId', cleanId),
+                Query.limit(1)
+            ]);
+            if (orderRes.documents.length > 0) return orderRes.documents[0];
+        } catch (err) {}
+
+        // 4. Case-insensitive fallback across recent purchases
+        try {
+            const recentRes = await databases.listDocuments(DB_ID, getPurchasesCollectionId(), [
+                Query.orderDesc('$createdAt'),
+                Query.limit(100)
+            ]);
+            const lower = cleanId.toLowerCase();
+            const matched = recentRes.documents.find((d: any) => 
+                (d.poNumber && d.poNumber.toLowerCase() === lower) ||
+                (d.orderId && d.orderId.toLowerCase() === lower) ||
+                (d.$id && d.$id.toLowerCase() === lower)
+            );
+            if (matched) return matched;
+        } catch (err) {}
+
+        return null;
+    },
     
     async getPurchase(documentId: string) {
         return await databases.getDocument(DB_ID, getPurchasesCollectionId(), documentId);

@@ -362,17 +362,12 @@
 
           </div>
 
-          <!-- Bottom Action Buttons (Delete / Save PO) inside card when Edit Mode is active -->
-          <div v-if="!isEdit || editMode" class="card-actions justify-between items-center pt-4 border-t border-base-200 mt-2">
-            <button v-if="isEdit" class="btn btn-sm btn-error btn-outline rounded-xl font-bold" @click="handleDelete" :disabled="saving">
-              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-              Delete Purchase
-            </button>
-            <div v-else></div> <!-- Spacer -->
+          <!-- Bottom Action Button for New PO creation only (!isEdit) -->
+          <div v-if="!isEdit" class="card-actions justify-end items-center pt-4 border-t border-base-200 mt-2">
             <button class="btn btn-sm btn-primary px-6 rounded-xl font-black gap-1.5 shadow-md" @click="savePurchase" :disabled="saving">
               <span v-if="saving" class="loading loading-spinner loading-xs"></span>
               <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
-              {{ isEdit ? 'Save PO Changes' : 'Create Purchase Order' }}
+              <span>Create Purchase Order</span>
             </button>
           </div>
         </div>
@@ -901,15 +896,15 @@
         </button>
 
         <div class="flex items-center gap-2">
-          <!-- Action 2: Receive All to Backstock -->
+          <!-- Action 2: Purchase (if Draft) or Receive All (if not Draft and has unreceived items) -->
           <button 
-            v-if="hasUnreceivedItems" 
-            @click="receiveAllToStock('Backstock')" 
+            v-if="isDraft || hasUnreceivedItems" 
+            @click="handleReceiveOrPurchase('Backstock')" 
             class="btn btn-sm btn-success text-success-content font-black rounded-2xl shadow-md gap-1.5 h-10 px-4 active:scale-95 transition-all"
-            title="Receive all unreceived items into Backstock"
+            :title="isDraft ? 'Complete purchase and activate items into Backstock' : 'Receive all unreceived items into Backstock'"
           >
-            <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
-            <span class="text-xs sm:text-sm">Receive All</span>
+            <Icon :icon="isDraft ? 'lucide:truck' : 'solar:check-circle-bold'" class="w-4 h-4" />
+            <span class="text-xs sm:text-sm">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
           </button>
 
           <!-- Action 3: Save PO Changes (when in edit mode) -->
@@ -1028,6 +1023,7 @@ const handleSavedItem = async (payload) => {
 };
 
 const isEdit = computed(() => !!props.purchaseId);
+const activeDocId = ref(props.purchaseId || null);
 const editMode = ref(!props.purchaseId);
 const isExpanded = ref(false);
 const loadingInit = ref(false);
@@ -1089,6 +1085,8 @@ const computedGrandTotal = computed(() => {
            (form.value.taxTotal || 0) + 
            (form.value.feeTotal || 0);
 });
+
+const isDraft = computed(() => (form.value.status || '').toLowerCase() === 'draft');
 
 // --- Operating Expenses & Smart Suggestions State ---
 const expenses = ref([]);
@@ -1233,7 +1231,8 @@ const checkAndSyncPoStatus = async () => {
     if (newStatus !== form.value.status) {
         form.value.status = newStatus;
         try {
-            await purchasesAPI.updatePurchase(props.purchaseId, { status: newStatus });
+            const docId = activeDocId.value || props.purchaseId;
+            await purchasesAPI.updatePurchase(docId, { status: newStatus });
             addToast(`PO status updated to "${newStatus}"`, 'success');
         } catch (e) {
             console.warn('Failed to auto-sync PO status:', e);
@@ -1287,8 +1286,9 @@ const receiveAllToStock = async (location = 'Backstock') => {
                 storageLocation: item.storageLocation || location
             })
         ));
-        if (props.purchaseId) {
-            await purchasesAPI.updatePurchase(props.purchaseId, { status: 'Received' });
+        const docId = activeDocId.value || props.purchaseId;
+        if (docId) {
+            await purchasesAPI.updatePurchase(docId, { status: 'Received' });
             form.value.status = 'Received';
         }
         addToast(`All ${items.value.length} items are now In-Stock (Backstock)!`, 'success');
@@ -1300,6 +1300,57 @@ const receiveAllToStock = async (location = 'Backstock') => {
         hideLoader();
     }
 };
+
+const handleReceiveOrPurchase = async (location = 'Backstock') => {
+    if (isDraft.value) {
+        const label = form.value.poNumber || form.value.vendor || 'this order';
+        const count = items.value.length;
+        const ok = await confirmDialog(
+            count > 0
+                ? `Finalize purchase for "${label}" (${count} item${count === 1 ? '' : 's'})? This will mark this Purchase Order as "Received" and activate all items into Backstock.`
+                : `Finalize purchase for "${label}"? This will mark this Purchase Order as "Received".`,
+            'Complete Purchase',
+            'Purchase It',
+            'Cancel',
+            'btn-success'
+        );
+        if (!ok) return;
+
+        showLoader('Finalizing purchase & activating items...');
+        try {
+            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+            const collId = getCollectionId();
+            if (count > 0) {
+                await Promise.all(items.value.map(item => 
+                    databases.updateDocument(DB_ID, collId, item.$id, {
+                        status: 'in-stock',
+                        storageLocation: item.storageLocation || location
+                    })
+                ));
+            }
+            const docId = activeDocId.value || props.purchaseId;
+            if (docId) {
+                await purchasesAPI.updatePurchase(docId, { 
+                    status: 'Received',
+                    subtotal: computedGrandTotal.value || form.value.subtotal,
+                    grandTotal: computedGrandTotal.value || form.value.grandTotal
+                });
+                form.value.status = 'Received';
+            }
+            addToast(`Purchase completed! PO "${label}" is now Received.`, 'success');
+            await loadLinkedItems();
+            await checkAndSyncPoStatus();
+        } catch (e) {
+            console.error('Failed to complete purchase:', e);
+            addToast(`Failed to complete purchase: ${e.message}`, 'error');
+        } finally {
+            hideLoader();
+        }
+    } else {
+        await receiveAllToStock(location);
+    }
+};
+
 const loadingItems = ref(false);
 const itemSearchQuery = ref('');
 const searchResults = ref([]);
@@ -1319,11 +1370,10 @@ onMounted(async () => {
         loadingInit.value = true;
         showLoader("Loading Purchase Details...");
         try {
-            // Appwrite doesn't have a simple getDocument without the DB/Coll ID exposed in purchasesAPI,
-            // so we do a listPurchases with a filter by ID.
-            const res = await purchasesAPI.listPurchases([Query.equal('$id', props.purchaseId)]);
-            if (res.documents.length > 0) {
-                const p = res.documents[0];
+            // Support opening via document $id, poNumber (e.g. PO-123456), or orderId
+            const p = await purchasesAPI.findPurchase(props.purchaseId);
+            if (p) {
+                activeDocId.value = p.$id;
                 form.value = {
                     poNumber: p.poNumber || '',
                     vendor: p.vendor || '',
@@ -1335,7 +1385,8 @@ onMounted(async () => {
                     handlingTotal: p.handlingTotal || 0,
                     taxTotal: p.taxTotal || 0,
                     feeTotal: p.feeTotal || 0,
-                    receiptImageId: p.receiptImageId || ''
+                    receiptImageId: p.receiptImageId || '',
+                    tenantId: p.tenantId || null
                 };
                 
                 if (form.value.status === 'Draft' || !form.value.receiptImageId) {
@@ -1349,9 +1400,12 @@ onMounted(async () => {
                 ]);
                 await checkAndSyncPoStatus();
                 initRealtime();
+            } else {
+                addToast(`Purchase Order "${props.purchaseId}" not found.`, 'error');
             }
         } catch (e) {
             console.error('Failed to load purchase', e);
+            addToast('Failed to load purchase details: ' + e.message, 'error');
         } finally {
             loadingInit.value = false;
             hideLoader();
@@ -1362,7 +1416,8 @@ onMounted(async () => {
 let realtimeUnsubscribes = [];
 
 const initRealtime = () => {
-    if (!props.purchaseId) return;
+    const docId = activeDocId.value || props.purchaseId;
+    if (!docId) return;
     if (realtimeUnsubscribes.length > 0) return;
     
     try {
@@ -1372,10 +1427,10 @@ const initRealtime = () => {
 
         // 1. Live update Purchase Order header
         const poSub = client.subscribe(
-            `databases.${DB_ID}.collections.${PURCHASES_COL}.documents.${props.purchaseId}`,
+            `databases.${DB_ID}.collections.${PURCHASES_COL}.documents.${docId}`,
             (response) => {
                 const doc = response.payload;
-                if (!doc || doc.$id !== props.purchaseId) return;
+                if (!doc || doc.$id !== docId) return;
                 
                 if (!editMode.value) {
                     form.value = {
@@ -1407,12 +1462,13 @@ const initRealtime = () => {
                 const doc = response.payload;
                 if (!doc || !doc.$id) return;
 
-                const poIdStr = String(props.purchaseId || '').trim();
+                const poIdStr = String(docId).trim();
                 const belongsToPo = 
                     (doc.purchaseId && String(doc.purchaseId).trim() === poIdStr) ||
                     (doc.cartId && String(doc.cartId).trim() === poIdStr) ||
                     (form.value.orderId && doc.cartId && String(doc.cartId).trim() === String(form.value.orderId).trim()) || 
-                    (form.value.poNumber && doc.cartId && String(doc.cartId).trim() === String(form.value.poNumber).trim());
+                    (form.value.poNumber && doc.cartId && String(doc.cartId).trim() === String(form.value.poNumber).trim()) ||
+                    (form.value.poNumber && doc.purchaseId && String(doc.purchaseId).trim() === String(form.value.poNumber).trim());
 
                 if (isCreate && belongsToPo) {
                     if (!items.value.find(i => i.$id === doc.$id)) {
@@ -1446,9 +1502,10 @@ const initRealtime = () => {
                 const doc = response.payload;
                 if (!doc || !doc.$id) return;
 
-                const poIdStr = String(props.purchaseId || '').trim();
+                const poIdStr = String(docId).trim();
                 const belongsToPo = (doc.purchaseId && String(doc.purchaseId).trim() === poIdStr) ||
-                                    (doc.cartId && String(doc.cartId).trim() === poIdStr);
+                                    (doc.cartId && String(doc.cartId).trim() === poIdStr) ||
+                                    (form.value.poNumber && doc.purchaseId && String(doc.purchaseId).trim() === String(form.value.poNumber).trim());
 
                 if (isCreate && belongsToPo) {
                     if (!expenses.value.find(e => e.$id === doc.$id)) {
@@ -1675,13 +1732,16 @@ const rescanReceipt = async () => {
 const loadLinkedItems = async () => {
     loadingItems.value = true;
     try {
-        items.value = await getItemsByPurchaseId(props.purchaseId, form.value.orderId, form.value.poNumber);
+        const docId = activeDocId.value || props.purchaseId;
+        items.value = await getItemsByPurchaseId(docId, form.value.orderId, form.value.poNumber);
         
         // Auto-fill subtotal from items if it's currently 0 or missing
         if (!form.value.subtotal) {
             form.value.subtotal = items.value.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
             // Optionally auto-save it back to the DB to fix it permanently
-            await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
+            if (docId) {
+                await purchasesAPI.updatePurchase(docId, { subtotal: form.value.subtotal });
+            }
         }
         
     } catch (e) {
@@ -1706,12 +1766,13 @@ const savePurchase = async () => {
         }
 
         if (isEdit.value) {
-            await purchasesAPI.updatePurchase(props.purchaseId, payload);
+            const docId = activeDocId.value || props.purchaseId;
+            await purchasesAPI.updatePurchase(docId, payload);
             editMode.value = false;
         } else {
             const res = await purchasesAPI.createPurchase(payload);
-            // Redirect to edit page
-            window.location.href = `/purchases/${res.$id}`;
+            // Redirect to edit page with poNumber or $id
+            window.location.href = `/purchases/${res.poNumber || res.$id}`;
         }
     } catch (e) {
         console.error('Failed to save purchase:', e);
@@ -1734,7 +1795,8 @@ const handleDelete = async () => {
 
     saving.value = true;
     try {
-        await purchasesAPI.deletePurchase(props.purchaseId);
+        const docId = activeDocId.value || props.purchaseId;
+        await purchasesAPI.deletePurchase(docId);
         addToast('Purchase Order deleted', 'success');
         window.location.href = '/purchases';
     } catch (e) {
@@ -1856,8 +1918,9 @@ const loadExpenses = async () => {
     loadingExpenses.value = true;
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const docId = activeDocId.value || props.purchaseId;
         const res = await databases.listDocuments(DB_ID, 'expenses', [
-            Query.equal('purchaseId', props.purchaseId)
+            Query.equal('purchaseId', docId)
         ]);
         expenses.value = res.documents;
     } catch (e) {
@@ -1871,13 +1934,14 @@ const handleAddExpense = async () => {
     if (!newExpenseAmount.value) return;
     loadingExpenses.value = true;
     try {
+        const docId = activeDocId.value || props.purchaseId;
         const expense = await databases.createDocument(
             import.meta.env.PUBLIC_APPWRITE_DB_ID,
             'expenses',
             ID.unique(),
             {
-                purchaseId: props.purchaseId,
-                cartId: props.purchaseId, // legacy support
+                purchaseId: docId,
+                cartId: docId, // legacy support
                 tenantId: form.value.tenantId || 'personal',
                 amount: newExpenseAmount.value,
                 note: newExpenseNote.value || 'Misc Expense',

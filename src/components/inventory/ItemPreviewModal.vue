@@ -21,6 +21,16 @@
                         <span v-if="item.locationSku || item.sku" class="badge badge-sm font-mono font-bold bg-secondary/15 text-secondary border-secondary/30 text-xs">
                             SKU: {{ (item.locationSku || item.sku).replace(/^'/, '') }}
                         </span>
+                        <a 
+                            v-if="item.purchaseId || item.orderId || item.cartId" 
+                            :href="`/purchases/${item.orderId || item.purchaseId || item.cartId}`" 
+                            target="_blank"
+                            class="badge badge-sm font-mono font-bold bg-primary/15 text-primary border-primary/30 text-xs hover:underline inline-flex items-center gap-1 shrink-0"
+                            :title="`Open Purchase Order: ${item.orderId || item.purchaseId || item.cartId}`"
+                        >
+                            <Icon icon="solar:cart-bold" class="w-3 h-3 text-primary" />
+                            <span>{{ item.orderId || 'PO Details' }}</span>
+                        </a>
                     </div>
                     <h2 class="font-extrabold text-sm sm:text-base leading-snug break-words text-base-content line-clamp-2 md:line-clamp-none">
                         {{ title }}

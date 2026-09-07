@@ -5,7 +5,7 @@ import PurchaseEditor from '../../components/purchases/PurchaseEditor.vue';
 const { id } = Astro.params;
 ---
 
-<Layout title="Edit Purchase">
+<Layout title={`Purchase Details ${id ? `• ${id}` : ''}`}>
   <div class="p-8 max-w-7xl mx-auto space-y-8">
     <div class="flex items-center gap-4">
       <a href="/purchases" class="btn btn-ghost btn-circle">

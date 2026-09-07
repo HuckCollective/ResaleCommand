@@ -64,10 +64,19 @@
                 </template>
               </div>
 
-              <div class="text-xs font-mono opacity-50 flex items-center gap-2 mt-0.5">
-                <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
-                <span>•</span>
-                <span class="shrink-0">{{ displayItemCount }} total {{ displayItemCount === 1 ? 'item' : 'items' }}</span>
+              <div class="text-xs font-mono flex items-center gap-2 mt-0.5">
+                <a 
+                  v-if="currentTracker && (currentTracker.poNumber || currentTracker.$id)" 
+                  :href="`/purchases/${currentTracker.poNumber || currentTracker.$id}`" 
+                  class="truncate font-bold text-primary hover:underline inline-flex items-center gap-0.5 group/traypo"
+                  title="Open Purchase Order Details"
+                >
+                  <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
+                  <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 opacity-60 group-hover/traypo:opacity-100 transition-opacity shrink-0" />
+                </a>
+                <span v-else class="truncate opacity-50">{{ currentTracker?.poNumber || currentTracker?.orderId || 'Draft' }}</span>
+                <span class="opacity-40">•</span>
+                <span class="shrink-0 opacity-60">{{ displayItemCount }} total {{ displayItemCount === 1 ? 'item' : 'items' }}</span>
               </div>
             </div>
           </div>

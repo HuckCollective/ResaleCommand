@@ -148,10 +148,18 @@
                     </button>
                   </template>
                 </div>
-                <div class="text-[11px] font-mono opacity-50 flex items-center gap-1.5 mt-0.5">
-                  <span>{{ purchase.poNumber || purchase.orderId || 'Draft' }}</span>
-                  <span>•</span>
-                  <span class="inline-flex items-center gap-1" :title="`Last updated: ${purchase.$updatedAt || purchase.purchaseDate || purchase.$createdAt}`">
+                <div class="text-[11px] font-mono flex items-center gap-1.5 mt-0.5">
+                  <a 
+                    :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
+                    @click.stop 
+                    class="font-bold text-primary hover:underline flex items-center gap-0.5 group/po"
+                    title="Open Purchase Order Details"
+                  >
+                    <span>{{ purchase.poNumber || purchase.orderId || 'Draft' }}</span>
+                    <Icon icon="solar:arrow-right-up-linear" class="w-2.5 h-2.5 opacity-60 group-hover/po:opacity-100 transition-opacity" />
+                  </a>
+                  <span class="opacity-40">•</span>
+                  <span class="inline-flex items-center gap-1 opacity-50" :title="`Last updated: ${purchase.$updatedAt || purchase.purchaseDate || purchase.$createdAt}`">
                     <Icon icon="solar:clock-circle-linear" class="w-3 h-3 opacity-70 shrink-0" />
                     Updated {{ formatUpdatedDate(purchase.$updatedAt || purchase.purchaseDate || purchase.$createdAt) }}
                   </span>
@@ -210,18 +218,6 @@
             Resume Scouting
           </button>
 
-          <button 
-            @click="handleCompletePurchase(purchase)"
-            :disabled="actionInProgress === purchase.$id"
-            class="btn btn-success btn-sm font-bold text-success-content shadow-xs"
-            title="Mark as paid and open Purchase Order"
-          >
-            <span v-if="actionInProgress === purchase.$id" class="loading loading-spinner loading-xs"></span>
-            <template v-else>
-              <Icon icon="lucide:truck" class="w-4 h-4" />
-              Purchase It
-            </template>
-          </button>
 
           <button 
             @click="handleDiscardPurchase(purchase)"
@@ -602,18 +598,6 @@ const confirmStartPurchase = async () => {
   }
 };
 
-const handleCompletePurchase = async (purchase: ScoutPurchase) => {
-  actionInProgress.value = purchase.$id;
-  try {
-    addToast({ type: 'info', message: `📋 Opening Draft PO: "${purchase.vendor}"...` });
-    // Open directly in the Purchase Order screen without finalizing prematurely
-    window.location.href = `/purchases/${purchase.$id}`;
-  } catch (err: any) {
-    addToast({ type: 'error', message: 'Failed to open purchase: ' + err.message });
-  } finally {
-    actionInProgress.value = null;
-  }
-};
 
 const handleDiscardPurchase = async (purchase: ScoutPurchase) => {
   const confirmed = await confirmDialog(
