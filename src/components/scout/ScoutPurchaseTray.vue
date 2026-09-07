@@ -1,5 +1,5 @@
 <template>
-  <div v-if="activePurchase && isOpen" class="relative z-50">
+  <div v-if="currentTracker && showTray" class="relative z-50">
     <!-- EXPANDABLE MANIFEST DRAWER / MODAL -->
     <div 
       class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
@@ -7,19 +7,65 @@
     >
       <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
         
-        <!-- Drawer Header -->
+        <!-- Drawer Header with Inline Title Editing -->
         <div class="p-4 sm:p-5 border-b border-base-300 flex items-center justify-between gap-3 shrink-0">
-          <div class="flex items-center gap-3 min-w-0">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Icon icon="lucide:truck" class="w-6 h-6" />
             </div>
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <h3 class="text-base sm:text-lg font-black text-base-content truncate">{{ activePurchase.vendor || 'Buy Tracker' }}</h3>
-                <span class="badge badge-warning badge-sm font-bold shrink-0">Buy Tracker</span>
+            <div class="min-w-0 flex-1">
+              <!-- Title Row: Display or Inline Edit Mode -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <template v-if="isEditingTitle">
+                  <div class="flex items-center gap-1.5 flex-1 max-w-sm">
+                    <input 
+                      ref="titleInputRef"
+                      v-model="editedTitle" 
+                      type="text" 
+                      class="input input-xs sm:input-sm input-bordered font-bold text-sm w-full"
+                      placeholder="Tracker Title / Vendor"
+                      @keyup.enter="saveTitle"
+                      @keyup.esc="cancelEditTitle"
+                    />
+                    <button 
+                      @click="saveTitle" 
+                      :disabled="savingTitle || !editedTitle.trim()"
+                      class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-bold px-2 shrink-0" 
+                      title="Save Title"
+                    >
+                      <Icon icon="solar:check-read-linear" class="w-4 h-4" />
+                    </button>
+                    <button 
+                      @click="cancelEditTitle" 
+                      class="btn btn-xs sm:btn-sm btn-ghost px-2 shrink-0" 
+                      title="Cancel"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <h3 class="text-base sm:text-lg font-black text-base-content truncate">
+                    {{ currentTracker.vendor || 'Buy Tracker' }}
+                  </h3>
+                  <button 
+                    @click="startEditTitle" 
+                    class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 hover:bg-base-200"
+                    title="Rename Tracker"
+                  >
+                    <Icon icon="solar:pen-bold" class="w-3.5 h-3.5 text-primary" />
+                  </button>
+                  <span v-if="activePurchase" class="badge badge-warning badge-sm font-bold shrink-0">
+                    Active Tracker
+                  </span>
+                  <span v-else class="badge badge-outline badge-warning badge-sm font-bold shrink-0">
+                    Paused
+                  </span>
+                </template>
               </div>
-              <div class="text-xs font-mono opacity-50 flex items-center gap-2">
-                <span class="truncate">{{ activePurchase.poNumber || activePurchase.orderId }}</span>
+
+              <div class="text-xs font-mono opacity-50 flex items-center gap-2 mt-0.5">
+                <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
                 <span>•</span>
                 <span class="shrink-0">{{ purchaseItems.length }} total {{ purchaseItems.length === 1 ? 'item' : 'items' }}</span>
               </div>
@@ -74,16 +120,17 @@
           <div v-if="purchaseItems.length === 0" class="text-center py-12 text-base-content/50 space-y-2">
             <Icon icon="solar:scanner-linear" class="w-10 h-10 mx-auto opacity-30" />
             <p class="text-sm font-bold">Your buy tracker is empty.</p>
-            <p class="text-xs max-w-xs mx-auto">Scan photos or paste screenshots above, then tap "+ Add to Purchase" to tally items here!</p>
+            <p class="text-xs max-w-xs mx-auto">Scan photos or paste screenshots in Scout to tally items here!</p>
           </div>
 
           <div 
             v-for="item in purchaseItems" 
             :key="item.$id"
-            class="bg-base-200/50 border border-base-300 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
+            @click="openPreview(item)"
+            class="bg-base-200/50 border border-base-300 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-all cursor-pointer group"
           >
             <!-- Thumbnail / Icon -->
-            <div class="w-12 h-12 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden shrink-0">
+            <div class="w-12 h-12 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
               <img 
                 v-if="item.imageId" 
                 :src="getImageUrl(item.imageId)" 
@@ -104,7 +151,9 @@
                 <span v-if="item.isLot" class="badge badge-xs badge-outline badge-secondary font-bold">
                   {{ item.lotItemsCount || 0 }} Items In Lot
                 </span>
-                <h4 class="font-bold text-xs text-base-content truncate">{{ cleanItemTitle(item.title) }}</h4>
+                <h4 class="font-bold text-xs text-base-content truncate group-hover:text-primary transition-colors">
+                  {{ cleanItemTitle(item.title) }}
+                </h4>
               </div>
 
               <div class="flex items-center gap-2 text-[10px] opacity-70 mt-1">
@@ -114,18 +163,42 @@
               </div>
             </div>
 
-            <!-- Delete Action -->
-            <button 
-              @click="handleRemoveItem(item.$id)"
-              class="btn btn-ghost btn-xs btn-circle text-error/60 hover:text-error hover:bg-error/10"
-              title="Remove from purchase"
-            >
-              <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
-            </button>
+            <!-- Item Action Buttons (Preview, Edit, Delete) -->
+            <div class="flex items-center gap-1 shrink-0" @click.stop>
+              <!-- Preview Modal Button -->
+              <button 
+                type="button"
+                @click="openPreview(item)"
+                class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100 hover:bg-base-300"
+                title="Preview full item details"
+              >
+                <Icon icon="solar:eye-linear" class="w-4 h-4" />
+              </button>
+
+              <!-- ItemDrawer Editor Button -->
+              <button 
+                type="button"
+                @click="openEdit(item)"
+                class="btn btn-ghost btn-xs btn-circle text-primary opacity-80 hover:opacity-100 hover:bg-primary/10"
+                title="Edit item details"
+              >
+                <Icon icon="solar:pen-linear" class="w-4 h-4" />
+              </button>
+
+              <!-- Remove Item Button -->
+              <button 
+                type="button"
+                @click="handleRemoveItem(item.$id)"
+                class="btn btn-ghost btn-xs btn-circle text-error/60 hover:text-error hover:bg-error/10"
+                title="Remove from purchase"
+              >
+                <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Drawer Footer: Hero Action -->
+        <!-- Drawer Footer: Hero Action (State C: Purchase It / State B: + Add Here) -->
         <div class="p-3 sm:p-4 border-t border-base-300 bg-base-200/70 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex items-baseline justify-between sm:block">
             <div class="text-[10px] uppercase font-bold tracking-wider opacity-60 whitespace-nowrap">Total Cost To Pay</div>
@@ -141,11 +214,14 @@
               Keep Scouting
             </button>
 
+            <!-- State C (Active Tracker): Purchase It Hero Action in Footer -->
             <button 
+              v-if="activePurchase"
               type="button"
               @click="handleCompletePurchase"
               :disabled="completing || purchaseItems.length === 0"
               class="btn btn-success btn-sm sm:btn-md font-black text-success-content shadow-lg px-4 sm:px-6 flex-[1.5] sm:flex-initial gap-2 shrink-0 active:scale-95 transition-all"
+              title="Open Draft Purchase Order to review and finalize"
             >
               <span v-if="completing" class="loading loading-spinner loading-sm"></span>
               <template v-else>
@@ -153,51 +229,159 @@
                 <span class="whitespace-nowrap">Purchase It (${{ totalCost.toFixed(2) }})</span>
               </template>
             </button>
+
+            <!-- State B (Paused Tracker): + Add Here / Resume Action in Footer -->
+            <button 
+              v-else-if="currentTracker"
+              type="button"
+              @click="handleResumeCurrentTracker"
+              class="btn btn-primary btn-sm sm:btn-md font-black text-primary-content shadow-lg px-4 sm:px-6 flex-[1.5] sm:flex-initial gap-2 shrink-0 active:scale-95 transition-all"
+              title="Resume this tracker and set as active"
+            >
+              <Icon icon="solar:add-circle-bold" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span class="whitespace-nowrap">+ Add Here & Resume</span>
+            </button>
           </div>
         </div>
 
       </div>
     </div>
+
+    <!-- FULLSCREEN PREVIEW MODAL -->
+    <ItemPreviewModal 
+      v-if="previewItem"
+      :item="previewItem" 
+      @close="previewItem = null" 
+      @edit="openEdit" 
+    />
+
+    <!-- ITEM DRAWER EDITOR -->
+    <ItemDrawer 
+      v-if="editingItem" 
+      :item="editingItem" 
+      @close="editingItem = null" 
+      @save="handleItemSaved" 
+      @saved="handleItemSaved" 
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
+import { useScoutPurchase, type ScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
 import { addToast } from '../../stores/toast';
-import { BUCKET_ID } from '../../lib/inventory';
+import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
+import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
+import ItemDrawer from '../common/ItemDrawer.vue';
 
 const emit = defineEmits<{
   (e: 'toggle-tray'): void;
   (e: 'purchase-completed', purchaseId: string): void;
+  (e: 'resume-tracker', purchase: ScoutPurchase): void;
 }>();
 
 const props = defineProps<{
-  isOpen: boolean;
+  isOpen?: boolean;
+  pausedTracker?: ScoutPurchase | null;
 }>();
 
 const { 
   activePurchase, 
   purchaseItems, 
+  pausedTracker: composablePausedTracker,
+  isTrayOpen: composableIsTrayOpen,
   singleItems, 
   lotItems, 
   totalCost, 
   totalBoutiqueValue, 
   projectedProfit, 
   roiMultiple, 
-  profitMargin, 
   tierBreakdown,
   removeItemFromPurchase,
-  completePurchase
+  setActivePurchase,
+  updatePurchaseTitle,
+  refreshActivePurchaseItems
 } = useScoutPurchase();
+
+const showTray = computed(() => {
+  return props.isOpen !== undefined ? props.isOpen : composableIsTrayOpen.value;
+});
+
+const currentTracker = computed(() => {
+  return activePurchase.value || props.pausedTracker || composablePausedTracker.value;
+});
 
 const completing = ref(false);
 
 const toggleTray = () => {
   emit('toggle-tray');
+  composableIsTrayOpen.value = false;
 };
 
+// -- TITLE EDITING STATE --
+const isEditingTitle = ref(false);
+const editedTitle = ref('');
+const savingTitle = ref(false);
+const titleInputRef = ref<HTMLInputElement | null>(null);
+
+const startEditTitle = () => {
+  if (!currentTracker.value) return;
+  editedTitle.value = currentTracker.value.vendor || '';
+  isEditingTitle.value = true;
+  nextTick(() => {
+    titleInputRef.value?.focus();
+    titleInputRef.value?.select();
+  });
+};
+
+const cancelEditTitle = () => {
+  isEditingTitle.value = false;
+};
+
+const saveTitle = async () => {
+  if (!currentTracker.value?.$id || !editedTitle.value.trim() || savingTitle.value) return;
+  savingTitle.value = true;
+  try {
+    await updatePurchaseTitle(currentTracker.value.$id, editedTitle.value.trim());
+    isEditingTitle.value = false;
+    addToast({ type: 'success', message: `Renamed tracker to "${editedTitle.value.trim()}"` });
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to rename tracker: ' + err.message });
+  } finally {
+    savingTitle.value = false;
+  }
+};
+
+// -- ITEM PREVIEW & EDITOR STATE --
+const previewItem = ref<any | null>(null);
+const editingItem = ref<any | null>(null);
+
+const openPreview = (item: any) => {
+  previewItem.value = item;
+};
+
+const openEdit = (item: any) => {
+  editingItem.value = { ...item };
+};
+
+const handleItemSaved = async (payload: any) => {
+  if (!editingItem.value) return;
+  try {
+    await updateInventoryItem(editingItem.value.$id, payload);
+    const idx = purchaseItems.value.findIndex(i => i.$id === editingItem.value?.$id);
+    if (idx !== -1) {
+      Object.assign(purchaseItems.value[idx], payload);
+    }
+    editingItem.value = null;
+    addToast({ type: 'success', message: 'Item updated successfully!' });
+    await refreshActivePurchaseItems();
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to update item: ' + err.message });
+  }
+};
+
+// -- REMOVE & COMPLETE --
 const handleRemoveItem = async (itemId: string) => {
   try {
     await removeItemFromPurchase(itemId);
@@ -214,13 +398,19 @@ const handleCompletePurchase = async () => {
     const pId = activePurchase.value.$id;
     addToast({ type: 'info', message: '📋 Opening Draft Purchase Order...' });
     emit('purchase-completed', pId);
-    // Open directly in the Purchase Order screen to review lines and attach receipt
     window.location.href = `/purchases/${pId}`;
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to open purchase: ' + err.message });
   } finally {
     completing.value = false;
   }
+};
+
+const handleResumeCurrentTracker = () => {
+  if (!currentTracker.value) return;
+  setActivePurchase(currentTracker.value);
+  emit('resume-tracker', currentTracker.value);
+  addToast({ type: 'success', message: `Resumed tracker: ${currentTracker.value.vendor}` });
 };
 
 const getImageUrl = (imageId: string): string => {

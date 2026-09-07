@@ -21,7 +21,7 @@
       </div>
 
       <!-- Option 1: Existing Active Buy Trackers -->
-      <div v-if="draftPurchases.length > 0" class="space-y-2">
+      <div v-if="sortedDraftTrackers.length > 0" class="space-y-2">
         <label class="text-[11px] uppercase font-bold tracking-wider opacity-60 flex items-center gap-1">
           <Icon icon="solar:folder-with-files-bold" class="w-3.5 h-3.5 text-primary" />
           Add to Open Buy Tracker
@@ -29,7 +29,7 @@
         
         <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
           <button
-            v-for="purchase in draftPurchases"
+            v-for="purchase in sortedDraftTrackers"
             :key="purchase.$id"
             type="button"
             @click="$emit('select-tracker', purchase)"
@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import type { ScoutPurchase } from '../../composables/useScoutPurchase';
 
@@ -144,6 +144,15 @@ const emit = defineEmits<{
 }>();
 
 const newVendorName = ref('');
+
+// Sort draft trackers by last updated (most recent first)
+const sortedDraftTrackers = computed(() => {
+  return [...(props.draftPurchases || [])].sort((a, b) => {
+    const timeA = new Date(a.$updatedAt || a.purchaseDate || a.$createdAt || 0).getTime();
+    const timeB = new Date(b.$updatedAt || b.purchaseDate || b.$createdAt || 0).getTime();
+    return timeB - timeA;
+  });
+});
 
 const presets = [
   { name: 'Goodwill', icon: '🏪' },

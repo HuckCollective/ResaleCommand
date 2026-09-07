@@ -503,13 +503,6 @@
         @remove-photo="removeImage"
     />
 
-    <!-- MANIFEST DETAILS DRAWER (Modal overlay) -->
-    <ScoutPurchaseTray 
-        :is-open="isTrayOpen" 
-        @toggle-tray="isTrayOpen = !isTrayOpen" 
-        @purchase-completed="onPurchaseCompleted" 
-    />
-
     <!-- ASSIGN TRACKER MODAL (Shown when untethered user adds item) -->
     <ScoutAssignTrackerModal
         :is-open="isAssignModalOpen"
@@ -525,17 +518,17 @@
     <div class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
         <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
             
-            <!-- Active Buy Tracker Status Strip (Integrated into dock, ONLY shown when activePurchase is present) -->
+            <!-- State C: Active Buy Tracker Status Strip (Integrated into dock, ONLY shown when activePurchase is present) -->
             <div v-if="activePurchase" class="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-base-content/10">
-                <!-- Left: Deal Summary & Expand Manifest -->
+                <!-- Deal Summary & Expand Manifest (Purchase button moved to expanded tray footer!) -->
                 <button 
                     type="button" 
-                    @click="isTrayOpen = !isTrayOpen" 
+                    @click="toggleTray()" 
                     class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden"
                     title="View manifest details"
                 >
                     <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
-                    <span class="font-black text-xs text-base-content truncate max-w-[90px] sm:max-w-[180px]">
+                    <span class="font-black text-xs text-base-content truncate max-w-[120px] sm:max-w-[220px]">
                         {{ activePurchase.vendor || 'Buy Tracker' }}
                     </span>
                     <span class="badge badge-xs badge-warning font-black shrink-0">
@@ -549,18 +542,40 @@
                     <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
                         ${{ totalBoutiqueValue.toFixed(2) }}
                     </span>
-                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                    <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
+                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-1" />
+                </button>
+            </div>
+
+            <!-- State B: Paused Buy Tracker Status Strip (User has trackers, but none active) -->
+            <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-base-content/10">
+                <!-- Left: Paused Tracker summary -->
+                <button 
+                    type="button" 
+                    @click="toggleTray()" 
+                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/50 hover:bg-base-300/80 text-left min-w-0 flex-1 overflow-hidden border border-base-300"
+                    title="Inspect paused tracker"
+                >
+                    <Icon icon="solar:pause-circle-bold" class="w-4 h-4 text-warning shrink-0" />
+                    <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
+                    <span class="font-bold text-xs text-base-content truncate max-w-[100px] sm:max-w-[180px]">
+                        {{ pausedTracker.vendor || 'Buy Tracker' }}
+                    </span>
+                    <span class="text-[11px] font-mono opacity-60 shrink-0">
+                        {{ pausedTracker.itemCount || 0 }} items
+                    </span>
+                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-50 shrink-0 ml-auto" />
                 </button>
 
-                <!-- Right: Direct PO Navigation -->
+                <!-- Right: + Add Here Button -->
                 <button 
-                    type="button"
-                    @click="navigateToPurchase" 
-                    class="btn btn-success btn-xs h-7 px-3 font-black text-success-content rounded-xl shadow-xs gap-1 shrink-0 active:scale-95"
-                    title="Open Draft Purchase Order"
+                    type="button" 
+                    @click="handleAddHereToPausedTracker"
+                    class="btn btn-primary btn-xs h-7 px-3 font-black text-primary-content rounded-xl shadow-xs gap-1.5 shrink-0 active:scale-95"
+                    title="Add to this tracker and resume"
                 >
-                    <Icon icon="lucide:truck" class="w-3.5 h-3.5" />
-                    <span class="whitespace-nowrap">Purchase It</span>
+                    <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                    <span>+ Add Here</span>
                 </button>
             </div>
 
@@ -626,7 +641,6 @@ import { isAlphaMode } from '../../stores/env';
 import { getPurchasesCollectionId } from '../../lib/purchases';
 import SpeedEntryForm from '../purchases/SpeedEntryForm.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
-import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
 import ScoutAssignTrackerModal from './ScoutAssignTrackerModal.vue';
 
@@ -668,6 +682,9 @@ const {
     profitMargin,
     tierBreakdown,
     draftPurchases,
+    pausedTracker,
+    isTrayOpen,
+    toggleTray,
     loadDraftPurchases,
     addItemToPurchase,
     addLotToPurchase,
@@ -688,14 +705,36 @@ watch(() => props.initialPurchaseId, async (newId) => {
     }
 }, { immediate: true });
 
-const isTrayOpen = ref(false);
-
 // Tracker Assignment Modal State
 const isAssignModalOpen = ref(false);
 const creatingTracker = ref(false);
 const allowStandaloneSave = ref(false);
 const pendingSaveItem = ref<{ item: any; index: number; isBatch: boolean } | null>(null);
 const pendingSaveAll = ref(false);
+
+const handleAddHereToPausedTracker = async () => {
+    if (!pausedTracker.value) return;
+    const target = pausedTracker.value;
+    setActivePurchase(target);
+    try {
+        window.history.replaceState({}, '', `${window.location.pathname}?purchase=${target.$id}`);
+    } catch (e) {}
+    addToast({ type: 'success', message: `Resumed tracker: ${target.vendor || 'Buy Tracker'}` });
+
+    if (pendingSaveItem.value || pendingSaveAll.value) {
+        await executePendingSave();
+    } else if (result.value && result.value.items && result.value.items.length > 0) {
+        await saveAllItems();
+    }
+};
+
+const handleResumeFromTray = (purchase: any) => {
+    setActivePurchase(purchase);
+    isTrayOpen.value = false;
+    try {
+        window.history.replaceState({}, '', `${window.location.pathname}?purchase=${purchase.$id}`);
+    } catch (e) {}
+};
 
 const navigateToPurchase = () => {
     if (!activePurchase.value) return;

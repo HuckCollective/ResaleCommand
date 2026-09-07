@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-8">
     <!-- Top Financial Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <!-- Active Drafts -->
@@ -47,36 +47,15 @@
       </div>
     </div>
 
-    <!-- Action Bar -->
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-base-100 p-4 rounded-2xl border border-base-300 shadow-sm">
-      <div>
-        <h2 class="text-lg sm:text-xl font-black text-base-content flex items-center gap-2">
-          <Icon icon="lucide:truck" class="text-primary w-5 h-5" />
-          Buy Trackers
-        </h2>
-        <p class="text-xs opacity-60 mt-0.5">
-          Active sourcing runs and buy trackers holding multiple items & lots before purchase
-        </p>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <button 
-          @click="emit('quick-scan')" 
-          class="btn btn-outline btn-sm font-bold flex-1 sm:flex-initial"
-          title="Fast one-off valuation without saving to a purchase"
-        >
-          <Icon icon="solar:scanner-bold" class="w-4 h-4 text-warning" />
-          ⚡ Quick Scan
-        </button>
-
-        <button 
-          @click="isModalOpen = true" 
-          class="btn btn-primary btn-sm font-black text-primary-content shadow-md gap-1 flex-1 sm:flex-initial"
-        >
-          <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
-          <span>New Buy Tracker</span>
-        </button>
-      </div>
+    <!-- Section Header -->
+    <div class="bg-base-100 p-4 rounded-2xl border border-base-300 shadow-sm">
+      <h2 class="text-lg sm:text-xl font-black text-base-content flex items-center gap-2">
+        <Icon icon="lucide:truck" class="text-primary w-5 h-5" />
+        Buy Trackers
+      </h2>
+      <p class="text-xs opacity-60 mt-0.5">
+        Active sourcing runs and buy trackers holding multiple items & lots before purchase
+      </p>
     </div>
 
     <!-- Loading State -->
@@ -109,7 +88,7 @@
     <!-- Purchase Cards Grid -->
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div 
-        v-for="purchase in draftPurchases" 
+        v-for="purchase in sortedDraftPurchases" 
         :key="purchase.$id" 
         class="card bg-base-100 border border-base-300 shadow-sm hover:shadow-md hover:border-primary/50 transition-all rounded-3xl overflow-hidden flex flex-col justify-between group"
       >
@@ -121,13 +100,42 @@
                 <Icon :icon="getVendorIcon(purchase.vendor)" class="w-5 h-5" />
               </div>
               <div class="min-w-0">
-                <h3 class="font-black text-base text-base-content truncate group-hover:text-primary transition-colors">
-                  {{ purchase.vendor || 'Buy Tracker' }}
-                </h3>
-                <div class="text-[11px] font-mono opacity-50 flex items-center gap-1.5">
+                <div class="flex items-center gap-1.5">
+                  <template v-if="editingPurchaseId === purchase.$id">
+                    <input 
+                      ref="cardTitleInputRef"
+                      v-model="editingPurchaseTitle" 
+                      type="text" 
+                      class="input input-xs input-bordered font-bold text-sm w-36 sm:w-48"
+                      @click.stop
+                      @keyup.enter="saveCardTitle(purchase.$id)"
+                      @keyup.esc="cancelCardTitle"
+                    />
+                    <button @click.stop="saveCardTitle(purchase.$id)" :disabled="savingCardTitle" class="btn btn-xs btn-primary text-primary-content btn-circle">
+                      <Icon icon="solar:check-read-linear" class="w-3.5 h-3.5" />
+                    </button>
+                    <button @click.stop="cancelCardTitle" class="btn btn-xs btn-ghost btn-circle">✕</button>
+                  </template>
+                  <template v-else>
+                    <h3 class="font-black text-base text-base-content truncate group-hover:text-primary transition-colors">
+                      {{ purchase.vendor || 'Buy Tracker' }}
+                    </h3>
+                    <button 
+                      @click.stop="startCardTitleEdit(purchase)" 
+                      class="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 hover:bg-base-200 transition-opacity"
+                      title="Rename Tracker"
+                    >
+                      <Icon icon="solar:pen-bold" class="w-3.5 h-3.5 text-primary" />
+                    </button>
+                  </template>
+                </div>
+                <div class="text-[11px] font-mono opacity-50 flex items-center gap-1.5 mt-0.5">
                   <span>{{ purchase.poNumber || purchase.orderId || 'Draft' }}</span>
                   <span>•</span>
-                  <span>{{ formatDate(purchase.purchaseDate || purchase.$createdAt) }}</span>
+                  <span class="inline-flex items-center gap-1" :title="`Last updated: ${purchase.$updatedAt || purchase.purchaseDate || purchase.$createdAt}`">
+                    <Icon icon="solar:clock-circle-linear" class="w-3 h-3 opacity-70 shrink-0" />
+                    Updated {{ formatUpdatedDate(purchase.$updatedAt || purchase.purchaseDate || purchase.$createdAt) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -141,12 +149,20 @@
         <!-- Card Body: Financial Summary -->
         <div class="p-5 space-y-4 grow">
           <div class="grid grid-cols-3 gap-2 text-center">
-            <div class="bg-base-200/50 p-2.5 rounded-2xl border border-base-content/5">
-              <div class="text-[9px] uppercase font-bold opacity-60">Items</div>
-              <div class="font-black text-sm text-base-content mt-0.5">
+            <button 
+              type="button"
+              @click.stop="handleInspectTracker(purchase)"
+              class="bg-base-200/50 p-2.5 rounded-2xl border border-base-content/5 hover:border-primary/50 hover:bg-primary/5 transition-all text-center group/items cursor-pointer"
+              title="Inspect items in tracker drawer"
+            >
+              <div class="text-[9px] uppercase font-bold opacity-60 flex items-center justify-center gap-1">
+                <span>Items</span>
+                <Icon icon="solar:eye-linear" class="w-3 h-3 text-primary" />
+              </div>
+              <div class="font-black text-sm text-primary mt-0.5 group-hover/items:underline">
                 {{ purchase.itemCount || 0 }}
               </div>
-            </div>
+            </button>
 
             <div class="bg-base-200/50 p-2.5 rounded-2xl border border-base-content/5">
               <div class="text-[9px] uppercase font-bold opacity-60">Planned Cost</div>
@@ -272,14 +288,41 @@
         <button>close</button>
       </form>
     </dialog>
+
+    <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
+    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
+      <div class="max-w-md mx-auto flex items-center justify-between gap-3">
+        <!-- Action 1: Quick Scan -->
+        <button 
+          type="button"
+          @click="emit('quick-scan')" 
+          class="btn btn-sm sm:btn-md btn-outline border-base-300 hover:border-warning font-extrabold flex-1 rounded-2xl shadow-xs active:scale-95 transition-all gap-2"
+          title="Fast one-off valuation without saving to a purchase"
+        >
+          <Icon icon="solar:scanner-bold" class="w-4 h-4 sm:w-5 sm:h-5 text-warning" />
+          <span class="text-xs sm:text-sm font-bold">Quick Scan</span>
+        </button>
+
+        <!-- Action 2: New Buy Tracker -->
+        <button 
+          type="button"
+          @click="isModalOpen = true" 
+          class="btn btn-sm sm:btn-md btn-primary text-primary-content font-black flex-[1.2] rounded-2xl shadow-md active:scale-95 transition-all gap-2 tracking-wide cursor-pointer"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-5 h-5 shrink-0" />
+          <span class="text-xs sm:text-sm font-black">New Buy Tracker</span>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
 import { addToast } from '../../stores/toast';
+import { confirmDialog } from '../../stores/confirm';
 
 const emit = defineEmits<{
   (e: 'start-purchase', purchase: ScoutPurchase): void;
@@ -298,13 +341,65 @@ const {
   loadDraftPurchases, 
   startDraftPurchase, 
   completePurchase, 
-  discardPurchase 
+  discardPurchase,
+  updatePurchaseTitle,
+  setActivePurchase,
+  toggleTray,
+  activePurchase,
+  pausedTracker
 } = useScoutPurchase();
 
 const isModalOpen = ref(false);
 const newVendorName = ref('Goodwill');
 const creatingPurchase = ref(false);
 const actionInProgress = ref<string | null>(null);
+
+// Card inline title editing state
+const editingPurchaseId = ref<string | null>(null);
+const editingPurchaseTitle = ref('');
+const savingCardTitle = ref(false);
+const cardTitleInputRef = ref<HTMLInputElement | null>(null);
+
+const startCardTitleEdit = (purchase: ScoutPurchase) => {
+  editingPurchaseId.value = purchase.$id;
+  editingPurchaseTitle.value = purchase.vendor || '';
+  nextTick(() => {
+    cardTitleInputRef.value?.focus();
+    cardTitleInputRef.value?.select();
+  });
+};
+
+const cancelCardTitle = () => {
+  editingPurchaseId.value = null;
+};
+
+const saveCardTitle = async (purchaseId: string) => {
+  if (!editingPurchaseTitle.value.trim() || savingCardTitle.value) return;
+  savingCardTitle.value = true;
+  try {
+    await updatePurchaseTitle(purchaseId, editingPurchaseTitle.value.trim());
+    editingPurchaseId.value = null;
+    addToast({ type: 'success', message: 'Tracker renamed!' });
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to rename: ' + err.message });
+  } finally {
+    savingCardTitle.value = false;
+  }
+};
+
+const handleInspectTracker = (purchase: ScoutPurchase) => {
+  setActivePurchase(purchase);
+  toggleTray(true);
+};
+
+// Sort draft purchases by last updated (most recent first)
+const sortedDraftPurchases = computed(() => {
+  return [...draftPurchases.value].sort((a, b) => {
+    const timeA = new Date(a.$updatedAt || a.purchaseDate || a.$createdAt || 0).getTime();
+    const timeB = new Date(b.$updatedAt || b.purchaseDate || b.$createdAt || 0).getTime();
+    return timeB - timeA;
+  });
+});
 
 const vendorPresets = [
   { name: 'Goodwill', icon: '🏪' },
@@ -380,9 +475,15 @@ const handleCompletePurchase = async (purchase: ScoutPurchase) => {
 };
 
 const handleDiscardPurchase = async (purchase: ScoutPurchase) => {
-  if (!confirm(`Discard draft deal "${purchase.vendor}"? Any scouted items in this draft will be removed.`)) {
-    return;
-  }
+  const confirmed = await confirmDialog(
+    `Discard draft deal "${purchase.vendor}"? Any scouted items in this draft will be removed.`,
+    'Discard Buy Tracker',
+    'Discard Deal',
+    'Keep Tracker',
+    'btn-error text-error-content font-black'
+  );
+  if (!confirmed) return;
+
   actionInProgress.value = purchase.$id;
   try {
     await discardPurchase(purchase.$id);
@@ -402,6 +503,28 @@ const getVendorIcon = (vendor?: string): string => {
   if (v.includes('auction')) return 'solar:hammer-bold';
   if (v.includes('online') || v.includes('shopgoodwill') || v.includes('ebay')) return 'solar:laptop-bold';
   return 'solar:box-bold';
+};
+
+const formatUpdatedDate = (dateStr?: string): string => {
+  if (!dateStr) return 'Just now';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = Math.max(0, now.getTime() - d.getTime());
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return 'Recently';
+  }
 };
 
 const formatDate = (dateStr?: string): string => {

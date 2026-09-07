@@ -10,8 +10,9 @@
       <template v-if="isAuthenticated">
         <!-- Desktop & Mobile: Unified Scout Page / Toggle Tracker Link -->
         <div class="indicator flex items-center mr-2 md:mr-4">
-          <span v-if="cartItems.length > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ cartItems.length }}</span>
+          <span v-if="displayTrackedCount > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ displayTrackedCount }}</span>
           <a href="/scout" 
+             @click="handleScoutClick"
              class="btn btn-ghost btn-sm border border-base-300 bg-base-200/50 rounded-lg gap-1.5 normal-case font-semibold hover:bg-base-200 flex items-center px-3"
              aria-label="Go to Scout">
             <Icon icon="solar:object-scan-linear" class="w-4 h-4 text-primary" />
@@ -322,6 +323,7 @@ import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
 import { useCart } from '../../composables/useCart';
+import { useScoutPurchase } from '../../composables/useScoutPurchase';
 import { Icon } from '@iconify/vue';
 
 const { 
@@ -330,6 +332,18 @@ const {
 } = useAuth();
 
 const { cartItems } = useCart();
+const { purchaseItems, activePurchase, pausedTracker, toggleTray } = useScoutPurchase();
+
+const displayTrackedCount = computed(() => {
+  return purchaseItems.value.length || cartItems.value.length || (activePurchase.value?.itemCount || 0);
+});
+
+const handleScoutClick = (e: MouseEvent) => {
+  if (typeof window !== 'undefined' && window.location.pathname === '/scout' && (activePurchase.value || pausedTracker.value)) {
+    e.preventDefault();
+    toggleTray();
+  }
+};
 
 const alphaMode = useStore(isAlphaMode);
 

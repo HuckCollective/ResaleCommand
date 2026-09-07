@@ -16,6 +16,15 @@
       @back-to-list="handleBackToList"
       @purchase-completed="handlePurchaseCompleted"
     />
+
+    <!-- 3. EXPANDABLE ACTIVE / PAUSED PURCHASE MANIFEST TRAY -->
+    <ScoutPurchaseTray 
+      :is-open="isTrayOpen" 
+      :paused-tracker="pausedTracker"
+      @toggle-tray="toggleTray(false)" 
+      @purchase-completed="handlePurchaseCompleted" 
+      @resume-tracker="handleResumePurchase"
+    />
   </div>
 </template>
 
@@ -23,6 +32,7 @@
 import { ref, onMounted } from 'vue';
 import ScoutPurchaseList from './ScoutPurchaseList.vue';
 import ScoutView from './ScoutView.vue';
+import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
 
 const getInitialView = () => {
@@ -50,7 +60,14 @@ const currentView = ref<'list' | 'scout'>(getInitialView());
 const activePurchaseId = ref<string | null>(getInitialPurchaseId());
 const isQuickScanMode = ref(getInitialQuickScan());
 
-const { setActivePurchase, loadPurchaseById, activePurchase } = useScoutPurchase();
+const { 
+  setActivePurchase, 
+  loadPurchaseById, 
+  activePurchase, 
+  pausedTracker, 
+  isTrayOpen, 
+  toggleTray 
+} = useScoutPurchase();
 
 onMounted(async () => {
   const urlParams = new URLSearchParams(window.location.search);

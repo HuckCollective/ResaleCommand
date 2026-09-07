@@ -47,6 +47,7 @@ export interface ScoutPurchaseItem extends Models.Document {
 const activePurchase = ref<ScoutPurchase | null>(null);
 const purchaseItems = ref<ScoutPurchaseItem[]>([]);
 const draftPurchases = ref<ScoutPurchase[]>([]);
+const isTrayOpen = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -179,7 +180,7 @@ export function useScoutPurchase() {
             const queries = [
                 Query.equal('status', 'Draft'),
                 Query.orderDesc('$createdAt'),
-                Query.limit(25)
+                Query.limit(50)
             ];
 
             const tenantId = currentTeam.value?.$id;
@@ -190,7 +191,12 @@ export function useScoutPurchase() {
             }
 
             const res = await databases.listDocuments(DB_ID, PURCHASES_COL, queries);
-            draftPurchases.value = res.documents as unknown as ScoutPurchase[];
+            const docs = (res.documents as unknown as ScoutPurchase[]).sort((a, b) => {
+                const timeA = new Date(a.$updatedAt || a.purchaseDate || a.$createdAt || 0).getTime();
+                const timeB = new Date(b.$updatedAt || b.purchaseDate || b.$createdAt || 0).getTime();
+                return timeB - timeA;
+            });
+            draftPurchases.value = docs;
             return draftPurchases.value;
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to list draft purchases:', e);
@@ -710,11 +716,53 @@ export function useScoutPurchase() {
         }
     };
 
+    /**
+     * Update the title / vendor of a purchase
+     */
+    const updatePurchaseTitle = async (purchaseId: string, newTitle: string): Promise<boolean> => {
+        const cleanTitle = newTitle?.trim();
+        if (!cleanTitle || !purchaseId) return false;
+        try {
+            await databases.updateDocument(DB_ID, PURCHASES_COL, purchaseId, {
+                vendor: cleanTitle
+            });
+            if (activePurchase.value && activePurchase.value.$id === purchaseId) {
+                activePurchase.value.vendor = cleanTitle;
+            }
+            const match = draftPurchases.value.find(p => p.$id === purchaseId);
+            if (match) {
+                match.vendor = cleanTitle;
+            }
+            return true;
+        } catch (e: any) {
+            console.error('[useScoutPurchase] Failed to update purchase title:', e);
+            throw e;
+        }
+    };
+
+    /**
+     * Refresh purchase items for active purchase
+     */
+    const refreshActivePurchaseItems = async () => {
+        if (!activePurchase.value?.$id) return;
+        await fetchPurchaseItems(activePurchase.value.$id);
+    };
+
+    const toggleTray = (open?: boolean) => {
+        isTrayOpen.value = typeof open === 'boolean' ? open : !isTrayOpen.value;
+    };
+
+    const pausedTracker = computed(() => {
+        return (!activePurchase.value && draftPurchases.value.length > 0) ? draftPurchases.value[0] : null;
+    });
+
     return {
         // State
         activePurchase,
         purchaseItems,
         draftPurchases,
+        pausedTracker,
+        isTrayOpen,
         loading,
         error,
 
@@ -730,11 +778,14 @@ export function useScoutPurchase() {
         tierBreakdown,
 
         // Actions
+        toggleTray,
         loadDraftPurchases,
         loadPurchaseById,
         startDraftPurchase,
         setActivePurchase,
         fetchPurchaseItems,
+        refreshActivePurchaseItems,
+        updatePurchaseTitle,
         addItemToPurchase,
         addLotToPurchase,
         removeItemFromPurchase,
