@@ -196,6 +196,67 @@ export function useScoutPurchase() {
                 const timeB = new Date(b.$updatedAt || b.purchaseDate || b.$createdAt || 0).getTime();
                 return timeB - timeA;
             });
+
+            // Hydrate item counts for all draft purchases so inactive trackers never display 0
+            if (docs.length > 0) {
+                const collId = getItemsCollectionId();
+                const purchaseIds = docs.map(d => d.$id);
+                const countMap: Record<string, number> = {};
+
+                try {
+                    // Method 1: Batch fetch items matching these purchase IDs
+                    const itemsRes = await databases.listDocuments(DB_ID, collId, [
+                        Query.equal('purchaseId', purchaseIds),
+                        Query.limit(500)
+                    ]);
+                    itemsRes.documents.forEach((item: any) => {
+                        const pid = item.purchaseId || item.cartId;
+                        if (pid) {
+                            countMap[pid] = (countMap[pid] || 0) + 1;
+                        }
+                    });
+                } catch (batchErr) {
+                    console.warn('[useScoutPurchase] Batch itemCount query fallback:', batchErr);
+                }
+
+                // Method 2: Ensure every purchase without batch items gets counted via indexed total
+                await Promise.all(docs.map(async (d) => {
+                    if (countMap[d.$id] !== undefined && countMap[d.$id] > 0) {
+                        d.itemCount = countMap[d.$id];
+                        return;
+                    }
+                    try {
+                        const countRes = await databases.listDocuments(DB_ID, collId, [
+                            Query.equal('purchaseId', d.$id),
+                            Query.limit(1)
+                        ]);
+                        if (countRes.total > 0) {
+                            d.itemCount = countRes.total;
+                            return;
+                        }
+                        // Fallback check on cartId
+                        const cartRes = await databases.listDocuments(DB_ID, collId, [
+                            Query.equal('cartId', d.$id),
+                            Query.limit(1)
+                        ]);
+                        d.itemCount = cartRes.total || 0;
+                    } catch {
+                        d.itemCount = countMap[d.$id] || d.itemCount || 0;
+                    }
+                }));
+
+                // If activePurchase is currently in memory, ensure its live item count takes precedence
+                if (activePurchase.value) {
+                    const activeMatch = docs.find(d => d.$id === activePurchase.value?.$id);
+                    if (activeMatch) {
+                        if (purchaseItems.value.length > 0) {
+                            activeMatch.itemCount = purchaseItems.value.length;
+                        }
+                        activePurchase.value.itemCount = activeMatch.itemCount;
+                    }
+                }
+            }
+
             draftPurchases.value = docs;
             return draftPurchases.value;
         } catch (e: any) {
@@ -299,6 +360,22 @@ export function useScoutPurchase() {
             console.warn('[useScoutPurchase] Error unsubscribing:', e);
         }
 
+        // Before resetting activePurchase, preserve the item count and subtotal of previous activePurchase in draftPurchases
+        if (activePurchase.value) {
+            const prevId = activePurchase.value.$id;
+            const currentCount = purchaseItems.value.length;
+            const match = draftPurchases.value.find(p => p.$id === prevId);
+            if (match) {
+                if (currentCount > 0 || activePurchase.value.itemCount !== undefined) {
+                    match.itemCount = currentCount || activePurchase.value.itemCount;
+                }
+                if (totalCost.value > 0 || activePurchase.value.subtotal !== undefined) {
+                    match.subtotal = totalCost.value || activePurchase.value.subtotal;
+                    match.grandTotal = match.subtotal;
+                }
+            }
+        }
+
         activePurchase.value = purchase;
         purchaseItems.value = [];
 
@@ -321,7 +398,12 @@ export function useScoutPurchase() {
                 `databases.${DB_ID}.collections.${PURCHASES_COL}.documents.${purchase.$id}`,
                 (response) => {
                     if (response.events.includes('databases.*.documents.*.update')) {
-                        activePurchase.value = response.payload as unknown as ScoutPurchase;
+                        const updated = response.payload as unknown as ScoutPurchase;
+                        // Preserve in-memory itemCount if not present in payload
+                        if (updated.itemCount === undefined && activePurchase.value?.itemCount !== undefined) {
+                            updated.itemCount = activePurchase.value.itemCount;
+                        }
+                        activePurchase.value = updated;
                     }
                 }
             );
@@ -398,6 +480,16 @@ export function useScoutPurchase() {
 
             // Sync with global cartItems
             cartItems.value = purchaseItems.value as unknown as CartItem[];
+
+            // Sync item count on active and draft purchases so inactives stay accurate
+            const currentCount = purchaseItems.value.length;
+            if (activePurchase.value && activePurchase.value.$id === purchaseId) {
+                activePurchase.value.itemCount = currentCount;
+            }
+            const match = draftPurchases.value.find(p => p.$id === purchaseId);
+            if (match) {
+                match.itemCount = currentCount;
+            }
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to fetch purchase items:', e);
         }
@@ -495,6 +587,18 @@ export function useScoutPurchase() {
                 subtotal: newSubtotal,
                 grandTotal: newSubtotal
             });
+
+            if (activePurchase.value) {
+                activePurchase.value.itemCount = purchaseItems.value.length;
+                activePurchase.value.subtotal = newSubtotal;
+                activePurchase.value.grandTotal = newSubtotal;
+                const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
+                if (match) {
+                    match.itemCount = purchaseItems.value.length;
+                    match.subtotal = newSubtotal;
+                    match.grandTotal = newSubtotal;
+                }
+            }
 
             return purchaseItem;
         } catch (e: any) {
@@ -602,6 +706,18 @@ export function useScoutPurchase() {
                 grandTotal: newSubtotal
             });
 
+            if (activePurchase.value) {
+                activePurchase.value.itemCount = purchaseItems.value.length;
+                activePurchase.value.subtotal = newSubtotal;
+                activePurchase.value.grandTotal = newSubtotal;
+                const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
+                if (match) {
+                    match.itemCount = purchaseItems.value.length;
+                    match.subtotal = newSubtotal;
+                    match.grandTotal = newSubtotal;
+                }
+            }
+
             return purchaseItem;
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to add lot to purchase:', e);
@@ -627,6 +743,18 @@ export function useScoutPurchase() {
                 subtotal: newSubtotal,
                 grandTotal: newSubtotal
             });
+
+            if (activePurchase.value) {
+                activePurchase.value.itemCount = purchaseItems.value.length;
+                activePurchase.value.subtotal = newSubtotal;
+                activePurchase.value.grandTotal = newSubtotal;
+                const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
+                if (match) {
+                    match.itemCount = purchaseItems.value.length;
+                    match.subtotal = newSubtotal;
+                    match.grandTotal = newSubtotal;
+                }
+            }
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to remove item:', e);
             throw e;

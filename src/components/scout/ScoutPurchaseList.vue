@@ -179,7 +179,7 @@
                 <Icon icon="solar:eye-linear" class="w-3 h-3 text-primary" />
               </div>
               <div class="font-black text-sm text-primary mt-0.5 group-hover/items:underline">
-                {{ purchase.itemCount || 0 }}
+                {{ (purchase.$id === activePurchase?.$id && purchaseItems.length > 0) ? purchaseItems.length : (purchase.itemCount || 0) }}
               </div>
             </button>
 
@@ -325,7 +325,7 @@
                 {{ activePurchase.vendor || 'Buy Tracker' }}
               </span>
               <span class="badge badge-xs badge-warning font-black shrink-0">
-                {{ activePurchase.itemCount || 0 }} items
+                {{ (purchaseItems.length || activePurchase.itemCount || 0) }} items
               </span>
               <span class="text-[11px] font-mono text-warning font-black shrink-0">
                 ${{ (activePurchase.subtotal || 0).toFixed(2) }}
@@ -396,7 +396,7 @@
               </template>
 
               <span class="text-[11px] font-mono opacity-60 shrink-0">
-                {{ mostRecentTracker.itemCount || 0 }} items
+                {{ (mostRecentTracker.$id === activePurchase?.$id && purchaseItems.length > 0) ? purchaseItems.length : (mostRecentTracker.itemCount || 0) }} items
               </span>
               <span v-if="mostRecentTracker.subtotal" class="text-[11px] font-mono text-warning font-bold shrink-0 hidden sm:inline">
                 ${{ mostRecentTracker.subtotal.toFixed(2) }}
