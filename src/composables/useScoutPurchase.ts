@@ -732,6 +732,8 @@ export function useScoutPurchase() {
             const match = draftPurchases.value.find(p => p.$id === purchaseId);
             if (match) {
                 match.vendor = cleanTitle;
+                match.$updatedAt = new Date().toISOString();
+                draftPurchases.value = [...draftPurchases.value];
             }
             return true;
         } catch (e: any) {

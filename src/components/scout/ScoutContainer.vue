@@ -24,6 +24,7 @@
       @toggle-tray="toggleTray(false)" 
       @purchase-completed="handlePurchaseCompleted" 
       @resume-tracker="handleResumePurchase"
+      @go-to-list="handleBackToList"
     />
   </div>
 </template>
@@ -63,6 +64,7 @@ const isQuickScanMode = ref(getInitialQuickScan());
 const { 
   setActivePurchase, 
   loadPurchaseById, 
+  loadDraftPurchases,
   activePurchase, 
   pausedTracker, 
   isTrayOpen, 
@@ -70,6 +72,10 @@ const {
 } = useScoutPurchase();
 
 onMounted(async () => {
+  await loadDraftPurchases().catch(err => {
+    console.warn('[ScoutContainer] Failed to load draft purchases:', err);
+  });
+
   const urlParams = new URLSearchParams(window.location.search);
   
   if (urlParams.has('rescout') || urlParams.get('quick') === 'true') {

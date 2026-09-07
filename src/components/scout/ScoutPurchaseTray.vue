@@ -67,14 +67,27 @@
               <div class="text-xs font-mono opacity-50 flex items-center gap-2 mt-0.5">
                 <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
                 <span>•</span>
-                <span class="shrink-0">{{ purchaseItems.length }} total {{ purchaseItems.length === 1 ? 'item' : 'items' }}</span>
+                <span class="shrink-0">{{ displayItemCount }} total {{ displayItemCount === 1 ? 'item' : 'items' }}</span>
               </div>
             </div>
           </div>
 
-          <button @click="toggleTray" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close manifest">
-            <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
-          </button>
+          <!-- Right side of header: Switch Tracker & Close -->
+          <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button 
+              @click="goToScoutHome" 
+              type="button"
+              class="btn btn-ghost btn-xs sm:btn-sm gap-1.5 font-bold text-xs rounded-xl bg-base-200/80 hover:bg-primary/15 hover:text-primary border border-base-300 transition-all"
+              title="Go to Scout Home to view & switch trackers"
+            >
+              <Icon icon="solar:widget-2-bold" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+              <span class="font-extrabold text-[11px] sm:text-xs">Switch Tracker</span>
+            </button>
+
+            <button @click="toggleTray" type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close manifest">
+              <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
+            </button>
+          </div>
         </div>
 
         <!-- Financial Summary Banner -->
@@ -82,15 +95,15 @@
           <div class="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
             <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Planned Cost</div>
-              <div class="font-mono font-black text-xs sm:text-base text-warning truncate">${{ totalCost.toFixed(2) }}</div>
+              <div class="font-mono font-black text-xs sm:text-base text-warning truncate">${{ displayCost.toFixed(2) }}</div>
             </div>
             <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Boutique Ret.</div>
-              <div class="font-mono font-black text-xs sm:text-base text-secondary truncate">${{ totalBoutiqueValue.toFixed(2) }}</div>
+              <div class="font-mono font-black text-xs sm:text-base text-secondary truncate">${{ displayBoutiqueValue.toFixed(2) }}</div>
             </div>
             <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Est. Profit</div>
-              <div class="font-mono font-black text-xs sm:text-base text-success truncate">+${{ projectedProfit.toFixed(2) }}</div>
+              <div class="font-mono font-black text-xs sm:text-base text-success truncate">+${{ displayProfit.toFixed(2) }}</div>
             </div>
             <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">ROI Multiple</div>
@@ -205,11 +218,22 @@
             <div class="text-xl sm:text-2xl font-black text-warning font-mono">${{ totalCost.toFixed(2) }}</div>
           </div>
 
-          <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
+            <!-- Go to Scout Home / Switch Tracker -->
+            <button 
+              type="button"
+              @click="goToScoutHome" 
+              class="btn btn-ghost btn-sm font-bold gap-1.5 text-xs sm:text-sm text-base-content/80 hover:text-primary hover:bg-primary/10 rounded-xl"
+              title="Go to Scout Home to switch trackers"
+            >
+              <Icon icon="solar:widget-2-bold" class="w-4 h-4 text-primary" />
+              <span>All Trackers</span>
+            </button>
+
             <button 
               type="button"
               @click="toggleTray" 
-              class="btn btn-ghost btn-sm font-bold flex-1 sm:flex-initial"
+              class="btn btn-ghost btn-sm font-bold flex-1 sm:flex-initial rounded-xl"
             >
               Keep Scouting
             </button>
@@ -226,11 +250,11 @@
               <span v-if="completing" class="loading loading-spinner loading-sm"></span>
               <template v-else>
                 <Icon icon="lucide:truck" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span class="whitespace-nowrap">Purchase It (${{ totalCost.toFixed(2) }})</span>
+                <span class="whitespace-nowrap">Purchase It (${{ displayCost.toFixed(2) }})</span>
               </template>
             </button>
 
-            <!-- State B (Paused Tracker): + Add Here / Resume Action in Footer -->
+            <!-- State B (Paused Tracker): Resume Tracker Action in Footer -->
             <button 
               v-else-if="currentTracker"
               type="button"
@@ -238,8 +262,8 @@
               class="btn btn-primary btn-sm sm:btn-md font-black text-primary-content shadow-lg px-4 sm:px-6 flex-[1.5] sm:flex-initial gap-2 shrink-0 active:scale-95 transition-all"
               title="Resume this tracker and set as active"
             >
-              <Icon icon="solar:add-circle-bold" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-              <span class="whitespace-nowrap">+ Add Here & Resume</span>
+              <Icon icon="solar:play-circle-bold" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span class="whitespace-nowrap">Resume Tracker</span>
             </button>
           </div>
         </div>
@@ -267,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
 import { addToast } from '../../stores/toast';
@@ -279,6 +303,7 @@ const emit = defineEmits<{
   (e: 'toggle-tray'): void;
   (e: 'purchase-completed', purchaseId: string): void;
   (e: 'resume-tracker', purchase: ScoutPurchase): void;
+  (e: 'go-to-list'): void;
 }>();
 
 const props = defineProps<{
@@ -301,6 +326,7 @@ const {
   removeItemFromPurchase,
   setActivePurchase,
   updatePurchaseTitle,
+  fetchPurchaseItems,
   refreshActivePurchaseItems
 } = useScoutPurchase();
 
@@ -312,11 +338,51 @@ const currentTracker = computed(() => {
   return activePurchase.value || props.pausedTracker || composablePausedTracker.value;
 });
 
+// Auto-fetch line items whenever tray is opened for a tracker
+watch(
+  [() => showTray.value, () => currentTracker.value?.$id],
+  async ([open, trackerId]) => {
+    if (open && trackerId) {
+      await fetchPurchaseItems(trackerId);
+    }
+  },
+  { immediate: true }
+);
+
+// Fallback metrics to avoid $0.00 while items load or when inspecting paused tracker
+const displayCost = computed(() => {
+  if (purchaseItems.value.length > 0) return totalCost.value;
+  return currentTracker.value?.subtotal || 0;
+});
+
+const displayBoutiqueValue = computed(() => {
+  if (purchaseItems.value.length > 0) return totalBoutiqueValue.value;
+  return (currentTracker.value?.subtotal || 0) * 4;
+});
+
+const displayProfit = computed(() => {
+  if (purchaseItems.value.length > 0) return projectedProfit.value;
+  return Math.max(0, displayBoutiqueValue.value - displayCost.value);
+});
+
+const displayItemCount = computed(() => {
+  if (purchaseItems.value.length > 0) return purchaseItems.value.length;
+  return currentTracker.value?.itemCount || 0;
+});
+
 const completing = ref(false);
 
 const toggleTray = () => {
   emit('toggle-tray');
   composableIsTrayOpen.value = false;
+};
+
+const goToScoutHome = () => {
+  toggleTray();
+  emit('go-to-list');
+  if (typeof window !== 'undefined' && window.location.pathname !== '/scout') {
+    window.location.href = '/scout';
+  }
 };
 
 // -- TITLE EDITING STATE --
@@ -408,9 +474,11 @@ const handleCompletePurchase = async () => {
 
 const handleResumeCurrentTracker = () => {
   if (!currentTracker.value) return;
-  setActivePurchase(currentTracker.value);
-  emit('resume-tracker', currentTracker.value);
-  addToast({ type: 'success', message: `Resumed tracker: ${currentTracker.value.vendor}` });
+  const target = currentTracker.value;
+  setActivePurchase(target);
+  toggleTray();
+  emit('resume-tracker', target);
+  addToast({ type: 'success', message: `Resumed tracker: ${target.vendor}` });
 };
 
 const getImageUrl = (imageId: string): string => {

@@ -547,45 +547,45 @@
                 </button>
             </div>
 
-            <!-- State B: Paused Buy Tracker Status Strip (User has trackers, but none active) -->
-            <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-base-content/10">
-                <!-- Left: Paused Tracker summary -->
+            <!-- State B: Paused Buy Tracker Status Strip -->
+            <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="pb-1.5 mb-1.5 border-b border-base-content/10">
                 <button 
-                    type="button" 
+                    type="button"
                     @click="toggleTray()" 
-                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/50 hover:bg-base-300/80 text-left min-w-0 flex-1 overflow-hidden border border-base-300"
-                    title="Inspect paused tracker"
+                    class="w-full flex items-center justify-between gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-2xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left"
+                    title="Inspect paused tracker manifest"
                 >
-                    <Icon icon="solar:pause-circle-bold" class="w-4 h-4 text-warning shrink-0" />
-                    <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
-                    <span class="font-bold text-xs text-base-content truncate max-w-[100px] sm:max-w-[180px]">
-                        {{ pausedTracker.vendor || 'Buy Tracker' }}
-                    </span>
-                    <span class="text-[11px] font-mono opacity-60 shrink-0">
-                        {{ pausedTracker.itemCount || 0 }} items
-                    </span>
-                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-50 shrink-0 ml-auto" />
-                </button>
+                    <!-- Left: Paused Tracker summary -->
+                    <div class="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                        <Icon icon="solar:pause-circle-bold" class="w-4 h-4 text-warning shrink-0" />
+                        <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
+                        <span class="font-bold text-xs text-base-content truncate max-w-[130px] sm:max-w-[220px]">
+                            {{ pausedTracker.vendor || 'Buy Tracker' }}
+                        </span>
+                        <span class="text-[11px] font-mono opacity-60 shrink-0">
+                            {{ pausedTracker.itemCount || 0 }} items
+                        </span>
+                        <span v-if="pausedTracker.subtotal" class="text-[11px] font-mono text-warning font-bold shrink-0 hidden sm:inline">
+                            ${{ pausedTracker.subtotal.toFixed(2) }}
+                        </span>
+                    </div>
 
-                <!-- Right: + Add Here Button -->
-                <button 
-                    type="button" 
-                    @click="handleAddHereToPausedTracker"
-                    class="btn btn-primary btn-xs h-7 px-3 font-black text-primary-content rounded-xl shadow-xs gap-1.5 shrink-0 active:scale-95"
-                    title="Add to this tracker and resume"
-                >
-                    <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
-                    <span>+ Add Here</span>
+                    <!-- Right: Manifest chevron -->
+                    <div class="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
+                        <span class="text-[10px] uppercase font-bold opacity-60 hidden sm:inline">Manifest</span>
+                        <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5" />
+                    </div>
                 </button>
             </div>
 
             <!-- Tactile Actions Row -->
             <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
-                <!-- 1. Start New (Clear / Reset) -->
+                <!-- 1. New Scout (Clear / Reset) -->
                 <button @click="startNewScan" 
-                        class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all">
+                        class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
+                        title="Clear viewfinder and start new scout">
                     <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
-                    <span class="font-extrabold tracking-wider uppercase text-[10px]">Start New</span>
+                    <span class="font-extrabold tracking-wider uppercase text-[10px]">New Scout</span>
                 </button>
 
                 <!-- 2. Primary Hero Action (Identify / Analyze) -->
@@ -615,9 +615,11 @@
                         :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
                     <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
                     <template v-else>
-                        <Icon :icon="activePurchase ? 'lucide:truck' : 'solar:box-minimalistic-bold'" class="w-5 h-5 opacity-80" />
+                        <Icon :icon="(activePurchase || pausedTracker) ? 'lucide:truck' : 'solar:box-minimalistic-bold'" class="w-5 h-5 opacity-80" />
                         <span class="font-extrabold tracking-wider uppercase text-[10px]">
-                            {{ (result && result.items && result.items.length > 0) ? (activePurchase ? `+ Add (${result.items.length})` : `+ Add (${result.items.length})`) : (activePurchase ? '+ Add to Deal' : '+ Add to Buy Tracker') }}
+                            {{ (result && result.items && result.items.length > 0) 
+                                ? `+ Add (${result.items.length})` 
+                                : (activePurchase ? `+ Add to ${activePurchase.vendor || 'Deal'}` : (pausedTracker ? `+ Add to ${pausedTracker.vendor || 'Deal'}` : '+ Add to Buy Tracker')) }}
                         </span>
                     </template>
                 </button>
@@ -1710,13 +1712,20 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         return;
     }
     
-    // If untethered and user hasn't chosen standalone bypass, prompt them with tracker modal
+    // If untethered and user hasn't chosen standalone bypass, auto-resume pausedTracker if present, else prompt with tracker modal
     if (!activePurchase.value && !allowStandaloneSave.value) {
-        pendingSaveItem.value = { item, index, isBatch };
-        pendingSaveAll.value = false;
-        loadDraftPurchases();
-        isAssignModalOpen.value = true;
-        return;
+        if (pausedTracker.value) {
+            setActivePurchase(pausedTracker.value);
+            try {
+                window.history.replaceState({}, '', `${window.location.pathname}?purchase=${pausedTracker.value.$id}`);
+            } catch (e) {}
+        } else {
+            pendingSaveItem.value = { item, index, isBatch };
+            pendingSaveAll.value = false;
+            loadDraftPurchases();
+            isAssignModalOpen.value = true;
+            return;
+        }
     }
     
     if (!user.value) {
