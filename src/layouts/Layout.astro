@@ -1,6 +1,5 @@
 ---
 import Navbar from "@components/nav/Navbar.vue";
-import TrackerDrawer from "@components/cart/TrackerDrawer.vue";
 import Footer from "@components/Footer.astro";
 import ToastContainer from "@components/ui/ToastContainer.vue";
 import ConfirmContainer from "@components/ui/ConfirmContainer.vue";
@@ -39,23 +38,12 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
   </head>
 </html>
 <body>
-  <div id="app-drawer" class="drawer drawer-end">
-    <input id="tracker-drawer" type="checkbox" class="drawer-toggle" />
-    
-    <div class="drawer-content flex flex-col min-h-screen">
-      <Navbar client:load />
-      <main class="flex-1">
-        <slot />
-      </main>
-      {!hideFooter && <Footer />}
-    </div>
-
-    <div class="drawer-side z-[200]">
-      <label for="tracker-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-      <aside class="w-[100vw] sm:w-[400px] h-[100dvh] flex flex-col bg-base-200 shadow-xl overflow-hidden">
-        <TrackerDrawer client:only="vue" />
-      </aside>
-    </div>
+  <div class="flex flex-col min-h-screen">
+    <Navbar client:load />
+    <main class="flex-1">
+      <slot />
+    </main>
+    {!hideFooter && <Footer />}
   </div>
 
   <MarkdownModal />

@@ -23,6 +23,10 @@ export interface ComponentItem {
     image_index: number;
     image_url?: string;
     bounding_box?: [number, number, number, number];
+    tier?: 'showcase' | 'core' | 'quick_turn';
+    tier_label?: string;
+    tier_number?: number;
+    is_key_issue?: boolean;
     price_breakdown?: {
         mint?: string;
         fair?: string;
@@ -186,18 +190,21 @@ TASK:
 3. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
    - If this image shows multiple distinct items, extract each one into the "items" array.
    - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
-   - Format "name" strictly with one of these 3 tier prefixes:
-     * '[Tier 1: Standout Key] Brand/Series - Date/Vol - Key Feature/Artist' (1977-1983 issues, #1s, iconic artists Moebius/Giger/Frazetta/Corben/Bisley/Leary/Manara -> $28 - $65+)
-     * '[Tier 2: Mid-Tier Run] Brand/Series - Date/Vol - Artist/Storyline' (Solid 1984-1996 run issues, Frezzato, Druillet, Gimenez, Caza, complete storylines -> $14 - $24)
-     * '[Tier 3: Reader Pack] Brand/Series - Date/Vol - General Feature' (Late 1999-2015 common monthly back issues, or copies with noticeable cover wear/creasing -> $6 - $10)
+   - Assign 'tier': 'showcase' | 'core' | 'quick_turn'.
+     * 'showcase': High-ticket grails, rare vintage, #1s, iconic artists/brands, top trending items ($35 - $75+)
+     * 'core': Solid regular run issues, core brand staples, complete story arcs ($14 - $28)
+     * 'quick_turn': Common back issues, paperbacks, impulse grab picks, shelf-fillers ($6 - $12)
+   - Format "name" CLEANLY WITHOUT any bracket prefixes like '[Tier 1]':
+     * 'Brand/Series - Date/Vol - Key Feature/Artist'
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "name": "Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
       "identity": "Heavy Metal Magazine Oct 1977",
+      "tier": "showcase",
       "is_key_issue": true,
       "detected_text": "Text read from tags, labels, covers, or hallmarks",
       "condition": "Used/Good, NWT, Minor flaw, etc.",
@@ -228,20 +235,28 @@ OUTPUT STRICT JSON:
             image_index: image.index,
             image_url: image.url,
             items: rawItems.map((item: any) => {
-                const isKey = item.is_key_issue || item.name?.includes('Tier 1') || false;
-                const isReader = item.name?.includes('Tier 3') || false;
+                const cleanName = (item.name || item.identity || "Inspected Piece").replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+                const isKey = item.tier === 'showcase' || item.is_key_issue || item.name?.includes('Tier 1') || false;
+                const isQuickTurn = item.tier === 'quick_turn' || item.name?.includes('Tier 3') || false;
+                const tierVal: 'showcase' | 'core' | 'quick_turn' = isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core');
+                const tierLabel = isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core');
+                const tierNum = isKey ? 1 : (isQuickTurn ? 3 : 2);
+
                 return {
-                    name: item.name || item.identity || "Inspected Piece",
-                    identity: item.identity || item.name || "Inspected Piece",
+                    name: cleanName,
+                    identity: (item.identity || cleanName).replace(/\[Tier \d[^\]]*\]\s*/i, '').trim(),
+                    tier: tierVal,
+                    tier_label: tierLabel,
+                    tier_number: tierNum,
                     is_key_issue: isKey,
                     detected_text: item.detected_text || "",
                     condition: item.condition || "Used/Good",
-                    estimated_value: item.estimated_value || (isKey ? "$35 - $65" : isReader ? "$6 - $10" : "$14 - $22"),
+                    estimated_value: item.estimated_value || (isKey ? "$35 - $65" : isQuickTurn ? "$6 - $10" : "$14 - $22"),
                     price_breakdown: item.price_breakdown || {
-                        mint: isKey ? "$60 - $95" : isReader ? "$10 - $15" : "$20 - $30",
-                        fair: isKey ? "$35 - $60" : isReader ? "$6 - $10" : "$14 - $22",
-                        poor: isKey ? "$18 - $30" : isReader ? "$3 - $5" : "$8 - $12",
-                        boutique_premium: isKey ? "$45 - $75" : isReader ? "$8 - $12" : "$16 - $25"
+                        mint: isKey ? "$60 - $95" : isQuickTurn ? "$10 - $15" : "$20 - $30",
+                        fair: isKey ? "$35 - $60" : isQuickTurn ? "$6 - $10" : "$14 - $22",
+                        poor: isKey ? "$18 - $30" : isQuickTurn ? "$3 - $5" : "$8 - $12",
+                        boutique_premium: isKey ? "$45 - $75" : isQuickTurn ? "$8 - $12" : "$16 - $25"
                     },
                     red_flags: item.red_flags || [],
                     image_index: image.index,
@@ -356,16 +371,16 @@ ${locationsSummary}
 CRITICAL RECONCILIATION & TIER SORTING RULES:
 1. PRESERVE DETECTED ISSUES & PREVENT DOWNGRADING STANDOUT KEYS:
    - You MUST preserve all specific issues, dates, and artist highlights detected in the raw photo scans. Do NOT replace them with generic placeholder text.
-   - DO NOT downgrade items marked 'is_standout_key: true' into Tier 3 Readers!
-   - Every issue with famous artists, cultural interviews, rare brands, or early golden era dates MUST be kept in **[Tier 1: Standout Key]** ($28 - $65+).
+   - DO NOT downgrade items marked 'is_standout_key: true' into Quick Turn!
+   - Every piece with famous artists, cultural interviews, rare brands, or early golden era dates MUST be kept in **[Showcase]** ($35 - $75+).
 2. MERGE DUPLICATE PHOTO DETECTIONS TO EXACT PHYSICAL COUNT:
    - Consolidate and merge multi-photo duplicates down to the EXACT physical count of distinct items (approx ${context?.quantity || '30-35'} items).
 3. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
-   - **FIRST: [Tier 1: Standout Key]** (Rare vintage, #1s, iconic artists/brands, top trending items -> $28 - $65+ each).
-   - **SECOND: [Tier 2: Mid-Tier Run]** (Solid regular run issues, core brand staples, complete story arcs -> $14 - $24 each).
-   - **THIRD: [Tier 3: Reader Pack]** (ONLY common mass-market back issues or copies with noticeable cover creases/shelf wear -> $6 - $10 each).
+   - **FIRST: Showcase (Tier 1)** (Rare vintage, #1s, iconic artists/brands, top trending items -> $35 - $75+ each).
+   - **SECOND: Core (Tier 2)** (Solid regular run issues, core brand staples, complete story arcs -> $14 - $28 each).
+   - **THIRD: Quick Turn (Tier 3)** (Common back issues, paperbacks, impulse picks -> $6 - $12 each).
 4. STANDARDIZED TITLE FORMAT:
-   - Every item name in "lot_items" must be formatted as: '[Tier Name] Full Series - Exact Month Year (Vol/No) - Key Feature/Artist'.
+   - Every item name in "lot_items" must be clean WITHOUT ANY tier prefixes like '[Tier 1]': 'Full Series - Exact Month Year (Vol/No) - Key Feature/Artist'.
 
 OUTPUT STRICT JSON:
 {
@@ -387,11 +402,11 @@ OUTPUT STRICT JSON:
     "current_asking_price": "${context?.cost ? `$${context.cost}` : '$50.00'}",
     "max_bid": 120,
     "max_landed_cost": 150,
-    "advice": "High profit potential: sell Tier 1 keys individually in booth showcase, multi-tag Tier 2 runs at $16/ea, and box Tier 3 readers in $22 3-packs."
+    "advice": "High profit potential: sell Showcase keys individually in booth showcase, multi-tag Core runs at $18/ea, and crate Quick Turn readers in $10 impulse boxes."
   },
   "market_report": {
     "best_platform": "Memory Den Physical Booth & eBay / Poshmark",
-    "platform_rationale": "Standouts sell best in showcase; mid-tier runs move quickly with multi-quantity tags; readers clear fast in floor grab-bags.",
+    "platform_rationale": "Showcase items sell best in display; core runs move quickly with multi-quantity tags; quick turn items clear fast in floor grab-bags.",
     "sell_through_velocity": "Fast (1-2 weeks)",
     "target_buyer": "Vintage pop culture collectors, fantasy art fans, booth flippers",
     "channels": [
@@ -401,7 +416,8 @@ OUTPUT STRICT JSON:
   },
   "lot_items": [
     {
-      "title": "[Tier 1: Standout Key] Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "title": "Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "tier": "showcase",
       "val": "$35 - $65",
       "cond": "Good",
       "img": 0
@@ -422,25 +438,23 @@ OUTPUT STRICT JSON:
         // Map reconciled items and ensure image_url and tier sorting
         const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
             ? parsedSynth.lot_items.map((item: any) => {
-                let titleStr = item.title || item.name || item.identity || "Component Item";
+                let rawTitle = item.title || item.name || item.identity || "Component Item";
+                const cleanTitle = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
                 const imgIdx = (typeof item.img === 'number' && item.img >= 0 && item.img < images.length)
                     ? item.img
                     : (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length ? item.image_index : 0);
 
                 // Match with raw component detection to ensure zero standout loss
                 const rawMatch = uniqueComponents.find((c: any) => c.image_index === imgIdx) || uniqueComponents[imgIdx];
-                const rawWasKey = rawMatch?.is_key_issue || rawMatch?.name?.includes('Tier 1');
+                const rawWasKey = rawMatch?.tier === 'showcase' || rawMatch?.is_key_issue || rawMatch?.name?.includes('Tier 1');
                 
-                let isKey = titleStr.includes('Tier 1') || item.is_key_issue || rawWasKey || false;
-                
-                // If raw detection was a standout key, enforce Tier 1 title & valuation
-                if (rawWasKey && !titleStr.includes('Tier 1')) {
-                    titleStr = `[Tier 1: Standout Key] ${titleStr.replace(/\[Tier \d[^\]]*\]\s*/i, '')}`;
-                    isKey = true;
-                }
+                let isKey = item.tier === 'showcase' || rawTitle.includes('Tier 1') || item.is_key_issue || rawWasKey || false;
+                let isQuickTurn = !isKey && (item.tier === 'quick_turn' || rawTitle.includes('Tier 3') || false);
+                const tierVal: 'showcase' | 'core' | 'quick_turn' = isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core');
+                const tierLabel = isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core');
+                const tierNum = isKey ? 1 : (isQuickTurn ? 3 : 2);
 
-                let isReader = !isKey && titleStr.includes('Tier 3');
-                let valStr = item.val || item.estimated_value || (isKey ? (rawMatch?.estimated_value || "$28 - $65") : isReader ? "$6 - $10" : "$14 - $24");
+                let valStr = item.val || item.estimated_value || (isKey ? (rawMatch?.estimated_value || "$35 - $65") : isQuickTurn ? "$6 - $12" : "$14 - $24");
                 const condStr = item.cond || item.condition || rawMatch?.condition || "Used/Good";
 
                 let pb = item.price_breakdown;
@@ -458,16 +472,19 @@ OUTPUT STRICT JSON:
                     } else {
                         pb = {
                             fair: valStr,
-                            mint: isKey ? "$65 - $95" : isReader ? "$10 - $15" : "$20 - $30",
-                            poor: isKey ? "$18 - $30" : isReader ? "$3 - $5" : "$8 - $12",
-                            boutique_premium: isKey ? "$45 - $75" : isReader ? "$8 - $12" : "$16 - $25"
+                            mint: isKey ? "$65 - $95" : isQuickTurn ? "$10 - $15" : "$20 - $30",
+                            poor: isKey ? "$18 - $30" : isQuickTurn ? "$3 - $5" : "$8 - $12",
+                            boutique_premium: isKey ? "$45 - $75" : isQuickTurn ? "$8 - $14" : "$16 - $25"
                         };
                     }
                 }
 
                 return {
-                    name: titleStr,
-                    identity: titleStr.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim(),
+                    name: cleanTitle,
+                    identity: cleanTitle,
+                    tier: tierVal,
+                    tier_label: tierLabel,
+                    tier_number: tierNum,
                     is_key_issue: isKey,
                     estimated_value: valStr,
                     condition: condStr,
@@ -477,26 +494,29 @@ OUTPUT STRICT JSON:
                     red_flags: item.red_flags || []
                 };
             })
-            : uniqueComponents.map(c => ({
-                name: c.name || c.identity,
-                identity: c.identity || c.name,
-                estimated_value: c.estimated_value || "$15 - $25",
-                condition: c.condition || "Used/Good",
-                image_index: c.image_index,
-                image_url: images[c.image_index]?.url || images[c.image_index]?.base64 || undefined,
-                price_breakdown: c.price_breakdown,
-                red_flags: c.red_flags || []
-            }));
+            : uniqueComponents.map(c => {
+                const cName = (c.name || c.identity || "Inspected Piece").replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+                const isKey = c.tier === 'showcase' || c.is_key_issue || c.name?.includes('Tier 1') || false;
+                const isQuickTurn = c.tier === 'quick_turn' || c.name?.includes('Tier 3') || false;
+                return {
+                    name: cName,
+                    identity: cName,
+                    tier: isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core') as 'showcase' | 'core' | 'quick_turn',
+                    tier_label: isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core'),
+                    tier_number: isKey ? 1 : (isQuickTurn ? 3 : 2),
+                    is_key_issue: isKey,
+                    estimated_value: c.estimated_value || "$15 - $25",
+                    condition: c.condition || "Used/Good",
+                    image_index: c.image_index,
+                    image_url: images[c.image_index]?.url || images[c.image_index]?.base64 || undefined,
+                    price_breakdown: c.price_breakdown,
+                    red_flags: c.red_flags || []
+                };
+            });
 
-        // Sort items by Tier order: Tier 1 -> Tier 2 -> Tier 3
+        // Sort items by Tier order: Showcase (1) -> Core (2) -> Quick Turn (3)
         finalLotItems.sort((a, b) => {
-            const getRank = (name: string) => {
-                if (name.includes('Tier 1')) return 1;
-                if (name.includes('Tier 2')) return 2;
-                if (name.includes('Tier 3')) return 3;
-                return 4;
-            };
-            return getRank(a.name || '') - getRank(b.name || '');
+            return (a.tier_number || 2) - (b.tier_number || 2);
         });
 
         return {

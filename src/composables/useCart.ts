@@ -118,20 +118,35 @@ export function useCart() {
         cartItems.value = []; 
         cartExpenses.value = []; // Reset
         
-        if (unsubscribe) unsubscribe();
-
-        unsubscribe = client.subscribe(
-            `databases.${DB_ID}.collections.${CARTS_COL}.documents.${cart.$id}`,
-            (response) => {
-                if (response.events.includes('databases.*.documents.*.update')) {
-                    console.log('[useCart] Cart updated via subscription:', response.payload);
-                    activeCart.value = response.payload as unknown as Cart;
-                }
+        try {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+                unsubscribe = null;
             }
-        );
+        } catch (e) {
+            console.warn('[useCart] Error unsubscribing:', e);
+        }
 
-        fetchCartItems(cart.$id);
-        fetchExpenses(cart.$id); // Load expenses too
+        try {
+            unsubscribe = client.subscribe(
+                `databases.${DB_ID}.collections.${CARTS_COL}.documents.${cart.$id}`,
+                (response) => {
+                    if (response.events.includes('databases.*.documents.*.update')) {
+                        console.log('[useCart] Cart updated via subscription:', response.payload);
+                        activeCart.value = response.payload as unknown as Cart;
+                    }
+                }
+            );
+        } catch (subErr) {
+            console.warn('[useCart] Real-time subscription error:', subErr);
+        }
+
+        try {
+            fetchCartItems(cart.$id);
+            fetchExpenses(cart.$id); // Load expenses too
+        } catch (fErr) {
+            console.warn('[useCart] Error fetching cart items:', fErr);
+        }
     };
 
     const fetchCartItems = async (cartId: string) => {
@@ -467,6 +482,7 @@ export function useCart() {
         cartTotalCost,
         hasActiveCart,
         startCart,
+        setActiveCart,
         addItemToCart,
         addExpense,
         deleteExpense,

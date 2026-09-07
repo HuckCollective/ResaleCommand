@@ -520,9 +520,9 @@ interface CustomTier {
 }
 
 const tiers = ref<CustomTier[]>([
-  { id: 'tier-1', name: '🌟 Tier 1: Standout Keys', mode: 'single', targetPrice: 45 },
-  { id: 'tier-2', name: '📦 Tier 2: Mid-Tier Runs', mode: 'multi_qty', targetPrice: 16 },
-  { id: 'tier-3', name: '🛒 Tier 3: Reader Packs', mode: 'multi_qty', targetPrice: 8 },
+  { id: 'tier-1', name: '🌟 Tier 1: Showcase', mode: 'single', targetPrice: 55 },
+  { id: 'tier-2', name: '📦 Tier 2: Core', mode: 'multi_qty', targetPrice: 22 },
+  { id: 'tier-3', name: '⚡ Tier 3: Quick Turn', mode: 'multi_qty', targetPrice: 10 },
 ]);
 
 interface ParsedItem {
@@ -574,15 +574,16 @@ function initItemsFromLot() {
 
   if (sourceItems.length > 0) {
     sourceItems.forEach((it: any, idx: number) => {
-      const nameStr = it.name || it.identity || it.title || `Lot Item #${idx + 1}`;
+      const rawName = it.name || it.identity || it.title || `Lot Item #${idx + 1}`;
+      const nameStr = rawName.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
       let assignedTierId = 'tier-2';
-      let defaultPrice = 16;
-      if (nameStr.includes('Tier 1') || it.is_key_issue) {
+      let defaultPrice = 22;
+      if (it.tier === 'showcase' || it.is_key_issue || rawName.includes('Tier 1')) {
         assignedTierId = 'tier-1';
-        defaultPrice = 45;
-      } else if (nameStr.includes('Tier 3')) {
+        defaultPrice = 55;
+      } else if (it.tier === 'quick_turn' || rawName.includes('Tier 3')) {
         assignedTierId = 'tier-3';
-        defaultPrice = 8;
+        defaultPrice = 10;
       }
 
       const parsedPrice = parsePriceFromText(it.estimated_value || it.price_breakdown?.fair);

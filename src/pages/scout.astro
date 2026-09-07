@@ -1,5 +1,5 @@
 ---
-import ScoutView from "@components/scout/ScoutView.vue";
+import ScoutContainer from "@components/scout/ScoutContainer.vue";
 import Layout from "@layouts/Layout.astro";
 ---
 
@@ -10,10 +10,10 @@ import Layout from "@layouts/Layout.astro";
         Resale Scout
       </h1>
       <p class="text-sm sm:text-base opacity-70">
-        AI-Powered Item Identification & Valuation
+        AI-Powered Item Identification & Deal Management
       </p>
     </div>
 
-    <ScoutView client:only="vue" />
+    <ScoutContainer client:only="vue" />
   </div>
 </Layout>

@@ -30,7 +30,7 @@
                   <button class="btn btn-ghost btn-sm btn-circle absolute top-4 right-4" @click="closeTracker">✕</button>
                   <div class="flex flex-col gap-1 pr-6">
                       <h2 class="text-sm font-bold opacity-70 truncate uppercase">Active Sourcing</h2>
-                      <h3 class="text-lg font-black truncate">{{ activeCart.source }}</h3>
+                      <h3 class="text-lg font-black truncate">{{ activeCart.vendor || activeCart.source || 'Draft Purchase' }}</h3>
                   </div>
                   <div class="mt-2 text-xs opacity-70 flex justify-between font-bold bg-base-300/50 p-2 rounded">
                       <div>Est. Value: <span class="text-success">${{ cartTotalResale.toFixed(0) }}</span></div>
@@ -233,7 +233,7 @@ watch(user, async (newUser) => {
 });
 
 // -- COMPUTED --
-const trackedItems = computed(() => cartItems.value.filter(item => item.status === 'tracked'));
+const trackedItems = computed(() => cartItems.value.filter(item => item.status === 'tracked' || item.status === 'draft' || !item.status));
 
 const cartTotalResale = computed(() => {
     return cartItems.value.reduce((sum, item) => sum + (parseFloat(item.resalePrice as any) || 0), 0);

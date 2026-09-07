@@ -18,6 +18,21 @@
     <!-- MAIN CONTENT AREA -->
     <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto">
         
+        <!-- SLEEK COMPACT TOP BAR (Back to Buy Trackers) -->
+        <div class="flex items-center justify-between gap-2 pb-1">
+            <button @click="emit('back-to-list')" class="btn btn-ghost btn-xs font-bold gap-1 text-base-content/70 hover:text-base-content" title="Back to Buy Trackers">
+                <Icon icon="solar:arrow-left-bold" class="w-3.5 h-3.5" />
+                <span>Buy Trackers</span>
+            </button>
+            <div v-if="activePurchase" class="text-xs font-bold flex items-center gap-1.5 opacity-70">
+                <Icon icon="lucide:truck" class="w-4 h-4 text-primary" />
+                <span>{{ activePurchase.vendor || 'Buy Tracker' }}</span>
+                <span class="badge badge-xs badge-warning font-bold">Buy Tracker</span>
+            </div>
+            <div v-else-if="props.isQuickScan" class="text-xs font-black text-warning flex items-center gap-1">
+                <span>⚡ Quick Scan Mode</span>
+            </div>
+        </div>
 
         <!-- 1. INPUT SECTION -->
         <div class="card bg-base-100 shadow-sm border border-base-200">
@@ -38,45 +53,14 @@
 
                 <!-- 1a. IMAGE INPUTS (Speed Scout Mode) -->
                 <div v-if="mode === 'speed'" class="form-control w-full">
-                    <label class="label pt-0">
-                        <span class="label-text opacity-70">Capture or Upload Item(s)</span>
-                        <span v-if="dragOver" class="badge badge-primary badge-sm animate-pulse">Drop images here!</span>
-                    </label>
-                    <div class="border-2 border-dashed rounded-lg p-4 transition-colors relative flex flex-col justify-center cursor-pointer min-h-32 mb-4"
-                         :class="dragOver ? 'border-primary bg-primary/10' : 'border-base-300 hover:border-primary/50'"
-                         @dragenter.prevent="dragOver = true"
-                         @dragover.prevent="dragOver = true"
-                         @dragleave.prevent="onDragLeave"
-                         @drop.prevent="handleDrop"
-                         @click.self="fileInput?.click()">
-                         
-                        <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*" multiple class="hidden" />
-
-                        <!-- Empty State -->
-                        <div v-if="images.length === 0" class="flex flex-col items-center justify-center opacity-50 pointer-events-none text-center h-full py-4">
-                            <div class="text-4xl mb-2"><Icon icon="solar:camera-linear" class="mx-auto" /></div>
-                            <div class="text-sm font-bold font-mono">Drag & Drop images here<br/>or Click to Browse</div>
-                        </div>
-
-                        <!-- Gallery Mode -->
-                        <div v-else class="flex gap-3 overflow-x-auto pb-2 w-full items-center pointer-events-auto">
-                            <div v-for="(img, index) in images" :key="index" class="relative w-20 h-20 shrink-0 group cursor-pointer" @click="fileInput?.click()">
-                                <img :src="img.url" class="w-full h-full object-cover rounded shadow-sm border border-base-300" />
-                                <button @click.stop="removeImage(index)" class="btn btn-xs btn-circle btn-error absolute -top-2 -right-2 w-5 h-5 min-h-0 text-[10px] flex items-center justify-center z-30 shadow hover:scale-110">✕</button>
-                            </div>
-                            <!-- Add More Button -->
-                            <div class="relative w-20 h-20 shrink-0 border-2 border-dashed border-base-300 rounded flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-base-200 transition-colors"
-                                 @click="fileInput?.click()">
-                                <div class="text-3xl opacity-50 font-light leading-none mb-1">+</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="divider my-0 mb-4 opacity-50">OR</div>
-                    
-                    <button @click="scannerWidget?.startCamera()" class="btn btn-outline btn-primary w-full gap-2">
-                        <Icon icon="solar:camera-linear" class="w-5 h-5" /> Add Photo with Camera
-                    </button>
+                    <PhotoGalleryManager 
+                        v-model:new-photos="images"
+                        :max-photos="5"
+                        :scanner-widget="scannerWidget"
+                        output-format="object"
+                        :show-header="false"
+                        @open-camera="scannerWidget?.startCamera()"
+                    />
                 </div>
 
                 <!-- 1b. URL INPUT (Precision/Link Scout Mode) -->
@@ -91,6 +75,12 @@
                                 <label class="label pt-0"><span class="label-text opacity-70 text-sm font-bold">Scout ZIP Code</span></label>
                                 <input type="text" v-model="zipCode" @blur="saveZipCode" @change="saveZipCode" class="input input-bordered w-full font-mono text-sm text-center" placeholder="98101" maxlength="5" />
                             </div>
+                        </div>
+                        <div class="flex items-center justify-between text-xs opacity-75 px-1">
+                            <span>Blocked by anti-bot captcha? Snip the screen and paste it:</span>
+                            <button type="button" @click="pasteFromClipboard" class="btn btn-xs btn-outline btn-secondary gap-1">
+                                <Icon icon="solar:clipboard-text-linear" class="w-3.5 h-3.5" /> Paste Screenshot
+                            </button>
                         </div>
                     </div>
                     
@@ -194,11 +184,14 @@
                         <!-- Title & Source Section (Right/Bottom) -->
                         <div class="w-full md:w-1/2 flex flex-col justify-between h-full space-y-4">
                             <div>
-                                <div class="flex items-center justify-between gap-2 mb-1">
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
                                     <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono">Scouted Listing</span>
+                                    <span v-if="getTierBadgeInfo(item)" class="badge font-bold gap-1 shadow-xs" :class="getTierBadgeInfo(item).class">
+                                        {{ getTierBadgeInfo(item).label }}
+                                    </span>
                                     <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                                 </div>
-                                <h2 class="text-xl md:text-2xl font-black text-base-content tracking-tight leading-tight mb-2">{{ item.identity || 'Unidentified Item' }}</h2>
+                                <h2 class="text-xl md:text-2xl font-black text-base-content tracking-tight leading-tight mb-2">{{ cleanDisplayTitle(item) }}</h2>
                                 
                                 <div class="flex flex-wrap gap-2 mt-3">
                                     <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-sm btn-outline btn-secondary gap-1.5 shadow-sm rounded-lg">
@@ -212,24 +205,44 @@
                         </div>
                     </div>
 
-                    <!-- Pricing Grid -->
-                    <div class="grid grid-cols-4 gap-2 text-center mt-2">
-                        <div class="bg-base-200/80 border border-base-300 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
-                            <span class="badge badge-success badge-xs font-bold mb-1">MINT</span>
-                            <span class="font-mono font-bold text-sm md:text-base text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
-                        </div>
-                        <div class="bg-primary/10 border border-primary/30 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
-                            <span class="badge badge-primary badge-xs font-bold mb-1">FAIR</span>
-                            <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.price_breakdown?.fair) }}</span>
-                        </div>
-                        <div class="bg-base-200/80 border border-base-300 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
-                            <span class="badge badge-warning badge-xs font-bold mb-1">POOR</span>
-                            <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
-                        </div>
-                        <div class="bg-secondary/10 border border-secondary/30 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                    <!-- Pricing Potential Grid (Interactive 1-Tap Selectors) -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center mt-2">
+                        <!-- Fair Market -->
+                        <button type="button" 
+                                @click="selectPricePreset(item, item.pricing_potential?.fair || item.price_breakdown?.fair)"
+                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
+                                :class="isPriceSelected(item, item.pricing_potential?.fair || item.price_breakdown?.fair) ? 'border-primary bg-primary/15 ring-2 ring-primary/30' : 'border-base-300 bg-base-200/80'">
+                            <span class="badge badge-primary badge-xs font-bold mb-1">FAIR MARKET</span>
+                            <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.pricing_potential?.fair || item.price_breakdown?.fair) }}</span>
+                            <span class="text-[9px] opacity-60 font-medium mt-0.5">Online Comps</span>
+                        </button>
+                        <!-- Boutique Retail -->
+                        <button type="button" 
+                                @click="selectPricePreset(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium)"
+                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
+                                :class="isPriceSelected(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30' : 'border-base-300 bg-base-200/80'">
                             <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
-                            <span class="font-mono font-extrabold text-sm md:text-base text-base-content">{{ formatBoutiquePriceDisplay(item) }}</span>
-                        </div>
+                            <span class="font-mono font-extrabold text-sm md:text-base text-secondary">{{ formatBoutiquePriceDisplay(item) }}</span>
+                            <span class="text-[9px] opacity-60 font-medium mt-0.5">Booth Retail</span>
+                        </button>
+                        <!-- Mint -->
+                        <button type="button" 
+                                @click="selectPricePreset(item, item.price_breakdown?.mint)"
+                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
+                                :class="isPriceSelected(item, item.price_breakdown?.mint) ? 'border-success bg-success/15 ring-2 ring-success/30' : 'border-base-300 bg-base-200/60'">
+                            <span class="badge badge-success badge-xs font-bold mb-1">MINT / NEW</span>
+                            <span class="font-mono font-bold text-xs md:text-sm text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
+                            <span class="text-[9px] opacity-50 font-medium mt-0.5">Pristine</span>
+                        </button>
+                        <!-- Poor -->
+                        <button type="button" 
+                                @click="selectPricePreset(item, item.price_breakdown?.poor)"
+                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
+                                :class="isPriceSelected(item, item.price_breakdown?.poor) ? 'border-warning bg-warning/15 ring-2 ring-warning/30' : 'border-base-300 bg-base-200/60'">
+                            <span class="badge badge-warning badge-xs font-bold mb-1">POOR / AS-IS</span>
+                            <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
+                            <span class="text-[9px] opacity-50 font-medium mt-0.5">Damaged</span>
+                        </button>
                     </div>
 
                     <!-- Sourcing Buy/Bid Limits -->
@@ -310,6 +323,22 @@
                         </div>
 
                         <p class="text-sm font-medium leading-relaxed opacity-90">{{ item.purchase_strategy.advice }}</p>
+
+                        <!-- Why Pay Up (Collector Catalyst) -->
+                        <div v-if="item.why_pay_up" class="mt-3 p-3 rounded-lg bg-success/15 border border-success/30 text-xs">
+                            <div class="font-bold text-success flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
+                                <Icon icon="solar:fire-bold" class="w-3.5 h-3.5" /> Sourcing Catalyst (Why Pay Up):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
+                        </div>
+
+                        <!-- Why Pass (Risk & Fee Warnings) -->
+                        <div v-if="item.why_pass" class="mt-3 p-3 rounded-lg bg-error/15 border border-error/30 text-xs">
+                            <div class="font-bold text-error flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
+                                <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" /> Risk Rationale (Why Pass):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
+                        </div>
                     </div>
 
                     <!-- Condition Assessment -->
@@ -450,10 +479,13 @@
 
                     <!-- SAVE BUTTON -->
                     <button @click="handleSaveItem(item, Number(index))" 
-                            class="btn btn-outline btn-primary w-full mt-6"
+                            class="btn btn-outline btn-primary w-full mt-6 shadow-xs font-bold"
                             :disabled="item.saving || item.saved">
                         <span v-if="item.saving" class="loading loading-spinner"></span>
-                        {{ item.saved ? '✅ Saved to Cart' : 'Save Item' }}
+                        <template v-else>
+                            <Icon :icon="item.saved ? 'solar:check-circle-bold' : (activePurchase ? 'lucide:truck' : 'solar:disk-bold')" class="w-5 h-5 mr-1" />
+                            {{ item.saved ? '✅ Added to Tracker' : (activePurchase ? (item.lot_items ? '+ Add Lot to Buy Tracker' : '+ Add to Buy Tracker') : 'Save Item') }}
+                        </template>
                     </button>
 
                 </div>
@@ -471,51 +503,110 @@
         @remove-photo="removeImage"
     />
 
-    <!-- BOTTOM DOCK NAV (Theme-Adaptive Tactile Action Bar) -->
+    <!-- MANIFEST DETAILS DRAWER (Modal overlay) -->
+    <ScoutPurchaseTray 
+        :is-open="isTrayOpen" 
+        @toggle-tray="isTrayOpen = !isTrayOpen" 
+        @purchase-completed="onPurchaseCompleted" 
+    />
+
+    <!-- ASSIGN TRACKER MODAL (Shown when untethered user adds item) -->
+    <ScoutAssignTrackerModal
+        :is-open="isAssignModalOpen"
+        :draft-purchases="draftPurchases"
+        :creating="creatingTracker"
+        @close="isAssignModalOpen = false"
+        @select-tracker="handleSelectTracker"
+        @create-tracker="handleCreateTracker"
+        @save-standalone="handleSaveStandalone"
+    />
+
+    <!-- BOTTOM DOCK NAV (Unified Tactile Dock Pattern) -->
     <div class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
-        <div class="flex items-center gap-3 p-2 h-18 sm:h-20 transition-all duration-300"
-             :class="mode === 'bulk' ? 'max-w-md mx-auto' : 'max-w-2xl mx-auto'">
+        <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
             
-            <!-- 1. Start New (Clear / Reset - Theme Adaptive) -->
-            <button @click="startNewScan" 
-                    class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all">
-                <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
-                <span class="font-extrabold tracking-wider uppercase text-[10px]">Start New</span>
-            </button>
-
-            <!-- 2. Primary Hero Action (Identify / Analyze - Theme Primary) -->
-            <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
-                    class="btn flex-[1.4] h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
-                    :class="(loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl))
-                            ? 'btn-ghost bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed'
-                            : 'btn-primary text-primary-content font-black shadow-lg border border-primary-content/25'"
-                    :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
-                <span v-if="loading" class="loading loading-spinner loading-md"></span>
-                <template v-else>
-                    <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
-                    <span class="text-xs font-black uppercase tracking-wider">
-                        {{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}
+            <!-- Active Buy Tracker Status Strip (Integrated into dock, ONLY shown when activePurchase is present) -->
+            <div v-if="activePurchase" class="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-base-content/10">
+                <!-- Left: Deal Summary & Expand Manifest -->
+                <button 
+                    type="button" 
+                    @click="isTrayOpen = !isTrayOpen" 
+                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden"
+                    title="View manifest details"
+                >
+                    <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
+                    <span class="font-black text-xs text-base-content truncate max-w-[90px] sm:max-w-[180px]">
+                        {{ activePurchase.vendor || 'Buy Tracker' }}
                     </span>
-                </template>
-            </button>
-
-            <!-- 3. Track All / Save (Theme Success / Readable Disabled) -->
-            <button @click="saveAllItems" 
-                    class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs active:scale-95"
-                    :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) 
-                            ? 'btn-success text-success-content font-black shadow-md' 
-                            : (result && result.items && result.items.length > 0 
-                               ? 'btn-success text-success-content font-black shadow-md animate-pulse' 
-                               : 'btn-ghost bg-base-300/40 text-base-content/50 border border-base-content/15 cursor-not-allowed')"
-                    :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
-                <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
-                <template v-else>
-                    <Icon icon="solar:disk-bold" class="w-5 h-5 opacity-80" />
-                    <span class="font-extrabold tracking-wider uppercase text-[10px]">
-                        {{ (result && result.items && result.items.length > 0) ? `Save (${result.items.length})` : 'Save' }}
+                    <span class="badge badge-xs badge-warning font-black shrink-0">
+                        {{ purchaseItems.length }} {{ purchaseItems.length === 1 ? 'item' : 'items' }}
+                        <span v-if="lotItems.length > 0" class="hidden sm:inline">({{ lotItems.length }} lots)</span>
                     </span>
-                </template>
-            </button>
+                    <span class="text-[11px] font-mono text-warning font-black shrink-0">
+                        ${{ totalCost.toFixed(2) }}
+                    </span>
+                    <span class="text-xs opacity-40 hidden sm:inline">→</span>
+                    <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
+                        ${{ totalBoutiqueValue.toFixed(2) }}
+                    </span>
+                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                </button>
+
+                <!-- Right: Direct PO Navigation -->
+                <button 
+                    type="button"
+                    @click="navigateToPurchase" 
+                    class="btn btn-success btn-xs h-7 px-3 font-black text-success-content rounded-xl shadow-xs gap-1 shrink-0 active:scale-95"
+                    title="Open Draft Purchase Order"
+                >
+                    <Icon icon="lucide:truck" class="w-3.5 h-3.5" />
+                    <span class="whitespace-nowrap">Purchase It</span>
+                </button>
+            </div>
+
+            <!-- Tactile Actions Row -->
+            <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+                <!-- 1. Start New (Clear / Reset) -->
+                <button @click="startNewScan" 
+                        class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all">
+                    <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
+                    <span class="font-extrabold tracking-wider uppercase text-[10px]">Start New</span>
+                </button>
+
+                <!-- 2. Primary Hero Action (Identify / Analyze) -->
+                <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
+                        class="btn flex-[1.4] h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
+                        :class="(loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl))
+                                ? 'btn-ghost bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed'
+                                : 'btn-primary text-primary-content font-black shadow-lg border border-primary-content/25'"
+                        :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
+                    <span v-if="loading" class="loading loading-spinner loading-md"></span>
+                    <template v-else>
+                        <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
+                        <span class="text-xs font-black uppercase tracking-wider">
+                            {{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}
+                        </span>
+                    </template>
+                </button>
+
+                <!-- 3. Add to Buy Tracker / Save -->
+                <button @click="saveAllItems" 
+                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs active:scale-95"
+                        :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) 
+                                ? 'btn-success text-success-content font-black shadow-md' 
+                                : (result && result.items && result.items.length > 0 
+                                   ? 'btn-success text-success-content font-black shadow-md animate-pulse' 
+                                   : 'btn-ghost bg-base-300/40 text-base-content/50 border border-base-content/15 cursor-not-allowed')"
+                        :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
+                    <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
+                    <template v-else>
+                        <Icon :icon="activePurchase ? 'lucide:truck' : 'solar:box-minimalistic-bold'" class="w-5 h-5 opacity-80" />
+                        <span class="font-extrabold tracking-wider uppercase text-[10px]">
+                            {{ (result && result.items && result.items.length > 0) ? (activePurchase ? `+ Add (${result.items.length})` : `+ Add (${result.items.length})`) : (activePurchase ? '+ Add to Deal' : '+ Add to Buy Tracker') }}
+                        </span>
+                    </template>
+                </button>
+            </div>
 
         </div>
     </div>
@@ -523,20 +614,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { account, storage, databases, ID } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
+import { useScoutPurchase } from '../../composables/useScoutPurchase';
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { isAlphaMode } from '../../stores/env';
+import { getPurchasesCollectionId } from '../../lib/purchases';
 import SpeedEntryForm from '../purchases/SpeedEntryForm.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
+import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
+import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
+import ScoutAssignTrackerModal from './ScoutAssignTrackerModal.vue';
+
+interface Props {
+    initialPurchaseId?: string | null;
+    isQuickScan?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    initialPurchaseId: null,
+    isQuickScan: false
+});
+
+const emit = defineEmits<{
+    (e: 'back-to-list'): void;
+    (e: 'purchase-completed', purchaseId: string): void;
+}>();
 
 // APPWRITE
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; 
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
+const PURCHASES_COL = getPurchasesCollectionId();
 import { BUCKET_ID } from '../../lib/inventory';
 
 // -- COMPOSABLES --
@@ -544,12 +656,136 @@ const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
 const { 
     activeCart, addItemToCart, startCart, checkActiveCart, cartItems
 } = useCart();
+const {
+    activePurchase,
+    purchaseItems,
+    singleItems,
+    lotItems,
+    totalCost,
+    totalBoutiqueValue,
+    projectedProfit,
+    roiMultiple,
+    profitMargin,
+    tierBreakdown,
+    draftPurchases,
+    loadDraftPurchases,
+    addItemToPurchase,
+    addLotToPurchase,
+    removeItemFromPurchase,
+    completePurchase,
+    setActivePurchase,
+    startDraftPurchase,
+    loadPurchaseById
+} = useScoutPurchase();
+
+watch(() => props.initialPurchaseId, async (newId) => {
+    if (newId && (!activePurchase.value || activePurchase.value.$id !== newId)) {
+        await loadPurchaseById(newId).catch(err => {
+            console.warn('[ScoutView] Failed to load purchase from initialPurchaseId prop:', err);
+        });
+    } else if (!newId) {
+        setActivePurchase(null);
+    }
+}, { immediate: true });
+
+const isTrayOpen = ref(false);
+
+// Tracker Assignment Modal State
+const isAssignModalOpen = ref(false);
+const creatingTracker = ref(false);
+const allowStandaloneSave = ref(false);
+const pendingSaveItem = ref<{ item: any; index: number; isBatch: boolean } | null>(null);
+const pendingSaveAll = ref(false);
+
+const navigateToPurchase = () => {
+    if (!activePurchase.value) return;
+    const pId = activePurchase.value.$id;
+    addToast({ type: 'info', message: '📋 Opening Draft Purchase Order...' });
+    window.location.href = `/purchases/${pId}`;
+};
+
+const handleSelectTracker = async (purchase: any) => {
+    setActivePurchase(purchase);
+    isAssignModalOpen.value = false;
+    addToast({ type: 'info', message: `Attached to ${purchase.vendor || 'tracker'}!` });
+    await executePendingSave();
+};
+
+const handleCreateTracker = async (vendorName: string) => {
+    creatingTracker.value = true;
+    try {
+        const newPurchase = await startDraftPurchase(vendorName);
+        setActivePurchase(newPurchase);
+        isAssignModalOpen.value = false;
+        addToast({ type: 'success', message: `Created tracker for ${vendorName}!` });
+        await executePendingSave();
+    } catch (e: any) {
+        addToast({ type: 'error', message: 'Failed to create tracker: ' + e.message });
+    } finally {
+        creatingTracker.value = false;
+    }
+};
+
+const handleSaveStandalone = async () => {
+    isAssignModalOpen.value = false;
+    allowStandaloneSave.value = true;
+    try {
+        await executePendingSave();
+    } finally {
+        allowStandaloneSave.value = false;
+    }
+};
+
+const executePendingSave = async () => {
+    if (pendingSaveAll.value) {
+        pendingSaveAll.value = false;
+        await saveAllItems();
+    } else if (pendingSaveItem.value) {
+        const { item, index, isBatch } = pendingSaveItem.value;
+        pendingSaveItem.value = null;
+        await handleSaveItem(item, index, isBatch);
+    }
+};
+
+const onPurchaseCompleted = (purchaseId: string) => {
+    emit('purchase-completed', purchaseId);
+};
+
 const { showLoader, hideLoader } = useLoader();
 
 // -- LIFECYCLE --
+const onWindowPaste = async (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile();
+            if (blob) {
+                e.preventDefault();
+                await processFile(blob);
+                addToast({ type: 'success', message: '📸 Screenshot pasted from clipboard!' });
+                break;
+            }
+        }
+    }
+};
+
 onMounted(async () => {
-    // Check for Re-Scout
+    window.addEventListener('paste', onWindowPaste);
+
+    // Check for Purchase from props or URL
     const urlParams = new URLSearchParams(window.location.search);
+    const targetPurchaseId = props.initialPurchaseId || urlParams.get('purchase');
+    if (targetPurchaseId && databases) {
+        try {
+            const pDoc = await databases.getDocument(DB_ID, PURCHASES_COL, targetPurchaseId);
+            setActivePurchase(pDoc as any);
+        } catch (pErr) {
+            console.warn('[ScoutView] Failed to load target purchase:', targetPurchaseId, pErr);
+        }
+    }
+
+    // Check for Re-Scout
     rescoutId.value = urlParams.get('rescout');
     
     if (rescoutId.value && databases) {
@@ -600,6 +836,72 @@ onMounted(async () => {
     }
 });
 
+onUnmounted(() => {
+    window.removeEventListener('paste', onWindowPaste);
+});
+
+async function pasteFromClipboard() {
+    try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+            const clipboardItems = await navigator.clipboard.read();
+            for (const clipboardItem of clipboardItems) {
+                for (const type of clipboardItem.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await clipboardItem.getType(type);
+                        const file = new File([blob], `screenshot_${Date.now()}.png`, { type });
+                        await processFile(file);
+                        addToast({ type: 'success', message: '📸 Screenshot imported from clipboard!' });
+                        return;
+                    }
+                }
+            }
+            addToast({ type: 'warning', message: 'No image found on clipboard. Take a screenshot first (Win+Shift+S or phone screenshot).' });
+        } else {
+            fileInput.value?.click();
+        }
+    } catch (err: any) {
+        fileInput.value?.click();
+    }
+}
+
+function getTierBadgeInfo(item: any) {
+    if (!item) return null;
+    const t = item.tier?.toLowerCase() || '';
+    const raw = (item.name || item.identity || item.title || '').toLowerCase();
+    
+    if (t === 'showcase' || raw.includes('tier 1') || item.is_key_issue) {
+        return { label: '🌟 Showcase', class: 'badge-secondary text-secondary-content font-bold' };
+    }
+    if (t === 'quick_turn' || raw.includes('tier 3')) {
+        return { label: '⚡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
+    }
+    if (t === 'core' || raw.includes('tier 2')) {
+        return { label: '📦 Core', class: 'badge-primary text-primary-content font-bold' };
+    }
+    return null;
+}
+
+function cleanDisplayTitle(item: any) {
+    if (!item) return 'Unidentified Item';
+    const text = item.identity || item.title || item.name || 'Unidentified Item';
+    return text.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+}
+
+function selectPricePreset(item: any, priceStr: any) {
+    if (!item || !priceStr) return;
+    const parsed = parsePrice(priceStr);
+    if (parsed > 0) {
+        item.selected_resale_price = Math.round(parsed);
+        addToast({ type: 'info', message: `Resale price set to $${item.selected_resale_price}` });
+    }
+}
+
+function isPriceSelected(item: any, priceStr: any) {
+    if (!item || !priceStr) return false;
+    const parsed = parsePrice(priceStr);
+    return item.selected_resale_price === Math.round(parsed);
+}
+
 // -- STATE --
 const rescoutId = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
@@ -630,30 +932,7 @@ const includeShippingInCost = ref(false);
 // Camera
 const scannerWidget = ref<any>(null);
 
-// -- INIT --
-const ensureTrackerOpen = () => {
-    if (window.innerWidth >= 1024) {
-        const drawer = document.getElementById('app-drawer');
-        if (drawer && !drawer.classList.contains('lg:drawer-open')) {
-            drawer.classList.add('lg:drawer-open');
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
-        }
-    } else {
-        const cb = document.getElementById('tracker-drawer') as HTMLInputElement;
-        if (cb && !cb.checked) {
-            cb.checked = true;
-        }
-    }
-};
 
-const hasAutoOpened = ref(false);
-
-watch(cartItems, (newItems) => {
-    if (newItems && newItems.length > 0 && !hasAutoOpened.value) {
-        hasAutoOpened.value = true;
-        ensureTrackerOpen();
-    }
-}, { immediate: true });
 
 const initCartCheck = async () => {
    if (user.value) {
@@ -938,7 +1217,9 @@ async function analyzeListing() {
         
         if (data.items) {
             data.items.forEach((it: any) => {
-                it.selected_resale_price = Math.round(parsePrice(it.price_breakdown?.fair) || 0);
+                const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
+                const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
+                it.selected_resale_price = Math.round(boutique || fair || 0);
             });
         }
         result.value = data;
@@ -989,13 +1270,34 @@ async function analyzeImage() {
         const base64Images: string[] = [];
         const remoteImageUrls: string[] = [];
         
-        images.value.forEach(img => {
-            if (img.url.startsWith('data:')) {
-                base64Images.push(img.url);
-            } else if (img.url.startsWith('http')) {
-                remoteImageUrls.push(img.url);
+        for (const item of images.value) {
+            const url = typeof item === 'string' ? item : item?.url;
+            const file = item instanceof File ? item : item?.file;
+            if (url && url.startsWith('data:')) {
+                base64Images.push(url);
+            } else if (url && url.startsWith('http')) {
+                remoteImageUrls.push(url);
+            } else if (file) {
+                const dataUrl = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target?.result as string || '');
+                    reader.onerror = () => resolve('');
+                    reader.readAsDataURL(file);
+                });
+                if (dataUrl) base64Images.push(dataUrl);
+            } else if (url && url.startsWith('blob:')) {
+                try {
+                    const blob = await fetch(url).then(r => r.blob());
+                    const dataUrl = await new Promise<string>((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target?.result as string || '');
+                        reader.onerror = () => resolve('');
+                        reader.readAsDataURL(blob);
+                    });
+                    if (dataUrl) base64Images.push(dataUrl);
+                } catch (e) {}
             }
-        });
+        }
 
         const payload = JSON.stringify({ 
             images: base64Images,
@@ -1023,7 +1325,9 @@ async function analyzeImage() {
         
         if (data.items) {
             data.items.forEach((it: any) => {
-                it.selected_resale_price = Math.round(parsePrice(it.price_breakdown?.fair) || 0);
+                const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
+                const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
+                it.selected_resale_price = Math.round(boutique || fair || 0);
             });
         }
         result.value = data;
@@ -1070,6 +1374,15 @@ const savingAll = ref(false);
 async function saveAllItems() {
     if (savingAll.value) return;
     if (!result.value || !result.value.items) return;
+
+    if (!activePurchase.value && !allowStandaloneSave.value) {
+        pendingSaveAll.value = true;
+        pendingSaveItem.value = null;
+        loadDraftPurchases();
+        isAssignModalOpen.value = true;
+        return;
+    }
+
     savingAll.value = true;
     try {
         let savedAny = false;
@@ -1084,16 +1397,12 @@ async function saveAllItems() {
         if (savedAny) {
             let cartItem = null;
             if (rescoutId.value) {
-                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value);
+                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value) || (purchaseItems.value as any[]).find(pi => pi.$id === rescoutId.value);
             } else {
-                cartItem = cartItems.value[cartItems.value.length - 1];
+                cartItem = cartItems.value[0] || purchaseItems.value[0] || cartItems.value[cartItems.value.length - 1];
             }
             
-            ensureTrackerOpen();
-            
-            if (cartItem) {
-                window.dispatchEvent(new CustomEvent('open-tracker-item-preview', { detail: cartItem }));
-            }
+
             
             startNewScan();
         }
@@ -1183,11 +1492,14 @@ function formatPriceDisplay(val: any) {
 }
 
 function formatBoutiquePriceDisplay(item: any) {
+    if (item?.pricing_potential?.boutique) {
+        return formatPriceDisplay(item.pricing_potential.boutique);
+    }
     if (item?.price_breakdown?.boutique_premium) {
         return formatPriceDisplay(item.price_breakdown.boutique_premium);
     }
     const mint = parsePrice(item?.price_breakdown?.mint);
-    const fair = parsePrice(item?.price_breakdown?.fair);
+    const fair = parsePrice(item?.pricing_potential?.fair || item?.price_breakdown?.fair);
     if (mint > 0) {
         const low = Math.round(mint * 1.15);
         const high = Math.round(mint * 1.4);
@@ -1197,7 +1509,7 @@ function formatBoutiquePriceDisplay(item: any) {
         const high = Math.round(fair * 1.6);
         return `$${low} - $${high}`;
     }
-    return '$45 - $65';
+    return '$15 - $25';
 }
 
 function getSliderMinMax(item: any) {
@@ -1356,6 +1668,15 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
     
     if (item.saving || item.saved) {
         console.log('[ScoutView] Item already saving/saved, ignoring save request for', item.identity);
+        return;
+    }
+    
+    // If untethered and user hasn't chosen standalone bypass, prompt them with tracker modal
+    if (!activePurchase.value && !allowStandaloneSave.value) {
+        pendingSaveItem.value = { item, index, isBatch };
+        pendingSaveAll.value = false;
+        loadDraftPurchases();
+        isAssignModalOpen.value = true;
         return;
     }
     
@@ -1563,15 +1884,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
             return;
         }
 
-        // 3. Ensure Cart
-        console.log('[ScoutView] Checking activeCart:', activeCart.value);
-        if (!activeCart.value) {
-             console.log('[ScoutView] No active cart, starting new one...');
-             await startCart(sourcingLocation.value || "Quick Trip", currentTeam.value?.$id || '', user.value.$id);
-             console.log('[ScoutView] New cart started:', activeCart.value);
-        }
-
-        // 4. Save Item(s)
+        // 3. Save Item(s)
         if (item.save_individually && item.lot_items && item.lot_items.length > 0) {
              console.log('[ScoutView] Saving items individually...', item.lot_items.length);
              const individualCost = cost.value ? parseFloat((Number(cost.value) / item.lot_items.length).toFixed(2)) : 0.0;
@@ -1686,12 +1999,30 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      rawAnalysis: getSafeRawAnalysis(item) || undefined
                  };
                  
-                 if (itemGalleryIds.length > 0) {
-                     itemPayload.imageId = itemGalleryIds[0];
-                 }
+                 const subItemImage = itemGalleryIds[0] 
+                     || subItem.imageId 
+                     || subItem.image 
+                     || (itemGalleryIds.length > 0 ? itemGalleryIds[0] : null)
+                     || item.imageId
+                     || item.fetched_image
+                     || null;
                  
-                 console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
-                 await addItemToCart(itemPayload);
+                 itemPayload.imageId = subItemImage;
+                 
+                 if (activePurchase.value) {
+                     await addItemToPurchase({
+                         title: subItemName,
+                         cost: individualCost,
+                         resalePrice: parsePrice(subItem.estimated_value) || 0.0,
+                         boutiquePrice: parsePrice(subItem.estimated_value) || 0.0,
+                         imageId: subItemImage,
+                         conditionNotes: noteDetails,
+                         rawAnalysis: getSafeRawAnalysis(item) || undefined
+                     });
+                 } else {
+                     console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
+                     await addItemToCart(itemPayload);
+                 }
              }
         } else {
              // Save as single bundle
@@ -1702,6 +2033,18 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              }
              if (receiptId) {
                   noteDetails += `\n[RECEIPT: ${receiptId}]`;
+             }
+
+             const primaryImage = galleryIds[0] 
+                 || item.imageId 
+                 || item.fetched_image 
+                 || (item.fetched_images && item.fetched_images[0]) 
+                 || item.image 
+                 || (images.value && images.value.length > 0 ? images.value[0].url : null) 
+                 || null;
+             
+             if (primaryImage && galleryIds.length === 0) {
+                 galleryIds.push(primaryImage);
              }
 
              const itemPayload: any = {
@@ -1716,33 +2059,60 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  storageLocation: storageLocation.value || '',
                  status: isAcquired.value ? 'acquired' : 'tracked',
                  keywords: item.keywords || [],
+                 imageId: primaryImage,
                  galleryImageIds: galleryIds,
                  rawAnalysis: getSafeRawAnalysis(item) || undefined
              };
              
-             // Removed JSON dump to marketDescription
-
-             console.log('[ScoutView] Adding bundle lot item to cart:', itemPayload);
-             await addItemToCart(itemPayload);
+             if (activePurchase.value) {
+                 if (item.lot_items && item.lot_items.length > 0) {
+                     const doc = await addLotToPurchase({
+                         title: item.title || item.identity,
+                         lotCost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
+                         totalEstValue: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                         boutiqueValue: parsePrice(item.price_breakdown?.boutique_premium) || (item.selected_resale_price || 0),
+                         lotItems: item.lot_items,
+                         imageId: primaryImage,
+                         rawAnalysis: getSafeRawAnalysis(item) || undefined
+                     });
+                     if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
+                         cartItems.value.unshift(doc as any);
+                     }
+                 } else {
+                     const doc = await addItemToPurchase({
+                         title: item.title || item.identity,
+                         cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
+                         resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                         boutiquePrice: parsePrice(item.price_breakdown?.boutique_premium) || (item.selected_resale_price || 0),
+                         imageId: primaryImage,
+                         conditionNotes: noteDetails,
+                         rawAnalysis: getSafeRawAnalysis(item) || undefined
+                     });
+                     if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
+                         cartItems.value.unshift(doc as any);
+                     }
+                 }
+             } else {
+                 console.log('[ScoutView] Adding bundle lot item to cart:', itemPayload);
+                 await addItemToCart(itemPayload);
+             }
         }
-        console.log('[ScoutView] Item added to cart successfully');
+        console.log('[ScoutView] Item added successfully');
         
         item.saved = true;
-        successMessage.value = `Saved ${item.identity}!`;
+        const dealName = activePurchase.value?.vendor || 'Inventory';
+        successMessage.value = `Added to ${dealName}!`;
+        addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
 
         if (!isBatch) {
             let cartItem = null;
             if (rescoutId.value) {
-                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value);
+                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value) || (purchaseItems.value as any[]).find(pi => pi.$id === rescoutId.value);
             } else {
-                cartItem = cartItems.value[cartItems.value.length - 1];
+                cartItem = cartItems.value[0] || purchaseItems.value[0] || cartItems.value[cartItems.value.length - 1];
             }
             
-            ensureTrackerOpen();
-            
-            if (cartItem) {
-                window.dispatchEvent(new CustomEvent('open-tracker-item-preview', { detail: cartItem }));
-            }
+
             
             startNewScan();
         }

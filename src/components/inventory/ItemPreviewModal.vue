@@ -135,12 +135,17 @@
 
                     <!-- Scout Data Output -->
                     <div v-if="parsedScoutData" class="mt-4 bg-base-100 rounded-2xl border border-base-300 shadow-sm text-base-content overflow-hidden">
-                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase tracking-wider flex justify-between items-center">
+                        <div class="bg-base-200/70 p-3 border-b border-base-300 text-xs font-bold uppercase tracking-wider flex justify-between items-center flex-wrap gap-2">
                             <span class="flex items-center gap-1.5 text-primary">
                                 <Icon icon="solar:magic-stick-bold" class="w-4 h-4" />
                                 AI Scout Report
                             </span>
-                            <span v-if="parsedScoutData.identity" class="truncate max-w-50 normal-case opacity-70">{{ parsedScoutData.identity }}</span>
+                            <div class="flex items-center gap-2">
+                                <span v-if="scoutTierBadge" class="badge font-bold" :class="scoutTierBadge.class">
+                                    {{ scoutTierBadge.label }}
+                                </span>
+                                <span v-if="parsedScoutData.identity" class="truncate max-w-50 normal-case opacity-70">{{ cleanScoutIdentity }}</span>
+                            </div>
                         </div>
                         <div class="p-4 space-y-4">
                             
@@ -153,6 +158,24 @@
                                 </div>
                             </div>
 
+                            <!-- Why Pay Up (Collector Catalyst) -->
+                            <div v-if="parsedScoutData.why_pay_up" class="bg-success/15 border border-success/30 rounded-xl p-3 text-xs flex gap-2 items-start">
+                                <span class="text-success font-black mt-0.5">💎</span>
+                                <div>
+                                    <span class="font-bold mr-1 text-success uppercase text-[10px] tracking-wider block mb-0.5">Sourcing Catalyst (Why Pay Up):</span> 
+                                    <span class="text-base-content font-medium leading-relaxed">{{ parsedScoutData.why_pay_up }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Why Pass (Risk Warnings) -->
+                            <div v-if="parsedScoutData.why_pass" class="bg-error/15 border border-error/30 rounded-xl p-3 text-xs flex gap-2 items-start">
+                                <span class="text-error font-black mt-0.5">⚠️</span>
+                                <div>
+                                    <span class="font-bold mr-1 text-error uppercase text-[10px] tracking-wider block mb-0.5">Risk Rationale (Why Pass):</span> 
+                                    <span class="text-base-content font-medium leading-relaxed">{{ parsedScoutData.why_pass }}</span>
+                                </div>
+                            </div>
+
                             <!-- Notes -->
                             <div class="text-sm opacity-90" v-if="parsedScoutData.condition_notes">
                                 <span class="font-bold opacity-70 block mb-1 uppercase text-[10px] tracking-widest">Analysis Notes</span> 
@@ -160,22 +183,22 @@
                             </div>
                             
                             <!-- Pricing Grid -->
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4" v-if="parsedScoutData.price_breakdown">
-                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
-                                    <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
-                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.mint || '-' }}</span>
-                                </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4" v-if="parsedScoutData.price_breakdown || parsedScoutData.pricing_potential">
                                 <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20">
                                     <span class="badge badge-xs font-bold bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
-                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.fair || '-' }}</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-primary">{{ parsedScoutData.pricing_potential?.fair || parsedScoutData.price_breakdown?.fair || '-' }}</span>
+                                </div>
+                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs">
+                                    <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-secondary">{{ parsedScoutData.pricing_potential?.boutique || parsedScoutData.price_breakdown?.boutique_premium || '-' }}</span>
+                                </div>
+                                <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
+                                    <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown?.mint || '-' }}</span>
                                 </div>
                                 <div class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs">
                                     <span class="badge badge-xs font-bold bg-error/20 text-error border-error/40 mb-1">POOR</span>
-                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.poor || '-' }}</span>
-                                </div>
-                                <div v-if="parsedScoutData.price_breakdown.boutique_premium" class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs">
-                                    <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
-                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown.boutique_premium || '-' }}</span>
+                                    <span class="font-mono font-black text-sm sm:text-base text-base-content">{{ parsedScoutData.price_breakdown?.poor || '-' }}</span>
                                 </div>
                             </div>
                             
@@ -480,6 +503,28 @@ const cleanConditionNotes = computed(() => {
 
 const parsedScoutData = ref(null);
 const scoutMarkdownText = ref(null);
+
+const cleanScoutIdentity = computed(() => {
+    if (!parsedScoutData.value) return '';
+    const raw = parsedScoutData.value.identity || parsedScoutData.value.name || '';
+    return raw.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+});
+
+const scoutTierBadge = computed(() => {
+    if (!parsedScoutData.value) return null;
+    const t = parsedScoutData.value.tier?.toLowerCase() || '';
+    const raw = (parsedScoutData.value.identity || parsedScoutData.value.name || '').toLowerCase();
+    if (t === 'showcase' || raw.includes('tier 1') || parsedScoutData.value.is_key_issue) {
+        return { label: '🌟 Showcase', class: 'badge-secondary text-secondary-content font-bold' };
+    }
+    if (t === 'quick_turn' || raw.includes('tier 3')) {
+        return { label: '⚡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
+    }
+    if (t === 'core' || raw.includes('tier 2')) {
+        return { label: '📦 Core', class: 'badge-primary text-primary-content font-bold' };
+    }
+    return null;
+});
 
 const loadScoutData = async (item) => {
     parsedScoutData.value = null;

@@ -298,7 +298,17 @@
                     :disabled="uploadingReceipt || rescanningReceipt"
                   >
                     <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
-                    <span>Scan Receipt</span>
+                    <span>Camera</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-xs btn-outline btn-accent font-bold gap-1 rounded-lg" 
+                    @click="pasteReceiptFromClipboard"
+                    :disabled="uploadingReceipt || rescanningReceipt"
+                    title="Paste new receipt screenshot from clipboard"
+                  >
+                    <Icon icon="solar:clipboard-text-bold" class="w-3.5 h-3.5" />
+                    <span>Paste</span>
                   </button>
                   <button 
                     type="button" 
@@ -322,25 +332,29 @@
               </div>
 
               <!-- Case B: No Receipt Attached -->
-              <div v-else class="py-6 px-3 text-center border-2 border-dashed border-base-300 rounded-xl space-y-2.5 bg-base-100/50">
-                <div class="w-9 h-9 mx-auto rounded-xl bg-base-200 flex items-center justify-center text-base-content/40">
+              <div 
+                v-else 
+                class="py-6 px-3 text-center border-2 border-dashed border-base-300 rounded-xl space-y-2.5 bg-base-100/50 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                @click.self="receiptFileInput?.click()"
+              >
+                <div class="w-9 h-9 mx-auto rounded-xl bg-base-200 flex items-center justify-center text-base-content/40 pointer-events-none">
                   <Icon icon="solar:bill-cross-linear" class="w-5 h-5" />
                 </div>
-                <div class="text-xs">
-                  <div class="font-bold text-base-content">No Receipt Attached</div>
+                <div class="text-xs pointer-events-none">
+                  <div class="font-bold text-base-content">Tap to upload or drag receipt here</div>
                   <p class="opacity-60 text-[11px] mt-0.5 max-w-xs mx-auto">
-                    {{ editMode ? 'Upload or capture a photo of the paper receipt.' : 'Turn on Edit mode to upload or capture a receipt.' }}
+                    Capture or paste a photo of the receipt to verify prices, taxes, and fees.
                   </p>
                 </div>
-                <!-- Upload buttons if editMode is active -->
-                <div v-if="editMode || !isEdit" class="flex justify-center gap-2 pt-1">
-                  <button type="button" class="btn btn-xs btn-primary font-bold gap-1 rounded-lg" @click="receiptFileInput?.click()">
-                    <Icon icon="solar:upload-track-bold-duotone" class="w-3.5 h-3.5" />
-                    Upload
-                  </button>
+                <!-- Camera & Paste Buttons (Always Accessible) -->
+                <div class="flex flex-wrap justify-center gap-2 pt-1 pointer-events-auto">
                   <button type="button" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 rounded-lg" @click="openCameraScanner">
                     <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
-                    Scan with Camera
+                    Camera
+                  </button>
+                  <button type="button" class="btn btn-xs btn-outline btn-accent font-bold gap-1 rounded-lg" @click="pasteReceiptFromClipboard" title="Paste receipt screenshot directly from clipboard">
+                    <Icon icon="solar:clipboard-text-bold" class="w-3.5 h-3.5" />
+                    Paste
                   </button>
                 </div>
               </div>
@@ -1324,6 +1338,11 @@ onMounted(async () => {
                     receiptImageId: p.receiptImageId || ''
                 };
                 
+                if (form.value.status === 'Draft' || !form.value.receiptImageId) {
+                    isExpanded.value = true;
+                    editMode.value = true;
+                }
+
                 await Promise.all([
                     loadLinkedItems(),
                     loadExpenses()
@@ -1521,6 +1540,29 @@ const openCameraScanner = () => {
     if (scannerWidget.value) {
         scannerWidget.value.startCamera();
     } else {
+        receiptFileInput.value?.click();
+    }
+};
+
+const pasteReceiptFromClipboard = async () => {
+    try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        const file = new File([blob], `receipt_${Date.now()}.png`, { type });
+                        await processAndSaveReceiptFile(file);
+                        return;
+                    }
+                }
+            }
+            addToast("No receipt image found on clipboard. Copy an image or screenshot first.", "warning");
+        } else {
+            receiptFileInput.value?.click();
+        }
+    } catch (e) {
         receiptFileInput.value?.click();
     }
 };

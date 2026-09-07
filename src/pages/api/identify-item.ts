@@ -821,116 +821,134 @@ export const ALL: APIRoute = async ({ request }) => {
             3. 'poor': Price range if Poor/Damaged. Set to 20-40% of mint value.
             4. 'boutique_premium': Curated physical retail price (usually 30-50% higher than online/eBay sold prices due to curation/vintage appeal).
           
-          - MARKUP STRATEGY & MINIMUM THRESHOLDS:
-            If you have context about the acquisition cost (e.g., in user notes or a scraped price that represents your cost):
-            1. Landed Cost Calculation: If shipping or handling cost is provided in context/notes, add it to the asking price/acquisition cost to calculate the true Landed Cost (Landed Cost = acquisition_cost + shipping_cost). Otherwise, Landed Cost is simply the acquisition_cost.
-            2. Standard Markup: Target resale price should be **3.0x Landed Cost**.
-            3. Minimum Markup Floor: Target resale price must be at least **2.0x Landed Cost**.
-            4. High-Value Markup: Target resale price can be **1.5x Landed Cost** for high-ticket items (Landed Cost > $100).
-            5. Minimum Absolute Profit threshold: You must expect at least **$15.00** in net profit (resalePrice - Landed Cost >= 15.00).
-            6. Minimum Resale Listing Price: You must never list an item for less than **$25.00** resale price. If the item's fair value is under $25, recommend passing.
-            
-          - PURCHASE STRATEGY VERDICT DECISION FLOW:
-            Evaluate the 'purchase_strategy' based on the asking price (if found in notes/scraped data) and the item's value:
-            1. "BUY_NOW": If asking price <= 40% of fair market value (OR <= 40% of the curated physical retail booth value/'boutique_premium' if reselling in a physical booth location) AND potential profit >= $15 AND target resale price >= $25.
-            2. "PASS": If target resale price < $25, AND expected profit < $15 (considering both online fair value and curated physical booth value/'boutique_premium'), OR if asking price is too close to/above target resale values.
-            3. "WATCH": If it's an auction and the current bid is reasonable, or if the profit margin is marginal.
-            4. "NEGOTIATE": If it's a fixed-price listing but allows offers, and the asking price is slightly above the BUY_NOW threshold.
-            5. "CHASE_AUCTION": If it is a live auction and current price/bid is low compared to the estimated Max Buy Price (which is ~40% of fair value or booth value).
-            *IMPORTANT*: Many users sell in curated booth locations (antique malls, physical consignment booths) where they can realize the higher 'boutique_premium' price. When evaluating profit margins and determining the verdict, factor in the 'boutique_premium' value as a valid resale target. If an item would normally be a PASS based on online fair value but is a BUY based on booth value, recommend BUY_NOW or watch/negotiate, and explain this in the advice.
-            *AUCTION BID LIMITS*: If the item is an auction (or the verdict is CHASE_AUCTION or WATCH), calculate the Suggested Max Bid as: (Max Buy Price - Estimated Shipping - Handling). Explicitly state this Max Bid limit in the 'advice' string (e.g., "Suggested max bid is $25.00 to stay under the landed target of $44.09").
-            
-          - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
-            When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
-            * If an organization physical location has a specific niche (e.g. DustyTiger = Small Collectibles, Jewelry, Pins, Wands; Memory Den = Vintage Clothing, Arcane / Punk, Jackets), ONLY recommend that physical location if the item strictly matches its niche!
-            * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear): DO NOT recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
-            * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
-
-          - ACTIVELY READ TEXT & COVERS: Extract the EXACT title directly from the item. If it is a book, game, or media, read the cover text precisely (e.g., "Monster Manual", "Spell Compendium"). Pay close attention to small sub-text like "v.3.5".
-          - SPECIFY EDITIONS: For tabletop games, RPGs (like Dungeons & Dragons), and textbooks, you MUST use the cover art style and layout to identify the EXACT EDITION (e.g., 1st Edition, v3.5, 4th Edition, 5e) and put it in the title.
-          - STANDARD D&D 3.5: Standard 3.5e core books have MASSIVE, highly detailed painted metal borders, giant hinges, and locks covering the entire book. For example, the standard DMG has a huge silver lock mechanism with gems and the title is on a gold plaque. DO NOT call these "Premium". Call them "D&D 3.5e [Book Name]".
-          - PREMIUM REPRINTS 3.5: ONLY call a book a "Premium Reprint" if the cover is mostly empty space featuring a SOLID flat faux-leather texture (solid dark green, dark red, or dark blue) across the entire cover. They DO NOT have massive painted silver locks or hinges. The title text floats directly on the plain leather texture above a single central globe/eye/crest.
-          
-          - UNIVERSAL MULTI-ITEM & BUNDLE LOT SCANNING (ALL CATEGORIES):
-            When the images contain multiple items (a lot, collection, bundle, or table display), you must inspect EVERY image and break down ALL individual items in the 'lot_items' array across all categories:
-            
-            1. TOYS, ACTION FIGURES & DIECAST (Star Wars, Marvel, Transformers, Hot Wheels, LEGO, Pokemon, Bionicle, etc.):
-               * Identify each specific character, vehicle, or set number (e.g. "Vintage 1977 Kenner Darth Vader", "Hot Wheels 1969 Redline Custom Camaro", "LEGO Star Wars Ahsoka Minifigure").
-               * Note accessories, completeness, or wear.
-               
-            2. CLOTHING & ACCESSORIES BUNDLES (Lululemon, Dr. Martens, Vintage Leather/Denim, Band Tees, Designer Purses):
-               * Identify each individual garment/shoe by brand tag, style name, colorway, and size if visible (e.g. "Lululemon Align High-Rise Leggings Sz 6 Navy", "Dr. Martens 1460 8-Eye Black Leather Boots").
-               
-            3. VIDEO GAMES, RETRO GAMING & ACCESSORIES (Nintendo NES/SNES/N64/Switch, PlayStation, Xbox, Handhelds):
-               * Identify the exact console model, controller color, and EACH individual game cartridge/disc title and packaging status (Loose vs CIB/Boxed).
-               
-            4. MUSIC CDS, VINYL RECORDS, CASSETTES & MEDIA SETS:
-               * CRITICAL MULTI-DISC RULE: A 2-CD, multi-disc album, or 2-in-1 compilation (e.g. "Def Leppard Rock of Ages 2-CD", "Whitesnake 2-CD Set") is strictly ONE SINGLE INVENTORY ITEM / 1 sellable unit. NEVER split individual discs of a set into separate items in 'lot_items' or 'items'. Note "(2-CD Set)" in the title.
-               * Read every spine, cover title, artist, and label.
-               
-            5. BOOKS, RPGs, COMIC LOTS & BOARD GAMES (D&D, Tolkien, Warhammer, Marvel/DC Comics):
-               * Read every spine, cover title, and issue number. Specify exact edition (1st Edition, 3.5e, 5e, Omnibus vs TPB).
-               
-            6. CAMERAS, VINTAGE ELECTRONICS & AUDIO (Canon, Nikon, Sony, Walkmans, Lenses, Stereo gear):
-               * Identify camera body model (e.g. "Canon EOS Rebel T3i"), lens specifications (e.g. "EF-S 18-55mm IS II"), and accompanying batteries/chargers.
-               
-            7. JEWELRY & PRECIOUS METALS / COLLECTIBLES (Sterling Silver 925, Gold 10k/14k/18k, Coins, Pins):
-               * Identify metal type, visible hallmarks, gemstone types, and brand stamps.
-               
-            7. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
-               * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
-               
-             CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
-             - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
-             - STRICT ANTI-HALLUCINATION GUARD: If a date, issue number, or brand name is obscured or not 100% legible due to glare, DO NOT guess famous names or specific dates. State "Date Unclear" or "Unbranded" instead of inventing details.
-             - FOR VINTAGE PRINT / MAGAZINES / COMICS:
-                * Look at the exact date box (usually top-left or spine). Read Month, Year, Volume, and Issue Number.
-                * Only credit cover artists if their signature is clearly visible on the cover or printed in the credit line.
-             - FOR APPAREL & STREETWEAR:
-                * Read inner neck tag / wash tag for Brand, RN#, Size, Material, Single-Stitch, and Made in USA/Country.
-             - FOR TOYS, FIGURES & TABLETOP:
-                * Read copyright stamp on foot/back or box title (e.g. "© 1979 L.F.L. Kenner", "Games Workshop 1998").
-             - FOR GAMES & ELECTRONICS:
-                * Read exact model/part number and condition indicators (CIB, Boxed, Loose Cartridge, Tested).
-             - FOR LOTS & MULTI-ITEM IMAGES:
-                * For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
-                * STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'.
+           - MARKUP STRATEGY & MINIMUM THRESHOLDS:
+             If you have context about the acquisition cost (e.g., in user notes or a scraped/screenshot price that represents your cost):
+             1. Landed Cost Calculation: If shipping or handling cost is provided in context/notes/screenshot, add it to the asking price/acquisition cost to calculate the true Landed Cost (Landed Cost = acquisition_cost + shipping_cost). Otherwise, Landed Cost is simply the acquisition_cost.
+             2. Standard Markup: Target resale price should be **3.0x Landed Cost**.
+             3. High-Value Markup: Target resale price can be **1.5x - 2.0x Landed Cost** for high-ticket items (Landed Cost > $100) because dollar profit is high.
+             4. Quick Turn Markup: For small impulse items ($8.00 - $20.00 resale such as vintage paperbacks, cassettes, mugs, small toys/pins), target **3.0x - 5.0x Landed Cost** (e.g. buy for $1-$4, sell for $8-$15 in booth crate/basket). These are valuable "Quick Turn" items that provide high-velocity cash flow.
+             5. Absolute Profit & Price Thresholds:
+                - High-ticket / Showcase: Profit should be >= $35.00.
+                - Core items: Resale price >= $20.00 with >= $12.00 net profit.
+                - Quick Turn impulse items: Resale price $8.00 - $18.00, BUT acquisition cost must be <= $4.00 (ensuring at least $5.00 - $12.00 net gain). Do NOT recommend passing on low-cost items if they can flip quickly for $8 - $15!
              
-           OUTPUT FORMAT:
-           Return strictly a JSON object with property "items": [ ... ].
+           - SCREENSHOT RECOGNITION (ONLINE SOURCING BYPASS):
+             If the image depicts a smartphone or computer screenshot of an online marketplace (eBay, ShopGoodwill, Facebook Marketplace, Poshmark, Mercari, HiBid):
+             - Inspect the UI to read the current asking price or active auction bid and place it in 'purchase_strategy.current_asking_price'.
+             - Inspect the UI for stated shipping fees (e.g. "+$14.25 Shipping") and factor it into 'max_landed_cost'.
+             - Extract the listing title and seller condition notes directly from the screenshot layout.
+             
+           - PURCHASE STRATEGY VERDICT DECISION FLOW:
+             Evaluate the 'purchase_strategy' based on the asking price (if found in notes/scraped data/screenshot) and the item's value:
+             1. "BUY_NOW": If acquisition price leaves healthy margin (e.g. <= 35% of fair market value OR <= 35% of boutique booth value) AND meets profit thresholds.
+             2. "PASS": If asking price is too high, margin is eaten by shipping/fees, or if the item is a slow shelf-warmer with low velocity.
+             3. "WATCH": If it's an auction and the current bid is reasonable, or if the profit margin is marginal.
+             4. "NEGOTIATE": If it's a fixed-price listing but allows offers, and the asking price is slightly above the BUY_NOW threshold.
+             5. "CHASE_AUCTION": If it is a live auction and current price/bid is low compared to the estimated Max Buy Price.
+             *IMPORTANT*: Many users sell in curated booth locations (antique malls, physical consignment booths like Memory Den & DustyTiger) where they can realize the higher 'boutique_premium' price. When evaluating profit margins and determining the verdict, factor in the 'boutique_premium' value as a valid resale target.
+             *AUCTION BID LIMITS*: If the item is an auction (or the verdict is CHASE_AUCTION or WATCH), calculate the Suggested Max Bid as: (Max Landed Cost - Estimated Shipping - Handling). Explicitly state this Max Bid limit in the 'advice' string.
+             
+           - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
+             When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
+             * If an organization physical location has a specific niche (e.g. DustyTiger = Small Collectibles, Jewelry, Pins, Wands; Memory Den = Vintage Clothing, Arcane / Punk, Jackets), ONLY recommend that physical location if the item strictly matches its niche!
+             * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear): DO NOT recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
+             * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
+
+           - ACTIVELY READ TEXT & COVERS: Extract the EXACT title directly from the item. If it is a book, game, or media, read the cover text precisely (e.g., "Monster Manual", "Spell Compendium"). Pay close attention to small sub-text like "v.3.5".
+           - SPECIFY EDITIONS: For tabletop games, RPGs (like Dungeons & Dragons), and textbooks, you MUST use the cover art style and layout to identify the EXACT EDITION (e.g., 1st Edition, v3.5, 4th Edition, 5e) and put it in the title.
+           - STANDARD D&D 3.5: Standard 3.5e core books have MASSIVE, highly detailed painted metal borders, giant hinges, and locks covering the entire book. For example, the standard DMG has a huge silver lock mechanism with gems and the title is on a gold plaque. DO NOT call these "Premium". Call them "D&D 3.5e [Book Name]".
+           - PREMIUM REPRINTS 3.5: ONLY call a book a "Premium Reprint" if the cover is mostly empty space featuring a SOLID flat faux-leather texture (solid dark green, dark red, or dark blue) across the entire cover. They DO NOT have massive painted silver locks or hinges. The title text floats directly on the plain leather texture above a single central globe/eye/crest.
            
-           Each item object in the array must contain:
-           - 'identity': A single string describing the item.
-           - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den). Must be ultra-clean, concise, and professional:
-                * Vintage Magazines: "Heavy Metal Mag - Oct 1977 #7"
-                * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Harley 3D Emblem Tee XL"
-                * Toys/Collectibles: "Kenner Star Wars Boba Fett 1979" or "D&D Beholder Mini Pro-Painted"
-                * Games/Media: "SNES Chrono Trigger (Authentic)" or "D&D 3.5e PHB 1st Print"
-                * Bulk / Multi-Qty: "Heavy Metal Mag - 80s-90s Choice" or "Vintage Paperbacks ($5 Choice)"
-           - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop).
-           - 'ocr_detected_text': String transcribing verbatim text legible on the item's tag, cover, or stamp.
-           - 'keywords': An array of strings.
-           - 'condition_notes': A VERY BRIEF (1-2 sentences max) condition assessment.
-           - 'country_of_origin': Infer the manufacturing country if visible (e.g., from tags like "Made in USA"). Return "Unknown" if not visible.
-           - 'red_flags': An array of strings highlighting potential issues. Return empty if none.
-           - 'price_breakdown': An object with estimated values:
-               - 'mint': Price range if New/Mint.
-               - 'fair': Price range if Used/Good.
-               - 'poor': Price range if Poor/Damaged.
-               - 'boutique_premium': (REQUIRED string) High-end physical booth / curated antique shop retail pricing tier (e.g. "$45 - $65"). MUST always be included.
-               - 'confidence': (Low/Medium/High)
-           - 'comparables': An array of EXACTLY 1 similar item sold on eBay/etc (BE BRIEF).
-                - 'name': Specific item name/title.
-                - 'price': approx sold price.
-                - 'status': "Sold" or "Listed"
-           - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the item in the primary image.
-           - 'purchase_strategy': An object containing strategic advice for sourcing this item:
-                - 'verdict': ONE of these strict enums: "PASS", "WATCH", "BUY_NOW", "NEGOTIATE", "CHASE_AUCTION".
-                - 'current_asking_price': State the current bid or asking price if found.
-                - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
-                - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
-                - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
-           - 'market_report': An object analyzing sales channels, velocity, and profit:
+           - UNIVERSAL MULTI-ITEM & BUNDLE LOT SCANNING (ALL CATEGORIES):
+             When the images contain multiple items (a lot, collection, bundle, or table display), you must inspect EVERY image and break down ALL individual items in the 'lot_items' array across all categories:
+             
+             1. TOYS, ACTION FIGURES & DIECAST (Star Wars, Marvel, Transformers, Hot Wheels, LEGO, Pokemon, Bionicle, etc.):
+                * Identify each specific character, vehicle, or set number (e.g. "Vintage 1977 Kenner Darth Vader", "Hot Wheels 1969 Redline Custom Camaro", "LEGO Star Wars Ahsoka Minifigure").
+                * Note accessories, completeness, or wear.
+                
+             2. CLOTHING & ACCESSORIES BUNDLES (Lululemon, Dr. Martens, Vintage Leather/Denim, Band Tees, Designer Purses):
+                * Identify each individual garment/shoe by brand tag, style name, colorway, and size if visible (e.g. "Lululemon Align High-Rise Leggings Sz 6 Navy", "Dr. Martens 1460 8-Eye Black Leather Boots").
+                
+             3. VIDEO GAMES, RETRO GAMING & ACCESSORIES (Nintendo NES/SNES/N64/Switch, PlayStation, Xbox, Handhelds):
+                * Identify the exact console model, controller color, and EACH individual game cartridge/disc title and packaging status (Loose vs CIB/Boxed).
+                
+             4. MUSIC CDS, VINYL RECORDS, CASSETTES & MEDIA SETS:
+                * CRITICAL MULTI-DISC RULE: A 2-CD, multi-disc album, or 2-in-1 compilation (e.g. "Def Leppard Rock of Ages 2-CD", "Whitesnake 2-CD Set") is strictly ONE SINGLE INVENTORY ITEM / 1 sellable unit. NEVER split individual discs of a set into separate items in 'lot_items' or 'items'. Note "(2-CD Set)" in the title.
+                * Read every spine, cover title, artist, and label.
+                
+             5. BOOKS, RPGs, COMIC LOTS & BOARD GAMES (D&D, Tolkien, Warhammer, Marvel/DC Comics):
+                * Read every spine, cover title, and issue number. Specify exact edition (1st Edition, 3.5e, 5e, Omnibus vs TPB).
+                
+             6. CAMERAS, VINTAGE ELECTRONICS & AUDIO (Canon, Nikon, Sony, Walkmans, Lenses, Stereo gear):
+                * Identify camera body model (e.g. "Canon EOS Rebel T3i"), lens specifications (e.g. "EF-S 18-55mm IS II"), and accompanying batteries/chargers.
+                
+             7. JEWELRY & PRECIOUS METALS / COLLECTIBLES (Sterling Silver 925, Gold 10k/14k/18k, Coins, Pins):
+                * Identify metal type, visible hallmarks, gemstone types, and brand stamps.
+                
+             8. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
+                * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
+                
+              CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
+              - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
+              - STRICT ANTI-HALLUCINATION GUARD: If a date, issue number, or brand name is obscured or not 100% legible due to glare, DO NOT guess famous names or specific dates. State "Date Unclear" or "Unbranded" instead of inventing details.
+              - FOR VINTAGE PRINT / MAGAZINES / COMICS:
+                 * Look at the exact date box (usually top-left or spine). Read Month, Year, Volume, and Issue Number.
+                 * Only credit cover artists if their signature is clearly visible on the cover or printed in the credit line.
+              - FOR APPAREL & STREETWEAR:
+                 * Read inner neck tag / wash tag for Brand, RN#, Size, Material, Single-Stitch, and Made in USA/Country.
+              - FOR TOYS, FIGURES & TABLETOP:
+                 * Read copyright stamp on foot/back or box title (e.g. "© 1979 L.F.L. Kenner", "Games Workshop 1998").
+              - FOR GAMES & ELECTRONICS:
+                 * Read exact model/part number and condition indicators (CIB, Boxed, Loose Cartridge, Tested).
+              - FOR LOTS & MULTI-ITEM IMAGES:
+                 * For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
+                 * STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'.
+              
+            OUTPUT FORMAT:
+            Return strictly a JSON object with property "items": [ ... ].
+            
+            Each item object in the array must contain:
+            - 'identity': A single string describing the item.
+            - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den / DustyTiger). Must be ultra-clean, concise, and professional without ANY tier bracket prefixes like '[Tier 1]':
+                 * Vintage Magazines: "Heavy Metal Mag - Oct 1977 #7"
+                 * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Harley 3D Emblem Tee XL"
+                 * Toys/Collectibles: "Kenner Star Wars Boba Fett 1979" or "D&D Beholder Mini Pro-Painted"
+                 * Games/Media: "SNES Chrono Trigger (Authentic)" or "D&D 3.5e PHB 1st Print"
+                 * Paperbacks/Media: "Frank Herbert Dune (Paperback)" or "Def Leppard Rock of Ages 2-CD"
+            - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop) without tier bracket prefixes.
+            - 'tier': (REQUIRED string, strictly one of: "showcase", "core", "quick_turn").
+                 * "showcase": High-ticket grails ($50.00 - $150.00+), locked showcase, top online listings.
+                 * "core": Steady bread-and-butter ($20.00 - $49.00), standard apparel racks & booth shelves.
+                 * "quick_turn": High-velocity impulse ($8.00 - $18.00), crate/counter picks, paperbacks, cassettes, mugs, small collectibles with 3x-5x ROI.
+            - 'tier_label': String corresponding to tier ("🌟 Showcase", "📦 Core", "⚡ Quick Turn").
+            - 'pricing_potential': An object with realistic valuation ranges:
+                 * 'fair': (REQUIRED string) Realistic online / eBay comp average (e.g. "$8 - $10" or "$85 - $110").
+                 * 'boutique': (REQUIRED string) Curated physical antique mall / retail tag (e.g. "$12 - $15" or "$165 - $185").
+            - 'why_pay_up': (REQUIRED string) 1-2 concise sentences detailing the collector catalyst, rare provenance (Made in USA, single-stitch, 1st print), or high booth velocity justifying paying a premium or bidding up.
+            - 'why_pass': (REQUIRED string) 1-2 concise sentences detailing specific risk factors (e.g. shipping/fee drag, market saturation, dead shelf hold, defects) if the item is marginal or a PASS. Return empty string if item is an obvious strong buy.
+            - 'ocr_detected_text': String transcribing verbatim text legible on the item's tag, cover, or stamp.
+            - 'keywords': An array of strings.
+            - 'condition_notes': A VERY BRIEF (1-2 sentences max) condition assessment.
+            - 'country_of_origin': Infer the manufacturing country if visible (e.g., from tags like "Made in USA"). Return "Unknown" if not visible.
+            - 'red_flags': An array of strings highlighting potential issues. Return empty if none.
+            - 'price_breakdown': An object with estimated values:
+                - 'mint': Price range if New/Mint.
+                - 'fair': Price range if Used/Good.
+                - 'poor': Price range if Poor/Damaged.
+                - 'boutique_premium': (REQUIRED string) High-end physical booth / curated antique shop retail pricing tier (e.g. "$45 - $65"). MUST always be included.
+                - 'confidence': (Low/Medium/High)
+            - 'comparables': An array of EXACTLY 1 similar item sold on eBay/etc (BE BRIEF).
+                 - 'name': Specific item name/title.
+                 - 'price': approx sold price.
+                 - 'status': "Sold" or "Listed"
+            - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the item in the primary image.
+            - 'purchase_strategy': An object containing strategic advice for sourcing this item:
+                 - 'verdict': ONE of these strict enums: "PASS", "WATCH", "BUY_NOW", "NEGOTIATE", "CHASE_AUCTION".
+                 - 'current_asking_price': State the current bid or asking price if found on screen/notes.
+                 - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
+                 - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
+                 - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
+            - 'market_report': An object analyzing sales channels, velocity, and profit:
                  - 'best_platform': String naming the recommended platform/channel.
                  - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit.
                  - 'sell_through_velocity': One of: "Fast (< 7 days)", "Moderate (2-4 weeks)", "Slow / Long-Tail (1-3 months)".
@@ -941,15 +959,16 @@ export const ALL: APIRoute = async ({ request }) => {
                      - 'net_payout': Estimated net payout after fees/shipping
                      - 'speed': Estimated velocity rating
                      - 'recommendation': e.g. "Best Net Profit", "Fast Cash Flow", "Zero Shipping Hassle"
-           - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
-                 - 'name': Specific name/description of the item.
-                 - 'tag_title': Concise booth tag title (<= 40 chars) for this specific sub-item.
-                 - 'identity': The item's distinct identity.
-                 - 'estimated_value': Inferred individual resale value.
-                 - 'condition': Inferred condition of this item.
-                 - 'ocr_detected_text': Verbatim text read from this item.
-                 - 'image_index': (Integer, 0-indexed) Which image contains the clearest view of this item.
-                 - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates locating the exact physical object.
+            - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
+                  - 'name': Specific name/description of the item without tier prefixes.
+                  - 'tag_title': Concise booth tag title (<= 40 chars) for this specific sub-item.
+                  - 'identity': The item's distinct identity.
+                  - 'tier': "showcase" | "core" | "quick_turn".
+                  - 'estimated_value': Inferred individual resale value.
+                  - 'condition': Inferred condition of this item.
+                  - 'ocr_detected_text': Verbatim text read from this item.
+                  - 'image_index': (Integer, 0-indexed) Which image contains the clearest view of this item.
+                  - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates locating the exact physical object..
         `;
 
         const contentParts: any[] = [{ text: prompt }];

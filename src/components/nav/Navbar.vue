@@ -12,7 +12,6 @@
         <div class="indicator flex items-center mr-2 md:mr-4">
           <span v-if="cartItems.length > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ cartItems.length }}</span>
           <a href="/scout" 
-             @click="handleScoutClick"
              class="btn btn-ghost btn-sm border border-base-300 bg-base-200/50 rounded-lg gap-1.5 normal-case font-semibold hover:bg-base-200 flex items-center px-3"
              aria-label="Go to Scout">
             <Icon icon="solar:object-scan-linear" class="w-4 h-4 text-primary" />
@@ -401,27 +400,7 @@ const handleInvite = async () => {
     }
 };
 
-const toggleTracker = () => {
-    if (window.innerWidth >= 1024) {
-        // Desktop: toggle static side-by-side pane
-        const drawer = document.getElementById('app-drawer');
-        if (drawer) {
-            drawer.classList.toggle('lg:drawer-open');
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 50); // Help graphs/masonry recalculate
-        }
-    } else {
-        // Mobile/Tablet: toggle overlay checkbox
-        const cb = document.getElementById('tracker-drawer') as HTMLInputElement;
-        if (cb) cb.checked = !cb.checked;
-    }
-};
 
-const handleScoutClick = (e: MouseEvent) => {
-    if (window.location.pathname === '/scout') {
-        e.preventDefault();
-        toggleTracker();
-    }
-};
 
 </script>
 

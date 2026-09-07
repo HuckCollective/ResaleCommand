@@ -139,164 +139,13 @@
 
                             <!-- 2. 📸 PHOTOS & SOURCING MEDIA -->
                             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3.5">
-                                <div class="flex justify-between items-center">
-                                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                                        <Icon icon="solar:gallery-bold" class="w-4 h-4 text-primary" />
-                                        Photos & Sourcing Media
-                                    </label>
-                                    <span class="badge badge-sm badge-ghost font-mono text-[11px] font-bold">
-                                        {{ totalGalleryCount }} Photo{{ totalGalleryCount === 1 ? '' : 's' }}
-                                    </span>
-                                </div>
-
-                                <!-- A. Empty State (No Photos Yet) -->
-                                <div v-if="!editForm.existingGalleryIds?.length && !editGalleryBuffer.length" 
-                                     class="border-2 border-dashed border-base-300 rounded-2xl p-6 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-2"
-                                     @dragenter.prevent="dragOver = true"
-                                     @dragover.prevent="dragOver = true"
-                                     @dragleave.prevent="onDragLeave"
-                                     @drop.prevent="handleDrop"
-                                     @click="fileInput?.click()">
-                                    <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-1">
-                                        <Icon icon="solar:gallery-add-bold-duotone" class="w-7 h-7" />
-                                    </div>
-                                    <div class="font-bold text-xs text-base-content">Tap to upload or drag photos here</div>
-                                    <p class="text-[11px] opacity-60 max-w-xs">High-res photos will automatically attach to this item</p>
-                                </div>
-
-                                <!-- B. Populated State (Hero Main Photo + Smooth Thumbnails Filmstrip) -->
-                                <div v-else class="space-y-3">
-                                    <!-- 1. Hero Main Cover Photo Card -->
-                                    <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-base-300/40 shadow-sm group aspect-4/3 sm:aspect-16/9 max-h-64 flex items-center justify-center">
-                                        <img 
-                                            :src="actualMainPhoto.url" 
-                                            class="w-full h-full object-contain bg-black/10" 
-                                            alt="Main Cover Photo"
-                                        />
-                                        
-                                        <!-- Cover Photo Badges Overlay -->
-                                        <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20">
-                                            <span class="badge badge-warning text-warning-content font-black text-xs gap-1 shadow-md py-2.5 px-3 rounded-xl">
-                                                <Icon icon="solar:star-bold" class="w-3.5 h-3.5" />
-                                                Main Cover Photo
-                                            </span>
-                                        </div>
-
-                                        <!-- Top Right Action Controls -->
-                                        <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20">
-                                            <!-- Zoom Lightbox Button -->
-                                            <button 
-                                                type="button" 
-                                                class="btn btn-sm btn-circle bg-base-100/90 hover:bg-base-100 shadow-md text-base-content border border-base-300"
-                                                @click="openZoomPreview(actualMainPhoto.url)"
-                                                title="Zoom Full Resolution"
-                                            >
-                                                <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4" />
-                                            </button>
-                                            <!-- Remove Main Photo Button -->
-                                            <button 
-                                                type="button" 
-                                                class="btn btn-sm btn-circle btn-error text-error-content shadow-md"
-                                                @click="actualMainPhoto.type === 'existing' ? removeGalleryItem(actualMainPhoto.id, true) : removeGalleryItem(actualMainPhoto.idx, false)"
-                                                title="Remove this photo"
-                                            >
-                                                <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-                                            </button>
-                                        </div>
-
-                                        <div class="absolute bottom-2 inset-x-2 text-center pointer-events-none">
-                                            <span class="text-[11px] font-semibold text-white/90 bg-black/60 px-2.5 py-1 rounded-full backdrop-blur-xs">
-                                                Primary listing image shown on marketplace & tags
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <!-- 2. Supporting Gallery (Wrapping Grid - Zero Side Scroll) -->
-                                    <div v-if="totalGalleryCount > 1" class="space-y-1.5">
-                                        <div class="flex justify-between items-center px-1">
-                                            <span class="text-[11px] font-bold opacity-70">Supporting Photos (Tap to set as Main ⭐)</span>
-                                            <span class="text-[10px] opacity-50">{{ totalGalleryCount }} in gallery</span>
-                                        </div>
-                                        
-                                        <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 py-1 px-0.5">
-                                            <!-- Existing Appwrite Photos -->
-                                            <div 
-                                                v-for="(id, idx) in editForm.existingGalleryIds" 
-                                                :key="'exist_' + id" 
-                                                class="relative aspect-square w-full rounded-xl overflow-hidden border-2 bg-base-100 cursor-pointer transition-all active:scale-95 shadow-xs"
-                                                :class="actualMainPhoto.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
-                                                @click="setMainPhoto('existing', id)"
-                                            >
-                                                <img :src="getAssetUrl(id)" class="w-full h-full object-cover" />
-                                                
-                                                <!-- Index Pill -->
-                                                <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
-                                                    #{{ idx + 1 }}
-                                                </span>
-
-                                                <!-- Main Indicator -->
-                                                <div v-if="actualMainPhoto.id === id" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
-                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
-                                                </div>
-
-                                                <!-- Inner Delete Button (Safe from container clipping) -->
-                                                <button 
-                                                    type="button"
-                                                    @click.stop="removeGalleryItem(id, true)" 
-                                                    class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm"
-                                                    title="Remove photo"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-
-                                            <!-- New Buffered Uploads -->
-                                            <div 
-                                                v-for="(file, idx) in editGalleryBuffer" 
-                                                :key="'new_' + idx" 
-                                                class="relative aspect-square w-full rounded-xl overflow-hidden border-2 bg-base-100 cursor-pointer transition-all active:scale-95 shadow-xs"
-                                                :class="actualMainPhoto.file === file ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
-                                                @click="setMainPhoto('new', idx)"
-                                            >
-                                                <img :src="getObjectUrl(file)" class="w-full h-full object-cover" />
-                                                
-                                                <!-- Index Pill -->
-                                                <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
-                                                    #{{ (editForm.existingGalleryIds?.length || 0) + idx + 1 }}
-                                                </span>
-
-                                                <!-- Main Indicator -->
-                                                <div v-if="actualMainPhoto.file === file" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
-                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
-                                                </div>
-
-                                                <!-- Inner Delete Button -->
-                                                <button 
-                                                    type="button"
-                                                    @click.stop="removeGalleryItem(idx, false)" 
-                                                    class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm"
-                                                    title="Remove photo"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- 3. Photo Action Buttons (Upload & Camera) -->
-                                <div class="grid grid-cols-2 gap-2 pt-1">
-                                    <button type="button" @click="fileInput?.click()" class="btn btn-sm btn-outline text-xs rounded-xl font-bold gap-1.5 h-10">
-                                        <Icon icon="solar:gallery-add-bold" class="w-4 h-4 text-primary" />
-                                        Upload Photo(s)
-                                    </button>
-                                    <input type="file" ref="fileInput" multiple accept="image/*" class="hidden" @change="handleFileSelect" />
-                                    
-                                    <button type="button" @click="scannerWidget?.startCamera()" class="btn btn-sm btn-outline text-xs rounded-xl font-bold gap-1.5 h-10">
-                                        <Icon icon="solar:camera-bold" class="w-4 h-4 text-secondary" />
-                                        Live Camera
-                                    </button>
-                                </div>
+                                <PhotoGalleryManager 
+                                    v-model:existing-images="editForm.existingGalleryIds"
+                                    v-model:new-photos="editGalleryBuffer"
+                                    v-model:main-selection="mainPhotoSelection"
+                                    :scanner-widget="scannerWidget"
+                                    @open-camera="scannerWidget?.startCamera()"
+                                />
 
                                 <!-- 4. Sourcing URL & Image Scraper Bar -->
                                 <div class="form-control">
@@ -1306,6 +1155,7 @@
 <script setup>
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
+import PhotoGalleryManager from './PhotoGalleryManager.vue';
 import ScannerWidget from './ScannerWidget.vue';
 import TagInput from './TagInput.vue';
 import MultiSelectDropdown from './MultiSelectDropdown.vue';
@@ -2790,17 +2640,18 @@ const analyzeExistingItem = async () => {
                 
                 // Auto-fill title if untitled or empty
                 if ((!editForm.title || editForm.title.trim().toLowerCase() === 'untitled item') && (item.title || item.identity)) {
-                    editForm.title = item.title || item.identity;
+                    const rawTitle = item.title || item.identity;
+                    editForm.title = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
                 }
 
                 // Auto-fill list price if empty or 0
-                if ((!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') && item.price_breakdown) {
-                    const fairPrice = parsePrice(item.price_breakdown.fair || item.price_breakdown.mint);
+                if ((!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') && (item.pricing_potential || item.price_breakdown)) {
+                    const fairPrice = parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                     if (fairPrice > 0) {
                         editForm.resalePrice = fairPrice.toFixed(2);
                     }
                 }
-                const priceRange = parsePriceRange(item.price_breakdown?.fair || item.price_breakdown?.mint);
+                const priceRange = parsePriceRange(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
                     if (!editForm.estLow) editForm.estLow = priceRange.low.toFixed(2);
                     if (!editForm.estHigh) editForm.estHigh = priceRange.high.toFixed(2);
@@ -2813,15 +2664,24 @@ const analyzeExistingItem = async () => {
                 }
                 
                 let report = `--- 🕵️ SCOUT REPORT ---\n\n`;
-                if(item.title) report += `**Title:** ${item.title}\n\n`;
+                if (item.tier_label || item.tier) {
+                    const tierName = item.tier_label || (item.tier === 'showcase' ? '🌟 Showcase' : item.tier === 'quick_turn' ? '⚡ Quick Turn' : '📦 Core');
+                    report += `**Inventory Tier:** ${tierName}\n`;
+                }
+                if(item.title) {
+                    const cleanTitle = item.title.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+                    report += `**Title:** ${cleanTitle}\n\n`;
+                }
+                if(item.why_pay_up) report += `**💎 Sourcing Catalyst (Why Pay Up):** ${item.why_pay_up}\n`;
+                if(item.why_pass) report += `**⚠️ Risk Rationale (Why Pass):** ${item.why_pass}\n`;
                 if(item.condition_notes) report += `**Condition:** ${item.condition_notes}\n`;
                 if(item.red_flags && item.red_flags.length > 0) report += `**🚩 Red Flags:** ${item.red_flags.join(', ')}\n`;
-                if(item.price_breakdown) {
+                if(item.pricing_potential || item.price_breakdown) {
                     report += `\n**Valuation Breakdown:**\n`;
-                    report += `- **Mint / New:** ${item.price_breakdown.mint || '-'}\n`;
-                    report += `- **Fair / Used:** ${item.price_breakdown.fair || '-'}\n`;
-                    report += `- **Poor / As-Is:** ${item.price_breakdown.poor || '-'}\n`;
-                    if(item.price_breakdown.boutique_premium) report += `- **Boutique Booth:** ${item.price_breakdown.boutique_premium}\n`;
+                    if(item.pricing_potential?.fair || item.price_breakdown?.fair) report += `- **Fair Market:** ${item.pricing_potential?.fair || item.price_breakdown?.fair}\n`;
+                    if(item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) report += `- **Boutique Booth:** ${item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium}\n`;
+                    if(item.price_breakdown?.mint) report += `- **Mint / New:** ${item.price_breakdown.mint}\n`;
+                    if(item.price_breakdown?.poor) report += `- **Poor / As-Is:** ${item.price_breakdown.poor}\n`;
                 }
                 if(item.purchase_strategy) {
                     report += `\n**Sourcing Strategy:**\n`;
@@ -2847,15 +2707,24 @@ const analyzeExistingItem = async () => {
         else if (data && (data.identity || data.title || data.price_breakdown || data.purchase_strategy || data.market_report)) {
             scoutResult.value = data;
             let desc = `--- 📦 LOT APPRAISAL & BOOTH STRATEGY ---\n\n`;
-            if (data.title) desc += `**Suggested Title:** ${data.title}\n\n`;
+            if (data.tier_label || data.tier) {
+                const tierName = data.tier_label || (data.tier === 'showcase' ? '🌟 Showcase' : data.tier === 'quick_turn' ? '⚡ Quick Turn' : '📦 Core');
+                desc += `**Inventory Tier:** ${tierName}\n`;
+            }
+            if (data.title) {
+                const cleanLotTitle = data.title.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+                desc += `**Suggested Title:** ${cleanLotTitle}\n\n`;
+            }
+            if (data.why_pay_up) desc += `**💎 Sourcing Catalyst (Why Pay Up):** ${data.why_pay_up}\n`;
+            if (data.why_pass) desc += `**⚠️ Risk Rationale (Why Pass):** ${data.why_pass}\n`;
             if (data.condition_notes) desc += `**Condition Overview:** ${data.condition_notes}\n\n`;
 
-            if (data.price_breakdown) {
+            if (data.pricing_potential || data.price_breakdown) {
                 desc += `**💰 Total Valuation:**\n`;
-                if (data.price_breakdown.mint) desc += `- **Mint / High-Grade:** ${data.price_breakdown.mint}\n`;
-                if (data.price_breakdown.fair) desc += `- **Fair / Market Average:** ${data.price_breakdown.fair}\n`;
-                if (data.price_breakdown.boutique_premium) desc += `- **Boutique / Antique Mall:** ${data.price_breakdown.boutique_premium}\n`;
-                if (data.price_breakdown.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
+                if (data.pricing_potential?.fair || data.price_breakdown?.fair) desc += `- **Fair Market:** ${data.pricing_potential?.fair || data.price_breakdown?.fair}\n`;
+                if (data.pricing_potential?.boutique || data.price_breakdown?.boutique_premium) desc += `- **Boutique / Antique Mall:** ${data.pricing_potential?.boutique || data.price_breakdown?.boutique_premium}\n`;
+                if (data.price_breakdown?.mint) desc += `- **Mint / High-Grade:** ${data.price_breakdown.mint}\n`;
+                if (data.price_breakdown?.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
                 desc += `\n`;
             }
 
