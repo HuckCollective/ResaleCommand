@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "inspect": "node scripts/inspect_schema.js",
+    "audit:schema": "node scripts/audit_schema.mjs",
     "start": "astro dev",
     "build": "astro build",
     "lint": "node scripts/validate-templates.mjs",
