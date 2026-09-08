@@ -85,7 +85,19 @@ Under **Treasury Regulation § 1.263(a)-1(f)** (the IRS *De Minimis Safe Harbor 
 
 ---
 
-## 5. Resale Command Feature Roadmap
+## 5. Multi-Channel Sales Matrix: Booths vs. Online Marketplaces vs. Cash
+
+Different sales channels generate distinct tax deduction opportunities and reporting requirements for Huckleberry Collective LLC:
+
+| Sales Channel | Schedule C Line | What's Deductible | Key IRS / Reporting Rule |
+| :--- | :--- | :--- | :--- |
+| **Online Marketplaces** *(eBay, Poshmark, Etsy, Mercari)* | **Line 10** (Commissions & Fees)<br>**Line 27a** (Shipping & Postage)<br>**Line 22** (Supplies)<br>**Line 2** (Returns & Allowances) | Final Value fees (10-20%), payment processing, Pirate Ship/USPS postage labels, boxes, poly mailers, bubble wrap, promoted ad spend | **1099-K Gross Trap**: Platforms report *gross customer charges*. You must deduct all seller fees, shipping postage, and refunds, or you pay tax on income you never received. |
+| **Antique Malls / Booths** *(Memory Den, DustyTiger)* | **Line 20b** (Rent for Business Property)<br>**Line 10** (Commissions)<br>**Line 22 / Safe Harbor** (Fixtures) | Fixed monthly booth rent, consignment commission percentage cuts (10–15%), display shelving, chrome racks, price tags, barcode labels | Operating expenses are deductible immediately in current tax year regardless of item sell-through. |
+| **Direct & Pop-up Sales** *(Craigslist, Flea Markets, Cash)* | **Line 27a** (Other Expenses / Event Fees)<br>**Line 10** (Payment Processing)<br>**Cohan Rule Log** | Flea market table admission fees, vendor permits, Square/Stripe/Venmo business payment fees (2.9% + $0.30) | No 1099-K issued. Maintain contemporaneous 5-point log and photo evidence for audit defense. |
+
+---
+
+## 6. Resale Command Feature Roadmap
 
 Future app features to embed this knowledge directly into the user experience:
 
@@ -96,5 +108,7 @@ Future app features to embed this knowledge directly into the user experience:
    * Prompts the user to snap a photo and auto-fills a structured Cohan Rule log entry.
 3. **Sourcing Trip Mileage Calculator**:
    * A mileage input field (miles × $0.67 IRS rate) that automatically computes and populates the travel deduction for sourcing runs.
-4. **Schedule C Tax Export**:
-   * A one-click tax report separating **Cost of Goods Sold (Line 4)**, **Supplies (Line 22)**, **Travel/Mileage (Line 24a)**, and **Other Expenses (Line 27a)**.
+4. **1099-K Marketplace Reconciliation Tool**:
+   * Automatic cross-referencing between eBay/Poshmark 1099-K Gross amounts and logged platform fees + postage expenses.
+5. **Schedule C Tax Export**:
+   * A one-click tax report separating **Cost of Goods Sold (Line 4)**, **Commissions & Fees (Line 10)**, **Supplies (Line 22)**, **Travel/Mileage (Line 24a)**, and **Other Expenses (Line 27a)**.

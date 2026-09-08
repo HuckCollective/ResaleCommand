@@ -36,24 +36,24 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
       document.documentElement.setAttribute('data-theme', theme);
     </script>
   </head>
+  <body>
+    <div class="flex flex-col min-h-screen">
+      <Navbar client:load />
+      <main class="flex-1">
+        <slot />
+      </main>
+      {!hideFooter && <Footer />}
+    </div>
+
+    <MarkdownModal />
+    <HuckleberryLoader client:only="vue" />
+    <ToastContainer client:only="vue" />
+    <ConfirmContainer client:only="vue" />
+    <script>
+      import { initAuth } from "../lib/store";
+
+      // Initialize auth state on client load
+      initAuth();
+    </script>
+  </body>
 </html>
-<body>
-  <div class="flex flex-col min-h-screen">
-    <Navbar client:load />
-    <main class="flex-1">
-      <slot />
-    </main>
-    {!hideFooter && <Footer />}
-  </div>
-
-  <MarkdownModal />
-  <HuckleberryLoader client:only="vue" />
-  <ToastContainer client:only="vue" />
-  <ConfirmContainer client:only="vue" />
-  <script>
-    import { initAuth } from "../lib/store";
-
-    // Initialize auth state on client load
-    initAuth();
-  </script>
-</body>

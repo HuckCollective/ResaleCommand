@@ -17,14 +17,24 @@ description: Industry-standard mobile UX/UI rules for Resale Command, synthesizi
 - **No Clipped Text**: Long product/item titles (e.g. *"360 Stretch Active Mesh - Zones with Breathable Fabric"*) must NEVER be placed in single-line fixed-width inputs that horizontally clip or truncate text.
 - **Mobile Card Inputs**: Use 2-row auto-wrapping `textarea` (`textarea textarea-bordered leading-snug resize-none`) with full width (`w-full`) so the entire title is legible and easily editable without scrolling inside the box.
 
-## 3. Badges, Pills & High-Contrast Tokens (DaisyUI & M3)
-- **Zero Text Stacking**: Badges & small pills (`badge-xs`, `badge-sm`) MUST include `whitespace-nowrap` so multi-word text (*e.g. "AI POWERED"*) never line-breaks and stacks on top of itself inside fixed-height pills.
+## 3. Badges, Pills & Segmented Filter Bars (DaisyUI & M3)
+- **Zero Text Stacking & Shrink Immunity**: Badges & small pills (`badge-xs`, `badge-sm`) MUST ALWAYS include `whitespace-nowrap shrink-0` so multi-word text (*e.g. "AI POWERED"*, *"Google Billed"*) never line-breaks, stacks, or crushes inside fixed-height pills.
+- **Segmented Filter & Pill Bars on Mobile**:
+  - A row of 3 or more filter buttons (e.g. `[All Insights 11] [Tax Write-Offs 7] [Inventory Alerts 4]`) totals >430px in width and WILL clip on mobile viewports (375px–420px) if placed in a standard row.
+  - **MANDATORY PATTERN**: Container MUST use `flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none` with `shrink-0` on each button so the bar scrolls naturally without clipping the rightmost button.
+  - **Responsive Labels**: Use compact text on mobile (e.g., `Tax`, `All`, `Inventory`) and expand with `<span class="hidden sm:inline">` (e.g. `Write-Offs`, `Insights`, `Alerts`) on `sm:` breakpoints.
+- **Card-Level Badge Rows**:
+  - Never place two badges in a rigid `flex justify-between` without wrapping on mobile cards.
+  - ALWAYS use `flex flex-wrap items-center justify-between gap-1.5` with `shrink-0` on both badges so long tags (e.g., `Line 22 & 27a`) wrap cleanly below the category badge instead of colliding or truncating.
 - **Explicit Contrast Tokens**: Always pair colored badge backgrounds with their matching semantic content color token:
   - `badge-primary` $\to$ `text-primary-content`
   - `badge-secondary` $\to$ `text-secondary-content`
+  - `badge-success` $\to$ `text-success-content`
   - `badge-warning` $\to$ `text-warning-content`
   - `badge-error` $\to$ `text-error-content`
   - `badge-neutral` $\to$ `text-neutral-content`
+- **Mobile Emulation Testing**:
+  - Always verify responsive UI in Chrome DevTools mobile emulation mode at **375px to 420px viewport width** (e.g., iPhone SE, iPhone 14, Pixel 7) to confirm zero horizontal clipping or awkward badge stacking.
 
 ## 4. Touch Targets & Safe-Area Padding (Apple HIG & Material 3)
 - **Touch Target Size**: All interactive buttons, icon triggers, and form pills must have a minimum touch target of **44×44px** (or generous padding) to prevent tap errors.
