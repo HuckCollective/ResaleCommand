@@ -1,27 +1,9 @@
 ---
-import { featureFlags } from "site-config";
 ---
 
 <footer class="mt-8 pt-4 pb-24 sm:pb-28 border-t border-base-300/40">
   <div class="text-center text-xs text-base-content/60 space-y-1">
     <p class="flex flex-wrap items-center justify-center gap-3">
-      {
-        featureFlags.enableImprint && (
-          <a class="hover:underline hover:text-primary font-medium" href="/imprint">
-            Imprint
-          </a>
-        )
-      }
-      {
-        featureFlags.enableDataprotection && (
-          <a
-            class="hover:underline hover:text-primary font-medium"
-            href="/dataprotection">
-            Privacy Policy
-          </a>
-        )
-      }
-
       <span>
         Copyright © {new Date().getFullYear()} Huckleberry Collective LLC
       </span>
