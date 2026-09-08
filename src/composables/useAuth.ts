@@ -27,12 +27,19 @@ export function useAuth() {
   const currentTeam = computed(() => state.value.currentTeam);
   const ownedTeam = computed(() => state.value.ownedTeam);
   const loading = computed(() => state.value.loading);
+  const isAdmin = computed(() => {
+    if (!state.value.user) return false;
+    return !!state.value.ownedTeam || 
+           !!state.value.user.labels?.includes('admin') ||
+           state.value.isPartner;
+  });
 
   return {
     // State
     user,
     isAuthenticated,
     isPartner,
+    isAdmin,
     teams,
     currentTeam,
     ownedTeam,

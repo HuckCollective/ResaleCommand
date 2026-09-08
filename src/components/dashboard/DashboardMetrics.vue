@@ -68,6 +68,9 @@
             </div>
         </div>
         </div>
+
+        <!-- GEMINI AI USAGE & COST MONITOR (ADMIN ONLY) -->
+        <AiUsageCard v-if="isAdmin" />
     </div>
 </template>
 
@@ -76,6 +79,10 @@ import { onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
 import { useLoader } from '../../composables/useLoader';
+import { useAuth } from '../../composables/useAuth';
+import AiUsageCard from './AiUsageCard.vue';
+
+const { isAdmin } = useAuth();
 
 const {
     loading,
