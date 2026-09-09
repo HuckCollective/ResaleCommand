@@ -881,7 +881,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '../../lib/inventory';
+import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
+import { useLoader } from '../../composables/useLoader';
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
 import { useAuth } from '../../composables/useAuth';
@@ -1009,11 +1010,9 @@ const confirmPostExportActions = async () => {
 // Environment Variables
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-import { BUCKET_ID } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 
 // Use Composable
-import { useLoader } from '../../composables/useLoader';
 const { currentTeam, user, loading: authLoading } = useAuth();
 
 const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs, getNextUpc } = useInventory();
@@ -2179,9 +2178,13 @@ const cameraStream = ref(null);
 
 // Trigger loader on setup only if items not already loaded
 const { showLoader, updateLoader, hideLoader } = useLoader();
-if (inventoryItems.value.length === 0) {
-    showLoader("Loading Inventory...");
-}
+
+// Guarantee loader dismisses when useInventory finishes loading
+watch(loading, (isLoading) => {
+    if (!isLoading) {
+        hideLoader();
+    }
+});
 
 // Lifecycle
 onMounted(async () => {
@@ -2196,20 +2199,36 @@ onMounted(async () => {
         if (st) filterStatus.value = st;
     }
 
-    // Initiate inventory load
-    await fetchInventory(currentTeam.value?.$id || ''); 
+    try {
+        if (inventoryItems.value.length === 0) {
+            showLoader("Loading Inventory...");
+        }
+        await fetchInventory(currentTeam.value?.$id || ''); 
+    } catch (e) {
+        console.error("Failed to load inventory:", e);
+    } finally {
+        hideLoader();
+    }
 });
 
 // Watch for Auth / Team changes
 watch(authLoading, async (newVal, oldVal) => {
     if (oldVal && !newVal) {
-        await fetchInventory(currentTeam.value?.$id || ''); 
+        try {
+            await fetchInventory(currentTeam.value?.$id || ''); 
+        } finally {
+            hideLoader();
+        }
     }
 });
 
 watch(currentTeam, async (newTeam, oldTeam) => {
     if (newTeam?.$id !== oldTeam?.$id) {
-        await fetchInventory(newTeam?.$id || '');
+        try {
+            await fetchInventory(newTeam?.$id || '');
+        } finally {
+            hideLoader();
+        }
     }
 });
 

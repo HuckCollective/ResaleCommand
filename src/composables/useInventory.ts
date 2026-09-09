@@ -92,8 +92,9 @@ export function useInventory() {
                 const pageSize = 5000;
 
                 while (hasMoreItems) {
+                    // Use $id for ordering: strictly unique and monotonic, avoiding bulk-import $createdAt collisions
                     const queries: any[] = [
-                        Query.orderDesc('$createdAt'),
+                        Query.orderDesc('$id'),
                         Query.limit(pageSize)
                     ];
 
@@ -121,6 +122,11 @@ export function useInventory() {
                     }
 
                     console.log(`[useInventory] Batch: ${response.documents.length}, Accumulated: ${allDocs.length}, Collection total: ${total} (${getCollectionId()})`);
+
+                    // 4,000-item warning track
+                    if (total >= 4000 && allDocs.length === response.documents.length) {
+                        console.warn(`[useInventory] ⚠️ Inventory at ${total}/5000 items. Multi-batch pagination is armed for 5k+ expansion.`);
+                    }
 
                     if (response.documents.length < pageSize || allDocs.length >= total) {
                         hasMoreItems = false;

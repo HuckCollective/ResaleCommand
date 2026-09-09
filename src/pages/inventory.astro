@@ -1,12 +1,11 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import InventoryManager from '../components/inventory/InventoryManager.vue';
-
-export const prerender = false;
+import InventoryList from '../components/InventoryList.astro';
 ---
 
 <Layout title="Inventory | Resale Command">
     <div class="container mx-auto px-4 py-8">
-        <InventoryManager client:only="vue" />
+        <InventoryList />
     </div>
 </Layout>
+

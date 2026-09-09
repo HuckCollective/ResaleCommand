@@ -12,6 +12,7 @@
         <div class="indicator flex items-center mr-2 md:mr-4">
           <span v-if="displayTrackedCount > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ displayTrackedCount }}</span>
           <a href="/scout?quick=true" 
+             @click="handleScoutClick"
              class="btn btn-ghost btn-sm border border-base-300 bg-base-200/50 rounded-lg gap-1.5 normal-case font-semibold hover:bg-base-200 flex items-center px-3"
              title="Speed Scout"
              aria-label="Speed Scout">
@@ -196,7 +197,7 @@
                        <Icon v-else-if="link.text === 'Inventory'" icon="solar:box-linear" class="w-5 h-5 text-primary" />
                        <Icon v-else-if="link.text === 'Organization'" icon="solar:settings-linear" class="w-5 h-5 text-primary" />
                        <span class="grow text-left">{{ link.text }}</span>
-                       <span v-if="(link.text === 'Speed Scout' || link.text === 'Scout') && cartItems.length > 0" class="badge badge-primary font-bold">{{ cartItems.length }}</span>
+                       <span v-if="(link.text === 'Speed Scout' || link.text === 'Scout') && displayTrackedCount > 0" class="badge badge-primary font-bold">{{ displayTrackedCount }}</span>
                     </a>
                 </div>
 
@@ -316,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
@@ -332,10 +333,35 @@ const {
 } = useAuth();
 
 const { cartItems } = useCart();
-const { purchaseItems, activePurchase, pausedTracker, toggleTray } = useScoutPurchase();
+const { purchaseItems, activePurchase, pausedTracker, draftPurchases, loadDraftPurchases, toggleTray } = useScoutPurchase();
 
 const displayTrackedCount = computed(() => {
-  return purchaseItems.value.length || cartItems.value.length || (activePurchase.value?.itemCount || 0);
+  return (
+    purchaseItems.value.length || 
+    (activePurchase.value?.itemCount || 0) || 
+    (pausedTracker.value?.itemCount || 0) || 
+    (draftPurchases.value[0]?.itemCount || 0) || 
+    cartItems.value.length
+  );
+});
+
+// Globally sync active/paused tracker count across all views (Inventory, Sales, Dashboard, etc.)
+onMounted(() => {
+  if (isAuthenticated.value) {
+    loadDraftPurchases().catch(err => console.warn('[Navbar] Failed to load draft purchases:', err));
+  }
+});
+
+watch(isAuthenticated, (authed) => {
+  if (authed) {
+    loadDraftPurchases().catch(err => console.warn('[Navbar] Failed to load draft purchases:', err));
+  }
+}, { immediate: true });
+
+watch(currentTeam, () => {
+  if (isAuthenticated.value) {
+    loadDraftPurchases().catch(err => console.warn('[Navbar] Failed to load draft purchases on team switch:', err));
+  }
 });
 
 const handleScoutClick = (e: MouseEvent) => {

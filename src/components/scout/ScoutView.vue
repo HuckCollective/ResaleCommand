@@ -15,246 +15,431 @@
         </div>
     </div>
 
-    <!-- MAIN CONTENT AREA -->
-    <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto">
-        
+    <!-- MAIN CONTENT AREA (Intake Cockpit) -->
+    <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto pb-60 sm:pb-72">
 
-        <!-- 1. INPUT SECTION -->
+        <!-- 1. UNIFIED INTAKE SECTION (No Tabs) -->
         <div class="card bg-base-100 shadow-sm border border-base-200">
-            <div class="card-body p-4">
+            <div class="card-body p-4 space-y-4">
                 
-                <!-- TABS -->
-                <div class="tabs tabs-boxed justify-center mb-4 bg-base-200">
-                    <a class="tab gap-2" :class="{ 'tab-active': mode === 'speed' }" @click="mode = 'speed'">
-                        <Icon icon="solar:camera-linear" /> Single Item
-                    </a>
-                    <a class="tab gap-2" :class="{ 'tab-active': mode === 'precision' }" @click="mode = 'precision'">
-                        <Icon icon="solar:link-linear" /> Web Link
-                    </a>
-                    <a class="tab gap-2" :class="{ 'tab-active': mode === 'bulk' }" @click="mode = 'bulk'">
-                        <Icon icon="solar:document-text-linear" /> Bulk / Receipt
-                    </a>
+                <!-- 1a. DETAILS ON TOP (Optional notes: size, brand, defect, etc.) -->
+                <div class="form-control w-full flex flex-col">
+                    <div class="mb-1 text-xs font-semibold opacity-70 px-1">Additional Details (Optional) Size, Brand, Defects, etc.</div>
+                    <textarea v-model="userNotes" class="textarea textarea-bordered w-full h-20 text-xs sm:text-sm leading-relaxed" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
                 </div>
 
-                <!-- 1a. IMAGE INPUTS (Speed Scout Mode) -->
-                <div v-if="mode === 'speed'" class="form-control w-full">
+                <!-- 1b. CAMERA & PHOTO GALLERY -->
+                <div class="form-control w-full">
                     <PhotoGalleryManager 
                         v-model:new-photos="images"
-                        :max-photos="5"
+                        v-model:main-selection="mainPhotoSelection"
+                        :max-photos="10"
                         :scanner-widget="scannerWidget"
                         output-format="object"
                         :show-header="false"
+                        :allow-paste="false"
                         @open-camera="scannerWidget?.startCamera()"
                     />
                 </div>
 
-                <!-- 1b. URL INPUT (Precision/Link Scout Mode) -->
-                <div v-if="mode === 'precision'" class="form-control w-full">
-                    <div v-if="isAuthenticated" class="form-control w-full space-y-3">
-                        <div class="flex flex-col sm:flex-row gap-3">
-                            <div class="grow form-control">
-                                <label class="label pt-0"><span class="label-text opacity-70 text-sm font-bold">Paste Web URL</span></label>
-                                <input type="text" v-model="scoutUrl" class="input input-bordered w-full font-mono text-sm" placeholder="Paste eBay, ShopGoodwill, FB Marketplace, Poshmark or Mercari link..." />
-                            </div>
-                            <div class="w-full sm:w-36 form-control">
-                                <label class="label pt-0"><span class="label-text opacity-70 text-sm font-bold">Scout ZIP Code</span></label>
-                                <input type="text" v-model="zipCode" @blur="saveZipCode" @change="saveZipCode" class="input input-bordered w-full font-mono text-sm text-center" placeholder="98101" maxlength="5" />
+                <!-- OR DIVIDER -->
+                <div class="divider text-xs font-bold uppercase tracking-wider opacity-60 my-0">OR PASTE WEB LINK</div>
+
+                <!-- 1c. WEB URL INPUT -->
+                <div v-if="isAuthenticated" class="form-control w-full space-y-2">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <div class="grow form-control">
+                            <div class="relative flex items-center">
+                                <Icon icon="solar:link-linear" class="absolute left-3 w-4 h-4 opacity-50 pointer-events-none" />
+                                <input 
+                                    type="text" 
+                                    v-model="scoutUrl" 
+                                    class="input input-bordered w-full pl-9 font-mono text-sm" 
+                                    placeholder="Paste eBay, ShopGoodwill, FB Marketplace, Poshmark or Mercari link..." 
+                                    @keydown.enter.prevent="handleAnalyze"
+                                />
+                                <button v-if="scoutUrl" type="button" @click="scoutUrl = ''" class="absolute right-2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">✕</button>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between text-xs opacity-75 px-1">
-                            <span>Blocked by anti-bot captcha? Snip the screen and paste it:</span>
-                            <button type="button" @click="pasteFromClipboard" class="btn btn-xs btn-outline btn-secondary gap-1">
-                                <Icon icon="solar:clipboard-text-linear" class="w-3.5 h-3.5" /> Paste Screenshot
-                            </button>
+                        <div class="w-full sm:w-32 form-control">
+                            <input type="text" v-model="zipCode" @blur="saveZipCode" @change="saveZipCode" class="input input-bordered w-full font-mono text-sm text-center" placeholder="My Zip" maxlength="5" />
                         </div>
                     </div>
-                    
-                    <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-4 text-sm">
-                        <div class="font-bold text-primary mb-1">Web Link Import is restricted during Early Alpha.</div>
-                        <span class="opacity-70">We're currently gathering feedback and accepting waitlist members for the collective. </span>
-                        <a href="/login" class="link text-secondary font-bold">Log in to unlock access.</a>
+                </div>
+                
+                <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-3 text-xs">
+                    <span class="opacity-70">Web Link Import requires login. </span>
+                    <a href="/login" class="link text-secondary font-bold">Log in to unlock access.</a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. FULL-SCREEN SCOUT RESULTS (Modeled directly after ItemDrawer layout: pinned header, window-edge scroll body, pinned footer) -->
+    <div 
+        v-if="result && isResultsModalOpen" 
+        class="fixed inset-0 z-50 bg-base-100 flex flex-col h-screen overflow-hidden animate-in fade-in duration-200"
+    >
+        <!-- Modal Top Bar (flex-none pinned header) -->
+        <div class="flex-none h-14 sm:h-16 border-b border-base-300 bg-base-100/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30 shadow-xs">
+            <div class="flex items-center gap-2 min-w-0">
+                <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-ghost btn-circle" title="Back to Intake">
+                    <Icon icon="solar:arrow-left-linear" class="w-5 h-5" />
+                </button>
+                <div class="min-w-0">
+                    <div class="font-black text-xs sm:text-sm text-base-content truncate flex items-center gap-2">
+                        <span>Scouting Report</span>
+                        <span v-if="result.items && result.items.length > 0" class="badge badge-primary badge-xs sm:badge-sm font-bold">
+                            {{ result.items.length }} {{ result.items.length === 1 ? 'Item' : 'Items (Lot)' }}
+                        </span>
                     </div>
+                    <div class="text-[10px] opacity-60 truncate">Inspect pricing, condition, & save to Buy Tracker</div>
                 </div>
-
-                <!-- ADDITIONAL DETAILS -->
-                <div v-if="mode !== 'bulk'" class="form-control w-full mt-4 flex flex-col">
-                    <div class="mb-1 text-sm font-medium opacity-70 px-1">Additional Details (Optional) Size, Brand, Defects, etc.</div>
-                    <textarea v-model="userNotes" class="textarea textarea-bordered w-full h-24 text-sm leading-relaxed" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
-                </div>
-
-                <!-- 1c. BULK / RECEIPT ENTRY -->
-                <div v-if="mode === 'bulk'" class="form-control w-full">
-                    <SpeedEntryForm />
-                </div>
-
-                <!-- ANALYZE BUTTON MOVED TO COMPONENT STICKY FOOTER -->
+            </div>
+            
+            <div class="flex items-center gap-1.5">
+                <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-circle btn-ghost" title="Close Scouting Report">
+                    ✕
+                </button>
             </div>
         </div>
 
-        <!-- 2. SHARED DETAILS SECTION (Only if results or manual entry) -->
-        <div v-if="mode !== 'bulk' && (result || images.length > 0)" class="card bg-base-100 shadow-sm border border-base-200">
-             <div class="card-body p-4">
-
-                
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text opacity-70">Cost Basis ($)</span></label>
-                    <input v-model="cost" type="number" step="0.01" class="input input-bordered w-full" placeholder="0.00" />
-                </div>
-
-                <div class="form-control w-full mt-2">
-                    <label class="cursor-pointer label justify-start gap-3">
-                        <input type="checkbox" v-model="isAcquired" class="checkbox checkbox-primary checkbox-sm rounded-md" />
-                        <span class="label-text opacity-75 font-bold">Item Already Purchased / Acquired</span>
-                    </label>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text opacity-70">Sourcing Location / URL</span></label>
-                    <div class="join w-full">
-                        <input v-model="sourcingLocation" type="text" class="input input-bordered join-item w-full" placeholder="e.g. Goodwill, Garage Sale" />
-                        <button class="btn btn-outline btn-square join-item">
-                            <Icon icon="solar:map-point-linear" class="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-                
-                 <div class="form-control w-full">
-                     <label class="label"><span class="label-text opacity-70">Physical Location</span></label>
-                    <input v-model="storageLocation" type="text" class="input input-bordered w-full" placeholder="e.g. Front Cart, Blue Bin, Shelf 3" />
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text opacity-70">Receipt Photo (Optional)</span></label>
-                    <div class="join w-full">
-                         <button class="btn btn-outline join-item" @click="receiptInput?.click()">Choose File</button>
-                         <input type="text" readonly class="input input-bordered join-item w-full text-xs opacity-70" :value="receiptFile ? receiptFile.name : 'No file chosen'" />
-                    </div>
-                    <input type="file" ref="receiptInput" @change="handleReceiptUpload" accept="image/*" class="hidden" />
-                </div>
-             </div>
-        </div>
-
-        <!-- 3. RESULTS (ITEM CARDS) -->
-        <div v-if="mode !== 'bulk' && result" id="scout-results-section" class="space-y-6">
-            <div v-for="(item, index) in (result.items || [])" :key="index" class="card bg-base-100 shadow-lg border-t-4 border-t-primary">
+        <!-- Scrollable Report Body (flex-1 overflow-y-auto w-full - Scrollbar on the extreme right of the window) -->
+        <div class="flex-1 overflow-y-auto w-full">
+            <div class="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-5 space-y-6">
+                <!-- 3. RESULTS (ITEM CARDS) -->
+                <div id="scout-results-section" class="space-y-6">
+            <div v-for="(item, index) in ((result.items && result.items.length > 0) ? result.items : [result])" :key="index" class="card bg-base-100 shadow-sm border border-base-200">
                 <div class="card-body p-4 md:p-6">
-                    
-                    <!-- Header & Interactive Gallery -->
-                    <div class="flex flex-col md:flex-row gap-6 items-start w-full">
-                        <!-- Image Gallery (Left/Top) -->
-                        <div class="w-full md:w-1/2 flex flex-col gap-3">
-                            <div v-if="item.fetched_image" class="w-full h-64 sm:h-80 bg-base-200 border border-base-300 rounded-xl relative overflow-hidden flex items-center justify-center shadow-inner group">
-                                <img :src="proxify(item.fetched_image)" 
-                                     @error="handleImageError" 
-                                     referrerpolicy="no-referrer"
-                                     class="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105" 
-                                     alt="Item Main Image" />
-                                <div class="absolute top-2 left-2 badge badge-primary gap-1 shadow font-bold text-xs uppercase tracking-wide">
-                                    <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Main Photo
+                                    <!-- 1. Title Header & Input (Top of Card) -->
+                    <div class="space-y-1 mb-4">
+                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                            <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono">Scouted Listing</span>
+                            <span v-if="getTierBadgeInfo(item)" class="badge font-bold gap-1 shadow-xs" :class="getTierBadgeInfo(item).class">
+                                {{ getTierBadgeInfo(item).label }}
+                            </span>
+                            <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
+                        </div>
+                        
+                        <!-- Suggested Title Input -->
+                        <div class="form-control w-full mt-1">
+                            <div class="relative">
+                                <input v-model="item.title" type="text" class="input input-bordered w-full font-black text-sm sm:text-base pr-8" placeholder="Item Title..." />
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-30 pointer-events-none"><Icon icon="solar:pen-linear" class="w-4 h-4" /></span>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-xs btn-outline btn-secondary gap-1 shadow-xs rounded-lg">
+                                <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> View Source Listing
+                            </a>
+                            <a v-if="getItemDisplayImage(item) && getItemDisplayImage(item).startsWith('http')" :href="'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(getItemDisplayImage(item))" target="_blank" class="btn btn-xs btn-outline btn-primary gap-1 shadow-xs rounded-lg">
+                                <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Search Google Lens
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 2. COLLAPSIBLE PHOTOS & DETAILS SECTION (Compact on mobile so Verdict & Estimates are immediately visible!) -->
+                    <div class="card bg-base-200/80 border border-base-300 rounded-2xl overflow-hidden mb-3 transition-all duration-200 shadow-xs">
+                        <!-- Compact Preview & Toggle Bar -->
+                        <div 
+                            @click="isMediaDetailsExpanded = !isMediaDetailsExpanded"
+                            class="p-2.5 sm:p-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-base-300/60 transition-colors select-none"
+                        >
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <!-- Small Thumbnail Preview -->
+                                <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-base-300 shrink-0 overflow-hidden border border-base-content/10 relative flex items-center justify-center shadow-xs">
+                                    <img 
+                                        v-if="getItemDisplayImage(item)" 
+                                        :src="proxify(getItemDisplayImage(item))" 
+                                        @error="handleImageError" 
+                                        referrerpolicy="no-referrer"
+                                        class="w-full h-full object-cover" 
+                                        alt="Thumbnail" 
+                                    />
+                                    <Icon v-else icon="solar:camera-linear" class="w-6 h-6 opacity-40 text-base-content" />
+                                    
+                                    <!-- Photo Count Badge -->
+                                    <span v-if="(images.length + (itemGalleryImages?.length || 0)) > 1" class="absolute bottom-0.5 right-0.5 badge badge-neutral badge-xs font-mono text-[9px] px-1 py-0 h-3.5 leading-none opacity-90">
+                                        {{ images.length + (itemGalleryImages?.length || 0) }}
+                                    </span>
                                 </div>
+
+                                <!-- Summary Text (Photos count + Notes excerpt) -->
+                                <div class="min-w-0 flex flex-col justify-center">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-xs font-black text-base-content flex items-center gap-1">
+                                            <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5 text-primary" />
+                                            Photos &amp; Notes
+                                        </span>
+                                        <span class="badge badge-ghost badge-xs font-bold text-[10px] opacity-70 shrink-0">
+                                            {{ (images.length + (itemGalleryImages?.length || 0)) }} {{ (images.length + (itemGalleryImages?.length || 0)) === 1 ? 'photo' : 'photos' }}
+                                        </span>
+                                    </div>
+                                    <p class="text-[11px] opacity-65 truncate max-w-xs sm:max-w-md mt-0.5 font-medium">
+                                        {{ userNotes && userNotes.trim() ? userNotes : 'No notes added. Tap to edit photos or add details.' }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Toggle Button & Icon -->
+                            <button 
+                                type="button" 
+                                class="btn btn-xs sm:btn-sm btn-ghost gap-1 font-bold text-[11px] shrink-0 text-primary hover:bg-primary/10"
+                            >
+                                <span class="hidden sm:inline">{{ isMediaDetailsExpanded ? 'Collapse' : 'Expand' }}</span>
+                                <span>{{ isMediaDetailsExpanded ? 'Hide' : 'Edit' }}</span>
+                                <Icon :icon="isMediaDetailsExpanded ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <!-- Collapsible Body (Details textarea + full PhotoGalleryManager) -->
+                        <div v-show="isMediaDetailsExpanded" class="p-3 sm:p-4 border-t border-base-300 space-y-3 bg-base-100 animate-in fade-in duration-150">
+                            <!-- Additional Details Textarea -->
+                            <div class="form-control w-full">
+                                <div class="mb-1 text-xs font-bold text-base-content flex items-center justify-between px-1">
+                                    <span class="flex items-center gap-1.5">
+                                        <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
+                                        Additional Details (Size, Brand, Defects, etc.)
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-semibold">Saved to notes</span>
+                                </div>
+                                <textarea 
+                                    v-model="userNotes" 
+                                    class="textarea textarea-bordered w-full h-20 text-xs sm:text-sm leading-relaxed bg-base-100 font-medium" 
+                                    placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve, mint in box...">
+                                </textarea>
+                            </div>
+
+                            <!-- Photo Gallery Manager -->
+                            <div class="w-full">
+                                <div class="mb-1 text-xs font-bold text-base-content flex items-center justify-between px-1">
+                                    <span class="flex items-center gap-1.5">
+                                        <Icon icon="solar:camera-bold" class="w-4 h-4 text-primary" />
+                                        Listing Photos
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-semibold">Add, remove, or change main</span>
+                                </div>
+                                <!-- For primary scouted item -->
+                                <PhotoGalleryManager 
+                                    v-if="index === 0"
+                                    v-model:existing-images="itemGalleryImages"
+                                    v-model:new-photos="images"
+                                    v-model:main-selection="mainPhotoSelection"
+                                    :max-photos="15"
+                                    :scanner-widget="scannerWidget"
+                                    output-format="object"
+                                    :show-header="false"
+                                    :allow-paste="false"
+                                    @open-camera="scannerWidget?.startCamera()"
+                                />
+                                <!-- Sub-item in a lot -->
+                                <div v-else class="flex flex-col gap-3">
+                                    <div v-if="getItemDisplayImage(item)" class="w-full h-64 bg-base-200 border border-base-300 rounded-xl relative overflow-hidden flex items-center justify-center shadow-inner group">
+                                        <img :src="proxify(getItemDisplayImage(item))" 
+                                             @error="handleImageError" 
+                                             referrerpolicy="no-referrer"
+                                             class="max-w-full max-h-full object-contain" 
+                                             alt="Lot Item Image" />
+                                        <div class="absolute top-2 left-2 badge badge-neutral gap-1 shadow font-bold text-xs uppercase tracking-wide">
+                                            <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Lot Item #{{ Number(index) + 1 }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Sourcing Strategy Verdict (Pass / No Pass) with Max Landed & Max Bid Built-in -->
+                    <div v-if="item.purchase_strategy" class="border-2 rounded-2xl p-4 shadow-sm mb-4" :class="{
+                        'border-success bg-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
+                        'border-error bg-error/10': item.purchase_strategy.verdict === 'PASS',
+                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
+                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
+                    }">
+                        <!-- Verdict Header -->
+                        <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                            <div class="flex items-center gap-2">
+                                <Icon icon="solar:magic-stick-linear" class="text-2xl" v-if="['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)" />
+                                <Icon icon="solar:stop-circle-linear" class="text-2xl" v-if="item.purchase_strategy.verdict === 'PASS'" />
+                                <Icon icon="solar:eye-linear" class="text-2xl" v-if="['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)" />
+                                <h3 class="font-black text-lg uppercase tracking-wider" :class="{
+                                    'text-success': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
+                                    'text-error': item.purchase_strategy.verdict === 'PASS',
+                                    'text-warning': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)
+                                }">{{ item.purchase_strategy.verdict.replace('_', ' ') }}</h3>
                             </div>
                             
-                            <!-- Horizontal gallery of all scraped images -->
-                            <div v-if="item.fetched_images && item.fetched_images.length > 1" class="flex gap-2 overflow-x-auto py-1 scrollbar-thin max-w-full">
-                                <div v-for="(imgUrl, imgIdx) in item.fetched_images" 
-                                     :key="imgIdx" 
-                                     @click="item.fetched_image = imgUrl"
-                                     class="w-16 h-16 shrink-0 rounded-lg cursor-pointer border-2 transition-all relative overflow-hidden bg-base-100 shadow-sm"
-                                     :class="item.fetched_image === imgUrl ? 'border-primary ring-2 ring-primary/20 scale-95 shadow-md' : 'border-base-300 hover:border-primary/50'">
-                                    <img :src="proxify(imgUrl)" @error="handleImageError" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
-                                </div>
+                            <div 
+                                v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" 
+                                class="px-2.5 py-1 rounded-lg bg-base-300/80 border border-base-content/10 text-xs font-semibold text-base-content flex items-center gap-1.5"
+                            >
+                                <span class="text-base-content/70 font-extrabold uppercase text-[10px] tracking-wider shrink-0">Asking / Bid:</span>
+                                <span class="text-base-content font-bold text-xs">{{ item.purchase_strategy.current_asking_price }}</span>
                             </div>
                         </div>
 
-                        <!-- Title & Source Section (Right/Bottom) -->
-                        <div class="w-full md:w-1/2 flex flex-col justify-between h-full space-y-4">
-                            <div>
-                                <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                    <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono">Scouted Listing</span>
-                                    <span v-if="getTierBadgeInfo(item)" class="badge font-bold gap-1 shadow-xs" :class="getTierBadgeInfo(item).class">
-                                        {{ getTierBadgeInfo(item).label }}
-                                    </span>
-                                    <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
+                        <!-- Max Landed & Max Bid for Auctions (Directly within Pass / No Pass!) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 my-3">
+                            <!-- Max Landed Cost -->
+                            <div class="bg-base-100 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] uppercase font-black tracking-wider opacity-70">Max Landed Cost (All-in)</span>
+                                    <span class="text-[10px] opacity-60 font-medium">Incl. shipping &amp; fees</span>
                                 </div>
-                                <h2 class="text-xl md:text-2xl font-black text-base-content tracking-tight leading-tight mb-2">{{ cleanDisplayTitle(item) }}</h2>
-                                
-                                <div class="flex flex-wrap gap-2 mt-3">
-                                    <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-sm btn-outline btn-secondary gap-1.5 shadow-sm rounded-lg">
-                                        <Icon icon="solar:link-linear" class="w-4 h-4" /> View Source Listing
-                                    </a>
-                                    <a v-if="item.fetched_image && item.fetched_image.startsWith('http')" :href="'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(item.fetched_image)" target="_blank" class="btn btn-sm btn-outline btn-primary gap-1.5 shadow-sm rounded-lg">
-                                        <Icon icon="solar:camera-linear" class="w-4 h-4" /> Search Google Lens
-                                    </a>
-                                </div>
+                                <span class="font-mono font-black text-success text-xl">${{ calculateMaxBuy(item) }}</span>
                             </div>
+
+                            <!-- Max Bid (Auction) -->
+                            <div class="bg-base-100 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] uppercase font-black tracking-wider text-primary">Suggested Max Bid</span>
+                                    <span class="text-[10px] opacity-60 font-medium">Site bid limit (excl. shipping)</span>
+                                </div>
+                                <span class="font-mono font-black text-xl" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
+                                    ${{ calculateMaxBid(item) }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <p class="text-sm font-medium leading-relaxed opacity-90 mt-1">{{ item.purchase_strategy.advice }}</p>
+
+                        <!-- Why Pay Up (Collector Catalyst) -->
+                        <div v-if="item.why_pay_up" class="mt-3 p-3 rounded-lg bg-success/15 border border-success/30 text-xs">
+                            <div class="font-bold text-success flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
+                                <Icon icon="solar:fire-bold" class="w-3.5 h-3.5" /> Sourcing Catalyst (Why Pay Up):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
+                        </div>
+
+                        <!-- Why Pass (Risk & Fee Warnings) -->
+                        <div v-if="item.why_pass" class="mt-3 p-3 rounded-lg bg-error/15 border border-error/30 text-xs">
+                            <div class="font-bold text-error flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
+                                <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" /> Risk Rationale (Why Pass):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
                         </div>
                     </div>
 
-                    <!-- Pricing Potential Grid (Interactive 1-Tap Selectors) -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center mt-2">
-                        <!-- Fair Market -->
-                        <button type="button" 
-                                @click="selectPricePreset(item, item.pricing_potential?.fair || item.price_breakdown?.fair)"
-                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
-                                :class="isPriceSelected(item, item.pricing_potential?.fair || item.price_breakdown?.fair) ? 'border-primary bg-primary/15 ring-2 ring-primary/30' : 'border-base-300 bg-base-200/80'">
-                            <span class="badge badge-primary badge-xs font-bold mb-1">FAIR MARKET</span>
-                            <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.pricing_potential?.fair || item.price_breakdown?.fair) }}</span>
-                            <span class="text-[9px] opacity-60 font-medium mt-0.5">Online Comps</span>
-                        </button>
-                        <!-- Boutique Retail -->
-                        <button type="button" 
-                                @click="selectPricePreset(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium)"
-                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
-                                :class="isPriceSelected(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30' : 'border-base-300 bg-base-200/80'">
-                            <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
-                            <span class="font-mono font-extrabold text-sm md:text-base text-secondary">{{ formatBoutiquePriceDisplay(item) }}</span>
-                            <span class="text-[9px] opacity-60 font-medium mt-0.5">Booth Retail</span>
-                        </button>
-                        <!-- Mint -->
-                        <button type="button" 
-                                @click="selectPricePreset(item, item.price_breakdown?.mint)"
-                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
-                                :class="isPriceSelected(item, item.price_breakdown?.mint) ? 'border-success bg-success/15 ring-2 ring-success/30' : 'border-base-300 bg-base-200/60'">
-                            <span class="badge badge-success badge-xs font-bold mb-1">MINT / NEW</span>
-                            <span class="font-mono font-bold text-xs md:text-sm text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
-                            <span class="text-[9px] opacity-50 font-medium mt-0.5">Pristine</span>
-                        </button>
-                        <!-- Poor -->
-                        <button type="button" 
-                                @click="selectPricePreset(item, item.price_breakdown?.poor)"
-                                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
-                                :class="isPriceSelected(item, item.price_breakdown?.poor) ? 'border-warning bg-warning/15 ring-2 ring-warning/30' : 'border-base-300 bg-base-200/60'">
-                            <span class="badge badge-warning badge-xs font-bold mb-1">POOR / AS-IS</span>
-                            <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
-                            <span class="text-[9px] opacity-50 font-medium mt-0.5">Damaged</span>
-                        </button>
-                    </div>
-
-                    <!-- Sourcing Buy/Bid Limits -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                        <!-- Max Landed Buy -->
-                        <div class="bg-black text-white p-3 rounded-lg flex justify-between items-center shadow-md">
+                    <!-- Fallback: Max Landed & Max Bid if purchase_strategy is absent -->
+                    <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+                        <div class="bg-base-200 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
                             <div class="flex flex-col text-left">
-                                <span class="text-[10px] uppercase font-bold opacity-60">Max Landed Cost (All-in)</span>
-                                <span class="text-[10px] opacity-75 font-medium">Incl. shipping/handling</span>
+                                <span class="text-[10px] uppercase font-black tracking-wider opacity-70">Max Landed Cost (All-in)</span>
+                                <span class="text-[10px] opacity-60 font-medium">Incl. shipping &amp; fees</span>
                             </div>
-                            <span class="font-bold text-success text-lg">${{ calculateMaxBuy(item) }}</span>
+                            <span class="font-mono font-black text-success text-xl">${{ calculateMaxBuy(item) }}</span>
                         </div>
-
-                        <!-- Max Bid (Auction) -->
-                        <div class="bg-neutral-800 text-white p-3 rounded-lg flex justify-between items-center shadow-md border border-neutral-700">
+                        <div class="bg-base-200 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
                             <div class="flex flex-col text-left">
-                                <span class="text-[10px] uppercase font-bold text-primary">Suggested Max Bid</span>
-                                <span class="text-[10px] opacity-75 font-medium">Site bid limit (excl. shipping)</span>
+                                <span class="text-[10px] uppercase font-black tracking-wider text-primary">Suggested Max Bid</span>
+                                <span class="text-[10px] opacity-60 font-medium">Auction site limit</span>
                             </div>
-                            <span class="font-bold text-lg" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
+                            <span class="font-mono font-black text-xl" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
                                 ${{ calculateMaxBid(item) }}
                             </span>
                         </div>
                     </div>
 
-                    <!-- Shipping Info Breakdown -->
-                    <div v-if="item.shipping_info" class="mt-4 bg-base-200 border border-base-300 rounded-xl p-4 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <!-- 5. Pricing Potential Estimates Grid (Interactive 1-Tap Selectors) -->
+                    <div class="space-y-2 mb-3">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-bold uppercase tracking-wider opacity-75 flex items-center gap-1.5">
+                                <Icon icon="solar:graph-up-linear" class="w-4 h-4 text-primary" />
+                                Pricing Estimates
+                            </span>
+                            <span class="text-[10px] opacity-60 font-semibold">Tap to select target price</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                            <!-- Fair Market -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.pricing_potential?.fair || item.price_breakdown?.fair)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
+                                    :class="isPriceSelected(item, item.pricing_potential?.fair || item.price_breakdown?.fair) ? 'border-primary bg-primary/15 ring-2 ring-primary/30' : 'border-base-300 bg-base-200/80'">
+                                <span class="badge badge-primary badge-xs font-bold mb-1">FAIR MARKET</span>
+                                <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.pricing_potential?.fair || item.price_breakdown?.fair) }}</span>
+                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Online Comps</span>
+                            </button>
+                            <!-- Boutique Retail -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
+                                    :class="isPriceSelected(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30' : 'border-base-300 bg-base-200/80'">
+                                <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
+                                <span class="font-mono font-extrabold text-sm md:text-base text-secondary">{{ formatBoutiquePriceDisplay(item) }}</span>
+                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Booth Retail</span>
+                            </button>
+                            <!-- Mint -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.price_breakdown?.mint)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
+                                    :class="isPriceSelected(item, item.price_breakdown?.mint) ? 'border-success bg-success/15 ring-2 ring-success/30' : 'border-base-300 bg-base-200/60'">
+                                <span class="badge badge-success badge-xs font-bold mb-1">MINT / NEW</span>
+                                <span class="font-mono font-bold text-xs md:text-sm text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
+                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Pristine</span>
+                            </button>
+                            <!-- Poor -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.price_breakdown?.poor)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
+                                    :class="isPriceSelected(item, item.price_breakdown?.poor) ? 'border-warning bg-warning/15 ring-2 ring-warning/30' : 'border-base-300 bg-base-200/60'">
+                                <span class="badge badge-warning badge-xs font-bold mb-1">POOR / AS-IS</span>
+                                <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
+                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Damaged</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 6. Cost Basis ($) & Target Resale Price Inputs -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
+                        <!-- Cost Basis Input -->
+                        <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                            <label class="label pt-0 pb-1">
+                                <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                    <Icon icon="solar:wallet-money-bold" class="w-4 h-4 text-warning" />
+                                    Cost Basis ($)
+                                </span>
+                            </label>
+                            <div class="join w-full shadow-xs">
+                                <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
+                                <input v-model="cost" type="number" step="0.01" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0.00" />
+                            </div>
+                        </div>
+
+                        <!-- Target Resale Price Input -->
+                        <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                            <label class="label pt-0 pb-1">
+                                <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                    <Icon icon="solar:tag-bold" class="w-4 h-4 text-success" />
+                                    Target Resale ($)
+                                </span>
+                            </label>
+                            <div class="join w-full shadow-xs">
+                                <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
+                                <input v-model.number="item.selected_resale_price" type="number" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 7. Source Link URL Input -->
+                    <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300 mb-3">
+                        <label class="label pt-0 pb-1 flex justify-between items-center">
+                            <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                <Icon icon="solar:link-bold" class="w-4 h-4 text-primary" />
+                                Source Link
+                            </span>
+                            <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="text-[10px] text-primary font-bold link hover:underline flex items-center gap-0.5">
+                                <span>Open</span>
+                                <Icon icon="solar:square-top-down-linear" class="w-3 h-3" />
+                            </a>
+                        </label>
+                        <input v-model="sourcingLocation" type="text" class="input input-xs input-bordered w-full font-mono text-xs" placeholder="e.g. https://... or Goodwill" />
+                    </div>
+
+                    <!-- 8. Shipping Info Breakdown -->
+                    <div v-if="item.shipping_info" class="mb-4 bg-base-200 border border-base-300 rounded-xl p-4 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div class="flex items-center gap-3">
                             <div class="p-3 bg-primary/10 text-primary rounded-xl">
                                 <Icon icon="solar:delivery-linear" class="text-2xl" />
@@ -282,51 +467,6 @@
                                     <input type="checkbox" v-model="includeShippingInCost" class="toggle toggle-primary toggle-sm" />
                                 </label>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Sourcing Strategy Verdict -->
-                    <div v-if="item.purchase_strategy" class="mt-4 border-2 rounded-xl p-4 shadow-sm" :class="{
-                        'border-success bg-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
-                        'border-error bg-error/10': item.purchase_strategy.verdict === 'PASS',
-                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
-                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
-                    }">
-                        <div class="flex items-center gap-2 mb-2">
-                           <Icon icon="solar:magic-stick-linear" class="text-2xl" v-if="['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)" />
-                           <Icon icon="solar:stop-circle-linear" class="text-2xl" v-if="item.purchase_strategy.verdict === 'PASS'" />
-                           <Icon icon="solar:eye-linear" class="text-2xl" v-if="['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)" />
-                           <h3 class="font-black text-lg uppercase tracking-wider" :class="{
-                                'text-success': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
-                                'text-error': item.purchase_strategy.verdict === 'PASS',
-                                'text-warning': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)
-                           }">{{ item.purchase_strategy.verdict.replace('_', ' ') }}</h3>
-                        </div>
-                        
-                        <div 
-                            v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" 
-                            class="my-2.5 px-3 py-2 rounded-xl bg-base-300/80 border border-base-content/10 text-xs font-semibold text-base-content leading-snug flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2 break-words"
-                        >
-                            <span class="text-base-content/70 font-extrabold uppercase text-[10px] tracking-wider shrink-0">Asking / Bid:</span>
-                            <span class="text-base-content font-bold text-xs">{{ item.purchase_strategy.current_asking_price }}</span>
-                        </div>
-
-                        <p class="text-sm font-medium leading-relaxed opacity-90 mt-1">{{ item.purchase_strategy.advice }}</p>
-
-                        <!-- Why Pay Up (Collector Catalyst) -->
-                        <div v-if="item.why_pay_up" class="mt-3 p-3 rounded-lg bg-success/15 border border-success/30 text-xs">
-                            <div class="font-bold text-success flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
-                                <Icon icon="solar:fire-bold" class="w-3.5 h-3.5" /> Sourcing Catalyst (Why Pay Up):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
-                        </div>
-
-                        <!-- Why Pass (Risk & Fee Warnings) -->
-                        <div v-if="item.why_pass" class="mt-3 p-3 rounded-lg bg-error/15 border border-error/30 text-xs">
-                            <div class="font-bold text-error flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
-                                <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" /> Risk Rationale (Why Pass):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
                         </div>
                     </div>
 
@@ -411,43 +551,6 @@
                         </div>
                     </div>
 
-                    <!-- Editable Fields -->
-                    <div class="form-control mt-4">
-                        <label class="label"><span class="label-text font-bold opacity-70">Suggested Title</span></label>
-                        <div class="relative">
-                            <input v-model="item.title" type="text" class="input input-bordered w-full font-bold text-sm pr-8" />
-                            <span class="absolute right-2 top-1/2 -translate-y-1/2 opacity-30"><Icon icon="solar:clipboard-text-linear" class="w-5 h-5" /></span>
-                        </div>
-                    </div>
-
-                    <!-- Custom Resale Price Slider -->
-                    <div class="form-control mt-6 bg-base-200 p-4 rounded-xl border border-base-300">
-                        <label class="label pt-0 pb-2">
-                             <span class="label-text font-bold opacity-70 flex items-center gap-2">
-                                 <Icon icon="solar:tag-linear" class="w-5 h-5" /> Target Resale Price
-                             </span>
-                        </label>
-                        
-                        <div class="flex flex-col sm:flex-row items-center gap-4">
-                            <input type="range" 
-                                   v-model.number="item.selected_resale_price" 
-                                   :min="getSliderMinMax(item).min" 
-                                   :max="getSliderMinMax(item).max" 
-                                   class="range sm:grow w-full" 
-                                   :class="getSliderColor(item)"
-                                   step="1" />
-                            
-                            <div class="join w-full sm:w-auto mt-2 sm:mt-0 shadow-sm">
-                                <span class="join-item btn no-animation bg-base-100 border-base-300 pointer-events-none">$</span>
-                                <input type="number" v-model.number="item.selected_resale_price" class="input input-bordered join-item w-full sm:w-24 font-bold text-lg text-center" />
-                            </div>
-                        </div>
-                        <div class="w-full flex justify-between text-xs px-2 mt-2 font-bold opacity-40">
-                             <span>Low (${{ getSliderMinMax(item).min }})</span>
-                             <span>High (${{ getSliderMinMax(item).max }})</span>
-                        </div>
-                    </div>
-
                     <div class="mt-4">
                         <label class="label pt-0"><span class="label-text font-bold opacity-70">Keywords</span></label>
                         <div class="border border-base-300 rounded-lg p-2 bg-base-100 flex flex-wrap gap-2 items-center">
@@ -459,28 +562,104 @@
                         </div>
                     </div>
 
-                    <div class="form-control mt-4">
-                         <label class="label"><span class="label-text font-bold opacity-70">Condition Notes</span></label>
-                         <p class="text-xs opacity-70 mb-2 border-l-2 border-base-300 pl-2 italic">
-                            {{ item.condition_notes || 'No notes generated.' }}
-                         </p>
-                    </div>
-
-                    <!-- SAVE BUTTON -->
-                    <button @click="handleSaveItem(item, Number(index))" 
-                            class="btn btn-outline btn-primary w-full mt-6 shadow-xs font-bold"
-                            :disabled="item.saving || item.saved">
-                        <span v-if="item.saving" class="loading loading-spinner"></span>
-                        <template v-else>
-                            <Icon :icon="item.saved ? 'solar:check-circle-bold' : (activePurchase ? 'lucide:truck' : 'solar:disk-bold')" class="w-5 h-5 mr-1" />
-                            {{ item.saved ? '✅ Added to Tracker' : (activePurchase ? (item.lot_items ? '+ Add Lot to Buy Tracker' : '+ Add to Buy Tracker') : 'Save Item') }}
-                        </template>
-                    </button>
-
+                </div>
+            </div>
                 </div>
             </div>
         </div>
 
+        <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, scrollbar stops above it) -->
+        <div class="flex-none border-t border-base-300 bg-base-200/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.15)] pb-safe z-30">
+            <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
+                
+                <!-- State C: Active Buy Tracker Status Strip (Matches Screenshot 4) -->
+                <div v-if="activePurchase" class="pb-2 mb-1.5 border-b border-base-content/10">
+                    <button 
+                        type="button" 
+                        @click="toggleTray()" 
+                        class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden"
+                        title="View manifest details"
+                    >
+                        <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
+                        <span class="font-black text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                            {{ activePurchase.vendor || 'Buy Tracker' }}
+                        </span>
+                        <span class="badge badge-xs badge-warning font-black shrink-0">
+                            {{ purchaseItems.length }} {{ purchaseItems.length === 1 ? 'item' : 'items' }}
+                            <span v-if="lotItems.length > 0" class="hidden sm:inline">({{ lotItems.length }} lots)</span>
+                        </span>
+                        <span class="text-[11px] font-mono text-warning font-black shrink-0">
+                            ${{ totalCost.toFixed(2) }}
+                        </span>
+                        <span class="text-xs opacity-40 hidden sm:inline">→</span>
+                        <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
+                            ${{ totalBoutiqueValue.toFixed(2) }}
+                        </span>
+                        <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
+                        <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                    </button>
+                </div>
+
+                <!-- State B: Paused Buy Tracker Status Strip -->
+                <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="pb-1.5 mb-1.5 border-b border-base-content/10">
+                    <button 
+                        type="button" 
+                        @click="toggleTray()" 
+                        class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
+                        title="Inspect paused tracker manifest"
+                    >
+                        <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0" />
+                        <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
+                        <span class="font-bold text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                            {{ pausedTracker.vendor || 'Buy Tracker' }}
+                        </span>
+                        <span class="text-[11px] font-mono opacity-60 shrink-0">
+                            {{ pausedTracker.itemCount || 0 }} items
+                        </span>
+                        <span v-if="pausedTracker.subtotal" class="text-[11px] font-mono text-warning font-bold shrink-0 hidden sm:inline">
+                            ${{ pausedTracker.subtotal.toFixed(2) }}
+                        </span>
+                        <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
+                        <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                    </button>
+                </div>
+
+                <!-- 3 Action Buttons Row (Matches Screenshot 4) -->
+                <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+                    <!-- 1. New Scout Button -->
+                    <button type="button" @click="startNewScan" 
+                            class="btn btn-ghost w-24 sm:w-28 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
+                            title="Clear and start new scout">
+                        <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
+                        <span class="font-extrabold tracking-wider uppercase text-[10px]">New Scout</span>
+                    </button>
+
+                    <!-- 2. Identify Item (Re-scout) Button -->
+                    <button type="button" @click="handleAnalyze" 
+                            class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95 btn-primary text-primary-content font-black shadow-lg border border-primary-content/25"
+                            :disabled="loading">
+                        <span v-if="loading" class="loading loading-spinner loading-md"></span>
+                        <template v-else>
+                            <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
+                            <span class="text-xs font-black uppercase tracking-wider">Identify Item</span>
+                        </template>
+                    </button>
+
+                    <!-- 3. Add Button (Saves to active tracker directly or prompts destination tray) -->
+                    <button type="button" @click="handleAddButtonClick" 
+                            class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-md active:scale-95 btn-success text-success-content font-black"
+                            :disabled="savingAll || !canSaveReport">
+                        <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
+                        <template v-else>
+                            <Icon icon="lucide:truck" class="w-5 h-5" />
+                            <span class="font-extrabold tracking-wider uppercase text-[10px]">
+                                + Add {{ itemsInResult.length > 1 ? `All (${itemsInResult.length})` : 'Item' }}
+                            </span>
+                        </template>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <ScannerWidget 
@@ -503,21 +682,20 @@
         @save-standalone="handleSaveStandalone"
     />
 
-    <!-- BOTTOM DOCK NAV (Unified Tactile Dock Pattern) -->
-    <div class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
+    <!-- BOTTOM DOCK NAV (Unified Tactile Dock Pattern for Intake Cockpit) -->
+    <div v-if="!isResultsModalOpen" class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
         <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
             
             <!-- State C: Active Buy Tracker Status Strip (Integrated into dock, ONLY shown when activePurchase is present) -->
-            <div v-if="activePurchase" class="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-base-content/10">
-                <!-- Deal Summary & Expand Manifest (Purchase button moved to expanded tray footer!) -->
+            <div v-if="activePurchase" class="pb-2 mb-1.5 border-b border-base-content/10">
                 <button 
                     type="button" 
                     @click="toggleTray()" 
-                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden"
+                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden"
                     title="View manifest details"
                 >
                     <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
-                    <span class="font-black text-xs text-base-content truncate max-w-[120px] sm:max-w-[220px]">
+                    <span class="font-black text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
                         {{ activePurchase.vendor || 'Buy Tracker' }}
                     </span>
                     <span class="badge badge-xs badge-warning font-black shrink-0">
@@ -532,88 +710,88 @@
                         ${{ totalBoutiqueValue.toFixed(2) }}
                     </span>
                     <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
-                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-1" />
+                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                 </button>
             </div>
 
             <!-- State B: Paused Buy Tracker Status Strip -->
             <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="pb-1.5 mb-1.5 border-b border-base-content/10">
                 <button 
-                    type="button"
+                    type="button" 
                     @click="toggleTray()" 
-                    class="w-full flex items-center justify-between gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-2xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left"
+                    class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
                     title="Inspect paused tracker manifest"
                 >
-                    <!-- Left: Paused Tracker summary -->
-                    <div class="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
-                        <Icon icon="solar:pause-circle-bold" class="w-4 h-4 text-warning shrink-0" />
-                        <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
-                        <span class="font-bold text-xs text-base-content truncate max-w-[130px] sm:max-w-[220px]">
-                            {{ pausedTracker.vendor || 'Buy Tracker' }}
-                        </span>
-                        <span class="text-[11px] font-mono opacity-60 shrink-0">
-                            {{ pausedTracker.itemCount || 0 }} items
-                        </span>
-                        <span v-if="pausedTracker.subtotal" class="text-[11px] font-mono text-warning font-bold shrink-0 hidden sm:inline">
-                            ${{ pausedTracker.subtotal.toFixed(2) }}
-                        </span>
-                    </div>
-
-                    <!-- Right: Manifest chevron -->
-                    <div class="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
-                        <span class="text-[10px] uppercase font-bold opacity-60 hidden sm:inline">Manifest</span>
-                        <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5" />
-                    </div>
+                    <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0" />
+                    <span class="badge badge-xs badge-warning badge-outline font-bold shrink-0">Paused</span>
+                    <span class="font-bold text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                        {{ pausedTracker.vendor || 'Buy Tracker' }}
+                    </span>
+                    <span class="text-[11px] font-mono opacity-60 shrink-0">
+                        {{ pausedTracker.itemCount || 0 }} items
+                    </span>
+                    <span v-if="pausedTracker.subtotal" class="text-[11px] font-mono text-warning font-bold shrink-0 hidden sm:inline">
+                        ${{ pausedTracker.subtotal.toFixed(2) }}
+                    </span>
+                    <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
+                    <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                 </button>
             </div>
 
-            <!-- Tactile Actions Row -->
+            <!-- Tactile Actions Row (Matches Screenshot 3) -->
             <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
-                <!-- 1. New Scout (Clear / Reset) -->
+                <!-- 1. New Scout Button -->
                 <button @click="startNewScan" 
-                        class="btn btn-ghost flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
-                        title="Clear viewfinder and start new scout">
+                        class="btn btn-ghost w-24 sm:w-28 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
+                        title="Start fresh new scout">
                     <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
                     <span class="font-extrabold tracking-wider uppercase text-[10px]">New Scout</span>
                 </button>
 
-                <!-- 2. Primary Hero Action (Identify / Analyze) -->
-                <button v-if="mode !== 'bulk'" @click="mode === 'speed' ? analyzeImage() : analyzeListing()" 
-                        class="btn flex-[1.4] h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
-                        :class="(loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl))
+                <!-- 2. Primary Hero Action: Identify Item or View Report -->
+                <button v-if="result" 
+                        @click="isResultsModalOpen = true" 
+                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95 btn-primary text-primary-content font-black shadow-lg border border-primary-content/25"
+                        title="Open current scouting report">
+                    <Icon icon="solar:document-text-bold" class="w-5 h-5 drop-shadow-md" />
+                    <span class="text-xs font-black uppercase tracking-wider">
+                        View Report
+                    </span>
+                </button>
+
+                <button v-else 
+                        @click="handleAnalyze" 
+                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
+                        :class="(loading || !canAnalyze)
                                 ? 'btn-ghost bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed'
                                 : 'btn-primary text-primary-content font-black shadow-lg border border-primary-content/25'"
-                        :disabled="loading || (mode === 'speed' && images.length === 0) || (mode === 'precision' && !scoutUrl)">
+                        :disabled="loading || !canAnalyze">
                     <span v-if="loading" class="loading loading-spinner loading-md"></span>
                     <template v-else>
                         <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
                         <span class="text-xs font-black uppercase tracking-wider">
-                            {{ mode === 'speed' ? 'Identify Item' : 'Analyze Link' }}
+                            Identify Item
                         </span>
                     </template>
                 </button>
 
-                <!-- 3. Add to Buy Tracker / Save -->
-                <button @click="saveAllItems" 
-                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs active:scale-95"
-                        :class="(result && result.items && result.items.length > 0 && !result.items.some((i: any) => !i.saved && !i.saving)) 
-                                ? 'btn-success text-success-content font-black shadow-md' 
-                                : (result && result.items && result.items.length > 0 
-                                   ? 'btn-success text-success-content font-black shadow-md animate-pulse' 
-                                   : 'btn-ghost bg-base-300/40 text-base-content/50 border border-base-content/15 cursor-not-allowed')"
-                        :disabled="savingAll || !result || !result.items || result.items.length === 0 || !result.items.some((i: any) => !i.saved && !i.saving)">
-                    <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
-                    <template v-else>
-                        <Icon :icon="(activePurchase || pausedTracker) ? 'lucide:truck' : 'solar:box-minimalistic-bold'" class="w-5 h-5 opacity-80" />
-                        <span class="font-extrabold tracking-wider uppercase text-[10px]">
-                            {{ (result && result.items && result.items.length > 0) 
-                                ? `+ Add (${result.items.length})` 
-                                : (activePurchase ? `+ Add to ${activePurchase.vendor || 'Deal'}` : (pausedTracker ? `+ Add to ${pausedTracker.vendor || 'Deal'}` : '+ Add to Buy Tracker')) }}
-                        </span>
-                    </template>
+                <!-- 3. Add to Tracker Button -->
+                <button 
+                    type="button" 
+                    @click="result ? handleAddButtonClick() : null" 
+                    class="btn w-28 sm:w-36 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs"
+                    :class="result && canSaveReport 
+                            ? 'btn-success text-success-content font-black shadow-md active:scale-95' 
+                            : 'btn-ghost bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed'"
+                    :disabled="!result || savingAll || !canSaveReport"
+                    :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
+                >
+                    <Icon icon="lucide:truck" class="w-5 h-5" />
+                    <span class="font-extrabold tracking-wider uppercase text-[9px] sm:text-[10px] truncate max-w-[110px]">
+                        + Add {{ itemsInResult.length > 1 ? `(${itemsInResult.length})` : 'Item' }}
+                    </span>
                 </button>
             </div>
-
         </div>
     </div>
   </div>
@@ -623,6 +801,7 @@
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { account, storage, databases, ID } from '../../lib/appwrite';
+import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
@@ -630,7 +809,6 @@ import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { isAlphaMode } from '../../stores/env';
 import { getPurchasesCollectionId } from '../../lib/purchases';
-import SpeedEntryForm from '../purchases/SpeedEntryForm.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
 import ScoutAssignTrackerModal from './ScoutAssignTrackerModal.vue';
@@ -654,7 +832,7 @@ const emit = defineEmits<{
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; 
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
 const PURCHASES_COL = getPurchasesCollectionId();
-import { BUCKET_ID } from '../../lib/inventory';
+import { BUCKET_ID, getCollectionId, generateAutoUpc } from '../../lib/inventory';
 
 // -- COMPOSABLES --
 const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
@@ -677,11 +855,14 @@ const {
     isTrayOpen,
     toggleTray,
     loadDraftPurchases,
+    fetchPurchaseItems,
     addItemToPurchase,
     addLotToPurchase,
     removeItemFromPurchase,
     completePurchase,
     setActivePurchase,
+    pauseTracker,
+    resumeTracker,
     startDraftPurchase,
     loadPurchaseById
 } = useScoutPurchase();
@@ -702,6 +883,41 @@ const creatingTracker = ref(false);
 const allowStandaloneSave = ref(false);
 const pendingSaveItem = ref<{ item: any; index: number; isBatch: boolean } | null>(null);
 const pendingSaveAll = ref(false);
+
+const handlePauseTracker = () => {
+    const vendorName = activePurchase.value?.vendor || 'Buy Tracker';
+    pauseTracker();
+    addToast({ type: 'warning', message: `⏸️ Paused ${vendorName}` });
+};
+
+const handleResumeTracker = async (purchase?: any) => {
+    const target = await resumeTracker(purchase);
+    if (target) {
+        addToast({ type: 'success', message: `▶️ Resumed ${target.vendor || 'Buy Tracker'}` });
+    }
+};
+
+const handleAddButtonClick = () => {
+    if (activePurchase.value) {
+        // Active tracker is running: immediate 1-tap fast add directly to tracker
+        saveAllItems();
+    } else {
+        // Paused or untethered: slide up destination bottom sheet (Option A)
+        promptSaveDestination();
+    }
+};
+
+const promptSaveDestination = (item?: any, index?: number) => {
+    if (typeof index === 'number' && item) {
+        pendingSaveItem.value = { item, index, isBatch: false };
+        pendingSaveAll.value = false;
+    } else {
+        pendingSaveAll.value = true;
+        pendingSaveItem.value = null;
+    }
+    loadDraftPurchases();
+    isAssignModalOpen.value = true;
+};
 
 const handleAddHereToPausedTracker = async () => {
     if (!pausedTracker.value) return;
@@ -739,6 +955,10 @@ const handleSelectTracker = async (purchase: any) => {
     isAssignModalOpen.value = false;
     addToast({ type: 'info', message: `Attached to ${purchase.vendor || 'tracker'}!` });
     await executePendingSave();
+    if (activePurchase.value?.$id) {
+        await fetchPurchaseItems(activePurchase.value.$id);
+        await loadDraftPurchases();
+    }
 };
 
 const handleCreateTracker = async (vendorName: string) => {
@@ -749,6 +969,10 @@ const handleCreateTracker = async (vendorName: string) => {
         isAssignModalOpen.value = false;
         addToast({ type: 'success', message: `Created tracker for ${vendorName}!` });
         await executePendingSave();
+        if (activePurchase.value?.$id) {
+            await fetchPurchaseItems(activePurchase.value.$id);
+            await loadDraftPurchases();
+        }
     } catch (e: any) {
         addToast({ type: 'error', message: 'Failed to create tracker: ' + e.message });
     } finally {
@@ -785,16 +1009,41 @@ const { showLoader, hideLoader } = useLoader();
 
 // -- LIFECYCLE --
 const onWindowPaste = async (e: ClipboardEvent) => {
+    const activeEl = document.activeElement;
+    const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA';
+
     const items = e.clipboardData?.items;
     if (!items) return;
+
+    // 1. Check for image first (e.g. screenshot or copied photo)
     for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
             const blob = items[i].getAsFile();
             if (blob) {
                 e.preventDefault();
                 await processFile(blob);
-                addToast({ type: 'success', message: '📸 Screenshot pasted from clipboard!' });
-                break;
+                addToast({ type: 'success', message: '📸 Image/Screenshot attached from clipboard!' });
+                return;
+            }
+        }
+    }
+
+    // 2. If not already typing in an input, detect whether clipboard text is a URL or body of details text
+    if (!isInput) {
+        const text = e.clipboardData?.getData('text')?.trim();
+        if (text) {
+            if (text.startsWith('http://') || text.startsWith('https://')) {
+                e.preventDefault();
+                scoutUrl.value = text;
+                addToast({ type: 'success', message: '🔗 Web Link pasted into Scout URL!' });
+            } else if (text.length > 0) {
+                e.preventDefault();
+                if (userNotes.value && !userNotes.value.includes(text)) {
+                    userNotes.value += `\n${text}`;
+                } else {
+                    userNotes.value = text;
+                }
+                addToast({ type: 'success', message: '📝 Text detected & pasted into Additional Details!' });
             }
         }
     }
@@ -846,6 +1095,7 @@ onMounted(async () => {
                 const analysis = JSON.parse(itemDoc.rawAnalysis);
                 // Hydrate the view
                 result.value = { items: [analysis] };
+                isResultsModalOpen.value = true;
                 console.log('[ScoutView] Hydrated analysis:', analysis);
                 
                 // Pre-fill inputs
@@ -869,30 +1119,6 @@ onMounted(async () => {
 onUnmounted(() => {
     window.removeEventListener('paste', onWindowPaste);
 });
-
-async function pasteFromClipboard() {
-    try {
-        if (navigator.clipboard && navigator.clipboard.read) {
-            const clipboardItems = await navigator.clipboard.read();
-            for (const clipboardItem of clipboardItems) {
-                for (const type of clipboardItem.types) {
-                    if (type.startsWith('image/')) {
-                        const blob = await clipboardItem.getType(type);
-                        const file = new File([blob], `screenshot_${Date.now()}.png`, { type });
-                        await processFile(file);
-                        addToast({ type: 'success', message: '📸 Screenshot imported from clipboard!' });
-                        return;
-                    }
-                }
-            }
-            addToast({ type: 'warning', message: 'No image found on clipboard. Take a screenshot first (Win+Shift+S or phone screenshot).' });
-        } else {
-            fileInput.value?.click();
-        }
-    } catch (err: any) {
-        fileInput.value?.click();
-    }
-}
 
 function getTierBadgeInfo(item: any) {
     if (!item) return null;
@@ -936,33 +1162,132 @@ function isPriceSelected(item: any, priceStr: any) {
 const rescoutId = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 const error = ref<string | null>(null);
-const mode = ref<'speed' | 'precision'>('speed');
 const loading = ref(false);
 const analyzing = ref(false); // Added for re-scout feature
+const isResultsModalOpen = ref(false);
+const isMediaDetailsExpanded = ref(false);
+const result = ref<any>(null);
+const cost = ref('');
+const isAcquired = ref(false);
+const sourcingLocation = ref('');
+const storageLocation = ref('');
+const zipCode = ref('');
+const includeShippingInCost = ref(false);
 const images = ref<{ url: string; file?: File }[]>([]);
+const mainPhotoSelection = ref<{ type: 'existing' | 'new' | 'none'; val: any }>({ type: 'none', val: null });
 const receiptFile = ref<File | null>(null);
 const userNotes = ref('');
 const dragOver = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const receiptInput = ref<HTMLInputElement | null>(null);
-
-// URL Scraping
 const scoutUrl = ref('');
-
-// Shared Inputs
-const cost = ref('');
-const isAcquired = ref(false);
-const sourcingLocation = ref('');
-const storageLocation = ref('');
-
-const result = ref<any>(null);
-const zipCode = ref('');
-const includeShippingInCost = ref(false);
-
-// Camera
 const scannerWidget = ref<any>(null);
 
+const getItemDisplayImage = (item: any) => {
+    if (mainPhotoSelection.value.type === 'new' && typeof mainPhotoSelection.value.val === 'number' && images.value[mainPhotoSelection.value.val]) {
+        const sel = images.value[mainPhotoSelection.value.val];
+        return typeof sel === 'string' ? sel : sel.url;
+    }
+    if (mainPhotoSelection.value.type === 'existing' && mainPhotoSelection.value.val) {
+        return mainPhotoSelection.value.val;
+    }
+    if (item?.fetched_image) return item.fetched_image;
+    if (item?.fetched_images && item.fetched_images.length > 0) return item.fetched_images[0];
+    if (images.value && images.value.length > 0) {
+        const first = images.value[0];
+        return typeof first === 'string' ? first : first.url;
+    }
+    return null;
+};
 
+const itemGalleryImages = computed<string[]>({
+    get() {
+        const item = result.value?.items?.[0] || result.value;
+        if (!item) return [];
+        const urls: string[] = [];
+        const newPhotoUrls = images.value.map(i => typeof i === 'string' ? i : i.url);
+
+        const addUrl = (u: string) => {
+            if (u && typeof u === 'string' && !urls.includes(u) && !newPhotoUrls.includes(u)) {
+                urls.push(u);
+            }
+        };
+
+        if (item.fetched_image) addUrl(item.fetched_image);
+        if (Array.isArray(item.fetched_images)) {
+            for (const u of item.fetched_images) addUrl(u);
+        }
+        if (item.imageId) addUrl(item.imageId);
+        if (item.image) addUrl(item.image);
+        if (Array.isArray(item.galleryImageIds)) {
+            for (const id of item.galleryImageIds) addUrl(id);
+        }
+        return urls;
+    },
+    set(newUrls: string[]) {
+        const target = result.value?.items?.[0] || result.value;
+        if (target) {
+            target.fetched_images = newUrls;
+            if (newUrls.length > 0 && !newUrls.includes(target.fetched_image)) {
+                target.fetched_image = newUrls[0];
+            }
+        }
+    }
+});
+
+
+
+// Smoothly scroll to top and prevent background scrolling when report is open
+watch(isResultsModalOpen, (isOpen) => {
+    if (typeof document !== 'undefined') {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            window.scrollTo({ top: 0 });
+        } else {
+            document.body.style.overflow = '';
+        }
+    }
+});
+
+
+
+watch(scoutUrl, (val) => {
+    if (val && val.trim().startsWith('http')) {
+        sourcingLocation.value = val.trim();
+    }
+});
+
+const canAnalyze = computed(() => {
+    return images.value.length > 0 || !!(scoutUrl.value && scoutUrl.value.trim()) || !!(userNotes.value && userNotes.value.trim());
+});
+
+const analyzeButtonText = computed(() => {
+    if (scoutUrl.value && scoutUrl.value.trim()) {
+        return 'Analyze Link';
+    }
+    if (images.value.length > 0) {
+        return 'Identify Item';
+    }
+    if (userNotes.value && userNotes.value.trim()) {
+        return 'Identify from Notes';
+    }
+    return 'Identify Item';
+});
+
+const handleAnalyze = () => {
+    // Check if we have a URL from the input or previously stored in sourcingLocation
+    const urlToScout = (scoutUrl.value && scoutUrl.value.trim()) || 
+                       (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') ? sourcingLocation.value.trim() : '');
+
+    if (urlToScout) {
+        scoutUrl.value = urlToScout;
+        analyzeListing();
+    } else if (images.value.length > 0 || (userNotes.value && userNotes.value.trim()) || result.value?.items?.[0]?.fetched_image) {
+        analyzeImage();
+    } else {
+        addToast({ type: 'warning', message: 'Take a photo, paste a web link, or enter item details to scout.' });
+    }
+};
 
 const initCartCheck = async () => {
    if (user.value) {
@@ -988,6 +1313,8 @@ onMounted(async () => {
             zipCode.value = userZip;
         }
     }
+
+
 });
 
 // Watch for user to load if not ready on mount
@@ -1194,7 +1521,7 @@ const handleImageError = (e: Event) => {
 };
 
 async function analyzeListing() {
-    const url = scoutUrl.value;
+    const url = scoutUrl.value || (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') ? sourcingLocation.value.trim() : '');
     const isId = url && url.match(/^\d+$/);
     if (!url || (!url.startsWith('http') && !isId)) {
         addToast({ type: 'warning', message: "Please enter a valid URL or Item ID." });
@@ -1251,9 +1578,19 @@ async function analyzeListing() {
                 const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
                 it.selected_resale_price = Math.round(boutique || fair || 0);
             });
+            if (data.items.length > 0 && images.value.length > 0) {
+                const firstImg = typeof images.value[0] === 'string' ? images.value[0] : images.value[0]?.url;
+                if (firstImg && !data.items[0].fetched_image) {
+                    data.items[0].fetched_image = firstImg;
+                }
+                if (!data.items[0].fetched_images || data.items[0].fetched_images.length === 0) {
+                    data.items[0].fetched_images = images.value.map(i => typeof i === 'string' ? i : i.url).filter(Boolean);
+                }
+            }
         }
         result.value = data;
         sourcingLocation.value = targetUrl;
+        isResultsModalOpen.value = true;
         
         nextTick(() => {
             const el = document.getElementById('scout-results-section');
@@ -1277,7 +1614,11 @@ async function analyzeListing() {
 
 // -- ANALYSIS --
 async function analyzeImage() {
-    if (!images.value.length) return;
+    const hasLocalImages = images.value.length > 0;
+    const hasRemoteImages = !!(result.value?.items?.[0]?.fetched_image || (result.value?.items?.[0]?.fetched_images && result.value.items[0].fetched_images.length > 0));
+    const hasNotes = !!userNotes.value.trim();
+
+    if (!hasLocalImages && !hasRemoteImages && !hasNotes) return;
     loading.value = true;
     error.value = null;
     
@@ -1329,6 +1670,16 @@ async function analyzeImage() {
             }
         }
 
+        // On Re-Scout: If local images array is empty but we have fetched images from earlier scan, pass them to Gemini
+        if (images.value.length === 0 && result.value?.items?.[0]) {
+            const firstItem = result.value.items[0];
+            if (firstItem.fetched_image && firstItem.fetched_image.startsWith('http')) {
+                remoteImageUrls.push(firstItem.fetched_image);
+            } else if (firstItem.fetched_images && Array.isArray(firstItem.fetched_images)) {
+                remoteImageUrls.push(...firstItem.fetched_images.filter((u: string) => u && u.startsWith('http')).slice(0, 5));
+            }
+        }
+
         const payload = JSON.stringify({ 
             images: base64Images,
             remoteImageUrls,
@@ -1359,8 +1710,19 @@ async function analyzeImage() {
                 const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
                 it.selected_resale_price = Math.round(boutique || fair || 0);
             });
+            // Ensure scouted images are preserved on data.items[0]
+            if (data.items.length > 0 && images.value.length > 0) {
+                const firstImg = typeof images.value[0] === 'string' ? images.value[0] : images.value[0]?.url;
+                if (firstImg && !data.items[0].fetched_image) {
+                    data.items[0].fetched_image = firstImg;
+                }
+                if (!data.items[0].fetched_images || data.items[0].fetched_images.length === 0) {
+                    data.items[0].fetched_images = images.value.map(i => typeof i === 'string' ? i : i.url).filter(Boolean);
+                }
+            }
         }
         result.value = data;
+        isResultsModalOpen.value = true;
         
         nextTick(() => {
             const el = document.getElementById('scout-results-section');
@@ -1382,7 +1744,10 @@ async function analyzeImage() {
 // -- ACTION COMBOS --
 function startNewScan() {
     result.value = null;
+    isResultsModalOpen.value = false;
+    isMediaDetailsExpanded.value = false;
     images.value = [];
+    mainPhotoSelection.value = { type: 'none', val: null };
     scoutUrl.value = '';
     userNotes.value = '';
     cost.value = '';
@@ -1393,6 +1758,11 @@ function startNewScan() {
     error.value = null;
     successMessage.value = null;
     rescoutId.value = null;
+    if (typeof window !== 'undefined') {
+        try {
+            sessionStorage.removeItem('scout_active_result');
+        } catch (e) {}
+    }
     if (fileInput.value) fileInput.value.value = '';
     if (receiptInput.value) receiptInput.value.value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1401,9 +1771,19 @@ function startNewScan() {
 
 const savingAll = ref(false);
 
+const itemsInResult = computed(() => {
+    if (!result.value) return [];
+    if (result.value.items && result.value.items.length > 0) return result.value.items;
+    return [result.value];
+});
+
+const canSaveReport = computed(() => {
+    return itemsInResult.value.length > 0 && itemsInResult.value.some((i: any) => !i.saved && !i.saving);
+});
+
 async function saveAllItems() {
     if (savingAll.value) return;
-    if (!result.value || !result.value.items) return;
+    if (!result.value) return;
 
     if (!activePurchase.value && !allowStandaloneSave.value) {
         pendingSaveAll.value = true;
@@ -1415,9 +1795,10 @@ async function saveAllItems() {
 
     savingAll.value = true;
     try {
+        const toSave = itemsInResult.value;
         let savedAny = false;
-        for (let i = 0; i < result.value.items.length; i++) {
-            const item = result.value.items[i];
+        for (let i = 0; i < toSave.length; i++) {
+            const item = toSave[i];
             if (!item.saved && !item.saving) {
                  await handleSaveItem(item, i, true);
                  savedAny = true;
@@ -1425,6 +1806,7 @@ async function saveAllItems() {
         }
 
         if (savedAny) {
+            isResultsModalOpen.value = false;
             let cartItem = null;
             if (rescoutId.value) {
                 cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value) || (purchaseItems.value as any[]).find(pi => pi.$id === rescoutId.value);
@@ -1692,6 +2074,48 @@ const urlToFile = async (url: string, filename: string): Promise<File | null> =>
     }
 };
 
+// -- DIRECT TO INVENTORY HELPER (Bypasses Buy Trackers and saves directly to items collection) --
+async function saveDirectToInventory(payload: any) {
+    const teamId = currentTeam.value?.$id;
+    let permissions: string[] = [];
+    if (teamId) {
+        const role = Role.team(teamId);
+        permissions = [Permission.read(role), Permission.update(role), Permission.delete(role)];
+    } else if (user.value) {
+        const role = Role.user(user.value.$id);
+        permissions = [Permission.read(role), Permission.update(role), Permission.delete(role)];
+    }
+
+    let finalUpc = payload.upc;
+    if (!finalUpc) {
+        try {
+            finalUpc = await generateAutoUpc('HUCK-', teamId);
+        } catch {
+            finalUpc = `HUCK-${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+    }
+
+    const doc: any = {
+        ...payload,
+        upc: finalUpc,
+        tenantId: teamId || null,
+        status: payload.status || 'acquired'
+    };
+
+    // Clean undefined keys for Appwrite document validation
+    Object.keys(doc).forEach(key => doc[key] === undefined && delete doc[key]);
+
+    const created = await databases.createDocument(
+        DB_ID,
+        getCollectionId(),
+        ID.unique(),
+        doc,
+        permissions.length > 0 ? permissions : undefined
+    );
+    console.log('[ScoutView] Direct to inventory document created successfully:', created.$id, created.title);
+    return created;
+}
+
 // -- SAVE ACTION --
 async function handleSaveItem(item: any, index: number, isBatch = false) {
     console.log('[ScoutView] handleSaveItem callled for item:', item.identity);
@@ -1701,20 +2125,10 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         return;
     }
     
-    // If untethered and user hasn't chosen standalone bypass, auto-resume pausedTracker if present, else prompt with tracker modal
+    // If untethered and user hasn't chosen standalone bypass, prompt with tracker modal
     if (!activePurchase.value && !allowStandaloneSave.value) {
-        if (pausedTracker.value) {
-            setActivePurchase(pausedTracker.value);
-            try {
-                window.history.replaceState({}, '', `${window.location.pathname}?purchase=${pausedTracker.value.$id}`);
-            } catch (e) {}
-        } else {
-            pendingSaveItem.value = { item, index, isBatch };
-            pendingSaveAll.value = false;
-            loadDraftPurchases();
-            isAssignModalOpen.value = true;
-            return;
-        }
+        promptSaveDestination(item, index);
+        return;
     }
     
     if (!user.value) {
@@ -1758,7 +2172,12 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         let galleryIds: string[] = [];
         if (images.value.length > 0) {
              console.log('[ScoutView] Processing gallery images...', images.value.length);
-             const uploads = await Promise.all(images.value.map(async (img: any) => {
+             const orderedImages = [...images.value];
+             if (mainPhotoSelection.value.type === 'new' && typeof mainPhotoSelection.value.val === 'number' && orderedImages[mainPhotoSelection.value.val]) {
+                 const [chosenMain] = orderedImages.splice(mainPhotoSelection.value.val, 1);
+                 orderedImages.unshift(chosenMain);
+             }
+             const uploads = await Promise.all(orderedImages.map(async (img: any) => {
                  if (img.file) {
                      // This is a new local image that needs to be uploaded to Appwrite storage
                      try {
@@ -1768,6 +2187,32 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          console.error('[ScoutView] Failed to upload local image:', e);
                          return null;
                      }
+                 } else if (img.url && img.url.startsWith('http') && !img.url.includes(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '')) {
+                     // Remote URL - upload to Appwrite storage
+                     try {
+                         const filename = img.url.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+                         const file = await urlToFile(img.url, filename);
+                         if (file) {
+                             const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
+                             return up.$id;
+                         }
+                     } catch (e) {
+                         console.error('[ScoutView] Client-side remote image crop/upload failed, trying fallback:', img.url, e);
+                     }
+                     try {
+                         const res = await fetch('/api/upload-remote-image', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ url: img.url })
+                         });
+                         if (res.ok) {
+                             const uploadRes = await res.json();
+                             return uploadRes.fileId || null;
+                         }
+                     } catch (e) {
+                         console.error('[ScoutView] Failed to upload remote image via fallback:', img.url, e);
+                     }
+                     return null;
                  } else {
                      // This is an existing image URL, extract its file ID
                      return getFileIdFromUrl(img.url);
@@ -2011,7 +2456,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      addToast({ type: 'error', message: `Could not load main image to crop ${subItemName}` });
                  }
                  
-                 let noteDetails = `Lot Item: ${subItemName}\nInferred Condition: ${subItem.condition}\n` + (item.condition_notes || '');
+                 let noteDetails = `Lot Item: ${subItemName}\nInferred Condition: ${subItem.condition}\n` + (userNotes.value ? `User Note: ${userNotes.value}\n` : '') + (item.condition_notes || '');
                  if (item.shipping_info) {
                       const { shipping, handling, carrier, zipCode } = item.shipping_info;
                       noteDetails += `\n[Shipping: $${(shipping/item.lot_items.length).toFixed(2)}, Handling: $${(handling/item.lot_items.length).toFixed(2)} via ${carrier} to ${zipCode}]`;
@@ -2057,8 +2502,8 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
                      });
                  } else {
-                     console.log('[ScoutView] Adding individual lot item to cart:', itemPayload);
-                     await addItemToCart(itemPayload);
+                     console.log('[ScoutView] Saving individual lot item direct to inventory:', itemPayload);
+                     await saveDirectToInventory(itemPayload);
                  }
              }
         } else {
@@ -2094,11 +2539,12 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
                  sourcingLocation: sourcingLocation.value || '',
                  storageLocation: storageLocation.value || '',
-                 status: isAcquired.value ? 'acquired' : 'tracked',
+                 status: 'acquired',
                  keywords: item.keywords || [],
                  imageId: primaryImage,
                  galleryImageIds: galleryIds,
-                 rawAnalysis: getSafeRawAnalysis(item) || undefined
+                 rawAnalysis: getSafeRawAnalysis(item) || undefined,
+                 components: item.lot_items ? JSON.stringify(item.lot_items).slice(0, 65000) : undefined
              };
              
              if (activePurchase.value) {
@@ -2110,6 +2556,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          boutiqueValue: parsePrice(item.price_breakdown?.boutique_premium) || (item.selected_resale_price || 0),
                          lotItems: item.lot_items,
                          imageId: primaryImage,
+                         conditionNotes: noteDetails,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
                      });
                      if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
@@ -2130,8 +2577,8 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      }
                  }
              } else {
-                 console.log('[ScoutView] Adding bundle lot item to cart:', itemPayload);
-                 await addItemToCart(itemPayload);
+                 console.log('[ScoutView] Saving bundle/item direct to inventory:', itemPayload);
+                 await saveDirectToInventory(itemPayload);
              }
         }
         console.log('[ScoutView] Item added successfully');

@@ -506,9 +506,9 @@
 
                                     <div class="flex items-center gap-2">
                                         <!-- Report Ready Badge -->
-                                        <span v-if="scoutResult" class="badge badge-xs badge-primary font-bold">Report Ready</span>
-                                        <span v-else-if="analyzing" class="badge badge-xs badge-warning font-bold animate-pulse">Analyzing...</span>
-                                        <span v-else class="badge badge-xs badge-ghost opacity-60">Not Scanned</span>
+                                        <span v-if="scoutResult" class="badge badge-sm badge-success text-success-content font-black whitespace-nowrap px-2.5 py-0.5 shadow-xs">Report Ready</span>
+                                        <span v-else-if="analyzing" class="badge badge-sm badge-warning text-warning-content font-black whitespace-nowrap px-2.5 py-0.5 animate-pulse">Analyzing...</span>
+                                        <span v-else class="badge badge-sm badge-ghost text-base-content/70 font-bold whitespace-nowrap px-2">Not Scanned</span>
                                     </div>
                                 </div>
 
@@ -612,7 +612,7 @@
                                             @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.mint.formatted : scoutItemsArray[0]?.price_breakdown?.mint)"
                                             title="Click to apply Mint price"
                                         >
-                                            <span class="badge badge-xs font-bold bg-success/20 text-success border-success/40 mb-1">MINT</span>
+                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-success/20 text-success border-success/40 mb-1">MINT</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
                                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-success font-bold mt-0.5">Use Price ↵</span>
                                         </div>
@@ -621,7 +621,7 @@
                                             @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.fair.formatted : scoutItemsArray[0]?.price_breakdown?.fair)"
                                             title="Click to apply Fair market price"
                                         >
-                                            <span class="badge badge-xs font-bold bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
+                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
                                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-primary font-bold mt-0.5">Use Price ↵</span>
                                         </div>
@@ -630,7 +630,7 @@
                                             @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.poor.formatted : scoutItemsArray[0]?.price_breakdown?.poor)"
                                             title="Click to apply Poor / Clearance price"
                                         >
-                                            <span class="badge badge-xs font-bold bg-error/20 text-error border-error/40 mb-1">POOR</span>
+                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-error/20 text-error border-error/40 mb-1">POOR</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
                                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-error font-bold mt-0.5">Use Price ↵</span>
                                         </div>
@@ -639,7 +639,7 @@
                                             @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.boutique.formatted : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
                                             title="Click to apply Boutique / Antique Mall price"
                                         >
-                                            <span class="badge badge-xs font-bold bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
+                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
                                             <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
                                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-secondary font-bold mt-0.5">Use Price ↵</span>
                                         </div>

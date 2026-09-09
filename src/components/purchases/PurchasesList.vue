@@ -366,7 +366,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
@@ -374,8 +374,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
-
-const BulkImport = defineAsyncComponent(() => import('../inventory/BulkImport.vue'));
+import BulkImport from '../inventory/BulkImport.vue';
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';

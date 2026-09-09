@@ -1,5 +1,3 @@
-import Papa from 'papaparse';
-
 export interface ReconciliationResult {
     unmatchedCsvItems: any[]; // In CSV, but not in Appwrite
     missingAppwriteItems: any[]; // In Appwrite, but not in CSV
@@ -26,7 +24,9 @@ function calculateOverlap(setA: Set<string>, setB: Set<string>): number {
     return overlap / Math.min(setA.size, setB.size); // Subset matching
 }
 
-export function reconcileBoothInventory(csvText: string, appwriteItems: any[]): Promise<ReconciliationResult> {
+export async function reconcileBoothInventory(csvText: string, appwriteItems: any[]): Promise<ReconciliationResult> {
+    const papaModule = await import('papaparse');
+    const Papa = papaModule.default || papaModule;
     return new Promise((resolve, reject) => {
         Papa.parse(csvText, {
             header: true,

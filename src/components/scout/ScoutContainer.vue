@@ -37,12 +37,12 @@ import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
 
 const getInitialView = () => {
-  if (typeof window === 'undefined') return 'list';
+  if (typeof window === 'undefined') return 'scout';
   const p = new URLSearchParams(window.location.search);
-  if (p.has('rescout') || p.get('quick') === 'true' || p.has('purchase')) {
-    return 'scout';
+  if (p.get('view') === 'trackers') {
+    return 'list';
   }
-  return 'list';
+  return 'scout';
 };
 
 const getInitialPurchaseId = () => {
@@ -52,9 +52,9 @@ const getInitialPurchaseId = () => {
 };
 
 const getInitialQuickScan = () => {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   const p = new URLSearchParams(window.location.search);
-  return p.has('rescout') || p.get('quick') === 'true';
+  return p.has('rescout') || p.get('quick') === 'true' || !p.has('purchase');
 };
 
 const currentView = ref<'list' | 'scout'>(getInitialView());
@@ -78,10 +78,10 @@ onMounted(async () => {
 
   const urlParams = new URLSearchParams(window.location.search);
   
-  if (urlParams.has('rescout') || urlParams.get('quick') === 'true') {
-    isQuickScanMode.value = true;
-    currentView.value = 'scout';
-    setActivePurchase(null);
+  if (urlParams.get('view') === 'trackers') {
+    currentView.value = 'list';
+    activePurchaseId.value = null;
+    isQuickScanMode.value = false;
   } else if (urlParams.has('purchase')) {
     const pId = urlParams.get('purchase');
     activePurchaseId.value = pId;
@@ -93,7 +93,9 @@ onMounted(async () => {
       });
     }
   } else {
-    // Untethered default
+    // Untethered direct scout mode (Default)
+    isQuickScanMode.value = true;
+    currentView.value = 'scout';
     setActivePurchase(null);
   }
 });

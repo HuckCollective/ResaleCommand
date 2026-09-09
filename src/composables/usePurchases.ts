@@ -64,7 +64,7 @@ export function usePurchases() {
         try {
             const queries = [
                 Query.orderDesc('$createdAt'),
-                Query.limit(100)
+                Query.limit(5000)
             ];
             if (currentTenantId) {
                 queries.push(Query.equal('tenantId', currentTenantId));
@@ -78,7 +78,7 @@ export function usePurchases() {
                 try {
                     const fallbackRes = await purchasesAPI.listPurchases([
                         Query.orderDesc('$createdAt'),
-                        Query.limit(100)
+                        Query.limit(5000)
                     ]);
                     if (fallbackRes.documents && fallbackRes.documents.length > 0) {
                         docs = fallbackRes.documents;
@@ -96,7 +96,7 @@ export function usePurchases() {
             error.value = err.message || 'Failed to load purchases';
             // Safe fallback attempt with minimal query
             try {
-                const minimalRes = await purchasesAPI.listPurchases([Query.limit(100)]);
+                const minimalRes = await purchasesAPI.listPurchases([Query.limit(5000)]);
                 if (minimalRes.documents) {
                     purchases.value = minimalRes.documents;
                     totalPurchases.value = minimalRes.documents.length;

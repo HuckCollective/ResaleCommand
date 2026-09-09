@@ -12,15 +12,16 @@
     </div>
 
     <!-- 1. EMPTY STATE (No photos yet) -->
+    <!-- 1. EMPTY STATE (Tactile Dropzone with Big Camera Button) -->
     <div 
       v-if="totalCount === 0"
-      class="border-2 border-dashed border-base-300 rounded-2xl p-6 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-3 relative"
+      class="border-2 border-dashed border-base-300 rounded-2xl p-6 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-3 relative select-none"
       :class="{ 'border-primary bg-primary/10': isDragging }"
       @dragenter.prevent="isDragging = true"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="onDragLeave"
       @drop.prevent="handleDrop"
-      @click.self="triggerUpload"
+      @click="triggerUpload"
     >
       <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-1 pointer-events-none">
         <Icon icon="solar:gallery-add-bold-duotone" class="w-7 h-7" />
@@ -30,27 +31,16 @@
         <p class="text-[11px] opacity-60 max-w-xs mt-0.5">High-res photos or screenshots will attach to this item</p>
       </div>
 
-      <!-- Quick Action Buttons inside Empty State -->
-      <div class="flex flex-wrap items-center justify-center gap-2.5 pt-1 w-full max-w-sm pointer-events-auto">
+      <!-- Quick Action: Prominent Large Camera Button -->
+      <div class="flex items-center justify-center pt-1 w-full max-w-xs pointer-events-auto">
         <button 
           v-if="allowCamera" 
           type="button" 
-          class="btn btn-xs sm:btn-sm btn-outline btn-secondary rounded-xl font-bold gap-1.5 flex-1 min-w-36 h-9"
-          @click="handleCameraClick"
+          class="btn btn-secondary w-full rounded-2xl font-black text-sm sm:text-base gap-2.5 h-12 sm:h-14 shadow-md active:scale-95 transition-all"
+          @click.stop="handleCameraClick"
         >
-          <Icon icon="solar:camera-bold" class="w-4 h-4" />
-          Add Photo with Camera
-        </button>
-
-        <button 
-          v-if="allowPaste" 
-          type="button" 
-          class="btn btn-xs sm:btn-sm btn-outline btn-accent rounded-xl font-bold gap-1.5 flex-1 min-w-36 h-9"
-          @click="pasteFromClipboard"
-          title="Paste screenshot directly from clipboard (Ctrl+V)"
-        >
-          <Icon icon="solar:clipboard-text-bold" class="w-4 h-4" />
-          Paste Screenshot
+          <Icon icon="solar:camera-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          <span>Add Photo with Camera</span>
         </button>
       </div>
     </div>
@@ -62,6 +52,7 @@
         <img 
           v-if="actualMainPhoto.url"
           :src="actualMainPhoto.url" 
+          referrerpolicy="no-referrer"
           class="w-full h-full object-contain bg-black/10" 
           alt="Main Cover Photo"
         />
@@ -110,10 +101,10 @@
       </div>
 
       <!-- B. Supporting Gallery Grid (Zero Side-Scroll Wrapping Grid) -->
-      <div v-if="totalCount > 1" class="space-y-1.5">
+      <div v-if="totalCount > 0" class="space-y-1.5">
         <div class="flex justify-between items-center px-1">
-          <span class="text-[11px] font-bold opacity-70">Supporting Photos (Tap to set as Main ⭐)</span>
-          <span class="text-[10px] opacity-50">{{ totalCount }} total</span>
+          <span class="text-[11px] font-bold opacity-70">{{ totalCount > 1 ? 'Supporting Photos (Tap to set as Main ⭐)' : 'Photos (Tap to set as Main ⭐)' }}</span>
+          <span class="text-[10px] opacity-50 font-mono">{{ totalCount }} photo{{ totalCount === 1 ? '' : 's' }}</span>
         </div>
         
         <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 py-1 px-0.5">
@@ -125,7 +116,7 @@
             :class="actualMainPhoto.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
             @click="setMainPhoto('existing', id)"
           >
-            <img :src="getAssetUrl(id)" class="w-full h-full object-cover" />
+            <img :src="getAssetUrl(id)" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
             
             <!-- Index Pill -->
             <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
@@ -139,7 +130,7 @@
 
             <!-- Inner Delete Button -->
             <button 
-              type="button"
+              type="button" 
               @click.stop="removeExisting(id)" 
               class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm opacity-90 hover:opacity-100"
               title="Remove photo"
@@ -156,7 +147,7 @@
             :class="isNewSelected(item, idx) ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
             @click="setMainPhoto('new', idx)"
           >
-            <img :src="getPhotoUrl(item)" class="w-full h-full object-cover" />
+            <img :src="getPhotoUrl(item)" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
             
             <!-- Index Pill -->
             <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
@@ -170,7 +161,7 @@
 
             <!-- Inner Delete Button -->
             <button 
-              type="button"
+              type="button" 
               @click.stop="removeNew(idx)" 
               class="btn btn-xs btn-circle btn-error absolute top-1 right-1 w-5 h-5 min-h-0 text-[10px] shadow-sm opacity-90 hover:opacity-100"
               title="Remove photo"
@@ -181,11 +172,11 @@
 
           <!-- Add More Thumbnail Tile -->
           <button 
-            v-if="totalCount < maxPhotos"
+            v-if="allowUpload && totalCount < maxPhotos"
             type="button"
             @click="triggerUpload" 
             class="aspect-square w-full rounded-xl border-2 border-dashed border-base-300 hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center text-base-content/60 hover:text-primary transition-all group"
-            title="Upload more photos"
+            title="Upload more photos from device"
           >
             <Icon icon="solar:gallery-add-bold" class="w-5 h-5 group-hover:scale-110 transition-transform" />
             <span class="text-[9px] font-bold mt-0.5">Add</span>
@@ -193,27 +184,15 @@
         </div>
       </div>
 
-      <!-- C. Photo Action Buttons (Camera, Paste Screenshot) -->
-      <div class="grid grid-cols-2 gap-2 pt-1">
+      <!-- C. Photo Action Buttons (Camera) -->
+      <div v-if="allowCamera" class="pt-1">
         <button 
-          v-if="allowCamera" 
           type="button" 
           @click="handleCameraClick" 
-          class="btn btn-sm btn-outline btn-secondary text-xs rounded-xl font-bold gap-1.5 h-10"
+          class="btn btn-sm btn-outline btn-secondary w-full text-xs rounded-xl font-bold gap-2 h-10 shadow-xs"
         >
           <Icon icon="solar:camera-bold" class="w-4 h-4" />
           Add with Camera
-        </button>
-
-        <button 
-          v-if="allowPaste" 
-          type="button" 
-          @click="pasteFromClipboard" 
-          class="btn btn-sm btn-outline btn-accent text-xs rounded-xl font-bold gap-1.5 h-10"
-          title="Paste screenshot directly from clipboard (Ctrl+V)"
-        >
-          <Icon icon="solar:clipboard-text-bold" class="w-4 h-4" />
-          Paste Screenshot
         </button>
       </div>
     </div>
@@ -527,30 +506,7 @@ const addFiles = async (files: File[]) => {
   addToast({ type: 'success', message: `📸 Added ${toAdd.length} photo${toAdd.length > 1 ? 's' : ''} to gallery!` });
 };
 
-// Clipboard Paste Support (One-tap button + Ctrl+V listener)
-const pasteFromClipboard = async () => {
-  try {
-    if (navigator.clipboard && navigator.clipboard.read) {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        for (const type of item.types) {
-          if (type.startsWith('image/')) {
-            const blob = await item.getType(type);
-            const file = new File([blob], `screenshot_${Date.now()}.png`, { type });
-            await addFiles([file]);
-            return;
-          }
-        }
-      }
-      addToast({ type: 'warning', message: 'No image found on clipboard. Take a screenshot first (Win+Shift+S / Cmd+Shift+4).' });
-    } else {
-      triggerUpload();
-    }
-  } catch (err) {
-    triggerUpload();
-  }
-};
-
+// Clipboard Paste Support (Silent native Ctrl+V listener without permission prompts)
 const onWindowPaste = async (e: ClipboardEvent) => {
   if (!props.allowPaste) return;
   const items = e.clipboardData?.items;
@@ -590,7 +546,6 @@ const closeZoomPreview = () => {
 
 defineExpose({
   triggerUpload,
-  pasteFromClipboard,
   addFiles
 });
 </script>

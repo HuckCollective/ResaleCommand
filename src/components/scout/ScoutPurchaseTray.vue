@@ -1,102 +1,99 @@
 <template>
-  <div v-if="currentTracker && showTray" class="relative z-50">
+  <div v-if="currentTracker && showTray" class="relative z-[70]">
     <!-- EXPANDABLE MANIFEST DRAWER / MODAL -->
     <div 
-      class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
+      class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
       @click.self="toggleTray"
     >
       <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
         
         <!-- Drawer Header with Inline Title Editing -->
-        <div class="p-4 sm:p-5 border-b border-base-300 flex items-center justify-between gap-3 shrink-0">
-          <div class="flex items-center gap-3 min-w-0 flex-1">
-            <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Icon icon="lucide:truck" class="w-6 h-6" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <!-- Title Row: Display or Inline Edit Mode -->
-              <div class="flex items-center gap-2 flex-wrap">
-                <template v-if="isEditingTitle">
-                  <div class="flex items-center gap-1.5 flex-1 max-w-sm">
-                    <input 
-                      ref="titleInputRef"
-                      v-model="editedTitle" 
-                      type="text" 
-                      class="input input-xs sm:input-sm input-bordered font-bold text-sm w-full"
-                      placeholder="Tracker Title / Vendor"
-                      @keyup.enter="saveTitle"
-                      @keyup.esc="cancelEditTitle"
-                    />
-                    <button 
-                      @click="saveTitle" 
-                      :disabled="savingTitle || !editedTitle.trim()"
-                      class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-bold px-2 shrink-0" 
-                      title="Save Title"
-                    >
-                      <Icon icon="solar:check-read-linear" class="w-4 h-4" />
-                    </button>
-                    <button 
-                      @click="cancelEditTitle" 
-                      class="btn btn-xs sm:btn-sm btn-ghost px-2 shrink-0" 
-                      title="Cancel"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </template>
-                <template v-else>
-                  <h3 class="text-base sm:text-lg font-black text-base-content truncate">
-                    {{ currentTracker.vendor || 'Buy Tracker' }}
-                  </h3>
+        <div class="px-4 py-3 sm:px-5 sm:py-4 border-b border-base-300 flex items-center justify-between gap-3 shrink-0">
+          <div class="min-w-0 flex-1">
+            <!-- Title Row: Display or Inline Edit Mode -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <template v-if="isEditingTitle">
+                <div class="flex items-center gap-1.5 flex-1 max-w-sm">
+                  <input 
+                    ref="titleInputRef"
+                    v-model="editedTitle" 
+                    type="text" 
+                    class="input input-xs sm:input-sm input-bordered font-bold text-sm w-full"
+                    placeholder="Tracker Title / Vendor"
+                    @keyup.enter="saveTitle"
+                    @keyup.esc="cancelEditTitle"
+                  />
                   <button 
-                    @click="startEditTitle" 
-                    class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 hover:bg-base-200"
-                    title="Rename Tracker"
+                    @click="saveTitle" 
+                    :disabled="savingTitle || !editedTitle.trim()"
+                    class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-bold px-2 shrink-0" 
+                    title="Save Title"
                   >
-                    <Icon icon="solar:pen-bold" class="w-3.5 h-3.5 text-primary" />
+                    <Icon icon="solar:check-read-linear" class="w-4 h-4" />
                   </button>
-                  <span v-if="activePurchase" class="badge badge-warning badge-sm font-bold shrink-0">
-                    Active Tracker
-                  </span>
-                  <span v-else class="badge badge-outline badge-warning badge-sm font-bold shrink-0">
-                    Paused
-                  </span>
-                </template>
-              </div>
-
-              <div class="text-xs font-mono flex items-center gap-2 mt-0.5">
-                <a 
-                  v-if="currentTracker && (currentTracker.poNumber || currentTracker.$id)" 
-                  :href="`/purchases/${currentTracker.poNumber || currentTracker.$id}`" 
-                  class="truncate font-bold text-primary hover:underline inline-flex items-center gap-0.5 group/traypo"
-                  title="Open Purchase Order Details"
+                  <button 
+                    @click="cancelEditTitle" 
+                    class="btn btn-xs sm:btn-sm btn-ghost px-2 shrink-0" 
+                    title="Cancel"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </template>
+              <template v-else>
+                <h3 class="text-base sm:text-lg font-black text-base-content truncate">
+                  {{ currentTracker.vendor || 'Buy Tracker' }}
+                </h3>
+                <button 
+                  @click="startEditTitle" 
+                  class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 hover:bg-base-200"
+                  title="Rename Tracker"
                 >
-                  <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
-                  <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 opacity-60 group-hover/traypo:opacity-100 transition-opacity shrink-0" />
-                </a>
-                <span v-else class="truncate opacity-50">{{ currentTracker?.poNumber || currentTracker?.orderId || 'Draft' }}</span>
-                <span class="opacity-40">•</span>
-                <span class="shrink-0 opacity-60">{{ displayItemCount }} total {{ displayItemCount === 1 ? 'item' : 'items' }}</span>
-              </div>
+                  <Icon icon="solar:pen-bold" class="w-3.5 h-3.5 text-primary" />
+                </button>
+                <button 
+                  v-if="activePurchase" 
+                  type="button"
+                  @click="handlePauseCurrentTracker"
+                  class="badge badge-warning badge-sm font-bold gap-1 cursor-pointer hover:opacity-85 active:scale-95 transition-all select-none border-0 shadow-xs"
+                  title="Active tracker — Tap to pause"
+                >
+                  <Icon icon="solar:pause-circle-bold" class="w-3 h-3" />
+                  <span>Pause Tracker</span>
+                </button>
+                <button 
+                  v-else 
+                  type="button"
+                  @click="handleResumeCurrentTracker"
+                  class="badge badge-outline badge-warning badge-sm font-bold gap-1 cursor-pointer hover:bg-warning/20 active:scale-95 transition-all select-none"
+                  title="Paused tracker — Tap to resume"
+                >
+                  <Icon icon="solar:play-circle-bold" class="w-3 h-3" />
+                  <span>Resume Tracker</span>
+                </button>
+              </template>
+            </div>
+
+            <div class="text-xs font-mono flex items-center gap-2 mt-0.5">
+              <a 
+                v-if="currentTracker && (currentTracker.poNumber || currentTracker.$id)" 
+                :href="`/purchases/${currentTracker.poNumber || currentTracker.$id}`" 
+                class="truncate font-bold text-primary hover:underline inline-flex items-center gap-0.5 group/traypo"
+                title="Open Purchase Order Details"
+              >
+                <span class="truncate">{{ currentTracker.poNumber || currentTracker.orderId || 'Draft' }}</span>
+                <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 opacity-60 group-hover/traypo:opacity-100 transition-opacity shrink-0" />
+              </a>
+              <span v-else class="truncate opacity-50">{{ currentTracker?.poNumber || currentTracker?.orderId || 'Draft' }}</span>
+              <span class="opacity-40">•</span>
+              <span class="shrink-0 opacity-60">{{ displayItemCount }} total {{ displayItemCount === 1 ? 'item' : 'items' }}</span>
             </div>
           </div>
 
-          <!-- Right side of header: Switch Tracker & Close -->
-          <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button 
-              @click="goToScoutHome" 
-              type="button"
-              class="btn btn-ghost btn-xs sm:btn-sm gap-1.5 font-bold text-xs rounded-xl bg-base-200/80 hover:bg-primary/15 hover:text-primary border border-base-300 transition-all"
-              title="Go to Scout Home to view & switch trackers"
-            >
-              <Icon icon="solar:widget-2-bold" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-              <span class="font-extrabold text-[11px] sm:text-xs">Switch Tracker</span>
-            </button>
-
-            <button @click="toggleTray" type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close manifest">
-              <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
-            </button>
-          </div>
+          <!-- Right side of header: Close only -->
+          <button @click="toggleTray" type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close manifest">
+            <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
+          </button>
         </div>
 
         <!-- Financial Summary Banner -->
@@ -122,16 +119,16 @@
 
           <!-- Tier Breakdown Chips -->
           <div class="flex items-center justify-center gap-2 flex-wrap text-xs">
-            <span class="badge badge-secondary badge-sm font-bold gap-1">
+            <span class="badge badge-secondary text-secondary-content badge-sm font-bold whitespace-nowrap gap-1">
               🌟 Showcase: {{ tierBreakdown.showcase }}
             </span>
-            <span class="badge badge-primary badge-sm font-bold gap-1">
+            <span class="badge badge-primary text-primary-content badge-sm font-bold whitespace-nowrap gap-1">
               📦 Core: {{ tierBreakdown.core }}
             </span>
-            <span class="badge badge-accent badge-sm font-bold gap-1">
+            <span class="badge badge-accent text-accent-content badge-sm font-bold whitespace-nowrap gap-1">
               ⚡ Quick Turn: {{ tierBreakdown.quickTurn }}
             </span>
-            <span v-if="lotItems.length > 0" class="badge badge-outline badge-sm font-bold gap-1">
+            <span v-if="lotItems.length > 0" class="badge badge-outline badge-sm font-bold whitespace-nowrap gap-1">
               📦 Lots: {{ lotItems.length }}
             </span>
           </div>
@@ -148,7 +145,7 @@
           <div 
             v-for="item in purchaseItems" 
             :key="item.$id"
-            @click="openPreview(item)"
+            @click="openEdit(item)"
             class="bg-base-200/50 border border-base-300 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-all cursor-pointer group"
           >
             <!-- Thumbnail / Icon -->
@@ -164,13 +161,13 @@
               <Icon v-else icon="solar:tag-bold" class="w-6 h-6 opacity-40" />
             </div>
 
-            <!-- Title & Details -->
+            <!-- Title & Details (Clicking row opens edit directly) -->
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <span v-if="getItemTier(item)" class="badge badge-xs font-bold" :class="getItemTier(item)?.class">
+                <span v-if="getItemTier(item)" class="badge badge-xs font-bold whitespace-nowrap" :class="getItemTier(item)?.class">
                   {{ getItemTier(item)?.label }}
                 </span>
-                <span v-if="item.isLot" class="badge badge-xs badge-outline badge-secondary font-bold">
+                <span v-if="item.isLot" class="badge badge-xs badge-outline badge-secondary font-bold whitespace-nowrap">
                   {{ item.lotItemsCount || 0 }} Items In Lot
                 </span>
                 <h4 class="font-bold text-xs text-base-content truncate group-hover:text-primary transition-colors">
@@ -185,34 +182,13 @@
               </div>
             </div>
 
-            <!-- Item Action Buttons (Preview, Edit, Delete) -->
-            <div class="flex items-center gap-1 shrink-0" @click.stop>
-              <!-- Preview Modal Button -->
+            <!-- Item Action: Delete icon (opens confirmation modal) -->
+            <div class="shrink-0" @click.stop>
               <button 
                 type="button"
-                @click="openPreview(item)"
-                class="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100 hover:bg-base-300"
-                title="Preview full item details"
-              >
-                <Icon icon="solar:eye-linear" class="w-4 h-4" />
-              </button>
-
-              <!-- ItemDrawer Editor Button -->
-              <button 
-                type="button"
-                @click="openEdit(item)"
-                class="btn btn-ghost btn-xs btn-circle text-primary opacity-80 hover:opacity-100 hover:bg-primary/10"
-                title="Edit item details"
-              >
-                <Icon icon="solar:pen-linear" class="w-4 h-4" />
-              </button>
-
-              <!-- Remove Item Button -->
-              <button 
-                type="button"
-                @click="handleRemoveItem(item.$id)"
-                class="btn btn-ghost btn-xs btn-circle text-error/60 hover:text-error hover:bg-error/10"
-                title="Remove from purchase"
+                @click.stop="itemPendingDelete = item"
+                class="btn btn-ghost btn-xs btn-circle text-error/60 hover:text-error hover:bg-error/10 transition-all"
+                title="Remove item from tracker"
               >
                 <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
               </button>
@@ -220,20 +196,15 @@
           </div>
         </div>
 
-        <!-- Drawer Footer: Hero Action (State C: Purchase It / State B: + Add Here) -->
-        <div class="p-3 sm:p-4 border-t border-base-300 bg-base-200/70 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex items-baseline justify-between sm:block">
-            <div class="text-[10px] uppercase font-bold tracking-wider opacity-60 whitespace-nowrap">Total Cost To Pay</div>
-            <div class="text-xl sm:text-2xl font-black text-warning font-mono">${{ totalCost.toFixed(2) }}</div>
-          </div>
-
-          <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
-            <!-- Go to Scout Home / Switch Tracker -->
+        <!-- Drawer Footer (Clean Symmetrical Dock) -->
+        <div class="p-3 sm:p-4 border-t border-base-300 bg-base-200/90 backdrop-blur-md flex flex-col gap-2.5 shrink-0">
+          <!-- Row 1: Equal-width 50/50 Utility Buttons based on container width -->
+          <div class="grid grid-cols-2 gap-2 w-full">
             <button 
-              type="button"
               @click="goToScoutHome" 
-              class="btn btn-ghost btn-sm font-bold gap-1.5 text-xs sm:text-sm text-base-content/80 hover:text-primary hover:bg-primary/10 rounded-xl"
-              title="Go to Scout Home to switch trackers"
+              type="button"
+              class="btn btn-ghost btn-sm gap-1.5 font-bold text-xs rounded-xl bg-base-100 hover:bg-base-300 border border-base-300 transition-all h-10 w-full flex items-center justify-center shadow-xs"
+              title="View all trackers"
             >
               <Icon icon="solar:widget-2-bold" class="w-4 h-4 text-primary" />
               <span>All Trackers</span>
@@ -241,44 +212,148 @@
 
             <button 
               type="button"
-              @click="toggleTray" 
-              class="btn btn-ghost btn-sm font-bold flex-1 sm:flex-initial rounded-xl"
+              @click="isDeleteTrackerModalOpen = true"
+              class="btn btn-ghost btn-sm text-error hover:bg-error/15 border border-error/25 rounded-xl gap-1.5 h-10 w-full flex items-center justify-center transition-all shadow-xs"
+              title="Delete this tracker and all associated items"
             >
-              Keep Scouting
+              <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
+              <span>Delete Tracker</span>
             </button>
+          </div>
 
-            <!-- State C (Active Tracker): Purchase It Hero Action in Footer -->
-            <button 
-              v-if="activePurchase"
-              type="button"
-              @click="handleCompletePurchase"
-              :disabled="completing || purchaseItems.length === 0"
-              class="btn btn-success btn-sm sm:btn-md font-black text-success-content shadow-lg px-4 sm:px-6 flex-[1.5] sm:flex-initial gap-2 shrink-0 active:scale-95 transition-all"
-              title="Open Draft Purchase Order to review and finalize"
-            >
-              <span v-if="completing" class="loading loading-spinner loading-sm"></span>
-              <template v-else>
-                <Icon icon="lucide:truck" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span class="whitespace-nowrap">Purchase It (${{ displayCost.toFixed(2) }})</span>
-              </template>
-            </button>
+          <!-- Row 2: Full-width Hero Action (Purchase It or Resume) -->
+          <div class="w-full">
+            <!-- Active Tracker state: 100% width Purchase It button -->
+            <template v-if="activePurchase">
+              <button 
+                type="button"
+                @click="handleCompletePurchase"
+                :disabled="completing || purchaseItems.length === 0"
+                class="btn btn-success w-full font-black text-success-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center"
+                title="Open Draft Purchase Order to review and finalize"
+              >
+                <span v-if="completing" class="loading loading-spinner loading-xs"></span>
+                <template v-else>
+                  <Icon icon="lucide:truck" class="w-5 h-5 shrink-0" />
+                  <span class="whitespace-nowrap">Purchase It (${{ displayCost.toFixed(2) }})</span>
+                </template>
+              </button>
+            </template>
 
-            <!-- State B (Paused Tracker): Resume Tracker Action in Footer -->
-            <button 
-              v-else-if="currentTracker"
-              type="button"
-              @click="handleResumeCurrentTracker"
-              class="btn btn-primary btn-sm sm:btn-md font-black text-primary-content shadow-lg px-4 sm:px-6 flex-[1.5] sm:flex-initial gap-2 shrink-0 active:scale-95 transition-all"
-              title="Resume this tracker and set as active"
-            >
-              <Icon icon="solar:play-circle-bold" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-              <span class="whitespace-nowrap">Resume Tracker</span>
-            </button>
+            <!-- Paused Tracker state: 100% width Resume Tracker button -->
+            <template v-else-if="currentTracker">
+              <button 
+                type="button"
+                @click="handleResumeCurrentTracker"
+                class="btn btn-success w-full font-black text-success-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center"
+                title="Resume this tracker and set as active"
+              >
+                <Icon icon="solar:play-circle-bold" class="w-5 h-5 shrink-0" />
+                <span class="whitespace-nowrap">Resume Tracker</span>
+              </button>
+            </template>
           </div>
         </div>
 
       </div>
     </div>
+
+    <!-- 1. DELETE TRACKER CONFIRMATION MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': isDeleteTrackerModalOpen }">
+      <div v-if="isDeleteTrackerModalOpen" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
+        <div class="flex items-center gap-3 text-error mb-3">
+          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6 text-error" />
+          </div>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-base-content">Delete Tracker?</h3>
+            <p class="text-xs opacity-60 font-mono">{{ currentTracker?.vendor || 'Buy Tracker' }}</p>
+          </div>
+        </div>
+        
+        <p class="text-xs sm:text-sm text-base-content/80 mb-5 leading-relaxed">
+          This will permanently delete this tracker, along with all <strong>{{ displayItemCount }} {{ displayItemCount === 1 ? 'item' : 'items' }}</strong> and uploaded photos. This action cannot be undone.
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            @click="isDeleteTrackerModalOpen = false" 
+            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isDeletingTracker"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="handleDeleteTracker" 
+            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            :disabled="isDeletingTracker"
+          >
+            <span v-if="isDeletingTracker" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Yes, Delete Tracker</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="isDeleteTrackerModalOpen = false">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- 2. REMOVE ITEM CONFIRMATION MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingDelete }">
+      <div v-if="itemPendingDelete" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
+        <div class="flex items-center gap-3 text-error mb-3">
+          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6 text-error" />
+          </div>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-base-content">Remove Item?</h3>
+            <p class="text-xs opacity-60 font-mono">From {{ currentTracker?.vendor || 'Tracker' }}</p>
+          </div>
+        </div>
+        
+        <div class="bg-base-200/60 p-2.5 rounded-xl flex items-center gap-2.5 mb-4 border border-base-300">
+          <div class="w-10 h-10 rounded-lg bg-base-300 overflow-hidden shrink-0">
+            <img v-if="itemPendingDelete.imageId" :src="getImageUrl(itemPendingDelete.imageId)" class="w-full h-full object-cover" />
+            <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-xs text-base-content truncate">{{ cleanItemTitle(itemPendingDelete.title) }}</div>
+            <div class="text-[11px] font-mono text-warning font-bold">${{ (itemPendingDelete.cost || 0).toFixed(2) }}</div>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/70 mb-5 leading-relaxed">
+          Are you sure you want to remove this item from your scouting manifest?
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            @click="itemPendingDelete = null" 
+            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isRemovingItem"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="confirmRemoveItem" 
+            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            :disabled="isRemovingItem"
+          >
+            <span v-if="isRemovingItem" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Remove Item</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="itemPendingDelete = null">
+        <button>close</button>
+      </form>
+    </dialog>
 
     <!-- FULLSCREEN PREVIEW MODAL -->
     <ItemPreviewModal 
@@ -334,8 +409,12 @@ const {
   tierBreakdown,
   removeItemFromPurchase,
   setActivePurchase,
+  pauseTracker,
+  resumeTracker,
+  discardPurchase,
   updatePurchaseTitle,
   fetchPurchaseItems,
+  loadDraftPurchases,
   refreshActivePurchaseItems
 } = useScoutPurchase();
 
@@ -391,6 +470,22 @@ const goToScoutHome = () => {
   emit('go-to-list');
   if (typeof window !== 'undefined' && window.location.pathname !== '/scout') {
     window.location.href = '/scout';
+  }
+};
+
+// -- MANUAL TRAY REFRESH --
+const isRefreshingTray = ref(false);
+const handleManualRefresh = async () => {
+  if (!currentTracker.value?.$id || isRefreshingTray.value) return;
+  isRefreshingTray.value = true;
+  try {
+    await fetchPurchaseItems(currentTracker.value.$id);
+    await loadDraftPurchases();
+    addToast({ type: 'info', message: 'Tracker data refreshed' });
+  } catch (e: any) {
+    console.warn('[ScoutPurchaseTray] Manual refresh error:', e);
+  } finally {
+    isRefreshingTray.value = false;
   }
 };
 
@@ -457,12 +552,21 @@ const handleItemSaved = async (payload: any) => {
 };
 
 // -- REMOVE & COMPLETE --
-const handleRemoveItem = async (itemId: string) => {
+const itemPendingDelete = ref<ScoutPurchaseItem | null>(null);
+const isRemovingItem = ref(false);
+
+const confirmRemoveItem = async () => {
+  if (!itemPendingDelete.value) return;
+  isRemovingItem.value = true;
   try {
-    await removeItemFromPurchase(itemId);
-    addToast({ type: 'info', message: 'Item removed from purchase.' });
+    const trackerId = currentTracker.value?.$id;
+    await removeItemFromPurchase(itemPendingDelete.value.$id, trackerId);
+    addToast({ type: 'info', message: 'Item removed from tracker.' });
+    itemPendingDelete.value = null;
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to remove item: ' + err.message });
+  } finally {
+    isRemovingItem.value = false;
   }
 };
 
@@ -481,13 +585,41 @@ const handleCompletePurchase = async () => {
   }
 };
 
-const handleResumeCurrentTracker = () => {
+const handlePauseCurrentTracker = () => {
   if (!currentTracker.value) return;
-  const target = currentTracker.value;
-  setActivePurchase(target);
-  toggleTray();
-  emit('resume-tracker', target);
-  addToast({ type: 'success', message: `Resumed tracker: ${target.vendor}` });
+  const vendorName = currentTracker.value.vendor || 'Buy Tracker';
+  pauseTracker();
+  addToast({ type: 'warning', message: `⏸️ Paused tracker: ${vendorName}` });
+};
+
+const handleResumeCurrentTracker = async () => {
+  if (!currentTracker.value) return;
+  const target = await resumeTracker(currentTracker.value);
+  if (target) {
+    toggleTray();
+    emit('resume-tracker', target);
+    addToast({ type: 'success', message: `▶️ Resumed tracker: ${target.vendor}` });
+  }
+};
+
+const isDeleteTrackerModalOpen = ref(false);
+const isDeletingTracker = ref(false);
+
+const handleDeleteTracker = async () => {
+  if (!currentTracker.value?.$id || isDeletingTracker.value) return;
+  isDeletingTracker.value = true;
+  try {
+    const targetId = currentTracker.value.$id;
+    const vendorName = currentTracker.value.vendor || 'Buy Tracker';
+    await discardPurchase(targetId);
+    isDeleteTrackerModalOpen.value = false;
+    toggleTray();
+    addToast({ type: 'info', message: `🗑️ Deleted ${vendorName} and all associated items.` });
+  } catch (e: any) {
+    addToast({ type: 'error', message: 'Failed to delete tracker: ' + e.message });
+  } finally {
+    isDeletingTracker.value = false;
+  }
 };
 
 const getImageUrl = (imageId: string): string => {

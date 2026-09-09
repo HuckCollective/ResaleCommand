@@ -215,10 +215,11 @@ const preProcessLandedCosts = (rows) => {
     const processedRows = [];
     
     for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
         const rKeys = Object.keys(row);
-        const itemCol = findCol(rKeys, ['item id', 'item #', 'itemid', 'item_id', 'item id', 'itemno', 'item number']);
+        const itemCol = findCol(rKeys, ['item id', 'item #', 'itemid', 'item_id', 'itemno', 'item number', 'sku']);
         const fallbackItemCol = findCol(rKeys, ['id']);
-        const orderCol = findCol(rKeys, ['order id', 'order #', 'order number', 'orderid', 'order id', 'order no', 'invoice id', 'invoice #', 'order', 'invoice']);
+        const orderCol = findCol(rKeys, ['order id', 'order #', 'order number', 'orderid', 'order no', 'invoice id', 'invoice #', 'order', 'invoice']);
 
         let itemId = itemCol ? row[itemCol] : (fallbackItemCol ? row[fallbackItemCol] : null);
         let orderId = orderCol ? row[orderCol] : null;
@@ -252,16 +253,16 @@ const preProcessLandedCosts = (rows) => {
         const taxKey = findCol(rowKeys, ['tax']);
         const feeKey = findCol(rowKeys, ['fee', 'additional']);
         
-        const orderTotalShipping = shipKey ? parseFloat(group[0][shipKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
-        const orderTotalHandling = (handKey && handKey !== shipKey) ? parseFloat(group[0][handKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
-        const orderTotalTax = taxKey ? parseFloat(group[0][taxKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
-        const orderTotalFee = feeKey ? parseFloat(group[0][feeKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        const orderTotalShipping = (shipKey && group[0][shipKey] != null) ? parseFloat(group[0][shipKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        const orderTotalHandling = (handKey && handKey !== shipKey && group[0][handKey] != null) ? parseFloat(group[0][handKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        const orderTotalTax = (taxKey && group[0][taxKey] != null) ? parseFloat(group[0][taxKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+        const orderTotalFee = (feeKey && group[0][feeKey] != null) ? parseFloat(group[0][feeKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
         
         let orderSubtotal = 0;
         for (const row of group) {
             const rKeys = Object.keys(row);
             const priceKey = findCol(rKeys, ['price', 'paid', 'amount', 'cost', 'total', 'bid']);
-            const basePrice = priceKey ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+            const basePrice = (priceKey && row[priceKey] != null) ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
             orderSubtotal += basePrice;
         }
         
@@ -273,7 +274,7 @@ const preProcessLandedCosts = (rows) => {
         for (const row of group) {
             const rKeys = Object.keys(row);
             const priceKey = findCol(rKeys, ['price', 'paid', 'amount', 'cost', 'total', 'bid']);
-            const basePrice = priceKey ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
+            const basePrice = (priceKey && row[priceKey] != null) ? parseFloat(row[priceKey].toString().replace(/[^0-9.]/g, '')) || 0 : 0;
             const landedCost = basePrice + shippingPerItem + handlingPerItem + taxPerItem + feePerItem;
             
             let shippingNotes = '';
@@ -306,6 +307,67 @@ const preProcessLandedCosts = (rows) => {
     return processedRows;
 };
 
+const parseCSVText = (text) => {
+    const lines = [];
+    let row = [];
+    let inQuotes = false;
+    let currentField = '';
+    
+    const cleaned = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        const nextChar = cleaned[i + 1];
+        
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                currentField += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            row.push(currentField.trim());
+            currentField = '';
+        } else if (char === '\n' && !inQuotes) {
+            row.push(currentField.trim());
+            if (row.some(f => f !== '')) {
+                lines.push(row);
+            }
+            row = [];
+            currentField = '';
+        } else {
+            currentField += char;
+        }
+    }
+    if (currentField || row.length > 0) {
+        row.push(currentField.trim());
+        if (row.some(f => f !== '')) {
+            lines.push(row);
+        }
+    }
+    
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].map(h => h.replace(/^\uFEFF/, '').replace(/^"|"$/g, '').trim());
+    const data = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i];
+        const rowObj = {};
+        for (let j = 0; j < headers.length; j++) {
+            let val = values[j] !== undefined ? values[j].trim() : '';
+            if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+                val = val.slice(1, -1);
+            }
+            rowObj[headers[j]] = val;
+        }
+        data.push(rowObj);
+    }
+    
+    return data;
+};
+
 const processCSV = async () => {
     if (!file.value) return;
     
@@ -324,43 +386,72 @@ const processCSV = async () => {
     const extension = file.value.name.split('.').pop().toLowerCase();
     
     const onDataParsed = async (rows) => {
-        total.value = rows.length;
-        const processedRows = preProcessLandedCosts(rows);
-        await processRows(processedRows);
-        processing.value = false;
+        try {
+            total.value = rows.length;
+            logs.value.push(`🔍 Analyzing columns and calculating landed costs for ${rows.length} rows...`);
+            const processedRows = preProcessLandedCosts(rows);
+            if (processedRows.length === 0) {
+                logs.value.push('⚠️ No valid rows matched with Item ID or Order ID.');
+                return;
+            }
+            logs.value.push(`📦 Starting import of ${processedRows.length} items...`);
+            await processRows(processedRows);
+        } catch (err) {
+            console.error('[BulkImport] onDataParsed failed:', err);
+            logs.value.push(`❌ Import Error: ${err.message || err}`);
+        } finally {
+            processing.value = false;
+        }
     };
 
     if (extension === 'xlsx' || extension === 'xls') {
-        const XLSX = await import('xlsx');
+        try {
+            logs.value.push(`📄 Reading Excel spreadsheet: ${file.value.name}...`);
+            const XLSX = await import('xlsx');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                    logs.value.push(`📊 Extracted ${rows.length} rows from sheet "${firstSheetName}".`);
+                    await onDataParsed(rows);
+                } catch (err) {
+                    logs.value.push(`❌ Excel Error: ${err.message}`);
+                    processing.value = false;
+                }
+            };
+            reader.onerror = (err) => {
+                logs.value.push(`❌ Failed to read file: ${err}`);
+                processing.value = false;
+            };
+            reader.readAsArrayBuffer(file.value);
+        } catch (err) {
+            logs.value.push(`❌ XLSX Library Load Error: ${err.message}`);
+            processing.value = false;
+        }
+    } else {
+        logs.value.push(`📄 Reading CSV file: ${file.value.name}...`);
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                const text = e.target.result;
+                const rows = parseCSVText(text);
+                logs.value.push(`📊 Parsed ${rows.length} rows from CSV.`);
                 await onDataParsed(rows);
             } catch (err) {
-                logs.value.push(`❌ Excel Error: ${err.message}`);
+                console.error('[BulkImport] Error parsing CSV text:', err);
+                logs.value.push(`❌ Error parsing CSV: ${err.message || err}`);
                 processing.value = false;
             }
         };
-        reader.readAsArrayBuffer(file.value);
-    } else {
-        const papaModule = await import('papaparse');
-        const Papa = papaModule.default || papaModule;
-        Papa.parse(file.value, {
-            header: true,
-            skipEmptyLines: 'greedy',
-            complete: async (results) => {
-                await onDataParsed(results.data);
-            },
-            error: (err) => {
-                logs.value.push(`❌ CSV Error: ${err.message}`);
-                processing.value = false;
-            }
-        });
+        reader.onerror = (err) => {
+            logs.value.push(`❌ Failed to read CSV file: ${err}`);
+            processing.value = false;
+        };
+        reader.readAsText(file.value);
     }
 };
 

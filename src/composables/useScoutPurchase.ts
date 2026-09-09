@@ -48,6 +48,7 @@ export interface ScoutPurchaseItem extends Models.Document {
 const activePurchase = ref<ScoutPurchase | null>(null);
 const purchaseItems = ref<ScoutPurchaseItem[]>([]);
 const draftPurchases = ref<ScoutPurchase[]>([]);
+const lastActivePurchaseId = ref<string | null>(null);
 const isTrayOpen = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -368,7 +369,7 @@ export function useScoutPurchase() {
     /**
      * Set active purchase and fetch its scouted line items
      */
-    const setActivePurchase = (purchase: ScoutPurchase | null) => {
+    const setActivePurchase = async (purchase: ScoutPurchase | null) => {
         try {
             if (typeof unsubscribe === 'function') {
                 unsubscribe();
@@ -394,6 +395,10 @@ export function useScoutPurchase() {
             }
         }
 
+        if (purchase) {
+            lastActivePurchaseId.value = purchase.$id;
+        }
+
         activePurchase.value = purchase;
         purchaseItems.value = [];
 
@@ -410,27 +415,43 @@ export function useScoutPurchase() {
             console.warn('[useScoutPurchase] Error setting global active cart:', e);
         }
 
-        // Subscribe to real-time updates on active purchase
+        // Subscribe to real-time updates on active purchase AND items collection
+        const collId = getItemsCollectionId();
         try {
-            unsubscribe = client.subscribe(
+            unsubscribe = client.subscribe([
                 `databases.${DB_ID}.collections.${PURCHASES_COL}.documents.${purchase.$id}`,
-                (response) => {
-                    if (response.events.includes('databases.*.documents.*.update')) {
-                        const updated = response.payload as unknown as ScoutPurchase;
-                        // Preserve in-memory itemCount if not present in payload
+                `databases.${DB_ID}.collections.${collId}.documents`
+            ], (response) => {
+                const payload = response.payload as any;
+                // 1. Items real-time updates
+                if (response.events.some(e => e.includes(`collections.${collId}.documents`))) {
+                    if (payload && (payload.purchaseId === purchase.$id || payload.cartId === purchase.$id)) {
+                        console.log('[useScoutPurchase] Real-time items event for active purchase:', payload?.title);
+                        fetchPurchaseItems(purchase.$id);
+                    }
+                }
+                // 2. Purchase document real-time updates
+                if (response.events.some(e => e.includes(`collections.${PURCHASES_COL}.documents.${purchase.$id}`))) {
+                    const updated = response.payload as unknown as ScoutPurchase;
+                    if (updated) {
                         if (updated.itemCount === undefined && activePurchase.value?.itemCount !== undefined) {
                             updated.itemCount = activePurchase.value.itemCount;
                         }
-                        activePurchase.value = updated;
+                        activePurchase.value = { ...activePurchase.value, ...updated };
+                        const idx = draftPurchases.value.findIndex(p => p.$id === updated.$id);
+                        if (idx !== -1) {
+                            draftPurchases.value[idx] = { ...draftPurchases.value[idx], ...updated };
+                            draftPurchases.value = [...draftPurchases.value];
+                        }
                     }
                 }
-            );
+            });
         } catch (subErr) {
             console.warn('[useScoutPurchase] Real-time subscription error:', subErr);
         }
 
         try {
-            fetchPurchaseItems(purchase.$id);
+            await fetchPurchaseItems(purchase.$id);
         } catch (fErr) {
             console.warn('[useScoutPurchase] Error fetching purchase items:', fErr);
         }
@@ -474,7 +495,7 @@ export function useScoutPurchase() {
                 }
             }
 
-            purchaseItems.value = docs.map((doc: any) => {
+            const mapped = docs.map((doc: any) => {
                 let bPrice = doc.resalePrice || 0;
                 let isLot = false;
                 let lotCount = 0;
@@ -509,17 +530,28 @@ export function useScoutPurchase() {
                 } as ScoutPurchaseItem;
             });
 
+            // Preserve freshly added items that have this purchaseId but haven't appeared in the list query yet
+            const existingFresh = purchaseItems.value.filter(existing => 
+                existing.purchaseId === purchaseId && !mapped.some(m => m.$id === existing.$id)
+            );
+            purchaseItems.value = [...existingFresh, ...mapped];
+
             // Sync with global cartItems
             cartItems.value = purchaseItems.value as unknown as CartItem[];
 
-            // Sync item count on active and draft purchases so inactives stay accurate
+            // Sync item count and subtotal on active and draft purchases so inactives stay accurate
             const currentCount = purchaseItems.value.length;
+            const currentSubtotal = totalCost.value;
             if (activePurchase.value && activePurchase.value.$id === purchaseId) {
                 activePurchase.value.itemCount = currentCount;
+                activePurchase.value.subtotal = currentSubtotal;
+                activePurchase.value.grandTotal = currentSubtotal;
             }
             const match = draftPurchases.value.find(p => p.$id === purchaseId);
             if (match) {
                 match.itemCount = currentCount;
+                match.subtotal = currentSubtotal;
+                match.grandTotal = currentSubtotal;
                 draftPurchases.value = [...draftPurchases.value];
             }
         } catch (e: any) {
@@ -613,22 +645,29 @@ export function useScoutPurchase() {
                 cartItems.value.unshift(purchaseItem as unknown as CartItem);
             }
 
-            // Update subtotal on purchase record
+            // Update subtotal and itemCount on purchase record
             const newSubtotal = totalCost.value;
-            await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
-                subtotal: newSubtotal,
-                grandTotal: newSubtotal
-            });
+            const newCount = purchaseItems.value.length;
+            try {
+                await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
+                    subtotal: newSubtotal,
+                    grandTotal: newSubtotal,
+                    itemCount: newCount
+                });
+            } catch (upErr) {
+                console.warn('[useScoutPurchase] Failed to update purchase record:', upErr);
+            }
 
             if (activePurchase.value) {
-                activePurchase.value.itemCount = purchaseItems.value.length;
+                activePurchase.value.itemCount = newCount;
                 activePurchase.value.subtotal = newSubtotal;
                 activePurchase.value.grandTotal = newSubtotal;
                 const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
                 if (match) {
-                    match.itemCount = purchaseItems.value.length;
+                    match.itemCount = newCount;
                     match.subtotal = newSubtotal;
                     match.grandTotal = newSubtotal;
+                    draftPurchases.value = [...draftPurchases.value];
                 }
             }
 
@@ -652,6 +691,7 @@ export function useScoutPurchase() {
         lotItems: any[];
         imageId?: string | null;
         rawAnalysis?: any;
+        conditionNotes?: string;
     }) => {
         if (!activePurchase.value) throw new Error("No active purchase selected");
 
@@ -690,7 +730,8 @@ export function useScoutPurchase() {
             rawObj.boutiquePrice = cleanBoutique;
 
             const safeRaw = JSON.stringify(rawObj).slice(0, 4900);
-            const notes = `[LOT_BUNDLE: ${lotCount} items]\n` +
+            const notes = (lotData.conditionNotes ? `${lotData.conditionNotes}\n` : '') +
+                `[LOT_BUNDLE: ${lotCount} items]\n` +
                 (lotData.lotItems || []).map((li, idx) => `${idx + 1}. ${li.name || li.title || li.identity} ($${li.estimated_value || '0'})`).join('\n') +
                 (cleanBoutique ? `\n[Boutique: $${cleanBoutique.toFixed(2)}]` : '');
 
@@ -731,22 +772,29 @@ export function useScoutPurchase() {
                 cartItems.value.unshift(purchaseItem as unknown as CartItem);
             }
 
-            // Update subtotal on purchase record
+            // Update subtotal and itemCount on purchase record
             const newSubtotal = totalCost.value;
-            await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
-                subtotal: newSubtotal,
-                grandTotal: newSubtotal
-            });
+            const newCount = purchaseItems.value.length;
+            try {
+                await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
+                    subtotal: newSubtotal,
+                    grandTotal: newSubtotal,
+                    itemCount: newCount
+                });
+            } catch (upErr) {
+                console.warn('[useScoutPurchase] Failed to update purchase record:', upErr);
+            }
 
             if (activePurchase.value) {
-                activePurchase.value.itemCount = purchaseItems.value.length;
+                activePurchase.value.itemCount = newCount;
                 activePurchase.value.subtotal = newSubtotal;
                 activePurchase.value.grandTotal = newSubtotal;
                 const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
                 if (match) {
-                    match.itemCount = purchaseItems.value.length;
+                    match.itemCount = newCount;
                     match.subtotal = newSubtotal;
                     match.grandTotal = newSubtotal;
+                    draftPurchases.value = [...draftPurchases.value];
                 }
             }
 
@@ -762,30 +810,51 @@ export function useScoutPurchase() {
     /**
      * Remove item or lot from purchase
      */
-    const removeItemFromPurchase = async (itemId: string) => {
-        if (!activePurchase.value) return;
+    const removeItemFromPurchase = async (itemId: string, purchaseId?: string) => {
+        const targetPurchaseId = purchaseId || activePurchase.value?.$id;
+        if (!targetPurchaseId) return;
         loading.value = true;
         try {
+            // Find item first to get image assets
+            const item = purchaseItems.value.find(i => i.$id === itemId);
+            if (item) {
+                const bucketId = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
+                if (item.imageId) {
+                    try {
+                        await storage.deleteFile(bucketId, item.imageId);
+                    } catch (e) {}
+                }
+                if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
+                    for (const gid of item.galleryImageIds) {
+                        try {
+                            await storage.deleteFile(bucketId, gid);
+                        } catch (e) {}
+                    }
+                }
+            }
+
             await databases.deleteDocument(DB_ID, getItemsCollectionId(), itemId);
             purchaseItems.value = purchaseItems.value.filter(i => i.$id !== itemId);
             cartItems.value = cartItems.value.filter(i => i.$id !== itemId);
 
             const newSubtotal = totalCost.value;
-            await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
+            await databases.updateDocument(DB_ID, PURCHASES_COL, targetPurchaseId, {
                 subtotal: newSubtotal,
-                grandTotal: newSubtotal
+                grandTotal: newSubtotal,
+                itemCount: purchaseItems.value.length
             });
 
-            if (activePurchase.value) {
+            if (activePurchase.value && activePurchase.value.$id === targetPurchaseId) {
                 activePurchase.value.itemCount = purchaseItems.value.length;
                 activePurchase.value.subtotal = newSubtotal;
                 activePurchase.value.grandTotal = newSubtotal;
-                const match = draftPurchases.value.find(p => p.$id === activePurchase.value!.$id);
-                if (match) {
-                    match.itemCount = purchaseItems.value.length;
-                    match.subtotal = newSubtotal;
-                    match.grandTotal = newSubtotal;
-                }
+            }
+            const match = draftPurchases.value.find(p => p.$id === targetPurchaseId);
+            if (match) {
+                match.itemCount = purchaseItems.value.length;
+                match.subtotal = newSubtotal;
+                match.grandTotal = newSubtotal;
+                draftPurchases.value = [...draftPurchases.value];
             }
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to remove item:', e);
@@ -841,6 +910,7 @@ export function useScoutPurchase() {
 
     /**
      * Discard draft purchase if walked away
+     * Permanently deletes tracker, all items, and associated image assets in Storage
      */
     const discardPurchase = async (purchaseId?: string) => {
         const targetId = purchaseId || activePurchase.value?.$id;
@@ -848,25 +918,87 @@ export function useScoutPurchase() {
 
         loading.value = true;
         try {
-            // Delete all draft items attached to this purchase
             const itemColl = getItemsCollectionId();
-            const deletePromises = purchaseItems.value.map(item => {
-                return databases.deleteDocument(DB_ID, itemColl, item.$id)
-                    .catch(err => console.warn(`Failed to delete item ${item.$id}:`, err));
+            const bucketId = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
+
+            // 1. Fetch all items attached to this purchase across purchaseId and cartId
+            let itemsToDelete: any[] = [...purchaseItems.value];
+            try {
+                const res = await databases.listDocuments(DB_ID, itemColl, [
+                    Query.equal('purchaseId', targetId),
+                    Query.limit(100)
+                ]);
+                if (res.documents && res.documents.length > 0) {
+                    res.documents.forEach((doc: any) => {
+                        if (!itemsToDelete.some(i => i.$id === doc.$id)) {
+                            itemsToDelete.push(doc);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn('[useScoutPurchase] Query items before discard warning:', err);
+            }
+
+            // 2. Delete all items and their associated image files from Storage
+            const deletePromises = itemsToDelete.map(async item => {
+                // Delete primary image from Storage if present
+                if (item.imageId) {
+                    try {
+                        await storage.deleteFile(bucketId, item.imageId);
+                    } catch (imgErr) {
+                        console.warn(`[useScoutPurchase] Storage image delete warning (${item.imageId}):`, imgErr);
+                    }
+                }
+                // Delete gallery images from Storage if present
+                if (item.galleryImageIds && Array.isArray(item.galleryImageIds)) {
+                    for (const gid of item.galleryImageIds) {
+                        try {
+                            await storage.deleteFile(bucketId, gid);
+                        } catch (gErr) {
+                            console.warn(`[useScoutPurchase] Storage gallery image delete warning (${gid}):`, gErr);
+                        }
+                    }
+                }
+                // Delete the database item document
+                try {
+                    await databases.deleteDocument(DB_ID, itemColl, item.$id);
+                } catch (docErr) {
+                    console.warn(`[useScoutPurchase] Failed to delete item document ${item.$id}:`, docErr);
+                }
             });
             await Promise.allSettled(deletePromises);
 
-            // Mark purchase cancelled or delete document
+            // 3. Delete the tracker / purchase document
             try {
-                await databases.updateDocument(DB_ID, PURCHASES_COL, targetId, {
-                    status: 'Cancelled'
-                });
-            } catch (e) {
-                // If update fails, delete document directly
                 await databases.deleteDocument(DB_ID, PURCHASES_COL, targetId);
+            } catch (pDelErr) {
+                console.warn('[useScoutPurchase] Hard delete failed, attempting cancellation update:', pDelErr);
+                try {
+                    await databases.updateDocument(DB_ID, PURCHASES_COL, targetId, { status: 'Cancelled' });
+                } catch {}
             }
 
-            setActivePurchase(null);
+            // 4. Clean active & draft state in memory
+            if (activePurchase.value?.$id === targetId) {
+                activePurchase.value = null;
+            }
+            if (lastActivePurchaseId.value === targetId) {
+                lastActivePurchaseId.value = null;
+            }
+            draftPurchases.value = draftPurchases.value.filter(p => p.$id !== targetId);
+            purchaseItems.value = [];
+
+            // 5. Clean URL query param if active
+            try {
+                if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    if (url.searchParams.get('purchase') === targetId) {
+                        url.searchParams.delete('purchase');
+                        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+                    }
+                }
+            } catch (urlErr) {}
+
             await loadDraftPurchases();
         } catch (e: any) {
             console.error('[useScoutPurchase] Failed to discard purchase:', e);
@@ -915,8 +1047,43 @@ export function useScoutPurchase() {
     };
 
     const pausedTracker = computed(() => {
-        return (!activePurchase.value && draftPurchases.value.length > 0) ? draftPurchases.value[0] : null;
+        if (activePurchase.value || draftPurchases.value.length === 0) return null;
+        if (lastActivePurchaseId.value) {
+            const found = draftPurchases.value.find(p => p.$id === lastActivePurchaseId.value);
+            if (found) return found;
+        }
+        return draftPurchases.value[0] || null;
     });
+
+    const pauseTracker = () => {
+        if (activePurchase.value) {
+            lastActivePurchaseId.value = activePurchase.value.$id;
+        }
+        setActivePurchase(null);
+        try {
+            if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('purchase')) {
+                    url.searchParams.delete('purchase');
+                    window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+                }
+            }
+        } catch (e) {}
+    };
+
+    const resumeTracker = async (purchase?: ScoutPurchase | null) => {
+        const target = purchase || pausedTracker.value || (draftPurchases.value.length > 0 ? draftPurchases.value[0] : null);
+        if (!target) return null;
+        await setActivePurchase(target);
+        try {
+            if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('purchase', target.$id);
+                window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+            }
+        } catch (e) {}
+        return target;
+    };
 
     return {
         // State
@@ -924,6 +1091,7 @@ export function useScoutPurchase() {
         purchaseItems,
         draftPurchases,
         pausedTracker,
+        lastActivePurchaseId,
         isTrayOpen,
         loading,
         error,
@@ -945,6 +1113,8 @@ export function useScoutPurchase() {
         loadPurchaseById,
         startDraftPurchase,
         setActivePurchase,
+        pauseTracker,
+        resumeTracker,
         fetchPurchaseItems,
         refreshActivePurchaseItems,
         updatePurchaseTitle,
