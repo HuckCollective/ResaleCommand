@@ -18,21 +18,6 @@
     <!-- MAIN CONTENT AREA -->
     <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto">
         
-        <!-- SLEEK COMPACT TOP BAR (Back to Buy Trackers) -->
-        <div class="flex items-center justify-between gap-2 pb-1">
-            <button @click="emit('back-to-list')" class="btn btn-ghost btn-xs font-bold gap-1 text-base-content/70 hover:text-base-content" title="Back to Buy Trackers">
-                <Icon icon="solar:arrow-left-bold" class="w-3.5 h-3.5" />
-                <span>Buy Trackers</span>
-            </button>
-            <div v-if="activePurchase" class="text-xs font-bold flex items-center gap-1.5 opacity-70">
-                <Icon icon="lucide:truck" class="w-4 h-4 text-primary" />
-                <span>{{ activePurchase.vendor || 'Buy Tracker' }}</span>
-                <span class="badge badge-xs badge-warning font-bold">Buy Tracker</span>
-            </div>
-            <div v-else-if="props.isQuickScan" class="text-xs font-black text-warning flex items-center gap-1">
-                <span>⚡ Quick Scan Mode</span>
-            </div>
-        </div>
 
         <!-- 1. INPUT SECTION -->
         <div class="card bg-base-100 shadow-sm border border-base-200">

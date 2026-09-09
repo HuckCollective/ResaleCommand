@@ -8,21 +8,21 @@
     <div class="navbar-end md:pr-2 lg:pr-8">
       <!-- Nav Links / Combined Scout & Tracker -->
       <template v-if="isAuthenticated">
-        <!-- Desktop & Mobile: Unified Scout Page / Toggle Tracker Link -->
+        <!-- Desktop & Mobile: Direct Speed Scout Button -->
         <div class="indicator flex items-center mr-2 md:mr-4">
           <span v-if="displayTrackedCount > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ displayTrackedCount }}</span>
-          <a href="/scout" 
-             @click="handleScoutClick"
+          <a href="/scout?quick=true" 
              class="btn btn-ghost btn-sm border border-base-300 bg-base-200/50 rounded-lg gap-1.5 normal-case font-semibold hover:bg-base-200 flex items-center px-3"
-             aria-label="Go to Scout">
+             title="Speed Scout"
+             aria-label="Speed Scout">
             <Icon icon="solar:object-scan-linear" class="w-4 h-4 text-primary" />
-            <span class="hidden sm:inline">Scout</span>
+            <span class="hidden sm:inline">Speed Scout</span>
           </a>
         </div>
       </template>
       <template v-else>
-        <a href="/scout" class="hidden md:inline-flex btn btn-ghost hover:bg-base-200 mr-2">
-          Scout
+        <a href="/scout?quick=true" class="hidden md:inline-flex btn btn-ghost hover:bg-base-200 mr-2" title="Speed Scout">
+          Speed Scout
         </a>
       </template>
       
@@ -191,12 +191,12 @@
                     <a v-for="link in navLinks" :key="link.url" :href="link.url" 
                        class="btn btn-ghost justify-start gap-3 w-full normal-case text-base hover:bg-base-200"
                        @click="openMobile = false">
-                       <Icon v-if="link.text === 'Scout'" icon="solar:object-scan-linear" class="w-5 h-5 text-primary" />
+                       <Icon v-if="link.text === 'Speed Scout' || link.text === 'Scout'" icon="solar:object-scan-linear" class="w-5 h-5 text-primary" />
                        <Icon v-else-if="link.text === 'Dashboard'" icon="solar:widget-linear" class="w-5 h-5 text-primary" />
                        <Icon v-else-if="link.text === 'Inventory'" icon="solar:box-linear" class="w-5 h-5 text-primary" />
                        <Icon v-else-if="link.text === 'Organization'" icon="solar:settings-linear" class="w-5 h-5 text-primary" />
                        <span class="grow text-left">{{ link.text }}</span>
-                       <span v-if="link.text === 'Scout' && cartItems.length > 0" class="badge badge-primary font-bold">{{ cartItems.length }}</span>
+                       <span v-if="(link.text === 'Speed Scout' || link.text === 'Scout') && cartItems.length > 0" class="badge badge-primary font-bold">{{ cartItems.length }}</span>
                     </a>
                 </div>
 
@@ -350,8 +350,8 @@ const alphaMode = useStore(isAlphaMode);
 // Dynamic Nav Links
 const navLinks = computed(() => {
   return [
-     // Scout is public
-    { text: 'Scout', url: '/scout' }
+     // Speed Scout is public
+    { text: 'Speed Scout', url: '/scout?quick=true' }
   ];
 });
 

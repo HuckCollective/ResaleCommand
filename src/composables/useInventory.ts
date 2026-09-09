@@ -63,52 +63,89 @@ export function useInventory() {
     const hasMore = ref(false);
     
     /**
-     * Fetch items (all)
+     * Fetch items (all, with pagination)
      */
-    const fetchInventory = async (teamId: string) => {
-        currentTeamId = teamId;
+    let fetchPromise: Promise<void> | null = null;
+
+    const fetchInventory = async (teamId?: string) => {
+        if (teamId !== undefined) currentTeamId = teamId;
+
+        // If already fetching, return existing promise to avoid duplicate concurrent loops
+        if (loading.value && fetchPromise) {
+            return fetchPromise;
+        }
+
         loading.value = true;
         error.value = null;
         
-        const { showLoader } = useLoader();
-        showLoader("Loading Inventory...");
-        
-        try {
-            const queries = [
-                Query.orderDesc('$createdAt'),
-                Query.orderDesc('$id'), 
-                Query.limit(100)
-            ];
-
-            if (teamId) {
-                queries.push(Query.equal('tenantId', teamId));
-            }
-
-            const response = await databases.listDocuments(
-                DB_ID,
-                getCollectionId(),
-                queries
-            );
-            
-            totalItems.value = response.total;
-
-            inventoryItems.value = response.documents;
-            initRealtime();
-            
-            hasMore.value = false;
-        } catch (e: any) {
-            console.error("Failed to fetch inventory:", e);
-            error.value = e.message;
-        } finally {
-            loading.value = false;
-            // Hide the global Vue loader
-            const { hideLoader } = useLoader();
-            hideLoader();
+        const { showLoader, updateLoader, hideLoader } = useLoader();
+        if (inventoryItems.value.length === 0) {
+            showLoader("Loading Inventory...");
         }
+        
+        fetchPromise = (async () => {
+            try {
+                const allDocs: Models.Document[] = [];
+                let cursor: string | null = null;
+                let hasMoreItems = true;
+                let total = 0;
+                const pageSize = 5000;
+
+                while (hasMoreItems) {
+                    const queries: any[] = [
+                        Query.orderDesc('$createdAt'),
+                        Query.limit(pageSize)
+                    ];
+
+                    if (currentTeamId) {
+                        queries.push(Query.equal('tenantId', currentTeamId));
+                    }
+
+                    if (cursor) {
+                        queries.push(Query.cursorAfter(cursor));
+                    }
+
+                    const response = await databases.listDocuments(
+                        DB_ID,
+                        getCollectionId(),
+                        queries
+                    );
+                    
+                    total = response.total;
+                    totalItems.value = total;
+
+                    if (response.documents.length > 0) {
+                        allDocs.push(...response.documents);
+                        cursor = response.documents[response.documents.length - 1].$id;
+                        inventoryItems.value = [...allDocs];
+                    }
+
+                    console.log(`[useInventory] Batch: ${response.documents.length}, Accumulated: ${allDocs.length}, Collection total: ${total} (${getCollectionId()})`);
+
+                    if (response.documents.length < pageSize || allDocs.length >= total) {
+                        hasMoreItems = false;
+                    }
+                }
+
+                inventoryItems.value = allDocs;
+                initRealtime();
+                hasMore.value = false;
+            } catch (e: any) {
+                console.error("Failed to fetch inventory:", e);
+                error.value = e.message;
+            } finally {
+                loading.value = false;
+                fetchPromise = null;
+                // Hide the global Vue loader
+                hideLoader();
+            }
+        })();
+
+        return fetchPromise;
     };
     
     const loadNextPage = () => {
-        // No-op
+        // No-op - all items are automatically fetched via fetchInventory
     };
 
     /**

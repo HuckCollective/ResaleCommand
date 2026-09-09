@@ -140,6 +140,8 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 import { salesApi } from '../../lib/sales';
 import { warehousesApi } from '../../lib/warehouses';
+import { databases } from '../../lib/appwrite';
+import { addToast } from '../../stores/toast';
 import type { SaleData, SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
 
@@ -150,6 +152,8 @@ const warehouses = ref<WarehouseDocument[]>([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref('');
+const isLinkedInventoryItem = ref(false);
+const linkedItemId = ref('');
 const isNew = computed(() => !props.saleId);
 
 const form = ref<Partial<SaleData>>({
@@ -168,10 +172,12 @@ const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 };
 
+const selectedWarehouse = computed(() => {
+  return warehouses.value.find(w => w.$id === form.value.warehouseId);
+});
+
 const selectedCommissionRate = computed(() => {
-  if (!form.value.warehouseId) return 0;
-  const wh = warehouses.value.find(w => w.$id === form.value.warehouseId);
-  return wh ? (wh.commissionRate || 0) : 0;
+  return selectedWarehouse.value ? selectedWarehouse.value.commissionRate : 0;
 });
 
 const computedCommissionFee = computed(() => {
@@ -199,11 +205,40 @@ const loadData = async () => {
     warehouses.value = await warehousesApi.listWarehouses(currentTeam.value.$id);
     
     if (props.saleId) {
-      const sale = await salesApi.getSale(props.saleId);
-      form.value = { ...sale };
-      // Format date for input
-      if (form.value.saleDate) {
-        form.value.saleDate = new Date(form.value.saleDate).toISOString().split('T')[0];
+      try {
+        const sale = await salesApi.getSale(props.saleId);
+        form.value = { ...sale };
+        // Format date for input
+        if (form.value.saleDate) {
+          form.value.saleDate = new Date(form.value.saleDate).toISOString().split('T')[0];
+        }
+      } catch (saleErr: any) {
+        // Fallback: If not in sales collection, check if props.saleId is an inventory item ID
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        try {
+          const itemDoc = await databases.getDocument(DB_ID, 'items', props.saleId) as any;
+          if (itemDoc) {
+            isLinkedInventoryItem.value = true;
+            linkedItemId.value = itemDoc.$id;
+            form.value.soNumber = itemDoc.upc || itemDoc.locationSku || await salesApi.generateSoNumber(currentTeam.value.$id);
+            form.value.orderId = itemDoc.locationSku || itemDoc.sku || itemDoc.title;
+            form.value.grossAmount = Number(itemDoc.soldPrice || itemDoc.resalePrice || itemDoc.listPrice || 0);
+            form.value.status = 'Sold';
+            form.value.saleDate = itemDoc.$updatedAt ? new Date(itemDoc.$updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+            
+            // Match warehouse
+            const locName = (Array.isArray(itemDoc.sellingLocations) ? itemDoc.sellingLocations[0] : itemDoc.sellingLocations) || itemDoc.storageLocation;
+            if (locName) {
+              const target = locName.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const wh = warehouses.value.find(w => w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === target);
+              if (wh) form.value.warehouseId = wh.$id;
+            }
+          } else {
+            throw saleErr;
+          }
+        } catch {
+          throw saleErr;
+        }
       }
     } else {
       form.value.soNumber = await salesApi.generateSoNumber(currentTeam.value.$id);
@@ -235,12 +270,22 @@ const saveSale = async () => {
       tenantId: currentTeam.value.$id
     };
 
-    if (isNew.value) {
+    if (isNew.value || isLinkedInventoryItem.value) {
       const newSale = await salesApi.createSale(payload);
+      if (isLinkedInventoryItem.value && linkedItemId.value) {
+        try {
+          const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+          await databases.updateDocument(DB_ID, 'items', linkedItemId.value, { saleId: newSale.$id });
+        } catch (linkErr) {
+          console.warn('Could not link saleId to item:', linkErr);
+        }
+      }
+      addToast('Sale created successfully!', 'success');
       window.location.href = `/sales/${newSale.$id}`;
     } else {
       await salesApi.updateSale(props.saleId!, payload);
-      alert('Sale saved successfully!');
+      addToast('Sale updated successfully!', 'success');
+      window.location.href = '/sales';
     }
   } catch (err: any) {
     console.error('Error saving sale:', err);

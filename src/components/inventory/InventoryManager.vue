@@ -2177,9 +2177,11 @@ const cameraVideo = ref(null);
 const isCameraOpen = ref(false);
 const cameraStream = ref(null);
 
-// Trigger loader immediately on setup (before mount) to prevent layout flash
+// Trigger loader on setup only if items not already loaded
 const { showLoader, updateLoader, hideLoader } = useLoader();
-showLoader("Loading Inventory...");
+if (inventoryItems.value.length === 0) {
+    showLoader("Loading Inventory...");
+}
 
 // Lifecycle
 onMounted(async () => {
@@ -2194,16 +2196,20 @@ onMounted(async () => {
         if (st) filterStatus.value = st;
     }
 
-    // ONLY fetch if auth is already loaded.
-    if (!authLoading.value) {
-        await fetchInventory(''); 
+    // Initiate inventory load
+    await fetchInventory(currentTeam.value?.$id || ''); 
+});
+
+// Watch for Auth / Team changes
+watch(authLoading, async (newVal, oldVal) => {
+    if (oldVal && !newVal) {
+        await fetchInventory(currentTeam.value?.$id || ''); 
     }
 });
 
-// Watch for Auth to finish loading so we know if the user is in Alpha mode
-watch(authLoading, async (newVal) => {
-    if (!newVal) {
-        await fetchInventory(''); 
+watch(currentTeam, async (newTeam, oldTeam) => {
+    if (newTeam?.$id !== oldTeam?.$id) {
+        await fetchInventory(newTeam?.$id || '');
     }
 });
 
