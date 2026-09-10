@@ -40,7 +40,7 @@
         <div class="drawer lg:drawer-open">
             <input id="inventory-sidebar" type="checkbox" class="drawer-toggle" />
             
-            <div class="drawer-content flex flex-col pb-8 lg:pl-5 pt-0 min-w-0">
+            <div class="drawer-content flex flex-col pb-32 lg:pl-5 pt-0 min-w-0">
                 <!-- COMPACT SINGLE-ROW STICKY HEADER -->
                 <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2.5 mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-xs">
                     <div class="flex items-center gap-2 sm:gap-3">
@@ -65,6 +65,30 @@
 
                         <!-- Right: Quick Add + Mobile Filter Drawer Toggle -->
                         <div class="flex items-center gap-1.5 shrink-0">
+                            <!-- View Mode Segmented Control -->
+                            <div class="join bg-base-200/80 p-0.5 rounded-lg border border-base-300 shrink-0">
+                                <button 
+                                    type="button"
+                                    class="join-item btn btn-xs gap-1 font-bold transition-all"
+                                    :class="viewMode === 'table' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                    @click="$emit('update:viewMode', 'table')"
+                                    title="Spreadsheet Table View"
+                                >
+                                    <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
+                                    <span class="hidden md:inline text-[11px]">Table</span>
+                                </button>
+                                <button 
+                                    type="button"
+                                    class="join-item btn btn-xs gap-1 font-bold transition-all"
+                                    :class="viewMode === 'grid' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                    @click="$emit('update:viewMode', 'grid')"
+                                    title="Visual Card Grid View"
+                                >
+                                    <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
+                                    <span class="hidden md:inline text-[11px]">Cards</span>
+                                </button>
+                            </div>
+
                             <button class="btn btn-sm btn-primary gap-1 hidden sm:inline-flex shadow-xs" @click="openAdd">
                                 <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add
                             </button>
@@ -371,13 +395,16 @@
                     </ItemCard>
                 </div>
 
-                <!-- Infinite Scroll Sentinel & Load More Trigger -->
-                <div ref="loadMoreSentinel" class="py-6 flex justify-center items-center w-full" v-if="displayedInventory.length < filteredInventory.length">
-                    <button class="btn btn-sm btn-ghost gap-2 font-bold opacity-70 hover:opacity-100 touch-manipulation active:scale-95" @click="loadMoreItems">
-                        <span class="loading loading-spinner loading-xs text-primary"></span>
-                        <span class="text-xs">Loading more items ({{ displayedInventory.length }} of {{ filteredInventory.length }})...</span>
-                    </button>
-                </div>
+                <!-- Floating Bottom Pagination Dock for Grid View -->
+                <InventoryPaginationDock 
+                    v-model:currentPage="gridPage"
+                    v-model:pageSize="gridPageSize"
+                    :pageSizeOptions="gridPageSizeOptions"
+                    :totalPages="gridTotalPages"
+                    :totalItems="filteredInventory.length"
+                    :selectedCount="selectedItems.length"
+                    :isLoading="loading"
+                />
             </div> <!-- End v-else -->
 
             <!-- ALL ITEMS LOADED -->
@@ -891,6 +918,7 @@ import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from './ItemPreviewModal.vue';
+import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import BundleModal from './BundleModal.vue';
 import TagInput from '../common/TagInput.vue';
 import { addToast } from '../../stores/toast';
@@ -898,6 +926,15 @@ import { confirmDialog } from '../../stores/confirm';
 import { purchasesAPI } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { warehousesApi } from '../../lib/warehouses';
+
+const props = defineProps({
+    viewMode: {
+        type: String,
+        default: 'grid'
+    }
+});
+
+const emit = defineEmits(['update:viewMode']);
 
 const allPurchases = ref([]);
 
@@ -1807,45 +1844,26 @@ const filteredInventory = computed(() => {
     });
 });
 
-// Progressive / Chunked Rendering for Lightning-Fast Instant Filter Speeds (<10ms)
-const displayLimit = ref(40);
+// Grid Pagination (Optimized for 2, 3, 4, and 6 column responsive layouts)
+const gridPage = ref(1);
+const gridPageSize = ref(48);
+const gridPageSizeOptions = [24, 48, 96, 192];
+const gridTotalPages = computed(() => Math.ceil(filteredInventory.value.length / gridPageSize.value) || 1);
+
 const displayedInventory = computed(() => {
-    return filteredInventory.value.slice(0, displayLimit.value);
+    const start = (gridPage.value - 1) * gridPageSize.value;
+    return filteredInventory.value.slice(start, start + gridPageSize.value);
 });
 
-// Reset display limit when any filter or query changes
+// Reset page when any filter or query changes
 watch([filterStatus, filterUpcPrefix, filterBinLocation, filterChannel, filterLotType, filterFlaggedLocated, filterKeywords, insightFilter, searchQuery, filterPurchaseId], () => {
-    displayLimit.value = 40;
+    gridPage.value = 1;
 });
 
-const loadMoreSentinel = ref(null);
-let infiniteScrollObserver = null;
-
-const loadMoreItems = () => {
-    if (displayLimit.value < filteredInventory.value.length) {
-        displayLimit.value += 40;
-    }
-};
-
-onMounted(() => {
-    if (typeof IntersectionObserver !== 'undefined') {
-        infiniteScrollObserver = new IntersectionObserver((entries) => {
-            if (entries[0]?.isIntersecting) {
-                loadMoreItems();
-            }
-        }, { rootMargin: '600px' });
-        
-        watch(loadMoreSentinel, (el) => {
-            if (el && infiniteScrollObserver) {
-                infiniteScrollObserver.observe(el);
-            }
-        }, { immediate: true });
-    }
-});
-
-onUnmounted(() => {
-    if (infiniteScrollObserver) {
-        infiniteScrollObserver.disconnect();
+// Smoothly scroll back to top of grid on page change if scrolled down
+watch(gridPage, () => {
+    if (typeof window !== 'undefined' && window.scrollY > 200) {
+        window.scrollTo({ top: 120, behavior: 'smooth' });
     }
 });
 

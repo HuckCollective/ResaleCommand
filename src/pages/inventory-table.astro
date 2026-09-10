@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import InventoryViewHub from '../components/inventory/InventoryViewHub.vue';
+---
+
+<Layout title="Inventory Spreadsheet | Resale Command">
+    <div class="container mx-auto px-4 py-8">
+        <InventoryViewHub client:only="vue" initialView="table" />
+    </div>
+</Layout>

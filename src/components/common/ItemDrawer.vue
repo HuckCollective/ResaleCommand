@@ -7,34 +7,10 @@
             <!-- Drawer Container: Mobile full-width, Desktop expanded (860px / 980px) -->
             <div class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
                 
-                <!-- HEADER (Sticky) -->
-                <div class="px-4 py-3 sm:px-6 border-b border-base-200 flex justify-between items-center bg-base-100 flex-none sticky top-0 z-30">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <Icon :icon="item ? 'solar:pen-bold' : 'solar:box-minimalistic-bold'" class="w-4 h-4" />
-                        </div>
-                        <div class="min-w-0">
-                            <h3 class="font-bold text-base sm:text-lg leading-tight truncate">
-                                {{ item ? 'Edit Item' : 'Add New Item' }}
-                            </h3>
-                            <div class="text-[11px] opacity-60 truncate flex items-center gap-1 font-mono">
-                                <span>{{ item?.$id ? `ID: ${item.$id.substring(0, 12)}...` : 'Creating Draft' }}</span>
-                                <span v-if="item?.tenantId" class="badge badge-ghost badge-xs scale-90">{{ item.tenantId }}</span>
-                            </div>
-                        </div>
-                    </div>
+                <!-- 1. STICKY HEADER (Extracted Subcomponent) -->
+                <ItemDrawerHeader :item="item" @close="closeDrawer" />
 
-                    <div class="flex items-center gap-2 shrink-0">
-                        <!-- UPC Badge -->
-                        <div v-if="item?.upc" class="hidden sm:flex items-center gap-1.5 text-xs font-mono bg-base-200 rounded-md px-2.5 py-1 border border-base-300">
-                            <Icon icon="solar:tag-horizontal-bold-duotone" class="w-3.5 h-3.5 text-primary" />
-                            <span class="font-bold tracking-wider">{{ item.upc }}</span>
-                        </div>
-                        <button class="btn btn-sm btn-circle btn-ghost" @click="closeDrawer" aria-label="Close Drawer">✕</button>
-                    </div>
-                </div>
-
-                <!-- TABS (Details, Verify, Lot) -->
+                <!-- 2. TABS (Details, Verify, Lot) -->
                 <div class="px-4 sm:px-6 pt-1 pb-0 bg-base-100 border-b border-base-200 flex-none z-20">
                     <div role="tablist" class="tabs tabs-bordered font-bold w-full">
                         <a role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-primary': mainTab === 'details'}" @click="mainTab = 'details'">
@@ -52,1002 +28,97 @@
                     </div>
                 </div>
 
-                <!-- SCROLLABLE CONTENT BODY -->
+                <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6" v-show="mainTab === 'details'">
-                    
-                    <!-- RESPONSIVE 2-COLUMN GRID (Mobile 1 col, Desktop 12-col split) -->
-                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-                        <!-- ================================================================= -->
-                        <!-- LEFT COLUMN: Physical Item & Logistics (Priority Order)          -->
-                        <!-- ================================================================= -->
-                        <div class="lg:col-span-6 space-y-5">
-                            
-                            <!-- 🔗 Subtle Lot Connection Badges (Clean & Compact) -->
-                            <div v-if="props.item?.parentLotId" class="flex items-center justify-between bg-primary/10 border border-primary/25 rounded-2xl px-3.5 py-2 text-xs shadow-2xs">
-                                <div class="flex items-center gap-2 min-w-0">
-                                    <Icon icon="solar:link-circle-bold" class="w-4 h-4 text-primary shrink-0" />
-                                    <span class="opacity-70 text-[11px] shrink-0">Extracted From:</span>
-                                    <strong class="truncate font-mono text-base-content">{{ parentItem?.title || parentItem?.upc || props.item.parentLotId }}</strong>
-                                </div>
-                                <button type="button" @click="mainTab = 'lot'" class="btn btn-ghost btn-xs text-primary font-bold hover:underline shrink-0 gap-1">
-                                    <span>Lot Hub</span>
-                                    <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
-                                </button>
-                            </div>
-
-                            <div v-else-if="lotChildren.length > 0" class="flex items-center justify-between bg-secondary/10 border border-secondary/25 rounded-2xl px-3.5 py-2 text-xs shadow-2xs">
-                                <div class="flex items-center gap-2 min-w-0">
-                                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary shrink-0" />
-                                    <span class="opacity-70 text-[11px] shrink-0">Master Lot:</span>
-                                    <strong class="font-bold text-secondary">{{ lotChildren.length }} Split Listings Active</strong>
-                                </div>
-                                <button type="button" @click="mainTab = 'lot'" class="btn btn-ghost btn-xs text-secondary font-bold hover:underline shrink-0 gap-1">
-                                    <span>Manage in Lot Hub</span>
-                                    <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
-                                </button>
-                            </div>
-
-                            <!-- 1. 🏷️ TITLE & IDENTITY (TOP PRIORITY) -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                                        <Icon icon="solar:text-bold" class="w-4 h-4 text-primary" />
-                                        Item Title & Identity
-                                    </label>
-                                    <div class="flex items-center gap-1.5">
-                                        <!-- Persistent Multi-Tier Lot Splitter Button -->
-                                        <button 
-                                            v-if="props.item && (Number(editForm.quantity || props.item.quantity || 1) > 1 || (scoutItemsArray && scoutItemsArray.length > 1) || editForm.title?.toLowerCase().includes('lot') || editForm.title?.toLowerCase().includes('bundle'))"
-                                            type="button" 
-                                            class="btn btn-xs btn-primary gap-1 font-bold shadow-xs hover:scale-105 transition-all"
-                                            @click="isLotSplitterOpen = true"
-                                        >
-                                            <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                                            <span>✨ Multi-Tier Splitter</span>
-                                        </button>
-
-                                        <span v-if="props.item?.sku || props.item?.upc" class="badge badge-sm font-mono font-bold bg-base-300">
-                                            {{ props.item.sku || props.item.upc }}
-                                        </span>
-                                        <span class="text-[11px] opacity-50 font-mono">{{ editForm.title?.length || 0 }} chars</span>
-                                    </div>
-                                </div>
-                                <button 
-                                    v-if="suggestedTitleStr && suggestedTitleStr !== editForm.title" 
-                                    type="button" 
-                                    class="btn btn-xs btn-outline btn-secondary font-normal w-full text-left h-auto py-1.5 px-3 justify-start items-start rounded-xl shadow-xs"
-                                    @click="editForm.title = suggestedTitleStr" 
-                                    title="Click to use AI suggested title"
-                                >
-                                    <Icon icon="solar:magic-stick-linear" class="w-3.5 h-3.5 shrink-0 mt-0.5" /> 
-                                    <span class="whitespace-normal break-words leading-tight text-xs"><strong>Use:</strong> {{ suggestedTitleStr }}</span>
-                                </button>
-
-                                <div class="join w-full flex shadow-xs">
-                                    <textarea 
-                                        v-model="editForm.title" 
-                                        class="textarea textarea-bordered join-item grow font-bold text-sm sm:text-base leading-snug min-h-[3.2rem] py-2 resize-none bg-base-100" 
-                                        rows="2" 
-                                        placeholder="Brand, Item Name, Model, Edition, Sizing...">
-                                    </textarea>
-                                    <button class="btn join-item border border-base-300 h-auto px-3 flex items-center justify-center hover:bg-base-200" @click="copyToClipboard(editForm.title)" title="Copy Title">
-                                        <Icon icon="solar:copy-linear" class="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 2. 📸 PHOTOS & SOURCING MEDIA -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3.5">
-                                <PhotoGalleryManager 
-                                    v-model:existing-images="editForm.existingGalleryIds"
-                                    v-model:new-photos="editGalleryBuffer"
-                                    v-model:main-selection="mainPhotoSelection"
-                                    :scanner-widget="scannerWidget"
-                                    @open-camera="scannerWidget?.startCamera()"
-                                />
-
-                                <!-- 4. Sourcing URL & Image Scraper Bar -->
-                                <div class="form-control">
-                                    <div class="join w-full shadow-xs">
-                                        <input 
-                                            type="text" 
-                                            v-model="editForm.sourcingLocation" 
-                                            placeholder="Paste ShopGoodwill Item # or Listing URL..." 
-                                            class="input input-bordered input-sm join-item grow font-mono text-xs bg-base-100 rounded-l-xl h-10" 
-                                            @keydown.enter.prevent="fetchSourceData"
-                                        />
-                                        <button 
-                                            class="btn btn-primary btn-sm join-item shrink-0 gap-1.5 font-bold rounded-r-xl h-10 px-4" 
-                                            @click="fetchSourceData" 
-                                            :disabled="!editForm.sourcingLocation || fetchingImages" 
-                                            title="Fetch photos & metadata from listing"
-                                        >
-                                            <span v-if="fetchingImages" class="loading loading-spinner loading-xs"></span>
-                                            <Icon v-else icon="solar:cloud-download-bold" class="w-4 h-4" />
-                                            <span>Fetch</span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- 📸 Fetched Listing Photos Tray (Pick & Add) -->
-                                <div v-if="fetchedImages && fetchedImages.length > 0" class="bg-base-100 rounded-xl p-3 border border-primary/40 shadow-md space-y-2.5 transition-all">
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-1.5">
-                                            <span class="badge badge-primary badge-sm font-bold shadow-xs">{{ fetchedImages.length }}</span>
-                                            <span class="text-xs font-bold text-base-content">Fetched Photos Available</span>
-                                        </div>
-                                        <div class="flex items-center gap-1.5">
-                                            <button 
-                                                type="button" 
-                                                @click="addAllFetchedImages" 
-                                                class="btn btn-xs btn-primary gap-1 font-bold shadow-xs"
-                                                title="Add all fetched photos to gallery"
-                                            >
-                                                <Icon icon="solar:gallery-add-bold" class="w-3.5 h-3.5" />
-                                                <span>Add All</span>
-                                            </button>
-                                            <button 
-                                                type="button" 
-                                                @click="fetchedImages = []" 
-                                                class="btn btn-xs btn-ghost btn-circle opacity-60 hover:opacity-100"
-                                                title="Dismiss fetched photos"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Image Grid (Exact same thumbnail size & grid as supporting gallery) -->
-                                    <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-64 overflow-y-auto p-1.5 rounded-xl bg-base-200/60 border border-base-300">
-                                        <div 
-                                            v-for="(imgUrl, idx) in fetchedImages" 
-                                            :key="idx"
-                                            class="group relative aspect-square w-full rounded-xl border-2 border-base-300 overflow-hidden bg-base-100 shadow-xs hover:border-primary transition-all flex items-center justify-center cursor-pointer"
-                                        >
-                                            <img 
-                                                :src="proxify(typeof imgUrl === 'string' ? imgUrl : imgUrl.url)" 
-                                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                                loading="lazy"
-                                            />
-                                            
-                                            <!-- Downloading Spinner Overlay -->
-                                            <div 
-                                                v-if="downloadingImageUrls[typeof imgUrl === 'string' ? imgUrl : imgUrl.url]" 
-                                                class="absolute inset-0 bg-base-300/80 backdrop-blur-xs flex items-center justify-center z-20"
-                                            >
-                                                <span class="loading loading-spinner loading-xs text-primary"></span>
-                                            </div>
-
-                                            <!-- Hover Actions -->
-                                            <div class="absolute inset-0 bg-neutral/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1 z-10">
-                                                <button 
-                                                    type="button"
-                                                    class="btn btn-xs btn-primary w-full text-[10px] h-6 min-h-0 px-1 font-bold shadow-xs gap-0.5"
-                                                    @click.stop="selectFetchedImage(typeof imgUrl === 'string' ? imgUrl : imgUrl.url, false)"
-                                                    title="Add to gallery"
-                                                >
-                                                    <Icon icon="solar:add-circle-bold" class="w-3 h-3" />
-                                                    <span>+ Gallery</span>
-                                                </button>
-                                                <button 
-                                                    type="button"
-                                                    class="btn btn-xs btn-warning w-full text-[10px] h-6 min-h-0 px-1 font-bold shadow-xs gap-0.5"
-                                                    @click.stop="selectFetchedImage(typeof imgUrl === 'string' ? imgUrl : imgUrl.url, true)"
-                                                    title="Set as main photo"
-                                                >
-                                                    <Icon icon="solar:star-bold" class="w-3 h-3" />
-                                                    <span>Set Main</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p class="text-[10px] text-base-content/60 text-center font-medium">Click <strong>+ Gallery</strong> to add or <strong>Set Main ⭐</strong> to pick photo</p>
-                                </div>
-                            </div>
-
-                            <!-- 3. 🛡️ ACQUISITION & BASE COST (PROTECTED / LOCKABLE) -->
-                            <div class="bg-base-200/70 rounded-2xl p-4 border border-base-300 relative shadow-sm">
-                                <div class="flex justify-between items-center border-b border-base-300 pb-2.5 mb-3">
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-6 h-6 rounded-md bg-warning/15 flex items-center justify-center text-warning font-bold">
-                                            <Icon icon="solar:shield-check-bold" class="w-3.5 h-3.5" />
-                                        </div>
-                                        <div>
-                                            <h4 class="font-bold text-xs uppercase tracking-wider text-base-content">Acquisition & Base Cost</h4>
-                                            <p class="text-[10px] opacity-60">Protected sourcing provenance</p>
-                                        </div>
-                                    </div>
-
-                                    <!-- Lock / Unlock Toggle Button -->
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-xs gap-1 font-bold transition-all shadow-xs" 
-                                        :class="isAcquisitionUnlocked ? 'btn-warning text-warning-content' : 'btn-outline btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="isAcquisitionUnlocked = !isAcquisitionUnlocked"
-                                        title="Toggle lock to protect original purchase cost and order ID"
-                                    >
-                                        <Icon :icon="isAcquisitionUnlocked ? 'solar:lock-unlocked-bold' : 'solar:lock-bold'" class="w-3.5 h-3.5" />
-                                        <span>{{ isAcquisitionUnlocked ? 'Unlocked' : 'Locked' }}</span>
-                                    </button>
-                                </div>
-
-                                <!-- Read-Only Locked View (Default) -->
-                                <div v-if="!isAcquisitionUnlocked && props.item" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-base-100/70 p-3 rounded-xl border border-base-200">
-                                    <div>
-                                        <span class="text-[10px] opacity-50 block font-bold uppercase">Buy Cost</span>
-                                        <span class="font-mono font-bold text-sm text-base-content">${{ Number(editForm.cost || 0).toFixed(2) }}</span>
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] opacity-50 block font-bold uppercase">Order #</span>
-                                        <a 
-                                            v-if="editForm.orderId || props.item?.purchaseId || props.item?.cartId" 
-                                            :href="`/purchases/${editForm.orderId || props.item?.purchaseId || props.item?.cartId}`" 
-                                            target="_blank" 
-                                            class="font-mono font-bold text-primary hover:underline truncate flex items-center gap-1 text-xs"
-                                            :title="`Open ${editForm.orderId || 'Purchase Order'} details`"
-                                        >
-                                            <span class="truncate">{{ editForm.orderId || 'View PO' }}</span>
-                                            <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 shrink-0 opacity-70" />
-                                        </a>
-                                        <span v-else class="font-mono font-semibold truncate block opacity-50">None</span>
-                                    </div>
-                                    <div class="col-span-2 sm:col-span-1 flex flex-col justify-center">
-                                        <span class="text-[10px] opacity-50 block font-bold uppercase">Purchase Link</span>
-                                        <a v-if="props.item?.purchaseId || editForm.orderId || props.item?.cartId" :href="`/purchases/${props.item?.purchaseId || editForm.orderId || props.item?.cartId}`" target="_blank" class="text-primary link font-bold flex items-center gap-1 truncate text-xs">
-                                            <Icon icon="solar:cart-bold" class="w-3.5 h-3.5 shrink-0" />
-                                            <span>PO Details</span>
-                                        </a>
-                                        <span v-else class="opacity-40 italic text-[11px]">Direct Entry</span>
-                                    </div>
-                                </div>
-
-                                <!-- Editable Unlocked Form -->
-                                <div v-else class="space-y-3">
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <div class="form-control">
-                                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Buy Cost Basis ($)</span></label>
-                                            <div class="relative">
-                                                <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                                <input type="number" step="0.01" v-model="editForm.cost" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" />
-                                            </div>
-                                        </div>
-                                        <div class="form-control">
-                                            <label class="label py-0.5 flex items-center justify-between">
-                                                <span class="label-text text-xs font-bold">Order / Invoice #</span>
-                                                <a 
-                                                    v-if="editForm.orderId" 
-                                                    :href="`/purchases?search=${encodeURIComponent(editForm.orderId)}`" 
-                                                    target="_blank" 
-                                                    class="text-[10px] text-primary font-bold hover:underline flex items-center gap-0.5"
-                                                    title="Open PO in Purchases"
-                                                >
-                                                    <Icon icon="solar:link-minimalistic-bold" class="w-3 h-3" /> View PO
-                                                </a>
-                                            </label>
-                                            <input type="text" v-model="editForm.orderId" placeholder="e.g. SGW-84920" class="input input-bordered input-sm w-full font-mono text-xs bg-base-100" />
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <div class="form-control">
-                                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Origin / Provenance</span></label>
-                                            <input type="text" v-model="editForm.countryOfOrigin" placeholder="e.g. USA, Japan, Estate Sale" class="input input-bordered input-sm w-full text-xs bg-base-100" />
-                                        </div>
-                                        <div class="form-control">
-                                            <label class="label py-0.5 flex items-center justify-between">
-                                                <span class="label-text text-xs font-bold">Parent Lot ID</span>
-                                                <span v-if="editForm.parentLotId" class="badge badge-xs badge-secondary font-bold">Extracted</span>
-                                            </label>
-                                            <div class="join w-full shadow-xs">
-                                                <input type="text" :value="editForm.parentLotId || 'None'" disabled class="input input-bordered input-sm join-item grow text-xs bg-base-200/60 font-mono opacity-80" />
-                                                <button 
-                                                    v-if="editForm.parentLotId" 
-                                                    type="button" 
-                                                    @click="editForm.parentLotId = null; addToast({ type: 'info', message: 'Unlinked from parent lot! Click Save to confirm.' })" 
-                                                    class="btn btn-sm btn-outline btn-error join-item font-bold text-xs" 
-                                                    title="Unlink and make standalone"
-                                                >
-                                                    Unlink
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 4. 💲 PRICING, MARGIN & MULTI-QUANTITY SPLITTING -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                                <div class="flex justify-between items-center">
-                                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                                        <Icon icon="solar:dollar-bold" class="w-4 h-4 text-success" />
-                                        Pricing & Margin
-                                    </label>
-
-                                    <!-- Margin Indicator -->
-                                    <div v-if="calculatedMargin !== null" class="badge badge-sm font-mono font-bold" :class="calculatedMargin >= 50 ? 'badge-success text-white' : (calculatedMargin >= 20 ? 'badge-warning' : 'badge-error')">
-                                        {{ calculatedMargin }}% Est. Margin
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
-                                    <!-- Quantity -->
-                                    <div class="form-control">
-                                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Quantity</span></label>
-                                        <input type="number" step="1" min="1" v-model.number="editForm.quantity" class="input input-bordered input-sm w-full text-center font-bold font-mono bg-base-100" />
-                                    </div>
-
-                                    <!-- List Price -->
-                                    <div class="form-control">
-                                        <label class="label py-0.5 flex justify-between">
-                                            <span class="label-text text-xs font-bold">List Price</span>
-                                        </label>
-                                        <div class="relative">
-                                            <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                            <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" />
-                                        </div>
-                                    </div>
-
-                                    <!-- Sold Price -->
-                                    <div class="form-control">
-                                        <label class="label py-0.5"><span class="label-text text-xs font-bold text-success">Sold Price</span></label>
-                                        <div class="relative">
-                                            <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                            <input type="number" step="0.01" v-model="editForm.soldPrice" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" :class="{'border-success ring-1 ring-success': editForm.status === 'sold'}" />
-                                        </div>
-                                    </div>
-
-                                    <!-- Estimated Comps Range -->
-                                    <div class="form-control">
-                                        <label class="label py-0.5"><span class="label-text text-[11px] opacity-60">Est. Range</span></label>
-                                        <div class="text-xs font-mono font-bold bg-base-100 p-1.5 rounded-lg border border-base-300 text-center truncate">
-                                            <span v-if="editForm.estLow || editForm.estHigh">${{ editForm.estLow || '0' }} - ${{ editForm.estHigh || '0' }}</span>
-                                            <span v-else class="opacity-40 font-normal">--</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Multi-Quantity Splitting Actions Bar -->
-                                <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 mt-2">
-                                    <div class="text-[11px] font-bold text-secondary flex items-center gap-1">
-                                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-                                        <span>Multi-Quantity Batch ({{ editForm.quantity }} Units)</span>
-                                    </div>
-                                    <div class="flex items-center gap-1.5 flex-wrap">
-                                        <button @click.prevent="sellOneQuantity" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit and subtract cost">
-                                            <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
-                                        </button>
-                                        <button @click.prevent="splitOneActive" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
-                                            <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 5. 📍 STORAGE LOCATION & STATUS -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div class="form-control">
-                                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Physical Storage Bin</span></label>
-                                        <SingleSelectDropdown 
-                                            v-model="editForm.storageLocation" 
-                                            :options="allLocations" 
-                                            placeholder="Select or type bin..."
-                                        />
-                                    </div>
-                                    <div class="form-control">
-                                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Inventory Status</span></label>
-                                        <select v-model="editForm.status" class="select select-bordered select-sm w-full font-bold text-xs bg-base-100">
-                                            <option value="acquired">Acquired (Backlog)</option>
-                                            <option value="received">Received</option>
-                                            <option value="placed">Placed (In Booth)</option>
-                                            <option value="tracked">Tracked</option>
-                                            <option value="combined">Combined</option>
-                                            <option value="sold">Sold</option>
-                                            <option value="archived">Archived</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <MultiSelectDropdown 
-                                    v-model="editForm.sellingLocations" 
-                                    label="Sales Channels & Booth Locations" 
-                                />
-
-                                <div class="flex items-center justify-between bg-base-100 p-2.5 rounded-xl border border-base-300">
-                                    <div class="flex items-center gap-2">
-                                        <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
-                                        <div>
-                                            <span class="text-xs font-bold">Public Storefront Visibility</span>
-                                            <p class="text-[10px] opacity-60">Show this item on your public catalog site</p>
-                                        </div>
-                                    </div>
-                                    <input type="checkbox" v-model="showOnStorefront" class="checkbox checkbox-primary checkbox-sm" />
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <!-- ================================================================= -->
-                        <!-- RIGHT COLUMN: Intelligence & Content Hub                          -->
-                        <!-- ================================================================= -->
-                        <div class="lg:col-span-6 space-y-5">
-                            
-                            <!-- 1. 📝 INTERNAL NOTES & AI PROMPT GUIDANCE (SAVED WITH ITEM) -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-2">
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <label class="font-bold text-xs uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                                            <Icon icon="solar:notes-bold" class="w-4 h-4 text-secondary" />
-                                            Internal Product Notes & AI Guidance
-                                        </label>
-                                        <p class="text-[10px] opacity-60">Saved with item & used to sharpen AI Deep Research</p>
-                                    </div>
-                                    <span class="badge badge-xs badge-ghost font-mono">Internal Only</span>
-                                </div>
-                                <textarea 
-                                    v-model="editForm.condition_notes" 
-                                    class="textarea textarea-bordered w-full h-24 text-xs font-medium bg-base-100 focus:ring-1 focus:ring-secondary/30" 
-                                    placeholder="e.g. Tested motor works, light turns on, missing battery cap, minor wear on bottom, purchased from estate sale...">
-                                </textarea>
-                            </div>
-
-                            <!-- 2. 🕵️ AI SCOUT & DEEP VALUATION REPORT (FULL PRODUCTION DISPLAY) -->
-                            <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-4 shadow-sm">
-                                <div class="flex justify-between items-center border-b border-base-300 pb-2.5">
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center text-primary font-bold">
-                                            <Icon icon="solar:magic-stick-bold" class="w-3.5 h-3.5" />
-                                        </div>
-                                        <div>
-                                            <h4 class="font-bold text-xs uppercase tracking-wider text-base-content">AI Scout & Valuation Intelligence</h4>
-                                            <p class="text-[10px] opacity-60">Deep market analysis & pricing models</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center gap-2">
-                                        <!-- Report Ready Badge -->
-                                        <span v-if="scoutResult" class="badge badge-sm badge-success text-success-content font-black whitespace-nowrap px-2.5 py-0.5 shadow-xs">Report Ready</span>
-                                        <span v-else-if="analyzing" class="badge badge-sm badge-warning text-warning-content font-black whitespace-nowrap px-2.5 py-0.5 animate-pulse">Analyzing...</span>
-                                        <span v-else class="badge badge-sm badge-ghost text-base-content/70 font-bold whitespace-nowrap px-2">Not Scanned</span>
-                                    </div>
-                                </div>
-
-                                <!-- Loading Animation -->
-                                <div v-if="analyzing" class="flex flex-col items-center justify-center py-8 space-y-2">
-                                    <span class="loading loading-spinner text-primary loading-md"></span>
-                                    <p class="font-bold text-xs text-primary">{{ analysisStatus || 'Scanning photos & market comps...' }}</p>
-                                </div>
-
-                                <!-- Report Contents -->
-                                <div v-else-if="scoutResult" class="space-y-4">
-                                    
-                                    <!-- SOURCING STRATEGY VERDICT CARD -->
-                                    <div v-if="scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
-                                        'border-success bg-success/10': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
-                                        'border-error bg-error/10': scoutPurchaseStrategy.verdict === 'PASS',
-                                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
-                                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
-                                    }">
-                                        <div class="flex items-center justify-between gap-2 mb-1.5">
-                                            <div class="flex items-center gap-2">
-                                                <Icon icon="solar:magic-stick-bold" class="w-5 h-5 text-success" v-if="['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)" />
-                                                <Icon icon="solar:stop-circle-bold" class="w-5 h-5 text-error" v-else-if="scoutPurchaseStrategy.verdict === 'PASS'" />
-                                                <Icon icon="solar:eye-bold" class="w-5 h-5 text-warning" v-else />
-                                                <h4 class="font-black text-sm uppercase tracking-wider" :class="{
-                                                    'text-success': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
-                                                    'text-error': scoutPurchaseStrategy.verdict === 'PASS',
-                                                    'text-warning': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
-                                                    'text-primary': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
-                                                }">{{ String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}</h4>
-                                            </div>
-                                            <div v-if="scoutPurchaseStrategy.current_asking_price && !String(scoutPurchaseStrategy.current_asking_price).includes('No Asking Price')" class="my-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-base-100 border border-base-300 flex flex-wrap items-center gap-1.5 leading-snug">
-                                                <span class="opacity-60 text-[10px] uppercase font-black">Asking/Bid:</span>
-                                                <span>{{ scoutPurchaseStrategy.current_asking_price }}</span>
-                                            </div>
-                                            <div v-else-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
-                                                Max Bid: ${{ scoutPurchaseStrategy.max_bid }}
-                                            </div>
-                                        </div>
-                                        <p v-if="scoutPurchaseStrategy.advice" class="text-xs opacity-90 leading-relaxed font-medium">
-                                            {{ scoutPurchaseStrategy.advice }}
-                                        </p>
-                                    </div>
-
-                                    <!-- VISUAL CONDITION ASSESSMENT (Matching Scout) -->
-                                    <div v-if="scoutItemsArray[0]?.condition_notes" class="bg-base-200 p-3 border border-base-300 rounded-xl">
-                                        <div class="font-bold text-xs mb-1 opacity-70 uppercase tracking-wide flex items-center gap-1.5">
-                                            <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5" />
-                                            <span>Visual Condition Assessment</span>
-                                        </div>
-                                        <p class="text-xs font-medium opacity-90 leading-relaxed">{{ scoutItemsArray[0].condition_notes }}</p>
-                                    </div>
-
-                                    <!-- BUNDLE COMPONENTS (Matching Scout layout 1-to-1) -->
-                                    <div v-if="scoutItemsArray.length > 1" class="bg-base-200 border border-base-300 rounded-xl p-3.5">
-                                        <div class="font-bold text-xs uppercase tracking-wider mb-2.5 flex items-center justify-between text-primary">
-                                            <div class="flex items-center gap-1.5">
-                                                <Icon icon="solar:box-linear" class="w-4 h-4" />
-                                                <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
-                                            </div>
-                                            <button v-if="item" type="button" class="btn btn-xs btn-outline btn-primary font-bold shadow-xs gap-1" @click="mainTab = 'lots'">
-                                                <span>Lot Hub ➔</span>
-                                            </button>
-                                        </div>
-                                        <ul class="space-y-2 text-xs font-medium">
-                                            <li v-for="(subItem, subIdx) in scoutItemsArray" :key="subIdx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex flex-col gap-1 shadow-xs">
-                                                <div class="flex justify-between items-start gap-2 w-full">
-                                                    <div class="flex items-start gap-2">
-                                                        <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
-                                                        <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
-                                                    </div>
-                                                    <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5 shrink-0">{{ subItem.condition }}</span>
-                                                </div>
-                                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1.5 mt-0.5">
-                                                    <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value || formatPriceRange(subItem.price_breakdown?.fair) || '-' }}</strong></span>
-                                                    <span class="opacity-30">|</span>
-                                                    <span>Max Buy: <strong class="text-success">${{ calculateMaxBuy(subItem) }}</strong></span>
-                                                    <span class="opacity-30">|</span>
-                                                    <span>Max Bid: <strong class="text-secondary">${{ calculateSubItemMaxBid(subItem, scoutResult) }}</strong></span>
-                                                    <span v-if="editForm.cost && Number(editForm.cost) > 0" class="opacity-30">|</span>
-                                                    <span v-if="editForm.cost && Number(editForm.cost) > 0">Split Cost Basis: <strong class="text-warning">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong></span>
-                                                </div>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <!-- AI Found Image Thumbnail (Single Item) -->
-                                    <div v-if="scoutItemsArray.length === 1 && scoutItemsArray[0].image" class="mb-2 flex justify-center">
-                                        <img :src="proxify(scoutItemsArray[0].image)" class="h-32 object-contain rounded-xl shadow-md border border-base-300" alt="AI Found Item" @error="$event.target.style.display = 'none'" />
-                                    </div>
-
-                                    <!-- Red Flags -->
-                                    <div v-if="scoutItemsArray[0]?.red_flags && scoutItemsArray[0].red_flags.length > 0" class="alert alert-warning shadow-xs p-2.5 text-xs">
-                                        <span class="font-bold"><Icon icon="solar:danger-triangle-bold" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutItemsArray[0].red_flags.join(', ') }}
-                                    </div>
-
-                                    <!-- SUGGESTED VALUATION MATRIX (2x2 Grid) -->
-                                    <div v-if="scoutTotalRange || scoutItemsArray[0]?.price_breakdown" class="grid grid-cols-2 gap-2 pt-1">
-                                        <div 
-                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-success/60 hover:bg-success/5 transition-all group"
-                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.mint.formatted : scoutItemsArray[0]?.price_breakdown?.mint)"
-                                            title="Click to apply Mint price"
-                                        >
-                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-success/20 text-success border-success/40 mb-1">MINT</span>
-                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
-                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-success font-bold mt-0.5">Use Price ↵</span>
-                                        </div>
-                                        <div 
-                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20 cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
-                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.fair.formatted : scoutItemsArray[0]?.price_breakdown?.fair)"
-                                            title="Click to apply Fair market price"
-                                        >
-                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
-                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
-                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-primary font-bold mt-0.5">Use Price ↵</span>
-                                        </div>
-                                        <div 
-                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-error/60 hover:bg-error/5 transition-all group"
-                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.poor.formatted : scoutItemsArray[0]?.price_breakdown?.poor)"
-                                            title="Click to apply Poor / Clearance price"
-                                        >
-                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-error/20 text-error border-error/40 mb-1">POOR</span>
-                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
-                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-error font-bold mt-0.5">Use Price ↵</span>
-                                        </div>
-                                        <div 
-                                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs cursor-pointer hover:border-secondary hover:bg-secondary/5 transition-all group"
-                                            @click="applyPriceTier(scoutTotalRange ? scoutTotalRange.boutique.formatted : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
-                                            title="Click to apply Boutique / Antique Mall price"
-                                        >
-                                            <span class="badge badge-xs font-bold whitespace-nowrap bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
-                                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
-                                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-secondary font-bold mt-0.5">Use Price ↵</span>
-                                        </div>
-                                    </div>
-
-                                    <!-- LOT MARKET STRATEGY & LIQUIDATION -->
-                                    <div v-if="scoutResult?.market_report || (Array.isArray(scoutResult) && scoutResult[0]?.market_report) || scoutItemsArray[0]?.market_report" class="bg-base-100 p-3 rounded-2xl border border-primary/30 shadow-xs space-y-2.5">
-                                        <div class="flex items-center justify-between border-b border-base-200 pb-2">
-                                            <span class="text-xs font-bold flex items-center gap-1.5 text-primary">
-                                                <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
-                                                {{ scoutItemsArray.length > 1 ? 'Lot Market Strategy & Liquidation' : 'Market Strategy & Sales Channels' }}
-                                            </span>
-                                            <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.sell_through_velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
-                                                ⚡ {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).sell_through_velocity }}
-                                            </span>
-                                        </div>
-                                        
-                                        <!-- Recommended Channel Banner -->
-                                        <div class="bg-primary/10 border border-primary/25 rounded-xl p-3 flex flex-col gap-1.5">
-                                            <div class="text-[10px] uppercase font-bold text-primary tracking-wider flex items-center gap-1">
-                                                <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Recommended Channel:
-                                            </div>
-                                            <div class="font-extrabold text-xs sm:text-sm text-base-content leading-snug break-words">
-                                                {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).best_platform }}
-                                            </div>
-                                            <p v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale" class="text-xs opacity-85 leading-relaxed mt-0.5 whitespace-pre-wrap break-words text-base-content">
-                                                {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale }}
-                                            </p>
-                                        </div>
-
-                                        <!-- Channel Comparisons / Trade-Offs (2-line layout with full channel name & readable pill) -->
-                                        <div v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.channels?.length" class="space-y-1.5 pt-1">
-                                            <div class="text-[10px] font-bold uppercase opacity-60">Channel Trade-Offs</div>
-                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                <div v-for="(ch, cIdx) in (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).channels" :key="cIdx" class="bg-base-200/60 p-2.5 rounded-xl border border-base-300 flex flex-col justify-between space-y-1.5 text-xs">
-                                                    <div class="space-y-1">
-                                                        <div class="font-extrabold text-xs text-base-content leading-snug break-words">
-                                                            {{ ch.name }}
-                                                        </div>
-                                                        <div v-if="ch.recommendation" class="text-[10px] text-base-content/85 leading-snug bg-base-100 p-1.5 rounded-lg border border-base-300 font-medium break-words">
-                                                            💡 {{ ch.recommendation }}
-                                                        </div>
-                                                        <div class="text-xs font-mono font-black text-success pt-0.5">
-                                                            {{ ch.est_price || '-' }}
-                                                        </div>
-                                                    </div>
-                                                    <div class="text-[10px] opacity-80 flex justify-between items-center border-t border-base-300 pt-1.5 font-mono">
-                                                        <span>Net Payout:</span>
-                                                        <span class="font-bold text-base-content">{{ ch.net_payout || '-' }}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- INVENTORY IMPORT PREFERENCE (IF MULTI-ITEM) -->
-                                    <div v-if="scoutItemsArray.length > 1" class="form-control border-t border-base-300 pt-3">
-                                        <label class="label pb-1.5"><span class="label-text text-[10px] uppercase font-bold opacity-75">Inventory Import Preference</span></label>
-                                        <div class="join grid grid-cols-2 w-full font-bold">
-                                            <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !saveIndividually }" @click="saveIndividually = false">
-                                                Save as Single Bundle
-                                            </button>
-                                            <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': saveIndividually }" @click="saveIndividually = true">
-                                                Split Individually (x{{ scoutItemsArray.length }})
-                                            </button>
-                                        </div>
-                                        <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
-                                            <span v-if="saveIndividually">
-                                                Creates {{ scoutItemsArray.length }} separate inventory items. Cost basis split evenly (${{ editForm.cost && !isNaN(parseFloat(editForm.cost)) ? (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) : '0.00' }} each).
-                                            </span>
-                                            <span v-else>
-                                                Updates this item as a single combined inventory bundle.
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <!-- CARD ACTION BUTTONS -->
-                                    <div class="pt-2 flex flex-col sm:flex-row gap-2">
-                                        <button v-if="saveIndividually && props.item" type="button" class="btn btn-primary btn-sm flex-1 font-bold shadow-xs gap-1.5" @click="deconstructAiLot">
-                                            <Icon icon="solar:scissors-linear" class="w-4 h-4" />
-                                            <span>Split Lot ({{ scoutItemsArray.length }} Items)</span>
-                                        </button>
-                                        <button v-else type="button" class="btn btn-secondary btn-sm flex-1 font-bold shadow-xs gap-1.5 text-white" @click="applyBundleSuggestions">
-                                            <Icon icon="solar:magic-stick-linear" class="w-4 h-4" />
-                                            <span>Apply AI to Listing Description</span>
-                                        </button>
-                                        <button v-if="scoutMdText" type="button" class="btn btn-outline btn-sm px-3" @click="openMdModal" title="View Full Report">
-                                            <Icon icon="solar:document-text-linear" class="w-4 h-4" />
-                                            <span class="sm:hidden">Report</span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Empty State Prompt -->
-                                <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 text-xs space-y-1.5 bg-base-100/50">
-                                    <Icon icon="solar:magic-stick-3-bold-duotone" class="w-7 h-7 mx-auto text-primary/50" />
-                                    <p class="font-bold text-xs text-base-content/80">Ready for AI Deep Research</p>
-                                    <p class="text-[11px] opacity-60 max-w-xs mx-auto">Use the <strong>AI Deep Research</strong> button in the bottom dock to scout photos, comps, and prices.</p>
-                                </div>
-                            </div>
-
-                            <!-- 3. 🛍️ PUBLIC LISTING DESCRIPTION (MARKDOWN) -->
-                            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-2">
-                                <div class="flex justify-between items-center">
-                                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                                        <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
-                                        Public Listing Description
-                                    </label>
-                                    
-                                    <div class="flex items-center gap-2">
-                                        <button class="btn btn-xs btn-outline btn-secondary font-bold gap-1" @click="generateDescription" :disabled="generatingDescription || !item">
-                                            <span v-if="generatingDescription" class="loading loading-spinner loading-xs"></span>
-                                            <Icon v-else icon="mingcute:gemini-fill" class="w-3.5 h-3.5" />
-                                            AI Generate
-                                        </button>
-
-                                        <div class="join border border-base-300 rounded-lg overflow-hidden">
-                                            <button type="button" class="btn btn-xs join-item" :class="descTab === 'edit' ? 'btn-active btn-neutral' : 'btn-ghost'" @click="descTab = 'edit'">Edit</button>
-                                            <button type="button" class="btn btn-xs join-item" :class="descTab === 'preview' ? 'btn-active btn-neutral' : 'btn-ghost'" @click="descTab = 'preview'">Preview</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="descTab === 'edit'">
-                                    <textarea v-model="editForm.description" class="textarea textarea-bordered w-full h-36 font-mono text-xs bg-base-100 focus:ring-1 focus:ring-primary/30" placeholder="Product details, condition, measurements, flaws for customer listing..."></textarea>
-                                </div>
-                                <div v-else class="w-full h-36 overflow-y-auto border border-base-300 rounded-xl p-3 bg-base-100 prose prose-xs" v-html="renderMarkdown(editForm.description || '*No description entered yet.*')"></div>
-
-                                <TagInput 
-                                    v-model="editForm.keywords" 
-                                    label="Tags & Keywords" 
-                                    type="keyword" 
-                                    badgeClass="badge-secondary" 
-                                    :recommendedTags="Array.isArray(scoutResult) ? Array.from(new Set(scoutResult.flatMap(item => item.keywords || []))) : (scoutResult && scoutResult.keywords ? scoutResult.keywords : [])"
-                                />
-                            </div>
-
-                        </div>
-                    </div>
-
+                    <ItemDetailsTab
+                        :editForm="editForm"
+                        :item="item"
+                        :parentItem="parentItem"
+                        :lotChildren="lotChildren"
+                        v-model:isAcquisitionUnlocked="isAcquisitionUnlocked"
+                        v-model:showOnStorefront="showOnStorefront"
+                        v-model:saveIndividually="saveIndividually"
+                        v-model:descTab="descTab"
+                        :allLocations="allLocations"
+                        :calculatedMargin="calculatedMargin"
+                        :suggestedTitleStr="suggestedTitleStr"
+                        :analyzing="analyzing"
+                        :analysisStatus="analysisStatus"
+                        :scoutResult="scoutResult"
+                        :scoutPurchaseStrategy="scoutPurchaseStrategy"
+                        :scoutItemsArray="scoutItemsArray"
+                        :scoutTotalRange="scoutTotalRange"
+                        :scoutMdText="scoutMdText"
+                        :generatingDescription="generatingDescription"
+                        :fetchedImages="fetchedImages"
+                        :fetchingImages="fetchingImages"
+                        :downloadingImageUrls="downloadingImageUrls"
+                        @open-lot-tab="mainTab = 'lot'"
+                        @open-splitter="isLotSplitterOpen = true"
+                        @copy-title="copyToClipboard(editForm.title)"
+                        @fetch-source-data="fetchSourceData"
+                        @add-all-fetched-images="addAllFetchedImages"
+                        @dismiss-fetched-images="fetchedImages = []"
+                        @select-fetched-image="selectFetchedImage"
+                        @sell-one-quantity="sellOneQuantity"
+                        @split-one-active="splitOneActive"
+                        @apply-price-tier="applyPriceTier"
+                        @deconstruct-ai-lot="deconstructAiLot"
+                        @apply-bundle-suggestions="applyBundleSuggestions"
+                        @open-md-modal="openMdModal"
+                        @generate-description="generateDescription"
+                    >
+                        <template #gallery-manager>
+                            <PhotoGalleryManager 
+                                v-model:existing-images="editForm.existingGalleryIds"
+                                v-model:new-photos="editGalleryBuffer"
+                                v-model:main-selection="mainPhotoSelection"
+                                :scanner-widget="scannerWidget"
+                                @open-camera="scannerWidget?.startCamera()"
+                            />
+                        </template>
+                    </ItemDetailsTab>
                     <div class="h-10"></div>
                 </div>
 
-                <!-- VERIFY CHECKLIST TAB -->
+                <!-- 4. CHECKLIST / VERIFY TAB (Extracted Subcomponent) -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'verify'">
-                    <div class="alert alert-info py-2 shadow-sm text-xs sm:text-sm">
-                        <Icon icon="solar:smart-speaker-minimalistic-linear" class="w-5 h-5 shrink-0" />
-                        <span>Photograph the back-of-box contents list to automatically generate an item checklist.</span>
-                    </div>
-
-                    <ScannerWidget @photos-captured="handleVerifyPhotosCaptured" :hide-upload="false" />
-
-                    <div v-if="extracting" class="flex flex-col items-center py-10">
-                        <span class="loading loading-spinner text-primary w-10 h-10 mb-3"></span>
-                        <p class="font-bold text-xs opacity-70">AI is extracting components from photos...</p>
-                    </div>
-
-                    <div v-if="componentsList && componentsList.length > 0" class="space-y-2">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="font-bold text-xs uppercase tracking-wider">Verification Checklist</span>
-                            <button class="btn btn-xs btn-ghost text-error" @click="componentsList = []">Clear</button>
-                        </div>
-                        <div v-for="(comp, idx) in componentsList" :key="idx" class="flex items-center gap-3 bg-base-200 p-3 rounded-xl border border-base-300">
-                            <input type="checkbox" v-model="comp.verified" class="checkbox checkbox-primary checkbox-sm" @change="handleVerifiedToggle(comp)" />
-                            <div class="flex-1 min-w-0 font-bold text-xs truncate" :class="{'line-through opacity-50': comp.verified}">{{ comp.name }}</div>
-                            <div class="flex items-center gap-1.5 bg-base-100 rounded-lg p-1 border border-base-300 font-mono text-xs">
-                                <button class="btn btn-xs btn-circle btn-ghost" @click="comp.found = Math.max(0, comp.found - 1)">-</button>
-                                <span class="w-8 text-center font-bold">{{ comp.found }} / {{ comp.expected }}</span>
-                                <button class="btn btn-xs btn-circle btn-ghost" @click="comp.found++">+</button>
-                            </div>
-                        </div>
-                    </div>
+                    <ItemVerifyTab
+                        :componentsList="componentsList"
+                        :extracting="extracting"
+                        @photos-captured="handleVerifyPhotosCaptured"
+                        @clear="componentsList = []"
+                    />
                 </div>
 
-                <!-- LOT DASHBOARD TAB -->
+                <!-- 5. LOT DASHBOARD & LINEAGE TAB (Extracted Subcomponent) -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'lot'">
-                    
-                    <!-- A. IF VIEWING AN EXTRACTED CHILD ITEM -->
-                    <div v-if="props.item?.parentLotId" class="space-y-4">
-                        <!-- Parent Lot Hero Card -->
-                        <div class="bg-base-200/70 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
-                            <div class="flex items-center justify-between border-b border-base-300 pb-2.5">
-                                <div class="flex items-center gap-2 text-xs font-bold text-primary">
-                                    <Icon icon="solar:link-circle-bold" class="w-4 h-4" />
-                                    <span>Parent Master Lot Origin</span>
-                                </div>
-                                <span class="badge badge-xs badge-secondary font-bold font-mono">{{ parentItem?.upc || props.item.parentLotId }}</span>
-                            </div>
-                            
-                            <div class="flex items-center justify-between gap-3">
-                                <div class="flex items-center gap-3 min-w-0">
-                                    <img 
-                                        v-if="parentItem?.imageId" 
-                                        :src="getAssetUrl(parentItem.imageId)" 
-                                        class="w-14 h-14 object-cover rounded-xl border border-base-300 shrink-0 bg-base-100" 
-                                    />
-                                    <div v-else class="w-14 h-14 rounded-xl bg-base-100 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
-                                        <Icon icon="solar:box-minimalistic-bold" class="w-6 h-6" />
-                                    </div>
-                                    <div class="min-w-0">
-                                        <h4 class="font-bold text-xs sm:text-sm truncate text-base-content">{{ parentItem?.title || 'Parent Lot' }}</h4>
-                                        <div class="flex items-center gap-2 mt-1 flex-wrap text-xs">
-                                            <span class="opacity-60 font-mono">Box Cost: <strong class="text-base-content">${{ Number(parentItem?.cost || 0).toFixed(2) }}</strong></span>
-                                            <a v-if="parentItem?.orderId" :href="`/purchases?search=${encodeURIComponent(parentItem.orderId)}`" target="_blank" class="badge badge-xs badge-info font-bold gap-0.5 hover:underline">
-                                                <Icon icon="solar:link-minimalistic-bold" class="w-2.5 h-2.5" /> PO: {{ parentItem.orderId }}
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs shrink-0" 
-                                    @click="parentItem ? $emit('selectItem', parentItem) : null"
-                                    :disabled="!parentItem"
-                                >
-                                    <Icon icon="solar:arrow-left-bold" class="w-4 h-4" />
-                                    <span>Open Parent</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Sibling Items extracted from same lot -->
-                        <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
-                            <div class="flex items-center justify-between border-b border-base-300 pb-2">
-                                <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
-                                    <Icon icon="solar:documents-bold" class="w-3.5 h-3.5 text-secondary" />
-                                    All Sibling Items in this Lot Batch ({{ lotChildren.length }})
-                                </h4>
-                                <a :href="`/inventory?parentLotId=${props.item.parentLotId}`" class="btn btn-xs btn-outline btn-neutral font-bold gap-1">
-                                    <Icon icon="solar:filter-bold" class="w-3 h-3" /> View in Table
-                                </a>
-                            </div>
-                            
-                            <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
-                                <div 
-                                    v-for="child in lotChildren" 
-                                    :key="child.$id" 
-                                    class="bg-base-100 p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-xs transition-all cursor-pointer group"
-                                    :class="child.$id === props.item.$id ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-base-300 hover:border-primary/50'"
-                                    @click="$emit('selectItem', child)"
-                                >
-                                    <div class="flex items-center gap-2.5 min-w-0">
-                                        <img 
-                                            v-if="child.imageId" 
-                                            :src="getAssetUrl(child.imageId)" 
-                                            class="w-9 h-9 object-cover rounded-lg border border-base-300 shrink-0 bg-base-200" 
-                                        />
-                                        <div v-else class="w-9 h-9 rounded-lg bg-base-200 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
-                                            <Icon icon="solar:document-bold" class="w-4 h-4" />
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-1.5">
-                                                <span class="badge badge-xs badge-ghost font-mono font-bold">{{ child.upc || 'NO-UPC' }}</span>
-                                                <span v-if="child.quantity > 1" class="badge badge-xs badge-accent font-bold">Qty: {{ child.quantity }}</span>
-                                                <span v-if="child.$id === props.item.$id" class="badge badge-xs badge-primary font-bold">Current</span>
-                                                <span v-else class="badge badge-xs" :class="child.status === 'sold' ? 'badge-success' : 'badge-ghost'">{{ child.status }}</span>
-                                            </div>
-                                            <p class="text-xs font-bold truncate text-base-content mt-0.5 group-hover:text-primary transition-colors">{{ child.title }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-right shrink-0">
-                                        <span class="text-xs font-bold text-success font-mono">${{ Number(child.resalePrice || 0).toFixed(2) }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- B. IF VIEWING A MASTER LOT -->
-                    <div v-else class="space-y-4">
-                        <!-- Top Action Toolbar -->
-                        <div class="flex flex-wrap items-center justify-between gap-2 bg-base-200/80 p-3 rounded-2xl border border-base-300 shadow-xs">
-                            <div class="flex items-center gap-2">
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs hover:scale-105 transition-all"
-                                    @click="isLotSplitterOpen = true"
-                                >
-                                    <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-                                    <span>✨ Multi-Tier Lot Splitter</span>
-                                </button>
-                                <a 
-                                    :href="`/inventory?parentLotId=${props.item?.$id}`" 
-                                    class="btn btn-sm btn-outline btn-secondary gap-1 font-bold shadow-xs"
-                                >
-                                    <Icon icon="solar:filter-bold" class="w-3.5 h-3.5" />
-                                    <span>View in Main Table</span>
-                                </a>
-                            </div>
-
-                            <!-- Rollback / Uncombine Button -->
-                            <button 
-                                v-if="lotChildren && lotChildren.length > 0"
-                                type="button" 
-                                class="btn btn-xs btn-outline btn-error font-bold gap-1 shrink-0" 
-                                @click="uncombineLot" 
-                                :disabled="uncombining"
-                                title="Restore original items and remove master lot"
-                            >
-                                <span v-if="uncombining" class="loading loading-spinner loading-xs"></span>
-                                <Icon v-else icon="solar:restart-bold" class="w-3 h-3" />
-                                <span>Rollback Lot</span>
-                            </button>
-                        </div>
-
-                        <!-- Financial ROI Stats -->
-                        <div class="stats stats-horizontal shadow-xs w-full bg-base-200/80 border border-base-300 text-xs">
-                            <div class="stat px-3 py-2.5">
-                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Box Cost</div>
-                                <div class="stat-value text-sm sm:text-base font-mono">${{ Number(lotDashboardItem?.cost || 0).toFixed(2) }}</div>
-                            </div>
-                            <div class="stat px-3 py-2.5">
-                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Listed Value</div>
-                                <div class="stat-value text-sm sm:text-base text-primary font-mono">${{ totalSplitResaleValue.toFixed(2) }}</div>
-                            </div>
-                            <div class="stat px-3 py-2.5">
-                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Realized Sales</div>
-                                <div class="stat-value text-sm sm:text-base text-success font-mono">${{ lotRealizedRevenue.toFixed(2) }}</div>
-                            </div>
-                            <div class="stat px-3 py-2.5">
-                                <div class="stat-title text-[10px] font-bold uppercase opacity-60">Net Profit</div>
-                                <div class="stat-value text-sm sm:text-base font-mono font-bold" :class="lotROI >= 0 ? 'text-success' : 'text-error'">
-                                    {{ lotROI >= 0 ? '+' : '' }}${{ lotROI.toFixed(2) }}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Split Child Inventory List -->
-                        <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3 shadow-xs">
-                            <div class="flex items-center justify-between border-b border-base-300 pb-2.5">
-                                <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
-                                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
-                                    Split Child Listings ({{ lotChildren.length }} Items)
-                                </h4>
-                                <span class="text-[11px] opacity-60">Active inventory listings</span>
-                            </div>
-
-                            <div v-if="!lotChildren || lotChildren.length === 0" class="text-center py-8 border-2 border-dashed border-base-300 rounded-xl">
-                                <Icon icon="solar:box-linear" class="w-8 h-8 text-base-content/30 mx-auto mb-1.5" />
-                                <p class="text-xs font-bold opacity-70">No split items created yet.</p>
-                                <p class="text-[11px] opacity-50 mt-0.5">Use the Multi-Tier Lot Splitter above to deconstruct this lot.</p>
-                            </div>
-
-                            <div v-else class="space-y-2 max-h-96 overflow-y-auto pr-1">
-                                <div 
-                                    v-for="child in lotChildren" 
-                                    :key="child.$id" 
-                                    class="bg-base-100 p-2.5 rounded-xl border border-base-300 flex items-center justify-between gap-3 shadow-xs hover:border-primary/50 transition-all cursor-pointer group"
-                                    @click="$emit('selectItem', child)"
-                                    title="Click to open this child item"
-                                >
-                                    <div class="flex items-center gap-2.5 min-w-0">
-                                        <img 
-                                            v-if="child.imageId" 
-                                            :src="getAssetUrl(child.imageId)" 
-                                            class="w-10 h-10 object-cover rounded-lg border border-base-300 shrink-0 bg-base-200" 
-                                        />
-                                        <div v-else class="w-10 h-10 rounded-lg bg-base-200 border border-base-300 flex items-center justify-center text-base-content/40 shrink-0">
-                                            <Icon icon="solar:document-bold" class="w-4 h-4" />
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-1.5">
-                                                <span class="badge badge-xs badge-ghost font-mono font-bold">{{ child.upc || 'NO-UPC' }}</span>
-                                                <span v-if="child.quantity > 1" class="badge badge-xs badge-accent font-bold">Qty: {{ child.quantity }}</span>
-                                                <span class="badge badge-xs" :class="child.status === 'sold' ? 'badge-success' : 'badge-primary'">{{ child.status }}</span>
-                                            </div>
-                                            <p class="text-xs font-bold truncate text-base-content mt-0.5 group-hover:text-primary transition-colors">{{ child.title }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-right shrink-0 flex items-center gap-3">
-                                        <div>
-                                            <span class="text-xs font-bold text-success font-mono block">${{ Number(child.resalePrice || 0).toFixed(2) }}</span>
-                                            <span class="text-[10px] opacity-60 font-mono block">Cost: ${{ Number(child.cost || 0).toFixed(2) }}</span>
-                                        </div>
-                                        <button type="button" class="btn btn-xs btn-ghost btn-circle text-primary group-hover:bg-primary group-hover:text-primary-content transition-all">
-                                            <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <ItemLotTab
+                        :item="item"
+                        :parentItem="parentItem"
+                        :lotChildren="lotChildren"
+                        :uncombining="uncombining"
+                        :lotDashboardItem="lotDashboardItem"
+                        :totalSplitResaleValue="totalSplitResaleValue"
+                        :lotRealizedRevenue="lotRealizedRevenue"
+                        :lotROI="lotROI"
+                        @selectItem="$emit('selectItem', $event)"
+                        @open-splitter="isLotSplitterOpen = true"
+                        @uncombine="uncombineLot"
+                    />
                 </div>
 
-                <!-- FOOTER (Sticky Action Toolbar - daisyUI v5 Dock Pattern) -->
-                <div class="p-3 sm:px-6 pb-safe border-t border-base-300 flex flex-row justify-between items-center bg-base-200/90 backdrop-blur-md z-30 shadow-lg gap-3 shrink-0">
-                    <div class="flex items-center gap-2">
-                        <button 
-                            class="btn btn-secondary btn-sm shadow-xs gap-1.5 font-bold hover:scale-105 transition-all" 
-                            @click="analyzeExistingItem" 
-                            :disabled="analyzing || (!actualMainPhoto.url && !editForm.sourcingLocation && !editForm.title && !editForm.condition_notes && (!editForm.existingGalleryIds || editForm.existingGalleryIds.length === 0))"
-                        >
-                            <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
-                            <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-                            <span class="hidden sm:inline">{{ analyzing ? (analysisStatus || 'Analyzing...') : (scoutResult ? '⚡ Re-Run AI Research' : '✨ AI Deep Research') }}</span>
-                            <span class="sm:hidden">{{ analyzing ? 'Scouting...' : 'AI Research' }}</span>
-                        </button>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <button class="btn btn-ghost btn-sm" @click="closeDrawer">Cancel</button>
-                        <button class="btn btn-primary btn-sm font-bold px-6 shadow-md" @click="saveEdit" :disabled="processing">
-                            <span v-if="processing" class="loading loading-spinner loading-xs mr-1"></span>
-                            <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 mr-1" />
-                            Save Item
-                        </button>
-                    </div>
-                </div>
+                <!-- 6. STICKY ACTION TOOLBAR FOOTER (Extracted Subcomponent) -->
+                <ItemDrawerFooter
+                    :analyzing="analyzing"
+                    :analysisStatus="analysisStatus"
+                    :hasScoutResult="!!scoutResult"
+                    :canAnalyze="canAnalyze"
+                    :processing="processing"
+                    @analyze="analyzeExistingItem"
+                    @cancel="closeDrawer"
+                    @save="saveEdit"
+                />
             </div>
 
             <!-- Visual Photo Selector Modal for Bundle Components -->
@@ -1129,7 +200,7 @@
                 @completed="onLotSplitCompleted" 
             />
 
-            <!-- Camera / Photo Scanner (Reusing exact same component as Scout) -->
+            <!-- Camera / Photo Scanner -->
             <ScannerWidget 
                 ref="scannerWidget" 
                 :photos="editGalleryBuffer" 
@@ -1166,20 +237,24 @@
 <script setup>
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
+import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
 import ScannerWidget from './ScannerWidget.vue';
-import TagInput from './TagInput.vue';
-import MultiSelectDropdown from './MultiSelectDropdown.vue';
-import SingleSelectDropdown from './SingleSelectDropdown.vue';
 import LotSplitterWizard from '../inventory/LotSplitterWizard.vue';
-import { saveItemToInventory, getCollectionId } from '../../lib/inventory';
+
+// Decomposed Subcomponents & Composables
+import ItemDrawerHeader from './drawer/ItemDrawerHeader.vue';
+import ItemDrawerFooter from './drawer/ItemDrawerFooter.vue';
+import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
+import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
+import ItemLotTab from './drawer/ItemLotTab.vue';
+import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
+
+import { saveItemToInventory, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
-import { ID } from 'appwrite';
-import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
-import { Icon } from '@iconify/vue';
 import { useLoader } from '../../composables/useLoader';
 import { warehousesApi } from '../../lib/warehouses';
 
@@ -1195,7 +270,6 @@ const allLocations = computed(() => {
     if (orgWarehouses.value) orgWarehouses.value.forEach(w => w?.name && set.add(String(w.name).trim()));
     return Array.from(set).filter(Boolean).sort();
 });
-const allStorageLocations = allLocations;
 
 const fetchLocations = async () => {
     if (!currentTeam.value) return;
@@ -1228,7 +302,6 @@ onUnmounted(() => {
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const BUCKET = BUCKET_ID;
-const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
 const props = defineProps({
     item: {
@@ -1243,11 +316,17 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem']);
 
+// Form Composable
+const {
+    editForm,
+    calculatedMargin,
+    isAcquisitionUnlocked,
+    initForm: initFormState
+} = useItemDrawerForm();
+
 const mainTab = ref('details');
 const descTab = ref('edit');
-const scoutTab = ref('edit');
 const processing = ref(false);
-const isAcquisitionUnlocked = ref(false);
 const showMdModal = ref(false);
 const isLotSplitterOpen = ref(false);
 
@@ -1281,15 +360,6 @@ const openMdModal = () => {
 
 const extracting = ref(false);
 const componentsList = ref([]);
-
-const calculatedMargin = computed(() => {
-    const cost = parseFloat(editForm.cost || 0);
-    const price = parseFloat(editForm.resalePrice || editForm.soldPrice || 0);
-    if (price > 0 && cost >= 0) {
-        return Math.round(((price - cost) / price) * 100);
-    }
-    return null;
-});
 
 const formatSourceDisplayName = (urlOrStr) => {
     if (!urlOrStr) return '';
@@ -1329,9 +399,15 @@ const performExtraction = async (imagesPayload) => {
 
 const extractComponentsFromFile = async (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => performExtraction(reader.result);
+    try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            await performExtraction(e.target.result);
+        };
+        reader.readAsDataURL(file);
+    } catch (e) {
+        addToast({ type: 'error', message: "File read error: " + e.message });
+    }
 };
 
 const handleVerifyPhotosCaptured = async (files) => {
@@ -1354,12 +430,6 @@ const handleVerifyPhotosCaptured = async (files) => {
     }
 };
 
-const handleVerifiedToggle = (comp) => {
-     if (comp.verified && comp.found < comp.expected) {
-          comp.found = comp.expected;
-     }
-};
-
 async function copyToClipboard(text) {
     if (!text) return;
     try {
@@ -1369,37 +439,6 @@ async function copyToClipboard(text) {
         addToast({ type: 'error', message: 'Failed to copy to clipboard.' });
     }
 }
-
-const editForm = reactive({
-    title: '',
-    quantity: 1,
-    cost: '',
-    resalePrice: '',
-    soldPrice: '',
-    estLow: '',
-    estHigh: '',
-    storageLocation: '',
-    sourcingLocation: '',
-    orderId: '',
-    status: 'acquired',
-    description: '',
-    condition_notes: '',
-    itemCondition: '',
-    existingGalleryIds: [],
-    sellingLocations: [],
-    keywords: [],
-    countryOfOrigin: ''
-});
-
-watch(() => editForm.status, (newStatus) => {
-    if (newStatus === 'sold' && (!editForm.soldPrice || editForm.soldPrice === '') && editForm.resalePrice) {
-        const rp = parseFloat(editForm.resalePrice);
-        if (!isNaN(rp) && rp > 0) {
-            editForm.soldPrice = (rp * 0.85).toFixed(2);
-            addToast({ type: 'info', message: 'Auto-filled Sold Price based on default payout.' });
-        }
-    }
-});
 
 const editGalleryBuffer = ref([]);
 const mainPhotoSelection = ref({ type: 'none', val: null });
@@ -1426,8 +465,8 @@ const actualMainPhoto = computed(() => {
     }
 });
 
-const totalGalleryCount = computed(() => {
-    return (editForm.existingGalleryIds?.length || 0) + (editGalleryBuffer.value?.length || 0);
+const canAnalyze = computed(() => {
+    return !!(actualMainPhoto.value.url || editForm.sourcingLocation || editForm.title || editForm.condition_notes || (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0));
 });
 
 const previewZoomUrl = ref(null);
@@ -1455,9 +494,6 @@ const showOnStorefront = computed({
     }
 });
 
-const setMainPhoto = (type, val) => {
-    mainPhotoSelection.value = { type, val };
-};
 const scoutResult = ref(null);
 
 const scoutItemsArray = computed(() => {
@@ -1499,175 +535,6 @@ const scoutPurchaseStrategy = computed(() => {
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items[0]?.purchase_strategy) return scoutResult.value.items[0].purchase_strategy;
     return null;
 });
-
-const suggestedListPriceStr = computed(() => {
-    if (!scoutResult.value) return null;
-    if (scoutResult.value.price_breakdown) {
-        let fair = parsePrice(scoutResult.value.price_breakdown.fair);
-        if (!fair) fair = parsePrice(scoutResult.value.price_breakdown.mint);
-        if (fair > 0) return fair.toFixed(2);
-    }
-    if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
-        return ((scoutTotalRange.value.low + scoutTotalRange.value.high) / 2).toFixed(2);
-    }
-    let itemData = scoutItemsArray.value[0];
-    if (!itemData) return null;
-    let fair = parsePrice(itemData.price_breakdown?.fair);
-    if (!fair && itemData.price_breakdown?.mint) fair = parsePrice(itemData.price_breakdown?.mint);
-    return fair > 0 ? fair.toFixed(2) : null;
-});
-
-const suggestedEstLowStr = computed(() => {
-    if (!scoutResult.value) return null;
-    if (scoutResult.value.price_breakdown) {
-        let poor = parsePrice(scoutResult.value.price_breakdown.poor);
-        if (poor > 0) return poor.toFixed(2);
-    }
-    if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
-        return scoutTotalRange.value.low.toFixed(2);
-    }
-    let itemData = scoutItemsArray.value[0];
-    if (!itemData) return null;
-    let poor = parsePrice(itemData.price_breakdown?.poor);
-    return poor > 0 ? poor.toFixed(2) : null;
-});
-
-const suggestedEstHighStr = computed(() => {
-    if (!scoutResult.value) return null;
-    if (scoutResult.value.price_breakdown) {
-        let mint = parsePrice(scoutResult.value.price_breakdown.mint);
-        if (mint > 0) return mint.toFixed(2);
-    }
-    if (scoutItemsArray.value.length > 1 && scoutTotalRange.value) {
-        return scoutTotalRange.value.high.toFixed(2);
-    }
-    let itemData = scoutItemsArray.value[0];
-    if (!itemData) return null;
-    let mint = parsePrice(itemData.price_breakdown?.mint);
-    return mint > 0 ? mint.toFixed(2) : null;
-});
-
-const suggestedDescriptionStr = computed(() => {
-    if (!scoutResult.value) return null;
-    let itemData = scoutItemsArray.value[0];
-    if (!itemData) return null;
-    return itemData.description || null;
-});
-
-const scoutMdText = ref(null);
-const scoutQuery = ref('');
-const fetchedImages = ref([]);
-const downloadingImageUrls = ref({});
-const fetchingImages = ref(false);
-const analyzing = ref(false);
-const analysisStatus = ref('');
-const extractingLot = ref(false);
-const saveIndividually = ref(false);
-const generatingDescription = ref(false);
-
-const getAssetUrl = (id) => {
-    if (!id) return '';
-    if (typeof id === 'string') {
-        if (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/')) {
-            return proxify(id);
-        }
-    }
-    if (!BUCKET) return '';
-    try {
-        return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
-    } catch (e) { return ''; }
-};
-
-const objectUrls = new WeakMap();
-const getObjectUrl = (file) => {
-    if (!objectUrls.has(file)) objectUrls.set(file, URL.createObjectURL(file));
-    return objectUrls.get(file);
-};
-const renderMarkdown = (text) => marked(text || '');
-
-const proxify = (url) => {
-    if (!url) return null;
-    if (typeof url !== 'string') return url;
-    if (url.startsWith('blob:') || url.startsWith('data:') || url.includes('/api/proxy-image')) return url;
-    if (url.includes('/storage/buckets/')) return url;
-    if (url.startsWith('http')) {
-        return `/api/proxy-image?url=${encodeURIComponent(url)}`;
-    }
-    return url;
-};
-
-const parsePrice = (p) => {
-    if (!p) return 0;
-    if (typeof p === 'number') return p;
-    if (Array.isArray(p)) {
-        if (p.length >= 2) return (parseFloat(String(p[0])) + parseFloat(String(p[1]))) / 2;
-        if (p.length === 1) return parseFloat(String(p[0]));
-        return 0;
-    }
-    if (typeof p === 'object') {
-        const l = parseFloat((p.low || p.min || p.mint || 0).toString().replace(/,/g, ''));
-        const h = parseFloat((p.high || p.max || p.fair || l).toString().replace(/,/g, ''));
-        return (l + h) / 2;
-    }
-    const s = String(p).replace(/[$,]/g, '').trim(); 
-    const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
-    if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
-    const single = s.match(/(\d+(?:\.\d+)?)/);
-    return single ? parseFloat(single[1]) : 0;
-};
-
-const parsePriceRange = (p) => {
-    if (!p) return { low: 0, high: 0, mid: 0 };
-    if (Array.isArray(p)) {
-        if (p.length >= 2) {
-            const l = parseFloat(String(p[0])) || 0;
-            const h = parseFloat(String(p[1])) || l;
-            return { low: l, high: h, mid: (l + h) / 2 };
-        }
-        if (p.length === 1) {
-            const val = parseFloat(String(p[0])) || 0;
-            return { low: val, high: val, mid: val };
-        }
-        return { low: 0, high: 0, mid: 0 };
-    }
-    const s = String(p).replace(/[$,]/g, '').trim();
-    const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
-    if (range) {
-        const l = parseFloat(range[1]);
-        const h = parseFloat(range[2]);
-        return { low: l, high: h, mid: (l + h) / 2 };
-    }
-    const single = s.match(/(\d+(?:\.\d+)?)/);
-    const val = single ? parseFloat(single[1]) : 0;
-    return { low: val, high: val, mid: val };
-};
-
-const applyPriceTier = (priceVal) => {
-    const p = parsePrice(priceVal);
-    if (p > 0) {
-        editForm.resalePrice = p.toFixed(2);
-        addToast({ type: 'success', message: `Applied List Price: $${p.toFixed(2)}` });
-    }
-};
-
-const calculateMaxBuy = (itemOrVal) => {
-    let fairPrice = 0;
-    if (typeof itemOrVal === 'string' || typeof itemOrVal === 'number') {
-        fairPrice = parsePrice(itemOrVal);
-    } else if (itemOrVal?.price_breakdown?.fair) {
-        fairPrice = parsePrice(itemOrVal.price_breakdown.fair);
-    } else if (itemOrVal?.estimated_value) {
-        fairPrice = parsePrice(itemOrVal.estimated_value);
-    }
-    if (fairPrice <= 0) return 0;
-    return Math.max(0, Math.round(fairPrice * 0.4 - 5));
-};
-
-const calculateSubItemMaxBid = (subItem, parentItem) => {
-    const maxBuy = calculateMaxBuy(subItem);
-    if (maxBuy <= 0) return 0;
-    return Math.max(0, Math.round(maxBuy * 0.85));
-};
 
 const scoutTotalRange = computed(() => {
     if (!scoutItemsArray.value || scoutItemsArray.value.length === 0) return null;
@@ -1744,62 +611,98 @@ const scoutTotalRange = computed(() => {
     };
 });
 
-function formatPriceRange(val) {
-    if (!val) return '-';
-    if (typeof val === 'string' && val.trim().startsWith('{')) {
-        try { val = JSON.parse(val); } catch (e) { }
-    }
-    if (typeof val === 'string' && val.trim().startsWith('[')) {
-        try { val = JSON.parse(val); } catch (e) { }
-    }
-    if (Array.isArray(val)) {
-        if (val.length >= 2) return `$${parseFloat(String(val[0])).toFixed(0)} - $${parseFloat(String(val[1])).toFixed(0)}`;
-        if (val.length === 1) return `$${parseFloat(String(val[0])).toFixed(0)}`;
-        return '-';
-    }
-    if (typeof val === 'object' && val !== null) {
-        const low = val.low ?? val.Low ?? val.min ?? val.Min ?? val.low_price ?? val.start;
-        const high = val.high ?? val.High ?? val.max ?? val.Max ?? val.high_price ?? val.end;
-        if (low !== undefined && high !== undefined) return `$${low} - $${high}`;
-        if (low !== undefined) return `$${low}+`;
-        return JSON.stringify(val).replace(/[{}"]/g, '').replace(/,/g, ', ');
-    }
-    return val;
-}
+const scoutMdText = ref(null);
+const scoutQuery = ref('');
+const fetchedImages = ref([]);
+const downloadingImageUrls = ref({});
+const fetchingImages = ref(false);
+const analyzing = ref(false);
+const analysisStatus = ref('');
+const saveIndividually = ref(false);
+const generatingDescription = ref(false);
 
-const getConditionGrade = (cond) => {
-    if (!cond || typeof cond !== 'string') return 'Good';
-    const match = cond.match(/^(NWT|NWOT|New With Tags|New|Like New|Very Good|Used\/Good|Good|Fair|Poor|Acceptable)/i);
-    if (match) return match[1].replace(/^Used\//i, '');
-    return cond.split(/[,;\-—\n]/)[0].trim().replace(/^Used\//i, '') || 'Good';
+const objectUrls = new WeakMap();
+const getObjectUrl = (file) => {
+    if (!objectUrls.has(file)) objectUrls.set(file, URL.createObjectURL(file));
+    return objectUrls.get(file);
+};
+const renderMarkdown = (text) => marked(text || '');
+
+const proxify = (url) => {
+    if (!url) return null;
+    if (typeof url !== 'string') return url;
+    if (url.startsWith('blob:') || url.startsWith('data:') || url.includes('/api/proxy-image')) return url;
+    if (url.includes('/storage/buckets/')) return url;
+    if (url.startsWith('http')) {
+        return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    }
+    return url;
 };
 
-const getConditionNotes = (cond) => {
-    if (!cond || typeof cond !== 'string') return '';
-    const grade = getConditionGrade(cond);
-    let notes = cond.replace(new RegExp(`^(Used\\/)?${grade}`, 'i'), '')
-                    .replace(/^[,;\-—\s:]+/, '')
-                    .trim();
-    return notes;
+const getAssetUrl = (id) => {
+    if (!id) return '';
+    if (typeof id === 'string') {
+        if (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/')) {
+            return proxify(id);
+        }
+    }
+    if (!BUCKET) return '';
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
 };
 
-const shippingCosts = computed(() => {
-    if (scoutResult.value && scoutResult.value.shipping_info) {
-        const sInfo = scoutResult.value.shipping_info;
-        const shipping = parseFloat(sInfo.shipping) || 0;
-        const handling = parseFloat(sInfo.handling) || 0;
-        const total = parseFloat(sInfo.total) || (shipping + handling);
-        return { shipping, handling, total };
+const parsePrice = (p) => {
+    if (!p) return 0;
+    if (typeof p === 'number') return p;
+    if (Array.isArray(p)) {
+        if (p.length >= 2) return (parseFloat(String(p[0])) + parseFloat(String(p[1]))) / 2;
+        if (p.length === 1) return parseFloat(String(p[0]));
+        return 0;
     }
-    const notes = props.item?.conditionNotes || '';
-    const match = notes.match(/\[Shipping:\s*\$([\d.]+),\s*Handling:\s*\$([\d.]+)/i);
-    if (match) {
-        const shipping = parseFloat(match[1]) || 0;
-        const handling = parseFloat(match[2]) || 0;
-        return { shipping, handling, total: shipping + handling };
+    if (typeof p === 'object') {
+        const l = parseFloat((p.low || p.min || p.mint || 0).toString().replace(/,/g, ''));
+        const h = parseFloat((p.high || p.max || p.fair || l).toString().replace(/,/g, ''));
+        return (l + h) / 2;
     }
-    return { shipping: 0, handling: 0, total: 0 };
-});
+    const s = String(p).replace(/[$,]/g, '').trim(); 
+    const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
+    if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
+    const single = s.match(/(\d+(?:\.\d+)?)/);
+    return single ? parseFloat(single[1]) : 0;
+};
+
+const parsePriceRange = (p) => {
+    if (!p) return { low: 0, high: 0, mid: 0 };
+    if (Array.isArray(p)) {
+        if (p.length >= 2) {
+            const l = parseFloat(String(p[0])) || 0;
+            const h = parseFloat(String(p[1])) || l;
+            return { low: l, high: h, mid: (l + h) / 2 };
+        }
+        if (p.length === 1) {
+            const val = parseFloat(String(p[0])) || 0;
+            return { low: val, high: val, mid: val };
+        }
+        return { low: 0, high: 0, mid: 0 };
+    }
+    const s = String(p).replace(/[$,]/g, '').trim();
+    const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
+    if (range) {
+        const l = parseFloat(range[1]);
+        const h = parseFloat(range[2]);
+        return { low: l, high: h, mid: (l + h) / 2 };
+    }
+    const single = s.match(/(\d+(?:\.\d+)?)/);
+    const val = single ? parseFloat(single[1]) : 0;
+    return { low: val, high: val, mid: val };
+};
+
+const applyPriceTier = (priceVal) => {
+    const p = parsePrice(priceVal);
+    if (p > 0) {
+        editForm.resalePrice = p.toFixed(2);
+        addToast({ type: 'success', message: `Applied List Price: $${p.toFixed(2)}` });
+    }
+};
 
 const pickingPhotoForItemIndex = ref(null);
 
@@ -1824,10 +727,6 @@ const allAvailableGalleryUrls = computed(() => {
     return urls;
 });
 
-const openPhotoPicker = (idx) => {
-    pickingPhotoForItemIndex.value = idx;
-};
-
 const assignPhotoToComponent = (itemIdx, photoUrl, photoIdx) => {
     if (itemIdx === null || itemIdx === undefined) return;
     const list = scoutItemsArray.value;
@@ -1849,113 +748,10 @@ const isPhotoAssigned = (itemIdx, photoIdx) => {
     return item.image_index === photoIdx;
 };
 
-const swapComponentPhotos = (idxA, idxB) => {
-    const list = scoutItemsArray.value;
-    if (!list || !list[idxA] || !list[idxB]) return;
-
-    const itemA = list[idxA];
-    const itemB = list[idxB];
-
-    const tempBox = itemA.bounding_box;
-    const tempImgIdx = itemA.image_index;
-    const tempImg = itemA.image;
-
-    itemA.bounding_box = itemB.bounding_box;
-    itemA.image_index = itemB.image_index;
-    itemA.image = itemB.image;
-
-    itemB.bounding_box = tempBox;
-    itemB.image_index = tempImgIdx;
-    itemB.image = tempImg;
-
-    const tempCrop = cropPreviews.value[idxA];
-    cropPreviews.value[idxA] = cropPreviews.value[idxB];
-    cropPreviews.value[idxB] = tempCrop;
-};
-
-const removeScoutComponent = (idx) => {
-    if (!scoutResult.value) return;
-    if (scoutResult.value.lot_items && Array.isArray(scoutResult.value.lot_items)) {
-        scoutResult.value.lot_items.splice(idx, 1);
-    } else if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) {
-        scoutResult.value.items.splice(idx, 1);
-    } else if (Array.isArray(scoutResult.value)) {
-        if (scoutResult.value[0]?.lot_items && Array.isArray(scoutResult.value[0].lot_items)) {
-            scoutResult.value[0].lot_items.splice(idx, 1);
-        } else {
-            scoutResult.value.splice(idx, 1);
-        }
-    }
-    delete cropPreviews.value[idx];
-    addToast({ type: 'info', message: 'Item removed from lot components.' });
-};
-
-const generateCropPreviews = async (items) => {
-    if (!items || items.length === 0) return;
-    const galleryUrls = allAvailableGalleryUrls.value;
-    if (!galleryUrls || galleryUrls.length === 0) return;
-
-    for (let idx = 0; idx < items.length; idx++) {
-        const item = items[idx];
-        if (item.image_url) {
-            cropPreviews.value[idx] = item.image_url;
-            continue;
-        }
-        if (item.image_index !== undefined && galleryUrls[item.image_index]) {
-            cropPreviews.value[idx] = galleryUrls[item.image_index];
-            continue;
-        }
-        if (item.image) {
-            cropPreviews.value[idx] = item.image;
-        }
-    }
-};
-
-watch(scoutResult, (newVal) => {
-    if (newVal) {
-        cropPreviews.value = {};
-        setTimeout(() => {
-            generateCropPreviews(scoutItemsArray.value);
-        }, 100);
-    }
-});
-
-const getNoteValue = (notes, key, isCurrency = false) => {
-    if (!notes) return null;
-    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`${escapedKey}:[ \\t]*([^\\n\\r]+)`, 'i');
-    const match = notes.match(regex);
-    if (match) {
-        let val = match[1].trim();
-        if (isCurrency) val = val.replace('$', '').trim();
-        return val;
-    }
-    return null;
-};
-
-const getImageUrl = (itemData) => {
-    if (!itemData || typeof itemData !== 'object') return null;
-    let id = itemData.imageId;
-    if (!id && Array.isArray(itemData.galleryImageIds) && itemData.galleryImageIds.length > 0) id = itemData.galleryImageIds[0];
-    if (!id && itemData.conditionNotes && typeof itemData.conditionNotes === 'string') {
-         const match = itemData.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-         if (match && match[1]) id = match[1].split(',')[0].trim();
-    }
-    return id ? getAssetUrl(id) : null;
-};
-
 const lotChildren = ref([]);
 const parentItem = ref(null);
 const loadingLot = ref(false);
 const creatingChild = ref(false);
-
-const newChild = reactive({
-    title: '',
-    cost: '',
-    resalePrice: '',
-    status: 'acquired',
-    soldPrice: ''
-});
 
 const lotDashboardItem = computed(() => parentItem.value || props.item);
 const lotSoldChildren = computed(() => (lotChildren.value || []).filter(c => c.status === 'sold'));
@@ -1972,7 +768,6 @@ async function fetchLotChildren() {
     lotChildren.value = [];
 
     try {
-        // 1. If this is a child item, fetch its parent lot
         if (props.item.parentLotId) {
             try {
                 const pDoc = await databases.getDocument(DB_ID, getCollectionId(), props.item.parentLotId);
@@ -1982,7 +777,6 @@ async function fetchLotChildren() {
             }
         }
 
-        // 2. Fetch all child items belonging to this lot
         const targetParentId = props.item.parentLotId || props.item.$id;
         const res = await databases.listDocuments(DB_ID, getCollectionId(), [
             Query.equal('parentLotId', targetParentId),
@@ -2015,7 +809,6 @@ const uncombineLot = async () => {
     });
 
     try {
-        // 1. Restore all child / constituent items
         for (const child of lotChildren.value) {
             await databases.updateDocument(DB_ID, getCollectionId(), child.$id, {
                 parentLotId: null,
@@ -2023,7 +816,6 @@ const uncombineLot = async () => {
             });
         }
 
-        // 2. Delete the master lot document
         await databases.deleteDocument(DB_ID, getCollectionId(), props.item.$id);
 
         addToast({ type: 'success', message: `Successfully rolled back lot and restored ${count} items!` });
@@ -2038,60 +830,18 @@ const uncombineLot = async () => {
 };
 
 const initForm = () => {
-    // If editing existing item, start with acquisition details locked to prevent fat-finger / AI overwrites
-    isAcquisitionUnlocked.value = !props.item;
+    initFormState(props.item);
 
     if (props.item) {
         const i = props.item;
-        const formatMoney = (val) => {
-            if (val === undefined || val === null || val === '') return '';
-            const num = parseFloat(val);
-            return isNaN(num) ? '' : num.toFixed(2);
-        };
-
-        editForm.title = i.title || '';
-        editForm.quantity = i.quantity || 1;
-        editForm.cost = formatMoney(i.cost || i.purchasePrice || getNoteValue(i.conditionNotes, 'Paid', true));
-        editForm.resalePrice = formatMoney(i.resalePrice || i.priceFair || i.listPrice || getNoteValue(i.conditionNotes, 'Resale', true));
-        editForm.soldPrice = formatMoney(i.soldPrice);
-        editForm.estLow = formatMoney(i.estLow || getNoteValue(i.conditionNotes, 'Est. Low', true));
-        editForm.estHigh = formatMoney(i.estHigh || getNoteValue(i.conditionNotes, 'Est. High', true));
-        editForm.storageLocation = i.storageLocation || '';
-        editForm.sourcingLocation = i.sourcingLocation || getNoteValue(i.conditionNotes, 'Location') || '';
-        editForm.orderId = i.orderId || getNoteValue(i.conditionNotes, 'Order #') || getNoteValue(i.conditionNotes, 'Imported from Order #') || '';
-        editForm.status = i.status || 'acquired';
-        editForm.parentLotId = i.parentLotId || null;
-        let desc = i.marketDescription || i.description || '';
-        if (desc && typeof desc === 'string' && desc.trim().startsWith('{') && desc.includes('"identity"')) {
-            desc = '';
-        }
-        editForm.description = desc; 
-        
-        // Clean and populate user internal notes
-        const rawNotes = i.conditionNotes || i.condition_notes || '';
-        editForm.condition_notes = rawNotes
-            .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
-            .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
-            .trim();
-
-        editForm.itemCondition = getNoteValue(i.conditionNotes, 'Condition') || '';
-        editForm.existingGalleryIds = i.galleryImageIds || [];
-        editForm.sellingLocations = i.sellingLocations || [];
-        editForm.keywords = i.keywords || [];
-
-        const existingUrl = getImageUrl(i);
         let activeImageId = null;
-
         if (i.imageId) {
             activeImageId = i.imageId;
         } else if (i.galleryImageIds?.length > 0) {
             activeImageId = i.galleryImageIds[0];
-        } else if (i.conditionNotes) {
-            const match = i.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-            if (match) activeImageId = match[1].split(',')[0].trim();
         }
 
-        if (existingUrl && activeImageId) {
+        if (activeImageId) {
             if (!editForm.existingGalleryIds.includes(activeImageId)) {
                 editForm.existingGalleryIds.unshift(activeImageId);
             }
@@ -2109,25 +859,7 @@ const initForm = () => {
                 scoutResult.value = parsed;
             } catch (e) {}
         }
-
     } else {
-        editForm.title = '';
-        editForm.cost = '';
-        editForm.resalePrice = '';
-        editForm.soldPrice = '';
-        editForm.estLow = '';
-        editForm.estHigh = '';
-        editForm.storageLocation = '';
-        editForm.sourcingLocation = '';
-        editForm.orderId = '';
-        editForm.status = 'acquired';
-        editForm.parentLotId = null;
-        editForm.description = '';
-        editForm.itemCondition = '';
-        editForm.existingGalleryIds = [];
-        editForm.sellingLocations = [];
-        editForm.keywords = [];
-        editForm.countryOfOrigin = '';
         mainPhotoSelection.value = { type: 'none', val: null };
         scoutResult.value = null;
         scoutMdText.value = null;
@@ -2263,30 +995,7 @@ const removeGalleryItem = async (idOrIdx, isExisting) => {
     }
 };
 
-const dragOver = ref(false);
-const fileInput = ref(null);
 const scannerWidget = ref(null);
-
-const handleDrop = async (e) => {
-    dragOver.value = false;
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-        handleCapturedPhotos(files);
-    }
-};
-
-const onDragLeave = (e) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-        dragOver.value = false;
-    }
-};
-
-const handleFileSelect = (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    handleCapturedPhotos(files);
-    e.target.value = '';
-};
 
 const handleCapturedPhotos = (files) => {
     if (!files || files.length === 0) return;
@@ -2333,7 +1042,6 @@ const fetchSourceData = async () => {
 
     try {
         const timeoutSignal = AbortSignal.timeout(25000);
-        // Combine abort controller and timeout
         const combinedSignal = (typeof AbortSignal.any === 'function') 
             ? AbortSignal.any([fetchImageAbort.signal, timeoutSignal])
             : fetchImageAbort.signal;
@@ -2391,7 +1099,6 @@ const selectFetchedImage = async (url, asMain = false) => {
             if (asMain || (!actualMainPhoto.value.file && !editForm.imageId && !actualMainPhoto.value.url)) {
                 mainPhotoSelection.value = { type: 'new', val: newIdx };
             }
-            // Remove the selected image from fetchedImages
             fetchedImages.value = fetchedImages.value.filter((img) => (typeof img === 'string' ? img : img.url) !== url);
             addToast({ type: 'success', message: asMain ? "Added & set as main photo ⭐" : "Photo added to gallery!" });
         } else {
@@ -2440,7 +1147,7 @@ const addAllFetchedImages = async () => {
 let scoutAbortController = new AbortController();
 
 const analyzeExistingItem = async () => {
-    if (!actualMainPhoto.value.url && !editForm.sourcingLocation && !editForm.condition_notes && !editForm.title && (!editForm.existingGalleryIds || editForm.existingGalleryIds.length === 0)) {
+    if (!canAnalyze.value) {
         addToast({ type: 'warning', message: "Please provide a title, notes, a photo, or a link to analyze." });
         return;
     }
@@ -2469,14 +1176,12 @@ const analyzeExistingItem = async () => {
             reader.readAsDataURL(blob);
         });
 
-        // 1. Convert new buffered images (support up to 30 photos for multi-lot decomposition)
         const resizePromises = editGalleryBuffer.value.slice(0, 30).map(async (file) => {
             try { return await resize(file); } catch (e) { return null; }
         });
         const resizedLocal = (await Promise.all(resizePromises)).filter(Boolean);
         base64Images.push(...resizedLocal);
 
-        // 2. Add existing Appwrite gallery photos as remote URLs
         if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
             editForm.existingGalleryIds.forEach(id => {
                 const u = getAssetUrl(id);
@@ -2484,7 +1189,6 @@ const analyzeExistingItem = async () => {
             });
         }
 
-        // 3. Fallback to main photo url if needed
         if (base64Images.length === 0 && remoteUrls.length === 0 && actualMainPhoto.value.url) {
             let url = actualMainPhoto.value.url;
             if (url.startsWith('data:') || url.startsWith('blob:')) {
@@ -2504,7 +1208,6 @@ const analyzeExistingItem = async () => {
         if (editForm.title && editForm.title.trim().toLowerCase() !== 'untitled item') contextNotes = `Current Title: ${editForm.title}\n\n` + contextNotes;
         if (editForm.sourcingLocation) contextNotes += `\n\nSourcing URL: ${editForm.sourcingLocation}`;
 
-        // Clear previous results
         scoutResult.value = null;
         scoutMdText.value = '';
 
@@ -2586,7 +1289,6 @@ const analyzeExistingItem = async () => {
 
         const data = await response.json();
 
-        // A. Lot items inspection result
         if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
             scoutResult.value = data;
             let desc = `--- 📦 MASTER LOT APPRAISAL & BOOTH STRATEGY (${data.lot_items.length} Cataloged Items) ---\n\n`;
@@ -2633,9 +1335,7 @@ const analyzeExistingItem = async () => {
 
             scoutMdText.value = desc.trim();
             addToast({ type: 'success', message: `Identified ${data.lot_items.length} items/groups in lot!` });
-        } 
-        // B. Standard / Multi-item result
-        else if (data.items && data.items.length > 0) {
+        } else if (data.items && data.items.length > 0) {
             if (data.items.length > 1) {
                 scoutResult.value = data.items;
                 let desc = `**📦 MULTI-ITEM LOT BREAKDOWN (${data.items.length} Items):**\n\n`;
@@ -2649,13 +1349,11 @@ const analyzeExistingItem = async () => {
                 scoutResult.value = data.items[0];
                 const item = scoutResult.value;
                 
-                // Auto-fill title if untitled or empty
                 if ((!editForm.title || editForm.title.trim().toLowerCase() === 'untitled item') && (item.title || item.identity)) {
                     const rawTitle = item.title || item.identity;
                     editForm.title = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
                 }
 
-                // Auto-fill list price if empty or 0
                 if ((!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') && (item.pricing_potential || item.price_breakdown)) {
                     const fairPrice = parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                     if (fairPrice > 0) {
@@ -2713,9 +1411,7 @@ const analyzeExistingItem = async () => {
                 scoutMdText.value = report.trim();
                 addToast({ type: 'success', message: 'AI Analysis complete!' });
             }
-        }
-        // C. Overarching Lot Report (Fallback when lot_items is empty or response is a single comprehensive appraisal object)
-        else if (data && (data.identity || data.title || data.price_breakdown || data.purchase_strategy || data.market_report)) {
+        } else if (data && (data.identity || data.title || data.price_breakdown || data.purchase_strategy || data.market_report)) {
             scoutResult.value = data;
             let desc = `--- 📦 LOT APPRAISAL & BOOTH STRATEGY ---\n\n`;
             if (data.tier_label || data.tier) {
@@ -2796,54 +1492,8 @@ const applyBundleSuggestions = () => {
 watch(mainTab, (newVal) => {
     if (newVal === 'lot') {
         fetchLotChildren();
-        if (props.item && !newChild.cost) {
-            const totalCost = parseFloat(editForm.cost || 0);
-            const childCount = lotChildren.value.length + 1;
-            newChild.cost = (totalCost / (childCount || 1)).toFixed(2);
-        }
     }
 });
-
-const createChildItem = async () => {
-    if (!props.item || !newChild.title.trim()) return;
-    creatingChild.value = true;
-    try {
-        const extraData = {
-            cost: parseFloat(newChild.cost || 0) || 0,
-            resalePrice: parseFloat(newChild.resalePrice || 0) || 0,
-            soldPrice: newChild.status === 'sold' ? (parseFloat(newChild.soldPrice || 0) || 0) : null,
-            status: newChild.status || 'acquired',
-            sourcingLocation: editForm.sourcingLocation,
-            orderId: editForm.orderId,
-            storageLocation: editForm.storageLocation,
-            quantity: 1,
-            parentLotId: props.item.$id,
-            purchaseId: props.item.purchaseId || null
-        };
-
-        await saveItemToInventory(
-            { 
-                title: newChild.title.trim(), 
-                identity: Math.random().toString(36).substring(2, 10), 
-                condition_notes: `Extracted from parent lot: ${props.item.title || props.item.$id}` 
-            },
-            null,
-            extraData,
-            currentTeam.value?.$id
-        );
-
-        newChild.title = '';
-        newChild.resalePrice = '';
-        newChild.soldPrice = '';
-        newChild.status = 'acquired';
-        await fetchLotChildren();
-        addToast({ type: 'success', message: 'Added item to lot!' });
-    } catch (e) {
-        addToast({ type: 'error', message: 'Failed to create child item: ' + e.message });
-    } finally {
-        creatingChild.value = false;
-    }
-};
 
 const deconstructAiLot = () => {
     if (!props.item) return;
@@ -2933,46 +1583,6 @@ const splitOneActive = async () => {
         addToast({ type: 'success', message: 'Split 1 item into active inventory!' });
     } catch (e) {
         addToast({ type: 'error', message: 'Error splitting item: ' + e.message });
-    }
-};
-
-const splitAllQuantity = async () => {
-    if (!props.item || editForm.quantity <= 1) return;
-    const totalUnits = editForm.quantity;
-    if (!window.confirm(`Unpack all ${totalUnits} units into separate individual inventory items?`)) return;
-
-    try {
-        const unitCost = parseFloat((parseFloat(editForm.cost || 0) / totalUnits).toFixed(2));
-        const unitResale = parseFloat((parseFloat(editForm.resalePrice || 0) / totalUnits).toFixed(2));
-
-        for (let i = 1; i <= totalUnits; i++) {
-            const childTitle = `${editForm.title} (${i}/${totalUnits})`;
-            const extraData = {
-                cost: unitCost,
-                resalePrice: unitResale,
-                status: editForm.status === 'sold' ? 'acquired' : editForm.status,
-                sourcingLocation: editForm.sourcingLocation,
-                orderId: editForm.orderId,
-                storageLocation: editForm.storageLocation,
-                quantity: 1,
-                parentLotId: props.item.$id,
-                purchaseId: props.item.purchaseId || null
-            };
-
-            await saveItemToInventory(
-                { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Unpacked (${i}/${totalUnits}) from lot ${props.item.$id}` },
-                null,
-                extraData,
-                currentTeam.value?.$id
-            );
-        }
-
-        editForm.quantity = 0;
-        editForm.status = 'archived';
-        saveEdit();
-        addToast({ type: 'success', message: `Successfully unpacked ${totalUnits} individual items!` });
-    } catch (e) {
-        addToast({ type: 'error', message: 'Error unpacking items: ' + e.message });
     }
 };
 </script>
