@@ -113,7 +113,7 @@
             v-for="(id, idx) in existingImages" 
             :key="'exist_' + id" 
             class="relative aspect-square w-full rounded-xl overflow-hidden border-2 bg-base-100 cursor-pointer transition-all active:scale-95 shadow-xs group"
-            :class="actualMainPhoto.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
+            :class="actualMainPhoto?.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
             @click="setMainPhoto('existing', id)"
           >
             <img :src="getAssetUrl(id)" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
@@ -124,7 +124,7 @@
             </span>
 
             <!-- Main Indicator -->
-            <div v-if="actualMainPhoto.id === id" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
+            <div v-if="actualMainPhoto?.id === id" class="absolute top-1 left-1 bg-warning text-warning-content rounded-full p-1 shadow-xs">
               <Icon icon="solar:star-bold" class="w-3 h-3" />
             </div>
 
@@ -375,9 +375,9 @@ const setMainPhoto = (type: 'existing' | 'new', val: any) => {
 
 const removeMainPhoto = () => {
   const current = actualMainPhoto.value;
-  if (current.type === 'existing' && current.id) {
+  if (current?.type === 'existing' && current?.id) {
     removeExisting(current.id);
-  } else if (current.type === 'new' && current.idx !== null) {
+  } else if (current?.type === 'new' && current?.idx !== null && current?.idx !== undefined) {
     removeNew(current.idx);
   }
 };
@@ -387,7 +387,7 @@ const removeExisting = (id: string) => {
   emit('update:existingImages', next);
   emit('photo-removed', { type: 'existing', idOrIdx: id });
   
-  if (actualMainPhoto.value.id === id) {
+  if (actualMainPhoto.value?.id === id) {
     internalSelection.value = { type: 'none', val: null };
     emit('update:mainSelection', { type: 'none', val: null });
   }

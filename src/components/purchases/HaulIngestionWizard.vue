@@ -454,7 +454,7 @@
       :item="activeDrawerDoc" 
       :isOpen="!!activeDrawerDoc" 
       @close="activeDrawerDoc = null" 
-      @saved="handleDrawerSaved" 
+      @save="handleDrawerSaved" 
     />
   </div>
 </template>
@@ -495,8 +495,9 @@ const openItemDrawer = async (item: IngestionItem) => {
 };
 
 const handleDrawerSaved = async (savedDoc: any) => {
-  if (savedDoc && savedDoc.$id) {
-    const matching = items.value.find(i => i.id === savedDoc.$id);
+  const docId = savedDoc?.$id || savedDoc?.id;
+  if (docId) {
+    const matching = items.value.find(i => i && (i.id === docId || i.$id === docId));
     if (matching) {
       matching.title = savedDoc.title || matching.title;
       matching.tagTitle = savedDoc.tag_title || matching.tagTitle;

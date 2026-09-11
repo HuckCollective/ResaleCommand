@@ -369,7 +369,6 @@
       :item="editingItem" 
       @close="editingItem = null" 
       @save="handleItemSaved" 
-      @saved="handleItemSaved" 
     />
   </div>
 </template>
@@ -535,19 +534,27 @@ const openEdit = (item: any) => {
   editingItem.value = { ...item };
 };
 
+const isSavingItem = ref(false);
 const handleItemSaved = async (payload: any) => {
-  if (!editingItem.value) return;
+  if (!editingItem.value || isSavingItem.value) return;
+  isSavingItem.value = true;
+  const targetItem = editingItem.value;
+  const targetId = targetItem?.$id;
   try {
-    await updateInventoryItem(editingItem.value.$id, payload);
-    const idx = purchaseItems.value.findIndex(i => i.$id === editingItem.value?.$id);
-    if (idx !== -1) {
-      Object.assign(purchaseItems.value[idx], payload);
+    if (targetId) {
+      await updateInventoryItem(targetId, payload);
+      const idx = purchaseItems.value.findIndex(i => i && i.$id === targetId);
+      if (idx !== -1) {
+        Object.assign(purchaseItems.value[idx], payload);
+      }
+      editingItem.value = null;
+      addToast({ type: 'success', message: 'Item updated successfully!' });
+      await refreshActivePurchaseItems();
     }
-    editingItem.value = null;
-    addToast({ type: 'success', message: 'Item updated successfully!' });
-    await refreshActivePurchaseItems();
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to update item: ' + err.message });
+  } finally {
+    isSavingItem.value = false;
   }
 };
 

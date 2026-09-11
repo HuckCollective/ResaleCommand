@@ -450,14 +450,14 @@ const editGalleryBuffer = ref([]);
 const mainPhotoSelection = ref({ type: 'none', val: null });
 
 const actualMainPhoto = computed(() => {
-    if (mainPhotoSelection.value.type === 'new' && editGalleryBuffer.value[mainPhotoSelection.value.val]) {
+    if (mainPhotoSelection.value?.type === 'new' && editGalleryBuffer.value?.[mainPhotoSelection.value?.val]) {
         return { 
             file: editGalleryBuffer.value[mainPhotoSelection.value.val], 
             url: getObjectUrl(editGalleryBuffer.value[mainPhotoSelection.value.val]),
             type: 'new',
             idx: mainPhotoSelection.value.val
         };
-    } else if (mainPhotoSelection.value.type === 'existing' && editForm.existingGalleryIds.includes(mainPhotoSelection.value.val)) {
+    } else if (mainPhotoSelection.value?.type === 'existing' && Array.isArray(editForm.existingGalleryIds) && editForm.existingGalleryIds.includes(mainPhotoSelection.value?.val)) {
         return { 
             file: null, 
             url: getAssetUrl(mainPhotoSelection.value.val), 
@@ -465,14 +465,14 @@ const actualMainPhoto = computed(() => {
             type: 'existing'
         };
     } else {
-        if (editGalleryBuffer.value.length > 0) return { file: editGalleryBuffer.value[0], url: getObjectUrl(editGalleryBuffer.value[0]), type: 'new', idx: 0 };
+        if (editGalleryBuffer.value?.length > 0) return { file: editGalleryBuffer.value[0], url: getObjectUrl(editGalleryBuffer.value[0]), type: 'new', idx: 0 };
         if (editForm.existingGalleryIds?.length > 0) return { file: null, url: getAssetUrl(editForm.existingGalleryIds[0]), id: editForm.existingGalleryIds[0], type: 'existing' };
-        return { file: null, url: null, type: 'none' };
+        return { file: null, url: null, type: 'none', id: null, idx: null };
     }
 });
 
 const canAnalyze = computed(() => {
-    return !!(actualMainPhoto.value.url || editForm.sourcingLocation || editForm.title || editForm.condition_notes || (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0));
+    return !!(actualMainPhoto.value?.url || editForm.sourcingLocation || editForm.title || editForm.condition_notes || (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0));
 });
 
 const previewZoomUrl = ref(null);
@@ -957,7 +957,7 @@ const saveEdit = async () => {
     try {
         let finalGallery = Array.isArray(editGalleryBuffer.value) ? [...editGalleryBuffer.value] : [];
         let finalImageFile = null;
-        if (actualMainPhoto.value.type === 'new' && finalGallery[actualMainPhoto.value.idx]) {
+        if (actualMainPhoto.value?.type === 'new' && actualMainPhoto.value?.idx !== undefined && actualMainPhoto.value?.idx !== null && finalGallery[actualMainPhoto.value.idx]) {
              finalImageFile = finalGallery[actualMainPhoto.value.idx];
              finalGallery.splice(actualMainPhoto.value.idx, 1);
         }
@@ -965,7 +965,7 @@ const saveEdit = async () => {
         const payload = {
             ...editForm,
             conditionNotes: editForm.condition_notes,
-            imageId: actualMainPhoto.value.id || null,
+            imageId: actualMainPhoto.value?.id || null,
             imageFile: finalImageFile,
             galleryFiles: finalGallery,
             existingGalleryIds: Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : [],
@@ -975,7 +975,6 @@ const saveEdit = async () => {
                 : null
         };
         emit('save', payload);
-        emit('saved', payload);
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {

@@ -2780,16 +2780,18 @@ const closeEditDrawer = () => {
 const saveEdit = async (payload) => {
     processing.value = true;
     try {
-        if (activeItem.value) {
+        const targetItem = activeItem.value;
+        const targetId = targetItem?.$id || targetItem?.id;
+        if (targetId) {
             // UPDATE EXISTING
             const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
-            if (!payload.upc && !activeItem.value.upc) {
+            if (!payload.upc && !targetItem.upc) {
                 payload.upc = getNextUpc(prefix);
             }
 
-            const updatedDoc = await updateInventoryItem(activeItem.value.$id, payload);
+            const updatedDoc = await updateInventoryItem(targetId, payload);
             // Optimistic update to immediately reflect in UI before Appwrite query cache clears
-            const idx = inventoryItems.value.findIndex(i => i.$id === activeItem.value.$id);
+            const idx = inventoryItems.value.findIndex(i => i && (i.$id === targetId || i.id === targetId));
             if (idx !== -1) {
                 inventoryItems.value[idx] = updatedDoc;
             }
@@ -2799,13 +2801,16 @@ const saveEdit = async (payload) => {
             if (!payload.upc) {
                 payload.upc = getNextUpc(prefix);
             }
+            const effectiveTeamId = currentTeamId.value || user.value?.$id;
              const newDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' }, 
                 payload.imageFile,
                 payload,
-                currentTeamId.value // Pass team ID
+                effectiveTeamId
             );
-            inventoryItems.value.unshift(newDoc);
+            if (newDoc) {
+                inventoryItems.value.unshift(newDoc);
+            }
         }
 
         closeEditDrawer();

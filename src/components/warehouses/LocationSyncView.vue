@@ -784,14 +784,16 @@ const formatDate = (isoStr: string) => {
 };
 
 const refreshSyncHistory = () => {
-  if (team.value) {
-    syncHistoryList.value = getSyncHistory(team.value.$id);
+  const tId = team.value?.$id || user.value?.$id;
+  if (tId) {
+    syncHistoryList.value = getSyncHistory(tId);
   }
 };
 
 const deleteHistoryItem = (id: string) => {
-  if (!team.value) return;
-  deleteSyncHistoryEntry(team.value.$id, id);
+  const tId = team.value?.$id || user.value?.$id;
+  if (!tId) return;
+  deleteSyncHistoryEntry(tId, id);
   refreshSyncHistory();
   addToast({ type: 'info', message: 'Removed sync history record.' });
 };
@@ -1433,8 +1435,8 @@ const quickAddRow = async (row: any) => {
         storageLocation: locName || '',
         upc: upc
       },
-      team.value.$id,
-      'team'
+      team.value?.$id || user.value?.$id || '',
+      team.value?.$id ? 'team' : 'user'
     ));
 
     inventoryItems.value.unshift(doc);
@@ -1557,8 +1559,8 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
             storageLocation: locName || '',
             upc: upc
           },
-          team.value.$id,
-          'team'
+          team.value?.$id || user.value?.$id || '',
+          team.value?.$id ? 'team' : 'user'
         ));
 
         inventoryItems.value.unshift(doc);
@@ -1745,8 +1747,8 @@ const executeSync = async () => {
                 storageLocation: item.storageLocation || locName,
                 upc: getNextUpc ? getNextUpc(prefix) : undefined
               },
-              team.value.$id,
-              'team'
+              team.value?.$id || user.value?.$id || '',
+              team.value?.$id ? 'team' : 'user'
             ));
             if (childDoc) {
               inventoryItems.value.unshift(childDoc);

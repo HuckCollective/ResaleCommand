@@ -333,7 +333,6 @@
             :item="activeItem" 
             @close="closeDrawer" 
             @save="onDrawerSaved" 
-            @saved="onDrawerSaved" 
             @refresh="fetchInventory"
         />
 
@@ -370,7 +369,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:viewMode']);
 
-const { currentTeam } = useAuth();
+const { currentTeam, user } = useAuth();
 
 // -- 1. CORE DATA COMPOSABLE --
 const { inventoryItems, loading, error, fetchInventory } = useInventory();
@@ -504,21 +503,27 @@ const closeDrawer = () => {
     activeItem.value = null;
 };
 
+const isDrawerSaving = ref(false);
 const onDrawerSaved = async (payload) => {
+    if (isDrawerSaving.value) return;
+    isDrawerSaving.value = true;
     try {
-        if (activeItem.value && activeItem.value.$id && payload) {
-            const updatedDoc = await updateInventoryItem(activeItem.value.$id, payload);
-            const idx = inventoryItems.value.findIndex(i => i.$id === activeItem.value.$id);
+        const targetItem = activeItem.value;
+        const targetId = targetItem?.$id || targetItem?.id;
+        if (targetId && payload) {
+            const updatedDoc = await updateInventoryItem(targetId, payload);
+            const idx = inventoryItems.value.findIndex(i => i && (i.$id === targetId || i.id === targetId));
             if (idx !== -1 && updatedDoc) {
                 inventoryItems.value[idx] = updatedDoc;
             }
             addToast({ type: 'success', message: 'Item updated successfully.' });
         } else if (payload) {
+            const effectiveTeamId = currentTeam.value?.$id || user.value?.$id;
             const newDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' },
                 payload.imageFile,
                 payload,
-                currentTeam.value?.$id
+                effectiveTeamId
             );
             if (newDoc) {
                 inventoryItems.value.unshift(newDoc);
@@ -528,6 +533,7 @@ const onDrawerSaved = async (payload) => {
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {
+        isDrawerSaving.value = false;
         closeDrawer();
         fetchInventory().catch(() => {});
     }

@@ -52,7 +52,7 @@ export function recordSyncHistory(entry: Omit<SyncHistoryEntry, 'id' | 'timestam
   try {
     const key = getStorageKey(entry.tenantId);
     const existing = getSyncHistory(entry.tenantId);
-    const updated = [fullEntry, ...existing.filter(e => e.id !== fullEntry.id)].slice(0, 100); // Keep last 100 syncs
+    const updated = [fullEntry, ...existing.filter(e => e && e.id && e.id !== fullEntry.id)].slice(0, 100); // Keep last 100 syncs
     localStorage.setItem(key, JSON.stringify(updated));
   } catch (err) {
     console.warn('Failed to save sync history to storage:', err);
@@ -66,7 +66,7 @@ export function deleteSyncHistoryEntry(tenantId: string, id: string): void {
   try {
     const key = getStorageKey(tenantId);
     const existing = getSyncHistory(tenantId);
-    const updated = existing.filter(e => e.id !== id);
+    const updated = existing.filter(e => e && e.id && e.id !== id);
     localStorage.setItem(key, JSON.stringify(updated));
   } catch (err) {
     console.warn('Failed to delete sync history entry:', err);

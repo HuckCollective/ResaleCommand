@@ -471,6 +471,12 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 Permission.update(role),
                 Permission.delete(role),
             ];
+        } else {
+            permissions = [
+                Permission.read(Role.users()),
+                Permission.update(Role.users()),
+                Permission.delete(Role.users()),
+            ];
         }
 
         // 3. Create Document
