@@ -266,8 +266,14 @@ const orgWarehouses = ref([]);
 
 const allLocations = computed(() => {
     const set = new Set();
+    ['HG', 'HD', 'MD', 'DT'].forEach(c => set.add(c));
+    if (orgWarehouses.value) {
+        orgWarehouses.value.forEach(w => {
+            if (w?.code) set.add(String(w.code).trim().toUpperCase());
+            if (w?.name) set.add(String(w.name).trim());
+        });
+    }
     if (orgPlacedLocations.value) orgPlacedLocations.value.forEach(l => l && set.add(String(l).trim()));
-    if (orgWarehouses.value) orgWarehouses.value.forEach(w => w?.name && set.add(String(w.name).trim()));
     return Array.from(set).filter(Boolean).sort();
 });
 

@@ -772,7 +772,7 @@ async function importSelected() {
                          cost: item.totalCost,
                          resalePrice: item.estimatedResale ? item.estimatedResale.toString() : undefined,
                          status: 'acquired' as const,
-                         location: 'backstock',
+                         storageLocation: 'HG',
                          orderId: item.orderId,
                          purchaseId: item.orderId ? poMap[item.orderId] : undefined,
                          sourcingLocation: item.sourceLink ? item.sourceLink : 'ShopGoodwill'

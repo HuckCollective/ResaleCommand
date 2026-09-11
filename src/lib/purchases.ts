@@ -276,7 +276,7 @@ export const purchasesAPI = {
                         quantity: Number(item.quantity) || 1,
                         purchaseId: finalPurchaseId,
                         status: 'acquired',
-                        storageLocation: 'backstock',
+                        storageLocation: 'HG',
                         sourcingLocation: vendor,
                         receiptImageId: receiptImageId || undefined
                     },

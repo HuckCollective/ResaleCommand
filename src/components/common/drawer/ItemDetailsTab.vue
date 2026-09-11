@@ -230,11 +230,20 @@
                         <span v-else class="font-mono font-semibold truncate block opacity-50">None</span>
                     </div>
                     <div class="col-span-2 sm:col-span-1 flex flex-col justify-center">
-                        <span class="text-[10px] opacity-50 block font-bold uppercase">Purchase Link</span>
-                        <a v-if="item?.purchaseId || editForm.orderId || item?.cartId" :href="`/purchases/${item?.purchaseId || editForm.orderId || item?.cartId}`" target="_blank" class="text-primary link font-bold flex items-center gap-1 truncate text-xs">
-                            <Icon icon="solar:cart-bold" class="w-3.5 h-3.5 shrink-0" />
-                            <span>PO Details</span>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase">Sourcing Origin</span>
+                        <a 
+                            v-if="editForm.sourcingLocation && editForm.sourcingLocation.startsWith('http')" 
+                            :href="editForm.sourcingLocation" 
+                            target="_blank" 
+                            class="text-primary link font-bold flex items-center gap-1 truncate text-xs"
+                            title="Open Sourcing Source Link"
+                        >
+                            <span class="truncate">{{ editForm.sourcingLocation.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] }}</span>
+                            <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 shrink-0 opacity-70" />
                         </a>
+                        <span v-else-if="editForm.sourcingLocation" class="font-bold text-xs truncate">
+                            {{ editForm.sourcingLocation }}
+                        </span>
                         <span v-else class="opacity-40 italic text-[11px]">Direct Entry</span>
                     </div>
                 </div>
@@ -271,22 +280,26 @@
                             <input type="text" v-model="editForm.countryOfOrigin" placeholder="e.g. USA, Japan, Estate Sale" class="input input-bordered input-sm w-full text-xs bg-base-100" />
                         </div>
                         <div class="form-control">
-                            <label class="label py-0.5 flex items-center justify-between">
-                                <span class="label-text text-xs font-bold">Parent Lot ID</span>
-                                <span v-if="editForm.parentLotId" class="badge badge-xs badge-secondary font-bold">Extracted</span>
-                            </label>
-                            <div class="join w-full shadow-xs">
-                                <input type="text" :value="editForm.parentLotId || 'None'" disabled class="input input-bordered input-sm join-item grow text-xs bg-base-200/60 font-mono opacity-80" />
-                                <button 
-                                    v-if="editForm.parentLotId" 
-                                    type="button" 
-                                    @click="editForm.parentLotId = null" 
-                                    class="btn btn-sm btn-outline btn-error join-item font-bold text-xs" 
-                                    title="Unlink and make standalone"
-                                >
-                                    Unlink
-                                </button>
-                            </div>
+                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Sourcing Origin / Link</span></label>
+                            <input type="text" v-model="editForm.sourcingLocation" placeholder="e.g. ShopGoodwill, CTBids, URL..." class="input input-bordered input-sm w-full font-mono text-xs bg-base-100" />
+                        </div>
+                    </div>
+                    <div class="form-control">
+                        <label class="label py-0.5 flex items-center justify-between">
+                            <span class="label-text text-xs font-bold">Parent Lot ID</span>
+                            <span v-if="editForm.parentLotId" class="badge badge-xs badge-secondary font-bold">Extracted</span>
+                        </label>
+                        <div class="join w-full shadow-xs">
+                            <input type="text" :value="editForm.parentLotId || 'None'" disabled class="input input-bordered input-sm join-item grow text-xs bg-base-200/60 font-mono opacity-80" />
+                            <button 
+                                v-if="editForm.parentLotId" 
+                                type="button" 
+                                @click="editForm.parentLotId = null" 
+                                class="btn btn-sm btn-outline btn-error join-item font-bold text-xs" 
+                                title="Unlink and make standalone"
+                            >
+                                Unlink
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -362,27 +375,66 @@
 
             <!-- 5. 📍 STORAGE LOCATION & STATUS -->
             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    <!-- Warehouse / Facility -->
                     <div class="form-control">
-                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Physical Storage Bin</span></label>
-                        <SingleSelectDropdown 
-                            v-model="editForm.storageLocation" 
-                            :options="allLocations" 
-                            placeholder="Select or type bin..."
-                        />
-                    </div>
-                    <div class="form-control">
-                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Inventory Status</span></label>
-                        <select v-model="editForm.status" class="select select-bordered select-sm w-full font-bold text-xs bg-base-100">
-                            <option value="acquired">Acquired (Backlog)</option>
-                            <option value="received">Received</option>
-                            <option value="placed">Placed (In Booth)</option>
-                            <option value="tracked">Tracked</option>
-                            <option value="combined">Combined</option>
-                            <option value="sold">Sold</option>
-                            <option value="archived">Archived</option>
+                        <label class="label py-0 h-6 flex items-center justify-between">
+                            <span class="label-text text-xs font-bold">Warehouse / Facility</span>
+                        </label>
+                        <select v-model="selectedFacility" class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100">
+                            <option value="HG">Huck's Garage (HG)</option>
+                            <option value="HD">Hideout (HD)</option>
+                            <option value="MD">Memory Den - Huck's Adventures Outfitters (MD)</option>
+                            <option value="DT">Dusty Tiger (DT)</option>
+                            <option value="__custom__">Custom / Other Location...</option>
                         </select>
                     </div>
+
+                    <!-- Bin / Shelf Location -->
+                    <div class="form-control" v-if="selectedFacility !== '__custom__'">
+                        <label class="label py-0 h-6 flex items-center justify-between">
+                            <span class="label-text text-xs font-bold">Storage (Bin / Shelf)</span>
+                            <span v-if="editForm.storageLocation" class="text-[10px] font-mono font-bold badge badge-xs badge-primary leading-none">
+                                {{ editForm.storageLocation }}
+                            </span>
+                        </label>
+                        <input 
+                            type="text" 
+                            v-model="facilityBin" 
+                            list="facility-bins-list"
+                            placeholder="e.g. RED BIN-16, 04..." 
+                            class="input input-bordered input-sm w-full h-8 min-h-8 font-mono text-xs bg-base-100 uppercase"
+                        />
+                        <datalist id="facility-bins-list">
+                            <option v-for="bin in availableBinsForFacility" :key="bin" :value="bin"></option>
+                        </datalist>
+                    </div>
+
+                    <!-- Custom Raw Location -->
+                    <div class="form-control" v-else>
+                        <label class="label py-0 h-6 flex items-center justify-between">
+                            <span class="label-text text-xs font-bold">Custom Location</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            v-model="customFacilityText" 
+                            placeholder="Enter custom location name..." 
+                            class="input input-bordered input-sm w-full h-8 min-h-8 text-xs bg-base-100"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-control">
+                    <label class="label py-0.5"><span class="label-text text-xs font-bold">Inventory Status</span></label>
+                    <select v-model="editForm.status" class="select select-bordered select-sm w-full font-bold text-xs bg-base-100">
+                        <option value="acquired">Acquired (Backlog)</option>
+                        <option value="received">Received</option>
+                        <option value="placed">Placed (In Booth)</option>
+                        <option value="tracked">Tracked</option>
+                        <option value="combined">Combined</option>
+                        <option value="sold">Sold</option>
+                        <option value="archived">Archived</option>
+                    </select>
                 </div>
 
                 <MultiSelectDropdown 
@@ -723,13 +775,13 @@
 </template>
 
 <script setup>
+import { ref, computed, watch, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { marked } from 'marked';
 import TagInput from '../TagInput.vue';
-import SingleSelectDropdown from '../SingleSelectDropdown.vue';
 import MultiSelectDropdown from '../MultiSelectDropdown.vue';
 
-defineProps({
+const props = defineProps({
     editForm: {
         type: Object,
         required: true
@@ -840,6 +892,68 @@ defineEmits([
     'open-md-modal',
     'generate-description'
 ]);
+
+const KNOWN_CODES = ['HG', 'HD', 'MD', 'DT'];
+
+const selectedFacility = ref('HG');
+const facilityBin = ref('');
+const customFacilityText = ref('');
+let isInternalSync = false;
+
+const syncFromStorageLocation = (loc) => {
+    isInternalSync = true;
+    const raw = (loc || '').trim();
+    if (!raw || raw.toLowerCase() === 'backstock') {
+        selectedFacility.value = 'HG';
+        facilityBin.value = '';
+        customFacilityText.value = '';
+    } else {
+        const matchedCode = KNOWN_CODES.find(code => raw === code || raw.startsWith(`${code}-`));
+        if (matchedCode) {
+            selectedFacility.value = matchedCode;
+            facilityBin.value = raw === matchedCode ? '' : raw.slice(matchedCode.length + 1).trim();
+            customFacilityText.value = '';
+        } else {
+            selectedFacility.value = '__custom__';
+            facilityBin.value = '';
+            customFacilityText.value = raw;
+        }
+    }
+    nextTick(() => { isInternalSync = false; });
+};
+
+const updateStorageLocation = () => {
+    if (isInternalSync) return;
+    if (selectedFacility.value === '__custom__') {
+        props.editForm.storageLocation = customFacilityText.value.trim();
+    } else {
+        const bin = facilityBin.value.trim();
+        if (bin) {
+            props.editForm.storageLocation = `${selectedFacility.value}-${bin.toUpperCase()}`;
+        } else {
+            props.editForm.storageLocation = selectedFacility.value;
+        }
+    }
+};
+
+watch(() => props.editForm?.storageLocation, (newVal) => {
+    if (!isInternalSync) {
+        syncFromStorageLocation(newVal);
+    }
+}, { immediate: true });
+
+watch([selectedFacility, facilityBin, customFacilityText], () => {
+    updateStorageLocation();
+});
+
+const availableBinsForFacility = computed(() => {
+    if (!props.allLocations || !Array.isArray(props.allLocations)) return [];
+    const prefix = `${selectedFacility.value}-`;
+    return props.allLocations
+        .filter(loc => typeof loc === 'string' && loc.startsWith(prefix))
+        .map(loc => loc.slice(prefix.length))
+        .filter(Boolean);
+});
 
 const renderMarkdown = (text) => marked(text || '');
 

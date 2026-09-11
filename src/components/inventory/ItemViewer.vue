@@ -126,17 +126,23 @@
                     <div>
                         <h1 class="text-3xl md:text-4xl font-bold leading-tight mb-2">{{ title }}</h1>
                         <div class="flex flex-wrap items-center gap-4 text-sm opacity-60 font-mono">
-                            <span v-if="locationText" class="flex gap-1 items-center badge badge-outline">
-                                <Icon icon="solar:map-point-linear" /> 
-                                <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-50 md:max-w-100" :title="locationText">
-                                    {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
+                            <!-- Physical Storage Bin -->
+                            <span v-if="item.storageLocation" class="flex gap-1 items-center badge badge-primary badge-outline font-bold font-mono">
+                                <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                                <span>{{ item.storageLocation }}</span>
+                            </span>
+                            <!-- Sourcing Origin -->
+                            <span v-if="item.sourcingLocation" class="flex gap-1 items-center badge badge-ghost">
+                                <Icon icon="solar:tag-linear" class="w-3.5 h-3.5 opacity-60" />
+                                <a v-if="item.sourcingLocation.startsWith('http')" :href="item.sourcingLocation" target="_blank" class="text-primary underline flex items-center gap-1 truncate max-w-48" :title="item.sourcingLocation">
+                                    {{ item.sourcingLocation.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] }}
                                     <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
                                 </a>
-                                <span v-else>{{ locationText }}</span>
+                                <span v-else>{{ item.sourcingLocation }}</span>
                             </span>
                             <span>ID: {{ item.$id }}</span>
                             <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="flex gap-1 items-center">
-                                <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm">{{ chan }}</span>
+                                <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm badge-secondary font-bold">{{ chan }}</span>
                             </span>
                         </div>
                     </div>

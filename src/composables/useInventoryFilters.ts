@@ -1,6 +1,7 @@
 import { ref, computed, type Ref } from 'vue';
 import type { Models } from 'appwrite';
 import { BUCKET_ID } from '../lib/inventory';
+import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
@@ -102,25 +103,18 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
 
     // -- 3. EXTRACT ALL LOCATIONS & CHANNELS --
     const allLocations = computed(() => {
-        const locs = new Set<string>();
-        locs.add('Memory Den Booth #12');
-        locs.add('Dusty Tiger');
-        locs.add('Backstock Bin A');
-        locs.add('Backstock Bin B');
-        for (const it of sourceItems.value) {
-            if ((it as any).storageLocation) locs.add((it as any).storageLocation);
-            if (Array.isArray((it as any).sellingLocations)) {
-                (it as any).sellingLocations.forEach((l: string) => l && locs.add(l));
-            }
-        }
-        return Array.from(locs).sort();
+        return getWarehouseFacilityOptions(sourceItems.value);
     });
 
     const allChannels = computed(() => {
         const channels = new Set<string>();
+        channels.add('Memory Den');
+        channels.add('Dusty Tiger');
+        channels.add('eBay');
+        channels.add('Poshmark');
         for (const it of sourceItems.value) {
             if (Array.isArray((it as any).sellingLocations)) {
-                (it as any).sellingLocations.forEach((l: string) => l && channels.add(l));
+                (it as any).sellingLocations.forEach((l: string) => l && channels.add(l.trim()));
             }
         }
         return Array.from(channels).sort();
@@ -217,9 +211,11 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
 
         // Location chip
         if (filterLocation.value !== 'all') {
+            const fac = findFacility(filterLocation.value);
+            const display = fac ? fac.displayName : filterLocation.value;
             chips.push({
                 id: 'location',
-                label: `Location: ${filterLocation.value}`,
+                label: `Location: ${display}`,
                 onRemove: () => { filterLocation.value = 'all'; }
             });
         }
@@ -401,10 +397,8 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
             }
 
             // 6. Location filter
-            if (loc !== 'all') {
-                const matchesStorage = anyItem.storageLocation === loc;
-                const matchesSelling = Array.isArray(anyItem.sellingLocations) && anyItem.sellingLocations.includes(loc);
-                if (!matchesStorage && !matchesSelling) return false;
+            if (loc && loc !== 'all') {
+                if (!matchesLocationFilter(anyItem, loc)) return false;
             }
 
             // 7. Sales Channel filter

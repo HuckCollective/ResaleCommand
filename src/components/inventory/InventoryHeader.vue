@@ -197,6 +197,34 @@
                 <Icon icon="solar:dollar-linear" class="w-3 h-3" />
                 <span>Missing Pricing</span>
             </button>
+
+            <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
+
+            <!-- Quick Location Filter Dropdown Pill -->
+            <div class="shrink-0 flex items-center">
+                <select 
+                    :value="filterLocation" 
+                    @change="$emit('update:filterLocation', $event.target.value)"
+                    class="select select-bordered select-xs rounded-full h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
+                    title="Filter by storage location or warehouse facility"
+                >
+                    <option value="all">All Locations</option>
+                    <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
+                </select>
+            </div>
+
+            <!-- Filters & Exclusions Modal Trigger Button -->
+            <button 
+                type="button" 
+                @click="isFiltersOpen = true"
+                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all border border-base-300"
+                :class="activeFilterChips.length > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                title="Open Advanced Filters & Exclusions"
+            >
+                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
+                <span>Filters</span>
+                <span v-if="activeFilterChips.length > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ activeFilterChips.length }}</span>
+            </button>
         </div>
 
         <!-- ------------------------------------------------------------- -->
@@ -256,6 +284,15 @@
                     <span class="label-text text-xs font-semibold text-base-content">Only Placed &amp; Located</span>
                     <input type="checkbox" :checked="filterPlacedLocated" @change="$emit('update:filterPlacedLocated', $event.target.checked)" class="checkbox checkbox-sm checkbox-primary" />
                 </label>
+            </div>
+
+            <!-- Location Filter -->
+            <div class="space-y-1.5">
+                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">Location / Facility</div>
+                <select :value="filterLocation" @change="$emit('update:filterLocation', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
+                    <option value="all">All Locations</option>
+                    <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
+                </select>
             </div>
 
             <!-- AI Health Insights -->

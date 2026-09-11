@@ -906,7 +906,7 @@ async function executeSplit() {
             quantity: 1,
             conditionNotes: `Split from master lot: ${parent.title || 'Lot'}`.slice(0, 950),
             imageId: mainImgId || undefined,
-            storageLocation: parent.storageLocation || 'Unsorted',
+            storageLocation: parent.storageLocation || 'HG',
             sourcingLocation: parent.sourcingLocation || '',
             parentLotId: parentDocId || undefined,
             status: 'placed'
@@ -936,7 +936,7 @@ async function executeSplit() {
           quantity: tierItems.length,
           conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
-          storageLocation: parent.storageLocation || 'Unsorted',
+          storageLocation: parent.storageLocation || 'HG',
           sourcingLocation: parent.sourcingLocation || '',
           parentLotId: parentDocId || undefined,
           status: 'placed'
@@ -961,7 +961,7 @@ async function executeSplit() {
           quantity: 1,
           conditionNotes: `Curated Mini-Lot Set:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
-          storageLocation: parent.storageLocation || 'Unsorted',
+          storageLocation: parent.storageLocation || 'HG',
           sourcingLocation: parent.sourcingLocation || '',
           parentLotId: parentDocId || undefined,
           status: 'placed'

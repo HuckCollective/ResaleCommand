@@ -445,7 +445,7 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
-import { warehousesApi } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter } from '../../lib/warehouses';
 import { client } from '../../lib/appwrite';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
@@ -606,8 +606,7 @@ const displayedSales = computed(() => {
   let list = [...consolidatedSales.value];
 
   if (locationFilter.value !== 'all') {
-    const target = locationFilter.value.toLowerCase().replace(/[^a-z0-9]/g, '');
-    list = list.filter(s => (s.locationName || '').toLowerCase().replace(/[^a-z0-9]/g, '') === target);
+    list = list.filter(s => matchesLocationFilter({ storageLocation: s.locationName, sellingLocations: [s.locationName] }, locationFilter.value));
   }
 
   if (searchQuery.value.trim()) {

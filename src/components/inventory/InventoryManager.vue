@@ -181,7 +181,7 @@
                                     class="select select-bordered select-xs rounded-full h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
                                 >
                                     <option value="">All Locations</option>
-                                    <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                    <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
                                 </select>
                             </div>
 
@@ -416,6 +416,9 @@
                     :selectedCount="selectedItems.length"
                     :activeFilterCount="activeFilterCount"
                     :isLoading="loading"
+                    v-model:filterLocation="filterBinLocation"
+                    v-model:filterStatus="filterStatus"
+                    v-model:filterChannel="filterChannel"
                     :locations="allAvailableLocations"
                     :channels="allAvailableChannels"
                     :isProcessing="processingBulk || processingBulkLoc || processingBulkChannel"
@@ -471,7 +474,7 @@
                                         <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
                                         <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                                             <option value="">All Locations</option>
-                                            <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                            <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
                                         </select>
                                     </div>
 
@@ -651,7 +654,7 @@
                                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
                                     <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                                         <option value="">All Locations</option>
-                                        <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                        <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
                                     </select>
                                 </div>
 
@@ -1124,7 +1127,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { purchasesAPI } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
-import { warehousesApi } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, getWarehouseFacilityOptions } from '../../lib/warehouses';
 
 const props = defineProps({
     viewMode: {
@@ -1647,10 +1650,7 @@ const fetchLocations = async () => {
 };
 
 const allAvailableLocations = computed(() => {
-    const set = new Set();
-    (orgPlacedLocations.value || []).forEach(l => l && set.add(String(l).trim()));
-    (warehouseLocations.value || []).forEach(l => l && set.add(String(l).trim()));
-    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    return getWarehouseFacilityOptions(inventoryItems.value, orgPlacedLocations.value);
 });
 
 const allAvailableChannels = computed(() => {
@@ -1984,24 +1984,7 @@ const filteredInventory = computed(() => {
 
         // Filter by Location (Physical location or selling booth)
         if (filterBinLocation.value) {
-            const rawTarget = filterBinLocation.value.trim().toLowerCase();
-            const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
-
-            const matchesLoc = (val) => {
-                if (!val) return false;
-                if (Array.isArray(val)) {
-                    return val.some(v => matchesLoc(v));
-                }
-                const str = String(val).trim().toLowerCase();
-                const cleanStr = str.replace(/[^a-z0-9]/g, '');
-                return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
-            };
-
-            const matchStorage = matchesLoc(item.storageLocation);
-            const matchSelling = matchesLoc(item.sellingLocations);
-            const matchPurchase = matchesLoc(item.purchaseLocation);
-
-            if (!matchStorage && !matchSelling && !matchPurchase) {
+            if (!matchesLocationFilter(item, filterBinLocation.value)) {
                 return false;
             }
         }

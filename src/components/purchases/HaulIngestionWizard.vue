@@ -279,9 +279,9 @@
 
               <!-- Destination Selector Pill -->
               <select v-model="item.destination" class="select select-bordered select-xs font-extrabold text-xs">
-                <option value="memory_den">🏢 Memory Den (MD1)</option>
-                <option value="dustytiger">🐯 DustyTiger (DUSTY)</option>
-                <option value="backstock">📦 Backstock (Bin)</option>
+                <option value="memory_den">🏢 Memory Den (MD)</option>
+                <option value="dustytiger">🐯 DustyTiger (DT)</option>
+                <option value="backstock">📦 Backstock (HG)</option>
                 <option value="online">🌐 Online (eBay/Poshmark)</option>
               </select>
             </div>
@@ -976,13 +976,30 @@ const completeIngestion = async () => {
 
     // Update existing items or create new active inventory records
     const savePromises = resaleItems.value.map(async item => {
+      let sellingLocations: string[] = [];
+      let storageLocation = 'HG';
+
+      if (item.destination === 'memory_den') {
+        sellingLocations = ['Memory Den'];
+        storageLocation = 'MD';
+      } else if (item.destination === 'dustytiger') {
+        sellingLocations = ['Dusty Tiger'];
+        storageLocation = 'DT';
+      } else if (item.destination === 'online') {
+        sellingLocations = ['eBay', 'Poshmark'];
+        storageLocation = 'HG';
+      } else {
+        storageLocation = 'HG';
+      }
+
       if (item.id) {
         const updateData: any = {
           title: item.title,
           cost: item.cost || 0,
           resalePrice: item.price || 0,
           status: 'in-stock',
-          storageLocation: item.destination,
+          storageLocation,
+          sellingLocations: sellingLocations.length ? sellingLocations : undefined,
           identity: item.sku,
           brand: item.brand,
           category: item.category
@@ -1004,7 +1021,8 @@ const completeIngestion = async () => {
             price: item.price || 0,
             quantity: item.quantity || 1,
             status: 'in-stock',
-            location: item.destination
+            storageLocation,
+            sellingLocations: sellingLocations.length ? sellingLocations : undefined
           }
         );
       }
@@ -1062,7 +1080,12 @@ onMounted(async () => {
             price: Number(d.resalePrice || d.price) || (Number(d.cost) ? Math.round(Number(d.cost) * 3.5) : 0),
             quantity: Number(d.quantity) || 1,
             type: 'resale',
-            destination: (d.storageLocation || d.location || 'backstock') as any,
+            destination: (
+              (Array.isArray(d.sellingLocations) && d.sellingLocations.includes('Memory Den')) || d.storageLocation === 'MD' || d.storageLocation === 'memory_den' ? 'memory_den' :
+              (Array.isArray(d.sellingLocations) && d.sellingLocations.includes('Dusty Tiger')) || d.storageLocation === 'DT' || d.storageLocation === 'dustytiger' ? 'dustytiger' :
+              (Array.isArray(d.sellingLocations) && (d.sellingLocations.includes('eBay') || d.sellingLocations.includes('Poshmark'))) ? 'online' :
+              'backstock'
+            ) as any,
             category: d.category || '',
             brand: d.brand || '',
             sku: d.identity || d.locationSku || d.upc || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,

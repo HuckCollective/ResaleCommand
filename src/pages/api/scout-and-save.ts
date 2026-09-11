@@ -204,7 +204,7 @@ export const ALL: APIRoute = async ({ request }) => {
             resalePrice: parseFloat(aiData.resalePrice) || parseFloat(aiData.price_breakdown?.fair) || 0.0,
             maxBuyPrice: 0.0,
             sourcingLocation: "Headless Import",
-            storageLocation: "To Be Processed",
+            storageLocation: "HG",
             status: "scouted", // The new initial status
             tenantId: tenantId, 
             imageId: imageId || "",

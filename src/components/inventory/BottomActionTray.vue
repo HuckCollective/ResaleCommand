@@ -127,23 +127,70 @@
                         </div>
 
                         <!-- SECTION B: LOCATION MOVE -->
-                        <div class="bg-base-200/70 p-3 rounded-2xl border border-base-300 space-y-2">
-                            <label class="font-black text-xs text-base-content flex items-center gap-1.5">
-                                <Icon icon="solar:map-point-bold" class="w-3.5 h-3.5 text-primary" />
-                                <span>Move Location ({{ selectedCount }} Records)</span>
-                            </label>
-                            <div class="flex items-center gap-2">
-                                <select v-model="targetLocation" class="select select-sm select-bordered flex-1 bg-base-100 text-xs font-bold rounded-xl">
-                                    <option value="" disabled selected>Select destination location...</option>
-                                    <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
-                                </select>
+                        <div class="bg-base-200/70 p-3.5 rounded-2xl border border-base-300 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <label class="font-black text-xs text-base-content flex items-center gap-1.5">
+                                    <Icon icon="solar:map-point-bold" class="w-3.5 h-3.5 text-primary" />
+                                    <span>Move Location ({{ selectedCount }} Records)</span>
+                                </label>
+                                <span v-if="computedLocationPreview" class="text-[10px] font-mono font-bold badge badge-xs badge-primary">
+                                    Target: {{ computedLocationPreview }}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <!-- Warehouse / Facility Choice -->
+                                <div class="form-control">
+                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Warehouse / Facility</span></label>
+                                    <select v-model="selectedWarehouse" class="select select-sm select-bordered w-full bg-base-100 text-xs font-bold rounded-xl">
+                                        <option value="HG">Huck's Garage (HG)</option>
+                                        <option value="HD">Hideout (HD)</option>
+                                        <option value="MD">Memory Den - Huck's Adventures Outfitters (MD)</option>
+                                        <option value="DT">Dusty Tiger (DT)</option>
+                                        <option value="__custom__">Custom / Other Location...</option>
+                                    </select>
+                                </div>
+
+                                <!-- Bin / Container Input -->
+                                <div class="form-control" v-if="selectedWarehouse !== '__custom__'">
+                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Bin / Tote / Shelf (Optional)</span></label>
+                                    <input 
+                                        type="text" 
+                                        v-model="customBin" 
+                                        placeholder="e.g. RED BIN-16 or 04" 
+                                        class="input input-sm input-bordered w-full bg-base-100 text-xs font-mono font-bold uppercase rounded-xl"
+                                    />
+                                </div>
+
+                                <!-- Custom Raw Input when __custom__ is selected -->
+                                <div class="form-control" v-else>
+                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Custom Location Name</span></label>
+                                    <input 
+                                        type="text" 
+                                        v-model="customRawLocation" 
+                                        placeholder="Enter custom location..." 
+                                        class="input input-sm input-bordered w-full bg-base-100 text-xs font-bold rounded-xl"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Fast Action Button & Suggestions -->
+                            <div class="flex items-center justify-between pt-1 gap-2">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-[10px] opacity-60 font-semibold">Quick:</span>
+                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('HG', '')">HG</button>
+                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('HD', '')">HD</button>
+                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('MD', '')">MD</button>
+                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('DT', '')">DT</button>
+                                </div>
                                 <button 
                                     type="button" 
-                                    class="btn btn-sm btn-primary text-primary-content font-bold px-4 rounded-xl shrink-0"
-                                    :disabled="!targetLocation || isProcessing"
+                                    class="btn btn-sm btn-primary text-primary-content font-bold px-4 rounded-xl shrink-0 gap-1.5 shadow-sm"
+                                    :disabled="!computedLocationPreview || isProcessing"
                                     @click="onApplyLocation"
                                 >
-                                    Apply
+                                    <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                                    Apply Move
                                 </button>
                             </div>
                         </div>
@@ -383,7 +430,22 @@
                                     class="select select-sm select-bordered w-full bg-base-100 text-xs font-bold rounded-xl"
                                 >
                                     <option value="all">All Locations</option>
-                                    <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
+                                    <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Channel Section -->
+                            <div v-if="channels && channels.length > 0" class="bg-base-200/70 p-3.5 rounded-2xl border border-base-300 space-y-2">
+                                <label class="font-black text-xs text-base-content">
+                                    Filter by Sales Channel
+                                </label>
+                                <select 
+                                    :value="filterChannel" 
+                                    @change="$emit('update:filterChannel', $event.target.value)"
+                                    class="select select-sm select-bordered w-full bg-base-100 text-xs font-bold rounded-xl"
+                                >
+                                    <option value="all">All Channels</option>
+                                    <option v-for="ch in channels" :key="ch" :value="ch">{{ ch }}</option>
                                 </select>
                             </div>
                         </div>
@@ -489,6 +551,10 @@ const props = defineProps({
         type: String,
         default: 'all'
     },
+    filterChannel: {
+        type: String,
+        default: 'all'
+    },
     isProcessing: {
         type: Boolean,
         default: false
@@ -500,6 +566,7 @@ const emit = defineEmits([
     'update:activeTab',
     'update:filterStatus',
     'update:filterLocation',
+    'update:filterChannel',
     'scout-quick-add',
     'open-add-drawer',
     'import-csv',
@@ -514,8 +581,26 @@ const emit = defineEmits([
 ]);
 
 const targetLocation = ref('');
+const selectedWarehouse = ref('HG');
+const customBin = ref('');
+const customRawLocation = ref('');
 const targetStatus = ref('');
 const isConfirmingDelete = ref(false);
+
+const computedLocationPreview = computed(() => {
+    if (selectedWarehouse.value === '__custom__') {
+        return customRawLocation.value.trim();
+    }
+    const wh = selectedWarehouse.value;
+    const bin = customBin.value.trim().toUpperCase().replace(/^[-_\s]+/, '');
+    if (!bin) return wh;
+    return `${wh}-${bin}`;
+});
+
+const setQuickLoc = (wh, bin = '') => {
+    selectedWarehouse.value = wh;
+    customBin.value = bin;
+};
 
 const statusOptions = [
     { value: 'active', label: 'Active Stock' },
@@ -590,9 +675,10 @@ const handleBundle = () => {
 };
 
 const onApplyLocation = () => {
-    if (!targetLocation.value) return;
-    emit('apply-location', targetLocation.value);
-    targetLocation.value = '';
+    const loc = computedLocationPreview.value;
+    if (!loc) return;
+    emit('apply-location', loc);
+    customBin.value = '';
 };
 
 const onApplyStatus = () => {

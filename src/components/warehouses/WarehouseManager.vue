@@ -36,7 +36,10 @@
         <div class="card-body p-5 flex flex-col justify-between h-full">
           <div>
             <div class="flex justify-between items-start">
-              <h3 class="card-title text-xl font-bold">{{ warehouse.name }}</h3>
+              <div class="flex items-center gap-2">
+                <h3 class="card-title text-xl font-bold">{{ warehouse.name }}</h3>
+                <span v-if="warehouse.code" class="badge badge-sm badge-primary font-mono font-black tracking-wider">{{ warehouse.code }}</span>
+              </div>
               <div class="badge font-bold" :class="warehouse.type === 'Online' ? 'badge-info' : warehouse.type === 'Warehouse' ? 'badge-neutral' : 'badge-secondary'">
                 {{ warehouse.type }}
               </div>
@@ -93,9 +96,15 @@
           <h3 class="font-bold text-2xl mb-6 text-primary">{{ isEditing ? 'Edit Location' : 'New Location' }}</h3>
           
           <form @submit.prevent="saveWarehouse" class="space-y-4">
-            <div class="form-control w-full">
-              <label class="label"><span class="label-text font-bold">Location Name</span></label>
-              <input type="text" v-model="editForm.name" required class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-2 focus:ring-primary/50 transition-colors" placeholder="e.g. DustyTiger or Memory Den" />
+            <div class="grid grid-cols-3 gap-3">
+              <div class="form-control col-span-2">
+                <label class="label"><span class="label-text font-bold">Location Name</span></label>
+                <input type="text" v-model="editForm.name" required class="input input-bordered w-full bg-base-200 focus:bg-base-100 focus:ring-2 focus:ring-primary/50 transition-colors" placeholder="e.g. Huck's Garage" />
+              </div>
+              <div class="form-control col-span-1">
+                <label class="label"><span class="label-text font-bold">Code</span></label>
+                <input type="text" v-model="editForm.code" maxlength="6" class="input input-bordered w-full bg-base-200 focus:bg-base-100 font-mono font-bold uppercase" placeholder="e.g. HG" />
+              </div>
             </div>
 
             <div class="form-control w-full">
@@ -220,6 +229,7 @@ const openCreateModal = () => {
   activeWarehouse.value = {} as any; // Trigger modal
   editForm.value = {
     name: '',
+    code: '',
     type: 'Consignment Booth',
     address: '',
     description: '',
@@ -234,6 +244,7 @@ const openEditModal = (warehouse: WarehouseDocument) => {
   activeWarehouse.value = warehouse;
   editForm.value = {
     name: warehouse.name,
+    code: warehouse.code || '',
     type: warehouse.type,
     address: warehouse.address || '',
     description: warehouse.description || '',

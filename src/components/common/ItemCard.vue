@@ -200,7 +200,7 @@ const titleClass = computed(() => props.compact ? 'text-xs h-[2.5em]' : 'text-ba
 
 // --- COMPUTED DATA ---
 const title = computed(() => props.item.title || props.item.identity || props.item.itemName || "Untitled Item");
-const locationText = computed(() => props.item.storageLocation || props.item.binLocation || props.item.purchaseLocation || '');
+const locationText = computed(() => props.item.storageLocation || props.item.binLocation || '');
 const tags = computed(() => {
     const raw = props.item.sellingLocations || props.item.salesChannel || [];
     const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);

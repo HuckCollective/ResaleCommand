@@ -173,7 +173,13 @@
             :activeFilterCount="activeFilterCount"
             :locations="locations"
             :channels="channels"
-            :isProcessing="isProcessing"
+            :filter-location="filterLocation"
+            :filter-status="filterStatus"
+            :filter-channel="filterChannel"
+            :is-processing="isProcessing"
+            @update:filter-location="$emit('update:filterLocation', $event)"
+            @update:filter-status="$emit('update:filterStatus', $event)"
+            @update:filter-channel="$emit('update:filterChannel', $event)"
             @scout-quick-add="$emit('scout-quick-add')"
             @open-add-drawer="$emit('add')"
             @import-csv="$emit('import-csv')"
@@ -239,6 +245,18 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    filterLocation: {
+        type: String,
+        default: 'all'
+    },
+    filterStatus: {
+        type: String,
+        default: 'active'
+    },
+    filterChannel: {
+        type: String,
+        default: 'all'
+    },
     isProcessing: {
         type: Boolean,
         default: false
@@ -281,7 +299,10 @@ const emit = defineEmits([
     'export',
     'delete',
     'clear-selection',
-    'clear-filters'
+    'clear-filters',
+    'update:filterLocation',
+    'update:filterStatus',
+    'update:filterChannel'
 ]);
 
 // Tray state

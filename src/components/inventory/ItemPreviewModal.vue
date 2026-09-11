@@ -120,13 +120,19 @@
                     
                     <!-- Location, Provenance & Meta Row -->
                     <div class="flex items-center gap-3 flex-wrap text-xs font-mono bg-base-200/50 p-3 rounded-xl border border-base-300">
-                        <span v-if="locationText" class="flex gap-1.5 items-center">
-                            <Icon icon="solar:map-point-bold" class="text-primary w-4 h-4" /> 
-                            <a v-if="locationText.startsWith('http')" :href="locationText" target="_blank" class="text-primary underline decoration-primary/40 underline-offset-2 flex items-center gap-1 truncate max-w-50 md:max-w-100" :title="locationText">
-                                {{ locationText.replace(/^https?:\/\/(www\.)?/, '') }}
+                        <!-- Physical Storage Bin -->
+                        <span v-if="item.storageLocation" class="flex gap-1.5 items-center badge badge-primary badge-outline font-bold">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
+                            <span>{{ item.storageLocation }}</span>
+                        </span>
+                        <!-- Sourcing Origin -->
+                        <span v-if="item.sourcingLocation" class="flex gap-1.5 items-center badge badge-ghost">
+                            <Icon icon="solar:tag-linear" class="w-3.5 h-3.5 opacity-60" />
+                            <a v-if="item.sourcingLocation.startsWith('http')" :href="item.sourcingLocation" target="_blank" class="text-primary underline flex items-center gap-1 truncate max-w-40" :title="item.sourcingLocation">
+                                {{ item.sourcingLocation.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] }}
                                 <Icon icon="solar:external-link-linear" class="w-3 h-3 shrink-0" />
                             </a>
-                            <span v-else class="font-bold text-base-content">{{ locationText }}</span>
+                            <span v-else class="font-bold">{{ item.sourcingLocation }}</span>
                         </span>
                         <span v-if="item.orderId" class="badge badge-sm badge-ghost font-mono">
                             Order #{{ item.orderId }}

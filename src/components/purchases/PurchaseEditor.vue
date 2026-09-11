@@ -1240,11 +1240,11 @@ const checkAndSyncPoStatus = async () => {
     }
 };
 
-const receiveToStock = async (item, location = 'Backstock') => {
+const receiveToStock = async (item, location = 'HG') => {
     const ok = await confirmDialog(
-        `Receive "${item.tag_title || item.title}" into active inventory stored in Backstock? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
-        'Receive Item to Backstock',
-        'Receive to Backstock',
+        `Receive "${item.tag_title || item.title}" into active inventory stored at Huck's Garage (HG)? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
+        'Receive Item to Huck\'s Garage (HG)',
+        'Receive to HG',
         'Cancel',
         'btn-success'
     );
@@ -1257,7 +1257,7 @@ const receiveToStock = async (item, location = 'Backstock') => {
             status: 'in-stock',
             storageLocation: item.storageLocation || location
         });
-        addToast(`Received "${item.tag_title || item.title}" into Backstock!`, 'success');
+        addToast(`Received "${item.tag_title || item.title}" into Huck's Garage (HG)!`, 'success');
         await loadLinkedItems();
         await checkAndSyncPoStatus();
     } catch (e) {
@@ -1265,18 +1265,18 @@ const receiveToStock = async (item, location = 'Backstock') => {
     }
 };
 
-const receiveAllToStock = async (location = 'Backstock') => {
+const receiveAllToStock = async (location = 'HG') => {
     if (items.value.length === 0) return;
     const ok = await confirmDialog(
-        `This will activate all ${items.value.length} item(s) in this Purchase Order to "In-Stock" status stored in Backstock, and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
-        'Receive Entire Haul to Backstock',
-        'Receive All to Backstock',
+        `This will activate all ${items.value.length} item(s) in this Purchase Order to "In-Stock" status stored at Huck's Garage (HG), and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
+        'Receive Entire Haul to Huck\'s Garage (HG)',
+        'Receive All to HG',
         'Cancel',
         'btn-success'
     );
     if (!ok) return;
 
-    showLoader('Activating items into Backstock...');
+    showLoader('Activating items into Huck\'s Garage (HG)...');
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
         const collId = getCollectionId();
@@ -1291,7 +1291,7 @@ const receiveAllToStock = async (location = 'Backstock') => {
             await purchasesAPI.updatePurchase(docId, { status: 'Received' });
             form.value.status = 'Received';
         }
-        addToast(`All ${items.value.length} items are now In-Stock (Backstock)!`, 'success');
+        addToast(`All ${items.value.length} items are now In-Stock at Huck's Garage (HG)!`, 'success');
         await loadLinkedItems();
         await checkAndSyncPoStatus();
     } catch (e) {
@@ -1301,13 +1301,13 @@ const receiveAllToStock = async (location = 'Backstock') => {
     }
 };
 
-const handleReceiveOrPurchase = async (location = 'Backstock') => {
+const handleReceiveOrPurchase = async (location = 'HG') => {
     if (isDraft.value) {
         const label = form.value.poNumber || form.value.vendor || 'this order';
         const count = items.value.length;
         const ok = await confirmDialog(
             count > 0
-                ? `Finalize purchase for "${label}" (${count} item${count === 1 ? '' : 's'})? This will mark this Purchase Order as "Received" and activate all items into Backstock.`
+                ? `Finalize purchase for "${label}" (${count} item${count === 1 ? '' : 's'})? This will mark this Purchase Order as "Received" and activate all items into Huck's Garage (HG).`
                 : `Finalize purchase for "${label}"? This will mark this Purchase Order as "Received".`,
             'Complete Purchase',
             'Purchase It',
@@ -1316,7 +1316,7 @@ const handleReceiveOrPurchase = async (location = 'Backstock') => {
         );
         if (!ok) return;
 
-        showLoader('Finalizing purchase & activating items...');
+        showLoader('Finalizing purchase & activating items into HG...');
         try {
             const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
             const collId = getCollectionId();
@@ -1337,7 +1337,7 @@ const handleReceiveOrPurchase = async (location = 'Backstock') => {
                 });
                 form.value.status = 'Received';
             }
-            addToast(`Purchase completed! PO "${label}" is now Received.`, 'success');
+            addToast(`Purchase completed! PO "${label}" is now Received at HG.`, 'success');
             await loadLinkedItems();
             await checkAndSyncPoStatus();
         } catch (e) {
@@ -1895,7 +1895,9 @@ const quickCreateItem = async () => {
         const extraData = {
             cost: newItem.value.cost || 0,
             purchaseId: props.purchaseId,
-            status: 'acquired' // Assuming it's acquired if it's on a PO
+            status: 'acquired', // Assuming it's acquired if it's on a PO
+            storageLocation: 'HG',
+            sourcingLocation: form.value.vendor || undefined
         };
         
         await saveItemToInventory(payload, null, extraData, currentTeam.value?.$id);

@@ -2,8 +2,8 @@ import { Client, Databases, Storage, Account, Teams, ID as AppwriteID, Query as 
 
 export const client = new Client();
 
-const endpoint = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
-const project = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
+const endpoint = import.meta.env?.PUBLIC_APPWRITE_ENDPOINT;
+const project = import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID;
 
 if (endpoint && project) {
     client
