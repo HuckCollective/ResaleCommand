@@ -1,5 +1,90 @@
 <template>
-    <div class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
+    <!-- HORIZONTAL LIST ROW MODE -->
+    <div v-if="horizontal"
+         class="card bg-base-100 shadow-xs border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-row rounded-xl p-2.5 gap-2.5 sm:gap-3 items-center"
+         :class="containerClass"
+         @click="$emit('click-card', item)">
+        
+        <!-- Left Thumbnail (Tap Photo to Select) -->
+        <div 
+            class="w-18 h-18 sm:w-22 sm:h-22 shrink-0 rounded-lg bg-base-200 overflow-hidden relative border transition-all cursor-pointer select-none"
+            :class="selected ? 'border-primary ring-2 ring-primary shadow-xs' : 'border-base-300/60 hover:border-primary/50'"
+            @click.stop="$emit('toggle-select', item)"
+            title="Tap photo to select item"
+        >
+            <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover pointer-events-none" loading="lazy" />
+            <div v-else class="flex items-center justify-center w-full h-full opacity-30 bg-base-300 pointer-events-none">
+                <Icon icon="solar:box-linear" class="w-7 h-7" />
+            </div>
+
+            <!-- Selection Indicator Badge (Visible when selected) -->
+            <div 
+                v-if="selected"
+                class="absolute top-1 left-1 w-5 h-5 rounded-md bg-primary text-primary-content flex items-center justify-center font-bold shadow-xs z-20 pointer-events-none"
+            >
+                <Icon icon="solar:check-square-bold" class="w-4 h-4" />
+            </div>
+
+            <!-- Lot badges -->
+            <div v-if="item.parentLotId" class="absolute bottom-1 left-1 badge badge-[8px] bg-black/70 text-white font-bold px-1 py-0" title="Extracted from Lot">
+                <Icon icon="solar:link-minimalistic-bold" class="w-2 h-2 mr-0.5 text-accent" />
+                <span>Extracted</span>
+            </div>
+            <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="absolute bottom-1 left-1 badge badge-[8px] bg-black/70 text-white font-bold px-1 py-0" title="Bulk Lot">
+                <Icon icon="solar:box-minimalistic-bold" class="w-2 h-2 mr-0.5 text-warning" /> 
+                <span>Lot<span v-if="item.quantity > 1" class="ml-0.5">x{{ item.quantity }}</span></span>
+            </div>
+        </div>
+
+        <!-- Right / Center Details -->
+        <div class="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+            <div>
+                <!-- Title -->
+                <h2 class="font-bold leading-snug line-clamp-2 text-xs group-hover:text-primary transition-colors" :title="title">
+                    {{ title }}
+                </h2>
+
+                <!-- Status Pill, UPC, Location SKU, & Storage Location -->
+                <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                    <!-- Status Badge (Liberated from image!) -->
+                    <span class="badge badge-xs font-bold uppercase text-[9px] px-1.5 py-0.5" :class="statusBadgeClass">
+                        {{ statusText }}
+                    </span>
+
+                    <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/80 text-[10px] px-1.5" title="UPC">
+                        <Icon icon="solar:barcode-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-primary" />{{ item.upc }}
+                    </span>
+                    <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5">
+                        {{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                    </span>
+                    <span v-if="locationText" class="text-[10px] opacity-60 truncate flex items-center gap-0.5">
+                        <Icon icon="solar:map-point-linear" class="w-3 h-3 inline shrink-0" />{{ locationText }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Financials + Actions -->
+            <div class="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-base-200/70">
+                <!-- Financial Badges -->
+                <div class="flex items-center gap-2 text-[11px] font-bold">
+                    <span class="opacity-70">Cost: <b class="font-mono text-base-content">{{ formatCurrency(paidValue) }}</b></span>
+                    <span class="text-success">Est: <b class="font-mono">{{ formatCurrency(estValue) }}</b></span>
+                    <span v-if="roi !== null" class="badge badge-xs font-mono font-bold" :class="roi > 50 ? 'badge-success text-success-content' : 'badge-ghost'">
+                        {{ roi }}%
+                    </span>
+                </div>
+
+                <!-- Actions Slot -->
+                <div class="shrink-0" @click.stop>
+                    <slot name="actions"></slot>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STANDARD VERTICAL CARD GRID MODE -->
+    <div v-else
+         class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
          :class="containerClass"
          @click="$emit('click-card', item)">
         
@@ -96,10 +181,12 @@ import { Icon } from '@iconify/vue';
 
 const props = defineProps({
     item: { type: Object, required: true },
-    compact: { type: Boolean, default: false } // Makes it look like the small inventory cards
+    compact: { type: Boolean, default: false }, // Makes it look like the small inventory cards
+    horizontal: { type: Boolean, default: false }, // Horizontal list row for mobile feed
+    selected: { type: Boolean, default: false } // Whether this item is currently selected
 });
 
-defineEmits(['click-card']);
+const emit = defineEmits(['click-card', 'toggle-select']);
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
@@ -216,9 +303,9 @@ const profitColor = computed(() => {
     const paid = parseFloat(paidValue.value) || 0;
     const est = parseFloat(estValue.value);
     
-    if (isNaN(est) || isNaN(paid) || (!paid && !est)) return 'bg-warning';
-    
-    if (est > paid) return 'bg-info'; 
+    if (!est || isNaN(est) || est === 0) return 'bg-base-content/30';
+    if (isNaN(paid) || paid === 0) return 'bg-info';
+    if (est > paid) return 'bg-success'; 
     if (est < paid) return 'bg-error';
     return 'bg-warning'; 
 });

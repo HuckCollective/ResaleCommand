@@ -3,8 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import InventoryViewHub from '../components/inventory/InventoryViewHub.vue';
 ---
 
-<Layout title="Inventory Spreadsheet | Resale Command">
-    <div class="container mx-auto px-4 py-8">
+<Layout title="Inventory Spreadsheet | Resale Command" hideFooter={true}>
+    <div class="container mx-auto px-2 sm:px-4 py-3 sm:py-6">
         <InventoryViewHub client:only="vue" initialView="table" />
     </div>
 </Layout>

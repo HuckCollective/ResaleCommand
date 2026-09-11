@@ -102,6 +102,31 @@ description: Expert guidelines and best practices for building modern, responsiv
 </dialog>
 ```
 
+### Bottom Navigation & Button Docks (`dock`)
+daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component:
+```html
+<!-- Base dock pinned at bottom with safe-area insets -->
+<div class="dock dock-sm bg-base-100/95 border-t border-base-300 z-40">
+  <button class="dock-active text-warning font-black">
+    <Icon icon="solar:bolt-bold" class="size-5" />
+    <span class="dock-label font-mono">Actions (3)</span>
+  </button>
+  <button class="text-primary font-bold">
+    <Icon icon="solar:add-circle-bold" class="size-5" />
+    <span class="dock-label">Add & Ingest</span>
+  </button>
+  <button>
+    <div class="indicator">
+      <span class="indicator-item badge badge-xs badge-primary font-bold">2</span>
+      <Icon icon="solar:tuning-square-2-bold-duotone" class="size-5" />
+    </div>
+    <span class="dock-label">Filters</span>
+  </button>
+</div>
+```
+- **Modifiers**: `dock-xs`, `dock-sm`, `dock-md` (default), `dock-lg`, `dock-xl`.
+- **Parts**: `.dock-label` for button text, `.dock-active` for active selection indicator bar.
+
 ### Badges, Tooltips & Loaders
 ```html
 <!-- Badges (CRITICAL: Always use whitespace-nowrap and explicit *-content contrast tokens) -->

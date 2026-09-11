@@ -2,7 +2,7 @@
     <Transition name="slide-up">
         <div 
             v-if="selectedCount > 0"
-            class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[95vw] bg-base-100/95 backdrop-blur-md border-2 border-primary shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-xs select-none"
+            class="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[96vw] overflow-x-auto scrollbar-none bg-base-100/95 backdrop-blur-md border-2 border-primary shadow-2xl rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 text-xs select-none"
         >
             <!-- Selected Badge Counter -->
             <div class="flex items-center gap-1.5 font-bold text-primary shrink-0 pr-2 border-r border-base-300">
@@ -17,7 +17,7 @@
                     <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
                 </select>
                 <button 
-                    class="btn btn-xs btn-primary join-item font-bold" 
+                    class="btn btn-xs btn-primary text-primary-content border-primary join-item font-bold" 
                     @click="onApplyLocation" 
                     :disabled="!targetLocation || isProcessing"
                 >
@@ -35,7 +35,7 @@
                     <option value="sold">Sold</option>
                 </select>
                 <button 
-                    class="btn btn-xs btn-secondary join-item font-bold" 
+                    class="btn btn-xs btn-secondary text-secondary-content border-secondary join-item font-bold" 
                     @click="onApplyStatus" 
                     :disabled="!targetStatus || isProcessing"
                 >
@@ -45,7 +45,7 @@
 
             <!-- Action: Export Dropdown -->
             <div class="dropdown dropdown-top dropdown-end shrink-0">
-                <button tabindex="0" class="btn btn-xs btn-success gap-1 font-bold shadow-xs">
+                <button tabindex="0" class="btn btn-xs btn-success text-success-content border-success gap-1 font-bold shadow-xs">
                     <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export ▾
                 </button>
                 <ul tabindex="0" class="dropdown-content z-50 menu p-1.5 shadow-xl bg-base-100 rounded-box w-52 border border-base-200 text-xs font-bold space-y-0.5">

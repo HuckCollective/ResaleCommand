@@ -40,226 +40,230 @@
         <div class="drawer lg:drawer-open">
             <input id="inventory-sidebar" type="checkbox" class="drawer-toggle" />
             
-            <div class="drawer-content flex flex-col pb-32 lg:pl-5 pt-0 min-w-0">
-                <!-- COMPACT SINGLE-ROW STICKY HEADER -->
-                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2.5 mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-xs">
-                    <div class="flex items-center gap-2 sm:gap-3">
-                        <!-- Left: Page Title & Item Count -->
-                        <div class="shrink-0 flex items-center gap-1.5">
-                            <h1 class="text-lg sm:text-xl font-bold tracking-tight text-base-content leading-none">Inventory</h1>
-                            <span class="badge badge-sm badge-neutral font-mono font-bold">{{ filteredInventory.length }}</span>
-                            <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
+            <div class="drawer-content flex flex-col pb-44 lg:pl-5 pt-0 min-w-0">
+                <!-- RESPONSIVE STICKY HEADER (Row 1: Title & Controls, Row 2: Full-width Search, Row 3: Quick Filter Pills) -->
+                <!-- STREAMLINED COMPACT HEADER -->
+                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2 mb-2 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-2xs">
+                    <div class="flex flex-col gap-1.5">
+                        <!-- Row 1: Title & Counts on Left | View Toggle & Add on Right -->
+                        <div class="flex items-center justify-between gap-2">
+                            <!-- Left: Clean Title & Live Item Count -->
+                            <div class="flex items-center gap-2 min-w-0">
+                                <h1 class="text-lg sm:text-xl font-black tracking-tight text-base-content leading-none">Inventory</h1>
+                                <span class="badge badge-sm badge-neutral font-mono font-bold">{{ filteredInventory.length }}</span>
+                                <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
+                            </div>
+
+                            <!-- Right: Compact Controls (Zero Collisions!) -->
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <!-- Mobile: Single compact "Table" toggle button -->
+                                <button 
+                                    type="button"
+                                    class="sm:hidden btn btn-xs btn-ghost border border-base-300 gap-1 font-bold shadow-2xs"
+                                    @click="$emit('update:viewMode', 'table')"
+                                    title="Switch to Spreadsheet Table View"
+                                >
+                                    <Icon icon="solar:list-bold" class="w-3.5 h-3.5 text-primary" />
+                                    <span class="text-xs">Table</span>
+                                </button>
+
+                                <!-- Desktop: Full Segmented Control -->
+                                <div class="hidden sm:inline-flex join bg-base-200/80 p-0.5 rounded-lg border border-base-300 shrink-0">
+                                    <button 
+                                        type="button"
+                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2.5"
+                                        :class="viewMode === 'table' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="$emit('update:viewMode', 'table')"
+                                        title="Spreadsheet Table View"
+                                    >
+                                        <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
+                                        <span class="text-[11px]">Table</span>
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2.5"
+                                        :class="viewMode === 'grid' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="$emit('update:viewMode', 'grid')"
+                                        title="Visual Card Grid View"
+                                    >
+                                        <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
+                                        <span class="text-[11px]">Cards</span>
+                                    </button>
+                                </div>
+
+                                <!-- Desktop Only: Add Item Trigger (Mobile Add is thumb-docked in bottom tray!) -->
+                                <button class="hidden sm:inline-flex btn btn-xs sm:btn-sm btn-primary gap-1 font-bold shadow-xs shrink-0" @click="openAdd">
+                                    <Icon icon="solar:add-circle-linear" class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                    <span class="text-xs">Add</span>
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Center: Full-width Omnibox Search -->
-                        <div class="relative flex-1 min-w-0">
-                            <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
+                        <!-- Row 2: Omnibox Search (Full Width) -->
+                        <div class="relative w-full">
+                            <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
                             <input 
                                 type="text" 
                                 v-model="searchQuery" 
                                 placeholder="Search title, UPC, PO, vendor, location..." 
-                                class="input input-bordered input-sm w-full pl-9 pr-9 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                                class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                             />
-                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-sm w-8 h-8 min-h-8 absolute right-0.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
                         </div>
 
-                        <!-- Right: Quick Add + Mobile Filter Drawer Toggle -->
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <!-- View Mode Segmented Control -->
-                            <div class="join bg-base-200/80 p-0.5 rounded-lg border border-base-300 shrink-0">
-                                <button 
-                                    type="button"
-                                    class="join-item btn btn-xs gap-1 font-bold transition-all"
-                                    :class="viewMode === 'table' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                    @click="$emit('update:viewMode', 'table')"
-                                    title="Spreadsheet Table View"
-                                >
-                                    <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
-                                    <span class="hidden md:inline text-[11px]">Table</span>
-                                </button>
-                                <button 
-                                    type="button"
-                                    class="join-item btn btn-xs gap-1 font-bold transition-all"
-                                    :class="viewMode === 'grid' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                    @click="$emit('update:viewMode', 'grid')"
-                                    title="Visual Card Grid View"
-                                >
-                                    <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
-                                    <span class="hidden md:inline text-[11px]">Cards</span>
-                                </button>
-                            </div>
-
-                            <button class="btn btn-sm btn-primary gap-1 hidden sm:inline-flex shadow-xs" @click="openAdd">
-                                <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add
+                        <!-- Row 3: Horizontal Quick-Tap Filter Pills Bar -->
+                        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 shrink-0 max-w-full text-xs">
+                            <!-- Filter Tray Trigger Pill -->
+                            <button type="button" @click="dockRef?.openTab('filters')" class="btn btn-xs rounded-full gap-1 font-bold shrink-0 border border-base-300 cursor-pointer lg:hidden" :class="activeFilterCount > 0 ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost bg-base-200/80 hover:bg-base-200'">
+                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
+                                <span>Filters</span>
+                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-neutral">{{ activeFilterCount }}</span>
                             </button>
-                            <label for="inventory-sidebar" class="btn btn-sm btn-ghost border border-base-300 bg-base-100 lg:hidden gap-1.5 shadow-xs" title="Open Filters & Tools">
-                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4 h-4 text-primary" />
-                                <span class="text-xs font-bold">Filters</span>
-                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-primary font-bold">{{ activeFilterCount }}</span>
-                            </label>
+
+                            <div class="h-3 w-px bg-base-content/20 shrink-0 lg:hidden"></div>
+
+                            <!-- Quick Pill: Active Stock -->
+                            <button 
+                                type="button"
+                                @click="filterStatus = (filterStatus === 'active' ? 'all' : 'active')"
+                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
+                                :class="filterStatus === 'active' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                                title="Toggle Active On-Hand Stock"
+                            >
+                                <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" />
+                                <span>Active Stock</span>
+                                <span class="badge badge-xs" :class="filterStatus === 'active' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus('active') }}</span>
+                            </button>
+
+                            <!-- Quick Pill: Ready to List -->
+                            <button 
+                                type="button"
+                                @click="insightFilter = (insightFilter === 'ready_to_list' ? '' : 'ready_to_list')"
+                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
+                                :class="insightFilter === 'ready_to_list' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                                title="Items with photos, pricing, and descriptions ready"
+                            >
+                                <Icon icon="solar:checklist-linear" class="w-3 h-3" />
+                                <span>Ready to List</span>
+                                <span class="badge badge-xs badge-ghost">{{ readyToListCount }}</span>
+                            </button>
+
+                            <!-- Quick Pill: Missing Photos -->
+                            <button 
+                                type="button"
+                                @click="insightFilter = (insightFilter === 'missing_photos' ? '' : 'missing_photos')"
+                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
+                                :class="insightFilter === 'missing_photos' ? 'bg-error text-error-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                                title="Items needing photo uploads"
+                            >
+                                <Icon icon="solar:camera-linear" class="w-3 h-3" />
+                                <span>Missing Photos</span>
+                                <span class="badge badge-xs badge-ghost">{{ missingPhotosCount }}</span>
+                            </button>
+
+                            <!-- Quick Pill: Missing Pricing -->
+                            <button 
+                                type="button"
+                                @click="insightFilter = (insightFilter === 'missing_est_value' ? '' : 'missing_est_value')"
+                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
+                                :class="insightFilter === 'missing_est_value' ? 'bg-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                                title="Items needing pricing"
+                            >
+                                <Icon icon="solar:dollar-linear" class="w-3 h-3" />
+                                <span>Missing Pricing</span>
+                                <span class="badge badge-xs badge-ghost">{{ missingPricingCount }}</span>
+                            </button>
+
+                            <!-- Quick Location Select Dropdown Pill -->
+                            <div class="shrink-0">
+                                <select 
+                                    v-model="filterBinLocation" 
+                                    class="select select-bordered select-xs rounded-full h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
+                                >
+                                    <option value="">All Locations</option>
+                                    <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Clear / Reset button if filters active -->
+                            <button 
+                                v-if="activeFilterCount > 0" 
+                                type="button" 
+                                @click="clearAllFilters" 
+                                class="btn btn-ghost btn-xs text-error font-bold shrink-0 hover:bg-error/10"
+                                title="Reset all filters"
+                            >
+                                ✕ Reset
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- ACTIVE FILTERS SUMMARY BANNER -->
-                <div v-if="activeFilterCount > 0" class="alert alert-info py-2 px-3 shadow-xs flex items-center justify-between gap-2 mb-3 text-xs rounded-xl">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                        <Icon icon="solar:filter-linear" class="w-4 h-4 shrink-0" />
-                        <span class="font-semibold">Active Filters:</span>
-                        <span v-if="filterStatus !== 'all'" class="badge badge-sm badge-neutral font-bold capitalize">{{ filterStatus }}</span>
-                        <span v-if="insightFilter" class="badge badge-sm badge-warning font-bold">{{ insightFilter.replace(/_/g, ' ') }}</span>
-                        <span v-if="filterUpcPrefix" class="badge badge-sm badge-neutral font-mono font-bold">UPC: {{ filterUpcPrefix === '__missing__' ? 'No Barcode' : filterUpcPrefix }}</span>
-                        <span v-if="filterBinLocation" class="badge badge-sm badge-neutral font-bold">Loc: {{ filterBinLocation }}</span>
-                        <span v-if="filterChannel" class="badge badge-sm badge-neutral font-bold">Channel: {{ filterChannel }}</span>
-                        <span v-if="filterLotType !== 'all'" class="badge badge-sm badge-neutral font-bold">{{ filterLotType.replace('_only', '') }}</span>
-                        <span v-if="filterFlaggedLocated" class="badge badge-sm badge-neutral font-bold">Placed &amp; Located</span>
-                        <span v-if="searchQuery" class="badge badge-sm badge-neutral font-mono truncate max-w-32 font-bold">"{{ searchQuery }}"</span>
-                    </div>
-                    <button class="btn btn-xs btn-outline bg-base-100 hover:bg-base-200 border-base-300 gap-1 font-bold shrink-0" @click="clearAllFilters">
-                        <Icon icon="solar:close-circle-linear" class="w-3.5 h-3.5" /> Clear All
-                    </button>
-                </div>
+                    <!-- SUBHEADER: SELECTION INDICATOR, MOBILE DENSITY SWITCHER & EXPORT -->
+                    <div class="mt-2 rounded-xl border transition-all duration-200 bg-base-200/90 border-base-300 px-3 py-2 flex flex-col gap-2"
+                         :class="selectedItems.length > 0 ? 'bg-primary/10 border-primary/50 shadow-xs' : ''">
+                        
+                        <div class="flex items-center justify-between gap-2">
+                            <!-- Left: Checkbox + Selection label -->
+                            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <label class="flex items-center gap-2 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox" 
+                                        :checked="isAllSelected" 
+                                        @change="toggleAll" 
+                                        class="checkbox checkbox-xs sm:checkbox-sm checkbox-primary shrink-0" 
+                                    />
+                                    <span v-if="selectedItems.length === 0" class="text-xs sm:text-sm font-semibold truncate text-base-content/80">
+                                        Select all items
+                                    </span>
+                                    <span v-else class="text-xs sm:text-sm font-bold text-primary truncate">
+                                        {{ selectedItems.length }} item{{ selectedItems.length > 1 ? 's' : '' }} selected
+                                    </span>
+                                    <span class="text-xs opacity-50 shrink-0">({{ filteredInventory.length }})</span>
+                                </label>
 
-                    <!-- SMART SELECTION / PIPELINE BAR -->
-                    <div class="mt-2 rounded-xl border transition-all duration-200"
-                         :class="selectedItems.length > 0 ? 'bg-primary/10 border-primary shadow-md' : 'bg-base-200 border-base-300'">
-
-                        <!-- State A: Nothing selected — show count + select all -->
-                        <div v-if="selectedItems.length === 0" class="flex items-center justify-between px-3 py-2.5 gap-3">
-                            <label class="flex items-center gap-3 cursor-pointer select-none">
-                                <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="checkbox checkbox-sm checkbox-primary" />
-                                <span class="text-sm font-semibold">Select items to take action</span>
-                                <span class="text-xs opacity-50">{{ filteredInventory.length }} in view</span>
-                            </label>
+                                <!-- Quick Clear button when items are selected -->
+                                <button 
+                                    v-if="selectedItems.length > 0" 
+                                    class="btn btn-xs btn-ghost text-error font-bold hover:bg-error/15 h-7 min-h-7 px-2 shrink-0" 
+                                    @click="selectedItems = []"
+                                    title="Clear selection"
+                                >
+                                    ✕ Clear
+                                </button>
+                            </div>
                             
-                            <!-- Export All Dropdown -->
-                            <div class="dropdown dropdown-end">
-                                <div tabindex="0" role="button" class="btn btn-xs btn-ghost gap-1 opacity-80 hover:opacity-100 border border-base-300 bg-base-100 font-bold">
-                                    <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export All ▾
-                                </div>
-                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
-                                    <li>
-                                        <a @click="exportCsv('ricochet')" class="text-primary hover:bg-primary/10">
-                                            <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
-                                            <span>Memory Den (Ricochet)</span>
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a @click="exportCsv('ebay')">
-                                            <Icon icon="solar:tag-price-linear" class="w-4 h-4 text-warning" />
-                                            <span>eBay Seller Hub</span>
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a @click="exportCsv('poshmark')">
-                                            <Icon icon="solar:hanger-linear" class="w-4 h-4 text-secondary" />
-                                            <span>Poshmark</span>
-                                        </a>
-                                    </li>
-                                    <div class="divider my-0.5"></div>
-                                    <li>
-                                        <a @click="exportCsv('generic')">
-                                            <Icon icon="solar:document-text-linear" class="w-4 h-4" />
-                                            <span>Generic CSV</span>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <!-- State B: Items selected — inline action pipeline -->
-                        <div v-else class="flex flex-col gap-2 p-3">
-                            <!-- Top row: checkbox + count + clear -->
-                            <div class="flex items-center gap-3">
-                                <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="checkbox checkbox-sm checkbox-primary" />
-                                <span class="text-sm font-bold text-primary flex-1">{{ selectedItems.length }} item{{ selectedItems.length > 1 ? 's' : '' }} selected</span>
-                                <button class="btn btn-xs btn-ghost text-error" @click="selectedItems = []">✕ Clear</button>
-                            </div>
-
-                            <!-- Action row -->
-                            <div class="flex flex-wrap gap-2">
-                                <!-- Status -->
-                                <div class="join">
-                                    <select v-model="bulkStatusTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content">
-                                        <option value="" disabled selected>Set Status...</option>
-                                        <option value="tracked">Tracked</option>
-                                        <option value="acquired">Acquired</option>
-                                        <option value="received">Received</option>
-                                        <option value="placed">Placed</option>
-                                        <option value="sold">Sold</option>
-                                    </select>
-                                    <button class="btn btn-xs btn-primary join-item" @click="applyBulkStatus" :disabled="!bulkStatusTarget || processingBulk">
-                                        <span v-if="processingBulk" class="loading loading-spinner loading-xs"></span>
-                                        <span v-else>Apply</span>
+                            <!-- Right: Mobile Density Switcher & Export -->
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <!-- Mobile Density Switcher: List vs Grid -->
+                                <div class="join sm:hidden bg-base-100 p-0.5 rounded-lg border border-base-300">
+                                    <button 
+                                        type="button" 
+                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 h-7 min-h-7"
+                                        :class="mobileLayout === 'list' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="setMobileLayout('list')"
+                                        title="1-Column Mobile Feed"
+                                    >
+                                        <Icon icon="solar:list-linear" class="w-3.5 h-3.5" />
+                                        <span class="text-[10px]">List</span>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 h-7 min-h-7"
+                                        :class="mobileLayout === 'grid' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="setMobileLayout('grid')"
+                                        title="2-Column Visual Card Grid"
+                                    >
+                                        <Icon icon="solar:gallery-wide-linear" class="w-3.5 h-3.5" />
+                                        <span class="text-[10px]">Grid</span>
                                     </button>
                                 </div>
 
-                                <!-- Location -->
-                                <div class="join">
-                                    <select v-model="bulkLocationTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35">
-                                        <option value="" disabled selected>Set Location...</option>
-                                        <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
-                                        <option value="__custom__">+ Custom Location...</option>
-                                    </select>
-                                    <input 
-                                        v-if="bulkLocationTarget === '__custom__'"
-                                        type="text" 
-                                        v-model="bulkCustomLocation"
-                                        placeholder="Type location..." 
-                                        class="input input-xs input-bordered join-item w-28 bg-base-100 text-xs font-bold" 
-                                    />
-                                    <button class="btn btn-xs btn-secondary join-item" @click="applyBulkLocation" :disabled="(!bulkLocationTarget || (bulkLocationTarget === '__custom__' && !bulkCustomLocation.trim())) || processingBulkLoc">
-                                        <span v-if="processingBulkLoc" class="loading loading-spinner loading-xs"></span>
-                                        <span v-else>Apply</span>
-                                    </button>
-                                </div>
-
-                                <!-- Channel -->
-                                <div class="join">
-                                    <select v-model="bulkChannelTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35">
-                                        <option value="" disabled selected>Set Channel...</option>
-                                        <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
-                                    </select>
-                                    <button class="btn btn-xs btn-primary join-item" @click="applyBulkChannel" :disabled="!bulkChannelTarget || processingBulkChannel">
-                                        <span v-if="processingBulkChannel" class="loading loading-spinner loading-xs"></span>
-                                        <span v-else>Apply</span>
-                                    </button>
-                                </div>
-
-                                <!-- Bundle / Combine (2+ only) -->
-                                <button v-if="selectedItems.length >= 2" class="btn btn-xs btn-accent gap-1" @click="openBundleModal">
-                                    <Icon icon="solar:box-minimalistic-bold-duotone" class="w-3.5 h-3.5" /> Bundle
-                                </button>
-                                <button v-if="selectedItems.length >= 2" class="btn btn-xs btn-secondary gap-1" @click="openCombineModal">
-                                    <Icon icon="solar:link-minimalistic-bold" class="w-3.5 h-3.5" /> Combine
-                                </button>
-
-                                <!-- Reassign / Set UPC Prefix -->
-                                <div class="join">
-                                    <select v-model="bulkUpcPrefixTarget" class="select select-xs select-bordered join-item bg-base-100 text-base-content max-w-35 font-mono">
-                                        <option value="" disabled selected>Set UPC Prefix...</option>
-                                        <option value="HUCK-">HUCK-</option>
-                                        <option value="PDXGL-">PDXGL-</option>
-                                        <option v-for="p in allAvailableUpcPrefixes.filter(x => !['HUCK-', 'PDXGL-', '__missing__', '__numeric__'].includes(x.prefix))" :key="p.prefix" :value="p.prefix">{{ p.prefix }}</option>
-                                        <option value="__custom__">+ Custom...</option>
-                                    </select>
-                                    <input 
-                                        v-if="bulkUpcPrefixTarget === '__custom__'"
-                                        type="text" 
-                                        v-model="bulkCustomUpcPrefix"
-                                        placeholder="PREFIX-" 
-                                        class="input input-xs input-bordered join-item w-24 bg-base-100 text-xs font-mono font-bold uppercase" 
-                                    />
-                                    <button class="btn btn-xs btn-primary join-item font-bold" @click="applyBulkUpc" :disabled="(!bulkUpcPrefixTarget || (bulkUpcPrefixTarget === '__custom__' && !bulkCustomUpcPrefix.trim())) || processingBulk">
-                                        <span v-if="processingBulk" class="loading loading-spinner loading-xs"></span>
-                                        <span v-else>Apply</span>
-                                    </button>
-                                </div>
-
-                                <!-- Export selected Dropdown -->
-                                <div class="dropdown dropdown-end ml-auto">
-                                    <div tabindex="0" role="button" class="btn btn-xs btn-success gap-1 font-bold shadow-xs">
-                                        <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" /> Export ({{ selectedItems.length }}) ▾
+                                <!-- Export Dropdown -->
+                                <div class="dropdown dropdown-end">
+                                    <div tabindex="0" role="button" class="btn btn-xs btn-ghost gap-1 opacity-80 hover:opacity-100 border border-base-300 bg-base-100 font-bold h-7 min-h-7">
+                                        <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" />
+                                        <span>Export {{ selectedItems.length > 0 ? `(${selectedItems.length})` : 'All' }} ▾</span>
                                     </div>
                                     <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
                                         <li>
@@ -290,40 +294,40 @@
                                     </ul>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Admin Auto-Heal row (only when insight filter active) -->
-                            <div v-if="insightFilter" class="pt-2 border-t border-primary/20">
-                                <div class="text-[10px] uppercase font-bold opacity-60 text-warning mb-1.5 flex items-center gap-1">
-                                    <Icon icon="solar:shield-warning-bold-duotone" class="w-3 h-3" /> Auto-Heal: {{ insightFilter.replace(/_/g, ' ') }}
-                                </div>
-                                <button v-if="insightFilter === 'missing_est_value'" class="btn btn-xs btn-warning w-full" @click="runAutoEstimatorAdmin" :disabled="isEstimating">
+                        <!-- Admin Auto-Heal row (only when insight filter active AND items selected) -->
+                        <div v-if="insightFilter && selectedItems.length > 0" class="pt-2 border-t border-primary/20">
+                            <div class="text-[10px] uppercase font-bold opacity-60 text-warning mb-1.5 flex items-center gap-1">
+                                <Icon icon="solar:shield-warning-bold-duotone" class="w-3 h-3" /> Auto-Heal: {{ insightFilter.replace(/_/g, ' ') }}
+                            </div>
+                            <button v-if="insightFilter === 'missing_est_value'" class="btn btn-xs btn-warning w-full" @click="runAutoEstimatorAdmin" :disabled="isEstimating">
+                                <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
+                                {{ isEstimating ? 'Estimating ' + bulkProgress + '/' + bulkTotal : 'Auto-Estimate ' + selectedItems.length + ' Items' }}
+                            </button>
+                            <button v-if="insightFilter === 'missing_sold_price'" class="btn btn-xs btn-warning w-full" @click="runAutoCalcSoldPrice" :disabled="isEstimating">
+                                <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                {{ isEstimating ? 'Calculating ' + bulkProgress + '/' + bulkTotal : 'Auto-Calc Sold Price for ' + selectedItems.length + ' Items' }}
+                            </button>
+                            <div v-if="insightFilter === 'missing_cost'" class="flex gap-2">
+                                <label class="input input-bordered input-xs flex items-center gap-1 w-28 bg-base-100">
+                                    <span class="opacity-50">$</span>
+                                    <input type="number" step="0.01" v-model="bulkCostValue" class="grow" placeholder="0.00" />
+                                </label>
+                                <button class="btn btn-xs btn-warning flex-1" @click="runAutoCalcCost" :disabled="isEstimating || bulkCostValue === ''">
                                     <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                    <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
-                                    {{ isEstimating ? 'Estimating ' + bulkProgress + '/' + bulkTotal : 'Auto-Estimate ' + selectedItems.length + ' Items' }}
-                                </button>
-                                <button v-if="insightFilter === 'missing_sold_price'" class="btn btn-xs btn-warning w-full" @click="runAutoCalcSoldPrice" :disabled="isEstimating">
-                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                    {{ isEstimating ? 'Calculating ' + bulkProgress + '/' + bulkTotal : 'Auto-Calc Sold Price for ' + selectedItems.length + ' Items' }}
-                                </button>
-                                <div v-if="insightFilter === 'missing_cost'" class="flex gap-2">
-                                    <label class="input input-bordered input-xs flex items-center gap-1 w-28 bg-base-100">
-                                        <span class="opacity-50">$</span>
-                                        <input type="number" step="0.01" v-model="bulkCostValue" class="grow" placeholder="0.00" />
-                                    </label>
-                                    <button class="btn btn-xs btn-warning flex-1" @click="runAutoCalcCost" :disabled="isEstimating || bulkCostValue === ''">
-                                        <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                        {{ isEstimating ? 'Processing...' : 'Set Cost for ' + selectedItems.length + ' Items' }}
-                                    </button>
-                                </div>
-                                <button v-if="insightFilter === 'missing_photos'" class="btn btn-xs btn-error w-full" @click="runAutoFetchPhotos" :disabled="isEstimating">
-                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                    {{ isEstimating ? 'Fetching ' + bulkProgress + '/' + bulkTotal : 'Auto-Fetch Photos for ' + selectedItems.length + ' Items' }}
-                                </button>
-                                <button v-if="insightFilter === 'missing_description'" class="btn btn-xs btn-info w-full" @click="runAutoGenerateDescriptions" :disabled="isEstimating">
-                                    <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
-                                    {{ isEstimating ? 'Generating ' + bulkProgress + '/' + bulkTotal : 'Auto-Generate Descriptions for ' + selectedItems.length + ' Items' }}
+                                    {{ isEstimating ? 'Processing...' : 'Set Cost for ' + selectedItems.length + ' Items' }}
                                 </button>
                             </div>
+                            <button v-if="insightFilter === 'missing_photos'" class="btn btn-xs btn-error w-full" @click="runAutoFetchPhotos" :disabled="isEstimating">
+                                <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                {{ isEstimating ? 'Fetching ' + bulkProgress + '/' + bulkTotal : 'Auto-Fetch Photos for ' + selectedItems.length + ' Items' }}
+                            </button>
+                            <button v-if="insightFilter === 'missing_description'" class="btn btn-xs btn-info w-full" @click="runAutoGenerateDescriptions" :disabled="isEstimating">
+                                <span v-if="isEstimating" class="loading loading-spinner loading-xs"></span>
+                                {{ isEstimating ? 'Generating ' + bulkProgress + '/' + bulkTotal : 'Auto-Generate Descriptions for ' + selectedItems.length + ' Items' }}
+                            </button>
                         </div>
                     </div>
 
@@ -360,33 +364,38 @@
                 <button class="btn btn-sm btn-outline" @click="clearAllFilters">Clear Filters</button>
             </div>
             
-            <div v-else>
-                <!-- RESPONSIVE 2-COLUMN MOBILE / MULTI-COLUMN DESKTOP GRID -->
-                <div class="grid gap-2.5 sm:gap-3 md:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <div v-else class="pb-32">
+                <!-- RESPONSIVE MOBILE FEED (1-COL LIST OR 2-COL GRID) / MULTI-COLUMN DESKTOP -->
+                <div :class="mobileLayout === 'list' 
+                    ? 'grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' 
+                    : 'grid gap-2.5 sm:gap-3 md:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'">
                     <ItemCard 
                         v-for="item in displayedInventory" 
                         :key="item.$id" 
                         :item="item"
                         :compact="true"
+                        :horizontal="mobileLayout === 'list'"
+                        :selected="selectedItems.includes(item.$id)"
                         @click-card="openPreview(item)"
+                        @toggle-select="toggleItemSelection(item.$id)"
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
                         
                         <template #absolute-top-left>
-                            <!-- Expanded 40x40px hit area for reliable one-tap selection (Fitts's Law) -->
-                            <label class="z-20 p-2.5 -m-2 flex items-center justify-center cursor-pointer touch-manipulation active:scale-90 transition-transform" @click.stop title="Select Item">
-                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-sm checkbox-primary shadow-xs cursor-pointer border-none bg-white/80 ring-1 ring-white/50" />
+                            <!-- Expanded hit area for reliable one-tap selection -->
+                            <label class="z-20 p-2 -m-1.5 flex items-center justify-center cursor-pointer touch-manipulation active:scale-90 transition-transform" @click.stop title="Select Item">
+                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-xs sm:checkbox-sm checkbox-primary shadow-xs cursor-pointer border-none bg-white/80 ring-1 ring-white/50" />
                             </label>
                         </template>
 
                         <template #actions>
-                            <div class="grid grid-cols-3 gap-1 w-full mt-1.5 pt-1.5 border-t border-base-200/60 z-10" @click.stop>
-                                <button @click="copyShareLink(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold opacity-75 hover:opacity-100 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Copy shareable link">
+                            <div :class="mobileLayout === 'list' ? 'flex items-center gap-1' : 'grid grid-cols-3 gap-1 w-full mt-1.5 pt-1.5 border-t border-base-200/60 z-10'" @click.stop>
+                                <button @click="copyShareLink(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold opacity-75 hover:opacity-100 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Copy shareable link">
                                     <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Share</span>
                                 </button>
-                                <button @click="openEdit(item)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold opacity-80 hover:opacity-100 hover:text-primary active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Edit item">
+                                <button @click="openEdit(item)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold opacity-80 hover:opacity-100 hover:text-primary active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Edit item">
                                     <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Edit</span>
                                 </button>
-                                <button @click="confirmDelete(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1 text-[11px] font-bold text-error opacity-80 hover:opacity-100 hover:bg-error/10 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" :disabled="processingId === item.$id" title="Delete item">
+                                <button @click="confirmDelete(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold text-error opacity-80 hover:opacity-100 hover:bg-error/10 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" :disabled="processingId === item.$id" title="Delete item">
                                     <span v-if="processingId === item.$id" class="loading loading-spinner loading-xs"></span>
                                     <span v-else><Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Del</span></span>
                                 </button>
@@ -395,258 +404,453 @@
                     </ItemCard>
                 </div>
 
-                <!-- Floating Bottom Pagination Dock for Grid View -->
+                <!-- Floating Bottom Integrated Pagination & Contextual Command Tray -->
                 <InventoryPaginationDock 
+                    ref="dockRef"
                     v-model:currentPage="gridPage"
                     v-model:pageSize="gridPageSize"
                     :pageSizeOptions="gridPageSizeOptions"
                     :totalPages="gridTotalPages"
                     :totalItems="filteredInventory.length"
+                    :totalUnfiltered="inventoryItems.length"
                     :selectedCount="selectedItems.length"
+                    :activeFilterCount="activeFilterCount"
                     :isLoading="loading"
-                />
+                    :locations="allAvailableLocations"
+                    :channels="allAvailableChannels"
+                    :isProcessing="processingBulk || processingBulkLoc || processingBulkChannel"
+                    :showBundle="selectedItems.length >= 2"
+                    :showCombine="selectedItems.length >= 2"
+                    @apply-location="onDockApplyLocation"
+                    @apply-status="onDockApplyStatus"
+                    @apply-channel="onDockApplyChannel"
+                    @export="exportCsv"
+                    @clear-selection="selectedItems = []"
+                    @clear-filters="clearAllFilters"
+                    @bundle="openBundleModal"
+                    @combine="openCombineModal"
+                    @add="openAdd"
+                    @delete="handleBulkDelete"
+                    @import-csv="showImport = true"
+                >
+                    <template #filters>
+                        <div class="space-y-3 text-xs">
+                            <!-- 1. Status Pipeline (Collapsible, open by default) -->
+                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" open>
+                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                    <span>Status Pipeline</span>
+                                    <span v-if="filterStatus !== 'active' && filterStatus !== 'all'" class="badge badge-xs badge-warning mr-4 uppercase text-[9px] font-bold">{{ filterStatus }}</span>
+                                </summary>
+                                <div class="collapse-content px-3 pb-3 pt-0">
+                                    <ul class="menu menu-xs p-0 gap-0.5 w-full">
+                                        <li>
+                                            <button :class="{'active font-bold text-primary': filterStatus === 'active'}" @click="filterStatus = 'active'">
+                                                <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                                                <span>Active Stock</span>
+                                                <span class="badge badge-xs badge-neutral">{{ countByStatus('active') }}</span>
+                                            </button>
+                                        </li>
+                                        <li><button :class="{'active font-bold text-warning': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
+                                        <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
+                                        <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
+                                        <li><button :class="{'active font-bold text-secondary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
+                                        <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
+                                        <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
+                                    </ul>
+                                </div>
+                            </details>
+
+                            <!-- 2. Location & Channels -->
+                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterBinLocation || !!filterChannel || filterLotType !== 'all'">
+                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                    <span>Location &amp; Channels</span>
+                                    <span v-if="filterBinLocation || filterChannel" class="badge badge-xs badge-primary mr-4 text-[9px] font-bold">Active</span>
+                                </summary>
+                                <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
+                                    <div class="form-control w-full">
+                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
+                                        <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                            <option value="">All Locations</option>
+                                            <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-control w-full">
+                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
+                                        <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                            <option value="">All Channels</option>
+                                            <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-control w-full">
+                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
+                                        <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                            <option value="all">All Items</option>
+                                            <option value="lots_only">Parent Lots Only</option>
+                                            <option value="extracted_only">Extracted Children Only</option>
+                                            <option value="standalone_only">Standalone Items</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <!-- 3. Exclusions ("No-Show") Toggles -->
+                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideSold || hideTracked || hideCombined || filterFlaggedLocated">
+                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                    <span>Exclusions ("No-Show")</span>
+                                </summary>
+                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1">
+                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                        <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
+                                        <input type="checkbox" v-model="hideSold" class="checkbox checkbox-xs checkbox-primary" />
+                                    </label>
+                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                        <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
+                                        <input type="checkbox" v-model="hideTracked" class="checkbox checkbox-xs checkbox-primary" />
+                                    </label>
+                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                        <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
+                                        <input type="checkbox" v-model="hideCombined" class="checkbox checkbox-xs checkbox-primary" />
+                                    </label>
+                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                        <span class="label-text text-xs font-semibold text-base-content">Only Placed & Located</span>
+                                        <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-xs checkbox-primary" />
+                                    </label>
+                                </div>
+                            </details>
+
+                            <!-- 4. AI Health Insights -->
+                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!insightFilter">
+                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                    <span>AI Health Insights</span>
+                                    <span v-if="insightFilter" class="badge badge-xs badge-secondary mr-4 text-[9px] font-bold">Active</span>
+                                </summary>
+                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
+                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
+                                        <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
+                                        <span class="badge badge-xs font-mono font-bold">{{ readyToListCount }}</span>
+                                    </button>
+                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
+                                        <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
+                                        <span class="badge badge-xs font-mono font-bold">{{ missingPhotosCount }}</span>
+                                    </button>
+                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
+                                        <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
+                                        <span class="badge badge-xs font-mono font-bold">{{ missingPricingCount }}</span>
+                                    </button>
+                                </div>
+                            </details>
+
+                            <!-- 5. Barcodes & Prefixes -->
+                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterUpcPrefix">
+                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                    <span>Barcodes &amp; Prefixes</span>
+                                    <span v-if="filterUpcPrefix" class="badge badge-xs badge-primary mr-4 text-[9px] font-mono font-bold">{{ filterUpcPrefix }}</span>
+                                </summary>
+                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
+                                    <div class="flex flex-wrap gap-1">
+                                        <button 
+                                            v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
+                                            :key="p.prefix" 
+                                            class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
+                                            :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
+                                            @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
+                                        >
+                                            {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
+                                        </button>
+                                        <button 
+                                            v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
+                                            class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2 font-bold" 
+                                            :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
+                                            @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
+                                        >
+                                            No Barcode
+                                        </button>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        v-model="filterUpcPrefix" 
+                                        placeholder="Custom prefix..." 
+                                        class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
+                                    />
+                                </div>
+                            </details>
+                        </div>
+                    </template>
+                </InventoryPaginationDock>
             </div> <!-- End v-else -->
 
             <!-- ALL ITEMS LOADED -->
             </div> <!-- End drawer-content -->
 
-            <!-- LEFT COMMAND & FILTERS SIDEBAR -->
-            <div class="drawer-side z-50 lg:z-auto">
-                <label for="inventory-sidebar" aria-label="close sidebar" class="drawer-overlay"></label> 
-                <div class="p-4 w-72 lg:w-64 min-h-full bg-base-100 lg:bg-transparent border-r lg:border-transparent border-base-200 text-base-content flex flex-col gap-3.5 lg:p-0">
+            <!-- LEFT COMMAND & FILTERS SIDEBAR (Desktop Only) -->
+            <div class="drawer-side z-50 lg:z-auto h-dvh max-h-dvh min-h-screen lg:h-auto lg:max-h-none hidden lg:block">
+                <label for="inventory-sidebar" aria-label="close sidebar" class="drawer-overlay bg-black/60 backdrop-blur-xs"></label> 
+                <div class="w-[90vw] max-w-sm sm:w-80 lg:w-64 h-dvh min-h-dvh max-h-dvh self-stretch lg:self-auto lg:h-auto lg:min-h-full lg:max-h-none bg-base-100 lg:bg-transparent border-r lg:border-transparent border-base-200 text-base-content flex flex-col justify-between shadow-2xl lg:shadow-none overflow-hidden p-3.5 sm:p-4 lg:p-0">
                     
-                    <!-- Mobile Drawer Header -->
-                    <div class="flex lg:hidden justify-between items-center pb-2 border-b border-base-200">
-                        <span class="font-bold text-base flex items-center gap-1.5">
-                            <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5 text-primary" /> Inventory Tools
-                        </span>
-                        <label for="inventory-sidebar" class="btn btn-sm btn-circle btn-ghost">✕</label>
+                    <!-- Sticky Header with Active Count & Quick Reset -->
+                    <div class="shrink-0 flex justify-between items-center pb-2.5 mb-1 border-b border-base-300">
+                        <div class="flex items-center gap-2">
+                            <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5 text-primary" />
+                            <span class="font-black text-base text-base-content">Filters</span>
+                            <span v-if="activeFilterCount > 0" class="badge badge-xs badge-primary font-mono font-bold px-1.5 py-0.5">
+                                {{ activeFilterCount }} Active
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button 
+                                v-if="activeFilterCount > 0"
+                                type="button" 
+                                class="btn btn-ghost btn-xs text-error font-bold hover:bg-error/15 h-7 min-h-7 px-2"
+                                @click="clearAllFilters"
+                                title="Reset all filters to default"
+                            >
+                                Reset All
+                            </button>
+                            <label for="inventory-sidebar" class="btn btn-sm btn-circle btn-ghost text-base-content/70 hover:text-base-content lg:hidden">✕</label>
+                        </div>
                     </div>
 
-                    <!-- 1. Primary Action & Tool Hub -->
-                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-2">
-                        <button class="btn btn-sm btn-primary w-full gap-1.5 font-bold shadow-xs" @click="openAdd">
-                            <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New Item
-                        </button>
+                    <!-- Scrollable Filter Accordions Container -->
+                    <div class="flex-1 overflow-y-auto space-y-2.5 py-1.5 pr-0.5 scrollbar-thin">
                         
-                        <div class="grid grid-cols-2 gap-1.5">
-                            <!-- Generate UPCs Dropdown -->
-                            <div class="dropdown">
-                                <div tabindex="0" role="button" class="btn btn-xs btn-outline btn-secondary gap-1 w-full font-bold">
-                                    <Icon icon="solar:barcode-read-linear" class="w-3.5 h-3.5" /> UPCs
-                                </div>
-                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
-                                    <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing:</li>
+                        <!-- 1. Status Pipeline (Collapsible, open by default) -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" open>
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                <span>Status Pipeline</span>
+                                <span v-if="filterStatus !== 'active' && filterStatus !== 'all'" class="badge badge-xs badge-warning mr-4 uppercase text-[9px] font-bold">{{ filterStatus }}</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0">
+                                <ul class="menu menu-xs p-0 gap-0.5 w-full">
                                     <li>
-                                        <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-1.5">
-                                            <span class="font-mono font-bold text-primary">HUCK-0001</span>
-                                            <span class="badge badge-xs badge-primary">Auto</span>
+                                        <button :class="{'active font-bold text-primary': filterStatus === 'active'}" @click="filterStatus = 'active'">
+                                            <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                                            <span>Active Stock</span>
+                                            <span class="badge badge-xs badge-neutral">{{ countByStatus('active') }}</span>
                                         </button>
                                     </li>
-                                    <li>
-                                        <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-1.5">
-                                            <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
-                                            <span class="badge badge-xs badge-secondary">Auto</span>
-                                        </button>
-                                    </li>
-                                    <li v-for="p in knownOrgPrefixes.filter(x => !['HUCK-', 'PDXGL-'].includes(x))" :key="p">
-                                        <button @click="handleGenerateUpcs(p)" class="flex items-center justify-between py-1.5">
-                                            <span class="font-mono font-bold">{{ p }}0001</span>
-                                            <span class="badge badge-xs badge-ghost">Auto</span>
-                                        </button>
-                                    </li>
-                                    <div class="divider my-1"></div>
-                                    <li>
-                                        <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-1.5 text-xs">
-                                            <Icon icon="solar:pen-new-square-linear" class="w-3.5 h-3.5" />
-                                            <span>Custom Prefix...</span>
-                                        </button>
-                                    </li>
+                                    <li><button :class="{'active font-bold text-warning': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
+                                    <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
+                                    <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
+                                    <li><button :class="{'active font-bold text-secondary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
+                                    <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
+                                    <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
                                 </ul>
                             </div>
+                        </details>
 
-                            <!-- Import Dropdown -->
-                            <div class="dropdown">
-                                <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full">
-                                    <Icon icon="solar:import-linear" class="w-3.5 h-3.5" /> Import
+                        <!-- 2. Location & Channels (Collapsible, open if filtered) -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterBinLocation || !!filterChannel || filterLotType !== 'all'">
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                <span>Location &amp; Channels</span>
+                                <span v-if="filterBinLocation || filterChannel" class="badge badge-xs badge-primary mr-4 text-[9px] font-bold">Active</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
+                                <div class="form-control w-full">
+                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
+                                    <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                        <option value="">All Locations</option>
+                                        <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
+                                    </select>
                                 </div>
-                                <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
-                                    <li>
-                                        <button class="flex items-start gap-2 py-2" @click="showImport = true">
-                                            <Icon icon="solar:document-text-linear" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-                                            <div>
-                                                <div class="font-bold text-xs">ShopGoodwill CSV</div>
-                                                <div class="text-[10px] opacity-60">Bought &amp; shipped items</div>
-                                            </div>
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button class="flex items-start gap-2 py-2" @click="showReconciliation = true">
-                                            <Icon icon="solar:refresh-circle-linear" class="w-4 h-4 mt-0.5 shrink-0 text-accent" />
-                                            <div>
-                                                <div class="font-bold text-xs">Booth Sync</div>
-                                                <div class="text-[10px] opacity-60">Reconcile booth inventory</div>
-                                            </div>
-                                        </button>
-                                    </li>
-                                </ul>
+
+                                <div class="form-control w-full">
+                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
+                                    <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                        <option value="">All Channels</option>
+                                        <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-control w-full">
+                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
+                                    <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                                        <option value="all">All Items</option>
+                                        <option value="lots_only">Parent Lots Only</option>
+                                        <option value="extracted_only">Extracted Children Only</option>
+                                        <option value="standalone_only">Standalone Items</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-control w-full">
+                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Keywords</span></label>
+                                    <TagInput 
+                                        v-model="filterKeywords" 
+                                        type="keyword" 
+                                        placeholder="Any..." 
+                                        badgeClass="badge-secondary" 
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        </details>
 
-                        <!-- Export Dropdown -->
-                        <div class="dropdown w-full">
-                            <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full justify-between">
-                                <span class="flex items-center gap-1"><Icon icon="solar:export-linear" class="w-3.5 h-3.5" /> Export Data</span>
-                                <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3 opacity-60" />
+                        <!-- 3. Exclusions ("No-Show") Toggles -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideSold || hideTracked || hideCombined || filterFlaggedLocated">
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                <span>Exclusions ("No-Show")</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1">
+                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                    <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
+                                    <input type="checkbox" v-model="hideSold" class="checkbox checkbox-xs checkbox-primary" />
+                                </label>
+                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                    <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
+                                    <input type="checkbox" v-model="hideTracked" class="checkbox checkbox-xs checkbox-primary" />
+                                </label>
+                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                    <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
+                                    <input type="checkbox" v-model="hideCombined" class="checkbox checkbox-xs checkbox-primary" />
+                                </label>
+                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
+                                    <span class="label-text text-xs font-semibold text-base-content">Only Placed &amp; Located</span>
+                                    <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-xs checkbox-primary" />
+                                </label>
                             </div>
-                            <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-64 mt-1">
-                                <li>
-                                    <a href="/inventory/sync" class="flex items-start gap-2 py-1.5">
-                                        <Icon icon="solar:synchronize-bold-duotone" class="w-4 h-4 mt-0.5 shrink-0 text-secondary" />
-                                        <span class="font-bold text-xs">MemoryDen Sync</span>
-                                    </a>
-                                </li>
-                                <div class="divider my-1"></div>
-                                <li>
-                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('generic')">
-                                        <Icon icon="solar:file-download-linear" class="w-4 h-4 mt-0.5 shrink-0 text-success" />
-                                        <span class="font-bold text-xs">Generic CSV</span>
+                        </details>
+
+                        <!-- 4. AI Health Insights -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!insightFilter">
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                <span>AI Health Insights</span>
+                                <span v-if="insightFilter" class="badge badge-xs badge-secondary mr-4 text-[9px] font-bold">Active</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
+                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
+                                    <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
+                                    <span class="badge badge-xs font-mono font-bold">{{ readyToListCount }}</span>
+                                </button>
+                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
+                                    <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
+                                    <span class="badge badge-xs font-mono font-bold">{{ missingPhotosCount }}</span>
+                                </button>
+                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
+                                    <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
+                                    <span class="badge badge-xs font-mono font-bold">{{ missingPricingCount }}</span>
+                                </button>
+                            </div>
+                        </details>
+
+                        <!-- 5. Barcodes & Prefixes -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterUpcPrefix">
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
+                                <span>Barcodes &amp; Prefixes</span>
+                                <span v-if="filterUpcPrefix" class="badge badge-xs badge-primary mr-4 text-[9px] font-mono font-bold">{{ filterUpcPrefix }}</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
+                                <div class="flex flex-wrap gap-1">
+                                    <button 
+                                        v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
+                                        :key="p.prefix" 
+                                        class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
+                                        :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
+                                        @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
+                                    >
+                                        {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
                                     </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('ebay')">
-                                        <Icon icon="solar:tag-price-linear" class="w-4 h-4 mt-0.5 shrink-0 text-secondary" />
-                                        <span class="font-bold text-xs">eBay Bulk Upload</span>
+                                    <button 
+                                        v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
+                                        class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2 font-bold" 
+                                        :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
+                                        @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
+                                    >
+                                        No Barcode
                                     </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('poshmark')">
-                                        <Icon icon="simple-icons:poshmark" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-                                        <span class="font-bold text-xs">Poshmark CSV</span>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button class="flex items-start gap-2 py-1.5" @click="exportCsv('ricochet')">
-                                        <Icon icon="solar:shop-bold-duotone" class="w-4 h-4 mt-0.5 shrink-0 text-info" />
-                                        <span class="font-bold text-xs">Ricochet POS (MemoryDen)</span>
-                                    </button>
-                                </li>
-                            </ul>
-                        </div>
+                                </div>
+                                <input 
+                                    type="text" 
+                                    v-model="filterUpcPrefix" 
+                                    placeholder="Custom prefix..." 
+                                    class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
+                                />
+                            </div>
+                        </details>
+
+                        <!-- 6. Ingestion & Tools Hub -->
+                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs">
+                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3">
+                                <span>Tools &amp; Imports</span>
+                            </summary>
+                            <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
+                                <button class="btn btn-sm btn-primary w-full gap-1.5 font-bold shadow-xs" @click="openAdd">
+                                    <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New Item
+                                </button>
+                                
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <!-- Generate UPCs Dropdown -->
+                                    <div class="dropdown">
+                                        <div tabindex="0" role="button" class="btn btn-xs btn-outline btn-secondary gap-1 w-full font-bold">
+                                            <Icon icon="solar:barcode-read-linear" class="w-3.5 h-3.5" /> UPCs
+                                        </div>
+                                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
+                                            <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing:</li>
+                                            <li>
+                                                <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-1.5">
+                                                    <span class="font-mono font-bold text-primary">HUCK-0001</span>
+                                                    <span class="badge badge-xs badge-primary">Auto</span>
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-1.5">
+                                                    <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
+                                                    <span class="badge badge-xs badge-secondary">Auto</span>
+                                                </button>
+                                            </li>
+                                            <div class="divider my-1"></div>
+                                            <li>
+                                                <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-1.5 text-xs">
+                                                    <Icon icon="solar:pen-new-square-linear" class="w-3.5 h-3.5" />
+                                                    <span>Custom Prefix...</span>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <!-- Import Dropdown -->
+                                    <div class="dropdown">
+                                        <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full font-bold">
+                                            <Icon icon="solar:import-linear" class="w-3.5 h-3.5" /> Import
+                                        </div>
+                                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
+                                            <li>
+                                                <button class="flex items-start gap-2 py-2" @click="showImport = true">
+                                                    <Icon icon="solar:document-text-linear" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                                                    <div>
+                                                        <div class="font-bold text-xs">ShopGoodwill CSV</div>
+                                                        <div class="text-[10px] opacity-60">Bought &amp; shipped items</div>
+                                                    </div>
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button class="flex items-start gap-2 py-2" @click="showReconciliation = true">
+                                                    <Icon icon="solar:refresh-circle-linear" class="w-4 h-4 mt-0.5 shrink-0 text-accent" />
+                                                    <div>
+                                                        <div class="font-bold text-xs">Booth Sync</div>
+                                                        <div class="text-[10px] opacity-60">Reconcile booth inventory</div>
+                                                    </div>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
                     </div>
 
-                    <!-- 2. Status Pipeline Navigation -->
-                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs">
-                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5 px-1">Status Pipeline</div>
-                        <ul class="menu menu-xs p-0 gap-0.5 w-full">
-                            <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
-                            <li><button :class="{'active font-bold text-secondary': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
-                            <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
-                            <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
-                            <li><button :class="{'active font-bold text-primary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
-                            <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
-                        </ul>
-                    </div>
-
-                    <!-- 3. AI Health Insights -->
-                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-1.5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1 flex items-center justify-between">
-                            <span>AI Health Insights</span>
-                            <button v-if="insightFilter" class="text-[9px] text-error font-bold" @click="insightFilter = ''">Clear</button>
-                        </div>
-                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
-                            <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
-                            <span class="badge badge-xs">{{ readyToListCount }}</span>
+                    <!-- Sticky Bottom Apply Footer (Mobile Only) -->
+                    <div class="shrink-0 pt-2.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-base-300 flex items-center justify-between gap-2 lg:hidden">
+                        <button 
+                            type="button" 
+                            class="btn btn-xs btn-ghost text-error font-bold" 
+                            @click="clearAllFilters" 
+                            :disabled="activeFilterCount === 0"
+                        >
+                            Reset
                         </button>
-                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
-                            <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
-                            <span class="badge badge-xs">{{ missingPhotosCount }}</span>
-                        </button>
-                        <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
-                            <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
-                            <span class="badge badge-xs">{{ missingPricingCount }}</span>
-                        </button>
-                    </div>
-
-                    <!-- 4. Barcodes & Prefixes -->
-                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-1.5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1 flex items-center justify-between">
-                            <span>Barcodes &amp; Prefixes</span>
-                            <button v-if="filterUpcPrefix" class="text-[9px] text-error font-bold" @click="filterUpcPrefix = ''">Clear</button>
-                        </div>
-                        <div class="flex flex-wrap gap-1">
-                            <button 
-                                v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
-                                :key="p.prefix" 
-                                class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
-                                :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
-                                @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
-                            >
-                                {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
-                            </button>
-                            <button 
-                                v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
-                                class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2" 
-                                :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
-                                @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
-                            >
-                                No Barcode
-                            </button>
-                        </div>
-                        <input 
-                            type="text" 
-                            v-model="filterUpcPrefix" 
-                            placeholder="Custom prefix..." 
-                            class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
-                        />
-                    </div>
-
-                    <!-- 5. Advanced Filters (Location, Channel, Lot, Keywords) -->
-                    <div class="card bg-base-200/50 border border-base-300/70 p-3 rounded-xl shadow-2xs space-y-2.5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1">Location &amp; Channels</div>
-
-                        <div class="form-control w-full">
-                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
-                            <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100">
-                                <option value="">All Locations</option>
-                                <option v-for="loc in allAvailableLocations" :key="loc" :value="loc">{{ loc }}</option>
-                            </select>
-                        </div>
-
-                        <div class="form-control w-full">
-                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
-                            <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100">
-                                <option value="">All Channels</option>
-                                <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
-                            </select>
-                        </div>
-
-                        <div class="form-control w-full">
-                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
-                            <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100">
-                                <option value="all">All Items</option>
-                                <option value="lots_only">Parent Lots Only</option>
-                                <option value="extracted_only">Extracted Children Only</option>
-                                <option value="standalone_only">Standalone Items</option>
-                            </select>
-                        </div>
-
-                        <div class="form-control w-full">
-                            <label class="label pt-0 pb-1"><span class="label-text text-[10px] uppercase font-bold opacity-60">Keywords</span></label>
-                            <TagInput 
-                                v-model="filterKeywords" 
-                                type="keyword" 
-                                placeholder="Any..." 
-                                badgeClass="badge-secondary" 
-                            />
-                        </div>
-
-                        <div class="form-control w-full border-t border-base-300/50 pt-2">
-                            <label class="label cursor-pointer justify-start gap-2 pt-0 pb-0">
-                                <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-primary checkbox-xs" />
-                                <span class="label-text font-bold text-xs select-none">Only Placed &amp; Located</span>
-                            </label>
-                        </div>
+                        <label for="inventory-sidebar" class="btn btn-xs btn-primary font-bold px-4 shadow-sm flex-1">
+                            Show {{ filteredInventory.length.toLocaleString() }} Items
+                        </label>
                     </div>
                 </div>
             </div>
@@ -887,28 +1091,23 @@
             <form method="dialog" class="modal-backdrop">
                 <button @click="closePostExportModal" :disabled="processing">close</button>
             </form>
+        <!-- Dialog postExportModalRef ... -->
         </dialog>
 
-        <!-- Floating Total Count / Scroll to Top -->
-        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-transform hover:-translate-y-1 cursor-pointer shadow-xl rounded-full" @click="scrollToTop">
-            <span class="badge badge-lg badge-primary border-none shadow-md px-6 py-4 font-bold text-sm flex gap-2 items-center">
-                {{ filteredInventory.length }} / {{ baseInventoryCount }} Items <Icon icon="solar:round-alt-arrow-up-linear" class="w-4 h-4" />
-            </span>
-        </div>
+        <!-- BUNDLE MODAL -->
+        <BundleModal 
+            :isOpen="isBundleModalOpen" 
+            :items="bundleItemsList" 
+            @close="isBundleModalOpen = false" 
+            @success="onBundleSuccess" 
+        />
     </div>
-    
-    <BundleModal 
-        :isOpen="isBundleModalOpen" 
-        :items="bundleItemsList" 
-        @close="isBundleModalOpen = false" 
-        @success="onBundleSuccess" 
-    />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
+import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
@@ -935,6 +1134,19 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:viewMode']);
+
+const dockRef = ref(null);
+
+const mobileLayout = ref(typeof window !== 'undefined' ? (localStorage.getItem('rc_mobile_grid_layout') || 'list') : 'list');
+
+const setMobileLayout = (mode) => {
+    mobileLayout.value = mode;
+    try {
+        localStorage.setItem('rc_mobile_grid_layout', mode);
+    } catch (e) {
+        // ignore
+    }
+};
 
 const allPurchases = ref([]);
 
@@ -964,6 +1176,24 @@ const onBundleSuccess = (bundleId) => {
     addToast({ type: 'success', message: 'Bundle created successfully!' });
     // Reload items
     fetchItems(true);
+};
+
+const handleBulkDelete = async () => {
+    if (selectedItems.value.length === 0) return;
+    const count = selectedItems.value.length;
+    processing.value = true;
+    try {
+        for (const id of selectedItems.value) {
+            await deleteInventoryItem(id);
+        }
+        addToast({ type: 'success', message: `Deleted ${count} items.` });
+        selectedItems.value = [];
+        await fetchItems(true);
+    } catch (e) {
+        addToast({ type: 'error', message: 'Bulk delete failed: ' + e.message });
+    } finally {
+        processing.value = false;
+    }
 };
 
 
@@ -1058,7 +1288,10 @@ const currentTeamId = computed(() => currentTeam.value?.$id);
 
 // State for Filters
 const searchQuery = ref('');
-const filterStatus = ref('all');
+const filterStatus = ref('active');
+const hideSold = ref(true);
+const hideTracked = ref(true);
+const hideCombined = ref(true);
 const insightFilter = ref('');
 const isEstimating = ref(false);
 const bulkProgress = ref(0);
@@ -1692,9 +1925,18 @@ const filteredInventory = computed(() => {
             if (!matchesLot) return false;
         }
 
+        // Exclusion Toggles ("No-Show")
+        if (hideSold.value && item.status === 'sold' && filterStatus.value !== 'sold') return false;
+        if (hideTracked.value && (item.status === 'tracked' || item.status === 'scouted') && filterStatus.value !== 'tracked') return false;
+        if (hideCombined.value && item.status === 'combined' && filterStatus.value !== 'combined') return false;
+
         // Filter by Status (Only if not using insight filter that forces status or filtering by lineage)
-        if (!insightFilter.value && !filterParentLotId.value && filterStatus.value !== 'all' && item.status !== filterStatus.value) {
-            return false;
+        if (!insightFilter.value && !filterParentLotId.value && filterStatus.value !== 'all') {
+            if (filterStatus.value === 'active') {
+                if (['sold', 'tracked', 'scouted', 'combined'].includes(item.status)) return false;
+            } else if (item.status !== filterStatus.value) {
+                return false;
+            }
         }
 
         // Filter by PO / Purchase Order / Sourcing Order
@@ -1844,10 +2086,10 @@ const filteredInventory = computed(() => {
     });
 });
 
-// Grid Pagination (Optimized for 2, 3, 4, and 6 column responsive layouts)
+// Grid Pagination
 const gridPage = ref(1);
-const gridPageSize = ref(48);
-const gridPageSizeOptions = [24, 48, 96, 192];
+const gridPageSize = ref(50);
+const gridPageSizeOptions = [25, 50, 100, 200];
 const gridTotalPages = computed(() => Math.ceil(filteredInventory.value.length / gridPageSize.value) || 1);
 
 const displayedInventory = computed(() => {
@@ -1912,6 +2154,15 @@ watch(selectedItems, (newVal, oldVal) => {
 const isAllSelected = computed(() => {
     return filteredInventory.value.length > 0 && selectedItems.value.length === filteredInventory.value.length;
 });
+
+const toggleItemSelection = (itemId) => {
+    const idx = selectedItems.value.indexOf(itemId);
+    if (idx > -1) {
+        selectedItems.value.splice(idx, 1);
+    } else {
+        selectedItems.value.push(itemId);
+    }
+};
 
 const toggleAll = (event) => {
     if (event.target.checked) {
@@ -2078,11 +2329,47 @@ const applyBulkLocation = async () => {
     const { showLoader, hideLoader } = useLoader();
     showLoader("Updating Location...", {
         step: `Moving ${total} items to "${targetLoc}"...`,
-        progress: 0,
+        progress: null,
         cancelable: false
     });
     
     try {
+        // Fast Server Path (bypasses browser rate limits with server admin API key)
+        try {
+            const resp = await fetch('/api/inventory/bulk-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    itemIds: selectedItems.value,
+                    updates: { storageLocation: targetLoc },
+                    collectionId: getCollectionId(),
+                    dbId: DB_ID
+                })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.success) {
+                    itemsToUpdate.forEach(item => {
+                        item.storageLocation = targetLoc;
+                        if (['scouted', 'acquired', 'received'].includes(item.status)) {
+                            item.status = 'placed';
+                        }
+                    });
+                    pruneFilteredOutSelections();
+                    bulkLocationTarget.value = '';
+                    bulkCustomLocation.value = '';
+                    processingBulkLoc.value = false;
+                    hideLoader();
+                    addToast({ type: 'success', message: `Successfully updated location for ${data.updatedCount ?? total} items to "${targetLoc}".` });
+                    return;
+                }
+            }
+        } catch (serverErr) {
+            console.warn("Server bulk update fallback in InventoryManager:", serverErr);
+        }
+
+        // Fallback Client Loop with pacing
         for (let idx = 0; idx < total; idx++) {
             const item = itemsToUpdate[idx];
             const percent = Math.round(((idx + 1) / total) * 100);
@@ -2106,7 +2393,7 @@ const applyBulkLocation = async () => {
             Object.assign(item, updates);
             successCount++;
             
-            if (total > 5) await new Promise(r => setTimeout(r, 80));
+            if (total > 1 && idx < total - 1) await new Promise(r => setTimeout(r, 120));
         }
         
         pruneFilteredOutSelections();
@@ -2176,6 +2463,22 @@ const applyBulkChannel = async () => {
         processingBulkChannel.value = false;
         hideLoader();
     }
+};
+
+// Handlers for unified bottom pagination dock bulk operations
+const onDockApplyLocation = async (targetLoc) => {
+    bulkLocationTarget.value = targetLoc;
+    await applyBulkLocation();
+};
+
+const onDockApplyStatus = async (targetSt) => {
+    bulkStatusTarget.value = targetSt;
+    await applyBulkStatus();
+};
+
+const onDockApplyChannel = async (targetCh) => {
+    bulkChannelTarget.value = targetCh;
+    await applyBulkChannel();
 };
 
 // Checkout State

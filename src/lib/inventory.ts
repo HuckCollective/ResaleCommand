@@ -1,6 +1,7 @@
 import { databases, storage, ID, Query } from './appwrite';
 import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
+import { withRateLimitRetry } from './retry';
 
 import { isAlphaMode } from '../stores/env';
 
@@ -675,7 +676,7 @@ export function getAssociatedFileIds(item: any): Map<string, string> {
 export async function deleteInventoryItem(documentId: string) {
     try {
         // 1. Fetch the item to find associated images
-        const item = await databases.getDocument(DB_ID, getCollectionId(), documentId);
+        const item = await withRateLimitRetry(() => databases.getDocument(DB_ID, getCollectionId(), documentId));
         
         const imagesToDelete = getAssociatedFileIds(item);
 
@@ -688,11 +689,11 @@ export async function deleteInventoryItem(documentId: string) {
         }
 
         // 3. Delete Document
-        await databases.deleteDocument(
+        await withRateLimitRetry(() => databases.deleteDocument(
             DB_ID, 
             getCollectionId(), 
             documentId
-        );
+        ));
         return true;
     } catch (error) {
         console.error("Error deleting item:", error);
@@ -708,25 +709,52 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
     }
 
     try {
-        // 1. Fetch current document to safely update notes
-        const currentDoc = await databases.getDocument(DB_ID, getCollectionId(), documentId);
-        let notes = currentDoc?.conditionNotes || '';
+        // Determine whether we actually need to read the document and parse conditionNotes/files.
+        // For rapid/bulk property updates (e.g. storageLocation, status, upc, locationSku), skipping getDocument cuts API requests in half!
+        const needsDocFetch = !!(
+            updates.conditionNotes !== undefined ||
+            updates.condition_notes !== undefined ||
+            updates.cost !== undefined ||
+            updates.resalePrice !== undefined ||
+            updates.soldPrice !== undefined ||
+            updates.sourcingLocation !== undefined ||
+            updates.estLow !== undefined ||
+            updates.estHigh !== undefined ||
+            updates.boutiquePrice !== undefined ||
+            updates.itemCondition !== undefined ||
+            updates.orderId !== undefined ||
+            updates.scoutData !== undefined ||
+            updates.receiptFile ||
+            updates.imageFile ||
+            updates.galleryFiles ||
+            updates.existingGalleryIds !== undefined ||
+            updates.imageId !== undefined
+        );
 
-        // If user explicitly provided new internal / condition notes, merge or replace the base text while preserving system bracket tags
-        if (updates.conditionNotes !== undefined || updates.condition_notes !== undefined) {
-            const rawNewNotes = (updates.conditionNotes !== undefined ? updates.conditionNotes : updates.condition_notes) || '';
-            // Extract existing bracket tags like [MAIN IMAGE ID: ...], [GALLERY IDS: ...], [SCOUT_REPORT_ID: ...], [SCOUT_REPORT_MD: ...]
-            const bracketTags = (notes && typeof notes === 'string') ? (notes.match(/\[[A-Z0-9_ ]+:[^\]]+\]/gi) || []) : [];
-            let cleanNewNotes = typeof rawNewNotes === 'string' ? rawNewNotes : String(rawNewNotes || '');
-            // Strip any bracket tags from user text to avoid duplicate tags
-            bracketTags.forEach(tag => {
-                cleanNewNotes = cleanNewNotes.replace(tag, '');
-            });
-            cleanNewNotes = cleanNewNotes.trim();
-            if (bracketTags.length > 0) {
-                notes = cleanNewNotes + (cleanNewNotes ? '\n\n' : '') + bracketTags.join('\n');
-            } else {
-                notes = cleanNewNotes;
+        let currentDoc: any = null;
+        let notes = '';
+
+        if (needsDocFetch) {
+            // 1. Fetch current document to safely update notes
+            currentDoc = await withRateLimitRetry(() => databases.getDocument(DB_ID, getCollectionId(), documentId));
+            notes = currentDoc?.conditionNotes || '';
+
+            // If user explicitly provided new internal / condition notes, merge or replace the base text while preserving system bracket tags
+            if (updates.conditionNotes !== undefined || updates.condition_notes !== undefined) {
+                const rawNewNotes = (updates.conditionNotes !== undefined ? updates.conditionNotes : updates.condition_notes) || '';
+                // Extract existing bracket tags like [MAIN IMAGE ID: ...], [GALLERY IDS: ...], [SCOUT_REPORT_ID: ...], [SCOUT_REPORT_MD: ...]
+                const bracketTags = (notes && typeof notes === 'string') ? (notes.match(/\[[A-Z0-9_ ]+:[^\]]+\]/gi) || []) : [];
+                let cleanNewNotes = typeof rawNewNotes === 'string' ? rawNewNotes : String(rawNewNotes || '');
+                // Strip any bracket tags from user text to avoid duplicate tags
+                bracketTags.forEach(tag => {
+                    cleanNewNotes = cleanNewNotes.replace(tag, '');
+                });
+                cleanNewNotes = cleanNewNotes.trim();
+                if (bracketTags.length > 0) {
+                    notes = cleanNewNotes + (cleanNewNotes ? '\n\n' : '') + bracketTags.join('\n');
+                } else {
+                    notes = cleanNewNotes;
+                }
             }
         }
 
@@ -1057,14 +1085,16 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             }
         }
         
-        // Always update notes
-        // CRITICAL: Ensure we don't exceed Appwrite's 1000 char limit for this string attribute (if not a text area)
-        // Using strict 800 char limit
-        if (notes.length > 800) {
-            console.warn("Inventory Note too long (" + notes.length + " chars). Truncating to 800.");
-            notes = notes.substring(0, 800);
+        // Only update conditionNotes if note fields or files were altered
+        if (needsDocFetch) {
+            // CRITICAL: Ensure we don't exceed Appwrite's 1000 char limit for this string attribute (if not a text area)
+            // Using strict 800 char limit
+            if (notes.length > 800) {
+                console.warn("Inventory Note too long (" + notes.length + " chars). Truncating to 800.");
+                notes = notes.substring(0, 800);
+            }
+            data.conditionNotes = notes;
         }
-        data.conditionNotes = notes;
 
         if (updates.rawAnalysis !== undefined) {
             data.rawAnalysis = updates.rawAnalysis === '' ? null : getSafeRawAnalysis(updates.rawAnalysis);
@@ -1073,36 +1103,38 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             if (raw) data.rawAnalysis = raw;
         }
 
-        const response = await databases.updateDocument(
+        const response = await withRateLimitRetry(() => databases.updateDocument(
             DB_ID,
             getCollectionId(),
             documentId,
             data
-        );
+        ));
         
         // --- Robust Orphaned Image Deletion ---
-        try {
-            const oldFileMap = getAssociatedFileIds(currentDoc);
-            const newFileMap = getAssociatedFileIds(response);
-            
-            const orphansToDelete = new Map<string, string>();
-            for (const [id, bucketId] of oldFileMap.entries()) {
-                if (!newFileMap.has(id)) orphansToDelete.set(id, bucketId);
+        if (currentDoc && (updates.imageFile || updates.imageId !== undefined || updates.galleryFiles || updates.existingGalleryIds !== undefined)) {
+            try {
+                const oldFileMap = getAssociatedFileIds(currentDoc);
+                const newFileMap = getAssociatedFileIds(response);
+                
+                const orphansToDelete = new Map<string, string>();
+                for (const [id, bucketId] of oldFileMap.entries()) {
+                    if (!newFileMap.has(id)) orphansToDelete.set(id, bucketId);
+                }
+                
+                if (orphansToDelete.size > 0) {
+                    await Promise.allSettled(Array.from(orphansToDelete.entries()).map(([fileId, bucketId]) => 
+                        storage.deleteFile(bucketId, fileId).catch(e => {
+                            // 404 means the file was already deleted or doesn't exist - safely ignore
+                            if (e?.code === 404 || e?.message?.includes('could not be found')) {
+                                return null;
+                            }
+                            console.warn(`Failed to delete orphaned file ${fileId} from ${bucketId}:`, e);
+                        })
+                    ));
+                }
+            } catch (cleanupErr) {
+                 console.warn("Non-fatal error during orphaned file cleanup:", cleanupErr);
             }
-            
-            if (orphansToDelete.size > 0) {
-                await Promise.allSettled(Array.from(orphansToDelete.entries()).map(([fileId, bucketId]) => 
-                    storage.deleteFile(bucketId, fileId).catch(e => {
-                        // 404 means the file was already deleted or doesn't exist - safely ignore
-                        if (e?.code === 404 || e?.message?.includes('could not be found')) {
-                            return null;
-                        }
-                        console.warn(`Failed to delete orphaned file ${fileId} from ${bucketId}:`, e);
-                    })
-                ));
-            }
-        } catch (cleanupErr) {
-             console.warn("Non-fatal error during orphaned file cleanup:", cleanupErr);
         }
 
         return response;

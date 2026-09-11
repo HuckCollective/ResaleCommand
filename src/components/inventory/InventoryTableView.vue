@@ -7,15 +7,26 @@
             v-model:searchQuery="searchQuery"
             v-model:filterStatus="filterStatus"
             v-model:filterLocation="filterLocation"
+            v-model:filterChannel="filterChannel"
+            v-model:hideSold="hideSold"
+            v-model:hideTracked="hideTracked"
+            v-model:hideCombined="hideCombined"
+            v-model:filterPlacedLocated="filterPlacedLocated"
+            v-model:filterInsight="filterInsight"
+            v-model:filterBarcode="filterBarcode"
+            v-model:filterLotType="filterLotType"
             :locations="allLocations"
+            :prefixes="allUpcPrefixes.list"
+            :activeFilterChips="activeFilterChips"
             :totalCount="inventoryItems.length"
             :filteredCount="filteredItems.length"
             :loading="loading"
-            :activeFilterCount="activeFilterCount"
             :statusCounts="{
+                active: countByStatus('active'),
                 acquired: countByStatus('acquired'),
                 received: countByStatus('received'),
                 placed: countByStatus('placed'),
+                tracked: countByStatus('tracked'),
                 sold: countByStatus('sold')
             }"
             switchViewHref="/inventory"
@@ -30,7 +41,7 @@
         />
 
         <!-- 2. DENSE SPREADSHEET TABLE -->
-        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl">
+        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl mb-32">
             <div class="overflow-x-auto">
                 <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
                     <thead>
@@ -289,25 +300,28 @@
             </div>
         </div>
 
-        <!-- 3. REUSABLE FLOATING BOTTOM ACTION DOCK -->
-        <InventoryActionDock 
-            :selectedCount="selectedItems.length"
-            :locations="allLocations"
-            :isProcessing="isApplyingBulk"
-            @apply-location="handleBulkLocation"
-            @apply-status="handleBulkStatus"
-            @export="handleExport"
-            @clear="clearSelection"
-        />
-
-        <!-- 4. FLOATING BOTTOM PAGINATION DOCK -->
+        <!-- 3. UNIFIED INTEGRATED BOTTOM COMMAND DOCK & TRAY -->
         <InventoryPaginationDock 
             v-model:currentPage="currentPage"
             v-model:pageSize="pageSize"
+            :pageSizeOptions="pageSizeOptions"
             :totalPages="totalPages"
             :totalItems="filteredItems.length"
+            :totalUnfiltered="inventoryItems.length"
             :selectedCount="selectedItems.length"
+            :activeFilterCount="activeFilterChips.length"
             :isLoading="loading"
+            :locations="allLocations"
+            :channels="allChannels"
+            :isProcessing="isApplyingBulk"
+            @add="openAdd"
+            @import-csv="showImport = true"
+            @apply-location="handleBulkLocation"
+            @apply-status="handleBulkStatus"
+            @export="handleExport"
+            @delete="handleBulkDelete"
+            @clear-selection="clearSelection"
+            @clear-filters="clearFilters"
         />
 
         <!-- 5. SLIDE-OVER ITEM DRAWER (Async Lazy-Loaded Island) -->
@@ -338,7 +352,6 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import InventoryHeader from './InventoryHeader.vue';
-import InventoryActionDock from './InventoryActionDock.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 
 // Lazy-loaded modal islands (Only downloaded on demand)
@@ -374,10 +387,21 @@ const {
     searchQuery,
     filterStatus,
     filterLocation,
+    filterChannel,
+    hideSold,
+    hideTracked,
+    hideCombined,
+    filterPlacedLocated,
+    filterInsight,
+    filterBarcode,
+    filterLotType,
     sortColumn,
     sortDirection,
     allLocations,
-    activeFilterCount,
+    allChannels,
+    allUpcPrefixes,
+    countActive,
+    activeFilterChips,
     filteredItems,
     setSort,
     getSortIcon,
@@ -392,6 +416,7 @@ const {
     isApplyingBulk,
     applyBulkLocation,
     applyBulkStatus,
+    deleteBulkItems,
     exportBulkItems
 } = useInventoryBulkActions(async () => {
     clearSelection();
@@ -406,6 +431,7 @@ const showImport = ref(false);
 // Pagination
 const currentPage = ref(1);
 const pageSize = ref(50);
+const pageSizeOptions = [25, 50, 100, 200];
 const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize.value));
 const pagedInventory = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
@@ -418,7 +444,8 @@ onMounted(async () => {
         const params = new URLSearchParams(window.location.search);
         if (params.has('search')) searchQuery.value = params.get('search') || '';
         if (params.has('location')) filterLocation.value = params.get('location') || 'all';
-        if (params.has('status')) filterStatus.value = params.get('status') || 'all';
+        if (params.has('status')) filterStatus.value = params.get('status') || 'active';
+        if (params.has('insightFilter')) filterInsight.value = params.get('insightFilter') || '';
         if (params.has('purchaseId') || params.has('po')) {
             searchQuery.value = params.get('purchaseId') || params.get('po') || '';
         }
@@ -429,7 +456,7 @@ onMounted(async () => {
 });
 
 // Reset page on filter change
-watch([searchQuery, filterStatus, filterLocation], () => {
+watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, filterPlacedLocated, filterInsight, filterBarcode, filterLotType], () => {
     currentPage.value = 1;
 });
 
@@ -447,6 +474,10 @@ const handleBulkLocation = async (targetLocation) => {
 
 const handleBulkStatus = async (targetStatus) => {
     await applyBulkStatus(selectedItems.value, targetStatus);
+};
+
+const handleBulkDelete = async () => {
+    await deleteBulkItems(selectedItems.value);
 };
 
 const handleExport = (format) => {

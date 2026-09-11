@@ -52,3 +52,14 @@ description: Industry-standard mobile UX/UI rules for Resale Command, synthesizi
 - **Confirmation Modals**: Always use `confirmDialog(message, title, confirmText, cancelText, confirmClass)` from `@stores/confirm` (rendered globally via `ConfirmContainer.vue`).
 - **Notifications & Errors**: Always use `addToast(message, type)` from `@stores/toast` for non-blocking feedback.
 
+## 7. The Contextual Command Dock & Interactive Bottom Sheet (NN/g & Apple HIG)
+- **The Pattern**: Pair persistent thumb-level telemetry (pages, items per page) with interactive action tabs (`[ ⚙ Filters (N) ]`, `[ ⚡ N Actions ]`, `[ + Add ]`).
+- **Zero Mobile Stacking/Clipping**: Never squeeze multiple dropdowns and inputs horizontally on mobile action bars. When clicked, tabs expand upward into a comfortable **Interactive Bottom Sheet** (`max-h-[85vh]`).
+- **Motion with Purpose**: Sheet entrance uses deceleration spring physics (`cubic-bezier(0.16, 1, 0.3, 1)` over 300ms) with a gentle backdrop scrim.
+- **Contextual Primary Action (CPA) Polymorphism**:
+  - *Catalog / Inventory*: Shows `[ + Add Item ]` when unselected $\to$ smoothly morphs to `[ ⚡ N Actions ]` when items are selected.
+  - *Ledger / Sales*: Shows `[ ⟳ Sync ]` or `[ 📥 Export ]`; gracefully omitted on read-only views.
+  - *Terminal / POS*: Reconfigures to `[ 📷 Scan ]` or `[ ⚡ Checkout ]`.
+- **Reference**: See complete specification in `.agents/skills/ux-design-system-taxonomy/SKILL.md`.
+
+
