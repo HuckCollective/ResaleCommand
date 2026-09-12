@@ -11,7 +11,10 @@ export interface InspectionContext {
     title?: string;
     notes?: string;
     cost?: number;
-    locations?: Array<{ id: string; name: string; niche?: string; categories?: string }>;
+    quantity?: number;
+    sourcingLocation?: string;
+    locations?: Array<{ id?: string; name: string; niche?: string; categories?: string; type?: string; commissionRate?: number }>;
+    existingItems?: Array<{ id?: string; title: string; upc?: string; price?: number | string; condition?: string; description?: string }>;
 }
 
 export interface ComponentItem {
@@ -161,59 +164,80 @@ export async function inspectSinglePhoto(
 
     if (!imagePart) return null;
 
+    const knownItemsContext = context?.existingItems && context.existingItems.length > 0
+        ? `\nKNOWN CONSTITUENT ITEMS IN THIS BUNDLE (${context.existingItems.length} verified listings):\n` +
+          context.existingItems.map(i => `- [${i.upc || 'ITEM'}] ${i.title}${i.price ? ` ($${i.price})` : ''}`).join('\n') +
+          `\nCRITICAL: The seller has ALREADY split and verified these items! If this photo shows one or more of these items, match them directly rather than guessing new categories, books, or magazines!\n`
+        : '';
+
     const prompt = `
 You are a master resale appraiser and multi-category inventory expert performing high-precision inspection of Photo #${image.index + 1}.
 
 Lot Context:
 ${context?.title ? `Lot Title: ${context.title}` : ''}
 ${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
+${knownItemsContext}
 
 TASK:
-1. READ ALL VISIBLE TEXT, TITLES & COVER BLURBS (OCR):
-   - Brand names, clothing tags, labels, sizes, materials, model numbers, dates, issue numbers, titles, barcodes, and maker signatures.
-   - COVER CALLOUTS, ARTISTS & INTERVIEW BLURBS (CRITICAL):
-     Carefully scan and read all cover blurbs, banner text, and artist credits (e.g. "Tim Leary Interview", "Frank Frazetta - Fire and Ice", "Moebius", "Nicollet", "Death Dealer", "H.R. Giger", "Berni Wrightson", "Richard Corben", "Boris Vallejo", "Simon Bisley", "Olivia", "Enki Bilal", "Philippe Druillet", "Juan Gimenez", "Paolo Eleuteri Serpieri", "Milo Manara", "Frezzato", "Chris Achilleos", "Angus McKie").
-   - VINTAGE RARITY RULE:
-     * ANY 1977–1983 early vintage issue (Vol 1 - Vol 7) is inherently rare and sought-after. ALWAYS classify as '[Tier 1: Standout Key]'.
-     * ANY issue featuring iconic artists or cultural interviews (Tim Leary, Frazetta, Moebius, Corben, Giger, Bisley, Manara, Serpieri) MUST be classified as '[Tier 1: Standout Key]'.
+1. PHYSICAL MEDIUM & SUBSTRATE VERIFICATION (CRITICAL FIRST STEP):
+   Inspect the physical construction and substrate of the item(s) before categorizing:
+   - **Art Prints, Wood Plaques & Wall Decor**:
+     * Visual cues: Flat printed art, lithograph, or fantasy illustration adhered or laminated to a solid wooden board, beveled timber plaque, rustic bark-edge wood slab, or masonite panel. Look for routed/beveled edges, wood grain on edges or reverse, clear protective varnish/lacquer coating (decoupage), hanging brackets/sawtooth hooks on back, or framed borders.
+     * **STRICT ANTI-HALLUCINATION RULE**:
+       Items mounted on wooden boards/plaques or framed wall art are **WALL ART / MOUNTED WOOD PLAQUES**. They are NEVER books, comic books, or magazines! DO NOT hallucinate issue numbers, volume numbers, publication dates, or book series when looking at art plaques or wall decor.
+       Even if the art depicts famous fantasy/sci-fi artists (Frank Frazetta, Boris Vallejo, Ken Kelly, Giger), identify them as:
+       '[Artist] - Vintage Wood Plaque Art Print - [Artwork Title]' (e.g. 'Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer').
+   - **Books & Magazines**:
+     * Only classify as a book or magazine if physical paper pages, a bound spine, or staple binding are clearly and visibly present.
+   - **Apparel, Workwear & Footwear**:
+     * Fabric weave, stitched seams, inner brand tags, wash tags, shoe silhouettes.
+   - **Collectibles, Toys, Electronics, Home Goods**:
+     * Action figures, pottery, cameras, games, audio equipment.
 
-2. MULTI-CATEGORY TREND & STANDOUT VALUE IDENTIFICATION:
-   Actively evaluate whether any item belongs to high-velocity resale trends, archival heritage, cult subcultures, or rare collectible categories:
-   - **Apparel & Workwear Standouts**: Carhartt (Detroit jackets, double-knee), Levi's (Made in USA, Big E, Orange Tab, 501), Patagonia (Synchilla, Retro-X, Deep Pile), The North Face (1996 Nuptse), Pendleton (100% Virgin Wool board shirts), Filson (Mackinaw), Arc'teryx, Stüssy, Tripp NYC.
-   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, platform, 1460, Mary Janes), Birkenstock (Boston, Arizona suede), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6, 1906R), Nike (Jordan 1/4, Dunk, ACG).
-   - **Books, RPGs, Comics & Magazines**:
-     * Heavy Metal Magazine: 1977 premiere #1, 1970s/80s golden era (Moebius, Giger, Frazetta, Olivia, Corben, Vallejo, Manara, Serpieri, Bisley, special editions).
-     * Dungeons & Dragons (TSR 1st/2nd Edition, 3.5e rare supplements), Frank Herbert Dune vintage paperbacks, vintage sci-fi first editions.
-   - **Electronics, Audio & Collectibles**:
-     * Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica, Yashica T4), Sony Walkman, retro video games (Nintendo NES/SNES/N64, Sega, PS1/PS2, Game Boy), LEGO modulars/titans.
+2. READ ALL VISIBLE TEXT, TITLES & MARKINGS (OCR):
+   - Read artist signatures (e.g. "Frank Frazetta", "Boris", "Ken Kelly", "Michael Whelan", "Giger"), artwork titles, copyright years, brand names, model numbers, tags, hallmarks, and labels.
+   - For Art & Decor: Identify the specific artwork title (e.g. "Death Dealer", "The Berserker", "Silver Warrior", "Conan", "Cat Girl", "Egyptian Queen", "Brain", "Dark Kingdom").
 
-3. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
+3. MULTI-CATEGORY VALUE & STANDOUT IDENTIFICATION:
+   - **Art Prints, Wood Plaques & Wall Decor**:
+     * Renowned fantasy/sci-fi artists: Frank Frazetta, Boris Vallejo, Ken Kelly, H.R. Giger, Michael Whelan, Moebius, Rodney Matthews.
+     * Medium: Vintage wood plaque decoupage, lithographs, framed fantasy art, gallery prints, screenprints.
+     * Vintage 1960s-1980s fantasy art plaques are highly collectible retro decor ($25 - $85+ each; multi-piece sets $120 - $350+).
+   - **Apparel & Workwear Standouts**: Carhartt (Detroit jackets, double-knee), Levi's (Made in USA, Big E, Orange Tab, 501), Patagonia (Synchilla, Retro-X), The North Face (1996 Nuptse), Pendleton (100% Virgin Wool), Filson (Mackinaw), Arc'teryx, Stüssy.
+   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, 1460, Mary Janes), Birkenstock (Boston, Arizona), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6), Nike (Jordan 1/4, Dunk, ACG).
+   - **Media, Books & Periodicals** (ONLY if physical pages/spines visible): Vintage RPGs (D&D TSR 1st/2nd/3.5e), vintage sci-fi paperbacks, vintage magazines.
+   - **Electronics, Audio & Collectibles**: Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, retro video games (NES/SNES/N64, Sega, PS1/PS2, Game Boy), LEGO modulars/titans.
+
+4. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
    - If this image shows multiple distinct items, extract each one into the "items" array.
    - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
    - Assign 'tier': 'showcase' | 'core' | 'quick_turn'.
-     * 'showcase': High-ticket grails, rare vintage, #1s, iconic artists/brands, top trending items ($35 - $75+)
-     * 'core': Solid regular run issues, core brand staples, complete story arcs ($14 - $28)
-     * 'quick_turn': Common back issues, paperbacks, impulse grab picks, shelf-fillers ($6 - $12)
+     * 'showcase': High-ticket grails, rare vintage, centerpieces, top trending items ($35 - $85+)
+     * 'core': Solid staples, regular run pieces, matching set members ($16 - $32)
+     * 'quick_turn': Common shelf-fillers, smaller pieces, impulse grab picks ($8 - $15)
    - Format "name" CLEANLY WITHOUT any bracket prefixes like '[Tier 1]':
-     * 'Brand/Series - Date/Vol - Key Feature/Artist'
+     * For Art/Plaques: '[Artist/Maker] - [Medium: Wood Plaque / Art Print / Wall Art] - [Artwork Title]' (e.g. 'Frank Frazetta - Vintage Wood Plaque Art Print - The Berserker')
+     * For Apparel: '[Brand] - [Model/Era] - [Garment Type]' (e.g. 'Carhartt - 1990s Detroit Jacket - Duck Canvas')
+     * For Media: '[Series/Title] - [Edition/Issue] - [Key Feature]'
+     * For Collectibles: '[Brand/Maker] - [Model/Character] - [Item Type]'
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
-      "identity": "Heavy Metal Magazine Oct 1977",
+      "name": "Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer",
+      "identity": "Frank Frazetta Vintage Wood Plaque Art Print",
       "tier": "showcase",
       "is_key_issue": true,
-      "detected_text": "Text read from tags, labels, covers, or hallmarks",
-      "condition": "Used/Good, NWT, Minor flaw, etc.",
-      "estimated_value": "$35 - $65",
+      "detected_text": "Text read from plaques, labels, art signatures, tags, or hallmarks",
+      "condition": "Used/Good, Minor edge wear, etc.",
+      "estimated_value": "$45 - $85",
       "price_breakdown": {
-         "mint": "$60 - $95",
-         "fair": "$35 - $60",
-         "poor": "$18 - $30",
-         "boutique_premium": "$45 - $75"
+         "mint": "$75 - $110",
+         "fair": "$45 - $85",
+         "poor": "$20 - $35",
+         "boutique_premium": "$65 - $95"
       },
       "red_flags": []
     }
@@ -353,14 +377,35 @@ export async function inspectLotWithGemini(
         detected_text: c.detected_text || ''
     }));
 
+    let targetQuantity: number | undefined = context?.quantity;
+    if (!targetQuantity || targetQuantity <= 1) {
+        const titleMatch = (context?.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
+        if (titleMatch) {
+            targetQuantity = parseInt(titleMatch[1], 10);
+        } else if (context?.existingItems && context.existingItems.length > 0) {
+            targetQuantity = context.existingItems.length;
+        }
+    }
+
+    const countInstruction = targetQuantity && targetQuantity > 1
+        ? `Physical Lot Stated Count: EXACTLY ${targetQuantity} items. You MUST consolidate and merge multi-photo detections down to EXACTLY ${targetQuantity} distinct items.`
+        : `Physical Lot Stated Count: Auto-detect distinct items based on unique visible pieces across photos.`;
+
+    const verifiedExistingContext = context?.existingItems && context.existingItems.length > 0
+        ? `\nVERIFIED CONSTITUENT ITEMS IN THIS LOT (${context.existingItems.length} verified items):\n` +
+          JSON.stringify(context.existingItems, null, 2) +
+          `\nCRITICAL CONSTITUENT INSTRUCTION:\nThe seller has ALREADY split, cataloged, and verified these items! Use these verified items as the definitive catalog for this lot. Do NOT invent new items or hallucinate different categories (e.g., do NOT call art plaques "books" or "magazines"). Synthesize the overarching lot appraisal, valuation, and sales strategy based on these verified items!\n`
+        : '';
+
     const synthesisPrompt = `
 You are a master multi-category resale appraiser and inventory valuation expert performing overarching lot consolidation, deduplication, and physical booth pricing strategy for Memory Den and online marketplaces.
 
 ORIGINAL LISTING & LOT CONTEXT:
 - Listing Title: "${context?.title || 'Multi-Item Lot'}"
-- Physical Lot Stated Count: ${context?.quantity || 'Auto-detect (approx 25-35 distinct items)'}
+- ${countInstruction}
 - Sourcing Location / URL: "${context?.sourcingLocation || 'N/A'}"
 - Total Landed Purchase Cost: ${context?.cost ? `$${context.cost}` : 'Not provided'}
+${verifiedExistingContext}
 
 RAW CANDIDATE DETECTIONS ACROSS ALL PHOTOS (${uniqueComponents.length} raw photo detections):
 ${JSON.stringify(candidateSummary, null, 2)}
@@ -369,56 +414,59 @@ Organization Physical Booths & Locations:
 ${locationsSummary}
 
 CRITICAL RECONCILIATION & TIER SORTING RULES:
-1. PRESERVE DETECTED ISSUES & PREVENT DOWNGRADING STANDOUT KEYS:
-   - You MUST preserve all specific issues, dates, and artist highlights detected in the raw photo scans. Do NOT replace them with generic placeholder text.
+1. PRESERVE DETECTED ITEMS & ARTIST IDENTITIES:
+   - You MUST preserve all specific artwork titles, artists, brands, and markings detected in the raw photo scans. Do NOT replace them with generic placeholder text.
    - DO NOT downgrade items marked 'is_standout_key: true' into Quick Turn!
-   - Every piece with famous artists, cultural interviews, rare brands, or early golden era dates MUST be kept in **[Showcase]** ($35 - $75+).
+   - Every piece with famous artists (e.g. Frank Frazetta, Boris Vallejo), iconic subjects, rare vintage, or top condition MUST be kept in **[Showcase]** ($35 - $85+).
 2. MERGE DUPLICATE PHOTO DETECTIONS TO EXACT PHYSICAL COUNT:
-   - Consolidate and merge multi-photo duplicates down to the EXACT physical count of distinct items (approx ${context?.quantity || '30-35'} items).
-3. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
-   - **FIRST: Showcase (Tier 1)** (Rare vintage, #1s, iconic artists/brands, top trending items -> $35 - $75+ each).
-   - **SECOND: Core (Tier 2)** (Solid regular run issues, core brand staples, complete story arcs -> $14 - $28 each).
-   - **THIRD: Quick Turn (Tier 3)** (Common back issues, paperbacks, impulse picks -> $6 - $12 each).
-4. STANDARDIZED TITLE FORMAT:
-   - Every item name in "lot_items" must be clean WITHOUT ANY tier prefixes like '[Tier 1]': 'Full Series - Exact Month Year (Vol/No) - Key Feature/Artist'.
+   - Consolidate and merge multi-photo duplicates down to the EXACT physical count of distinct items (${targetQuantity && targetQuantity > 1 ? `EXACTLY ${targetQuantity} items` : 'the unique distinct items'}).
+3. PHYSICAL MEDIUM FIDELITY (ANTI-HALLUCINATION):
+   - Respect the true physical medium of the items (e.g. Art Prints mounted on handmade wooden plaques, framed wall decor, clothing, electronics).
+   - NEVER refer to art prints or wooden wall plaques as books, paperbacks, or magazines!
+4. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
+   - **FIRST: Showcase (Tier 1)** (Rare vintage, iconic artists, top condition centerpieces -> $35 - $85+ each).
+   - **SECOND: Core (Tier 2)** (Solid standard pieces, matching set members -> $16 - $32 each).
+   - **THIRD: Quick Turn (Tier 3)** (Smaller pieces, common items, impulse picks -> $8 - $15 each).
+5. STANDARDIZED TITLE FORMAT:
+   - Every item name in "lot_items" must be clean WITHOUT ANY tier prefixes like '[Tier 1]': e.g. '[Artist/Brand] - [Medium] - [Title/Model]'.
 
 OUTPUT STRICT JSON:
 {
-  "identity": "Unified lot identity (e.g. Vintage 70s-90s Heavy Metal Magazine Collection)",
-  "title": "Comprehensive SEO title incorporating key issue dates, artist highlights, and lot count",
-  "keywords": ["Vintage", "Collectibles", "Magazines", "Fantasy Art"],
+  "identity": "Unified lot identity (e.g. Vintage Frank Frazetta Fantasy Art Wood Plaque Collection)",
+  "title": "Comprehensive SEO title incorporating artist highlights, medium, and lot count",
+  "keywords": ["Vintage", "Collectibles", "Wall Decor", "Art Prints"],
   "condition_notes": "Summary of overall condition across the collection",
   "country_of_origin": "USA",
   "red_flags": [],
   "price_breakdown": {
-    "mint": "$320 - $450",
-    "fair": "$220 - $310",
-    "poor": "$110 - $160",
-    "boutique_premium": "$260 - $360",
+    "mint": "$350 - $480",
+    "fair": "$240 - $340",
+    "poor": "$120 - $180",
+    "boutique_premium": "$290 - $390",
     "confidence": "High"
   },
   "purchase_strategy": {
-    "verdict": "CHASE_AUCTION",
-    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$50.00'}",
-    "max_bid": 120,
-    "max_landed_cost": 150,
-    "advice": "High profit potential: sell Showcase keys individually in booth showcase, multi-tag Core runs at $18/ea, and crate Quick Turn readers in $10 impulse boxes."
+    "verdict": "BUY_NOW",
+    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$77.05'}",
+    "max_bid": 150,
+    "max_landed_cost": 180,
+    "advice": "High profit potential: sell standout pieces individually in booth showcase, multi-tag matching sets, or bundle as a premium gallery wall lot."
   },
   "market_report": {
-    "best_platform": "Memory Den Physical Booth & eBay / Poshmark",
-    "platform_rationale": "Showcase items sell best in display; core runs move quickly with multi-quantity tags; quick turn items clear fast in floor grab-bags.",
+    "best_platform": "Memory Den Physical Booth & eBay / Etsy",
+    "platform_rationale": "Vintage pop culture art decor moves exceptionally well in curated physical booths, with strong national collector demand online.",
     "sell_through_velocity": "Fast (1-2 weeks)",
-    "target_buyer": "Vintage pop culture collectors, fantasy art fans, booth flippers",
+    "target_buyer": "Vintage pop culture collectors, fantasy art fans, retro decor enthusiasts",
     "channels": [
-       { "name": "Memory Den Booth", "est_price": "$280.00", "net_payout": "~$225.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
-       { "name": "eBay / Online", "est_price": "$250.00", "net_payout": "~$195.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Top Standalone Items" }
+       { "name": "Memory Den Booth", "est_price": "$320.00", "net_payout": "~$260.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
+       { "name": "eBay / Online", "est_price": "$290.00", "net_payout": "~$235.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Nationwide Reach" }
     ]
   },
   "lot_items": [
     {
-      "title": "Heavy Metal Magazine - Oct 1977 (Vol 1 No 7) - Tim Leary / Nicollet Cover",
+      "title": "Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer",
       "tier": "showcase",
-      "val": "$35 - $65",
+      "val": "$55 - $85",
       "cond": "Good",
       "img": 0
     }

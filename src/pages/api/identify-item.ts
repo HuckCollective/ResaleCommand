@@ -885,38 +885,45 @@ export const ALL: APIRoute = async ({ request }) => {
              7. JEWELRY & PRECIOUS METALS / COLLECTIBLES (Sterling Silver 925, Gold 10k/14k/18k, Coins, Pins):
                 * Identify metal type, visible hallmarks, gemstone types, and brand stamps.
                 
-             8. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
-                * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
-                
-              CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
-              - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
-              - STRICT ANTI-HALLUCINATION GUARD: If a date, issue number, or brand name is obscured or not 100% legible due to glare, DO NOT guess famous names or specific dates. State "Date Unclear" or "Unbranded" instead of inventing details.
-              - FOR VINTAGE PRINT / MAGAZINES / COMICS:
-                 * Look at the exact date box (usually top-left or spine). Read Month, Year, Volume, and Issue Number.
-                 * Only credit cover artists if their signature is clearly visible on the cover or printed in the credit line.
-              - FOR APPAREL & STREETWEAR:
-                 * Read inner neck tag / wash tag for Brand, RN#, Size, Material, Single-Stitch, and Made in USA/Country.
-              - FOR TOYS, FIGURES & TABLETOP:
-                 * Read copyright stamp on foot/back or box title (e.g. "© 1979 L.F.L. Kenner", "Games Workshop 1998").
-              - FOR GAMES & ELECTRONICS:
-                 * Read exact model/part number and condition indicators (CIB, Boxed, Loose Cartridge, Tested).
-              - FOR LOTS & MULTI-ITEM IMAGES:
-                 * For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
-                 * STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'.
-              
-            OUTPUT FORMAT:
-            Return strictly a JSON object with property "items": [ ... ].
-            
-            Each item object in the array must contain:
-            - 'identity': A single string describing the item.
-            - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den / DustyTiger). Must be ultra-clean, concise, and professional without ANY tier bracket prefixes like '[Tier 1]':
-                 * Vintage Magazines: "Heavy Metal Mag - Oct 1977 #7"
-                 * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Harley 3D Emblem Tee XL"
-                 * Toys/Collectibles: "Kenner Star Wars Boba Fett 1979" or "D&D Beholder Mini Pro-Painted"
-                 * Games/Media: "SNES Chrono Trigger (Authentic)" or "D&D 3.5e PHB 1st Print"
-                 * Paperbacks/Media: "Frank Herbert Dune (Paperback)" or "Def Leppard Rock of Ages 2-CD"
-            - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop) without tier bracket prefixes.
-            - 'tier': (REQUIRED string, strictly one of: "showcase", "core", "quick_turn").
+              8. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
+                 * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
+                 
+              9. ART PRINTS, MOUNTED WOOD PLAQUES & WALL DECOR (Frank Frazetta, Boris Vallejo, Ken Kelly, Decoupage, Lithographs, Framed Art):
+                 * Visual Form Factor: Flat printed art, fantasy illustration, or lithograph adhered to a wooden board, beveled timber plaque, rustic bark-edge slab, or frame. Finished with clear varnish, lacquer, or resin (decoupage).
+                 * STRICT ANTI-HALLUCINATION RULE: Art prints mounted on wood plaques are WALL ART / WOOD PLAQUES. They are NEVER books, magazines, or comics! Do NOT invent issue numbers, volumes, or book series.
+                 * Identify the artist (e.g. Frank Frazetta, Boris Vallejo, Ken Kelly) and specific artwork title (e.g. "Death Dealer", "The Berserker", "Silver Warrior", "Conan", "Cat Girl").
+                 * Resale Value: Vintage 1960s-1980s fantasy art wood plaques are collectible retro decor ($25 - $85+ each; multi-piece sets $120 - $350+).
+                 
+               CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
+               - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
+               - STRICT ANTI-HALLUCINATION GUARD: If a date, issue number, or brand name is obscured or not 100% legible due to glare, DO NOT guess famous names or specific dates. State "Date Unclear" or "Unbranded" instead of inventing details.
+               - FOR VINTAGE PRINT / MAGAZINES / COMICS:
+                  * Look at the exact date box (usually top-left or spine). Read Month, Year, Volume, and Issue Number.
+                  * Only credit cover artists if their signature is clearly visible on the cover or printed in the credit line.
+               - FOR APPAREL & STREETWEAR:
+                  * Read inner neck tag / wash tag for Brand, RN#, Size, Material, Single-Stitch, and Made in USA/Country.
+               - FOR TOYS, FIGURES & TABLETOP:
+                  * Read copyright stamp on foot/back or box title (e.g. "© 1979 L.F.L. Kenner", "Games Workshop 1998").
+               - FOR GAMES & ELECTRONICS:
+                  * Read exact model/part number and condition indicators (CIB, Boxed, Loose Cartridge, Tested).
+               - FOR LOTS & MULTI-ITEM IMAGES:
+                  * For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
+                  * STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'.
+               
+             OUTPUT FORMAT:
+             Return strictly a JSON object with property "items": [ ... ].
+             
+             Each item object in the array must contain:
+             - 'identity': A single string describing the item.
+             - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den / DustyTiger). Must be ultra-clean, concise, and professional without ANY tier bracket prefixes like '[Tier 1]':
+                  * Art Prints/Plaques: "Frazetta Wood Plaque - Berserker" or "Frazetta Art Plaque Set of 3"
+                  * Vintage Magazines: "Vintage Sci-Fi Mag - Oct 1977 #7"
+                  * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Harley 3D Emblem Tee XL"
+                  * Toys/Collectibles: "Kenner Star Wars Boba Fett 1979" or "D&D Beholder Mini Pro-Painted"
+                  * Games/Media: "SNES Chrono Trigger (Authentic)" or "D&D 3.5e PHB 1st Print"
+                  * Paperbacks/Media: "Frank Herbert Dune (Paperback)" or "Def Leppard Rock of Ages 2-CD"
+             - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop) without tier bracket prefixes.
+             - 'tier': (REQUIRED string, strictly one of: "showcase", "core", "quick_turn").
                  * "showcase": High-ticket grails ($50.00 - $150.00+), locked showcase, top online listings.
                  * "core": Steady bread-and-butter ($20.00 - $49.00), standard apparel racks & booth shelves.
                  * "quick_turn": High-velocity impulse ($8.00 - $18.00), crate/counter picks, paperbacks, cassettes, mugs, small collectibles with 3x-5x ROI.

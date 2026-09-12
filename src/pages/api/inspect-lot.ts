@@ -6,7 +6,7 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request }) => {
     try {
         const body = await request.json();
-        const { images, remoteImageUrls, base64Images, title, notes, cost, quantity, sourcingLocation, locations } = body;
+        const { images, remoteImageUrls, base64Images, title, notes, cost, quantity, sourcingLocation, locations, existingItems } = body;
 
         const preparedImages: InspectionImage[] = [];
         let imgIdx = 0;
@@ -62,7 +62,8 @@ export const POST: APIRoute = async ({ request }) => {
             cost: typeof cost === 'number' ? cost : parseFloat(cost) || undefined,
             quantity: typeof quantity === 'number' ? quantity : parseInt(quantity, 10) || undefined,
             sourcingLocation,
-            locations
+            locations,
+            existingItems
         });
 
         return new Response(JSON.stringify(result), {

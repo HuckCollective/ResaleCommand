@@ -1213,6 +1213,32 @@ const analyzeExistingItem = async () => {
         if (editForm.title && editForm.title.trim().toLowerCase() !== 'untitled item') contextNotes = `Current Title: ${editForm.title}\n\n` + contextNotes;
         if (editForm.sourcingLocation) contextNotes += `\n\nSourcing URL: ${editForm.sourcingLocation}`;
 
+        // Feed verified child items from lot lineage as ground truth
+        const existingChildComponents = (lotChildren.value || []).map(c => ({
+            id: c.$id,
+            upc: c.upc,
+            title: c.title,
+            price: c.resalePrice || c.price,
+            condition: c.condition_notes || c.condition,
+            description: c.description
+        }));
+
+        if (existingChildComponents.length > 0) {
+            contextNotes += `\n\n=== VERIFIED CONSTITUENT ITEMS IN THIS BUNDLE (${existingChildComponents.length} Split Listings) ===\n` +
+                existingChildComponents.map(c => `- [${c.upc || 'ITEM'}] ${c.title}${c.price ? ` ($${c.price})` : ''}`).join('\n') +
+                `\nNOTE: These items are ALREADY verified and cataloged. Appraise and synthesize the master lot based on these known items.`;
+        }
+
+        let lotQty = Number(editForm.quantity || props.item?.quantity || 0);
+        if (!lotQty || lotQty <= 1) {
+            const titleMatch = (editForm.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
+            if (titleMatch) {
+                lotQty = parseInt(titleMatch[1], 10);
+            } else if (existingChildComponents.length > 0) {
+                lotQty = existingChildComponents.length;
+            }
+        }
+
         scoutResult.value = null;
         scoutMdText.value = '';
 
@@ -1234,7 +1260,7 @@ const analyzeExistingItem = async () => {
         }
 
         const totalPhotos = base64Images.length + remoteUrls.length;
-        const isLot = (Number(editForm.quantity || props.item?.quantity || 1) > 1) || 
+        const isLot = (lotQty > 1) || 
                       (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
         const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
@@ -1278,9 +1304,10 @@ const analyzeExistingItem = async () => {
                 title: editForm.title,
                 notes: contextNotes,
                 cost: editForm.cost,
-                quantity: editForm.quantity || props.item?.quantity,
+                quantity: lotQty || editForm.quantity || props.item?.quantity,
                 sourcingLocation: editForm.sourcingLocation || props.item?.sourcingLocation,
-                locations: activeLocations
+                locations: activeLocations,
+                existingItems: existingChildComponents
             }),
             signal: scoutAbortController.signal
         });
@@ -1307,6 +1334,25 @@ const analyzeExistingItem = async () => {
                 if (data.price_breakdown.boutique_premium) desc += `- **Boutique / Antique Mall:** ${data.price_breakdown.boutique_premium}\n`;
                 if (data.price_breakdown.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
                 desc += `\n`;
+
+                if (!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') {
+                    const fairPrice = parsePrice(data.price_breakdown.fair || data.price_breakdown.boutique_premium || data.price_breakdown.mint);
+                    if (fairPrice > 0) {
+                        editForm.resalePrice = fairPrice.toFixed(2);
+                    }
+                }
+                const priceRange = parsePriceRange(data.price_breakdown.fair || data.price_breakdown.mint);
+                if (priceRange.low > 0 || priceRange.high > 0) {
+                    if (!editForm.estLow) editForm.estLow = priceRange.low.toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = priceRange.high.toFixed(2);
+                }
+            }
+
+            if ((!editForm.condition_notes || editForm.condition_notes.trim() === '') && data.condition_notes) {
+                editForm.condition_notes = data.condition_notes;
+            }
+            if ((!editForm.keywords || editForm.keywords.length === 0) && data.keywords?.length > 0) {
+                editForm.keywords = [...data.keywords];
             }
 
             if (data.market_report) {
@@ -1335,7 +1381,7 @@ const analyzeExistingItem = async () => {
                     desc += `   - **Pricing Matrix:** Fair ${item.price_breakdown.fair} | Mint ${item.price_breakdown.mint || '-'} | Boutique ${item.price_breakdown.boutique_premium || '-'}\n`;
                 }
                 if (item.condition) desc += `   - **Condition:** ${item.condition}\n`;
-                if (item.ocr_detected_text) desc += `   - **Cover Markings:** ${item.ocr_detected_text}\n`;
+                if (item.ocr_detected_text) desc += `   - **Markings / Text:** ${item.ocr_detected_text}\n`;
             });
 
             scoutMdText.value = desc.trim();
