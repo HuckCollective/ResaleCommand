@@ -97,7 +97,7 @@
     <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
     <div v-else class="block md:hidden space-y-3">
       <div 
-        v-for="purchase in filteredPurchases" 
+        v-for="purchase in paginatedPurchases" 
         :key="purchase.$id"
         class="card bg-base-100 shadow-md border border-base-200/80 hover:border-primary/40 transition-all rounded-2xl p-3.5 space-y-3"
       >
@@ -225,7 +225,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="purchase in filteredPurchases" :key="purchase.$id" class="hover:bg-base-200/40 transition-colors">
+            <tr v-for="purchase in paginatedPurchases" :key="purchase.$id" class="hover:bg-base-200/40 transition-colors">
               <!-- PO Number (Open PO Button with Code) -->
               <td class="py-3 px-4 font-bold whitespace-nowrap">
                 <a 
@@ -321,44 +321,51 @@
       </div>
     </div>
 
-    <!-- Floating Scroll to Top & Count FAB (Floats in bottom-right corner out of the content area) -->
-    <div v-if="filteredPurchases.length > 0" 
-         class="fixed bottom-20 right-4 sm:right-8 z-40 transition-all hover:scale-105 active:scale-95 cursor-pointer select-none" 
-         @click="scrollToTop">
-      <div class="flex items-center gap-1.5 bg-base-200/95 text-base-content border border-base-content/25 shadow-2xl rounded-full px-3.5 py-2 font-black text-xs backdrop-blur-md hover:bg-base-300 transition-all">
-        <span class="opacity-80">{{ filteredPurchases.length }}</span>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-        </svg>
-      </div>
-    </div>
-
-    <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
-    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] transition-all">
-      <div class="max-w-2xl mx-auto flex items-center justify-between gap-2.5">
-        
-        <!-- Action 1: Speed Entry -->
-        <a href="/purchases/speed-entry" 
-           class="btn btn-sm sm:btn-md btn-warning text-warning-content font-extrabold flex-1 rounded-2xl shadow-xs active:scale-95 transition-all gap-1.5">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span class="text-xs sm:text-sm">Speed Entry</span>
+    <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER PATTERN -->
+    <PaginationDock
+      v-if="filteredPurchases.length > 0"
+      v-model:currentPage="currentPage"
+      v-model:pageSize="pageSize"
+      :totalItems="filteredPurchases.length"
+      :totalPages="totalPages"
+      :isLoading="loading"
+      entityLabel="POs"
+      :isFiltered="!!searchQuery"
+      @scroll-top="scrollToTop"
+    >
+      <template #dock>
+        <!-- Dock Item 1: Speed Entry -->
+        <a 
+          href="/purchases/speed-entry" 
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-warning/15 text-warning font-bold border border-warning/25 shadow-xs active:scale-95 cursor-pointer"
+          title="Fast batch receipt & haul entry"
+        >
+          <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5 text-warning" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Speed Entry</span>
         </a>
 
-        <!-- Action 2: Import CSV (Regular Inventory BulkImport Modal) -->
+        <!-- Dock Item 2: Import CSV -->
         <button 
-           type="button"
-           @click="showImportModal = true"
-           class="btn btn-sm sm:btn-md btn-primary text-primary-content font-black flex-[1.2] rounded-2xl shadow-md active:scale-95 transition-all gap-2 tracking-wide cursor-pointer">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-          <span class="text-xs sm:text-sm font-black">Import CSV</span>
+          type="button"
+          @click="showImportModal = true"
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="Bulk import purchases & inventory via CSV"
+        >
+          <Icon icon="solar:file-text-bold" class="w-4.5 h-4.5" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Import CSV</span>
         </button>
 
-      </div>
-    </div>
+        <!-- Dock Item 3: New Purchase Order (Solid Elevated Hero Action) -->
+        <a 
+          href="/purchases/new" 
+          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          title="Create a new Purchase Order"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">New PO</span>
+        </a>
+      </template>
+    </PaginationDock>
 
     <!-- Regular Bulk Import Modal (Identical to Inventory) -->
     <BulkImport v-if="showImportModal" @close="showImportModal = false" @complete="showImportModal = false; loadPurchases();" />
@@ -366,7 +373,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
@@ -375,6 +382,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
 import BulkImport from '../inventory/BulkImport.vue';
+import PaginationDock from '../common/PaginationDock.vue';
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';
@@ -427,6 +435,29 @@ const handleSearch = () => {
 
 const clearSearch = () => {
     searchQuery.value = '';
+};
+
+// Pagination state
+const currentPage = ref(1);
+const pageSize = ref(50);
+
+const totalPages = computed(() => {
+    return Math.max(1, Math.ceil(filteredPurchases.value.length / pageSize.value));
+});
+
+const paginatedPurchases = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filteredPurchases.value.slice(start, start + pageSize.value);
+});
+
+watch([searchQuery, sortBy, sortDesc], () => {
+    currentPage.value = 1;
+});
+
+const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 };
 
 const getTimestamp = (p) => {
@@ -557,15 +588,15 @@ const getSgwUrl = (orderId) => {
 
 const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
-        case 'pending': return 'badge-warning';
-        case 'ordered': return 'badge-info';
-        case 'shipped': return 'badge-info';
+        case 'pending': return 'badge-warning text-warning-content font-black whitespace-nowrap';
+        case 'ordered': return 'badge-info text-info-content font-bold whitespace-nowrap';
+        case 'shipped': return 'badge-info text-info-content font-bold whitespace-nowrap';
         case 'partial':
-        case 'partially received': return 'badge-secondary';
-        case 'received': return 'badge-success';
-        case 'returned': return 'badge-error';
-        case 'cancelled': return 'badge-error';
-        default: return 'badge-ghost';
+        case 'partially received': return 'badge-secondary text-secondary-content font-bold whitespace-nowrap';
+        case 'received': return 'badge-success text-success-content font-black whitespace-nowrap';
+        case 'returned': return 'badge-error text-error-content font-bold whitespace-nowrap';
+        case 'cancelled': return 'badge-error text-error-content font-bold whitespace-nowrap';
+        default: return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
     }
 };
 

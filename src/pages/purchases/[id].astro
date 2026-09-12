@@ -5,8 +5,8 @@ import PurchaseEditor from '../../components/purchases/PurchaseEditor.vue';
 const { id } = Astro.params;
 ---
 
-<Layout title={`Purchase Details ${id ? `• ${id}` : ''}`}>
-  <div class="p-8 max-w-7xl mx-auto space-y-8">
+<Layout title={`Purchase Details ${id ? `• ${id}` : ''}`} hideFooter={true}>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-44 sm:pb-40">
     <div class="flex items-center gap-4">
       <a href="/purchases" class="btn btn-ghost btn-circle">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -187,7 +187,7 @@
       <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
       <div v-else class="block md:hidden space-y-3">
         <div 
-          v-for="sale in displayedSales" 
+          v-for="sale in paginatedSales" 
           :key="sale.uniqueKey"
           class="card bg-base-100 shadow-md border border-base-200/80 hover:border-primary/40 transition-all rounded-2xl p-3.5 space-y-3"
         >
@@ -342,7 +342,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="sale in displayedSales" :key="sale.uniqueKey" class="hover:bg-base-200/40 transition-colors">
+              <tr v-for="sale in paginatedSales" :key="sale.uniqueKey" class="hover:bg-base-200/40 transition-colors">
                 <!-- SO Number Button -->
                 <td class="py-3 px-4 font-bold whitespace-nowrap">
                   <a 
@@ -435,6 +435,52 @@
         </div>
       </div>
 
+      <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER PATTERN -->
+      <PaginationDock
+        v-if="displayedSales.length > 0"
+        v-model:currentPage="currentPage"
+        v-model:pageSize="pageSize"
+        :totalItems="displayedSales.length"
+        :totalPages="totalPages"
+        :isLoading="loading"
+        entityLabel="sales"
+        :isFiltered="locationFilter !== 'all' || !!searchQuery"
+        @scroll-top="scrollToTop"
+      >
+        <template #dock>
+          <!-- Dock Item 1: Location Sync -->
+          <a 
+            href="/warehouse/sync" 
+            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer"
+            title="Sync location CSV & sales reports"
+          >
+            <Icon icon="solar:round-transfer-horizontal-bold" class="w-4.5 h-4.5 text-secondary" />
+            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Sync</span>
+          </a>
+
+          <!-- Dock Item 2: Export CSV -->
+          <button 
+            type="button"
+            @click="exportSalesCsv"
+            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+            title="Export current sales view to CSV"
+          >
+            <Icon icon="solar:file-download-bold" class="w-4.5 h-4.5" />
+            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Export CSV</span>
+          </button>
+
+          <!-- Dock Item 3: Record Sale (Solid Elevated Hero Action) -->
+          <a 
+            href="/sales/new" 
+            class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            title="Record a new completed sale"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+            <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Record Sale</span>
+          </a>
+        </template>
+      </PaginationDock>
+
     </div>
   </div>
 </template>
@@ -447,6 +493,7 @@ import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
 import { warehousesApi, matchesLocationFilter } from '../../lib/warehouses';
 import { client } from '../../lib/appwrite';
+import PaginationDock from '../common/PaginationDock.vue';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
 
@@ -463,6 +510,54 @@ const locationFilter = ref('all');
 // Sorting state (PO treatment)
 const sortBy = ref<'date' | 'so' | 'net' | 'gross' | 'location' | 'status'>('date');
 const sortDesc = ref(true);
+
+// Pagination state
+const currentPage = ref(1);
+const pageSize = ref(50);
+
+const totalPages = computed(() => {
+  return Math.max(1, Math.ceil(displayedSales.value.length / pageSize.value));
+});
+
+const paginatedSales = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return displayedSales.value.slice(start, start + pageSize.value);
+});
+
+watch([searchQuery, locationFilter, sortBy, sortDesc], () => {
+  currentPage.value = 1;
+});
+
+const scrollToTop = () => {
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
+const exportSalesCsv = () => {
+  if (!displayedSales.value.length) return;
+  const headers = ['SO Number', 'Title', 'UPC', 'SKU', 'Location', 'Date', 'Status', 'Gross Amount', 'Fees', 'Net Payout'];
+  const rows = displayedSales.value.map(s => [
+    `"${(s.soNumber || '').replace(/"/g, '""')}"`,
+    `"${(s.title || '').replace(/"/g, '""')}"`,
+    `"${(s.upc || '').replace(/"/g, '""')}"`,
+    `"${(s.sku || '').replace(/"/g, '""')}"`,
+    `"${(s.locationName || '').replace(/"/g, '""')}"`,
+    `"${(s.date || '').replace(/"/g, '""')}"`,
+    `"${(s.status || '').replace(/"/g, '""')}"`,
+    s.grossAmount?.toFixed(2) || '0.00',
+    s.fees?.toFixed(2) || '0.00',
+    s.netPayout?.toFixed(2) || '0.00'
+  ]);
+  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `sales_export_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 const toggleSort = (field: 'date' | 'so' | 'net' | 'gross' | 'location' | 'status') => {
   if (sortBy.value === field) {
@@ -508,12 +603,12 @@ const formatRelativeTime = (dateStr?: string) => {
 
 const getStatusClass = (status: string) => {
   const s = (status || '').toLowerCase();
-  if (s === 'draft') return 'badge-neutral';
-  if (s === 'sold' || s === 'paid') return 'badge-success text-white';
-  if (s === 'shipped') return 'badge-primary';
-  if (s === 'delivered') return 'badge-info';
-  if (s === 'returned' || s === 'refunded') return 'badge-error';
-  return 'badge-ghost';
+  if (s === 'draft') return 'badge-neutral text-neutral-content font-bold whitespace-nowrap';
+  if (s === 'sold' || s === 'paid') return 'badge-success text-success-content font-black whitespace-nowrap';
+  if (s === 'shipped') return 'badge-primary text-primary-content font-bold whitespace-nowrap';
+  if (s === 'delivered') return 'badge-info text-info-content font-bold whitespace-nowrap';
+  if (s === 'returned' || s === 'refunded') return 'badge-error text-error-content font-bold whitespace-nowrap';
+  return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
 };
 
 const getWarehouseName = (warehouseId: string) => {

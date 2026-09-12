@@ -122,41 +122,42 @@
                 <!-- STACK ROW 2: DAISYUI SEMANTIC DOCK (BOTTOM STRIP - THUMB ZONE) -->
                 <!-- ------------------------------------------------------------- -->
                 <div class="max-w-xl w-full mx-auto">
-                    <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14">
+                    <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-1.5 sm:gap-2">
                         <!-- Dock Item 1: Actions & Bulk Operations -->
                         <button 
                             type="button"
-                            :class="{ 'dock-active text-warning font-black': selectedCount > 0, 'opacity-70 hover:opacity-100': selectedCount === 0 }"
+                            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer"
+                            :class="selectedCount > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
                             @click="openTray('actions')"
                             :title="selectedCount > 0 ? `${selectedCount} records selected for bulk actions` : 'Open bulk actions tray'"
                         >
-                            <Icon icon="solar:bolt-bold" class="w-5 h-5" />
-                            <span class="dock-label font-mono">Actions ({{ selectedCount }})</span>
+                            <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5" />
+                            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Actions ({{ selectedCount }})</span>
                         </button>
 
-                        <!-- Dock Item 2: Add & Ingest Primary Action -->
+                        <!-- Dock Item 2: Add & Ingest (Solid Elevated Hero Action) -->
                         <button 
                             type="button"
-                            class="text-primary hover:opacity-90 font-black"
+                            class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
                             @click="openTray('add-prep')"
                             title="Add items, scout quick add & CSV import"
                         >
-                            <Icon icon="solar:add-circle-bold" class="w-5 h-5" />
-                            <span class="dock-label">Add & Ingest</span>
+                            <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                            <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Add & Ingest</span>
                         </button>
 
                         <!-- Dock Item 3: Filters & View Options -->
                         <button 
                             type="button"
-                            :class="{ 'dock-active text-primary font-bold': activeFilterCount > 0, 'opacity-70 hover:opacity-100': activeFilterCount === 0 }"
+                            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer"
                             @click="openTray('filters')"
                             title="Open Filters & View Options"
                         >
                             <div class="indicator">
-                                <span v-if="activeFilterCount > 0" class="indicator-item badge badge-xs badge-primary font-mono font-bold">{{ activeFilterCount }}</span>
-                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5" />
+                                <span v-if="activeFilterCount > 0" class="indicator-item badge badge-xs badge-primary text-primary-content font-mono font-bold">{{ activeFilterCount }}</span>
+                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4.5 h-4.5 text-primary" />
                             </div>
-                            <span class="dock-label">Filters</span>
+                            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Filters</span>
                         </button>
                     </div>
                 </div>

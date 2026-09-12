@@ -3,8 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import SalesList from '../components/sales/SalesList.vue';
 ---
 
-<Layout title="Sales">
-  <div class="p-8 max-w-7xl mx-auto space-y-8">
+<Layout title="Sales | Resale Command" hideFooter={true}>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-44 sm:pb-40">
     <SalesList client:only="vue" />
   </div>
 </Layout>

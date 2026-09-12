@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 pb-32">
+  <div class="space-y-8 pb-44 sm:pb-40">
     <div v-if="loadingInit" class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
@@ -37,7 +37,7 @@
               <!-- Receipt Indicator Badge -->
               <span 
                 v-if="form.receiptImageId" 
-                class="badge badge-sm badge-success/15 text-success border-success/30 font-semibold gap-1 py-2"
+                class="badge badge-sm badge-success text-success-content font-black gap-1 py-2 whitespace-nowrap shadow-xs"
                 title="Receipt image is attached and linked to this PO"
               >
                 <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" />
@@ -284,25 +284,25 @@
                 <div v-if="isEdit && editMode" class="flex flex-wrap gap-2 pt-1">
                   <button 
                     type="button" 
-                    class="btn btn-xs btn-outline btn-primary font-bold gap-1 rounded-lg" 
+                    class="btn btn-xs btn-primary text-primary-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-primary-content/25" 
                     @click="receiptFileInput?.click()" 
                     :disabled="uploadingReceipt || rescanningReceipt"
                   >
-                    <Icon icon="solar:upload-track-bold-duotone" class="w-3.5 h-3.5" />
+                    <Icon icon="solar:upload-track-bold" class="w-3.5 h-3.5" />
                     <span>Replace</span>
                   </button>
                   <button 
                     type="button" 
-                    class="btn btn-xs btn-outline btn-secondary font-bold gap-1 rounded-lg" 
+                    class="btn btn-xs btn-secondary text-secondary-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-secondary-content/25" 
                     @click="openCameraScanner" 
                     :disabled="uploadingReceipt || rescanningReceipt"
                   >
-                    <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
+                    <Icon icon="solar:camera-bold" class="w-3.5 h-3.5" />
                     <span>Camera</span>
                   </button>
                   <button 
                     type="button" 
-                    class="btn btn-xs btn-outline btn-accent font-bold gap-1 rounded-lg" 
+                    class="btn btn-xs btn-accent text-accent-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-accent-content/25" 
                     @click="pasteReceiptFromClipboard"
                     :disabled="uploadingReceipt || rescanningReceipt"
                     title="Paste new receipt screenshot from clipboard"
@@ -312,12 +312,12 @@
                   </button>
                   <button 
                     type="button" 
-                    class="btn btn-xs btn-warning text-warning-content font-extrabold gap-1 rounded-lg shadow-xs" 
+                    class="btn btn-xs btn-warning text-warning-content font-black gap-1 rounded-lg shadow-xs active:scale-95 border border-warning-content/25" 
                     @click="rescanReceipt" 
                     :disabled="uploadingReceipt || rescanningReceipt"
                   >
                     <span v-if="rescanningReceipt" class="loading loading-spinner loading-xs"></span>
-                    <Icon v-else icon="solar:magic-stick-3-bold-duotone" class="w-3.5 h-3.5" />
+                    <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
                     <span>Rescan AI</span>
                   </button>
                 </div>
@@ -364,7 +364,7 @@
 
           <!-- Bottom Action Button for New PO creation only (!isEdit) -->
           <div v-if="!isEdit" class="card-actions justify-end items-center pt-4 border-t border-base-200 mt-2">
-            <button class="btn btn-sm btn-primary px-6 rounded-xl font-black gap-1.5 shadow-md" @click="savePurchase" :disabled="saving">
+            <button class="btn btn-sm btn-primary text-primary-content font-black px-6 rounded-xl gap-1.5 shadow-md border border-primary-content/25 active:scale-95 transition-all" @click="savePurchase" :disabled="saving">
               <span v-if="saving" class="loading loading-spinner loading-xs"></span>
               <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
               <span>Create Purchase Order</span>
@@ -518,7 +518,7 @@
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
                       <span v-else-if="item.identity" class="font-mono text-[11px] opacity-60">{{ item.identity }}</span>
-                      <div class="badge badge-xs" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost'))">
+                      <div class="badge badge-xs whitespace-nowrap" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info text-info-content font-bold' : (item.status === 'placed' ? 'badge-primary text-primary-content font-bold' : 'badge-ghost text-base-content/80 font-bold'))">
                         {{ item.status || 'acquired' }}
                       </div>
                       <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
@@ -544,17 +544,17 @@
                 <!-- Action Button Cluster -->
                 <div class="flex items-center gap-2 pt-1 border-t border-base-200">
                   <button 
-                    class="btn btn-sm btn-primary text-primary-content font-black gap-1.5 flex-1 h-9 rounded-xl shadow-xs" 
+                    class="btn btn-sm btn-primary text-primary-content font-black gap-1.5 flex-1 h-9 rounded-xl shadow-xs border border-primary-content/25 active:scale-95" 
                     @click="openEditItem(item)"
                     title="Open ItemDrawer with AI Deep Research, Lot Tools, and Details"
                   >
-                    <Icon icon="solar:pen-linear" class="w-4 h-4" />
+                    <Icon icon="solar:pen-bold" class="w-4 h-4" />
                     <span>Update</span>
                   </button>
 
                   <button 
                     v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
-                    class="btn btn-sm btn-success text-success-content font-bold gap-1 flex-1 h-9 rounded-xl shadow-xs" 
+                    class="btn btn-sm btn-success text-success-content font-black gap-1 flex-1 h-9 rounded-xl shadow-xs border border-success-content/25 active:scale-95" 
                     @click="receiveToStock(item, 'Backstock')"
                     title="Receive into Backstock"
                   >
@@ -567,12 +567,12 @@
                   </div>
 
                   <button 
-                    class="btn btn-sm btn-ghost text-error btn-square h-9 w-9 rounded-xl shrink-0" 
+                    class="btn btn-sm btn-ghost text-error hover:bg-error/15 btn-square h-9 w-9 rounded-xl shrink-0 active:scale-95" 
                     @click="unlinkItem(item)" 
                     :disabled="linkingItem === item.$id"
                     title="Unlink Item"
                   >
-                    <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
+                    <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -633,7 +633,7 @@
                       {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : '-') }}
                     </td>
                     <td>
-                      <div class="badge badge-sm" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info' : (item.status === 'placed' ? 'badge-primary' : 'badge-ghost'))">
+                      <div class="badge badge-sm whitespace-nowrap" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info text-info-content font-bold' : (item.status === 'placed' ? 'badge-primary text-primary-content font-bold' : 'badge-ghost text-base-content/80 font-bold'))">
                         {{ item.status || 'acquired' }}
                       </div>
                     </td>
@@ -641,20 +641,23 @@
                       <div class="flex items-center justify-end gap-1.5 flex-wrap">
                         <button 
                           v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
-                          class="btn btn-xs btn-ghost text-success hover:bg-success/20 font-bold gap-0.5" 
+                          class="btn btn-xs btn-success text-success-content font-black shadow-xs border border-success-content/25 gap-1 rounded-lg px-2.5 h-7 active:scale-95" 
                           @click="receiveToStock(item, 'Backstock')"
                           title="Receive into Backstock"
                         >
-                          <Icon icon="solar:check-circle-linear" class="w-3.5 h-3.5" />
+                          <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
                           <span>Receive</span>
                         </button>
-                        <button class="btn btn-xs btn-outline btn-primary gap-1 font-bold" @click="openEditItem(item)">
-                          <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" />
+                        <button class="btn btn-xs btn-primary text-primary-content font-black shadow-xs border border-primary-content/25 gap-1 rounded-lg px-2.5 h-7 active:scale-95" @click="openEditItem(item)">
+                          <Icon icon="solar:pen-bold" class="w-3.5 h-3.5" />
                           <span>Update</span>
                         </button>
-                        <button class="btn btn-xs btn-error btn-outline" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
+                        <button class="btn btn-xs btn-ghost text-error hover:bg-error/15 font-bold rounded-lg px-2 h-7 active:scale-95" @click="unlinkItem(item)" :disabled="linkingItem === item.$id">
                           <span v-if="linkingItem === item.$id" class="loading loading-spinner loading-xs"></span>
-                          <span v-else>Unlink</span>
+                          <span v-else class="flex items-center gap-1">
+                            <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
+                            <span>Unlink</span>
+                          </span>
                         </button>
                       </div>
                     </td>
@@ -866,9 +869,9 @@
           />
         </div>
         <div class="modal-action pt-2 border-t border-base-200 flex justify-between items-center m-0">
-          <button type="button" class="btn btn-sm btn-warning text-warning-content font-extrabold gap-1.5 rounded-xl shadow-xs" @click="showReceiptLightbox = false; rescanReceipt();">
-            <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
-            Rescan with AI
+          <button type="button" class="btn btn-sm btn-warning text-warning-content font-black gap-1.5 rounded-xl shadow-xs border border-warning-content/25 active:scale-95" @click="showReceiptLightbox = false; rescanReceipt();">
+            <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+            <span>Rescan with AI</span>
           </button>
           <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showReceiptLightbox = false">Close</button>
         </div>
@@ -881,42 +884,75 @@
     <!-- In-App Camera Scanner Widget for live receipt photos with alignment viewfinder box -->
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
 
-    <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
-    <div v-if="isEdit" class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
-      <div class="max-w-4xl mx-auto flex items-center justify-between gap-2.5">
-        <!-- Action 1: Delete PO -->
-        <button 
-          class="btn btn-sm btn-ghost text-error hover:bg-error/10 border border-error/20 font-bold rounded-2xl gap-1.5 h-10 px-3.5"
-          @click="handleDelete"
-          :disabled="saving"
-          title="Delete this Purchase Order"
-        >
-          <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-          <span class="text-xs sm:text-sm">Delete PO</span>
-        </button>
+    <!-- STANDARDIZED ERGONOMIC ACTION BUTTON DOCK -->
+    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+      <!-- Tier 1: Slim Telemetry & Cost Strip -->
+      <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-between text-xs shadow-2xs font-mono">
+        <div class="max-w-xl w-full mx-auto flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2 truncate">
+            <span class="font-black text-primary text-xs">{{ form.poNumber || (isEdit ? 'PO-PENDING' : 'New PO') }}</span>
+            <span class="opacity-40 font-bold">•</span>
+            <span class="text-[11px] font-bold text-base-content font-sans truncate max-w-[120px] sm:max-w-[200px]">{{ form.vendor || 'No Vendor' }}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="badge badge-xs font-black" :class="getStatusClass(form.status)">{{ form.status || 'Draft' }}</span>
+            <span class="font-black text-base-content text-xs">${{ computedGrandTotal.toFixed(2) }}</span>
+          </div>
+        </div>
+      </div>
 
-        <div class="flex items-center gap-2">
-          <!-- Action 2: Purchase (if Draft) or Receive All (if not Draft and has unreceived items) -->
+      <!-- Tier 2: DaisyUI Semantic Dock (Harmonized Tactile Pattern Matching Scout) -->
+      <div class="max-w-xl w-full mx-auto">
+        <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-1.5 sm:gap-2">
+          <!-- Action 1: Delete PO (when isEdit) -->
           <button 
-            v-if="isDraft || hasUnreceivedItems" 
-            @click="handleReceiveOrPurchase('Backstock')" 
-            class="btn btn-sm btn-success text-success-content font-black rounded-2xl shadow-md gap-1.5 h-10 px-4 active:scale-95 transition-all"
-            :title="isDraft ? 'Complete purchase and activate items into Backstock' : 'Receive all unreceived items into Backstock'"
+            v-if="isEdit"
+            type="button"
+            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-error/15 text-error font-bold border border-error/25 shadow-xs active:scale-95 cursor-pointer"
+            @click="handleDelete"
+            :disabled="saving"
+            title="Delete this Purchase Order"
           >
-            <Icon :icon="isDraft ? 'lucide:truck' : 'solar:check-circle-bold'" class="w-4 h-4" />
-            <span class="text-xs sm:text-sm">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
+            <Icon icon="solar:trash-bin-trash-bold" class="w-4.5 h-4.5" />
+            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Delete PO</span>
           </button>
 
-          <!-- Action 3: Save PO Changes (when in edit mode) -->
+          <!-- Action 2: Camera / Scan Receipt -->
           <button 
-            v-if="editMode" 
-            @click="savePurchase" 
-            :disabled="saving"
-            class="btn btn-sm btn-primary text-primary-content font-black rounded-2xl shadow-md gap-1.5 h-10 px-4 active:scale-95 transition-all"
+            type="button"
+            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+            @click="openCameraScanner"
+            title="Capture receipt photo"
           >
-            <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
-            <span class="text-xs sm:text-sm">Save PO</span>
+            <Icon icon="solar:camera-bold" class="w-4.5 h-4.5" />
+            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Receipt</span>
+          </button>
+
+          <!-- Action 3: Receive All / Purchase -->
+          <button 
+            v-if="isEdit && (isDraft || hasUnreceivedItems)" 
+            type="button"
+            @click="handleReceiveOrPurchase('Backstock')" 
+            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            :title="isDraft ? 'Complete purchase and activate items into Backstock' : 'Receive all unreceived items into Backstock'"
+          >
+            <Icon :icon="isDraft ? 'solar:box-minimalistic-bold' : 'solar:check-circle-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
+            <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
+          </button>
+
+          <!-- Action 4: Edit / Save PO (Elevated Solid Hero Action) -->
+          <button 
+            type="button"
+            @click="editMode || !isEdit ? savePurchase() : (editMode = true)" 
+            :disabled="saving"
+            class="h-11 my-auto px-3 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            :title="editMode || !isEdit ? 'Save Purchase Order changes' : 'Enable Edit Mode'"
+          >
+            <span v-if="saving" class="loading loading-spinner loading-xs text-primary-content"></span>
+            <template v-else>
+              <Icon :icon="editMode || !isEdit ? 'solar:diskette-bold' : 'solar:pen-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
+              <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ editMode || !isEdit ? 'Save PO' : 'Edit PO' }}</span>
+            </template>
           </button>
         </div>
       </div>
@@ -1041,15 +1077,15 @@ watch(editMode, (val) => {
 
 const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
-        case 'pending': return 'badge-warning text-warning-content';
-        case 'ordered': return 'badge-info text-info-content';
-        case 'shipped': return 'badge-info text-info-content';
+        case 'pending': return 'badge-warning text-warning-content font-black whitespace-nowrap';
+        case 'ordered': return 'badge-info text-info-content font-bold whitespace-nowrap';
+        case 'shipped': return 'badge-info text-info-content font-bold whitespace-nowrap';
         case 'partial':
-        case 'partially received': return 'badge-secondary text-secondary-content';
-        case 'received': return 'badge-success text-success-content';
-        case 'returned': return 'badge-error text-error-content';
-        case 'cancelled': return 'badge-error text-error-content';
-        default: return 'badge-ghost';
+        case 'partially received': return 'badge-secondary text-secondary-content font-bold whitespace-nowrap';
+        case 'received': return 'badge-success text-success-content font-black whitespace-nowrap';
+        case 'returned': return 'badge-error text-error-content font-bold whitespace-nowrap';
+        case 'cancelled': return 'badge-error text-error-content font-bold whitespace-nowrap';
+        default: return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
     }
 };
 
