@@ -568,16 +568,17 @@
             </div>
         </div>
 
-        <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, scrollbar stops above it) -->
-        <div class="flex-none border-t border-base-300 bg-base-200/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.15)] pb-safe z-30">
-            <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
-                
-                <!-- State C: Active Buy Tracker Status Strip (Matches Screenshot 4) -->
-                <div v-if="activePurchase" class="pb-2 mb-1.5 border-b border-base-content/10">
+        <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, matching unified dock pattern) -->
+        <div class="flex-none border-t border-base-300 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)] z-30">
+            <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
+            <div v-if="activePurchase || (draftPurchases.length > 0 && pausedTracker)" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+                <div class="max-w-xl w-full mx-auto">
+                    <!-- State C: Active Buy Tracker Status Strip -->
                     <button 
+                        v-if="activePurchase"
                         type="button" 
                         @click="toggleTray()" 
-                        class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden"
+                        class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden border border-base-content/20"
                         title="View manifest details"
                     >
                         <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
@@ -598,14 +599,13 @@
                         <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
                         <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                     </button>
-                </div>
 
-                <!-- State B: Paused Buy Tracker Status Strip -->
-                <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="pb-1.5 mb-1.5 border-b border-base-content/10">
+                    <!-- State B: Paused Buy Tracker Status Strip -->
                     <button 
+                        v-else-if="draftPurchases.length > 0 && pausedTracker"
                         type="button" 
                         @click="toggleTray()" 
-                        class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
+                        class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-100/80 hover:bg-base-100 border border-base-content/20 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
                         title="Inspect paused tracker manifest"
                     >
                         <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0" />
@@ -623,36 +623,52 @@
                         <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                     </button>
                 </div>
+            </div>
 
-                <!-- 3 Action Buttons Row (Matches Screenshot 4) -->
-                <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
-                    <!-- 1. New Scout Button -->
-                    <button type="button" @click="startNewScan" 
-                            class="btn btn-ghost w-24 sm:w-28 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
-                            title="Clear and start new scout">
-                        <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
-                        <span class="font-extrabold tracking-wider uppercase text-[10px]">New Scout</span>
+            <!-- STACK ROW 2: DAISYUI SEMANTIC DOCK (BOTTOM STRIP - THUMB ZONE) -->
+            <div class="max-w-xl w-full mx-auto">
+                <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-2">
+                    <!-- Dock Item 1: New Scout Button -->
+                    <button 
+                        type="button" 
+                        @click="startNewScan" 
+                        class="h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95"
+                        title="Clear and start new scout"
+                    >
+                        <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
+                        <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
                     </button>
 
-                    <!-- 2. Identify Item (Re-scout) Button -->
-                    <button type="button" @click="handleAnalyze" 
-                            class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95 btn-primary text-primary-content font-black shadow-lg border border-primary-content/25"
-                            :disabled="loading">
-                        <span v-if="loading" class="loading loading-spinner loading-md"></span>
+                    <!-- Dock Item 2: Re-Identify Button (Warning Pattern) -->
+                    <button 
+                        type="button" 
+                        @click="handleAnalyze" 
+                        class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110"
+                        :disabled="loading"
+                        title="Re-analyze Item with AI"
+                    >
+                        <span v-if="loading" class="loading loading-spinner loading-sm text-warning-content"></span>
                         <template v-else>
-                            <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
-                            <span class="text-xs font-black uppercase tracking-wider">Identify Item</span>
+                            <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                            <span class="font-black uppercase text-[11px] tracking-wide leading-none">Re-Identify</span>
                         </template>
                     </button>
 
-                    <!-- 3. Add Button (Saves to active tracker directly or prompts destination tray) -->
-                    <button type="button" @click="handleAddButtonClick" 
-                            class="btn flex-1 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-md active:scale-95 btn-success text-success-content font-black"
-                            :disabled="savingAll || !canSaveReport">
-                        <span v-if="savingAll" class="loading loading-spinner loading-sm"></span>
+                    <!-- Dock Item 3: Add to Tracker Button -->
+                    <button 
+                        type="button" 
+                        @click="handleAddButtonClick" 
+                        :class="savingAll || !canSaveReport
+                                ? 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'
+                                : 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110'"
+                        class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
+                        :disabled="savingAll || !canSaveReport"
+                        title="Save to Buy Tracker"
+                    >
+                        <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
                         <template v-else>
-                            <Icon icon="lucide:truck" class="w-5 h-5" />
-                            <span class="font-extrabold tracking-wider uppercase text-[10px]">
+                            <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
+                            <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
                                 + Add {{ itemsInResult.length > 1 ? `All (${itemsInResult.length})` : 'Item' }}
                             </span>
                         </template>
@@ -682,16 +698,20 @@
         @save-standalone="handleSaveStandalone"
     />
 
-    <!-- BOTTOM DOCK NAV (Unified Tactile Dock Pattern for Intake Cockpit) -->
-    <div v-if="!isResultsModalOpen" class="fixed bottom-0 left-0 right-0 w-full z-40 bg-base-200/95 backdrop-blur-md border-t border-base-300 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.3)] pb-safe">
-        <div class="max-w-2xl mx-auto px-3 pt-2 pb-1 transition-all duration-300">
-            
-            <!-- State C: Active Buy Tracker Status Strip (Integrated into dock, ONLY shown when activePurchase is present) -->
-            <div v-if="activePurchase" class="pb-2 mb-1.5 border-b border-base-content/10">
+    <!-- BOTTOM DOCK NAV (Unified Semantic DaisyUI Dock Pattern matching InventoryPaginationDock) -->
+    <div 
+        v-if="!isResultsModalOpen" 
+        class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
+    >
+        <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
+        <div v-if="activePurchase || (draftPurchases.length > 0 && pausedTracker)" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+            <div class="max-w-xl w-full mx-auto">
+                <!-- State C: Active Buy Tracker Status Strip -->
                 <button 
+                    v-if="activePurchase"
                     type="button" 
                     @click="toggleTray()" 
-                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-300/80 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden"
+                    class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 w-full overflow-hidden border border-base-content/20"
                     title="View manifest details"
                 >
                     <Icon icon="lucide:truck" class="w-4 h-4 text-primary shrink-0" />
@@ -712,14 +732,13 @@
                     <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
                     <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                 </button>
-            </div>
 
-            <!-- State B: Paused Buy Tracker Status Strip -->
-            <div v-else-if="draftPurchases.length > 0 && pausedTracker" class="pb-1.5 mb-1.5 border-b border-base-content/10">
+                <!-- State B: Paused Buy Tracker Status Strip -->
                 <button 
+                    v-else-if="draftPurchases.length > 0 && pausedTracker"
                     type="button" 
                     @click="toggleTray()" 
-                    class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-300/60 hover:bg-base-300/80 border border-base-300 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
+                    class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-base-100/80 hover:bg-base-100 border border-base-content/20 cursor-pointer select-none transition-all group text-left min-w-0 w-full h-7 overflow-hidden"
                     title="Inspect paused tracker manifest"
                 >
                     <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0" />
@@ -737,59 +756,74 @@
                     <Icon :icon="isTrayOpen ? 'solar:alt-arrow-down-linear' : 'solar:alt-arrow-up-linear'" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
                 </button>
             </div>
+        </div>
 
-            <!-- Tactile Actions Row (Matches Screenshot 3) -->
-            <div class="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
-                <!-- 1. New Scout Button -->
-                <button @click="startNewScan" 
-                        class="btn btn-ghost w-24 sm:w-28 h-full flex flex-col items-center justify-center gap-1 rounded-2xl bg-base-300/80 hover:bg-base-300 text-base-content border border-base-content/20 shadow-xs active:scale-95 transition-all"
-                        title="Start fresh new scout">
-                    <Icon icon="solar:restart-bold" class="w-5 h-5 opacity-80" />
-                    <span class="font-extrabold tracking-wider uppercase text-[10px]">New Scout</span>
+        <!-- STACK ROW 2: DAISYUI SEMANTIC DOCK (BOTTOM STRIP - THUMB ZONE) -->
+        <div class="max-w-xl w-full mx-auto">
+            <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-2">
+                <!-- Dock Item 1: New Scout Button -->
+                <button 
+                    type="button"
+                    @click="startNewScan" 
+                    class="h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95"
+                    title="Start fresh new scout"
+                >
+                    <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
+                    <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
                 </button>
 
-                <!-- 2. Primary Hero Action: Identify Item or View Report -->
-                <button v-if="result" 
-                        @click="isResultsModalOpen = true" 
-                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95 btn-primary text-primary-content font-black shadow-lg border border-primary-content/25"
-                        title="Open current scouting report">
-                    <Icon icon="solar:document-text-bold" class="w-5 h-5 drop-shadow-md" />
-                    <span class="text-xs font-black uppercase tracking-wider">
-                        View Report
-                    </span>
+                <!-- Dock Item 2: Hero Primary Action (Identify Item or View Report) -->
+                <button 
+                    v-if="result" 
+                    type="button"
+                    @click="isResultsModalOpen = true" 
+                    class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110"
+                    title="Open current scouting report"
+                >
+                    <Icon icon="solar:document-text-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                    <span class="font-black uppercase text-[11px] tracking-wide leading-none">View Report</span>
                 </button>
 
-                <button v-else 
-                        @click="handleAnalyze" 
-                        class="btn flex-1 h-full flex flex-col items-center justify-center gap-0.5 rounded-2xl shadow-md transition-all active:scale-95"
-                        :class="(loading || !canAnalyze)
-                                ? 'btn-ghost bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed'
-                                : 'btn-primary text-primary-content font-black shadow-lg border border-primary-content/25'"
-                        :disabled="loading || !canAnalyze">
-                    <span v-if="loading" class="loading loading-spinner loading-md"></span>
+                <button 
+                    v-else 
+                    type="button"
+                    @click="handleAnalyze" 
+                    :class="(loading || !canAnalyze)
+                            ? 'bg-base-300/40 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'
+                            : (rescoutId
+                                ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110'
+                                : 'bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110')"
+                    class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
+                    :disabled="loading || !canAnalyze"
+                    :title="rescoutId ? 'Re-analyze and update existing item' : 'Identify item with AI'"
+                >
+                    <span v-if="loading" class="loading loading-spinner loading-sm" :class="rescoutId ? 'text-warning-content' : 'text-primary-content'"></span>
                     <template v-else>
-                        <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 drop-shadow-md" />
-                        <span class="text-xs font-black uppercase tracking-wider">
-                            Identify Item
+                        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                        <span class="font-black uppercase text-[11px] tracking-wide leading-none">
+                            {{ rescoutId ? 'Re-Identify' : 'Identify Item' }}
                         </span>
                     </template>
                 </button>
 
-                <!-- 3. Add to Tracker Button -->
+                <!-- Dock Item 3: Add to Tracker Button -->
                 <button 
                     type="button" 
                     @click="result ? handleAddButtonClick() : null" 
-                    class="btn w-28 sm:w-36 h-full flex flex-col items-center justify-center gap-1 rounded-2xl transition-all shadow-xs"
                     :class="result && canSaveReport 
-                            ? 'btn-success text-success-content font-black shadow-md active:scale-95' 
-                            : 'btn-ghost bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed'"
+                            ? 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110' 
+                            : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'"
+                    class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                     :disabled="!result || savingAll || !canSaveReport"
                     :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
                 >
-                    <Icon icon="lucide:truck" class="w-5 h-5" />
-                    <span class="font-extrabold tracking-wider uppercase text-[9px] sm:text-[10px] truncate max-w-[110px]">
-                        + Add {{ itemsInResult.length > 1 ? `(${itemsInResult.length})` : 'Item' }}
-                    </span>
+                    <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
+                    <template v-else>
+                        <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
+                        <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
+                            + Add {{ itemsInResult.length > 1 ? `(${itemsInResult.length})` : 'Item' }}
+                        </span>
+                    </template>
                 </button>
             </div>
         </div>

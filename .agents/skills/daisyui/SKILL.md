@@ -103,29 +103,52 @@ description: Expert guidelines and best practices for building modern, responsiv
 ```
 
 ### Bottom Navigation & Button Docks (`dock`)
-daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component:
+daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component. In Resale Command, all bottom docks follow the **Unified Frozen Command Dock Pattern**:
+
 ```html
-<!-- Base dock pinned at bottom with safe-area insets -->
-<div class="dock dock-sm bg-base-100/95 border-t border-base-300 z-40">
-  <button class="dock-active text-warning font-black">
-    <Icon icon="solar:bolt-bold" class="size-5" />
-    <span class="dock-label font-mono">Actions (3)</span>
-  </button>
-  <button class="text-primary font-bold">
-    <Icon icon="solar:add-circle-bold" class="size-5" />
-    <span class="dock-label">Add & Ingest</span>
-  </button>
-  <button>
-    <div class="indicator">
-      <span class="indicator-item badge badge-xs badge-primary font-bold">2</span>
-      <Icon icon="solar:tuning-square-2-bold-duotone" class="size-5" />
+<!-- Base frozen 2-tier dock pinned at bottom with safe-area insets -->
+<div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+  
+  <!-- Tier 1: Slim Contextual Telemetry / Pager / Manifest Status Strip -->
+  <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+    <div class="max-w-xl w-full mx-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-2">
+      <!-- Pager items or active tracker pill -->
     </div>
-    <span class="dock-label">Filters</span>
-  </button>
+  </div>
+
+  <!-- Tier 2: DaisyUI Semantic Dock (Thumb Zone) with Solid Tactile Hero Buttons -->
+  <div class="max-w-xl w-full mx-auto">
+    <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-2">
+      <!-- Neutral Action: New Scout / Cancel -->
+      <button type="button" class="h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95">
+        <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
+        <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
+      </button>
+
+      <!-- Primary Hero CTA (Enabled): Solid High-Contrast Pill -->
+      <button type="button" class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110">
+        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+        <span class="font-black uppercase text-[11px] tracking-wide leading-none">Identify Item</span>
+      </button>
+
+      <!-- Warning Hero CTA (Attention / Re-Action / Re-Identify): Solid Amber Pill -->
+      <button type="button" class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110">
+        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+        <span class="font-black uppercase text-[11px] tracking-wide leading-none">Re-Identify</span>
+      </button>
+
+      <!-- Success Action (Save / Commit): Solid Green Pill -->
+      <button type="button" class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110">
+        <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
+        <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">+ Add Item</span>
+      </button>
+    </div>
+  </div>
 </div>
 ```
 - **Modifiers**: `dock-xs`, `dock-sm`, `dock-md` (default), `dock-lg`, `dock-xl`.
-- **Parts**: `.dock-label` for button text, `.dock-active` for active selection indicator bar.
+- **Parts**: `.dock-label` for standard tab text, `.dock-active` for active selection indicator bar.
+- **Hero Actions Rule**: Center actions in a dock must NEVER be flat transparent text with duotone icons (which wash out at 40% opacity in light themes). Always use **Solid Elevated Pills** (`bg-primary text-primary-content font-black shadow-md`, `bg-warning text-warning-content font-black shadow-md`) with **solid bold icons** (`solar:*-bold`).
 
 ### Badges, Tooltips & Loaders
 ```html

@@ -115,15 +115,17 @@ A standardized two-tier mobile-first interaction pattern synthesizing the Scout 
 ```
 
 ### Anatomical Rules:
-1. **Tier 1 (Top): Pager Navigation Bar**:
-   - Strictly reserved for page navigation: Scroll-to-top (`↑`), First/Previous, Tactile Page Pill (`Page 1 / 38`), Next/Last, Page Size selector.
-   - Zero inline bulk tools or action buttons in this bar.
-2. **Tier 2 (Bottom): Action Buttons Strip**:
-   - Positioned in the direct primary thumb zone.
-   - 3 focused trigger buttons that open dedicated bottom sheets:
-     - **`[ ⚙ Filters ]`**: Opens the Filters Tray with count badge.
-     - **`[ ⚡ Actions ]`**: Active when items are selected. Opens the Bulk Actions Tray (Move Location, Update Status, Channel Exports).
-     - **`[ ✦ Add & Prep ]`**: Opens the Add & Prep Tray (Scout Quick Add, Item Drawer, Combine Lots, Bundle into Lot).
+1. **Tier 1 (Top): Status / Telemetry Strip**:
+   - In Catalog views: Pager navigation bar (Scroll-to-top `↑`, First/Previous, `Page 1 / 38`, Next/Last, Page Size selector).
+   - In Terminal / Scout views: Active or Paused Buy Tracker telemetry strip (`[ 🚚 Goodwill 3 items $37.00 ] [ MANIFEST ⌃ ]`).
+2. **Tier 2 (Bottom): Action Buttons Strip (Thumb Zone)**:
+   - Built on the semantic **DaisyUI `.dock.dock-sm`** component inside a fixed glassmorphic container (`fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 pb-[env(safe-area-inset-bottom,0px)]`).
+   - Center action is the **Contextual Primary Action (CPA)**, styled as a **solid elevated tactile pill**:
+     - *Identify / Create*: `bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110`.
+     - *Re-Identify / Attention*: `bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110`.
+     - *Add / Commit*: `bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110`.
+     - *Disabled State*: `bg-base-300/40 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none`.
+   - Never use transparent text or duotone icons with 40% opacity for CTAs, which wash out in light mode. Always use solid bold icons (`solar:*-bold`).
 3. **Bottom Action Tray (Slide-up Drawer)**:
    - Follows Scout's detent drawer pattern with backdrop blur (`bg-black/60 backdrop-blur-xs`), rounded top (`rounded-t-3xl`), drag handle, segmented top tab switcher, and symmetrical footer buttons.
 

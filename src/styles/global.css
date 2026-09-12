@@ -48,3 +48,11 @@
         @apply opacity-100 scale-100;
     }
 }
+
+.pb-safe {
+    padding-bottom: max(1rem, calc(0.75rem + env(safe-area-inset-bottom, 0px)));
+}
+
+.pt-safe {
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}

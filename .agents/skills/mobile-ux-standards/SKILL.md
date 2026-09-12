@@ -38,14 +38,21 @@ description: Industry-standard mobile UX/UI rules for Resale Command, synthesizi
 
 ## 4. Touch Targets & Safe-Area Padding (Apple HIG & Material 3)
 - **Touch Target Size**: All interactive buttons, icon triggers, and form pills must have a minimum touch target of **44×44px** (or generous padding) to prevent tap errors.
-- **Viewport Safe Areas**: All fixed bottom bars, modals, and camera viewfinders must include `pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]` for iOS home indicators and Android navigation bars.
-- **Scroll Clearance with Fixed Docks**: When a fixed bottom dock is present, the scrollable page container must have **`pb-36` to `pb-44` (9rem–11rem) bottom padding**. This guarantees that the bottom-most list items or table rows scroll completely above the dock with generous breathing room and are never covered or clipped.
+- **Viewport Meta Requirement**: Every page layout (`Layout.astro`) MUST specify `<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />`. Without `viewport-fit=cover`, mobile WebKit ignores `env(safe-area-inset-bottom)`.
+- **Viewport Safe Areas**: All fixed bottom docks, modals, and camera viewfinders must include `pb-[env(safe-area-inset-bottom,0px)]` on the outer fixed container, and `.pb-safe` utilities with `max(1rem, calc(0.75rem + env(safe-area-inset-bottom, 0px)))`.
+- **Scroll Clearance with Fixed Docks**: When a fixed bottom dock is present, the scrollable page container must have **`pb-40` to `pb-44` (10rem–11rem) bottom padding**. This guarantees that the bottom-most inputs, camera buttons, or table rows scroll completely above the dock with generous breathing room and are never covered or clipped.
 - **Floating Action Pills (Scroll-to-Top / Counts)**: Floating badges must sit at **`bottom-22` to `bottom-24`** centered (`left-1/2 -translate-x-1/2 z-40`) so they hover cleanly above the dock without overlapping table text or colliding with the dock buttons. Must use high-contrast backgrounds (`bg-base-200/95` or `bg-base-300`) with visible borders (`border border-base-content/20`).
 
 ## 5. Theme-Adaptive Button Contrast & Disabled States (DaisyUI & WCAG 2.1 AA)
-- **Explicit Content Contrast**: Action buttons must pair `btn-primary` with `text-primary-content font-black` and `btn-success` with `text-success-content font-black` to guarantee legibility across all 35 DaisyUI light, dark, pastel, and neon themes (e.g. `synthwave`, `valentine`, `dracula`, `cyberpunk`).
-- **Accessible Disabled States**: Never use browser default disabled styling on dark backgrounds. Use `bg-base-300/40 text-base-content/40 border border-base-content/10 cursor-not-allowed` to maintain a visible $\ge 3:1$ contrast ratio.
-- **Ergonomic Dock Clustering**: Use `max-w-md mx-auto` for 2-button docks and `max-w-2xl mx-auto` for 3-button docks so buttons do not stretch into massive empty slabs on wide desktop screens.
+- **Explicit Content Contrast**: Action buttons must pair `btn-primary` with `text-primary-content font-black`, `btn-success` with `text-success-content font-black`, and `btn-warning` with `text-warning-content font-black` to guarantee legibility across all 35 DaisyUI light, dark, pastel, and neon themes (e.g. `emerald`, `corporate`, `synthwave`, `valentine`, `dracula`, `cyberpunk`).
+- **Hero Dock Button Pattern**: Center primary actions in a bottom dock (e.g. `Identify Item`, `Re-Identify`, `Save & Ingest`) must be **solid elevated tactile pills**:
+  - **Ready / Affirmative CTA**: `bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110`
+  - **Attention / Re-Action CTA (Warning Pattern)**: `bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110`
+  - **Success / Commit CTA**: `bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110`
+  - **Utility / Secondary CTA**: `bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95`
+  - **Disabled State**: `bg-base-300/40 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none`
+- **Anti-Duotone Rule for CTAs**: NEVER use duotone icons (`*-duotone`) with 40% transparent secondary paths for primary dock CTAs — in light themes, low-opacity fills wash out into unreadable grey. Always use **solid bold icons** (`solar:*-bold`).
+- **Ergonomic Dock Clustering**: Use `max-w-xl mx-auto` or `max-w-2xl mx-auto` with `gap-2 px-2 py-1` so buttons fit naturally across 360px–420px mobile screens without horizontal clipping.
 
 ## 6. Strict Zero Native Browser Dialogs (NN/g & Modern Web Standards)
 - **NEVER Use Native Dialogs**: `window.confirm()`, `window.alert()`, and `window.prompt()` are strictly forbidden across the codebase. They block the single JS execution thread, look outdated, and destroy mobile PWA experiences.
