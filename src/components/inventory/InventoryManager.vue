@@ -1207,41 +1207,46 @@ const postExportPlatform = ref('');
 const postExportItems = ref([]);
 
 function exportCsv(format = 'generic') {
-    // Safety check just in case it receives an event
-    if (typeof format !== 'string') {
-        format = 'generic';
-    }
-    const itemsToExport = selectedItems.value.length > 0
-        ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
-        : filteredInventory.value;
-
-    if (itemsToExport.length === 0) {
-        addToast({ type: 'warning', message: 'No items to export.' });
-        return;
-    }
-
-    let csvContent = '';
-    if (format === 'ebay') {
-        csvContent = generateEbayCsv(itemsToExport);
-    } else if (format === 'poshmark') {
-        csvContent = generatePoshmarkCsv(itemsToExport);
-    } else if (format === 'ricochet') {
-        csvContent = generateRicochetCsv(itemsToExport);
-    } else {
-        csvContent = generateGenericCsv(itemsToExport);
-    }
-
-    const filename = `inventory-export-${format}-${new Date().toISOString().split('T')[0]}.csv`;
-    downloadCsv(csvContent, filename);
-    addToast({ type: 'success', message: `Exported ${itemsToExport.length} items for ${format}.` });
-
-    // Show post-export actions for platform exports
-    if (format === 'ebay' || format === 'poshmark') {
-        postExportPlatform.value = format === 'ebay' ? 'eBay' : 'Poshmark';
-        postExportItems.value = itemsToExport;
-        if (postExportModalRef.value) {
-            postExportModalRef.value.showModal();
+    try {
+        // Safety check just in case it receives an event
+        if (typeof format !== 'string') {
+            format = 'generic';
         }
+        const itemsToExport = selectedItems.value.length > 0
+            ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
+            : filteredInventory.value;
+
+        if (itemsToExport.length === 0) {
+            addToast({ type: 'warning', message: 'No items to export.' });
+            return;
+        }
+
+        let csvContent = '';
+        if (format === 'ebay') {
+            csvContent = generateEbayCsv(itemsToExport);
+        } else if (format === 'poshmark') {
+            csvContent = generatePoshmarkCsv(itemsToExport);
+        } else if (format === 'ricochet') {
+            csvContent = generateRicochetCsv(itemsToExport);
+        } else {
+            csvContent = generateGenericCsv(itemsToExport);
+        }
+
+        const filename = `inventory-export-${format}-${new Date().toISOString().split('T')[0]}.csv`;
+        downloadCsv(csvContent, filename);
+        addToast({ type: 'success', message: `Exported ${itemsToExport.length} items for ${format}.` });
+
+        // Show post-export actions for platform exports
+        if (format === 'ebay' || format === 'poshmark') {
+            postExportPlatform.value = format === 'ebay' ? 'eBay' : 'Poshmark';
+            postExportItems.value = itemsToExport;
+            if (postExportModalRef.value) {
+                postExportModalRef.value.showModal();
+            }
+        }
+    } catch (err) {
+        console.error("[exportCsv] Export failed:", err);
+        addToast({ type: 'error', message: 'Export failed: ' + (err.message || 'Unknown error') });
     }
 }
 

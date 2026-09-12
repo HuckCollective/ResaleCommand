@@ -9,17 +9,18 @@ export type ExportFormat = 'generic' | 'ebay' | 'poshmark' | 'ricochet';
  */
 const escapeCsv = (str: any) => {
     if (str === null || str === undefined) return '';
-    return `"${String(str).replace(/"/g, '""').replace(/\n/g, ' ')}"`;
+    return `"${String(str).replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
 };
 
 /**
  * Generate standard generic export
  */
 export function generateGenericCsv(items: any[]): string {
-    const headers = ['ID', 'Title', 'Status', 'Cost', 'Resale Price', 'Est. Value', 'Location', 'Condition Notes', 'Keywords', 'Date Added'];
+    const headers = ['ID', 'UPC / SKU', 'Title', 'Status', 'Cost', 'Resale Price', 'Est. Value', 'Location', 'Condition Notes', 'Keywords', 'Date Added'];
     
     const rows = items.map(item => [
         item.$id,
+        item.upc || item.sku || item.$id,
         item.title || '',
         item.status || '',
         item.cost ?? '',
@@ -77,6 +78,9 @@ export function generateEbayCsv(items: any[]): string {
             } catch (e) {}
         }
 
+        const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
+        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '';
+
         return [
             'Add', // Action
             '', // Category (Must be filled by user usually, or mapped)
@@ -86,10 +90,10 @@ export function generateEbayCsv(items: any[]): string {
             '', // PicURL (Would map to our public image URL if enabled)
             item.quantity || 1, // Quantity
             'FixedPrice', // Format
-            item.resalePrice || item.estValue || '', // StartPrice
+            cleanPrice, // StartPrice
             'GTC', // Duration (Good 'Til Cancelled)
             item.storageLocation || 'US', // Location
-            item.$id, // CustomLabel / SKU
+            item.upc || item.sku || item.$id, // CustomLabel / SKU
             country // C:Country/Region of Manufacture
         ];
     });
@@ -132,6 +136,9 @@ export function generatePoshmarkCsv(items: any[]): string {
             } catch (e) {}
         }
 
+        const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
+        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '';
+
         return [
             '', // Department
             '', // Category
@@ -142,9 +149,9 @@ export function generatePoshmarkCsv(items: any[]): string {
             'No', // New With Tags
             (item.title || '').substring(0, 50), // Title max 50 chars for Poshmark
             desc, // Description
-            item.resalePrice || item.estValue || '', // Price
+            cleanPrice, // Price
             '0', // Original Price
-            item.$id // SKU
+            item.upc || item.sku || item.$id // SKU
         ];
     });
 
@@ -221,6 +228,9 @@ export function generateRicochetCsv(items: any[]): string {
             finalTitle = (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
         }
 
+        const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
+        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '0.00';
+
         return [
             item.upc || item.sku || item.$id, // SKU
             finalTitle, // Item Title (cleanly fits physical barcode sticker)
@@ -252,6 +262,11 @@ export function downloadCsv(csvContent: string, filename: string) {
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+        if (document.body.contains(a)) {
+            document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(url);
+    }, 150);
 }
+
