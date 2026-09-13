@@ -5,15 +5,183 @@
     </div>
 
     <template v-else>
-      <!-- COLLAPSIBLE PURCHASE SUMMARY & COST BREAKDOWN CARD -->
+      <!-- 1. TOP HERO CARD: RECEIPT PHOTO & AI SCANNER (PhotoGalleryManager UI Pattern) -->
       <div class="card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
-        <!-- HEADER SUMMARY BAR (ALWAYS VISIBLE - CLICKABLE ACCORDION HEADER) -->
+        <!-- Header -->
+        <div class="p-4 sm:p-5 border-b border-base-200 bg-base-200/20 flex items-center justify-between">
+          <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-2">
+            <Icon icon="solar:bill-list-bold-duotone" class="w-5 h-5 text-primary" />
+            <span>Receipt Photo &amp; AI Scanner</span>
+          </label>
+          <div class="flex items-center gap-1.5">
+            <span v-if="form.receiptImageId || receiptPreviewUrl" class="badge badge-success text-success-content font-bold text-xs gap-1 py-2">
+              <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" /> Attached
+            </span>
+            <span v-else class="badge badge-ghost text-xs text-base-content/60">
+              Optional
+            </span>
+          </div>
+        </div>
+
+        <div class="card-body p-4 sm:p-6">
+          <!-- Hidden File Input for Receipt -->
+          <input type="file" ref="receiptFileInput" @change="handleReceiptFileChange" accept="image/*" class="hidden" />
+
+          <!-- A. EMPTY STATE: Tactile Dropzone with Big Camera Button -->
+          <div 
+            v-if="!form.receiptImageId && !receiptPreviewUrl"
+            class="border-2 border-dashed border-base-300 rounded-2xl p-6 sm:p-8 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-3 relative select-none"
+            @click="receiptFileInput?.click()"
+            @dragover.prevent
+            @drop.prevent="handleReceiptDrop"
+          >
+            <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-1 pointer-events-none">
+              <Icon icon="solar:bill-cross-bold-duotone" class="w-8 h-8" />
+            </div>
+            <div class="pointer-events-none">
+              <div class="font-black text-sm sm:text-base text-base-content">Tap to upload or drag receipt here</div>
+              <p class="text-xs opacity-60 max-w-sm mt-1 mx-auto">
+                AI automatically extracts store name, purchase date, cost totals, and line items.
+              </p>
+            </div>
+
+            <!-- Prominent Large Action Buttons -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2 w-full max-w-md pointer-events-auto" @click.stop>
+              <button 
+                type="button" 
+                class="btn btn-secondary w-full sm:w-auto sm:flex-1 rounded-2xl font-black text-sm gap-2 h-12 shadow-md active:scale-95 transition-all"
+                @click="openCameraScanner"
+              >
+                <Icon icon="solar:camera-bold" class="w-5 h-5" />
+                <span>Take Photo with Camera</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-outline btn-primary w-full sm:w-auto rounded-2xl font-bold text-xs gap-1.5 h-12 shadow-xs active:scale-95"
+                @click="receiptFileInput?.click()"
+              >
+                <Icon icon="solar:upload-track-bold" class="w-4 h-4" />
+                <span>Upload File</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-outline btn-accent w-full sm:w-auto rounded-2xl font-bold text-xs gap-1.5 h-12 shadow-xs active:scale-95"
+                @click="pasteReceiptFromClipboard"
+                title="Paste receipt screenshot directly from clipboard (Ctrl+V)"
+              >
+                <Icon icon="solar:clipboard-text-bold" class="w-4 h-4" />
+                <span>Paste</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- B. POPULATED STATE: Hero Main Receipt Preview + Action Controls -->
+          <div v-else class="space-y-4">
+            <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-black/90 shadow-md group aspect-16/9 max-h-80 flex items-center justify-center">
+              <img 
+                :src="receiptPreviewUrl || getAssetUrl(form.receiptImageId)" 
+                alt="Attached Receipt" 
+                class="w-full h-full object-contain cursor-pointer transition-transform duration-300 group-hover:scale-102"
+                @click="showReceiptLightbox = true"
+              />
+              
+              <!-- Badges Overlay -->
+              <div class="absolute top-3 left-3 flex items-center gap-1.5 z-20">
+                <span class="badge badge-success text-success-content font-black text-xs gap-1 shadow-md py-2.5 px-3 rounded-xl">
+                  <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" />
+                  Receipt Attached
+                </span>
+                <span class="badge badge-neutral font-mono font-bold text-xs shadow-md py-2.5 px-3 rounded-xl">
+                  IRS Record
+                </span>
+              </div>
+
+              <!-- Top Right Controls -->
+              <div class="absolute top-3 right-3 flex items-center gap-2 z-20">
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-circle bg-base-100/90 hover:bg-base-100 shadow-md text-base-content border border-base-300"
+                  @click="showReceiptLightbox = true"
+                  title="Zoom Full Resolution"
+                >
+                  <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4" />
+                </button>
+                <button 
+                  v-if="(isEdit && editMode) || !isEdit"
+                  type="button" 
+                  class="btn btn-sm btn-circle btn-error text-error-content shadow-md"
+                  @click="removeReceiptPhoto"
+                  title="Remove receipt photo"
+                >
+                  <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+                </button>
+              </div>
+
+              <div class="absolute bottom-2.5 inset-x-3 text-center pointer-events-none">
+                <span class="text-[11px] font-semibold text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-xs">
+                  Click photo to zoom and inspect details
+                </span>
+              </div>
+            </div>
+
+            <!-- Action Strip for Attached Receipt -->
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button 
+                type="button" 
+                class="btn btn-sm btn-warning text-warning-content font-black gap-1.5 rounded-xl shadow-xs active:scale-95 border border-warning-content/25"
+                @click="rescanReceipt"
+                :disabled="rescanningReceipt || uploadingReceipt"
+              >
+                <span v-if="rescanningReceipt" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                <span>{{ rescanningReceipt ? 'AI Scanning...' : 'Rescan with AI' }}</span>
+              </button>
+              
+              <button 
+                type="button" 
+                class="btn btn-sm btn-secondary text-secondary-content font-bold gap-1.5 rounded-xl shadow-xs active:scale-95"
+                @click="openCameraScanner"
+                :disabled="rescanningReceipt || uploadingReceipt"
+              >
+                <Icon icon="solar:camera-bold" class="w-4 h-4" />
+                <span>Retake Photo</span>
+              </button>
+
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline btn-primary font-bold gap-1.5 rounded-xl shadow-xs active:scale-95"
+                @click="receiptFileInput?.click()"
+                :disabled="rescanningReceipt || uploadingReceipt"
+              >
+                <Icon icon="solar:upload-track-bold" class="w-4 h-4" />
+                <span>Replace File</span>
+              </button>
+
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline btn-accent font-bold gap-1.5 rounded-xl shadow-xs active:scale-95"
+                @click="pasteReceiptFromClipboard"
+                :disabled="rescanningReceipt || uploadingReceipt"
+                title="Paste new screenshot from clipboard"
+              >
+                <Icon icon="solar:clipboard-text-bold" class="w-4 h-4" />
+                <span>Paste New</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. PURCHASE DETAILS & COST BREAKDOWN CARD -->
+      <div class="card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+        <!-- Case A: Existing PO Header (Accordion Clickable) -->
         <div 
+          v-if="isEdit"
           class="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-base-100 hover:bg-base-200/40 transition-colors select-none cursor-pointer"
           :class="{ 'border-b border-base-200 bg-base-200/20': isExpanded }"
           @click="toggleExpanded"
         >
-          <!-- Left: PO Number, Vendor, Status Badge, Receipt Pill -->
+          <!-- Left: PO Number, Vendor, Status Badge -->
           <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
             <div class="w-6 h-6 flex items-center justify-center text-base-content/70">
               <Icon :icon="isExpanded ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-5 h-5 transition-transform duration-200" />
@@ -21,7 +189,7 @@
 
             <div class="flex items-center gap-2">
               <span class="font-mono font-black text-base sm:text-lg text-primary tracking-tight">
-                {{ form.poNumber || (isEdit ? 'PO-PENDING' : 'New Purchase Order') }}
+                {{ form.poNumber || 'PO-PENDING' }}
               </span>
               <span class="text-base-content/30 font-bold">•</span>
               <span class="font-bold text-sm sm:text-base text-base-content">
@@ -32,16 +200,6 @@
             <div class="flex items-center gap-1.5 flex-wrap">
               <span class="badge font-bold text-xs" :class="getStatusClass(form.status)">
                 {{ form.status || 'Draft' }}
-              </span>
-
-              <!-- Receipt Indicator Badge -->
-              <span 
-                v-if="form.receiptImageId" 
-                class="badge badge-sm badge-success text-success-content font-black gap-1 py-2 whitespace-nowrap shadow-xs"
-                title="Receipt image is attached and linked to this PO"
-              >
-                <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" />
-                Receipt
               </span>
             </div>
           </div>
@@ -58,7 +216,7 @@
             <div class="divider divider-horizontal my-0 hidden sm:flex"></div>
 
             <!-- Edit Mode Toggle -->
-            <div v-if="isEdit" class="flex items-center" @click.stop>
+            <div class="flex items-center" @click.stop>
               <label class="label cursor-pointer gap-2 py-1 px-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-300/40 transition-colors">
                 <span class="label-text text-xs font-bold uppercase tracking-wider text-base-content/70">Edit</span>
                 <input type="checkbox" class="toggle toggle-primary toggle-sm" v-model="editMode" />
@@ -71,16 +229,44 @@
           </div>
         </div>
 
-        <!-- EXPANDED CONTENT PANEL -->
-        <div v-if="isExpanded" class="card-body p-4 sm:p-6 space-y-6">
-          <!-- Hidden File Input for Receipt -->
-          <input type="file" ref="receiptFileInput" @change="handleReceiptFileChange" accept="image/*" class="hidden" />
+        <!-- Case B: New PO Header (Always Open, Non-Accordion) -->
+        <div 
+          v-else
+          class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-base-200 bg-base-200/20"
+        >
+          <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <div class="w-6 h-6 flex items-center justify-center text-primary">
+              <Icon icon="solar:document-add-bold-duotone" class="w-5 h-5" />
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-black text-base sm:text-lg text-primary tracking-tight">
+                New Purchase Order
+              </span>
+              <span class="text-base-content/30 font-bold">•</span>
+              <span class="font-bold text-sm sm:text-base text-base-content">
+                {{ form.vendor || 'No Vendor' }}
+              </span>
+            </div>
+            <span class="badge badge-warning text-warning-content font-bold text-xs">
+              {{ form.status || 'Draft' }}
+            </span>
+          </div>
 
-          <!-- 3-COLUMN RESPONSIVE LAYOUT (PO Details, Cost Breakdown, Receipt Image) -->
+          <div class="flex items-baseline gap-1.5 bg-base-200/70 px-3 py-1.5 rounded-xl border border-base-300/60 self-end sm:self-auto shrink-0">
+            <span class="text-[11px] font-extrabold uppercase tracking-wider text-base-content/60">Cost</span>
+            <span class="font-mono font-black text-lg sm:text-xl text-primary">
+              ${{ computedGrandTotal.toFixed(2) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- CONTENT PANEL (Open if New PO, or if isExpanded on existing PO) -->
+        <div v-if="!isEdit || isExpanded" class="card-body p-4 sm:p-6 space-y-6">
+          <!-- 2-COLUMN RESPONSIVE LAYOUT (PO Details, Cost Breakdown) -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
-            <!-- COLUMN 1: PO & Order Details (4 Cols on lg) -->
-            <div class="lg:col-span-4 space-y-4">
+            <!-- COLUMN 1: PO & Order Details (6 Cols on lg) -->
+            <div class="lg:col-span-6 space-y-4">
               <div class="flex items-center justify-between pb-2 border-b border-base-200">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                   <Icon icon="solar:document-text-bold-duotone" class="w-4 h-4 text-primary" />
@@ -102,7 +288,7 @@
                   <span class="font-bold text-base-content">{{ form.vendor || 'None specified' }}</span>
                 </div>
                 <div class="flex items-center justify-between py-1 border-b border-base-200/60">
-                  <span class="text-xs opacity-60 font-medium">Order ID</span>
+                  <span class="text-xs opacity-60 font-medium">External Order ID</span>
                   <span class="font-mono text-xs">{{ form.orderId || 'None' }}</span>
                 </div>
                 <div class="flex items-center justify-between py-1 border-b border-base-200/60">
@@ -150,8 +336,8 @@
               </div>
             </div>
 
-            <!-- COLUMN 2: Cost Breakdown (4 Cols on lg) -->
-            <div class="lg:col-span-4 bg-base-200/50 p-4 sm:p-5 rounded-2xl border border-base-300/60 space-y-3">
+            <!-- COLUMN 2: Cost Breakdown (6 Cols on lg) -->
+            <div class="lg:col-span-6 bg-base-200/50 p-4 sm:p-5 rounded-2xl border border-base-300/60 space-y-3">
               <div class="flex items-center justify-between pb-2 border-b border-base-300">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
                   <Icon icon="solar:wallet-money-bold-duotone" class="w-4 h-4 text-secondary" />
@@ -244,137 +430,12 @@
               </div>
             </div>
 
-            <!-- COLUMN 3: Receipt Photo & AI Verification (4 Cols on lg) -->
-            <div class="lg:col-span-4 bg-base-200/30 p-4 sm:p-5 rounded-2xl border border-base-300/50 space-y-3">
-              <div class="flex items-center justify-between pb-2 border-b border-base-200">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                  <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-accent" />
-                  <span>Receipt Photo</span>
-                </h3>
-                <span v-if="form.receiptImageId" class="badge badge-success badge-xs gap-1 font-bold">
-                  Attached
-                </span>
-                <span v-else class="badge badge-ghost badge-xs text-[10px] opacity-60">
-                  None Attached
-                </span>
-              </div>
-
-              <!-- Case A: Receipt Photo Exists -->
-              <div v-if="form.receiptImageId" class="space-y-3">
-                <div 
-                  class="relative w-full h-44 rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-sm group cursor-pointer flex items-center justify-center"
-                  @click="showReceiptLightbox = true"
-                  title="Click to zoom receipt"
-                >
-                  <img 
-                    :src="getAssetUrl(form.receiptImageId)" 
-                    alt="Attached Receipt" 
-                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white text-xs font-bold backdrop-blur-xs">
-                    <Icon icon="solar:magnifer-zoom-in-bold" class="w-5 h-5" />
-                    <span>Zoom In</span>
-                  </div>
-                  <span class="absolute top-2 left-2 badge badge-xs badge-neutral font-mono font-bold shadow-xs">
-                    IRS Record
-                  </span>
-                </div>
-
-                <!-- Action Controls: BEHIND EDIT TOGGLE -->
-                <div v-if="isEdit && editMode" class="flex flex-wrap gap-2 pt-1">
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-primary text-primary-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-primary-content/25" 
-                    @click="receiptFileInput?.click()" 
-                    :disabled="uploadingReceipt || rescanningReceipt"
-                  >
-                    <Icon icon="solar:upload-track-bold" class="w-3.5 h-3.5" />
-                    <span>Replace</span>
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-secondary text-secondary-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-secondary-content/25" 
-                    @click="openCameraScanner" 
-                    :disabled="uploadingReceipt || rescanningReceipt"
-                  >
-                    <Icon icon="solar:camera-bold" class="w-3.5 h-3.5" />
-                    <span>Camera</span>
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-accent text-accent-content font-bold gap-1 rounded-lg shadow-xs active:scale-95 border border-accent-content/25" 
-                    @click="pasteReceiptFromClipboard"
-                    :disabled="uploadingReceipt || rescanningReceipt"
-                    title="Paste new receipt screenshot from clipboard"
-                  >
-                    <Icon icon="solar:clipboard-text-bold" class="w-3.5 h-3.5" />
-                    <span>Paste</span>
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-xs btn-warning text-warning-content font-black gap-1 rounded-lg shadow-xs active:scale-95 border border-warning-content/25" 
-                    @click="rescanReceipt" 
-                    :disabled="uploadingReceipt || rescanningReceipt"
-                  >
-                    <span v-if="rescanningReceipt" class="loading loading-spinner loading-xs"></span>
-                    <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                    <span>Rescan AI</span>
-                  </button>
-                </div>
-
-                <!-- Read-only controls when !editMode -->
-                <div v-else class="flex items-center justify-between text-xs pt-1 opacity-70">
-                  <button type="button" class="btn btn-xs btn-ghost gap-1 px-1 font-semibold" @click="showReceiptLightbox = true">
-                    <Icon icon="solar:eye-linear" class="w-3.5 h-3.5" /> View Full Size
-                  </button>
-                  <span class="text-[11px] italic">Toggle Edit to change photo</span>
-                </div>
-              </div>
-
-              <!-- Case B: No Receipt Attached -->
-              <div 
-                v-else 
-                class="py-6 px-3 text-center border-2 border-dashed border-base-300 rounded-xl space-y-2.5 bg-base-100/50 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
-                @click.self="receiptFileInput?.click()"
-              >
-                <div class="w-9 h-9 mx-auto rounded-xl bg-base-200 flex items-center justify-center text-base-content/40 pointer-events-none">
-                  <Icon icon="solar:bill-cross-linear" class="w-5 h-5" />
-                </div>
-                <div class="text-xs pointer-events-none">
-                  <div class="font-bold text-base-content">Tap to upload or drag receipt here</div>
-                  <p class="opacity-60 text-[11px] mt-0.5 max-w-xs mx-auto">
-                    Capture or paste a photo of the receipt to verify prices, taxes, and fees.
-                  </p>
-                </div>
-                <!-- Camera & Paste Buttons (Always Accessible) -->
-                <div class="flex flex-wrap justify-center gap-2 pt-1 pointer-events-auto">
-                  <button type="button" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 rounded-lg" @click="openCameraScanner">
-                    <Icon icon="solar:camera-bold-duotone" class="w-3.5 h-3.5" />
-                    Camera
-                  </button>
-                  <button type="button" class="btn btn-xs btn-outline btn-accent font-bold gap-1 rounded-lg" @click="pasteReceiptFromClipboard" title="Paste receipt screenshot directly from clipboard">
-                    <Icon icon="solar:clipboard-text-bold" class="w-3.5 h-3.5" />
-                    Paste
-                  </button>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Bottom Action Button for New PO creation only (!isEdit) -->
-          <div v-if="!isEdit" class="card-actions justify-end items-center pt-4 border-t border-base-200 mt-2">
-            <button class="btn btn-sm btn-primary text-primary-content font-black px-6 rounded-xl gap-1.5 shadow-md border border-primary-content/25 active:scale-95 transition-all" @click="savePurchase" :disabled="saving">
-              <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-              <Icon v-else icon="solar:diskette-bold" class="w-4 h-4" />
-              <span>Create Purchase Order</span>
-            </button>
           </div>
         </div>
       </div>
 
-      <!-- Items Section (Only visible if Editing) -->
-      <div v-if="isEdit" class="card bg-base-100 shadow-xl border border-base-200">
+      <!-- Items Section (Visible if Editing or if items extracted from receipt) -->
+      <div v-if="isEdit || items.length > 0" class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body">
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 border-b border-base-200 pb-3">
             <div>
@@ -387,7 +448,7 @@
               </p>
             </div>
             
-            <div class="flex items-center gap-2">
+            <div v-if="isEdit" class="flex items-center gap-2">
               <a 
                 :href="`/inventory?search=${encodeURIComponent(form.orderId || form.poNumber || '')}`" 
                 class="btn btn-sm btn-outline btn-secondary gap-1.5 shadow-sm font-bold"
@@ -399,7 +460,7 @@
             </div>
           </div>
           
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div v-if="isEdit" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <!-- Link Existing Item -->
             <div class="bg-base-200 p-4 rounded-box relative">
               <h3 class="font-bold mb-2 text-sm uppercase opacity-70">Link Existing Item</h3>
@@ -862,8 +923,8 @@
         </div>
         <div class="flex items-center justify-center max-h-[72vh] overflow-auto bg-base-200/40 rounded-2xl p-2">
           <img 
-            v-if="form.receiptImageId" 
-            :src="getAssetUrl(form.receiptImageId)" 
+            v-if="form.receiptImageId || receiptPreviewUrl" 
+            :src="receiptPreviewUrl || getAssetUrl(form.receiptImageId)" 
             alt="Full Receipt" 
             class="max-w-full max-h-[68vh] object-contain rounded-xl shadow-md" 
           />
@@ -885,30 +946,30 @@
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
 
     <!-- STANDARDIZED ERGONOMIC ACTION BUTTON DOCK -->
-    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
-      <!-- Tier 1: Slim Telemetry & Cost Strip -->
-      <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-between text-xs shadow-2xs font-mono">
-        <div class="max-w-xl w-full mx-auto flex items-center justify-between text-xs">
-          <div class="flex items-center gap-2 truncate">
-            <span class="font-black text-primary text-xs">{{ form.poNumber || (isEdit ? 'PO-PENDING' : 'New PO') }}</span>
-            <span class="opacity-40 font-bold">•</span>
-            <span class="text-[11px] font-bold text-base-content font-sans truncate max-w-[120px] sm:max-w-[200px]">{{ form.vendor || 'No Vendor' }}</span>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <span class="badge badge-xs font-black" :class="getStatusClass(form.status)">{{ form.status || 'Draft' }}</span>
-            <span class="font-black text-base-content text-xs">${{ computedGrandTotal.toFixed(2) }}</span>
+    <Teleport to="body">
+      <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+        <!-- Tier 1: Slim Telemetry & Cost Strip -->
+        <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-between text-xs shadow-2xs font-mono">
+          <div class="max-w-xl w-full mx-auto flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2 truncate">
+              <span class="font-black text-primary text-xs">{{ form.poNumber || (isEdit ? 'PO-PENDING' : 'New PO') }}</span>
+              <span class="opacity-40 font-bold">•</span>
+              <span class="text-[11px] font-bold text-base-content font-sans truncate max-w-[120px] sm:max-w-[200px]">{{ form.vendor || 'No Vendor' }}</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="badge badge-xs font-black" :class="getStatusClass(form.status)">{{ form.status || 'Draft' }}</span>
+              <span class="font-black text-base-content text-xs">${{ computedGrandTotal.toFixed(2) }}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Tier 2: DaisyUI Semantic Dock (Harmonized Tactile Pattern Matching Scout) -->
-      <div class="max-w-xl w-full mx-auto">
-        <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-1.5 sm:gap-2">
+        <!-- Tier 2: Ergonomic Command Actions -->
+        <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-2 h-14">
           <!-- Action 1: Delete PO (when isEdit) -->
           <button 
             v-if="isEdit"
             type="button"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-error/15 text-error font-bold border border-error/25 shadow-xs active:scale-95 cursor-pointer"
+            class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-error/15 text-error font-bold border border-error/25 shadow-xs active:scale-95 cursor-pointer"
             @click="handleDelete"
             :disabled="saving"
             title="Delete this Purchase Order"
@@ -917,46 +978,37 @@
             <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Delete PO</span>
           </button>
 
-          <!-- Action 2: Camera / Scan Receipt -->
-          <button 
-            type="button"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
-            @click="openCameraScanner"
-            title="Capture receipt photo"
-          >
-            <Icon icon="solar:camera-bold" class="w-4.5 h-4.5" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Receipt</span>
-          </button>
-
-          <!-- Action 3: Receive All / Purchase -->
+          <!-- Action 2: Receive All / Purchase (when isEdit) -->
           <button 
             v-if="isEdit && (isDraft || hasUnreceivedItems)" 
             type="button"
             @click="handleReceiveOrPurchase('Backstock')" 
-            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
             :title="isDraft ? 'Complete purchase and activate items into Backstock' : 'Receive all unreceived items into Backstock'"
           >
             <Icon :icon="isDraft ? 'solar:box-minimalistic-bold' : 'solar:check-circle-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
             <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
           </button>
 
-          <!-- Action 4: Edit / Save PO (Elevated Solid Hero Action) -->
+          <!-- Action 3: Save / Create PO (Elevated Solid Hero Action) -->
           <button 
             type="button"
             @click="editMode || !isEdit ? savePurchase() : (editMode = true)" 
             :disabled="saving"
-            class="h-11 my-auto px-3 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            class="h-11 my-auto flex-1 sm:flex-initial sm:min-w-[140px] px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
             :title="editMode || !isEdit ? 'Save Purchase Order changes' : 'Enable Edit Mode'"
           >
             <span v-if="saving" class="loading loading-spinner loading-xs text-primary-content"></span>
             <template v-else>
               <Icon :icon="editMode || !isEdit ? 'solar:diskette-bold' : 'solar:pen-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
-              <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ editMode || !isEdit ? 'Save PO' : 'Edit PO' }}</span>
+              <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">
+                {{ !isEdit ? 'Create PO' : (editMode ? 'Save PO' : 'Edit PO') }}
+              </span>
             </template>
           </button>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -993,6 +1045,8 @@ const receiptFileInput = ref(null);
 const uploadingReceipt = ref(false);
 const rescanningReceipt = ref(false);
 const showReceiptLightbox = ref(false);
+const pendingReceiptFile = ref(null);
+const receiptPreviewUrl = ref('');
 
 const proxify = (url) => {
     if (!url) return null;
@@ -1061,7 +1115,7 @@ const handleSavedItem = async (payload) => {
 const isEdit = computed(() => !!props.purchaseId);
 const activeDocId = ref(props.purchaseId || null);
 const editMode = ref(!props.purchaseId);
-const isExpanded = ref(false);
+const isExpanded = ref(true);
 const loadingInit = ref(false);
 const saving = ref(false);
 
@@ -1073,7 +1127,7 @@ watch(editMode, (val) => {
     if (val) {
         isExpanded.value = true;
     }
-});
+}, { immediate: true });
 
 const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
@@ -1570,43 +1624,91 @@ const initRealtime = () => {
 };
 
 onUnmounted(() => {
+    if (receiptPreviewUrl.value) {
+        URL.revokeObjectURL(receiptPreviewUrl.value);
+    }
     realtimeUnsubscribes.forEach(unsub => {
         try { unsub(); } catch {}
     });
     realtimeUnsubscribes = [];
 });
 
+const handleReceiptDrop = async (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+        await processAndSaveReceiptFile(file);
+    }
+};
+
+const removeReceiptPhoto = async () => {
+    const ok = await confirmDialog(
+        "Remove attached receipt photo from this Purchase Order?",
+        "Remove Receipt Photo",
+        "Remove",
+        "Cancel",
+        "btn-error"
+    );
+    if (!ok) return;
+
+    if (receiptPreviewUrl.value) {
+        URL.revokeObjectURL(receiptPreviewUrl.value);
+        receiptPreviewUrl.value = '';
+    }
+    pendingReceiptFile.value = null;
+
+    const oldImageId = form.value.receiptImageId;
+    form.value.receiptImageId = '';
+
+    if (props.purchaseId) {
+        const docId = activeDocId.value || props.purchaseId;
+        await purchasesAPI.updatePurchase(docId, { receiptImageId: '' });
+        if (oldImageId) {
+            await storage.deleteFile(BUCKET_ID, oldImageId).catch(delErr => {
+                console.warn('[Purchases] Error deleting removed receipt from bucket:', delErr);
+            });
+        }
+    }
+    addToast("Receipt photo removed", "info");
+};
+
 const processAndSaveReceiptFile = async (file) => {
     if (!file) return;
     uploadingReceipt.value = true;
-    showLoader("Uploading Receipt Photo...", {
-        step: "Saving receipt image to storage and linking to PO...",
+    showLoader("Reading & Analyzing Receipt...", {
+        step: "Extracting receipt data with AI...",
         cancelable: false
     });
     try {
-        const up = await storage.createFile(BUCKET_ID, ID.unique(), file);
-        form.value.receiptImageId = up.$id;
-        
-        // Save immediately to PO
         if (props.purchaseId) {
-            await purchasesAPI.updatePurchase(props.purchaseId, {
+            // Existing PO: Upload new file and clean up replaced image from bucket
+            const oldImageId = form.value.receiptImageId;
+            const up = await storage.createFile(BUCKET_ID, ID.unique(), file);
+            form.value.receiptImageId = up.$id;
+            const docId = activeDocId.value || props.purchaseId;
+            await purchasesAPI.updatePurchase(docId, {
                 receiptImageId: up.$id
             });
-        }
-        
-        addToast("Receipt photo uploaded and linked to Purchase Order!", "success");
-        
-        // Prompt to rescan
-        const shouldRescan = await confirmDialog(
-            "Would you like to scan this receipt with AI right now to extract or verify vendor, date, and line items?",
-            "Rescan Receipt with AI?"
-        );
-        if (shouldRescan) {
-            await rescanReceipt();
+            if (oldImageId && oldImageId !== up.$id) {
+                await storage.deleteFile(BUCKET_ID, oldImageId).catch(delErr => {
+                    console.warn('[Purchases] Could not delete replaced receipt from bucket:', delErr);
+                });
+            }
+            addToast("Receipt photo updated! Reading details with AI...", "info");
+            await scanReceiptImage(file, up.$id);
+        } else {
+            // New PO: Keep local preview and File in memory.
+            // Zero files uploaded to Appwrite bucket until user explicitly creates the PO!
+            if (receiptPreviewUrl.value) {
+                URL.revokeObjectURL(receiptPreviewUrl.value);
+            }
+            pendingReceiptFile.value = file;
+            receiptPreviewUrl.value = URL.createObjectURL(file);
+            addToast("Receipt attached! Reading details with AI...", "info");
+            await scanReceiptImage(file);
         }
     } catch (e) {
-        console.error("Failed to upload receipt:", e);
-        addToast("Failed to upload receipt: " + e.message, "error");
+        console.error("Failed to process receipt:", e);
+        addToast("Failed to process receipt: " + e.message, "error");
     } finally {
         uploadingReceipt.value = false;
         hideLoader();
@@ -1640,8 +1742,8 @@ const openCameraScanner = () => {
 const pasteReceiptFromClipboard = async () => {
     try {
         if (navigator.clipboard && navigator.clipboard.read) {
-            const items = await navigator.clipboard.read();
-            for (const item of items) {
+            const clipItems = await navigator.clipboard.read();
+            for (const item of clipItems) {
                 for (const type of item.types) {
                     if (type.startsWith('image/')) {
                         const blob = await item.getType(type);
@@ -1660,28 +1762,38 @@ const pasteReceiptFromClipboard = async () => {
     }
 };
 
-const rescanReceipt = async () => {
-    if (!form.value.receiptImageId) {
+const scanReceiptImage = async (fileOrBlob = null, uploadedImageId = null) => {
+    const targetImageId = uploadedImageId || form.value.receiptImageId;
+    if (!fileOrBlob && !targetImageId) {
         receiptFileInput.value?.click();
         return;
     }
+    
     rescanningReceipt.value = true;
     showLoader("AI Reading & Analyzing Receipt...", {
         step: "Extracting store name, date, totals, and line items...",
         cancelable: false
     });
     try {
-        // Fetch the file as blob and convert to base64
-        const imgUrl = getAssetUrl(form.value.receiptImageId);
-        const resp = await fetch(imgUrl);
-        const blob = await resp.blob();
-        
-        const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
+        let base64 = '';
+        if (fileOrBlob instanceof Blob || fileOrBlob instanceof File) {
+            base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(fileOrBlob);
+            });
+        } else {
+            const imgUrl = getAssetUrl(targetImageId);
+            const resp = await fetch(imgUrl);
+            const blob = await resp.blob();
+            base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
         
         const res = await fetch('/api/parse-receipt', {
             method: 'POST',
@@ -1702,7 +1814,7 @@ const rescanReceipt = async () => {
         if (parsed.vendor && parsed.vendor.trim()) {
             form.value.vendor = parsed.vendor.trim();
             updatePayload.vendor = parsed.vendor.trim();
-            updateMsg.push(`Vendor: ${parsed.vendor}`);
+            updateMsg.push(`Vendor: ${parsed.vendor.trim()}`);
         }
         if (parsed.date) {
             try {
@@ -1724,45 +1836,58 @@ const rescanReceipt = async () => {
             }
         }
         
-        // Save PO header updates
-        if (Object.keys(updatePayload).length > 0) {
-            await purchasesAPI.updatePurchase(props.purchaseId, updatePayload);
-        }
-        
         // Handle items
         if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
-            const addItems = await confirmDialog(
-                `Receipt scanned!\n\n${updateMsg.join(' • ')}\n\nFound ${parsed.items.length} line items on the receipt. Would you like to add any missing items to this Purchase Order?`,
-                "Add Receipt Items to PO?"
-            );
-            
-            if (addItems) {
-                showLoader("Adding Receipt Line Items to Inventory...", {
-                    step: `Saving ${parsed.items.length} items to inventory...`,
-                    cancelable: false
-                });
-                
+            if (isEdit.value) {
+                const docId = activeDocId.value || props.purchaseId;
                 await purchasesAPI.savePurchaseOrder({
-                    purchaseId: props.purchaseId,
+                    purchaseId: docId,
                     poNumber: form.value.poNumber,
                     vendor: form.value.vendor || 'Receipt Purchase',
                     tenantId: currentTeam.value?.$id || null,
-                    receiptImageId: form.value.receiptImageId || undefined,
+                    receiptImageId: form.value.receiptImageId || targetImageId || undefined,
                     items: parsed.items
                 });
-                
                 await loadLinkedItems();
+            } else {
+                // On New PO: Populate items into local reactive array so user sees them immediately
+                const poPrefix = form.value.poNumber || 'ITEM';
+                items.value = parsed.items.map((it, idx) => ({
+                    $id: `temp_${Date.now()}_${idx}`,
+                    title: it.title || `Receipt Item #${idx + 1}`,
+                    cost: Number(it.cost) || 0,
+                    quantity: Number(it.quantity) || 1,
+                    status: 'acquired',
+                    identity: `${poPrefix}-${String(idx + 1).padStart(2, '0')}`,
+                    storageLocation: 'HG',
+                    sourcingLocation: form.value.vendor || 'Receipt'
+                }));
+                // Auto-fill subtotal from items if parsed.total was 0
+                if (!form.value.subtotal) {
+                    form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
+                }
             }
+            updateMsg.push(`${parsed.items.length} items`);
         }
         
-        addToast("Receipt rescanned successfully!", "success");
+        // If editing existing PO and has header updates, persist them
+        if (isEdit.value && Object.keys(updatePayload).length > 0) {
+            const docId = activeDocId.value || props.purchaseId;
+            await purchasesAPI.updatePurchase(docId, updatePayload);
+        }
+        
+        addToast(`Receipt scanned! ${updateMsg.join(' • ')}`, "success");
     } catch (err) {
-        console.error("Failed to rescan receipt:", err);
-        addToast("Rescan failed: " + (err.message || 'Unknown error'), "error");
+        console.error("Failed to scan receipt:", err);
+        addToast("Receipt scan failed: " + (err.message || 'Unknown error'), "error");
     } finally {
         rescanningReceipt.value = false;
         hideLoader();
     }
+};
+
+const rescanReceipt = async () => {
+    await scanReceiptImage(pendingReceiptFile.value);
 };
 
 const loadLinkedItems = async () => {
@@ -1805,14 +1930,38 @@ const savePurchase = async () => {
             const docId = activeDocId.value || props.purchaseId;
             await purchasesAPI.updatePurchase(docId, payload);
             editMode.value = false;
+            addToast("Purchase Order updated successfully!", "success");
         } else {
-            const res = await purchasesAPI.createPurchase(payload);
-            // Redirect to edit page with poNumber or $id
-            window.location.href = `/purchases/${res.poNumber || res.$id}`;
+            // New PO! Route through savePurchaseOrder so receiptFile is uploaded safely and items are linked
+            const res = await purchasesAPI.savePurchaseOrder({
+                poNumber: form.value.poNumber || undefined,
+                orderId: form.value.orderId || undefined,
+                vendor: form.value.vendor || 'Receipt Purchase',
+                purchaseDate: form.value.purchaseDate || new Date().toISOString(),
+                status: form.value.status || 'Draft',
+                subtotal: form.value.subtotal,
+                feeTotal: (form.value.shippingTotal || 0) + (form.value.handlingTotal || 0) + (form.value.taxTotal || 0) + (form.value.feeTotal || 0),
+                grandTotal: computedGrandTotal.value,
+                tenantId: currentTeam.value?.$id || null,
+                receiptFile: pendingReceiptFile.value || undefined,
+                receiptImageId: form.value.receiptImageId || undefined,
+                items: items.value.map(i => ({
+                    title: i.title,
+                    cost: Number(i.cost) || 0,
+                    quantity: Number(i.quantity) || 1
+                }))
+            });
+            if (receiptPreviewUrl.value) {
+                URL.revokeObjectURL(receiptPreviewUrl.value);
+                receiptPreviewUrl.value = '';
+            }
+            pendingReceiptFile.value = null;
+            addToast("Purchase Order created successfully!", "success");
+            window.location.href = `/purchases/${res.poNumber || res.purchaseId}`;
         }
     } catch (e) {
         console.error('Failed to save purchase:', e);
-        alert('Failed to save: ' + e.message);
+        addToast('Failed to save: ' + e.message, 'error');
     } finally {
         saving.value = false;
         hideLoader();
@@ -1891,6 +2040,15 @@ const linkItem = async (item) => {
 
 const unlinkItem = async (item) => {
     if (linkingItem.value) return;
+
+    // If on New PO (items not yet saved to Appwrite)
+    if (!isEdit.value) {
+        items.value = items.value.filter(i => i.$id !== item.$id);
+        form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
+        addToast(`Removed "${item.title}" from list`, 'info');
+        return;
+    }
+
     const ok = await confirmDialog(
         `Remove "${item.tag_title || item.title}" from this Purchase Order? The item will still exist in your active inventory, but will no longer be linked to this PO's landed costs.`,
         'Remove Item from PO',
@@ -1902,13 +2060,16 @@ const unlinkItem = async (item) => {
     
     linkingItem.value = item.$id;
     try {
+        const docId = activeDocId.value || props.purchaseId;
         await linkItemToPurchase(item.$id, null);
         items.value = items.value.filter(i => i.$id !== item.$id);
         
         // Auto-update the subtotal when an item is unlinked
         form.value.subtotal = items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
         // Persist the new subtotal immediately
-        await purchasesAPI.updatePurchase(props.purchaseId, { subtotal: form.value.subtotal });
+        if (docId) {
+            await purchasesAPI.updatePurchase(docId, { subtotal: form.value.subtotal });
+        }
         await checkAndSyncPoStatus();
         addToast(`Unlinked ${item.identity || item.title}`, 'info');
     } catch (e) {

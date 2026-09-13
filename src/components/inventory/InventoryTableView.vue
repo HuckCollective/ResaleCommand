@@ -1,5 +1,5 @@
 <template>
-    <div class="space-y-4 pb-32">
+    <div class="space-y-4 pb-24 sm:pb-28 w-full max-w-full min-w-0">
         <!-- 1. STICKY TOP OMNIBAR & STATUS PIPELINE TABS -->
         <InventoryHeader 
             title="Inventory"
@@ -41,8 +41,8 @@
         />
 
         <!-- 2. DENSE SPREADSHEET TABLE -->
-        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl mb-32">
-            <div class="overflow-x-auto">
+        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0">
+            <div class="overflow-x-auto w-full max-w-full min-w-0 overscroll-x-contain touch-pan-x">
                 <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
                     <thead>
                         <tr class="bg-base-200/90 text-base-content font-bold border-b border-base-300 select-none">
@@ -274,29 +274,6 @@
                         </tr>
                     </tbody>
                 </table>
-            </div>
-
-            <!-- Table Pagination Bar -->
-            <div class="p-3 bg-base-200/80 border-t border-base-300 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <div class="text-base-content/80 font-mono font-medium">
-                    Showing <span class="font-bold text-primary">{{ filteredItems.length > 0 ? (currentPage - 1) * pageSize + 1 : 0 }}</span> to <span class="font-bold text-primary">{{ Math.min(currentPage * pageSize, filteredItems.length) }}</span> of <span class="font-bold text-base-content">{{ filteredItems.length }}</span> items
-                </div>
-
-                <div class="join border border-base-content/20 rounded-lg">
-                    <button 
-                        class="join-item btn btn-xs font-bold" 
-                        :class="currentPage === 1 ? 'bg-base-300/40 text-base-content/40 border-base-content/10 cursor-not-allowed' : 'btn-primary text-primary-content'" 
-                        :disabled="currentPage === 1" 
-                        @click="currentPage--"
-                    >« Prev</button>
-                    <button class="join-item btn btn-xs font-mono font-bold bg-base-200 text-base-content border-x border-base-content/20">{{ currentPage }} / {{ totalPages || 1 }}</button>
-                    <button 
-                        class="join-item btn btn-xs font-bold" 
-                        :class="currentPage >= totalPages ? 'bg-base-300/40 text-base-content/40 border-base-content/10 cursor-not-allowed' : 'btn-primary text-primary-content'" 
-                        :disabled="currentPage >= totalPages" 
-                        @click="currentPage++"
-                    >Next »</button>
-                </div>
             </div>
         </div>
 

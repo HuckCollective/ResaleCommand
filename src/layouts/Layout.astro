@@ -37,9 +37,9 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     </script>
   </head>
   <body>
-    <div class="flex flex-col min-h-screen">
+    <div class="flex flex-col min-h-screen w-full max-w-full min-w-0 overflow-x-clip">
       <Navbar client:load />
-      <main class="flex-1">
+      <main class="flex-1 w-full max-w-full min-w-0">
         <slot />
       </main>
       {!hideFooter && <Footer />}

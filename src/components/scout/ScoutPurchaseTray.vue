@@ -5,7 +5,7 @@
       class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
       @click.self="toggleTray"
     >
-      <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
+      <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
         
         <!-- Drawer Header with Inline Title Editing -->
         <div class="px-4 py-3 sm:px-5 sm:py-4 border-b border-base-300 flex items-center justify-between gap-3 shrink-0">

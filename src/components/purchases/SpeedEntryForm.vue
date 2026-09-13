@@ -42,6 +42,32 @@
           </button>
           <input type="file" ref="receiptInput" @change="handleReceiptUpload" accept="image/*" multiple class="hidden" />
         </div>
+
+        <!-- Attached Receipt Preview Card -->
+        <div v-if="receiptPreviewUrl" class="p-3 bg-base-100 rounded-xl border border-primary/30 flex items-center justify-between gap-3 shadow-xs">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-12 h-12 rounded-lg overflow-hidden border border-base-300 bg-black/80 shrink-0 cursor-pointer" @click="showReceiptModal = true">
+              <img :src="receiptPreviewUrl" alt="Receipt Preview" class="w-full h-full object-cover hover:scale-105 transition-transform" />
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="badge badge-success badge-xs font-bold text-success-content gap-0.5">
+                  <Icon icon="solar:bill-check-bold" class="w-3 h-3" /> Attached
+                </span>
+                <span class="text-xs font-bold text-base-content truncate">Receipt Attached</span>
+              </div>
+              <div class="text-[11px] opacity-60 truncate">Will be saved to bucket with this PO</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" class="btn btn-ghost btn-xs text-primary font-bold" @click="showReceiptModal = true">
+              View
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs text-error font-bold" @click="removeScannedReceipt" title="Remove attached receipt">
+              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 2. Purchase Order Details Grid -->
@@ -237,11 +263,30 @@
 
     <!-- In-App Camera Widget for live receipt photos with alignment viewfinder box -->
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
+
+    <!-- Receipt Lightbox Modal -->
+    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showReceiptModal }">
+      <div class="modal-box max-w-2xl p-4 bg-base-100/95 backdrop-blur-xl border border-base-300 shadow-2xl rounded-3xl space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-base-200">
+          <span class="font-bold text-sm">Attached Receipt Photo</span>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showReceiptModal = false">✕</button>
+        </div>
+        <div class="flex items-center justify-center max-h-[70vh] overflow-auto bg-base-200/40 rounded-xl p-2">
+          <img v-if="receiptPreviewUrl" :src="receiptPreviewUrl" alt="Receipt Full" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-sm" />
+        </div>
+        <div class="modal-action pt-2 border-t border-base-200 flex justify-end m-0">
+          <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showReceiptModal = false">Close</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showReceiptModal = false">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { useAuth } from '../../composables/useAuth';
@@ -256,6 +301,8 @@ const { activeCart, cartItems } = useCart();
 const { showLoader, hideLoader } = useLoader();
 const saving = ref(false);
 const lastScannedReceiptFile = ref(null);
+const receiptPreviewUrl = ref('');
+const showReceiptModal = ref(false);
 
 const poVendor = ref('');
 const poDate = ref(new Date().toISOString().split('T')[0]);
@@ -301,7 +348,12 @@ const toggleItemType = (index) => {
 const processReceiptFiles = async (fileList) => {
     if (!fileList || fileList.length === 0) return;
 
+    if (receiptPreviewUrl.value) {
+        URL.revokeObjectURL(receiptPreviewUrl.value);
+    }
     lastScannedReceiptFile.value = fileList[0];
+    receiptPreviewUrl.value = URL.createObjectURL(fileList[0]);
+
     scanningReceipt.value = true;
     showLoader("Reading & Scanning Receipt...", {
         step: "AI is extracting store name, date, prices, and line items",
@@ -517,6 +569,16 @@ const removeItem = (index) => {
     }
 };
 
+const removeScannedReceipt = () => {
+    if (receiptPreviewUrl.value) {
+        URL.revokeObjectURL(receiptPreviewUrl.value);
+        receiptPreviewUrl.value = '';
+    }
+    lastScannedReceiptFile.value = null;
+    if (receiptInput.value) receiptInput.value.value = '';
+    addToast({ type: 'info', message: 'Attached receipt removed.' });
+};
+
 const submit = async () => {
     if (validItems.value.length === 0) {
         addToast({ type: 'warning', message: "Please enter at least one line item before saving." });
@@ -552,6 +614,12 @@ const submit = async () => {
             });
         }
 
+        if (receiptPreviewUrl.value) {
+            URL.revokeObjectURL(receiptPreviewUrl.value);
+            receiptPreviewUrl.value = '';
+        }
+        lastScannedReceiptFile.value = null;
+
         // Redirect to PO to view it
         window.location.href = `/purchases/${result.purchaseId}`;
     } catch (err) {
@@ -565,5 +633,11 @@ const submit = async () => {
 
 onMounted(() => {
     // Optional autofocus logic could go here
+});
+
+onUnmounted(() => {
+    if (receiptPreviewUrl.value) {
+        URL.revokeObjectURL(receiptPreviewUrl.value);
+    }
 });
 </script>

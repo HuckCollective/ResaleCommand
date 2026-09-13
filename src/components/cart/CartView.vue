@@ -1,5 +1,5 @@
 <template>
-  <div class="h-[calc(100vh-4rem)] flex flex-col bg-base-100 overflow-hidden relative">
+  <div class="h-[calc(100dvh-4rem)] flex flex-col bg-base-100 overflow-hidden relative">
       
       <!-- ERROR TOAST -->
       <div v-if="error" class="toast toast-top toast-center z-100">

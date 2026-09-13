@@ -1,5 +1,5 @@
 <template>
-    <div class="w-full min-h-[600px]">
+    <div class="w-full max-w-full min-w-0 min-h-[600px]">
         <Transition name="view-fade" mode="out-in">
             <component 
                 :is="activeComponent" 

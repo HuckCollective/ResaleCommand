@@ -576,13 +576,13 @@
                                     <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5 shrink-0">{{ subItem.condition }}</span>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1.5 mt-0.5">
-                                    <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value || formatPriceRange(subItem.price_breakdown?.fair) || '-' }}</strong></span>
+                                    <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
-                                    <span>Max Buy: <strong class="text-success">${{ calculateMaxBuy(subItem) }}</strong></span>
+                                    <span>Fair: <strong class="text-primary">{{ getSubItemFair(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
-                                    <span>Max Bid: <strong class="text-secondary">${{ calculateSubItemMaxBid(subItem, scoutResult) }}</strong></span>
-                                    <span v-if="editForm.cost && Number(editForm.cost) > 0" class="opacity-30">|</span>
-                                    <span v-if="editForm.cost && Number(editForm.cost) > 0">Split Cost Basis: <strong class="text-warning">${{ (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) }}</strong></span>
+                                    <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(subItem) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(subItem, scoutItemsArray.length, editForm?.cost) }}</strong></span>
                                 </div>
                             </li>
                         </ul>
@@ -780,6 +780,14 @@ import { Icon } from '@iconify/vue';
 import { marked } from 'marked';
 import TagInput from '../TagInput.vue';
 import MultiSelectDropdown from '../MultiSelectDropdown.vue';
+import { 
+    getSubItemBoutique, 
+    getSubItemFair, 
+    getSubItemBuyRange, 
+    getSubItemCostBasis, 
+    calculateMaxBuyPrice, 
+    calculateSubItemMaxBidPrice 
+} from '../../../lib/bundle-pricing';
 
 const props = defineProps({
     editForm: {
@@ -977,20 +985,10 @@ const formatPriceRange = (rangeObj) => {
 };
 
 const calculateMaxBuy = (subItem) => {
-    const fair = subItem?.price_breakdown?.fair;
-    let price = 0;
-    if (fair) {
-        price = typeof fair === 'object' ? (fair.mid || fair.min || 0) : parseFloat(fair) || 0;
-    }
-    return Math.round(price * 0.4);
+    return calculateMaxBuyPrice(subItem);
 };
 
 const calculateSubItemMaxBid = (subItem, result) => {
-    const fair = subItem?.price_breakdown?.fair;
-    let price = 0;
-    if (fair) {
-        price = typeof fair === 'object' ? (fair.mid || fair.min || 0) : parseFloat(fair) || 0;
-    }
-    return Math.round(price * 0.5);
+    return calculateSubItemMaxBidPrice(subItem, result);
 };
 </script>

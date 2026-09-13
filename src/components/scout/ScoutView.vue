@@ -79,7 +79,7 @@
     <!-- 2. FULL-SCREEN SCOUT RESULTS (Modeled directly after ItemDrawer layout: pinned header, window-edge scroll body, pinned footer) -->
     <div 
         v-if="result && isResultsModalOpen" 
-        class="fixed inset-0 z-50 bg-base-100 flex flex-col h-screen overflow-hidden animate-in fade-in duration-200"
+        class="fixed inset-0 z-50 bg-base-100 flex flex-col h-dvh max-h-dvh h-[100dvh] overflow-hidden animate-in fade-in duration-200"
     >
         <!-- Modal Top Bar (flex-none pinned header) -->
         <div class="flex-none h-14 sm:h-16 border-b border-base-300 bg-base-100/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30 shadow-xs">
@@ -107,7 +107,7 @@
 
         <!-- Scrollable Report Body (flex-1 overflow-y-auto w-full - Scrollbar on the extreme right of the window) -->
         <div class="flex-1 overflow-y-auto w-full">
-            <div class="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-5 space-y-6">
+            <div class="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-8 pt-5 pb-44 sm:pb-36 space-y-6">
                 <!-- 3. RESULTS (ITEM CARDS) -->
                 <div id="scout-results-section" class="space-y-6">
             <div v-for="(item, index) in ((result.items && result.items.length > 0) ? result.items : [result])" :key="index" class="card bg-base-100 shadow-sm border border-base-200">
@@ -517,14 +517,14 @@
                                     </div>
                                     <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ subItem.condition }}</span>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
-                                    <span>Est. Resale: <strong class="text-primary">{{ subItem.estimated_value }}</strong></span>
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
+                                    <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
-                                    <span>Max Buy: <strong class="text-success">${{ calculateMaxBuy(subItem.estimated_value) }}</strong></span>
+                                    <span>Fair: <strong class="text-primary">{{ getSubItemFair(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
-                                    <span>Max Bid: <strong class="text-secondary">${{ calculateSubItemMaxBid(subItem, item) }}</strong></span>
-                                    <span v-if="cost" class="opacity-30">|</span>
-                                    <span v-if="cost">Split Cost Basis: <strong class="text-warning">${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }}</strong></span>
+                                    <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(subItem) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(subItem, item.lot_items.length, cost) }}</strong></span>
                                 </div>
                             </li>
                         </ul>
@@ -758,74 +758,72 @@
             </div>
         </div>
 
-        <!-- STACK ROW 2: DAISYUI SEMANTIC DOCK (BOTTOM STRIP - THUMB ZONE) -->
-        <div class="max-w-xl w-full mx-auto">
-            <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-2">
-                <!-- Dock Item 1: New Scout Button -->
-                <button 
-                    type="button"
-                    @click="startNewScan" 
-                    class="h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95"
-                    title="Start fresh new scout"
-                >
-                    <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
-                    <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
-                </button>
+        <!-- STACK ROW 2: COMMAND DOCK (BOTTOM STRIP - THUMB ZONE) -->
+        <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-2">
+            <!-- Dock Item 1: New Scout Button -->
+            <button 
+                type="button"
+                @click="startNewScan" 
+                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95"
+                title="Start fresh new scout"
+            >
+                <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
+                <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
+            </button>
 
-                <!-- Dock Item 2: Hero Primary Action (Identify Item or View Report) -->
-                <button 
-                    v-if="result" 
-                    type="button"
-                    @click="isResultsModalOpen = true" 
-                    class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110"
-                    title="Open current scouting report"
-                >
-                    <Icon icon="solar:document-text-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-                    <span class="font-black uppercase text-[11px] tracking-wide leading-none">View Report</span>
-                </button>
+            <!-- Dock Item 2: Hero Primary Action (Identify Item or View Report) -->
+            <button 
+                v-if="result" 
+                type="button"
+                @click="isResultsModalOpen = true" 
+                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110"
+                title="Open current scouting report"
+            >
+                <Icon icon="solar:document-text-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                <span class="font-black uppercase text-[11px] tracking-wide leading-none">View Report</span>
+            </button>
 
-                <button 
-                    v-else 
-                    type="button"
-                    @click="handleAnalyze" 
-                    :class="(loading || !canAnalyze)
-                            ? 'bg-base-300/40 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'
-                            : (rescoutId
-                                ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110'
-                                : 'bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110')"
-                    class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
-                    :disabled="loading || !canAnalyze"
-                    :title="rescoutId ? 'Re-analyze and update existing item' : 'Identify item with AI'"
-                >
-                    <span v-if="loading" class="loading loading-spinner loading-sm" :class="rescoutId ? 'text-warning-content' : 'text-primary-content'"></span>
-                    <template v-else>
-                        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-                        <span class="font-black uppercase text-[11px] tracking-wide leading-none">
-                            {{ rescoutId ? 'Re-Identify' : 'Identify Item' }}
-                        </span>
-                    </template>
-                </button>
+            <button 
+                v-else 
+                type="button"
+                @click="handleAnalyze" 
+                :class="(loading || !canAnalyze)
+                        ? 'bg-base-300/40 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'
+                        : (rescoutId
+                            ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110'
+                            : 'bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110')"
+                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
+                :disabled="loading || !canAnalyze"
+                :title="rescoutId ? 'Re-analyze and update existing item' : 'Identify item with AI'"
+            >
+                <span v-if="loading" class="loading loading-spinner loading-sm" :class="rescoutId ? 'text-warning-content' : 'text-primary-content'"></span>
+                <template v-else>
+                    <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                    <span class="font-black uppercase text-[11px] tracking-wide leading-none">
+                        {{ rescoutId ? 'Re-Identify' : 'Identify Item' }}
+                    </span>
+                </template>
+            </button>
 
-                <!-- Dock Item 3: Add to Tracker Button -->
-                <button 
-                    type="button" 
-                    @click="result ? handleAddButtonClick() : null" 
-                    :class="result && canSaveReport 
-                            ? 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110' 
-                            : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'"
-                    class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
-                    :disabled="!result || savingAll || !canSaveReport"
-                    :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
-                >
-                    <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
-                    <template v-else>
-                        <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
-                        <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
-                            + Add {{ itemsInResult.length > 1 ? `(${itemsInResult.length})` : 'Item' }}
-                        </span>
-                    </template>
-                </button>
-            </div>
+            <!-- Dock Item 3: Add to Tracker Button -->
+            <button 
+                type="button" 
+                @click="result ? handleAddButtonClick() : null" 
+                :class="result && canSaveReport 
+                        ? 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110' 
+                        : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'"
+                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
+                :disabled="!result || savingAll || !canSaveReport"
+                :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
+            >
+                <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
+                <template v-else>
+                    <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
+                    <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
+                        + Add {{ itemsInResult.length > 1 ? `(${itemsInResult.length})` : 'Item' }}
+                    </span>
+                </template>
+            </button>
         </div>
     </div>
   </div>
@@ -846,6 +844,14 @@ import { getPurchasesCollectionId } from '../../lib/purchases';
 import ScannerWidget from '../common/ScannerWidget.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
 import ScoutAssignTrackerModal from './ScoutAssignTrackerModal.vue';
+import { 
+    getSubItemBoutique, 
+    getSubItemFair, 
+    getSubItemBuyRange, 
+    getSubItemCostBasis, 
+    calculateMaxBuyPrice, 
+    calculateSubItemMaxBidPrice 
+} from '../../lib/bundle-pricing';
 
 interface Props {
     initialPurchaseId?: string | null;
@@ -1882,11 +1888,7 @@ function parsePrice(priceStr: any) {
 }
 
 function calculateMaxBuy(item: any) {
-    if (item?.purchase_strategy?.max_landed_cost) {
-        return Math.floor(item.purchase_strategy.max_landed_cost);
-    }
-    const fair = parsePrice(item?.price_breakdown?.fair);
-    return Math.floor(fair * 0.4); // 40% rule placeholder
+    return calculateMaxBuyPrice(item);
 }
 
 function calculateMaxBid(item: any) {
@@ -1896,16 +1898,11 @@ function calculateMaxBid(item: any) {
     const maxBuy = calculateMaxBuy(item);
     const shippingTotal = item?.shipping_info?.total || 0;
     const maxBid = maxBuy - shippingTotal;
-    return maxBid > 0 ? Math.floor(maxBid) : 0;
+    return maxBid > 0 ? Math.floor(maxBid) : maxBuy;
 }
 
 function calculateSubItemMaxBid(subItem: any, parentItem: any) {
-    const maxBuy = calculateMaxBuy(subItem);
-    const shippingTotal = parentItem?.shipping_info?.total || 0;
-    const itemsCount = parentItem?.lot_items?.length || 1;
-    const shippingPerItem = shippingTotal / itemsCount;
-    const maxBid = maxBuy - shippingPerItem;
-    return maxBid > 0 ? Math.floor(maxBid) : 0;
+    return calculateSubItemMaxBidPrice(subItem, parentItem);
 }
 
 function formatPriceDisplay(val: any) {

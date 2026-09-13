@@ -5,7 +5,7 @@
       class="fixed inset-0 z-[80] bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
       @click.self="$emit('close')"
     >
-      <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
+      <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
         
         <!-- Header -->
         <div class="p-4 sm:p-5 border-b border-base-300 flex items-center justify-between gap-3 shrink-0">

@@ -591,13 +591,13 @@ const scoutTotalRange = computed(() => {
         poorLow += poor.low;
         poorHigh += poor.high;
 
-        if (resItem.price_breakdown?.boutique_premium) {
-            const b = parseLowHigh(resItem.price_breakdown.boutique_premium);
+        if (resItem.price_breakdown?.boutique_premium || resItem.pricing_potential?.boutique) {
+            const b = parseLowHigh(resItem.price_breakdown?.boutique_premium || resItem.pricing_potential?.boutique);
             boutiqueLow += b.low;
             boutiqueHigh += b.high;
         } else {
-            boutiqueLow += fair.low;
-            boutiqueHigh += fair.high;
+            boutiqueLow += Math.max(fair.low + 2, Math.round(fair.low * 1.35));
+            boutiqueHigh += Math.max(fair.high + 5, Math.round(fair.high * 1.50));
         }
     });
 

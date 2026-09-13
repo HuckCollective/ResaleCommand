@@ -1,5 +1,5 @@
 <template>
-    <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-3 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-xs">
+    <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-3 -mx-2 px-2 sm:mx-0 sm:px-0 shadow-xs w-full max-w-full min-w-0">
         <div class="flex flex-col gap-2 sm:gap-3">
             <!-- Row 1: Title & Live Counts on Left, View Switcher on Right -->
             <div class="flex items-center justify-between gap-2">
@@ -70,7 +70,7 @@
         <!-- ------------------------------------------------------------- -->
         <!-- HORIZONTAL STATUS PIPELINE TABS                               -->
         <!-- ------------------------------------------------------------- -->
-        <div class="flex items-center gap-2 overflow-x-auto pt-3 mt-1 pb-1 scrollbar-none">
+        <div class="flex items-center gap-2 overflow-x-auto pt-3 mt-1 pb-1 scrollbar-none w-full max-w-full min-w-0 overscroll-x-contain">
             <!-- Status Tab: Active Stock (Default on-hand physical inventory) -->
             <button 
                 type="button"

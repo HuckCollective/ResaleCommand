@@ -103,9 +103,20 @@ export function getSafeRawAnalysis(item: any): string | null {
             return {
                 name: (li.name || li.title || li.identity || '').trim(),
                 identity: li.identity || undefined,
+                tag_title: li.tag_title || undefined,
                 is_key_issue: li.is_key_issue || undefined,
                 condition: li.condition || undefined,
                 estimated_value: li.estimated_value || undefined,
+                pricing_potential: li.pricing_potential ? {
+                    boutique: li.pricing_potential.boutique || undefined,
+                    fair: li.pricing_potential.fair || undefined
+                } : undefined,
+                buy_range: li.buy_range ? {
+                    min: li.buy_range.min !== undefined ? li.buy_range.min : undefined,
+                    max: li.buy_range.max !== undefined ? li.buy_range.max : undefined,
+                    formatted: li.buy_range.formatted || undefined
+                } : undefined,
+                split_cost_basis: li.split_cost_basis !== undefined ? li.split_cost_basis : undefined,
                 price_breakdown: li.price_breakdown ? {
                     mint: li.price_breakdown.mint || undefined,
                     fair: li.price_breakdown.fair || undefined,

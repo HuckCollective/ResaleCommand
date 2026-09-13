@@ -1,6 +1,6 @@
 import { databases, storage, Query, ID } from './appwrite';
 import { Permission, Role, type Models } from 'appwrite';
-import { saveItemToInventory } from './inventory';
+import { saveItemToInventory, BUCKET_ID } from './inventory';
 import { isAlphaMode } from '../stores/env';
 
 export const getPurchasesCollectionId = () => import.meta.env.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID || 'purchases_dev';
@@ -175,7 +175,20 @@ export const purchasesAPI = {
     },
 
     async deletePurchase(documentId: string) {
-        return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), documentId);
+        // Clean up attached receipt image from storage bucket to prevent orphan files
+        try {
+            const doc = await purchasesAPI.findPurchase(documentId) || await databases.getDocument(DB_ID, getPurchasesCollectionId(), documentId).catch(() => null);
+            if (doc && doc.receiptImageId) {
+                await storage.deleteFile(BUCKET_ID, doc.receiptImageId).catch(delErr => {
+                    console.warn('[Purchases] Receipt file cleanup warning:', delErr);
+                });
+            }
+            const actualDocId = doc ? doc.$id : documentId;
+            return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), actualDocId);
+        } catch (e) {
+            console.warn('[Purchases] Could not inspect PO before deletion, attempting direct doc deletion:', e);
+            return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), documentId);
+        }
     },
 
     async listPurchases(queries = []) {
@@ -185,7 +198,7 @@ export const purchasesAPI = {
     /**
      * Centralized, all-in-one Purchase Order saver:
      * 1. Guarantees timestamped PO Number & Order ID across the board
-     * 2. Handles receipt photo upload to storage
+     * 2. Handles receipt photo upload to storage with automatic orphan rollback on failure
      * 3. Creates/updates PO document
      * 4. Saves resale items to inventory with unique sequential identity (e.g. PO-005817-01)
      * 5. Saves expense records to expenses collection
@@ -200,17 +213,31 @@ export const purchasesAPI = {
 
         // 1. Upload receipt image if file provided and not yet uploaded
         let receiptImageId = payload.receiptImageId || null;
+        let newlyUploadedReceiptId: string | null = null;
         if (!receiptImageId && payload.receiptFile && payload.receiptFile.size > 0) {
             try {
-                const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
                 const upload = await storage.createFile(BUCKET_ID, ID.unique(), payload.receiptFile);
                 receiptImageId = upload.$id;
+                newlyUploadedReceiptId = upload.$id;
             } catch (upErr) {
                 console.warn('[Purchases] Receipt image upload warning:', upErr);
             }
         }
 
-        // 2. Separate lines into resale and expense
+        // 2. If replacing an existing receipt on an existing PO, track old file for post-save cleanup
+        let oldReceiptToDelete: string | null = null;
+        if (payload.purchaseId && payload.receiptFile && receiptImageId) {
+            try {
+                const existingDoc = await databases.getDocument(DB_ID, getPurchasesCollectionId(), payload.purchaseId).catch(() => null);
+                if (existingDoc && existingDoc.receiptImageId && existingDoc.receiptImageId !== receiptImageId) {
+                    oldReceiptToDelete = existingDoc.receiptImageId;
+                }
+            } catch (cleanupErr) {
+                console.warn('[Purchases] Could not inspect existing PO for old receipt:', cleanupErr);
+            }
+        }
+
+        // 3. Separate lines into resale and expense
         const validItems = (payload.items || []).filter(i => i && i.title && i.title.trim() !== '');
         const resaleLines = validItems.filter(i => i.type !== 'expense');
         const expenseLines = validItems.filter(i => i.type === 'expense');
@@ -224,32 +251,49 @@ export const purchasesAPI = {
             : (subtotal + feeTotal);
 
         let finalPurchaseId: string;
-        if (payload.purchaseId) {
-            finalPurchaseId = payload.purchaseId;
-            const updatePayload: Partial<PurchaseData> = {
-                status,
-                vendor,
-                subtotal,
-                feeTotal,
-                grandTotal
-            };
-            if (receiptImageId) updatePayload.receiptImageId = receiptImageId;
-            await purchasesAPI.updatePurchase(finalPurchaseId, updatePayload);
-        } else {
-            const createPayload: PurchaseData = {
-                poNumber,
-                orderId,
-                vendor,
-                purchaseDate: payload.purchaseDate || new Date().toISOString(),
-                status,
-                subtotal,
-                feeTotal,
-                grandTotal,
-                tenantId: tenantId || undefined
-            };
-            if (receiptImageId) createPayload.receiptImageId = receiptImageId;
-            const created = await purchasesAPI.createPurchase(createPayload);
-            finalPurchaseId = created.$id;
+        try {
+            if (payload.purchaseId) {
+                finalPurchaseId = payload.purchaseId;
+                const updatePayload: Partial<PurchaseData> = {
+                    status,
+                    vendor,
+                    subtotal,
+                    feeTotal,
+                    grandTotal
+                };
+                if (receiptImageId) updatePayload.receiptImageId = receiptImageId;
+                await purchasesAPI.updatePurchase(finalPurchaseId, updatePayload);
+            } else {
+                const createPayload: PurchaseData = {
+                    poNumber,
+                    orderId,
+                    vendor,
+                    purchaseDate: payload.purchaseDate || new Date().toISOString(),
+                    status,
+                    subtotal,
+                    feeTotal,
+                    grandTotal,
+                    tenantId: tenantId || undefined
+                };
+                if (receiptImageId) createPayload.receiptImageId = receiptImageId;
+                const created = await purchasesAPI.createPurchase(createPayload);
+                finalPurchaseId = created.$id;
+            }
+        } catch (dbErr) {
+            // CRITICAL: Clean up newly uploaded file from bucket if PO creation/update failed
+            if (newlyUploadedReceiptId) {
+                await storage.deleteFile(BUCKET_ID, newlyUploadedReceiptId).catch(delErr => {
+                    console.warn('[Purchases] Failed to rollback newly uploaded receipt:', delErr);
+                });
+            }
+            throw dbErr;
+        }
+
+        // If PO was successfully saved and an old receipt was replaced, clean it up from bucket
+        if (oldReceiptToDelete) {
+            await storage.deleteFile(BUCKET_ID, oldReceiptToDelete).catch(delErr => {
+                console.warn('[Purchases] Could not delete replaced old receipt from bucket:', delErr);
+            });
         }
 
         // 3. Save or update resale items

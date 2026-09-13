@@ -1,6 +1,6 @@
 <template>
   <dialog ref="modalRef" class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': isOpen }">
-    <div class="modal-box w-full max-w-4xl max-h-[92vh] flex flex-col p-4 sm:p-6 bg-base-100 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+    <div class="modal-box w-full max-w-4xl max-h-[92dvh] flex flex-col p-4 sm:p-6 bg-base-100 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
       
       <!-- HEADER -->
       <div class="flex items-center justify-between border-b border-base-200 pb-3">

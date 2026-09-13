@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { normalizeBundleComponents } from '../../lib/bundle-pricing';
 
 export const prerender = false;
 
@@ -971,8 +972,20 @@ export const ALL: APIRoute = async ({ request }) => {
                   - 'tag_title': Concise booth tag title (<= 40 chars) for this specific sub-item.
                   - 'identity': The item's distinct identity.
                   - 'tier': "showcase" | "core" | "quick_turn".
-                  - 'estimated_value': Inferred individual resale value.
-                  - 'condition': Inferred condition of this item.
+                  - 'condition': Inferred condition of this item (e.g. "Good", "Mint", "Fair").
+                  - 'pricing_potential': An object with realistic valuation ranges (REQUIRED for every bundle component):
+                      * 'boutique': (REQUIRED string) The HIGHER boutique / antique booth curated price range (e.g. "$18 - $25").
+                      * 'fair': (REQUIRED string) Fair market / online sold comps price range (e.g. "$8 - $15").
+                  - 'buy_range': (REQUIRED object):
+                      * 'min': (Number) Conservative minimum buy target (e.g. 2 or 3).
+                      * 'max': (Number) Maximum profitable buy threshold (e.g. 5 or 6).
+                      * 'formatted': (String) Formatted min-max buy range (e.g. "$3 - $6").
+                  - 'price_breakdown': Full price breakdown object:
+                      * 'boutique_premium': The higher boutique price range string (e.g. "$18 - $25").
+                      * 'fair': The fair market price range string (e.g. "$8 - $15").
+                      * 'mint': Price range if Mint.
+                      * 'poor': Price range if Poor.
+                  - 'estimated_value': String of fair market value (e.g. "$8 - $15").
                   - 'ocr_detected_text': Verbatim text read from this item.
                   - 'image_index': (Integer, 0-indexed) Which image contains the clearest view of this item.
                   - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates locating the exact physical object..
@@ -1011,6 +1024,12 @@ export const ALL: APIRoute = async ({ request }) => {
             const jsonObj = JSON.parse(cleanedResponse);
             if (jsonObj.items && jsonObj.items.length > 0) {
                 jsonObj.items.forEach((item: any, idx: number) => {
+                    // Normalize bundle lot items so pricing fields are 100% complete and consistent
+                    if (item.lot_items && Array.isArray(item.lot_items)) {
+                        const askingCost = item.purchase_strategy?.current_asking_price || item.purchase_strategy?.max_landed_cost || null;
+                        item.lot_items = normalizeBundleComponents(item.lot_items, askingCost);
+                    }
+
                     if (idx === 0) {
                         if (successfulImageUrl) {
                             item.fetched_image = successfulImageUrl;
@@ -1023,6 +1042,9 @@ export const ALL: APIRoute = async ({ request }) => {
                         }
                     }
                 });
+            }
+            if (jsonObj.lot_items && Array.isArray(jsonObj.lot_items)) {
+                jsonObj.lot_items = normalizeBundleComponents(jsonObj.lot_items);
             }
             cleanedResponse = JSON.stringify(jsonObj);
         } catch (e) {

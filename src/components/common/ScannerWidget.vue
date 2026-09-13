@@ -38,7 +38,7 @@
                 
                 <!-- Receipt Alignment Guide Overlay -->
                 <div v-if="overlayMode === 'receipt'" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6 z-5">
-                    <div class="w-full max-w-xs sm:max-w-sm h-[60vh] border-2 border-dashed border-primary/80 rounded-2xl relative flex flex-col items-center justify-between p-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/10 backdrop-contrast-105">
+                    <div ref="guideBox" class="w-full max-w-xs sm:max-w-sm h-[60vh] border-2 border-dashed border-primary/80 rounded-2xl relative flex flex-col items-center justify-between p-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/10 backdrop-contrast-105">
                         <!-- 4 Corner Brackets -->
                         <div class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg"></div>
                         <div class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg"></div>
@@ -209,24 +209,66 @@ const flipCamera = () => {
     startCamera();
 };
 
+const guideBox = ref(null);
+
 const capturePhoto = () => {
     if (props.maxPhotos && props.photos.length >= props.maxPhotos) return;
     
     const videoEl = cameraVideoDialog.value;
     if (!videoEl) return;
+
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    if (!vw || !vh) return;
+
     const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth || 1920; 
-    canvas.height = videoEl.videoHeight || 1080;
     const ctx = canvas.getContext('2d');
-    if (ctx) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    if (guideBox.value && props.overlayMode !== 'none') {
+        const videoRect = videoEl.getBoundingClientRect();
+        const boxRect = guideBox.value.getBoundingClientRect();
+
+        const elW = videoRect.width;
+        const elH = videoRect.height;
+
+        // video has object-cover, centered
+        const scale = Math.max(elW / vw, elH / vh);
+        const renderedW = vw * scale;
+        const renderedH = vh * scale;
+        const offsetX = (renderedW - elW) / 2;
+        const offsetY = (renderedH - elH) / 2;
+
+        const boxLeftInEl = boxRect.left - videoRect.left;
+        const boxTopInEl = boxRect.top - videoRect.top;
+
+        let sx = (boxLeftInEl + offsetX) / scale;
+        let sy = (boxTopInEl + offsetY) / scale;
+        let sWidth = boxRect.width / scale;
+        let sHeight = boxRect.height / scale;
+
+        // Add 2% padding so edges of receipt/text are not clipped if touching border
+        const padX = sWidth * 0.02;
+        const padY = sHeight * 0.02;
+        sx = Math.max(0, sx - padX);
+        sy = Math.max(0, sy - padY);
+        sWidth = Math.min(vw - sx, sWidth + padX * 2);
+        sHeight = Math.min(vh - sy, sHeight + padY * 2);
+
+        canvas.width = Math.round(sWidth);
+        canvas.height = Math.round(sHeight);
+        ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+    } else {
+        canvas.width = vw || 1920; 
+        canvas.height = vh || 1080;
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     }
     
     canvas.toBlob(blob => {
         if (!blob) return;
-        const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+        const file = new File([blob], `receipt_${Date.now()}.jpg`, { type: "image/jpeg" });
         emit('photos-captured', [file]);
         
         // Visual feedback
