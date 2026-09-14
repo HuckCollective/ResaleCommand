@@ -89,12 +89,11 @@ export function useInventory() {
                 let cursor: string | null = null;
                 let hasMoreItems = true;
                 let total = 0;
-                const pageSize = 5000;
+                const pageSize = 100;
 
                 while (hasMoreItems) {
-                    // Use $id for ordering: strictly unique and monotonic, avoiding bulk-import $createdAt collisions
                     const queries: any[] = [
-                        Query.orderDesc('$id'),
+                        Query.orderDesc('$createdAt'),
                         Query.limit(pageSize)
                     ];
 
@@ -123,15 +122,18 @@ export function useInventory() {
 
                     console.log(`[useInventory] Batch: ${response.documents.length}, Accumulated: ${allDocs.length}, Collection total: ${total} (${getCollectionId()})`);
 
-                    // 4,000-item warning track
-                    if (total >= 4000 && allDocs.length === response.documents.length) {
-                        console.warn(`[useInventory] ⚠️ Inventory at ${total}/5000 items. Multi-batch pagination is armed for 5k+ expansion.`);
-                    }
-
-                    if (response.documents.length < pageSize || allDocs.length >= total) {
+                    // Continue until all items in collection are retrieved or empty batch returned
+                    if (response.documents.length === 0 || allDocs.length >= total) {
                         hasMoreItems = false;
                     }
                 }
+
+                // Deterministic sort by latest updated first ($updatedAt DESC)
+                allDocs.sort((a: any, b: any) => {
+                    const aTime = new Date(a.$updatedAt || a.updatedAt || a.$createdAt || 0).getTime();
+                    const bTime = new Date(b.$updatedAt || b.updatedAt || b.$createdAt || 0).getTime();
+                    return bTime - aTime;
+                });
 
                 inventoryItems.value = allDocs;
                 initRealtime();

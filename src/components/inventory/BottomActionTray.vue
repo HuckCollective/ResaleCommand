@@ -683,8 +683,10 @@ const onApplyLocation = () => {
 
 const onApplyStatus = () => {
     if (!targetStatus.value) return;
-    emit('apply-status', targetStatus.value);
+    const st = targetStatus.value;
     targetStatus.value = '';
+    closeTray();
+    emit('apply-status', st);
 };
 
 const confirmDelete = () => {

@@ -1,43 +1,47 @@
 <template>
   <div class="space-y-4">
-    <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & MOBILE-FIRST) -->
-    <div class="card bg-base-100 shadow-md border border-base-200 p-3 sm:p-4">
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+    <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
+    <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
         
-        <!-- DaisyUI Connected Search Input + Button Group (.join) -->
-        <div class="join w-full shadow-xs">
-          <div class="relative flex-1 join-item">
-            <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
-            <input 
-              type="text" 
-              v-model="searchQuery" 
-              @keyup.enter="handleSearch"
-              placeholder="Search PO Number, External Order ID, Vendor..." 
-              class="input input-bordered join-item w-full pl-10 pr-9 text-sm min-h-[44px]"
-            />
-            <button 
-              v-if="searchQuery" 
-              @click="clearSearch" 
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 min-h-[28px] min-w-[28px]"
-              title="Clear search"
-            >
-              ✕
-            </button>
-          </div>
-          
+        <!-- Constrained Omnibox Search Input -->
+        <div class="relative w-full sm:max-w-md md:max-w-lg">
+          <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
+          <input 
+            type="text" 
+            v-model="searchQuery" 
+            placeholder="Search PO Number, Order ID, Vendor..." 
+            class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
+          />
           <button 
-            @click="handleSearch" 
-            class="btn btn-primary join-item text-primary-content font-black px-4 min-h-[44px] shrink-0 gap-1.5 active:scale-95 transition-all"
-            :disabled="loading"
-            title="Execute Search"
+            v-if="searchQuery" 
+            @click="clearSearch" 
+            class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
+            title="Clear search"
           >
-            <Icon icon="solar:magnifer-bold" class="w-4 h-4" />
-            <span class="hidden sm:inline">Search</span>
+            ✕
           </button>
         </div>
 
-        <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
-        <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-1 text-xs">
+        <!-- Right Side: Item Count & Quick Actions -->
+        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
+          <span class="badge badge-sm badge-ghost font-mono opacity-70">
+            {{ filteredPurchases.length }} purchase{{ filteredPurchases.length === 1 ? '' : 's' }}
+          </span>
+          <button 
+            type="button" 
+            @click="showImportModal = true"
+            class="btn btn-xs sm:btn-sm btn-outline btn-primary gap-1.5 font-bold rounded-xl h-9 min-h-9 px-3 active:scale-95 transition-all shadow-2xs"
+            title="Import Purchase Orders from CSV"
+          >
+            <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" />
+            <span>Import CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
+      <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-2 mt-1 border-t border-base-200/60 text-xs">
           <span class="font-bold opacity-60 mr-1 flex items-center gap-1">
             <Icon icon="solar:sort-vertical-linear" class="w-3.5 h-3.5" /> Sort:
           </span>
@@ -79,7 +83,6 @@
           </button>
         </div>
       </div>
-    </div>
 
     <!-- LOADING STATE -->
     <div v-if="loading && purchases.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">

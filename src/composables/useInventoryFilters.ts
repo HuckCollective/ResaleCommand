@@ -6,7 +6,7 @@ import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 
-export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$createdAt';
+export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
 export type SortDirection = 'asc' | 'desc';
 
 // -- 0. IMAGE RESOLUTION HELPER (Exact ItemCard standard) --
@@ -66,7 +66,7 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
     const filterInsight = ref(''); // 'ready_to_list' | 'missing_photos' | 'missing_pricing' | 'missing_cost'
     const filterBarcode = ref('all'); // 'all' | '__missing__' | '__has_barcode__' | string prefix
     const filterLotType = ref('all'); // 'all' | 'lots_only' | 'extracted_only' | 'standalone_only'
-    const sortColumn = ref<InventorySortColumn>('$createdAt');
+    const sortColumn = ref<InventorySortColumn>('$updatedAt');
     const sortDirection = ref<SortDirection>('desc');
 
     // -- 1. VENDOR RESOLUTION HELPER --
@@ -365,29 +365,30 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
             const anyItem = item as any;
             const itemStatus = (anyItem.status || 'acquired').toLowerCase();
 
-            // 1. Core Exclusion: Combined / Merged items
-            if (doHideCombined && itemStatus === 'combined' && st !== 'combined') {
+            // 1. Core Exclusion: Combined / Merged items (Only when not explicitly searching)
+            if (!q && doHideCombined && itemStatus === 'combined' && st !== 'combined') {
                 return false;
             }
 
-            // 2. Core Exclusion: Trackers & Scouted (unacquired items)
-            // If hideTracked is true, hide them unless user is on the Tracked tab
-            if (doHideTracked && (itemStatus === 'tracked' || itemStatus === 'scouted') && st !== 'tracked') {
+            // 2. Core Exclusion: Trackers & Scouted (unacquired items) (Only when not explicitly searching)
+            if (!q && doHideTracked && (itemStatus === 'tracked' || itemStatus === 'scouted') && st !== 'tracked') {
                 return false;
             }
 
-            // 3. Core Exclusion: Sold items
-            if (doHideSold && itemStatus === 'sold' && st !== 'sold') {
+            // 3. Core Exclusion: Sold items (Only when not explicitly searching)
+            if (!q && doHideSold && itemStatus === 'sold' && st !== 'sold') {
                 return false;
             }
 
-            // 4. Status Filter
-            if (st === 'active') {
-                if (!isActiveInventory(itemStatus)) return false;
-            } else if (st === 'tracked') {
-                if (itemStatus !== 'tracked' && itemStatus !== 'scouted') return false;
-            } else if (st !== 'all') {
-                if (itemStatus !== st) return false;
+            // 4. Status Filter (Only when not explicitly searching)
+            if (!q) {
+                if (st === 'active') {
+                    if (!isActiveInventory(itemStatus)) return false;
+                } else if (st === 'tracked') {
+                    if (itemStatus !== 'tracked' && itemStatus !== 'scouted') return false;
+                } else if (st !== 'all') {
+                    if (itemStatus !== st) return false;
+                }
             }
 
             // 5. Placed & Located filter
@@ -468,7 +469,10 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
             let aVal = anyA[sortColumn.value];
             let bVal = anyB[sortColumn.value];
 
-            if (sortColumn.value === 'margin') {
+            if (sortColumn.value === '$updatedAt' || sortColumn.value === '$createdAt') {
+                aVal = new Date(anyA[sortColumn.value] || anyA.$updatedAt || anyA.$createdAt || 0).getTime();
+                bVal = new Date(anyB[sortColumn.value] || anyB.$updatedAt || anyB.$createdAt || 0).getTime();
+            } else if (sortColumn.value === 'margin') {
                 aVal = calculateRoi(anyA) ?? -999;
                 bVal = calculateRoi(anyB) ?? -999;
             } else if (sortColumn.value === 'vendor') {

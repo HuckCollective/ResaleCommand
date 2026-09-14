@@ -89,7 +89,7 @@
          @click="$emit('click-card', item)">
         
         <!-- Image Area -->
-        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-square sm:aspect-4/3 w-full">
+        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full">
             <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" loading="lazy" />
             <div v-else class="flex flex-col items-center justify-center w-full h-full opacity-30 bg-base-300 p-2">
                 <Icon icon="solar:box-linear" class="w-10 h-10" />
@@ -118,9 +118,9 @@
             </div>
             
             <!-- ROI Meter Bar overlaid on bottom of image -->
-            <div class="absolute bottom-0 left-0 right-0 h-5 bg-black/60 backdrop-blur-xs overflow-hidden flex items-center">
+            <div class="absolute bottom-0 left-0 right-0 h-6 bg-black/75 backdrop-blur-xs overflow-hidden flex items-center">
                 <div :class="[profitColor, profitWidth]" class="h-full transition-all duration-500 opacity-80"></div>
-                <div class="absolute inset-0 flex justify-between items-center px-1.5 font-bold z-10 text-[9px] text-white pointer-events-none drop-shadow-xs">
+                <div class="absolute inset-0 flex justify-between items-center px-2 font-bold z-10 text-[10px] text-white pointer-events-none drop-shadow-xs">
                     <span class="opacity-90">Cost: {{ formatCurrency(paidValue) }}</span>
                     <span>
                         <span class="opacity-90">Est: {{ formatCurrency(estValue) }}</span>
@@ -133,10 +133,10 @@
         </figure>
 
         <!-- Body Area -->
-        <div class="card-body p-2.5 gap-1.5 flex-1 flex flex-col justify-between">
+        <div class="card-body p-3 gap-1.5 flex-1 flex flex-col justify-between">
             <!-- Title & Identifiers -->
             <div>
-                <h2 class="font-bold leading-snug line-clamp-2 text-xs group-hover:text-primary transition-colors mb-1" :title="title">
+                <h2 class="font-bold leading-snug line-clamp-2 text-sm group-hover:text-primary transition-colors mb-1.5 min-h-[2.5rem]" :title="title">
                     {{ title }}
                 </h2>
 

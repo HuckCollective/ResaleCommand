@@ -1,5 +1,5 @@
 <template>
-  <nav class="navbar max-w-screen-lx mx-auto">
+  <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-8">
     <div class="navbar-start md:pl-2 lg:pl-8 items-center flex">
       <a href="/" class="btn btn-ghost text-xl font-bold text-primary">Resale Command</a>
       <div v-if="alphaMode" class="badge badge-warning badge-sm font-bold uppercase ml-2 shadow border border-warning">Alpha Mode</div>

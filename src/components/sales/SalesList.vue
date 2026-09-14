@@ -90,35 +90,47 @@
         </div>
       </div>
 
-      <!-- SEARCH & CONTROLS TOOLBAR (PO TREATMENT: CLEAN & MOBILE-FIRST) -->
-      <div class="card bg-base-100 shadow-md border border-base-200 p-3 sm:p-4">
-        <div class="flex flex-col gap-3">
+      <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
+      <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           
-          <!-- DaisyUI Connected Search Input + Location Dropdown (.join) -->
-          <div class="join w-full shadow-xs">
-            <div class="relative flex-1 join-item">
+          <!-- Left: Constrained Omnibox Search Input + Location Dropdown -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-2xl">
+            <!-- Search Input -->
+            <div class="relative flex-1 w-full">
               <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
               <input 
                 type="text" 
                 v-model="searchQuery" 
                 placeholder="Search sale by item title, UPC, SKU, SO#..." 
-                class="input input-bordered join-item w-full pl-10 pr-9 text-sm min-h-[44px]"
+                class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
               />
               <button 
                 v-if="searchQuery" 
                 @click="searchQuery = ''" 
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 min-h-[28px] min-w-[28px]"
+                class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
                 title="Clear search"
               >
                 ✕
               </button>
             </div>
 
-            <select v-model="locationFilter" class="select select-bordered join-item text-xs font-bold min-h-[44px] max-w-[130px] sm:max-w-[200px]">
-              <option value="all">All Locations</option>
-              <option v-for="wh in warehouses" :key="wh.$id" :value="wh.name">{{ wh.name }}</option>
-            </select>
+            <!-- Location Dropdown Pill -->
+            <div class="relative shrink-0">
+              <select v-model="locationFilter" class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs">
+                <option value="all">All Locations</option>
+                <option v-for="wh in warehouses" :key="wh.$id" :value="wh.name">{{ wh.name }}</option>
+              </select>
+            </div>
           </div>
+
+          <!-- Right Side: Count Summary -->
+          <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
+            <span class="badge badge-sm badge-ghost font-mono opacity-70">
+              {{ consolidatedSales.length }} record{{ consolidatedSales.length === 1 ? '' : 's' }}
+            </span>
+          </div>
+        </div>
 
           <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
           <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-1 text-xs">
@@ -163,7 +175,6 @@
             </button>
           </div>
         </div>
-      </div>
 
       <!-- Empty State -->
       <div v-if="displayedSales.length === 0" class="card bg-base-100 shadow-xl border border-base-200">

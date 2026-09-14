@@ -365,18 +365,18 @@
             </div>
             
             <div v-else class="pb-32">
-                <!-- RESPONSIVE MOBILE FEED (1-COL LIST OR 2-COL GRID) / MULTI-COLUMN DESKTOP -->
-                <div :class="mobileLayout === 'list' 
-                    ? 'grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' 
-                    : 'grid gap-2.5 sm:gap-3 md:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'">
+                <!-- RESPONSIVE INVENTORY FEED / GRID -->
+                <div :class="isHorizontalCard 
+                    ? 'grid gap-2.5 grid-cols-1' 
+                    : 'grid gap-3 sm:gap-3.5 md:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'">
                     <ItemCard 
                         v-for="item in displayedInventory" 
                         :key="item.$id" 
                         :item="item"
-                        :compact="true"
-                        :horizontal="mobileLayout === 'list'"
+                        :compact="false"
+                        :horizontal="isHorizontalCard"
                         :selected="selectedItems.includes(item.$id)"
-                        @click-card="openPreview(item)"
+                        @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
                         
@@ -388,16 +388,25 @@
                         </template>
 
                         <template #actions>
-                            <div :class="mobileLayout === 'list' ? 'flex items-center gap-1' : 'grid grid-cols-3 gap-1 w-full mt-1.5 pt-1.5 border-t border-base-200/60 z-10'" @click.stop>
-                                <button @click="copyShareLink(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold opacity-75 hover:opacity-100 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Copy shareable link">
-                                    <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Share</span>
+                            <div class="flex items-center gap-1.5 w-full mt-2 pt-2 border-t border-base-200/70 z-10" @click.stop>
+                                <button 
+                                    type="button"
+                                    @click="openEdit(item)" 
+                                    class="btn btn-sm flex-1 btn-primary font-bold rounded-xl gap-1.5 h-8 min-h-8 text-xs touch-manipulation active:scale-95 shadow-2xs" 
+                                    title="Edit item in drawer"
+                                >
+                                    <Icon icon="solar:pen-2-bold" class="w-3.5 h-3.5" />
+                                    <span>Edit</span>
                                 </button>
-                                <button @click="openEdit(item)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold opacity-80 hover:opacity-100 hover:text-primary active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" title="Edit item">
-                                    <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Edit</span>
-                                </button>
-                                <button @click="confirmDelete(item.$id)" class="btn btn-ghost btn-xs h-7.5 min-h-7.5 px-1.5 text-[11px] font-bold text-error opacity-80 hover:opacity-100 hover:bg-error/10 active:scale-95 flex items-center justify-center gap-1 rounded-lg touch-manipulation" :disabled="processingId === item.$id" title="Delete item">
+                                <button 
+                                    type="button"
+                                    @click="confirmDelete(item.$id)" 
+                                    class="btn btn-sm btn-ghost text-error/80 hover:text-error hover:bg-error/15 h-8 min-h-8 w-8 min-w-8 p-0 rounded-xl touch-manipulation active:scale-90" 
+                                    :disabled="processingId === item.$id" 
+                                    title="Delete item"
+                                >
                                     <span v-if="processingId === item.$id" class="loading loading-spinner loading-xs"></span>
-                                    <span v-else><Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> <span class="hidden sm:inline">Del</span></span>
+                                    <Icon v-else icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
                                 </button>
                             </div>
                         </template>
@@ -1140,7 +1149,14 @@ const emit = defineEmits(['update:viewMode']);
 
 const dockRef = ref(null);
 
-const mobileLayout = ref(typeof window !== 'undefined' ? (localStorage.getItem('rc_mobile_grid_layout') || 'list') : 'list');
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 640 : false);
+const updateIsMobile = () => {
+    if (typeof window !== 'undefined') {
+        isMobile.value = window.innerWidth < 640;
+    }
+};
+
+const mobileLayout = ref(typeof window !== 'undefined' ? (localStorage.getItem('rc_mobile_grid_layout') || 'grid') : 'grid');
 
 const setMobileLayout = (mode) => {
     mobileLayout.value = mode;
@@ -1150,6 +1166,11 @@ const setMobileLayout = (mode) => {
         // ignore
     }
 };
+
+const isHorizontalCard = computed(() => {
+    // Only mobile phones (< 640px) can use the horizontal row list feed
+    return isMobile.value && mobileLayout.value === 'list';
+});
 
 const allPurchases = ref([]);
 
@@ -1590,6 +1611,10 @@ const clearLineageFilters = () => {
 };
 
 onMounted(() => {
+    updateIsMobile();
+    if (typeof window !== 'undefined') {
+        window.addEventListener('resize', updateIsMobile);
+    }
     fetchPurchases();
     // Check URL for AI Insight filters & search / order params
     const params = new URLSearchParams(window.location.search);
@@ -1930,17 +1955,19 @@ const filteredInventory = computed(() => {
             if (!matchesLot) return false;
         }
 
-        // Exclusion Toggles ("No-Show")
-        if (hideSold.value && item.status === 'sold' && filterStatus.value !== 'sold') return false;
-        if (hideTracked.value && (item.status === 'tracked' || item.status === 'scouted') && filterStatus.value !== 'tracked') return false;
-        if (hideCombined.value && item.status === 'combined' && filterStatus.value !== 'combined') return false;
+        // Exclusion Toggles ("No-Show") - Applied when not explicitly searching
+        if (!searchQuery.value) {
+            if (hideSold.value && item.status === 'sold' && filterStatus.value !== 'sold') return false;
+            if (hideTracked.value && (item.status === 'tracked' || item.status === 'scouted') && filterStatus.value !== 'tracked') return false;
+            if (hideCombined.value && item.status === 'combined' && filterStatus.value !== 'combined') return false;
 
-        // Filter by Status (Only if not using insight filter that forces status or filtering by lineage)
-        if (!insightFilter.value && !filterParentLotId.value && filterStatus.value !== 'all') {
-            if (filterStatus.value === 'active') {
-                if (['sold', 'tracked', 'scouted', 'combined'].includes(item.status)) return false;
-            } else if (item.status !== filterStatus.value) {
-                return false;
+            // Filter by Status (Only if not using insight filter that forces status or filtering by lineage)
+            if (!insightFilter.value && !filterParentLotId.value && filterStatus.value !== 'all') {
+                if (filterStatus.value === 'active') {
+                    if (['sold', 'tracked', 'scouted', 'combined'].includes(item.status)) return false;
+                } else if (item.status !== filterStatus.value) {
+                    return false;
+                }
             }
         }
 
@@ -2071,6 +2098,10 @@ const filteredInventory = computed(() => {
         }
         
         return true;
+    }).sort((a, b) => {
+        const aTime = new Date(a.$updatedAt || a.updatedAt || a.$createdAt || 0).getTime();
+        const bTime = new Date(b.$updatedAt || b.updatedAt || b.$createdAt || 0).getTime();
+        return bTime - aTime;
     });
 });
 
@@ -2248,58 +2279,73 @@ const applyBulkStatus = async () => {
     
     processingBulk.value = true;
     const targetStatus = bulkStatusTarget.value;
-    const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
-    const total = itemsToUpdate.length;
-    let successCount = 0;
-    let autoCalcCount = 0;
+    const itemIdsToUpdate = [...selectedItems.value];
+    const total = itemIdsToUpdate.length;
     
     const { showLoader, hideLoader } = useLoader();
     showLoader("Updating Status...", {
         step: `Setting status to "${targetStatus}" for ${total} items...`,
-        progress: 0,
+        progress: null,
         cancelable: false
     });
     
     try {
-        for (let idx = 0; idx < total; idx++) {
-            const item = itemsToUpdate[idx];
-            const percent = Math.round(((idx + 1) / total) * 100);
-            
-            showLoader("Updating Status...", {
-                step: `Item ${idx + 1} of ${total}: "${(item.title || 'Item').substring(0, 28)}..." (${percent}%)`,
-                progress: percent,
-                cancelable: false
+        // 1. Fast Server Path (uses elevated admin API key to bypass client rate limits)
+        let serverSuccess = false;
+        try {
+            const resp = await fetch('/api/inventory/bulk-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    itemIds: itemIdsToUpdate,
+                    updates: { status: targetStatus },
+                    collectionId: getCollectionId(),
+                    dbId: DB_ID
+                })
             });
-            
-            const updates = { status: targetStatus };
-            if (targetStatus === 'sold' && item) {
-                const currentSoldPrice = item.soldPrice || '';
-                const rp = parseFloat(item.resalePrice || item.listPrice || 0);
-                if (!currentSoldPrice && rp > 0) {
-                    updates.soldPrice = parseFloat((rp * 0.85).toFixed(2));
-                    autoCalcCount++;
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.success) {
+                    serverSuccess = true;
+                    // Immediately reflect in in-memory state
+                    inventoryItems.value.forEach(item => {
+                        if (itemIdsToUpdate.includes(item.$id)) {
+                            item.status = targetStatus;
+                            item.$updatedAt = new Date().toISOString();
+                        }
+                    });
+                    const count = data.updatedCount ?? total;
+                    addToast({ type: 'success', message: `Successfully updated ${count} item(s) to "${targetStatus}".` });
                 }
             }
-            
-            await updateInventoryItem(item.$id, updates);
-            Object.assign(item, updates);
-            successCount++;
-            
-            if (total > 5) await new Promise(r => setTimeout(r, 80));
+        } catch (serverErr) {
+            console.warn("Server bulk-update fell back to client execution:", serverErr);
         }
-        
-        pruneFilteredOutSelections();
+
+        // 2. Client Fallback Path if server endpoint was unreachable
+        if (!serverSuccess) {
+            for (let idx = 0; idx < total; idx++) {
+                const id = itemIdsToUpdate[idx];
+                const updates = { status: targetStatus };
+                await updateInventoryItem(id, updates);
+                const localItem = inventoryItems.value.find(i => i.$id === id);
+                if (localItem) {
+                    localItem.status = targetStatus;
+                    localItem.$updatedAt = new Date().toISOString();
+                }
+            }
+            addToast({ type: 'success', message: `Updated status for ${total} items.` });
+        }
+
+        selectedItems.value = [];
         bulkStatusTarget.value = '';
-        
-        let msg = `Successfully updated status for ${successCount} items.`;
-        if (autoCalcCount > 0) msg += ` Auto-filled Sold Price for ${autoCalcCount} item(s).`;
-        addToast({ type: 'success', message: msg });
+        dockRef.value?.closeTray();
     } catch (e) {
         console.error("Bulk status error:", e);
         addToast({ type: 'error', message: "Failed to apply bulk update: " + e.message });
     } finally {
         processingBulk.value = false;
-        const { hideLoader } = useLoader();
         hideLoader();
     }
 };
@@ -3460,6 +3506,10 @@ const submitCombine = async () => {
 
 const showImport = ref(false); // CSV Modal
 
-
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', updateIsMobile);
+    }
+});
 
 </script>
