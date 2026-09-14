@@ -1208,10 +1208,17 @@ const analyzeExistingItem = async () => {
             .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
             .replace(/(Paid|Resale|Sold|Location|Est\. Low|Est\. High|Condition|Order #):[^\n]*/gi, '')
             .trim();
-        let contextNotes = cleanCondition;
-        if (editForm.description) contextNotes += (contextNotes ? '\n\n' : '') + `Existing Description: ${editForm.description}`;
-        if (editForm.title && editForm.title.trim().toLowerCase() !== 'untitled item') contextNotes = `Current Title: ${editForm.title}\n\n` + contextNotes;
-        if (editForm.sourcingLocation) contextNotes += `\n\nSourcing URL: ${editForm.sourcingLocation}`;
+        let notesParts = [];
+        if (cleanCondition) {
+            notesParts.push("USER-SPECIFIED CORRECTIONS & OVERRIDES (AUTHORITATIVE):\n" + cleanCondition);
+        }
+        if (editForm.description && editForm.description.trim()) {
+            notesParts.push("Listing Description:\n" + editForm.description.trim());
+        }
+        if (editForm.sourcingLocation) {
+            notesParts.push("Sourcing URL: " + editForm.sourcingLocation);
+        }
+        let contextNotes = notesParts.join('\n\n');
 
         // Feed verified child items from lot lineage as ground truth
         const existingChildComponents = (lotChildren.value || []).map(c => ({

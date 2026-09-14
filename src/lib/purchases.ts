@@ -1,6 +1,6 @@
 import { databases, storage, Query, ID } from './appwrite';
 import { Permission, Role, type Models } from 'appwrite';
-import { saveItemToInventory, BUCKET_ID } from './inventory';
+import { saveItemToInventory, BUCKET_ID, getItemsByPurchaseId } from './inventory';
 import { isAlphaMode } from '../stores/env';
 
 export const getPurchasesCollectionId = () => import.meta.env.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID || 'purchases_dev';
@@ -316,7 +316,7 @@ export const purchasesAPI = {
                     { title: item.title, identity },
                     null,
                     {
-                        cost: Number(item.cost) || 0,
+                        cost: String(Number(item.cost) || 0),
                         quantity: Number(item.quantity) || 1,
                         purchaseId: finalPurchaseId,
                         status: 'acquired',
@@ -376,5 +376,126 @@ export const purchasesAPI = {
             expenseCount: expenseLines.length,
             failedCount: failedItems.length
         };
+    },
+
+    /**
+     * Checks all items belonging to a purchase order and synchronizes the PO status:
+     * - 'Received': If 100% of items are received ('received', 'placed', 'in-stock', 'sold').
+     * - 'Partial': If at least 1 item is received, but not all items.
+     * - 'Pending': If 0 items are received and the PO was previously 'Received' or 'Partial'.
+     * - Preserves 'Cancelled' or 'Returned' without overriding.
+     */
+    async syncPurchaseOrderStatus(purchaseIdentifier: string) {
+        return await syncPurchaseOrderStatus(purchaseIdentifier);
+    },
+
+    async syncPurchaseStatusForItems(items: Array<{ purchaseId?: string; orderId?: string; cartId?: string } | any>) {
+        return await syncPurchaseStatusForItems(items);
     }
 };
+
+/**
+ * Checks all items belonging to a purchase order and synchronizes the PO status:
+ * - 'Received': If 100% of items are in a received state ('received', 'placed', 'in-stock', 'sold').
+ * - 'Partial': If at least 1 item is in a received state, but not all items.
+ * - 'Pending': If 0 items are in a received state and the PO was previously 'Received' or 'Partial'.
+ * - Preserves 'Cancelled' or 'Returned' without overriding.
+ */
+export async function syncPurchaseOrderStatus(purchaseIdentifier: string) {
+    if (!purchaseIdentifier) return null;
+    const cleanId = String(purchaseIdentifier).trim();
+    if (!cleanId) return null;
+
+    try {
+        const poDoc = await purchasesAPI.findPurchase(cleanId);
+        if (!poDoc) return null;
+
+        // Never override terminal statuses
+        if (poDoc.status === 'Cancelled' || poDoc.status === 'Returned') {
+            return { purchaseId: poDoc.$id, poNumber: poDoc.poNumber, status: poDoc.status, updated: false };
+        }
+
+        // Fetch all items for this PO
+        const items = await getItemsByPurchaseId(poDoc.$id, poDoc.orderId, poDoc.poNumber);
+        if (!items || items.length === 0) return null;
+
+        const total = items.length;
+        const isReceived = (st: any) => {
+            const lower = String(st || '').toLowerCase().trim();
+            return ['received', 'placed', 'in-stock', 'sold'].includes(lower);
+        };
+
+        const receivedCount = items.filter(i => isReceived(i.status)).length;
+
+        let targetStatus = poDoc.status;
+        if (receivedCount === total) {
+            targetStatus = 'Received';
+        } else if (receivedCount > 0) {
+            targetStatus = 'Partial';
+        } else if (poDoc.status === 'Received' || poDoc.status === 'Partial' || poDoc.status === 'Partially Received') {
+            targetStatus = 'Pending';
+        }
+
+        if (targetStatus && targetStatus !== poDoc.status) {
+            await purchasesAPI.updatePurchase(poDoc.$id, { status: targetStatus });
+            return {
+                purchaseId: poDoc.$id,
+                poNumber: poDoc.poNumber || poDoc.orderId || poDoc.$id,
+                status: targetStatus,
+                previousStatus: poDoc.status,
+                receivedCount,
+                totalCount: total,
+                updated: true
+            };
+        }
+
+        return {
+            purchaseId: poDoc.$id,
+            poNumber: poDoc.poNumber || poDoc.orderId || poDoc.$id,
+            status: poDoc.status,
+            previousStatus: poDoc.status,
+            receivedCount,
+            totalCount: total,
+            updated: false
+        };
+    } catch (err) {
+        console.warn(`[Purchases] Error syncing PO status for ${cleanId}:`, err);
+        return null;
+    }
+}
+
+/**
+ * Given an array of item objects or item IDs, finds all unique linked POs
+ * and syncs their status according to their items' current states.
+ */
+export async function syncPurchaseStatusForItems(items: Array<{ purchaseId?: string; orderId?: string; cartId?: string } | any>) {
+    if (!items || !Array.isArray(items) || items.length === 0) return [];
+
+    const poIdentifiers = new Set<string>();
+    for (const it of items) {
+        if (!it) continue;
+        if (it.purchaseId && String(it.purchaseId).trim()) poIdentifiers.add(String(it.purchaseId).trim());
+        if (it.orderId && String(it.orderId).trim()) poIdentifiers.add(String(it.orderId).trim());
+        if (it.cartId && String(it.cartId).trim()) poIdentifiers.add(String(it.cartId).trim());
+    }
+
+    const results: Array<{
+        purchaseId: string;
+        poNumber: string;
+        status: string;
+        previousStatus?: string;
+        receivedCount?: number;
+        totalCount?: number;
+        updated: boolean;
+    }> = [];
+
+    for (const poId of Array.from(poIdentifiers)) {
+        try {
+            const res = await syncPurchaseOrderStatus(poId);
+            if (res) results.push(res);
+        } catch (err) {
+            console.warn(`[Purchases] Failed to sync PO status for identifier ${poId}:`, err);
+        }
+    }
+    return results;
+}

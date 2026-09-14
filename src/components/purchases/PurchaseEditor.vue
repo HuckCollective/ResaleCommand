@@ -579,7 +579,7 @@
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span v-if="item.upc" class="badge badge-xs badge-neutral font-mono">{{ item.upc }}</span>
                       <span v-else-if="item.identity" class="font-mono text-[11px] opacity-60">{{ item.identity }}</span>
-                      <div class="badge badge-xs whitespace-nowrap" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info text-info-content font-bold' : (item.status === 'placed' ? 'badge-primary text-primary-content font-bold' : 'badge-ghost text-base-content/80 font-bold'))">
+                      <div class="badge badge-xs whitespace-nowrap" :class="getItemStatusBadgeClass(item.status)">
                         {{ item.status || 'acquired' }}
                       </div>
                       <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
@@ -614,7 +614,7 @@
                   </button>
 
                   <button 
-                    v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
+                    v-if="!isReceivedStatus(item.status)" 
                     class="btn btn-sm btn-success text-success-content font-black gap-1 flex-1 h-9 rounded-xl shadow-xs border border-success-content/25 active:scale-95" 
                     @click="receiveToStock(item, 'Backstock')"
                     title="Receive into Backstock"
@@ -624,7 +624,7 @@
                   </button>
                   <div v-else class="badge badge-success badge-sm text-success-content font-bold gap-1 px-2.5 h-9 rounded-xl">
                     <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                    <span>In-Stock</span>
+                    <span>{{ item.status === 'sold' ? 'Sold' : (item.status === 'placed' ? 'Placed' : 'In-Stock') }}</span>
                   </div>
 
                   <button 
@@ -694,14 +694,14 @@
                       {{ item.resalePrice ? '$' + Number(item.resalePrice).toFixed(2) : (item.listPrice ? '$' + Number(item.listPrice).toFixed(2) : '-') }}
                     </td>
                     <td>
-                      <div class="badge badge-sm whitespace-nowrap" :class="item.status === 'in-stock' ? 'badge-success text-success-content font-bold' : (item.status === 'sold' ? 'badge-info text-info-content font-bold' : (item.status === 'placed' ? 'badge-primary text-primary-content font-bold' : 'badge-ghost text-base-content/80 font-bold'))">
+                      <div class="badge badge-sm whitespace-nowrap" :class="getItemStatusBadgeClass(item.status)">
                         {{ item.status || 'acquired' }}
                       </div>
                     </td>
                     <td class="text-right">
                       <div class="flex items-center justify-end gap-1.5 flex-wrap">
                         <button 
-                          v-if="item.status !== 'in-stock' && item.status !== 'placed' && item.status !== 'sold'" 
+                          v-if="!isReceivedStatus(item.status)" 
                           class="btn btn-xs btn-success text-success-content font-black shadow-xs border border-success-content/25 gap-1 rounded-lg px-2.5 h-7 active:scale-95" 
                           @click="receiveToStock(item, 'Backstock')"
                           title="Receive into Backstock"
@@ -1143,6 +1143,19 @@ const getStatusClass = (status) => {
     }
 };
 
+const isReceivedStatus = (st) => {
+    const s = String(st || '').toLowerCase().trim();
+    return ['received', 'in-stock', 'placed', 'sold'].includes(s);
+};
+
+const getItemStatusBadgeClass = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'sold') return 'badge-info text-info-content font-bold whitespace-nowrap';
+    if (s === 'placed') return 'badge-primary text-primary-content font-bold whitespace-nowrap';
+    if (s === 'received' || s === 'in-stock') return 'badge-success text-success-content font-bold whitespace-nowrap';
+    return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
+};
+
 const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
@@ -1217,7 +1230,7 @@ const applySuggestion = (sug) => {
 const items = ref([]);
 const itemsWithPhotosCount = computed(() => items.value.filter(i => getItemImage(i)).length);
 const itemsTotalCost = computed(() => items.value.reduce((sum, i) => sum + (Number(i.cost) || 0), 0));
-const hasUnreceivedItems = computed(() => items.value.some(i => i.status !== 'in-stock' && i.status !== 'placed' && i.status !== 'sold'));
+const hasUnreceivedItems = computed(() => items.value.some(i => !isReceivedStatus(i.status)));
 const batchAiRunning = ref(false);
 const aiProcessingId = ref(null);
 
@@ -1305,9 +1318,7 @@ const checkAndSyncPoStatus = async () => {
     if (form.value.status === 'Cancelled' || form.value.status === 'Returned') return;
 
     const total = items.value.length;
-    const received = items.value.filter(i => 
-        i.status === 'in-stock' || i.status === 'placed' || i.status === 'sold'
-    );
+    const received = items.value.filter(i => isReceivedStatus(i.status));
 
     let newStatus = form.value.status;
     if (received.length === total) {

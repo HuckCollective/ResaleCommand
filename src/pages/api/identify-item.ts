@@ -855,10 +855,8 @@ export const ALL: APIRoute = async ({ request }) => {
              * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear): DO NOT recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
              * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
 
-           - ACTIVELY READ TEXT & COVERS: Extract the EXACT title directly from the item. If it is a book, game, or media, read the cover text precisely (e.g., "Monster Manual", "Spell Compendium"). Pay close attention to small sub-text like "v.3.5".
-           - SPECIFY EDITIONS: For tabletop games, RPGs (like Dungeons & Dragons), and textbooks, you MUST use the cover art style and layout to identify the EXACT EDITION (e.g., 1st Edition, v3.5, 4th Edition, 5e) and put it in the title.
-           - STANDARD D&D 3.5: Standard 3.5e core books have MASSIVE, highly detailed painted metal borders, giant hinges, and locks covering the entire book. For example, the standard DMG has a huge silver lock mechanism with gems and the title is on a gold plaque. DO NOT call these "Premium". Call them "D&D 3.5e [Book Name]".
-           - PREMIUM REPRINTS 3.5: ONLY call a book a "Premium Reprint" if the cover is mostly empty space featuring a SOLID flat faux-leather texture (solid dark green, dark red, or dark blue) across the entire cover. They DO NOT have massive painted silver locks or hinges. The title text floats directly on the plain leather texture above a single central globe/eye/crest.
+           - ACTIVELY READ TEXT & COVERS (VERBATIM OCR): Extract the exact printed title, subtitle, publisher, and visible publication/copyright year directly from the cover, spine, or label.
+           - ERA & EDITION IDENTIFICATION: Base the edition, print run, or release era strictly on the printed copyright year, logos, and physical cover/label design. Never guess or extrapolate unprinted titles or rare variants unless verified by printed markings or authoritative user notes.
            
            - UNIVERSAL MULTI-ITEM & BUNDLE LOT SCANNING (ALL CATEGORIES):
              When the images contain multiple items (a lot, collection, bundle, or table display), you must inspect EVERY image and break down ALL individual items in the 'lot_items' array across all categories:
@@ -889,11 +887,10 @@ export const ALL: APIRoute = async ({ request }) => {
               8. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
                  * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
                  
-              9. ART PRINTS, MOUNTED WOOD PLAQUES & WALL DECOR (Frank Frazetta, Boris Vallejo, Ken Kelly, Decoupage, Lithographs, Framed Art):
-                 * Visual Form Factor: Flat printed art, fantasy illustration, or lithograph adhered to a wooden board, beveled timber plaque, rustic bark-edge slab, or frame. Finished with clear varnish, lacquer, or resin (decoupage).
-                 * STRICT ANTI-HALLUCINATION RULE: Art prints mounted on wood plaques are WALL ART / WOOD PLAQUES. They are NEVER books, magazines, or comics! Do NOT invent issue numbers, volumes, or book series.
-                 * Identify the artist (e.g. Frank Frazetta, Boris Vallejo, Ken Kelly) and specific artwork title (e.g. "Death Dealer", "The Berserker", "Silver Warrior", "Conan", "Cat Girl").
-                 * Resale Value: Vintage 1960s-1980s fantasy art wood plaques are collectible retro decor ($25 - $85+ each; multi-piece sets $120 - $350+).
+               9. ART PRINTS, FRAMED ART & WALL DECOR:
+                  * Form Factor: Flat printed art, lithographs, paintings, framed panels, or mounted plaques.
+                  * Substrate Rule: Identify as Wall Art, Art Print, or Wall Decor. Never classify wall art as books, comics, or magazines.
+                  * Attribution: Transcribe artist signatures, print dates, and artwork titles ONLY if legibly printed on the artwork, border, or backing label. Never guess uncredited artwork titles or invent series numbers.
                  
                CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
                - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
@@ -917,12 +914,12 @@ export const ALL: APIRoute = async ({ request }) => {
              Each item object in the array must contain:
              - 'identity': A single string describing the item.
              - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den / DustyTiger). Must be ultra-clean, concise, and professional without ANY tier bracket prefixes like '[Tier 1]':
-                  * Art Prints/Plaques: "Frazetta Wood Plaque - Berserker" or "Frazetta Art Plaque Set of 3"
-                  * Vintage Magazines: "Vintage Sci-Fi Mag - Oct 1977 #7"
-                  * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Harley 3D Emblem Tee XL"
-                  * Toys/Collectibles: "Kenner Star Wars Boba Fett 1979" or "D&D Beholder Mini Pro-Painted"
-                  * Games/Media: "SNES Chrono Trigger (Authentic)" or "D&D 3.5e PHB 1st Print"
-                  * Paperbacks/Media: "Frank Herbert Dune (Paperback)" or "Def Leppard Rock of Ages 2-CD"
+                   * Art & Decor: "Framed Vintage Lithograph" or "Vintage Landscape Plaque"
+                   * Vintage Magazines: "Vintage Sci-Fi Mag - Oct 1977 #7"
+                   * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Band Tee (XL)"
+                   * Toys/Collectibles: "Vintage Action Figure 1979" or "Tabletop Miniatures Set"
+                   * Games/Media: "Retro Video Game Cartridge (CIB)" or "Vintage RPG Adventure Module"
+                   * Paperbacks/Media: "Classic Sci-Fi Novel (Paperback)" or "Rock Band Album (2-CD Set)"
              - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop) without tier bracket prefixes.
              - 'tier': (REQUIRED string, strictly one of: "showcase", "core", "quick_turn").
                  * "showcase": High-ticket grails ($50.00 - $150.00+), locked showcase, top online listings.

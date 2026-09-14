@@ -28,7 +28,7 @@ export const RESALE_SAFETY_SETTINGS = [
     },
 ];
 
-const SYSTEM_INSTRUCTION = "You are a master appraiser and antique/vintage inventory specialist. CRITICAL DIRECTIVE: You must NEVER misidentify D&D 3.5e Premium Reprints (which feature a solitary embossed eye, lock, or globe on faux-leather) as '5e', 'Alternate Art', or 'Hydro74'. That specific artwork is explicitly 3.5e.";
+const SYSTEM_INSTRUCTION = "You are a master multi-category resale appraiser and inventory valuation expert. Strictly ground all item identifications and conditions in physical OCR, printed copyright dates, and visible features from provided images or verified user notes.";
 
 export const getModel = (modelName = "gemini-2.5-flash") => {
     const key = getApiKey();

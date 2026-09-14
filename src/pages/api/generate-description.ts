@@ -141,7 +141,7 @@ export const POST: APIRoute = async ({ request }) => {
         Format the description so it looks clean and readable when pasted into an eBay listing. Do NOT use HTML tags or markdown formatting like asterisks or hashtags. Do not include placeholder text like "[Insert size here]". If you don't know, omit it or describe what you see.
         
         ANTI-HALLUCINATION & PHYSICAL MEDIUM RULE:
-        If the item is art prints mounted on wooden plaques, wooden wall decor, decoupage, or framed artwork, describe vintage wall decor / wall art plaques. NEVER describe wood plaques or art prints as books, magazines, or paperbacks!
+        Accurately describe the physical medium and substrate of the item (e.g. books for paper/bound volumes, apparel for textiles, wall decor for framed art or prints, electronics for hardware, media for discs/cartridges). Never confuse wall decor or art prints with books or magazines.
         
         CRITICAL: Return ONLY the plain text string. Do NOT wrap the output in any code blocks.
         `;

@@ -627,8 +627,8 @@
                     </div>
 
                     <!-- BUNDLE COMPONENTS -->
-                    <div v-if="scoutItemsArray.length > 1" class="bg-base-200 border border-base-300 rounded-xl p-3.5">
-                        <div class="font-bold text-xs uppercase tracking-wider mb-2.5 flex items-center justify-between text-primary">
+                    <div v-if="scoutItemsArray.length > 1" class="bg-base-200 border border-base-300 rounded-xl p-3">
+                        <div class="font-bold text-xs uppercase tracking-wider mb-2 flex items-center justify-between text-primary">
                             <div class="flex items-center gap-1.5">
                                 <Icon icon="solar:box-linear" class="w-4 h-4" />
                                 <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
@@ -637,16 +637,25 @@
                                 <span>Lot Hub ➔</span>
                             </button>
                         </div>
-                        <ul class="space-y-2 text-xs font-medium">
+                        <ul class="space-y-1.5 text-xs font-medium">
                             <li v-for="(subItem, subIdx) in scoutItemsArray" :key="subIdx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex flex-col gap-1 shadow-xs">
-                                <div class="flex justify-between items-start gap-2 w-full">
-                                    <div class="flex items-start gap-2">
-                                        <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
-                                        <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
+                                <div class="flex items-start gap-2 w-full">
+                                    <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
+                                    <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <span class="text-base-content font-bold leading-snug text-left text-xs sm:text-sm">
+                                                {{ getCleanSubItemTitle(subItem) }}
+                                            </span>
+                                            <span v-if="subItem.condition" class="badge badge-xs font-bold shrink-0 px-2 py-0.5 shadow-2xs" :class="getConditionPillClass(subItem.condition)">
+                                                {{ getConditionPillText(subItem.condition) }}
+                                            </span>
+                                        </div>
+                                        <p v-if="getConditionDetails(subItem)" class="text-[11px] text-base-content/70 italic leading-snug">
+                                            {{ getConditionDetails(subItem) }}
+                                        </p>
                                     </div>
-                                    <span v-if="subItem.condition" class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-0.5 shrink-0">{{ subItem.condition }}</span>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1.5 mt-0.5">
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1 mt-0.5">
                                     <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
                                     <span>Fair: <strong class="text-primary">{{ getSubItemFair(subItem) }}</strong></span>
@@ -1069,5 +1078,44 @@ const calculateMaxBuy = (subItem) => {
 
 const calculateSubItemMaxBid = (subItem, result) => {
     return calculateSubItemMaxBidPrice(subItem, result);
+};
+
+const getCleanSubItemTitle = (subItem) => {
+    if (!subItem) return 'Item';
+    const raw = subItem.tag_title || subItem.name || subItem.title || subItem.identity || subItem.item || 'Item';
+    return raw.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+};
+
+const getConditionPillText = (cond) => {
+    if (!cond) return 'Used';
+    const lower = String(cond).toLowerCase();
+    if (lower.includes('like new') || lower.includes('brand new') || lower.includes('mint')) return 'Mint';
+    if (lower.includes('very good')) return 'Very Good';
+    if (lower.includes('good')) return 'Good';
+    if (lower.includes('fair')) return 'Fair';
+    if (lower.includes('poor') || lower.includes('damaged') || lower.includes('as-is')) return 'Poor';
+    const cleanFirst = String(cond).split(/[-–—:,]/)[0].trim();
+    return cleanFirst.length <= 12 ? cleanFirst : 'Used';
+};
+
+const getConditionPillClass = (cond) => {
+    const text = getConditionPillText(cond).toLowerCase();
+    if (text === 'mint' || text === 'new') return 'badge-success text-success-content';
+    if (text === 'very good' || text === 'good') return 'badge-info text-info-content';
+    if (text === 'fair') return 'badge-warning text-warning-content';
+    if (text === 'poor') return 'badge-error text-error-content';
+    return 'badge-outline badge-primary';
+};
+
+const getConditionDetails = (subItem) => {
+    if (!subItem) return '';
+    if (subItem.condition_notes) return subItem.condition_notes.trim();
+    if (subItem.condition) {
+        const parts = String(subItem.condition).split(/[-–—:]/);
+        if (parts.length > 1) {
+            return parts.slice(1).join('-').trim();
+        }
+    }
+    return '';
 };
 </script>

@@ -102,26 +102,22 @@ function cleanAndParseJSON(rawText: string): any {
 }
 
 /**
- * Inspect a single photo with high-precision OCR and visual feature extraction.
+ * Fetch and prepare an image into a Gemini inlineData part.
  */
-export async function inspectSinglePhoto(
-    image: InspectionImage,
-    context?: InspectionContext
-): Promise<any> {
-    let imagePart: any = null;
-
+async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { data: string; mimeType: string }; index: number } | null> {
     if (image.base64) {
         const cleanBase64 = image.base64.replace(/^data:image\/\w+;base64,/, '');
-        imagePart = {
+        return {
             inlineData: {
                 data: cleanBase64,
                 mimeType: image.mimeType || 'image/jpeg'
-            }
+            },
+            index: image.index
         };
     } else if (image.url) {
         try {
             let fetchUrl = image.url.startsWith('http') ? image.url : `http://localhost:4321${image.url}`;
-            // High-speed Appwrite image pipeline: fetch optimized 1400px WebP preview instead of 8MB raw file
+            // High-speed Appwrite image pipeline: fetch optimized 1400px WebP preview instead of raw large file
             if (fetchUrl.includes('/storage/buckets/') && fetchUrl.includes('/view')) {
                 fetchUrl = fetchUrl.replace(/\/view(\?.*)?$/, '/preview?width=1400&height=1400&output=webp&quality=85');
             }
@@ -136,9 +132,9 @@ export async function inspectSinglePhoto(
                 if (projectId) headers['X-Appwrite-Project'] = projectId;
                 if (apiKey) headers['X-Appwrite-Key'] = apiKey;
             }
-            const res = await fetch(fetchUrl, { 
+            const res = await fetch(fetchUrl, {
                 headers,
-                signal: AbortSignal.timeout(6000)
+                signal: AbortSignal.timeout(8000)
             });
             if (!res.ok) {
                 console.error(`[ai-inspection] Failed to fetch image ${image.url} - Status ${res.status}`);
@@ -150,94 +146,89 @@ export async function inspectSinglePhoto(
             if (!mime.startsWith('image/') || mime === 'application/octet-stream') {
                 mime = 'image/jpeg';
             }
-            imagePart = {
+            return {
                 inlineData: {
                     data: base64,
                     mimeType: mime
-                }
+                },
+                index: image.index
             };
         } catch (e: any) {
             console.error(`[ai-inspection] Failed to fetch image ${image.url}:`, e.message);
             return null;
         }
     }
+    return null;
+}
 
-    if (!imagePart) return null;
+/**
+ * Inspect a single photo with high-precision OCR and visual feature extraction.
+ * Uses clean, unbiased multi-category recognition without hardcoded franchise trivia.
+ */
+export async function inspectSinglePhoto(
+    image: InspectionImage,
+    context?: InspectionContext
+): Promise<any> {
+    const fetched = await fetchImagePart(image);
+    if (!fetched) return null;
+    const imagePart = { inlineData: fetched.inlineData };
+
+    const userNotesSection = context?.notes
+        ? `\nUSER NOTES & PRIOR CORRECTIONS (AUTHORITATIVE):\n"${context.notes}"\nCRITICAL: If the user specified titles, editions, or flaws, treat them as ground truth.\n`
+        : '';
 
     const knownItemsContext = context?.existingItems && context.existingItems.length > 0
         ? `\nKNOWN CONSTITUENT ITEMS IN THIS BUNDLE (${context.existingItems.length} verified listings):\n` +
           context.existingItems.map(i => `- [${i.upc || 'ITEM'}] ${i.title}${i.price ? ` ($${i.price})` : ''}`).join('\n') +
-          `\nCRITICAL: The seller has ALREADY split and verified these items! If this photo shows one or more of these items, match them directly rather than guessing new categories, books, or magazines!\n`
+          `\nCRITICAL: The seller has ALREADY split and verified these items! Match against these verified listings directly.\n`
         : '';
 
     const prompt = `
-You are a master resale appraiser and multi-category inventory expert performing high-precision inspection of Photo #${image.index + 1}.
+You are an expert multi-category resale appraiser performing visual inspection of Photo #${image.index + 1}.
 
 Lot Context:
 ${context?.title ? `Lot Title: ${context.title}` : ''}
-${context?.notes ? `Lot Notes & Prior Research: ${context.notes}` : ''}
+${userNotesSection}
 ${knownItemsContext}
 
 TASK:
-1. PHYSICAL MEDIUM & SUBSTRATE VERIFICATION (CRITICAL FIRST STEP):
-   Inspect the physical construction and substrate of the item(s) before categorizing:
-   - **Art Prints, Wood Plaques & Wall Decor**:
-     * Visual cues: Flat printed art, lithograph, or fantasy illustration adhered or laminated to a solid wooden board, beveled timber plaque, rustic bark-edge wood slab, or masonite panel. Look for routed/beveled edges, wood grain on edges or reverse, clear protective varnish/lacquer coating (decoupage), hanging brackets/sawtooth hooks on back, or framed borders.
-     * **STRICT ANTI-HALLUCINATION RULE**:
-       Items mounted on wooden boards/plaques or framed wall art are **WALL ART / MOUNTED WOOD PLAQUES**. They are NEVER books, comic books, or magazines! DO NOT hallucinate issue numbers, volume numbers, publication dates, or book series when looking at art plaques or wall decor.
-       Even if the art depicts famous fantasy/sci-fi artists (Frank Frazetta, Boris Vallejo, Ken Kelly, Giger), identify them as:
-       '[Artist] - Vintage Wood Plaque Art Print - [Artwork Title]' (e.g. 'Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer').
-   - **Books & Magazines**:
-     * Only classify as a book or magazine if physical paper pages, a bound spine, or staple binding are clearly and visibly present.
-   - **Apparel, Workwear & Footwear**:
-     * Fabric weave, stitched seams, inner brand tags, wash tags, shoe silhouettes.
-   - **Collectibles, Toys, Electronics, Home Goods**:
-     * Action figures, pottery, cameras, games, audio equipment.
+1. PHYSICAL MEDIUM & SUBSTRATE VERIFICATION:
+   Inspect the physical construction and substrate of the visible item(s):
+   - **Books, RPGs, Comics & Periodicals**: Only classify as books/periodicals if physical paper pages, bound spines, or staple bindings are visibly present.
+   - **Apparel, Workwear & Footwear**: Fabric weave, stitched seams, brand tags, wash tags, shoe silhouettes.
+   - **Wall Art, Decor & Framed Art**: Art prints, framed lithographs, canvas, or mounted plaques. NEVER classify wall decor as books or magazines.
+   - **Electronics, Audio & Video Games**: Cartridges, optical discs, consoles, cameras, lenses, home electronics.
+   - **Collectibles, Toys & Miniatures**: Action figures, diecast, building sets, tabletop miniatures.
 
-2. READ ALL VISIBLE TEXT, TITLES & MARKINGS (OCR):
-   - Read artist signatures (e.g. "Frank Frazetta", "Boris", "Ken Kelly", "Michael Whelan", "Giger"), artwork titles, copyright years, brand names, model numbers, tags, hallmarks, and labels.
-   - For Art & Decor: Identify the specific artwork title (e.g. "Death Dealer", "The Berserker", "Silver Warrior", "Conan", "Cat Girl", "Egyptian Queen", "Brain", "Dark Kingdom").
+2. VERBATIM TEXT, TITLES & MARKINGS (OCR):
+   - Transcribe exact text visible on covers, spines, tags, hallmarks, and labels.
+   - Read the exact title, subtitle, author, publisher, and visible copyright/publication year (e.g. "© 2000", "© 2004", "© 2009").
+   - ANTI-HALLUCINATION GUARD: NEVER invent, extrapolate, or guess unprinted core titles or popular franchise staples unless the exact text or cover art is clearly visible in this photo.
 
-3. MULTI-CATEGORY VALUE & STANDOUT IDENTIFICATION:
-   - **Art Prints, Wood Plaques & Wall Decor**:
-     * Renowned fantasy/sci-fi artists: Frank Frazetta, Boris Vallejo, Ken Kelly, H.R. Giger, Michael Whelan, Moebius, Rodney Matthews.
-     * Medium: Vintage wood plaque decoupage, lithographs, framed fantasy art, gallery prints, screenprints.
-     * Vintage 1960s-1980s fantasy art plaques are highly collectible retro decor ($25 - $85+ each; multi-piece sets $120 - $350+).
-   - **Apparel & Workwear Standouts**: Carhartt (Detroit jackets, double-knee), Levi's (Made in USA, Big E, Orange Tab, 501), Patagonia (Synchilla, Retro-X), The North Face (1996 Nuptse), Pendleton (100% Virgin Wool), Filson (Mackinaw), Arc'teryx, Stüssy.
-   - **Footwear & Shoes Standouts**: Dr. Martens (Made in England, 1460, Mary Janes), Birkenstock (Boston, Arizona), Red Wing Heritage, Blundstone, Salomon (XT-6), New Balance (990v3/v6), Nike (Jordan 1/4, Dunk, ACG).
-   - **Media, Books & Periodicals** (ONLY if physical pages/spines visible): Vintage RPGs (D&D TSR 1st/2nd/3.5e), vintage sci-fi paperbacks, vintage magazines.
-   - **Electronics, Audio & Collectibles**: Vintage 35mm cameras (Canon AE-1, Olympus Mju, Leica), Sony Walkman, retro video games (NES/SNES/N64, Sega, PS1/PS2, Game Boy), LEGO modulars/titans.
-
-4. EXTRACT EVERY DISTINCT VISIBLE ITEM & ASSIGN TO ONE OF 3 TIERS:
-   - If this image shows multiple distinct items, extract each one into the "items" array.
-   - If an item is a high-demand trend or key collectible, mark 'is_key_issue: true'.
-   - Assign 'tier': 'showcase' | 'core' | 'quick_turn'.
-     * 'showcase': High-ticket grails, rare vintage, centerpieces, top trending items ($35 - $85+)
+3. MULTI-ITEM DETECTION & PROFITABILITY TIERS:
+   - Extract every distinct visible item in this photo.
+   - Assign 'tier': 'showcase' | 'core' | 'quick_turn':
+     * 'showcase': High-demand centerpieces, rare vintage, top condition ($35 - $85+)
      * 'core': Solid staples, regular run pieces, matching set members ($16 - $32)
-     * 'quick_turn': Common shelf-fillers, smaller pieces, impulse grab picks ($8 - $15)
-   - Format "name" CLEANLY WITHOUT any bracket prefixes like '[Tier 1]':
-     * For Art/Plaques: '[Artist/Maker] - [Medium: Wood Plaque / Art Print / Wall Art] - [Artwork Title]' (e.g. 'Frank Frazetta - Vintage Wood Plaque Art Print - The Berserker')
-     * For Apparel: '[Brand] - [Model/Era] - [Garment Type]' (e.g. 'Carhartt - 1990s Detroit Jacket - Duck Canvas')
-     * For Media: '[Series/Title] - [Edition/Issue] - [Key Feature]'
-     * For Collectibles: '[Brand/Maker] - [Model/Character] - [Item Type]'
+     * 'quick_turn': Common shelf-fillers, smaller pieces, impulse grabs ($8 - $15)
 
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
   "items": [
     {
-      "name": "Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer",
-      "identity": "Frank Frazetta Vintage Wood Plaque Art Print",
+      "name": "Clean descriptive item name without tier prefixes",
+      "identity": "Specific distinct identity",
       "tier": "showcase",
       "is_key_issue": true,
-      "detected_text": "Text read from plaques, labels, art signatures, tags, or hallmarks",
+      "detected_text": "Verbatim text read from cover, spine, label, or hallmark",
       "condition": "Used/Good, Minor edge wear, etc.",
-      "estimated_value": "$45 - $85",
+      "estimated_value": "$25 - $45",
       "price_breakdown": {
-         "mint": "$75 - $110",
-         "fair": "$45 - $85",
-         "poor": "$20 - $35",
-         "boutique_premium": "$65 - $95"
+         "mint": "$45 - $65",
+         "fair": "$25 - $45",
+         "poor": "$10 - $20",
+         "boutique_premium": "$35 - $55"
       },
       "red_flags": []
     }
@@ -254,7 +245,7 @@ OUTPUT STRICT JSON:
         const text = result.response.text();
         const parsed = cleanAndParseJSON(text);
         const rawItems = Array.isArray(parsed.items) ? parsed.items : (parsed.name ? [parsed] : []);
-        
+
         return {
             image_index: image.index,
             image_url: image.url,
@@ -297,8 +288,12 @@ OUTPUT STRICT JSON:
 export const inspectPhotoGallery = inspectLotWithGemini;
 
 /**
- * Inspect a full multi-item lot, performing parallel photo scanning,
- * strict item deduplication, and overarching Memory Den 3-tier synthesis.
+ * Inspect a full multi-item lot using Unified Multimodal Vision.
+ * 
+ * ARCHITECTURAL PRINCIPLE:
+ * Passes ALL gallery photos directly to Gemini in a single multimodal call.
+ * This guarantees the model has full visual sight of covers, spines, and overview layouts
+ * during synthesis, eliminating blind-text hallucinations and ensuring 100% physical grounding.
  */
 export async function inspectLotWithGemini(
     images: InspectionImage[],
@@ -309,77 +304,24 @@ export async function inspectLotWithGemini(
         throw new Error("No images provided for inspection");
     }
 
-    if (onProgress) onProgress(`Step 1 of 3: Scanning ${images.length} photos with per-item OCR & tier classification...`, 15);
+    if (onProgress) onProgress(`Step 1 of 2: Loading ${images.length} gallery photos for deep vision analysis...`, 20);
 
-    // 1. Inspect all photos concurrently in full parallel batches of 25 for maximum speed
-    const inspectionResults: any[] = [];
-    const batchSize = 25;
-    for (let i = 0; i < images.length; i += batchSize) {
-        const batch = images.slice(i, i + batchSize);
-        const batchPromises = batch.map(img => inspectSinglePhoto(img, context));
-        const batchResults = await Promise.all(batchPromises);
-        inspectionResults.push(...batchResults.filter(Boolean));
-        if (onProgress) {
-            const pct = Math.round(15 + ((i + batch.length) / images.length) * 55);
-            onProgress(`Step 1 of 3: Analyzed photo ${Math.min(i + batch.length, images.length)} of ${images.length}...`, pct);
-        }
+    // 1. Fetch and prepare all image parts concurrently
+    const imagePartPromises = images.map(img => fetchImagePart(img));
+    const rawImageParts = await Promise.all(imagePartPromises);
+    const validImageParts = rawImageParts.filter((p): p is { inlineData: { data: string; mimeType: string }; index: number } => p !== null);
+
+    if (validImageParts.length === 0) {
+        throw new Error("Could not process any gallery photos. Check image URLs or upload formats.");
     }
 
-    if (onProgress) onProgress(`Step 2 of 3: Cataloging distinct issues into 3 profitability tiers...`, 75);
+    if (onProgress) onProgress(`Step 2 of 2: Appraising full collection with Gemini Multimodal Vision...`, 60);
 
-    // Flatten all extracted items from all photos
-    const allExtractedItems: any[] = [];
-    for (const res of inspectionResults) {
-        if (res.items && Array.isArray(res.items)) {
-            allExtractedItems.push(...res.items);
-        }
-    }
-
-    // Deduplicate only truly identical items/issues
-    const uniqueComponents: ComponentItem[] = [];
-    const seenIssueKeys = new Set<string>();
-
-    for (const comp of allExtractedItems) {
-        const issueKey = (comp.name || comp.identity || '')
-            .toLowerCase()
-            .replace(/\[tier \d[^\]]*\]/i, '')
-            .replace(/[^a-z0-9]/g, '');
-            
-        if (issueKey.length > 2 && !seenIssueKeys.has(issueKey)) {
-            seenIssueKeys.add(issueKey);
-            uniqueComponents.push({
-                name: comp.name || comp.identity,
-                identity: comp.identity || comp.name,
-                estimated_value: comp.estimated_value || "$15 - $25",
-                condition: comp.condition || "Used/Good",
-                image_index: comp.image_index,
-                image_url: comp.image_url,
-                price_breakdown: comp.price_breakdown,
-                red_flags: comp.red_flags || [],
-                ocr_detected_text: comp.detected_text
-            });
-        }
-    }
-
-    if (onProgress) onProgress(`Step 3 of 3: Synthesizing Memory Den booth pricing & liquidation strategy...`, 90);
-
-    // 2. Synthesize overarching lot report & strategy with lightweight output (Fast & Cost-Effective)
-    const locationsSummary = context?.locations?.length 
-        ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
-        : "None provided";
-
-    const candidateSummary = uniqueComponents.map((c, i) => ({
-        index: i + 1,
-        title: c.name || c.identity,
-        is_standout_key: c.is_key_issue || c.name?.includes('Tier 1') || false,
-        condition: c.condition,
-        estimated_value: c.estimated_value,
-        detected_text: c.detected_text || ''
-    }));
-
+    // Determine target quantity from context or title regex
     let targetQuantity: number | undefined = context?.quantity;
     if (!targetQuantity || targetQuantity <= 1) {
-        const titleMatch = (context?.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
+        const titleMatch = (context?.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i) ||
+                           (context?.title || '').match(/\((\d+)\s*(?:books?|items?|pcs?|pieces?|vols?|volumes?)\)/i);
         if (titleMatch) {
             targetQuantity = parseInt(titleMatch[1], 10);
         } else if (context?.existingItems && context.existingItems.length > 0) {
@@ -388,122 +330,169 @@ export async function inspectLotWithGemini(
     }
 
     const countInstruction = targetQuantity && targetQuantity > 1
-        ? `Physical Lot Stated Count: EXACTLY ${targetQuantity} items. You MUST consolidate and merge multi-photo detections down to EXACTLY ${targetQuantity} distinct items.`
-        : `Physical Lot Stated Count: Auto-detect distinct items based on unique visible pieces across photos.`;
+        ? `Physical Lot Stated Count: EXACTLY ${targetQuantity} physical items. Locate and catalogue all ${targetQuantity} distinct physical items shown across the photos.`
+        : `Physical Lot Stated Count: Auto-detect distinct items based on unique visible pieces across photos. Do NOT duplicate items shown across multiple angles.`;
+
+    // 2. Format User Notes & Overrides as Authoritative Ground Truth
+    const userNotesSection = context?.notes
+        ? `\n========================================================
+USER-SPECIFIED NOTES & CORRECTIONS (ABSOLUTE GROUND TRUTH):
+"${context.notes}"
+CRITICAL OVERRIDE INSTRUCTION:
+The reseller/seller has provided specific physical notes above.
+These notes represent 100% authoritative ground truth and OVERRIDE automated visual guesses.
+If the notes specify an edition, year, flaw, or exact title (e.g. "DMG is 3.0", "Ashen Crown is 4e"),
+you MUST honor that specification precisely in the catalog and condition notes.
+========================================================\n`
+        : '';
 
     const verifiedExistingContext = context?.existingItems && context.existingItems.length > 0
         ? `\nVERIFIED CONSTITUENT ITEMS IN THIS LOT (${context.existingItems.length} verified items):\n` +
           JSON.stringify(context.existingItems, null, 2) +
-          `\nCRITICAL CONSTITUENT INSTRUCTION:\nThe seller has ALREADY split, cataloged, and verified these items! Use these verified items as the definitive catalog for this lot. Do NOT invent new items or hallucinate different categories (e.g., do NOT call art plaques "books" or "magazines"). Synthesize the overarching lot appraisal, valuation, and sales strategy based on these verified items!\n`
+          `\nCRITICAL CONSTITUENT INSTRUCTION:\nThe seller has ALREADY split, cataloged, and verified these items! Use these verified items as the definitive catalog for this lot. Do NOT invent new items or hallucinate different categories.\n`
         : '';
 
-    const synthesisPrompt = `
-You are a master multi-category resale appraiser and inventory valuation expert performing overarching lot consolidation, deduplication, and physical booth pricing strategy for Memory Den and online marketplaces.
+    const locationsSummary = context?.locations?.length
+        ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
+        : "None provided";
 
-ORIGINAL LISTING & LOT CONTEXT:
+    // 3. Assemble Unified Multimodal Prompt
+    const unifiedPrompt = `
+You are a master multi-category resale appraiser and inventory valuation expert performing high-precision inspection, item cataloging, and booth pricing for a multi-item collection/lot.
+
+ALL ${validImageParts.length} GALLERY PHOTOS ARE ATTACHED DIRECTLY TO THIS REQUEST:
+Photo #1 through Photo #${validImageParts.length}. Inspect every image carefully. Cross-reference group/overview shots with individual item closeups and spines.
+
+${userNotesSection}
+
+LOT CONTEXT:
 - Listing Title: "${context?.title || 'Multi-Item Lot'}"
 - ${countInstruction}
 - Sourcing Location / URL: "${context?.sourcingLocation || 'N/A'}"
 - Total Landed Purchase Cost: ${context?.cost ? `$${context.cost}` : 'Not provided'}
 ${verifiedExistingContext}
 
-RAW CANDIDATE DETECTIONS ACROSS ALL PHOTOS (${uniqueComponents.length} raw photo detections):
-${JSON.stringify(candidateSummary, null, 2)}
-
 Organization Physical Booths & Locations:
 ${locationsSummary}
 
-CRITICAL RECONCILIATION & TIER SORTING RULES:
-1. PRESERVE DETECTED ITEMS & ARTIST IDENTITIES:
-   - You MUST preserve all specific artwork titles, artists, brands, and markings detected in the raw photo scans. Do NOT replace them with generic placeholder text.
-   - DO NOT downgrade items marked 'is_standout_key: true' into Quick Turn!
-   - Every piece with famous artists (e.g. Frank Frazetta, Boris Vallejo), iconic subjects, rare vintage, or top condition MUST be kept in **[Showcase]** ($35 - $85+).
-2. MERGE DUPLICATE PHOTO DETECTIONS TO EXACT PHYSICAL COUNT:
-   - Consolidate and merge multi-photo duplicates down to the EXACT physical count of distinct items (${targetQuantity && targetQuantity > 1 ? `EXACTLY ${targetQuantity} items` : 'the unique distinct items'}).
-3. PHYSICAL MEDIUM FIDELITY (ANTI-HALLUCINATION):
-   - Respect the true physical medium of the items (e.g. Art Prints mounted on handmade wooden plaques, framed wall decor, clothing, electronics).
-   - NEVER refer to art prints or wooden wall plaques as books, paperbacks, or magazines!
-4. STRICT 3-TIER GROUPING (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
-   - **FIRST: Showcase (Tier 1)** (Rare vintage, iconic artists, top condition centerpieces -> $35 - $85+ each).
-   - **SECOND: Core (Tier 2)** (Solid standard pieces, matching set members -> $16 - $32 each).
-   - **THIRD: Quick Turn (Tier 3)** (Smaller pieces, common items, impulse picks -> $8 - $15 each).
-5. STANDARDIZED TITLE FORMAT:
-   - Every item name in "lot_items" must be clean WITHOUT ANY tier prefixes like '[Tier 1]': e.g. '[Artist/Brand] - [Medium] - [Title/Model]'.
+CORE MULTI-CATEGORY APPRAISAL PRINCIPLES:
+1. STRICT PHYSICAL GROUNDING & VERBATIM OCR (ZERO HALLUCINATION):
+   - You MUST identify each item strictly by what is physically visible in the attached photos.
+   - For Books, Media, Games, RPGs: Read the exact title and subtitle printed on each physical cover or spine.
+   - Extract the visible copyright/publication year (e.g. "© 2000", "© 2004", "© 2009").
+   - DO NOT assume all items in a lot share the edition, era, or brand stated in the general listing title! Online auction titles often contain loose seller generalizations (e.g. labeling an entire mixed lot '3.5 Edition' when individual adventure modules are actually 3.0 or 4th Edition, or labeling a lot 'Vintage 1970s' when pieces are from 1990). Use each individual item's visible cover design, logos, and printed copyright/publication year to determine its true edition, era, and secondary market value.
+   - STRICT ANTI-HALLUCINATION GUARD: NEVER invent, extrapolate, or guess famous franchise staples or core rulebooks (e.g. do NOT invent "Player's Handbook", "Monster Manual", "Complete Warrior", "Levi's 501", or "Air Jordan 1") unless that exact item's cover, tag, or spine is visibly present in the photos!
+   - Every single entry in "lot_items" must correspond to a real, visible physical item on the table/shelf.
+
+2. PHYSICAL COUNT FIDELITY & CROSS-PHOTO MERGING:
+   - Carefully cross-reference group shots with individual closeups.
+   - Merge multi-photo appearances of the same item so that each physical piece appears exactly ONCE in "lot_items".
+   - ${targetQuantity && targetQuantity > 1 ? `Reconcile the catalog so there are EXACTLY ${targetQuantity} distinct items in "lot_items".` : 'Include all distinct physical items present.'}
+
+3. PHYSICAL SUBSTRATE & CATEGORY ACCURACY:
+   - Accurately distinguish physical substrate:
+     * Paper pages / bound spines / staples = Books, RPGs, Comics, or Periodicals.
+     * Fabric weave, stitched seams, brand tags = Apparel & Workwear.
+     * Wooden boards / framed panels / mounted prints = Wall Decor & Art Plaques. NEVER classify wall art as books or magazines.
+     * Cartridges / optical discs / cases = Video Games & Media.
+   - Multi-disc sets (e.g. 2-CD sets) stay 1 single inventory unit. Distinct individual books, games, or garments get split into individual lot_items.
+
+4. 3-TIER INVENTORY CLASSIFICATION (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
+   - **FIRST: Showcase (Tier 1)**: Standouts, centerpieces, rare vintage, top condition, or high-value pieces ($35 - $85+ each).
+   - **SECOND: Core (Tier 2)**: Solid standard pieces, reliable staples, matching set members ($16 - $32 each).
+   - **THIRD: Quick Turn (Tier 3)**: Lower-value pieces, impulse picks, common shelf-fillers ($8 - $15 each).
+
+5. VALUATION & PRICING MATRICES:
+   - 'fair': Fair market secondary sold price (e.g. eBay sold comps).
+   - 'boutique_premium': Curated physical consignment / antique booth price (typically 25-45% higher than online comps).
+   - 'mint': Price if brand new / pristine.
+   - 'poor': Price if heavily worn, stained, or damaged.
+   - In 'purchase_strategy', calculate max_bid and max_landed_cost based on reasonable resale margins (target 3.0x markup for core items; 1.5x-2.0x for high-ticket).
 
 OUTPUT STRICT JSON:
 {
-  "identity": "Unified lot identity (e.g. Vintage Frank Frazetta Fantasy Art Wood Plaque Collection)",
-  "title": "Comprehensive SEO title incorporating artist highlights, medium, and lot count",
-  "keywords": ["Vintage", "Collectibles", "Wall Decor", "Art Prints"],
-  "condition_notes": "Summary of overall condition across the collection",
+  "identity": "Concise overarching identity of the lot (e.g. D&D 3.0 / 3.5e & 4e Adventure Modules & Sourcebooks Collection)",
+  "title": "Comprehensive SEO title incorporating key titles, era/editions, and lot count",
+  "keywords": ["Keyword1", "Keyword2", "Keyword3"],
+  "condition_notes": "Overview of physical condition across all items, itemizing any notable spine/cover wear or pristine copies",
   "country_of_origin": "USA",
   "red_flags": [],
   "price_breakdown": {
-    "mint": "$350 - $480",
-    "fair": "$240 - $340",
-    "poor": "$120 - $180",
-    "boutique_premium": "$290 - $390",
+    "mint": "$280 - $360",
+    "fair": "$180 - $250",
+    "poor": "$80 - $130",
+    "boutique_premium": "$230 - $310",
     "confidence": "High"
   },
   "purchase_strategy": {
     "verdict": "BUY_NOW",
-    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$77.05'}",
-    "max_bid": 150,
-    "max_landed_cost": 180,
-    "advice": "High profit potential: sell standout pieces individually in booth showcase, multi-tag matching sets, or bundle as a premium gallery wall lot."
+    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$58.15'}",
+    "max_bid": 110,
+    "max_landed_cost": 135,
+    "advice": "High profit potential: sell standout adventure modules individually in booth showcase or online, or bundle matching campaign arc modules."
   },
   "market_report": {
-    "best_platform": "Memory Den Physical Booth & eBay / Etsy",
-    "platform_rationale": "Vintage pop culture art decor moves exceptionally well in curated physical booths, with strong national collector demand online.",
+    "best_platform": "Memory Den Booth & eBay",
+    "platform_rationale": "Tabletop RPG sourcebooks and vintage adventure modules have strong physical booth demand and active collector followings online.",
     "sell_through_velocity": "Fast (1-2 weeks)",
-    "target_buyer": "Vintage pop culture collectors, fantasy art fans, retro decor enthusiasts",
+    "target_buyer": "Vintage tabletop gamers, RPG collectors, and DMs seeking classic adventure modules",
     "channels": [
-       { "name": "Memory Den Booth", "est_price": "$320.00", "net_payout": "~$260.00 after booth fees", "speed": "Fast", "recommendation": "Primary Sales Channel" },
-       { "name": "eBay / Online", "est_price": "$290.00", "net_payout": "~$235.00 after fees/shipping", "speed": "Medium", "recommendation": "Best for Nationwide Reach" }
+       { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Channel" },
+       { "name": "eBay / Online", "est_price": "$210.00", "net_payout": "~$170.00 after fees/shipping", "speed": "Medium", "recommendation": "Online Reach" }
     ]
   },
   "lot_items": [
     {
-      "title": "Frank Frazetta - Vintage Wood Plaque Art Print - Death Dealer",
+      "name": "Exact clean title and edition/year read from cover/spine",
+      "identity": "Specific title/identity",
       "tier": "showcase",
-      "val": "$55 - $85",
-      "cond": "Good",
-      "img": 0
+      "val": "$25 - $40",
+      "cond": "Good - Minor edge wear",
+      "img": 0,
+      "detected_text": "Verbatim text read from cover or spine including copyright year",
+      "price_breakdown": {
+        "mint": "$45 - $60",
+        "fair": "$25 - $40",
+        "poor": "$12 - $20",
+        "boutique_premium": "$35 - $50"
+      }
     }
   ]
 }
 `;
 
     try {
+        // Build multimodal payload: text prompt followed by all gallery image parts
+        const contentParts: any[] = [
+            { text: unifiedPrompt },
+            ...validImageParts.map(p => ({ inlineData: p.inlineData }))
+        ];
+
         const synthResult = await generateContentWithBackoff({
-            contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
+            contents: [{ role: 'user', parts: contentParts }],
             generationConfig: { responseMimeType: "application/json" }
-        }, 3, 1500);
+        }, 3, 2000);
 
         const synthText = synthResult.response.text();
         const parsedSynth = cleanAndParseJSON(synthText);
 
-        // Map reconciled items and ensure image_url and tier sorting
+        // Map reconciled lot items and ensure image_url and tier sorting
         const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
             ? parsedSynth.lot_items.map((item: any) => {
-                let rawTitle = item.title || item.name || item.identity || "Component Item";
+                let rawTitle = item.name || item.title || item.identity || "Component Item";
                 const cleanTitle = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
                 const imgIdx = (typeof item.img === 'number' && item.img >= 0 && item.img < images.length)
                     ? item.img
                     : (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length ? item.image_index : 0);
 
-                // Match with raw component detection to ensure zero standout loss
-                const rawMatch = uniqueComponents.find((c: any) => c.image_index === imgIdx) || uniqueComponents[imgIdx];
-                const rawWasKey = rawMatch?.tier === 'showcase' || rawMatch?.is_key_issue || rawMatch?.name?.includes('Tier 1');
-                
-                let isKey = item.tier === 'showcase' || rawTitle.includes('Tier 1') || item.is_key_issue || rawWasKey || false;
-                let isQuickTurn = !isKey && (item.tier === 'quick_turn' || rawTitle.includes('Tier 3') || false);
+                const isKey = item.tier === 'showcase' || item.is_key_issue || rawTitle.includes('Tier 1') || false;
+                const isQuickTurn = !isKey && (item.tier === 'quick_turn' || rawTitle.includes('Tier 3') || false);
                 const tierVal: 'showcase' | 'core' | 'quick_turn' = isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core');
                 const tierLabel = isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core');
                 const tierNum = isKey ? 1 : (isQuickTurn ? 3 : 2);
 
-                let valStr = item.val || item.estimated_value || (isKey ? (rawMatch?.estimated_value || "$35 - $65") : isQuickTurn ? "$6 - $12" : "$14 - $24");
-                const condStr = item.cond || item.condition || rawMatch?.condition || "Used/Good";
+                let valStr = item.val || item.estimated_value || (isKey ? "$35 - $65" : isQuickTurn ? "$6 - $12" : "$14 - $24");
+                const condStr = item.cond || item.condition || "Used/Good";
 
                 let pb = item.price_breakdown;
                 if (!pb) {
@@ -520,16 +509,16 @@ OUTPUT STRICT JSON:
                     } else {
                         pb = {
                             fair: valStr,
-                            mint: isKey ? "$65 - $95" : isQuickTurn ? "$10 - $15" : "$20 - $30",
-                            poor: isKey ? "$18 - $30" : isQuickTurn ? "$3 - $5" : "$8 - $12",
-                            boutique_premium: isKey ? "$45 - $75" : isQuickTurn ? "$8 - $14" : "$16 - $25"
+                            mint: isKey ? "$50 - $75" : isQuickTurn ? "$10 - $15" : "$20 - $30",
+                            poor: isKey ? "$15 - $25" : isQuickTurn ? "$3 - $5" : "$8 - $12",
+                            boutique_premium: isKey ? "$40 - $65" : isQuickTurn ? "$8 - $14" : "$18 - $28"
                         };
                     }
                 }
 
                 return {
                     name: cleanTitle,
-                    identity: cleanTitle,
+                    identity: item.identity ? item.identity.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim() : cleanTitle,
                     tier: tierVal,
                     tier_label: tierLabel,
                     tier_number: tierNum,
@@ -539,72 +528,48 @@ OUTPUT STRICT JSON:
                     image_index: imgIdx,
                     image_url: images[imgIdx]?.url || images[imgIdx]?.base64 || undefined,
                     price_breakdown: pb,
+                    ocr_detected_text: item.detected_text || item.ocr_detected_text || "",
                     red_flags: item.red_flags || []
                 };
             })
-            : uniqueComponents.map(c => {
-                const cName = (c.name || c.identity || "Inspected Piece").replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
-                const isKey = c.tier === 'showcase' || c.is_key_issue || c.name?.includes('Tier 1') || false;
-                const isQuickTurn = c.tier === 'quick_turn' || c.name?.includes('Tier 3') || false;
-                return {
-                    name: cName,
-                    identity: cName,
-                    tier: isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core') as 'showcase' | 'core' | 'quick_turn',
-                    tier_label: isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core'),
-                    tier_number: isKey ? 1 : (isQuickTurn ? 3 : 2),
-                    is_key_issue: isKey,
-                    estimated_value: c.estimated_value || "$15 - $25",
-                    condition: c.condition || "Used/Good",
-                    image_index: c.image_index,
-                    image_url: images[c.image_index]?.url || images[c.image_index]?.base64 || undefined,
-                    price_breakdown: c.price_breakdown,
-                    red_flags: c.red_flags || []
-                };
-            });
+            : [];
 
         // Sort items by Tier order: Showcase (1) -> Core (2) -> Quick Turn (3)
         finalLotItems.sort((a, b) => {
             return (a.tier_number || 2) - (b.tier_number || 2);
         });
 
+        if (onProgress) onProgress(`Cataloged ${finalLotItems.length} items with deep valuation!`, 100);
+
         return {
             ...parsedSynth,
             lot_items: finalLotItems
         };
     } catch (e: any) {
-        console.error("[ai-inspection] Synthesis pass fallback:", e.message);
+        console.error("[ai-inspection] Unified multimodal inspection failed, falling back:", e.message);
         return {
             identity: context?.title || "Multi-Item Lot",
             title: context?.title || "Multi-Item Lot",
             keywords: ["Lot", "Collectibles"],
-            condition_notes: "Multiple items inspected individually.",
+            condition_notes: "Multiple items inspected from gallery photos.",
             red_flags: [],
             price_breakdown: {
-                mint: "$120 - $180",
-                fair: "$80 - $120",
-                poor: "$30 - $60",
-                boutique_premium: "$140 - $200",
+                mint: "$150 - $220",
+                fair: "$100 - $150",
+                poor: "$40 - $70",
+                boutique_premium: "$130 - $190",
                 confidence: "Medium"
             },
             market_report: {
                 best_platform: "Memory Den Booth & eBay",
-                platform_rationale: "Online marketplaces and physical booths provide strong reach for individual component items.",
+                platform_rationale: "Physical consignment booth and online marketplace combination maximizes return on multi-item collections.",
                 sell_through_velocity: "Moderate (2-4 weeks)",
                 channels: [
-                    { name: "Memory Den Booth", est_price: "$120.00", net_payout: "~$95.00", speed: "Fast", recommendation: "Recommended" },
-                    { name: "eBay Online", est_price: "$100.00", net_payout: "~$80.00", speed: "Medium", recommendation: "Online Channel" }
+                    { name: "Memory Den Booth", est_price: "$130.00", net_payout: "~$105.00", speed: "Fast", recommendation: "Recommended" },
+                    { name: "eBay Online", est_price: "$110.00", net_payout: "~$88.00", speed: "Medium", recommendation: "Online Channel" }
                 ]
             },
-            lot_items: uniqueComponents.map(c => ({
-                name: c.name || c.identity,
-                identity: c.identity || c.name,
-                estimated_value: c.estimated_value || "$15 - $25",
-                condition: c.condition || "Used/Good",
-                image_index: c.image_index,
-                image_url: images[c.image_index]?.url || images[c.image_index]?.base64 || undefined,
-                price_breakdown: c.price_breakdown,
-                red_flags: c.red_flags || []
-            }))
+            lot_items: []
         };
     }
 }

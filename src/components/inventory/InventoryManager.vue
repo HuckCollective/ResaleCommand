@@ -1134,7 +1134,7 @@ import BundleModal from './BundleModal.vue';
 import TagInput from '../common/TagInput.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
-import { purchasesAPI } from '../../lib/purchases';
+import { purchasesAPI, syncPurchaseStatusForItems } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { warehousesApi, matchesLocationFilter, getWarehouseFacilityOptions } from '../../lib/warehouses';
 
@@ -2338,6 +2338,19 @@ const applyBulkStatus = async () => {
             addToast({ type: 'success', message: `Updated status for ${total} items.` });
         }
 
+        // 3. Synchronize linked Purchase Order status (Received / Partial / Pending)
+        try {
+            const updatedItems = inventoryItems.value.filter(i => itemIdsToUpdate.includes(i.$id));
+            const syncedPos = await syncPurchaseStatusForItems(updatedItems);
+            const changedPos = syncedPos.filter(p => p.updated);
+            if (changedPos.length > 0) {
+                const summary = changedPos.map(p => `${p.poNumber} ➔ ${p.status}`).join(', ');
+                addToast({ type: 'info', message: `PO Status Synced: ${summary}` });
+            }
+        } catch (syncErr) {
+            console.warn('[InventoryManager] Auto-sync PO status error:', syncErr);
+        }
+
         selectedItems.value = [];
         bulkStatusTarget.value = '';
         dockRef.value?.closeTray();
@@ -2868,6 +2881,20 @@ const saveEdit = async (payload) => {
         // Fire async refresh in background just in case
         fetchInventory('').catch(() => {});
         addToast({ type: 'success', message: 'Item saved successfully.' });
+
+        // Background PO Status Synchronization if item is linked to a PO
+        const savedItem = targetId ? (inventoryItems.value.find(i => i && (i.$id === targetId || i.id === targetId)) || payload) : null;
+        if (savedItem && (savedItem.purchaseId || savedItem.orderId || savedItem.cartId)) {
+            syncPurchaseStatusForItems([savedItem]).then(syncedPos => {
+                const changed = syncedPos.filter(p => p.updated);
+                if (changed.length > 0) {
+                    const summary = changed.map(p => `${p.poNumber} ➔ ${p.status}`).join(', ');
+                    addToast({ type: 'info', message: `PO Status Synced: ${summary}` });
+                }
+            }).catch(err => {
+                console.warn('[InventoryManager] PO sync after saveEdit error:', err);
+            });
+        }
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {
