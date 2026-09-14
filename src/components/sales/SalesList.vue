@@ -502,7 +502,7 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
-import { warehousesApi, matchesLocationFilter } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, findFacility } from '../../lib/warehouses';
 import { client } from '../../lib/appwrite';
 import PaginationDock from '../common/PaginationDock.vue';
 import type { SaleDocument } from '../../lib/sales';
@@ -622,19 +622,44 @@ const getStatusClass = (status: string) => {
   return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
 };
 
+const resolveWarehouse = (locNameOrId?: string): WarehouseDocument | undefined => {
+  if (!locNameOrId) return undefined;
+  const trimmed = locNameOrId.trim();
+
+  // 1. Match by ID
+  const byId = warehouses.value.find(w => w.$id === trimmed);
+  if (byId) return byId;
+
+  // 2. Match by code (MD, DT, HG, HD)
+  const byCode = warehouses.value.find(w => w.code && w.code.toUpperCase() === trimmed.toUpperCase());
+  if (byCode) return byCode;
+
+  // 3. Match via facility helper
+  const fac = findFacility(trimmed);
+  if (fac) {
+    const byFac = warehouses.value.find(w => 
+      (w.code && w.code.toUpperCase() === fac.code.toUpperCase()) ||
+      findFacility(w.name)?.code === fac.code
+    );
+    if (byFac) return byFac;
+  }
+
+  // 4. Match clean name
+  const target = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return warehouses.value.find(w => {
+    const wClean = w.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return wClean === target || wClean.includes(target) || target.includes(wClean);
+  });
+};
+
 const getWarehouseName = (warehouseId: string) => {
-  const wh = warehouses.value.find(w => w.$id === warehouseId || w.name.toLowerCase() === warehouseId.toLowerCase());
+  const wh = resolveWarehouse(warehouseId);
   return wh ? wh.name : (warehouseId || 'General Location');
 };
 
 const getCommissionRate = (locNameOrId: string) => {
-  if (!locNameOrId) return 0;
-  const target = locNameOrId.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const wh = warehouses.value.find(w => 
-    w.$id === locNameOrId || 
-    w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === target
-  );
-  return wh?.commissionRate || 0;
+  const wh = resolveWarehouse(locNameOrId);
+  return wh?.commissionRate ?? 0;
 };
 
 // Consolidated list combining sales collection documents & sold items from inventory
@@ -645,6 +670,7 @@ const consolidatedSales = computed(() => {
 
   // 1. Process official sales collection documents
   sales.value.forEach(sale => {
+    if (sale.status === 'Cancelled') return; // Skip cancelled sales so they drop from realized revenue
     linkedSaleIds.add(sale.$id);
     const linkedItem = inventoryItems.value.find(i => i.saleId === sale.$id || (sale.orderId && (i.locationSku === sale.orderId || i.upc === sale.orderId)));
     if (linkedItem) linkedItemIds.add(linkedItem.$id);

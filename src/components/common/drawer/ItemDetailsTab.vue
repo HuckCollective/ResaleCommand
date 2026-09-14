@@ -305,70 +305,127 @@
                 </div>
             </div>
 
-            <!-- 4. 💲 PRICING, MARGIN & MULTI-QUANTITY SPLITTING -->
-            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                <div class="flex justify-between items-center">
-                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                        <Icon icon="solar:dollar-bold" class="w-4 h-4 text-success" />
-                        Pricing & Margin
-                    </label>
+            <!-- 4. 💲 PRICING & MARGIN (PROTECTED WHEN SOLD) -->
+            <div class="bg-base-200/70 rounded-2xl p-4 border border-base-300 relative shadow-sm space-y-3">
+                <div class="flex justify-between items-center border-b border-base-300 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-md bg-success/15 flex items-center justify-center text-success font-bold">
+                            <Icon icon="solar:dollar-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-xs uppercase tracking-wider text-base-content">Pricing & Margin</h4>
+                            <p class="text-[10px] opacity-60">Realized sale and margin tracking</p>
+                        </div>
+                    </div>
 
-                    <!-- Margin Indicator -->
-                    <div v-if="calculatedMargin !== null" class="badge badge-sm font-mono font-bold" :class="calculatedMargin >= 50 ? 'badge-success text-white' : (calculatedMargin >= 20 ? 'badge-warning' : 'badge-error')">
-                        {{ calculatedMargin }}% Est. Margin
+                    <div class="flex items-center gap-1.5">
+                        <!-- Margin Indicator -->
+                        <div v-if="calculatedMargin !== null" class="badge badge-sm font-mono font-bold" :class="calculatedMargin >= 50 ? 'badge-success text-white' : (calculatedMargin >= 20 ? 'badge-warning' : 'badge-error')">
+                            {{ calculatedMargin }}% Est. Margin
+                        </div>
+
+                        <!-- If Sold: Locked Badge / SO Link (Matches Acquisition card above) -->
+                        <a 
+                            v-if="isSold"
+                            :href="`/sales/${linkedSaleOrderId}`" 
+                            class="btn btn-xs gap-1 font-bold transition-all shadow-xs btn-outline btn-ghost opacity-70 hover:opacity-100"
+                            title="Pricing is locked because item is sold. Click to view Sales Order."
+                        >
+                            <Icon icon="solar:lock-bold" class="w-3.5 h-3.5" />
+                            <span>Locked</span>
+                        </a>
+
+                        <!-- If Active: Quick Record Sale Link -->
+                        <a 
+                            v-else-if="item"
+                            :href="`/sales/new?itemId=${item.$id}`" 
+                            class="btn btn-xs gap-1 font-bold transition-all shadow-xs btn-outline btn-success opacity-85 hover:opacity-100"
+                            title="Record a sale for this item"
+                        >
+                            <Icon icon="solar:cart-check-bold" class="w-3.5 h-3.5" />
+                            <span>Record Sale</span>
+                        </a>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
-                    <!-- Quantity -->
-                    <div class="form-control">
-                        <label class="label py-0.5"><span class="label-text text-xs font-bold">Quantity</span></label>
-                        <input type="number" step="1" min="1" v-model.number="editForm.quantity" class="input input-bordered input-sm w-full text-center font-bold font-mono bg-base-100" />
+                <!-- Read-Only Locked View when Sold (Consistent with Acquisition Card Above) -->
+                <div v-if="isSold" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-base-100/70 p-3 rounded-xl border border-base-200">
+                    <div>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase">Quantity</span>
+                        <span class="font-mono font-bold text-sm text-base-content">{{ editForm.quantity || 1 }}</span>
                     </div>
-
-                    <!-- List Price -->
-                    <div class="form-control">
-                        <label class="label py-0.5 flex justify-between">
-                            <span class="label-text text-xs font-bold">List Price</span>
-                        </label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                            <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" />
-                        </div>
+                    <div>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase">List Price</span>
+                        <span class="font-mono font-bold text-sm text-base-content">${{ Number(editForm.resalePrice || 0).toFixed(2) }}</span>
                     </div>
-
-                    <!-- Sold Price -->
-                    <div class="form-control">
-                        <label class="label py-0.5"><span class="label-text text-xs font-bold text-success">Sold Price</span></label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                            <input type="number" step="0.01" v-model="editForm.soldPrice" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" :class="{'border-success ring-1 ring-success': editForm.status === 'sold'}" />
-                        </div>
+                    <div>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase text-success">Sold Price</span>
+                        <span class="font-mono font-black text-sm text-success">${{ Number(editForm.soldPrice || 0).toFixed(2) }}</span>
                     </div>
-
-                    <!-- Estimated Comps Range -->
-                    <div class="form-control">
-                        <label class="label py-0.5"><span class="label-text text-[11px] opacity-60">Est. Range</span></label>
-                        <div class="text-xs font-mono font-bold bg-base-100 p-1.5 rounded-lg border border-base-300 text-center truncate">
-                            <span v-if="editForm.estLow || editForm.estHigh">${{ editForm.estLow || '0' }} - ${{ editForm.estHigh || '0' }}</span>
-                            <span v-else class="opacity-40 font-normal">--</span>
-                        </div>
+                    <div>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase">Sales Order</span>
+                        <a 
+                            :href="`/sales/${linkedSaleOrderId}`" 
+                            class="font-mono font-bold text-primary hover:underline truncate flex items-center gap-1 text-xs"
+                            title="Open Sales Order details"
+                        >
+                            <span>View SO</span>
+                            <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 shrink-0 opacity-70" />
+                        </a>
                     </div>
                 </div>
 
-                <!-- Multi-Quantity Splitting Actions Bar -->
-                <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 mt-2">
-                    <div class="text-[11px] font-bold text-secondary flex items-center gap-1">
-                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-                        <span>Multi-Quantity Batch ({{ editForm.quantity }} Units)</span>
+                <!-- Editable Unlocked Form when Not Sold (With perfectly aligned labels and controls) -->
+                <div v-else class="space-y-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                        <!-- Quantity -->
+                        <div class="form-control">
+                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold">Quantity</span></label>
+                            <input type="number" step="1" min="1" v-model.number="editForm.quantity" class="input input-bordered input-sm w-full h-8 min-h-8 text-center font-bold font-mono bg-base-100 rounded-lg" />
+                        </div>
+
+                        <!-- List Price -->
+                        <div class="form-control">
+                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold">List Price</span></label>
+                            <div class="relative">
+                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
+                                <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" />
+                            </div>
+                        </div>
+
+                        <!-- Sold Price -->
+                        <div class="form-control">
+                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold text-success">Sold Price</span></label>
+                            <div class="relative">
+                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
+                                <input type="number" step="0.01" v-model="editForm.soldPrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" />
+                            </div>
+                        </div>
+
+                        <!-- Estimated Comps Range -->
+                        <div class="form-control">
+                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-[11px] opacity-60">Est. Range</span></label>
+                            <div class="text-xs font-mono font-bold bg-base-100 h-8 min-h-8 px-2 flex items-center justify-center rounded-lg border border-base-300 text-center truncate">
+                                <span v-if="editForm.estLow || editForm.estHigh">${{ editForm.estLow || '0' }} - ${{ editForm.estHigh || '0' }}</span>
+                                <span v-else class="opacity-40 font-normal">--</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                        <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit and subtract cost">
-                            <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
-                        </button>
-                        <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
-                            <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
-                        </button>
+
+                    <!-- Multi-Quantity Splitting Actions Bar -->
+                    <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 mt-2">
+                        <div class="text-[11px] font-bold text-secondary flex items-center gap-1">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
+                            <span>Multi-Quantity Batch ({{ editForm.quantity }} Units)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit and subtract cost">
+                                <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
+                            </button>
+                            <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
+                                <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -425,8 +482,13 @@
                 </div>
 
                 <div class="form-control">
-                    <label class="label py-0.5"><span class="label-text text-xs font-bold">Inventory Status</span></label>
-                    <select v-model="editForm.status" class="select select-bordered select-sm w-full font-bold text-xs bg-base-100">
+                    <label class="label py-0.5 flex items-center justify-between">
+                        <span class="label-text text-xs font-bold">Inventory Status</span>
+                        <span v-if="isSold" class="badge badge-xs badge-warning font-bold gap-1">
+                            <Icon icon="solar:lock-bold" class="w-2.5 h-2.5" /> Locked
+                        </span>
+                    </label>
+                    <select v-model="editForm.status" :disabled="isSold" class="select select-bordered select-sm w-full font-bold text-xs bg-base-100 disabled:bg-base-200/70">
                         <option value="acquired">Acquired (Backlog)</option>
                         <option value="received">Received</option>
                         <option value="placed">Placed (In Booth)</option>
@@ -435,6 +497,15 @@
                         <option value="sold">Sold</option>
                         <option value="archived">Archived</option>
                     </select>
+                    <div v-if="isSold" class="mt-1.5 flex items-center justify-between text-xs bg-base-100 p-2 rounded-xl border border-base-300">
+                        <span class="opacity-70 text-[11px] flex items-center gap-1">
+                            <Icon icon="solar:lock-bold" class="w-3.5 h-3.5 text-warning shrink-0" />
+                            Sold status is locked. Revert or cancel via Sales Order.
+                        </span>
+                        <a :href="`/sales/${linkedSaleOrderId}`" class="text-primary font-bold hover:underline text-xs flex items-center gap-0.5 shrink-0 ml-2">
+                            Open SO →
+                        </a>
+                    </div>
                 </div>
 
                 <MultiSelectDropdown 
@@ -902,6 +973,14 @@ defineEmits([
 ]);
 
 const KNOWN_CODES = ['HG', 'HD', 'MD', 'DT'];
+
+const isSold = computed(() => {
+    return props.editForm?.status === 'sold' || !!props.item?.saleId;
+});
+
+const linkedSaleOrderId = computed(() => {
+    return props.item?.saleId || props.item?.$id || '';
+});
 
 const selectedFacility = ref('HG');
 const facilityBin = ref('');

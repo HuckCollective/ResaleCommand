@@ -87,9 +87,17 @@
                 </td>
                 <td>
                   <div class="font-semibold text-sm">{{ row.itemName }}</div>
-                  <div class="font-mono text-xs opacity-70 flex items-center gap-1">
-                    <Icon icon="solar:tag-bold" class="w-3 h-3 text-secondary" />
-                    <span>SKU: {{ row.extractedSku || 'N/A' }}</span>
+                  <div class="font-mono text-xs opacity-70 flex items-center gap-1.5 flex-wrap">
+                    <span class="flex items-center gap-1">
+                      <Icon icon="solar:tag-bold" class="w-3 h-3 text-secondary" />
+                      <span>SKU: {{ row.extractedSku || 'N/A' }}</span>
+                    </span>
+                    <span v-if="row.ticketNumber" class="badge badge-xs badge-info font-mono font-bold">
+                      🎟️ Ticket #{{ row.ticketNumber }}
+                    </span>
+                    <span v-if="row.customerName" class="badge badge-xs badge-secondary">
+                      👤 {{ row.customerName }}
+                    </span>
                   </div>
                 </td>
                 <td class="font-mono text-success font-bold">${{ row.salePrice.toFixed(2) }}</td>
@@ -130,6 +138,8 @@ import { useInventory } from '../../composables/useInventory';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID } from '../../lib/inventory';
+import { salesApi } from '../../lib/sales';
+import { warehousesApi } from '../../lib/warehouses';
 
 const { inventoryItems, fetchInventory, currentTeamId } = useInventory();
 const isProcessing = ref(false);
@@ -210,8 +220,9 @@ const parseMemoryDenPayout = (csvText) => {
   const dateIdx = headers.findIndex(h => h === 'in stock' || h === 'sold' || h === 'date');
   const statusIdx = headers.findIndex(h => h === 'inventory' || h === 'status');
   const costIdx = headers.findIndex(h => h === 'cost' || h === 'fee' || h === 'cost/split' || h === 'split / cost');
-
   const splitIdx = headers.findIndex(h => h.includes('consignor %') || h.includes('split') || h.includes('split / cost'));
+  const ticketIdx = headers.findIndex(h => h.includes('ticket') || h.includes('receipt') || h.includes('transaction') || h.includes('invoice') || h.includes('sale #'));
+  const customerIdx = headers.findIndex(h => h.includes('customer') || h.includes('client') || h.includes('buyer'));
 
   if (itemIdx === -1) {
     addToast({ type: 'error', message: 'Could not find "Name" or "Item" column in MemoryDen CSV.' });
@@ -248,6 +259,8 @@ const parseMemoryDenPayout = (csvText) => {
     }
 
     const date = dateIdx !== -1 ? cols[dateIdx]?.trim() : new Date().toLocaleDateString();
+    const ticketNumber = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
+    const customerName = customerIdx !== -1 ? (cols[customerIdx]?.trim() || '') : '';
 
     // MemoryDen SKU either from explicit SKU column or end of title: "Item Name - 0EJ066"
     let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
@@ -285,6 +298,8 @@ const parseMemoryDenPayout = (csvText) => {
       date,
       itemName: fullItemName, // Display full original
       extractedSku,
+      ticketNumber,
+      customerName,
       status: statusVal,
       listedPrice: grossPrice,
       salePrice: netSoldPrice, // The actual net amount made after fees
@@ -303,47 +318,62 @@ const executeImport = async () => {
   isImporting.value = true;
   try {
     const ITEMS_COL = getCollectionId();
-    const SALES_COL = 'sales'; // Needs to exist in schema
-
-    // Group items into a single Sale record or just create individual sales?
-    // A single payout could be treated as one batch "Sale". 
-    // Let's create individual sale docs for simplicity right now unless we want one master payout doc.
     const batchId = 'MD-PAYOUT-' + new Date().toISOString().slice(0, 10);
+
+    // Look up Memory Den warehouse for platform attribution
+    let mdWarehouseId = '';
+    try {
+      if (currentTeamId.value) {
+        const warehouses = await warehousesApi.listWarehouses(currentTeamId.value);
+        const mdWh = warehouses.find(w => w.code === 'MD' || w.name.toLowerCase().includes('memory den'));
+        mdWarehouseId = mdWh?.$id || warehouses[0]?.$id || '';
+      }
+    } catch {}
 
     for (const row of parsedRows.value) {
       const item = row.mappedItem;
       if (!item) continue;
 
       const isSoldOrPaid = row.status === 'sold' || row.status === 'paid';
+      const orderRef = row.ticketNumber ? `Ticket #${row.ticketNumber}` : batchId;
+
       const updatePayload = {
         locationSku: row.extractedSku || item.locationSku
       };
 
       if (isSoldOrPaid) {
         updatePayload.status = 'sold';
-        updatePayload.resalePrice = row.listedPrice;
+        updatePayload.resalePrice = row.listedPrice || row.salePrice;
         updatePayload.soldPrice = row.salePrice;
-        updatePayload.saleId = batchId;
+        updatePayload.saleId = orderRef;
+
+        // Create official Sale record
+        try {
+          const gross = Number(row.listedPrice || row.salePrice) || 0;
+          const net = Number(row.salePrice) || 0;
+          const fee = Math.max(0, Number((gross - net).toFixed(2)));
+
+          const newSale = await salesApi.createSale({
+            tenantId: item.tenantId || currentTeamId.value,
+            warehouseId: mdWarehouseId,
+            soNumber: item.upc || item.locationSku || `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+            orderId: row.ticketNumber ? `Ticket #${row.ticketNumber}` : (row.extractedSku || item.locationSku || orderRef),
+            saleDate: row.date ? new Date(row.date).toISOString() : new Date().toISOString(),
+            grossAmount: gross,
+            commissionFee: fee,
+            netPayout: net,
+            shippingCharged: 0,
+            shippingCost: 0,
+            status: 'Sold'
+          });
+          updatePayload.saleId = newSale.$id;
+        } catch (saleErr) {
+          console.warn("Sale creation failed, setting fallback saleId:", saleErr);
+        }
       }
 
-      // 1. Update the Item: Sync locationSku, and mark Sold if sold/paid
+      // Update the Item in DB
       await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, updatePayload);
-
-      // 2. Create Sale Record (if you have a sales collection)
-      try {
-        await databases.createDocument(DB_ID, SALES_COL, ID.unique(), {
-          tenantId: item.tenantId,
-          soNumber: `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-          orderId: item.upc || row.extractedSku || `IMP-${Date.now()}`,
-          totalGross: row.salePrice,
-          totalNet: row.salePrice * 0.9, // Approximation, should be actual
-          status: 'Completed',
-          items: [item.$id]
-        });
-      } catch (e) {
-         // Silently fail if sales col isn't completely setup yet
-         console.warn("Sale creation failed, maybe schema not updated:", e);
-      }
     }
 
     addToast({ type: 'success', message: 'Sales imported and inventory updated!' });
