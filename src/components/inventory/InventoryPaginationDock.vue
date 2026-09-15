@@ -171,6 +171,7 @@
             v-model:isOpen="isTrayOpen"
             v-model:activeTab="activeTrayTab"
             :selectedCount="selectedCount"
+            :totalItems="totalItems"
             :activeFilterCount="activeFilterCount"
             :locations="locations"
             :channels="channels"

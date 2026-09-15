@@ -78,23 +78,75 @@
             <!-- ============================================================= -->
             <div v-show="activeTab === 'actions'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div class="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin text-xs">
-                    <!-- If 0 items selected -->
-                    <div v-if="selectedCount === 0" class="text-center py-8 text-base-content/50 space-y-2">
-                        <Icon icon="solar:bolt-linear" class="w-10 h-10 mx-auto opacity-30" />
-                        <p class="font-bold text-sm">No records currently selected.</p>
+                    <!-- SECTION 1: CHANNEL EXPORTS (Always accessible under Actions!) -->
+                    <div class="bg-base-200/80 p-3.5 rounded-2xl border border-base-300 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="font-black text-xs text-base-content flex items-center gap-1.5">
+                                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
+                                <span>Export Catalog &amp; Channels</span>
+                            </span>
+                            <span class="text-[10px] font-mono font-bold badge badge-xs" :class="selectedCount > 0 ? 'badge-primary' : 'badge-ghost'">
+                                {{ selectedCount > 0 ? `${selectedCount} Selected` : `${totalItems || 'All Filtered'} Records` }}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button 
+                                type="button" 
+                                class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold rounded-xl justify-start gap-2 h-10"
+                                @click="$emit('export', 'ricochet')"
+                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Memory Den (Ricochet)` : 'Export all filtered items to Memory Den (Ricochet)'"
+                            >
+                                <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-success" />
+                                <span class="truncate">Memory Den (Ricochet)</span>
+                            </button>
+                            <button 
+                                type="button" 
+                                class="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 font-bold rounded-xl justify-start gap-2 h-10"
+                                @click="$emit('export', 'ebay')"
+                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to eBay Hub` : 'Export all filtered items to eBay Hub'"
+                            >
+                                <Icon icon="solar:bag-bold" class="w-4 h-4 text-primary" />
+                                <span class="truncate">eBay Hub</span>
+                            </button>
+                            <button 
+                                type="button" 
+                                class="btn btn-sm btn-outline border-base-300 hover:border-secondary hover:bg-secondary/10 font-bold rounded-xl justify-start gap-2 h-10"
+                                @click="$emit('export', 'poshmark')"
+                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Poshmark` : 'Export all filtered items to Poshmark'"
+                            >
+                                <Icon icon="solar:tag-bold" class="w-4 h-4 text-secondary" />
+                                <span class="truncate">Poshmark</span>
+                            </button>
+                            <button 
+                                type="button" 
+                                class="btn btn-sm btn-outline border-base-300 hover:border-neutral font-bold rounded-xl justify-start gap-2 h-10"
+                                @click="$emit('export', 'generic')"
+                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Generic CSV` : 'Export all filtered items to Generic CSV'"
+                            >
+                                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-base-content/70" />
+                                <span class="truncate">Generic CSV</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- If 0 items selected: Guide for Bulk Edit Operations -->
+                    <div v-if="selectedCount === 0" class="bg-base-200/40 p-4 rounded-2xl border border-dashed border-base-300 text-center space-y-1.5 text-base-content/60">
+                        <Icon icon="solar:check-square-linear" class="w-6 h-6 mx-auto opacity-40 text-primary" />
+                        <p class="font-bold text-xs text-base-content">Bulk Edit &amp; Lot Operations</p>
                         <p class="text-[11px] max-w-xs mx-auto">
-                            Check items in your catalog to perform bulk operations: bundling, combining, relocations, status transitions, channel exporting, or deleting.
+                            Check records in your catalog (or use "Select all items") to enable bundling, location moves, pipeline status updates, or deleting.
                         </p>
                     </div>
 
-                    <!-- If items are selected -->
+                    <!-- If items are selected: Full Suite of Bulk Record Operations -->
                     <div v-else class="space-y-4">
                         <!-- SECTION A: BUNDLING & COMBINING (Lot Merchandising Operations) -->
                         <div class="bg-base-200/50 p-3 rounded-2xl border border-base-300 space-y-2">
                             <div class="flex items-center justify-between">
                                 <span class="font-black text-xs text-base-content flex items-center gap-1.5">
                                     <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-accent" />
-                                    <span>Bundling & Combining</span>
+                                    <span>Bundling &amp; Combining</span>
                                 </span>
                                 <span class="text-[10px] font-mono text-base-content/60">{{ selectedCount }} selected</span>
                             </div>
@@ -220,48 +272,7 @@
                             </div>
                         </div>
 
-                        <!-- SECTION D: CHANNEL EXPORTS -->
-                        <div class="space-y-1.5">
-                            <div class="text-[10px] uppercase font-bold tracking-wider text-base-content/60 px-1">
-                                Export Selected Records
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                    @click="$emit('export', 'ricochet')"
-                                >
-                                    <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-success" />
-                                    <span class="truncate">Memory Den</span>
-                                </button>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                    @click="$emit('export', 'ebay')"
-                                >
-                                    <Icon icon="solar:bag-bold" class="w-4 h-4 text-primary" />
-                                    <span class="truncate">eBay Hub</span>
-                                </button>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-outline border-base-300 hover:border-secondary hover:bg-secondary/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                    @click="$emit('export', 'poshmark')"
-                                >
-                                    <Icon icon="solar:tag-bold" class="w-4 h-4 text-secondary" />
-                                    <span class="truncate">Poshmark</span>
-                                </button>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-outline border-base-300 hover:border-neutral font-bold rounded-xl justify-start gap-2 h-10"
-                                    @click="$emit('export', 'generic')"
-                                >
-                                    <Icon icon="solar:file-download-bold" class="w-4 h-4 text-base-content/70" />
-                                    <span class="truncate">Generic CSV</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- SECTION E: DANGER ZONE (BULK DELETION) -->
+                        <!-- SECTION D: DANGER ZONE (BULK DELETION) -->
                         <div class="bg-error/10 border border-error/20 p-3 rounded-2xl space-y-2">
                             <div class="flex items-center justify-between">
                                 <span class="font-black text-xs text-error flex items-center gap-1.5">
@@ -528,6 +539,10 @@ const props = defineProps({
         default: 'actions' // 'actions' | 'add-prep' | 'filters'
     },
     selectedCount: {
+        type: Number,
+        default: 0
+    },
+    totalItems: {
         type: Number,
         default: 0
     },
