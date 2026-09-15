@@ -40,78 +40,7 @@
             @clear-filters="clearFilters"
         />
 
-        <!-- 2. SUBHEADER: SELECTION INDICATOR & EXPORT / ACTIONS TOOLBAR -->
-        <div class="rounded-xl border transition-all duration-200 bg-base-200/90 border-base-300 px-3 py-2 flex items-center justify-between gap-2"
-             :class="selectedItems.length > 0 ? 'bg-primary/10 border-primary/50 shadow-xs' : ''">
-            <!-- Left: Checkbox + Selection label -->
-            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                    <input 
-                        type="checkbox" 
-                        :checked="isAllSelected(filteredItems)" 
-                        @change="toggleAll(filteredItems)" 
-                        class="checkbox checkbox-xs sm:checkbox-sm checkbox-primary shrink-0" 
-                    />
-                    <span v-if="selectedItems.length === 0" class="text-xs sm:text-sm font-semibold truncate text-base-content/80">
-                        Select all items
-                    </span>
-                    <span v-else class="text-xs sm:text-sm font-bold text-primary truncate">
-                        {{ selectedItems.length }} item{{ selectedItems.length > 1 ? 's' : '' }} selected
-                    </span>
-                    <span class="text-xs opacity-50 shrink-0">({{ filteredItems.length }})</span>
-                </label>
-
-                <!-- Quick Clear button when items are selected -->
-                <button 
-                    v-if="selectedItems.length > 0" 
-                    type="button"
-                    class="btn btn-xs btn-ghost text-error font-bold hover:bg-error/15 h-7 min-h-7 px-2 shrink-0" 
-                    @click="clearSelection"
-                    title="Clear selection"
-                >
-                    ✕ Clear
-                </button>
-            </div>
-
-            <!-- Right: Export Dropdown (Always visible under Actions / Header) -->
-            <div class="flex items-center gap-2 shrink-0">
-                <div class="dropdown dropdown-end">
-                    <button tabindex="0" type="button" class="btn btn-xs btn-ghost gap-1.5 opacity-90 hover:opacity-100 border border-base-300 bg-base-100 font-bold h-7 min-h-7 shadow-2xs">
-                        <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5 text-success" />
-                        <span>Export {{ selectedItems.length > 0 ? `(${selectedItems.length})` : 'All' }} ▾</span>
-                    </button>
-                    <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
-                        <li>
-                            <a @click="handleExport('ricochet')" class="text-primary hover:bg-primary/10">
-                                <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
-                                <span>Memory Den (Ricochet)</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a @click="handleExport('ebay')">
-                                <Icon icon="solar:tag-price-linear" class="w-4 h-4 text-warning" />
-                                <span>eBay Seller Hub</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a @click="handleExport('poshmark')">
-                                <Icon icon="solar:hanger-linear" class="w-4 h-4 text-secondary" />
-                                <span>Poshmark</span>
-                            </a>
-                        </li>
-                        <div class="divider my-0.5"></div>
-                        <li>
-                            <a @click="handleExport('generic')">
-                                <Icon icon="solar:document-text-linear" class="w-4 h-4" />
-                                <span>Generic CSV</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. DENSE SPREADSHEET TABLE -->
+        <!-- 2. DENSE SPREADSHEET TABLE -->
         <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0">
             <div class="overflow-x-auto w-full max-w-full min-w-0 overscroll-x-contain touch-pan-x">
                 <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
@@ -371,6 +300,7 @@
             @apply-status="handleBulkStatus"
             @export="handleExport"
             @delete="handleBulkDelete"
+            @select-all="toggleAll(filteredItems)"
             @clear-selection="clearSelection"
             @clear-filters="clearFilters"
         />

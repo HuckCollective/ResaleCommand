@@ -191,6 +191,7 @@
             @apply-status="$emit('apply-status', $event)"
             @export="$emit('export', $event)"
             @delete="$emit('delete')"
+            @select-all="$emit('select-all')"
             @clear-selection="$emit('clear-selection')"
             @reset-filters="$emit('clear-filters')"
         >
@@ -301,6 +302,7 @@ const emit = defineEmits([
     'apply-status',
     'export',
     'delete',
+    'select-all',
     'clear-selection',
     'clear-filters',
     'update:filterLocation',

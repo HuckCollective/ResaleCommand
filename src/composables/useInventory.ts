@@ -248,25 +248,31 @@ export function useInventory() {
         }
     };
 
+    const localUpcLocks = new Map<string, number>();
+
     /**
      * Get the next UPC for a given prefix without saving
      */
     const getNextUpc = (prefix: string = 'HUCK-') => {
+        const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
         const existingUpcs = inventoryItems.value
             .map((i: any) => i.upc)
-            .filter(u => u && u.startsWith(prefix));
+            .filter(u => u && u.startsWith(cleanPrefix));
         
         let maxIndex = 0;
         existingUpcs.forEach((u: string) => {
-            const numPart = u.replace(prefix, '');
+            const numPart = u.replace(cleanPrefix, '');
             const num = parseInt(numPart, 10);
             if (!isNaN(num) && num > maxIndex) {
                 maxIndex = num;
             }
         });
 
-        maxIndex++;
-        return `${prefix}${maxIndex.toString().padStart(4, '0')}`;
+        const currentLock = localUpcLocks.get(cleanPrefix) || 0;
+        const nextIndex = Math.max(maxIndex, currentLock) + 1;
+        localUpcLocks.set(cleanPrefix, nextIndex);
+
+        return `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
     };
 
     return {

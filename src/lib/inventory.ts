@@ -53,13 +53,15 @@ export interface ExtraItemData {
     locationSku?: string;
 }
 
+const upcAllocationLocks = new Map<string, number>();
+
 export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string): Promise<string> {
     const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
     try {
         const queries = [
             Query.startsWith('upc', cleanPrefix),
-            Query.orderDesc('$createdAt'),
-            Query.limit(50)
+            Query.orderDesc('upc'),
+            Query.limit(25)
         ];
         if (teamId) {
             queries.push(Query.equal('tenantId', teamId));
@@ -79,11 +81,18 @@ export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string)
             }
         }
 
-        maxIndex++;
-        return `${cleanPrefix}${maxIndex.toString().padStart(4, '0')}`;
+        // Prevent race condition across rapid batch creations / imports in same session
+        const currentLock = upcAllocationLocks.get(cleanPrefix) || 0;
+        const nextIndex = Math.max(maxIndex, currentLock) + 1;
+        upcAllocationLocks.set(cleanPrefix, nextIndex);
+
+        return `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
     } catch (err) {
         console.warn('Auto UPC query fallback:', err);
-        return `${cleanPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+        const currentLock = upcAllocationLocks.get(cleanPrefix) || 9000;
+        const fallbackIndex = currentLock + 1;
+        upcAllocationLocks.set(cleanPrefix, fallbackIndex);
+        return `${cleanPrefix}${fallbackIndex.toString().padStart(4, '0')}`;
     }
 }
 

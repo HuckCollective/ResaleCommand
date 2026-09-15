@@ -196,105 +196,7 @@
                                 ✕ Reset
                             </button>
                         </div>
-                    </div>
                 </div>
-
-                    <!-- SUBHEADER: SELECTION INDICATOR, MOBILE DENSITY SWITCHER & EXPORT -->
-                    <div class="mt-2 rounded-xl border transition-all duration-200 bg-base-200/90 border-base-300 px-3 py-2 flex flex-col gap-2"
-                         :class="selectedItems.length > 0 ? 'bg-primary/10 border-primary/50 shadow-xs' : ''">
-                        
-                        <div class="flex items-center justify-between gap-2">
-                            <!-- Left: Checkbox + Selection label -->
-                            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                                <label class="flex items-center gap-2 cursor-pointer select-none">
-                                    <input 
-                                        type="checkbox" 
-                                        :checked="isAllSelected" 
-                                        @change="toggleAll" 
-                                        class="checkbox checkbox-xs sm:checkbox-sm checkbox-primary shrink-0" 
-                                    />
-                                    <span v-if="selectedItems.length === 0" class="text-xs sm:text-sm font-semibold truncate text-base-content/80">
-                                        Select all items
-                                    </span>
-                                    <span v-else class="text-xs sm:text-sm font-bold text-primary truncate">
-                                        {{ selectedItems.length }} item{{ selectedItems.length > 1 ? 's' : '' }} selected
-                                    </span>
-                                    <span class="text-xs opacity-50 shrink-0">({{ filteredInventory.length }})</span>
-                                </label>
-
-                                <!-- Quick Clear button when items are selected -->
-                                <button 
-                                    v-if="selectedItems.length > 0" 
-                                    class="btn btn-xs btn-ghost text-error font-bold hover:bg-error/15 h-7 min-h-7 px-2 shrink-0" 
-                                    @click="selectedItems = []"
-                                    title="Clear selection"
-                                >
-                                    ✕ Clear
-                                </button>
-                            </div>
-                            
-                            <!-- Right: Mobile Density Switcher & Export -->
-                            <div class="flex items-center gap-1.5 shrink-0">
-                                <!-- Mobile Density Switcher: List vs Grid -->
-                                <div class="join sm:hidden bg-base-100 p-0.5 rounded-lg border border-base-300">
-                                    <button 
-                                        type="button" 
-                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 h-7 min-h-7"
-                                        :class="mobileLayout === 'list' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="setMobileLayout('list')"
-                                        title="1-Column Mobile Feed"
-                                    >
-                                        <Icon icon="solar:list-linear" class="w-3.5 h-3.5" />
-                                        <span class="text-[10px]">List</span>
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 h-7 min-h-7"
-                                        :class="mobileLayout === 'grid' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="setMobileLayout('grid')"
-                                        title="2-Column Visual Card Grid"
-                                    >
-                                        <Icon icon="solar:gallery-wide-linear" class="w-3.5 h-3.5" />
-                                        <span class="text-[10px]">Grid</span>
-                                    </button>
-                                </div>
-
-                                <!-- Export Dropdown -->
-                                <div class="dropdown dropdown-end">
-                                    <div tabindex="0" role="button" class="btn btn-xs btn-ghost gap-1 opacity-80 hover:opacity-100 border border-base-300 bg-base-100 font-bold h-7 min-h-7">
-                                        <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" />
-                                        <span>Export {{ selectedItems.length > 0 ? `(${selectedItems.length})` : 'All' }} ▾</span>
-                                    </div>
-                                    <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-box w-56 border border-base-300 text-xs font-bold space-y-1">
-                                        <li>
-                                            <a @click="exportCsv('ricochet')" class="text-primary hover:bg-primary/10">
-                                                <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
-                                                <span>Memory Den (Ricochet)</span>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a @click="exportCsv('ebay')">
-                                                <Icon icon="solar:tag-price-linear" class="w-4 h-4 text-warning" />
-                                                <span>eBay Seller Hub</span>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a @click="exportCsv('poshmark')">
-                                                <Icon icon="solar:hanger-linear" class="w-4 h-4 text-secondary" />
-                                                <span>Poshmark</span>
-                                            </a>
-                                        </li>
-                                        <div class="divider my-0.5"></div>
-                                        <li>
-                                            <a @click="exportCsv('generic')">
-                                                <Icon icon="solar:document-text-linear" class="w-4 h-4" />
-                                                <span>Generic CSV</span>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
 
                         <!-- Admin Auto-Heal row (only when insight filter active AND items selected) -->
                         <div v-if="insightFilter && selectedItems.length > 0" class="pt-2 border-t border-primary/20">
@@ -437,6 +339,7 @@
                     @apply-status="onDockApplyStatus"
                     @apply-channel="onDockApplyChannel"
                     @export="exportCsv"
+                    @select-all="toggleAll"
                     @clear-selection="selectedItems = []"
                     @clear-filters="clearAllFilters"
                     @bundle="openBundleModal"

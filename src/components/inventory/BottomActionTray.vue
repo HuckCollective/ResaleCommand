@@ -131,12 +131,20 @@
                     </div>
 
                     <!-- If 0 items selected: Guide for Bulk Edit Operations -->
-                    <div v-if="selectedCount === 0" class="bg-base-200/40 p-4 rounded-2xl border border-dashed border-base-300 text-center space-y-1.5 text-base-content/60">
+                    <div v-if="selectedCount === 0" class="bg-base-200/40 p-4 rounded-2xl border border-dashed border-base-300 text-center space-y-2 text-base-content/60">
                         <Icon icon="solar:check-square-linear" class="w-6 h-6 mx-auto opacity-40 text-primary" />
                         <p class="font-bold text-xs text-base-content">Bulk Edit &amp; Lot Operations</p>
                         <p class="text-[11px] max-w-xs mx-auto">
-                            Check records in your catalog (or use "Select all items") to enable bundling, location moves, pipeline status updates, or deleting.
+                            Check individual records in your catalog or tap below to enable bulk moves, status transitions, or deletions.
                         </p>
+                        <button 
+                            type="button" 
+                            class="btn btn-xs btn-outline btn-primary font-bold rounded-xl gap-1.5 shadow-2xs"
+                            @click="$emit('select-all')"
+                        >
+                            <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
+                            <span>Select All {{ totalItems ? `(${totalItems})` : '' }}</span>
+                        </button>
                     </div>
 
                     <!-- If items are selected: Full Suite of Bulk Record Operations -->
@@ -148,7 +156,17 @@
                                     <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-accent" />
                                     <span>Bundling &amp; Combining</span>
                                 </span>
-                                <span class="text-[10px] font-mono text-base-content/60">{{ selectedCount }} selected</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-mono text-base-content/60">{{ selectedCount }} selected</span>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-ghost btn-xs text-error font-bold hover:bg-error/15 h-6 min-h-6 px-1.5" 
+                                        @click="$emit('clear-selection')"
+                                        title="Clear selection"
+                                    >
+                                        ✕ Clear
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-2 gap-2">
