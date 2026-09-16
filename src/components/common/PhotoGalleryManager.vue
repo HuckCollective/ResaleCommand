@@ -235,7 +235,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
-import { BUCKET_ID } from '../../lib/inventory';
+import { BUCKET_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 
 interface MainSelection {
   type: 'existing' | 'new' | 'none';
@@ -283,14 +283,11 @@ const previewZoomUrl = ref<string | null>(null);
 
 const internalSelection = ref<MainSelection>({ ...props.mainSelection });
 
-const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
-const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-
 const objectUrlMap = new WeakMap<File, string>();
 
 const getPhotoUrl = (item: any): string => {
   if (!item) return '';
-  if (typeof item === 'string') return item;
+  if (typeof item === 'string') return getAssetUrl(item);
   if (item.url) return item.url;
   if (item instanceof File) {
     if (!objectUrlMap.has(item)) {
@@ -299,15 +296,6 @@ const getPhotoUrl = (item: any): string => {
     return objectUrlMap.get(item)!;
   }
   return '';
-};
-
-const getAssetUrl = (id: string): string => {
-  if (!id) return '';
-  if (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/')) {
-    return id;
-  }
-  const bucket = BUCKET_ID || 'item_images';
-  return `${ENDPOINT}/storage/buckets/${bucket}/files/${id}/view?project=${PROJECT}`;
 };
 
 const totalCount = computed(() => {
@@ -544,9 +532,32 @@ const closeZoomPreview = () => {
   previewZoomUrl.value = null;
 };
 
+const cloneMedia = (options: { targetIndex?: number; copyAll?: boolean } = {}) => {
+  return cloneItemMediaPayload({
+    imageId: actualMainPhoto.value.id || undefined,
+    existingGalleryIds: props.existingImages
+  }, options);
+};
+
+const copyMedia = async (options: { targetIndex?: number; copyAll?: boolean; deepCopy?: boolean } = {}) => {
+  const { targetIndex, copyAll = false, deepCopy = true } = options;
+  if (deepCopy) {
+    return await duplicateItemMediaInStorage({
+      imageId: actualMainPhoto.value.id || undefined,
+      existingGalleryIds: props.existingImages
+    }, { targetIndex, copyAll });
+  }
+  return cloneMedia(options);
+};
+
 defineExpose({
   triggerUpload,
-  addFiles
+  addFiles,
+  actualMainPhoto,
+  totalCount,
+  getPhotoUrl,
+  cloneMedia,
+  copyMedia
 });
 </script>
 

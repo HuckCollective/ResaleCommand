@@ -79,40 +79,7 @@
                 
                 <!-- Left Column: Media -->
                 <div class="w-full lg:w-5/12 bg-base-300 border-r border-base-300 flex flex-col relative shrink-0">
-                    <!-- Main Image Area (Carousel) -->
-                    <div class="w-full aspect-square relative bg-base-200 flex items-center justify-center overflow-hidden group">
-                        
-                        <!-- Carousel Container -->
-                        <div v-if="gallery.length > 0" class="carousel w-full h-full snap-x snap-mandatory overflow-x-auto" ref="carouselRef" @scroll.passive="onCarouselScroll">
-                            <div v-for="(img, i) in gallery" :key="i" :id="`preview-slide-${i}`" class="carousel-item relative w-full shrink-0 items-center justify-center snap-center">
-                                <img :src="img" class="w-full h-full object-contain" draggable="false" />
-                            </div>
-                        </div>
-                        <div v-else class="w-full h-full flex items-center justify-center">
-                            <div class="text-6xl opacity-20"><Icon icon="solar:box-linear" class="mx-auto" /></div>
-                        </div>
-                        
-                        <!-- Carousel Arrows -->
-                        <div v-if="gallery.length > 1" class="absolute inset-x-2 top-1/2 flex -translate-y-1/2 justify-between opacity-0 sm:group-hover:opacity-100 transition-opacity pointer-events-none">
-                            <button @click.prevent="prevImage" class="btn btn-circle btn-sm bg-base-100/80 hover:bg-base-100 border-none backdrop-blur shadow-md pointer-events-auto">❮</button>
-                            <button @click.prevent="nextImage" class="btn btn-circle btn-sm bg-base-100/80 hover:bg-base-100 border-none backdrop-blur shadow-md pointer-events-auto">❯</button>
-                        </div>
-                        
-                        <!-- Tags Overlay -->
-                        <div class="absolute bottom-2 left-2 flex flex-wrap gap-1 z-10 pointer-events-none">
-                             <span v-for="tag in (item.keywords || [])" :key="tag" class="badge badge-sm bg-base-100/80 backdrop-blur shadow-sm border-none">{{ tag }}</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Thumbnail Gallery -->
-                    <div class="p-2 flex gap-2 overflow-x-auto bg-base-200 border-t border-base-300" v-if="gallery.length > 1">
-                        <button v-for="(img, i) in gallery" :key="i" 
-                                @click="selectThumbnail(i)"
-                                class="w-16 h-16 shrink-0 rounded border-2 overflow-hidden transition-all"
-                                :class="selectedIndex === i ? 'border-primary shadow-sm' : 'border-transparent opacity-60 hover:opacity-100'">
-                            <img :src="img" class="w-full h-full object-cover" />
-                        </button>
-                    </div>
+                    <MediaViewerCarousel :images="gallery" :keywords="item.keywords" />
                 </div>
 
                 <!-- Right Column: Details -->
@@ -343,6 +310,7 @@ import { Icon } from '@iconify/vue';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
+import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
 
 const { user } = useAuth();
 
@@ -359,13 +327,7 @@ const canUserEdit = computed(() => {
 const emit = defineEmits(['close', 'edit', 'deconstruct']);
 
 const previewModal = ref(null);
-const selectedIndex = ref(0);
-const carouselRef = ref(null);
-let isProgrammaticScroll = false;
-
-const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
-const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
-import { BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
+import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
@@ -401,52 +363,6 @@ watch(() => props.item, async (newItem) => {
         childItems.value = [];
     }
 });
-
-const scrollToSlide = (index) => {
-    if (!carouselRef.value) return;
-    const slides = carouselRef.value.children;
-    if (slides[index]) {
-        isProgrammaticScroll = true;
-        carouselRef.value.scrollTo({
-            left: index * carouselRef.value.clientWidth,
-            behavior: 'smooth'
-        });
-        setTimeout(() => { isProgrammaticScroll = false; }, 400); // Allow time for scroll animation
-    }
-};
-
-const nextImage = () => {
-    if (gallery.value.length <= 1) return;
-    const nextIdx = (selectedIndex.value + 1) % gallery.value.length;
-    selectedIndex.value = nextIdx;
-    scrollToSlide(nextIdx);
-};
-
-const prevImage = () => {
-    if (gallery.value.length <= 1) return;
-    const prevIdx = (selectedIndex.value - 1 + gallery.value.length) % gallery.value.length;
-    selectedIndex.value = prevIdx;
-    scrollToSlide(prevIdx);
-};
-
-let scrollTimeout;
-const onCarouselScroll = () => {
-    if (!carouselRef.value || isProgrammaticScroll) return;
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-        const scrollLeft = carouselRef.value.scrollLeft;
-        const width = carouselRef.value.clientWidth;
-        const index = Math.round(scrollLeft / width);
-        if (index !== selectedIndex.value && index >= 0 && index < gallery.value.length) {
-            selectedIndex.value = index;
-        }
-    }, 50);
-};
-
-const selectThumbnail = (index) => {
-    selectedIndex.value = index;
-    scrollToSlide(index);
-};
 
 const close = () => {
     previewModal.value?.close();
@@ -696,14 +612,6 @@ const proxify = (url) => {
     if (url.includes('/storage/buckets/')) return url;
     if (url.startsWith('http')) return `/api/proxy-image?url=${encodeURIComponent(url)}`;
     return url;
-};
-
-const getAssetUrl = (id) => {
-    if (!id) return '';
-    if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
-        return proxify(id);
-    }
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
 };
 
 const gallery = computed(() => {

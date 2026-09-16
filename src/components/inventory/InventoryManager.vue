@@ -1022,7 +1022,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
+import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
@@ -2529,16 +2529,7 @@ const getImageUrl = (item) => {
     }
     
     if (!id) return null;
-    if (id.startsWith('http')) return proxify(id);
-    return getAssetUrl(id);
-};
-
-const getAssetUrl = (id) => {
-    if (!id) return '';
-    if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/'))) {
-        return proxify(id);
-    }
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
+    return getAssetUrl(id, { preview: true, width: 350, height: 350, quality: 80 });
 };
 const getObjectUrl = (file) => URL.createObjectURL(file);
 const formatCurrency = (val) => {
@@ -3167,7 +3158,7 @@ const submitDeconstruct = async () => {
                 status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
                 sourcingLocation: "", // Clear sourcing location for child
                 storageLocation: parent.storageLocation,
-                imageId: childImageId,
+                imageId: childImageId || cloneItemMediaPayload(parent).imageId,
                 galleryImageIds: [], // Clear gallery images
                 keywords: parent.keywords,
                 quantity: 1,

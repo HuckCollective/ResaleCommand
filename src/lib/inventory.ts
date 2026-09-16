@@ -14,6 +14,220 @@ const _isDev = (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || '').endsWith('_
 export const BUCKET_ID = _isDev ? 'item_images_dev' : (import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images');
 export const REPORTS_BUCKET_ID = _isDev ? 'reports_dev' : 'reports';
 
+export const APPWRITE_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) 
+    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ENDPOINT) 
+    || 'https://sfo.cloud.appwrite.io/v1';
+
+export const APPWRITE_PROJECT_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID) 
+    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_PROJECT_ID) 
+    || '69714b35003a8adab6bb';
+
+/**
+ * Universal, reusable helper to resolve any item image reference (ID, data URL, blob, or remote HTTP URL)
+ * into a fully-qualified view/preview URL with the required Appwrite project parameter.
+ */
+export function getAssetUrl(
+    idOrUrl: string | null | undefined, 
+    options?: { preview?: boolean; width?: number; height?: number; quality?: number; bucket?: string }
+): string {
+    if (!idOrUrl || typeof idOrUrl !== 'string') return '';
+    const trimmed = idOrUrl.trim();
+    if (!trimmed) return '';
+
+    // Direct data or blob URL
+    if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+
+    // Direct Appwrite URL - guarantee project query parameter
+    if (trimmed.includes('/storage/buckets/')) {
+        if (!trimmed.includes('project=')) {
+            const separator = trimmed.includes('?') ? '&' : '?';
+            return `${trimmed}${separator}project=${APPWRITE_PROJECT_ID}`;
+        }
+        return trimmed;
+    }
+
+    // Other external HTTP URL - proxy if requested/needed
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        if (trimmed.includes('/api/proxy-image')) return trimmed;
+        return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+    }
+
+    // Appwrite File ID
+    const bucket = options?.bucket || BUCKET_ID || 'item_images';
+    if (options?.preview) {
+        const w = options.width || 350;
+        const h = options.height || 350;
+        const q = options.quality || 80;
+        return `${APPWRITE_ENDPOINT}/storage/buckets/${bucket}/files/${trimmed}/preview?project=${APPWRITE_PROJECT_ID}&width=${w}&height=${h}&quality=${q}&output=webp`;
+    }
+    return `${APPWRITE_ENDPOINT}/storage/buckets/${bucket}/files/${trimmed}/view?project=${APPWRITE_PROJECT_ID}`;
+}
+
+/**
+ * Resolves all available image URLs for an item across its main image and gallery references.
+ */
+export function resolveItemImageUrls(item: any, additionalSources: (string | null | undefined)[] = []): string[] {
+    const urls = new Set<string>();
+    
+    if (additionalSources && additionalSources.length > 0) {
+        additionalSources.forEach(s => {
+            const u = getAssetUrl(s);
+            if (u) urls.add(u);
+        });
+    }
+
+    if (item) {
+        if (item.imageId) {
+            const u = getAssetUrl(item.imageId);
+            if (u) urls.add(u);
+        }
+        if (Array.isArray(item.galleryImageIds)) {
+            item.galleryImageIds.forEach((id: string) => {
+                const u = getAssetUrl(id);
+                if (u) urls.add(u);
+            });
+        }
+        if (Array.isArray(item.existingGalleryIds)) {
+            item.existingGalleryIds.forEach((id: string) => {
+                const u = getAssetUrl(id);
+                if (u) urls.add(u);
+            });
+        }
+        if (item.imageUrl) {
+            const u = getAssetUrl(item.imageUrl);
+            if (u) urls.add(u);
+        }
+    }
+
+    return Array.from(urls);
+}
+
+/**
+ * Copies media from a parent item or source gallery for split, extract, or duplicate operations.
+ * Allows child items to inherit their own primary photo or gallery from the parent.
+ */
+export function cloneItemMediaPayload(
+    sourceItem: { imageId?: string; galleryImageIds?: string[]; existingGalleryIds?: string[] } | null | undefined,
+    options: { targetIndex?: number; copyAll?: boolean } = {}
+): { imageId: string | null; galleryImageIds: string[] } {
+    if (!sourceItem) return { imageId: null, galleryImageIds: [] };
+
+    const allIds: string[] = [];
+    if (sourceItem.imageId && !allIds.includes(sourceItem.imageId)) {
+        allIds.push(sourceItem.imageId);
+    }
+    const gallery = sourceItem.galleryImageIds || sourceItem.existingGalleryIds || [];
+    if (Array.isArray(gallery)) {
+        gallery.forEach(id => {
+            if (id && typeof id === 'string' && !allIds.includes(id)) {
+                allIds.push(id);
+            }
+        });
+    }
+
+    if (allIds.length === 0) {
+        return { imageId: null, galleryImageIds: [] };
+    }
+
+    if (options.targetIndex !== undefined && options.targetIndex >= 0 && options.targetIndex < allIds.length) {
+        const targetId = allIds[options.targetIndex];
+        return {
+            imageId: targetId,
+            galleryImageIds: options.copyAll ? [...allIds] : [targetId]
+        };
+    }
+
+    return {
+        imageId: allIds[0] || null,
+        galleryImageIds: options.copyAll ? [...allIds] : (allIds[0] ? [allIds[0]] : [])
+    };
+}
+
+/**
+ * Duplicates media files in Appwrite Storage for an item split, extract, or duplicate operation.
+ * Creates brand new physical files in Appwrite Storage with public permissions,
+ * so child/cloned items own their own independent files and can modify or delete them without affecting the parent.
+ *
+ * @param sourceItem The parent item or object containing image references
+ * @param options Configuration for what to clone (targetIndex, copyAll, bucket)
+ * @returns Object with { imageId, galleryImageIds } pointing to the newly created storage files (or fallback original IDs)
+ */
+export async function duplicateItemMediaInStorage(
+    sourceItem: { imageId?: string; galleryImageIds?: string[]; existingGalleryIds?: string[]; images?: any } | null | undefined,
+    options: {
+        targetIndex?: number;
+        copyAll?: boolean;
+        bucket?: string;
+    } = {}
+): Promise<{ imageId: string | null; galleryImageIds: string[] }> {
+    const fallback = cloneItemMediaPayload(sourceItem, options);
+    if (!fallback.imageId && fallback.galleryImageIds.length === 0) {
+        return fallback;
+    }
+
+    const bucket = options.bucket || BUCKET_ID || 'item_images';
+    const publicFilePermissions = [
+        Permission.read(Role.any()),
+        Permission.write(Role.users()),
+        Permission.update(Role.users()),
+        Permission.delete(Role.users())
+    ];
+
+    // Determine which file IDs need to be physically duplicated
+    const idsToDuplicate = options.copyAll 
+        ? fallback.galleryImageIds 
+        : (fallback.imageId ? [fallback.imageId] : []);
+
+    if (idsToDuplicate.length === 0) {
+        return fallback;
+    }
+
+    const duplicatedMap = new Map<string, string>();
+
+    for (const fileId of idsToDuplicate) {
+        if (!fileId || typeof fileId !== 'string') continue;
+        if (duplicatedMap.has(fileId)) continue;
+
+        try {
+            const fileUrl = getAssetUrl(fileId, { bucket });
+            // Fetch the image blob either via proxy or direct fetch
+            const fetchUrl = (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) && !fileUrl.includes('/api/proxy-image')
+                ? `/api/proxy-image?url=${encodeURIComponent(fileUrl)}`
+                : fileUrl;
+
+            const res = await fetch(fetchUrl);
+            if (!res.ok) {
+                console.warn(`[duplicateItemMediaInStorage] Fetch failed for ${fileId} (${res.status}), retaining original ID`);
+                duplicatedMap.set(fileId, fileId);
+                continue;
+            }
+
+            const blob = await res.blob();
+            const file = new File([blob], `copy-${fileId}.jpg`, { type: blob.type || 'image/jpeg' });
+            
+            const upload = await storage.createFile(
+                bucket,
+                ID.unique(),
+                file,
+                publicFilePermissions
+            );
+            duplicatedMap.set(fileId, upload.$id);
+        } catch (err) {
+            console.warn(`[duplicateItemMediaInStorage] Failed to clone ${fileId}, falling back to original ID:`, err);
+            duplicatedMap.set(fileId, fileId);
+        }
+    }
+
+    const newMainId = fallback.imageId ? (duplicatedMap.get(fallback.imageId) || fallback.imageId) : null;
+    const newGalleryIds = fallback.galleryImageIds.map(id => duplicatedMap.get(id) || id);
+
+    return {
+        imageId: newMainId,
+        galleryImageIds: newGalleryIds
+    };
+}
+
+
 export interface ExtraItemData {
     cost?: string;
     sourcingLocation?: string;

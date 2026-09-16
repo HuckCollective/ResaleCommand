@@ -249,8 +249,9 @@ import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
 import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
+import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
-import { saveItemToInventory, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID } from '../../lib/inventory';
+import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
@@ -467,6 +468,7 @@ const actualMainPhoto = computed(() => {
     } else {
         if (editGalleryBuffer.value?.length > 0) return { file: editGalleryBuffer.value[0], url: getObjectUrl(editGalleryBuffer.value[0]), type: 'new', idx: 0 };
         if (editForm.existingGalleryIds?.length > 0) return { file: null, url: getAssetUrl(editForm.existingGalleryIds[0]), id: editForm.existingGalleryIds[0], type: 'existing' };
+        if (props.item?.imageId) return { file: null, url: getAssetUrl(props.item.imageId), id: props.item.imageId, type: 'existing' };
         return { file: null, url: null, type: 'none', id: null, idx: null };
     }
 });
@@ -643,17 +645,6 @@ const proxify = (url) => {
         return `/api/proxy-image?url=${encodeURIComponent(url)}`;
     }
     return url;
-};
-
-const getAssetUrl = (id) => {
-    if (!id) return '';
-    if (typeof id === 'string') {
-        if (id.startsWith('http') || id.startsWith('data:') || id.startsWith('blob:') || id.startsWith('/api/')) {
-            return proxify(id);
-        }
-    }
-    if (!BUCKET) return '';
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/view?project=${PROJECT}`;
 };
 
 const parsePrice = (p) => {
@@ -1181,49 +1172,85 @@ const analyzeExistingItem = async () => {
             reader.readAsDataURL(blob);
         });
 
+        // 1. Convert any local files in editGalleryBuffer to base64
         const resizePromises = editGalleryBuffer.value.slice(0, 30).map(async (file) => {
             try { return await resize(file); } catch (e) { return null; }
         });
         const resizedLocal = (await Promise.all(resizePromises)).filter(Boolean);
         base64Images.push(...resizedLocal);
 
-        if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
-            const remoteFetchPromises = editForm.existingGalleryIds.slice(0, 20).map(async (id) => {
-                const u = getAssetUrl(id);
-                if (!u) return;
-                if (!remoteUrls.includes(u)) remoteUrls.push(u);
-                try {
-                    // Pre-convert in browser to direct resized base64 so serverless functions don't have to download multi-MB assets
-                    const r = await fetch(u);
-                    if (r.ok) {
-                        const blob = await r.blob();
-                        const b64 = await resize(blob);
-                        if (b64 && !base64Images.includes(b64)) {
-                            base64Images.push(b64);
-                        }
-                    }
-                } catch (err) {
-                    // If client-side fetch is blocked, remoteUrls is already populated as fallback for server
+        // 2. Gather all image sources available in the gallery at the time of the run
+        const candidateImageSources = new Set();
+
+        // 2a. Direct DOM extraction: grab all rendered <img> src attributes from the photo gallery UI
+        if (typeof document !== 'undefined') {
+            const galleryImgs = document.querySelectorAll('.photo-gallery-manager img');
+            galleryImgs.forEach((img) => {
+                if (img?.src && !img.src.includes('data:image/svg')) {
+                    candidateImageSources.add(img.src);
                 }
             });
-            await Promise.allSettled(remoteFetchPromises);
         }
 
-        if (base64Images.length === 0 && actualMainPhoto.value.url) {
-            let url = actualMainPhoto.value.url;
-            if (url.startsWith('data:') || url.startsWith('blob:')) {
-                try { const res = await fetch(url); base64Images.push(await resize(await res.blob())); } catch (e) {}
-            } else {
-                if (!remoteUrls.includes(url)) remoteUrls.push(url);
+        // 2b. Add URLs from computed gallery state
+        if (allAvailableGalleryUrls.value && allAvailableGalleryUrls.value.length > 0) {
+            allAvailableGalleryUrls.value.forEach(u => {
+                if (u) candidateImageSources.add(u);
+            });
+        }
+
+        // 2c. Add main photo URL
+        if (actualMainPhoto.value?.url) {
+            candidateImageSources.add(actualMainPhoto.value.url);
+        }
+
+        // 2d. Add existing gallery IDs & item image ID converted via getAssetUrl
+        const allIds = [
+            ...(Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : []),
+            ...(Array.isArray(props.item?.galleryImageIds) ? props.item.galleryImageIds : []),
+            ...(props.item?.imageId ? [props.item.imageId] : [])
+        ];
+        allIds.forEach(id => {
+            const u = getAssetUrl(id);
+            if (u) candidateImageSources.add(u);
+        });
+
+        // 3. Process all candidate image sources (DOM, computed, and Appwrite IDs)
+        const remoteFetchPromises = Array.from(candidateImageSources).slice(0, 20).map(async (sourceUrl) => {
+            if (!sourceUrl || typeof sourceUrl !== 'string') return;
+            
+            if (sourceUrl.startsWith('data:')) {
+                if (!base64Images.includes(sourceUrl)) base64Images.push(sourceUrl);
+                return;
+            }
+
+            if (sourceUrl.startsWith('blob:')) {
                 try {
-                    const res = await fetch(url);
+                    const res = await fetch(sourceUrl);
                     if (res.ok) {
                         const b64 = await resize(await res.blob());
-                        if (b64) base64Images.push(b64);
+                        if (b64 && !base64Images.includes(b64)) base64Images.push(b64);
                     }
                 } catch (e) {}
+                return;
             }
-        }
+
+            // Remote URL (Appwrite storage or external HTTP)
+            if (!remoteUrls.includes(sourceUrl)) remoteUrls.push(sourceUrl);
+            try {
+                const r = await fetch(sourceUrl);
+                if (r.ok) {
+                    const blob = await r.blob();
+                    const b64 = await resize(blob);
+                    if (b64 && !base64Images.includes(b64)) {
+                        base64Images.push(b64);
+                    }
+                }
+            } catch (err) {
+                // If client-side fetch is blocked, remoteUrls is already populated for server to fetch
+            }
+        });
+        await Promise.allSettled(remoteFetchPromises);
 
         let cleanCondition = (editForm.condition_notes || '')
             .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
@@ -1596,6 +1623,14 @@ const sellOneQuantity = async () => {
         const unitResale = parseFloat((parseFloat(editForm.resalePrice || 0) / editForm.quantity).toFixed(2));
         
         const childTitle = `${editForm.title} (Extracted 1/${editForm.quantity})`;
+        
+        // Inherit media from parent item/current gallery state
+        const mediaPayload = cloneItemMediaPayload({
+            imageId: props.item.imageId,
+            galleryImageIds: props.item.galleryImageIds,
+            existingGalleryIds: editForm.existingGalleryIds
+        }, { copyAll: false });
+
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
@@ -1604,17 +1639,35 @@ const sellOneQuantity = async () => {
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
             storageLocation: editForm.storageLocation,
+            imageId: mediaPayload.imageId,
+            galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
             parentLotId: props.item.$id,
             purchaseId: props.item.purchaseId || null
         };
         
-        await saveItemToInventory(
+        const extractedDoc = await saveItemToInventory(
             { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Extracted from Lot ${props.item.$id}` },
             null,
             extraData,
             currentTeam.value?.$id
         );
+
+        // Asynchronously duplicate file in Appwrite Storage so the extracted item owns its own physical copy
+        if (extractedDoc?.$id && mediaPayload.imageId) {
+            duplicateItemMediaInStorage({
+                imageId: props.item.imageId,
+                galleryImageIds: props.item.galleryImageIds,
+                existingGalleryIds: editForm.existingGalleryIds
+            }, { copyAll: false }).then(async (deepMedia) => {
+                if (deepMedia.imageId && deepMedia.imageId !== mediaPayload.imageId) {
+                    await updateInventoryItem(extractedDoc.$id, {
+                        imageId: deepMedia.imageId,
+                        galleryImageIds: deepMedia.galleryImageIds
+                    });
+                }
+            }).catch(e => console.warn('[sellOneQuantity] Background deep media clone skipped:', e));
+        }
         
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
@@ -1635,6 +1688,14 @@ const splitOneActive = async () => {
         const unitResale = parseFloat((parseFloat(editForm.resalePrice || 0) / editForm.quantity).toFixed(2));
         
         const childTitle = `${editForm.title} (Piece ${editForm.quantity})`;
+        
+        // Inherit media from parent item/current gallery state
+        const mediaPayload = cloneItemMediaPayload({
+            imageId: props.item.imageId,
+            galleryImageIds: props.item.galleryImageIds,
+            existingGalleryIds: editForm.existingGalleryIds
+        }, { copyAll: false });
+
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
@@ -1642,17 +1703,35 @@ const splitOneActive = async () => {
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
             storageLocation: editForm.storageLocation,
+            imageId: mediaPayload.imageId,
+            galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
             parentLotId: props.item.$id,
             purchaseId: props.item.purchaseId || null
         };
         
-        await saveItemToInventory(
+        const splitDoc = await saveItemToInventory(
             { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Split from batch: ${props.item.$id}` },
             null,
             extraData,
             currentTeam.value?.$id
         );
+
+        // Asynchronously duplicate file in Appwrite Storage so the split item owns its own physical copy
+        if (splitDoc?.$id && mediaPayload.imageId) {
+            duplicateItemMediaInStorage({
+                imageId: props.item.imageId,
+                galleryImageIds: props.item.galleryImageIds,
+                existingGalleryIds: editForm.existingGalleryIds
+            }, { copyAll: false }).then(async (deepMedia) => {
+                if (deepMedia.imageId && deepMedia.imageId !== mediaPayload.imageId) {
+                    await updateInventoryItem(splitDoc.$id, {
+                        imageId: deepMedia.imageId,
+                        galleryImageIds: deepMedia.galleryImageIds
+                    });
+                }
+            }).catch(e => console.warn('[splitOneActive] Background deep media clone skipped:', e));
+        }
         
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
