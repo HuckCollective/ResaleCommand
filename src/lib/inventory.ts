@@ -64,6 +64,131 @@ export function getAssetUrl(
 }
 
 /**
+ * Resolves an asset URL guaranteed to be safe for client-side JavaScript fetch() / canvas operations
+ * by routing through /api/proxy-image if it is a remote or Appwrite Storage URL.
+ */
+export function getProxiedAssetUrl(idOrUrl: string | null | undefined, options?: { bucket?: string }): string {
+    const rawUrl = getAssetUrl(idOrUrl, options);
+    if (!rawUrl) return '';
+    if (rawUrl.startsWith('data:') || rawUrl.startsWith('blob:')) return rawUrl;
+    if (rawUrl.includes('/api/proxy-image')) return rawUrl;
+    return `/api/proxy-image?url=${encodeURIComponent(rawUrl)}`;
+}
+
+/**
+ * Safely fetches an image asset as a Blob, bypassing browser CORS using /api/proxy-image.
+ */
+export async function fetchAssetBlob(idOrUrl: string | File | Blob | null | undefined, options?: { bucket?: string }): Promise<Blob | null> {
+    if (!idOrUrl) return null;
+    if (idOrUrl instanceof Blob) return idOrUrl;
+    if (typeof idOrUrl !== 'string') return null;
+
+    const trimmed = idOrUrl.trim();
+    if (!trimmed) return null;
+
+    // Data URL
+    if (trimmed.startsWith('data:')) {
+        try {
+            const res = await fetch(trimmed);
+            return await res.blob();
+        } catch {
+            return null;
+        }
+    }
+
+    // Blob URL
+    if (trimmed.startsWith('blob:')) {
+        try {
+            const res = await fetch(trimmed);
+            if (res.ok) return await res.blob();
+        } catch {}
+        return null;
+    }
+
+    // Remote or Appwrite URL -> Use proxy to avoid CORS
+    const proxiedUrl = getProxiedAssetUrl(trimmed, options);
+    try {
+        const res = await fetch(proxiedUrl);
+        if (res.ok) {
+            return await res.blob();
+        }
+    } catch (proxyErr) {
+        console.warn('[fetchAssetBlob] Proxied fetch failed, attempting direct fetch:', proxyErr);
+    }
+
+    // Direct fetch fallback
+    try {
+        const directUrl = getAssetUrl(trimmed, options);
+        const res = await fetch(directUrl);
+        if (res.ok) return await res.blob();
+    } catch (directErr) {
+        console.warn('[fetchAssetBlob] Direct fetch also failed:', directErr);
+    }
+
+    return null;
+}
+
+/**
+ * Safely loads any image asset (ID, URL, Blob, or File) and scales it down to maxDimension on an in-memory canvas,
+ * returning a clean base64 JPEG data URL for AI vision models (Gemini) with zero CORS errors.
+ */
+export async function convertAssetToBase64(
+    idOrUrl: string | File | Blob | null | undefined,
+    maxDimension = 1024,
+    quality = 0.85
+): Promise<string | null> {
+    if (!idOrUrl) return null;
+
+    if (typeof idOrUrl === 'string' && idOrUrl.startsWith('data:image/')) {
+        return idOrUrl;
+    }
+
+    const blob = await fetchAssetBlob(idOrUrl);
+    if (!blob) return null;
+
+    if (typeof document === 'undefined') {
+        // Server-side environment
+        const buffer = Buffer.from(await blob.arrayBuffer());
+        return `data:${blob.type || 'image/jpeg'};base64,${buffer.toString('base64')}`;
+    }
+
+    return new Promise((resolve) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (w > maxDimension || h > maxDimension) {
+                if (w > h) {
+                    h = Math.round(h * (maxDimension / w));
+                    w = maxDimension;
+                } else {
+                    w = Math.round(w * (maxDimension / h));
+                    h = maxDimension;
+                }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, w);
+            canvas.height = Math.max(1, h);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                resolve(null);
+                return;
+            }
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(null);
+        };
+        img.src = objectUrl;
+    });
+}
+
+
+/**
  * Resolves all available image URLs for an item across its main image and gallery references.
  */
 export function resolveItemImageUrls(item: any, additionalSources: (string | null | undefined)[] = []): string[] {
@@ -189,20 +314,13 @@ export async function duplicateItemMediaInStorage(
         if (duplicatedMap.has(fileId)) continue;
 
         try {
-            const fileUrl = getAssetUrl(fileId, { bucket });
-            // Fetch the image blob either via proxy or direct fetch
-            const fetchUrl = (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) && !fileUrl.includes('/api/proxy-image')
-                ? `/api/proxy-image?url=${encodeURIComponent(fileUrl)}`
-                : fileUrl;
-
-            const res = await fetch(fetchUrl);
-            if (!res.ok) {
-                console.warn(`[duplicateItemMediaInStorage] Fetch failed for ${fileId} (${res.status}), retaining original ID`);
+            const blob = await fetchAssetBlob(fileId, { bucket });
+            if (!blob) {
+                console.warn(`[duplicateItemMediaInStorage] Fetch failed for ${fileId}, retaining original ID`);
                 duplicatedMap.set(fileId, fileId);
                 continue;
             }
 
-            const blob = await res.blob();
             const file = new File([blob], `copy-${fileId}.jpg`, { type: blob.type || 'image/jpeg' });
             
             const upload = await storage.createFile(

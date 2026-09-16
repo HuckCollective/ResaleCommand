@@ -251,7 +251,7 @@ import ItemLotTab from './drawer/ItemLotTab.vue';
 import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
-import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
+import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
@@ -1156,33 +1156,10 @@ const analyzeExistingItem = async () => {
         let base64Images = [];
         let remoteUrls = [];
 
-        const resize = (blob) => new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let w = img.width, h = img.height, max = 1024;
-                if (w > max || h > max) { if (w > h) { h = Math.round(h * (max/w)); w = max; } else { w = Math.round(w * (max/h)); h = max; } }
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                resolve(canvas.toDataURL('image/jpeg', 0.85));
-            };
-            const reader = new FileReader(); 
-            reader.onload = (e) => img.src = e.target.result; 
-            reader.readAsDataURL(blob);
-        });
-
-        // 1. Convert any local files in editGalleryBuffer to base64
-        const resizePromises = editGalleryBuffer.value.slice(0, 30).map(async (file) => {
-            try { return await resize(file); } catch (e) { return null; }
-        });
-        const resizedLocal = (await Promise.all(resizePromises)).filter(Boolean);
-        base64Images.push(...resizedLocal);
-
-        // 2. Gather all image sources available in the gallery at the time of the run
+        // 1. Gather all image sources available in the gallery at the time of the run
         const candidateImageSources = new Set();
 
-        // 2a. Direct DOM extraction: grab all rendered <img> src attributes from the photo gallery UI
+        // 1a. Direct DOM extraction: grab all rendered <img> src attributes from the photo gallery UI
         if (typeof document !== 'undefined') {
             const galleryImgs = document.querySelectorAll('.photo-gallery-manager img');
             galleryImgs.forEach((img) => {
@@ -1192,19 +1169,26 @@ const analyzeExistingItem = async () => {
             });
         }
 
-        // 2b. Add URLs from computed gallery state
+        // 1b. Add local files in editGalleryBuffer
+        if (editGalleryBuffer.value && editGalleryBuffer.value.length > 0) {
+            editGalleryBuffer.value.forEach(f => {
+                if (f) candidateImageSources.add(f);
+            });
+        }
+
+        // 1c. Add URLs from computed gallery state
         if (allAvailableGalleryUrls.value && allAvailableGalleryUrls.value.length > 0) {
             allAvailableGalleryUrls.value.forEach(u => {
                 if (u) candidateImageSources.add(u);
             });
         }
 
-        // 2c. Add main photo URL
+        // 1d. Add main photo URL
         if (actualMainPhoto.value?.url) {
             candidateImageSources.add(actualMainPhoto.value.url);
         }
 
-        // 2d. Add existing gallery IDs & item image ID converted via getAssetUrl
+        // 1e. Add existing gallery IDs & item image ID converted via getAssetUrl
         const allIds = [
             ...(Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : []),
             ...(Array.isArray(props.item?.galleryImageIds) ? props.item.galleryImageIds : []),
@@ -1215,42 +1199,22 @@ const analyzeExistingItem = async () => {
             if (u) candidateImageSources.add(u);
         });
 
-        // 3. Process all candidate image sources (DOM, computed, and Appwrite IDs)
-        const remoteFetchPromises = Array.from(candidateImageSources).slice(0, 20).map(async (sourceUrl) => {
-            if (!sourceUrl || typeof sourceUrl !== 'string') return;
-            
-            if (sourceUrl.startsWith('data:')) {
-                if (!base64Images.includes(sourceUrl)) base64Images.push(sourceUrl);
-                return;
+        // 2. Safely convert all candidate sources to base64 via proxy/canvas (zero CORS errors)
+        const fetchPromises = Array.from(candidateImageSources).slice(0, 40).map(async (source) => {
+            if (!source) return;
+            if (typeof source === 'string' && (source.startsWith('http://') || source.startsWith('https://'))) {
+                if (!remoteUrls.includes(source)) remoteUrls.push(source);
             }
-
-            if (sourceUrl.startsWith('blob:')) {
-                try {
-                    const res = await fetch(sourceUrl);
-                    if (res.ok) {
-                        const b64 = await resize(await res.blob());
-                        if (b64 && !base64Images.includes(b64)) base64Images.push(b64);
-                    }
-                } catch (e) {}
-                return;
-            }
-
-            // Remote URL (Appwrite storage or external HTTP)
-            if (!remoteUrls.includes(sourceUrl)) remoteUrls.push(sourceUrl);
             try {
-                const r = await fetch(sourceUrl);
-                if (r.ok) {
-                    const blob = await r.blob();
-                    const b64 = await resize(blob);
-                    if (b64 && !base64Images.includes(b64)) {
-                        base64Images.push(b64);
-                    }
+                const b64 = await convertAssetToBase64(source);
+                if (b64 && !base64Images.includes(b64)) {
+                    base64Images.push(b64);
                 }
             } catch (err) {
-                // If client-side fetch is blocked, remoteUrls is already populated for server to fetch
+                console.warn('[analyzeWithScout] Failed to convert image to base64:', err);
             }
         });
-        await Promise.allSettled(remoteFetchPromises);
+        await Promise.allSettled(fetchPromises);
 
         let cleanCondition = (editForm.condition_notes || '')
             .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')

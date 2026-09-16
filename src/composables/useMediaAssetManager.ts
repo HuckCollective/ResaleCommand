@@ -1,7 +1,21 @@
-import { ref, computed, type Ref } from 'vue';
-import { getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage, APPWRITE_PROJECT_ID, BUCKET_ID } from '../lib/inventory';
-export { cloneItemMediaPayload, duplicateItemMediaInStorage };
-import { addToast } from '../stores/toast';
+import { 
+    getAssetUrl, 
+    getProxiedAssetUrl, 
+    fetchAssetBlob, 
+    convertAssetToBase64, 
+    cloneItemMediaPayload, 
+    duplicateItemMediaInStorage, 
+    APPWRITE_PROJECT_ID, 
+    BUCKET_ID 
+} from '../lib/inventory';
+export { 
+    getAssetUrl, 
+    getProxiedAssetUrl, 
+    fetchAssetBlob, 
+    convertAssetToBase64, 
+    cloneItemMediaPayload, 
+    duplicateItemMediaInStorage 
+};
 
 export interface MainPhotoSelection {
     type: 'existing' | 'new' | 'none';
@@ -282,38 +296,21 @@ export function useMediaAssetManager(options: MediaManagerOptions = {}) {
         const resizedLocals = (await Promise.all(resizeLocalPromises)).filter(Boolean) as string[];
         base64Images.push(...resizedLocals);
 
-        // 6. Process all candidate URLs (blobs, data URLs, and remote URLs)
-        const remoteFetchPromises = Array.from(candidateUrls).slice(0, 20).map(async sourceUrl => {
+        // 6. Process all candidate URLs (blobs, data URLs, and remote URLs) safely via proxy/canvas
+        const remoteFetchPromises = Array.from(candidateUrls).slice(0, 40).map(async sourceUrl => {
             if (!sourceUrl || typeof sourceUrl !== 'string') return;
 
-            if (sourceUrl.startsWith('data:')) {
-                if (!base64Images.includes(sourceUrl)) base64Images.push(sourceUrl);
-                return;
+            if (sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://')) {
+                if (!remoteUrls.includes(sourceUrl)) remoteUrls.push(sourceUrl);
             }
 
-            if (sourceUrl.startsWith('blob:')) {
-                try {
-                    const res = await fetch(sourceUrl);
-                    if (res.ok) {
-                        const blob = await res.blob();
-                        const b64 = await resizeToCanvasBase64(blob);
-                        if (b64 && !base64Images.includes(b64)) base64Images.push(b64);
-                    }
-                } catch {}
-                return;
-            }
-
-            // HTTP / HTTPS (Appwrite storage or external URL)
-            if (!remoteUrls.includes(sourceUrl)) remoteUrls.push(sourceUrl);
             try {
-                const res = await fetch(sourceUrl);
-                if (res.ok) {
-                    const blob = await res.blob();
-                    const b64 = await resizeToCanvasBase64(blob);
-                    if (b64 && !base64Images.includes(b64)) base64Images.push(b64);
+                const b64 = await convertAssetToBase64(sourceUrl);
+                if (b64 && !base64Images.includes(b64)) {
+                    base64Images.push(b64);
                 }
-            } catch {
-                // If client-side fetch is blocked, remoteUrls will be processed by serverless API
+            } catch (err) {
+                console.warn('[useMediaAssetManager] Failed to convert asset to base64:', sourceUrl, err);
             }
         });
 

@@ -2697,6 +2697,22 @@ function syncUrlWithDrawer(item) {
     window.history.replaceState({}, '', url.toString());
 }
 
+function openAdd() {
+    activeItem.value = null; // Create Mode
+    isEditDrawerOpen.value = true;
+}
+
+function openEdit(item) {
+    activeItem.value = item;
+    isEditDrawerOpen.value = true;
+    syncUrlWithDrawer(item);
+}
+
+function closeEditDrawer() {
+    isEditDrawerOpen.value = false;
+    syncUrlWithDrawer(null);
+}
+
 function checkUrlForDirectItemOpen() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -2719,21 +2735,6 @@ watch(inventoryItems, () => {
     checkUrlForDirectItemOpen();
 }, { immediate: true });
 
-const openAdd = () => {
-    activeItem.value = null; // Create Mode
-    isEditDrawerOpen.value = true;
-};
-
-const openEdit = (item) => {
-    activeItem.value = item;
-    isEditDrawerOpen.value = true;
-    syncUrlWithDrawer(item);
-};
-
-const closeEditDrawer = () => {
-    isEditDrawerOpen.value = false;
-    syncUrlWithDrawer(null);
-};
 
 const saveEdit = async (payload) => {
     processing.value = true;
