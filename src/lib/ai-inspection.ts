@@ -116,30 +116,80 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
         };
     } else if (image.url) {
         try {
-            let fetchUrl = image.url.startsWith('http') ? image.url : `http://localhost:4321${image.url}`;
-            // High-speed Appwrite image pipeline: fetch optimized 1400px WebP preview instead of raw large file
-            if (fetchUrl.includes('/storage/buckets/') && fetchUrl.includes('/view')) {
-                fetchUrl = fetchUrl.replace(/\/view(\?.*)?$/, '/preview?width=1400&height=1400&output=webp&quality=85');
+            const rawUrl = image.url;
+            let targetUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:4321${rawUrl}`;
+            
+            // Extract or resolve Appwrite configuration
+            const projectId = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID) 
+                || process.env.PUBLIC_APPWRITE_PROJECT_ID 
+                || '69714b35003a8adab6bb';
+            const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.APPWRITE_API_KEY) 
+                || process.env.APPWRITE_API_KEY;
+
+            const isAppwrite = targetUrl.includes('/storage/buckets/');
+            const candidateUrls: string[] = [];
+
+            if (isAppwrite) {
+                try {
+                    const parsedUrl = new URL(targetUrl);
+                    const existingProj = parsedUrl.searchParams.get('project') || projectId;
+                    
+                    // Candidate 1: High-performance 1200px WebP preview (preserves project param)
+                    const previewUrl = new URL(parsedUrl.toString());
+                    previewUrl.pathname = previewUrl.pathname.replace(/\/view$/, '/preview');
+                    previewUrl.searchParams.set('width', '1200');
+                    previewUrl.searchParams.set('height', '1200');
+                    previewUrl.searchParams.set('output', 'webp');
+                    previewUrl.searchParams.set('quality', '85');
+                    previewUrl.searchParams.set('project', existingProj);
+                    candidateUrls.push(previewUrl.toString());
+
+                    // Candidate 2: Original View URL (with project param guaranteed)
+                    const viewUrl = new URL(parsedUrl.toString());
+                    viewUrl.searchParams.set('project', existingProj);
+                    candidateUrls.push(viewUrl.toString());
+                } catch {
+                    candidateUrls.push(targetUrl);
+                }
+            } else {
+                candidateUrls.push(targetUrl);
             }
 
             const headers: Record<string, string> = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
                 'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
             };
-            if (fetchUrl.includes('/storage/buckets/')) {
-                const projectId = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID) || process.env.PUBLIC_APPWRITE_PROJECT_ID;
-                const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.APPWRITE_API_KEY) || process.env.APPWRITE_API_KEY;
+            if (isAppwrite) {
                 if (projectId) headers['X-Appwrite-Project'] = projectId;
                 if (apiKey) headers['X-Appwrite-Key'] = apiKey;
             }
-            const res = await fetch(fetchUrl, {
-                headers,
-                signal: AbortSignal.timeout(8000)
-            });
-            if (!res.ok) {
-                console.error(`[ai-inspection] Failed to fetch image ${image.url} - Status ${res.status}`);
+
+            let res: Response | null = null;
+            let lastStatus = 0;
+
+            for (const cUrl of candidateUrls) {
+                try {
+                    const attempt = await fetch(cUrl, {
+                        headers,
+                        signal: AbortSignal.timeout(20000)
+                    });
+                    if (attempt.ok) {
+                        res = attempt;
+                        break;
+                    } else {
+                        lastStatus = attempt.status;
+                        console.warn(`[ai-inspection] Fetch failed (${attempt.status}) for ${cUrl.slice(0, 80)}... trying fallback`);
+                    }
+                } catch (fetchErr: any) {
+                    console.warn(`[ai-inspection] Fetch error for ${cUrl.slice(0, 80)}: ${fetchErr.message}`);
+                }
+            }
+
+            if (!res || !res.ok) {
+                console.error(`[ai-inspection] All fetch attempts failed for image ${image.url} - Last Status: ${lastStatus}`);
                 return null;
             }
+
             const arrayBuffer = await res.arrayBuffer();
             const base64 = Buffer.from(arrayBuffer).toString('base64');
             let mime = res.headers.get('content-type') || 'image/jpeg';

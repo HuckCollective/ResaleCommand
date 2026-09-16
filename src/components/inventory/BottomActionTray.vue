@@ -128,6 +128,21 @@
                                 <span class="truncate">Generic CSV</span>
                             </button>
                         </div>
+
+                        <!-- Memory Den / Location Sync Helper -->
+                        <div class="pt-2 border-t border-base-300 flex items-center justify-between text-[11px]">
+                            <span class="opacity-70 flex items-center gap-1">
+                                <Icon icon="solar:shop-2-linear" class="w-3.5 h-3.5 text-success" />
+                                <span>Sold at Memory Den / Booths?</span>
+                            </span>
+                            <a 
+                                href="/warehouse/sync?location=Memory%20Den" 
+                                class="font-bold text-primary hover:underline flex items-center gap-1"
+                            >
+                                <span>Import &amp; Reconcile in Locations</span>
+                                <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+                            </a>
+                        </div>
                     </div>
 
                     <!-- If 0 items selected: Guide for Bulk Edit Operations -->

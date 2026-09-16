@@ -1188,18 +1188,40 @@ const analyzeExistingItem = async () => {
         base64Images.push(...resizedLocal);
 
         if (editForm.existingGalleryIds && editForm.existingGalleryIds.length > 0) {
-            editForm.existingGalleryIds.forEach(id => {
+            const remoteFetchPromises = editForm.existingGalleryIds.slice(0, 20).map(async (id) => {
                 const u = getAssetUrl(id);
-                if (u && !remoteUrls.includes(u)) remoteUrls.push(u);
+                if (!u) return;
+                if (!remoteUrls.includes(u)) remoteUrls.push(u);
+                try {
+                    // Pre-convert in browser to direct resized base64 so serverless functions don't have to download multi-MB assets
+                    const r = await fetch(u);
+                    if (r.ok) {
+                        const blob = await r.blob();
+                        const b64 = await resize(blob);
+                        if (b64 && !base64Images.includes(b64)) {
+                            base64Images.push(b64);
+                        }
+                    }
+                } catch (err) {
+                    // If client-side fetch is blocked, remoteUrls is already populated as fallback for server
+                }
             });
+            await Promise.allSettled(remoteFetchPromises);
         }
 
-        if (base64Images.length === 0 && remoteUrls.length === 0 && actualMainPhoto.value.url) {
+        if (base64Images.length === 0 && actualMainPhoto.value.url) {
             let url = actualMainPhoto.value.url;
             if (url.startsWith('data:') || url.startsWith('blob:')) {
                 try { const res = await fetch(url); base64Images.push(await resize(await res.blob())); } catch (e) {}
             } else {
-                remoteUrls.push(url);
+                if (!remoteUrls.includes(url)) remoteUrls.push(url);
+                try {
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const b64 = await resize(await res.blob());
+                        if (b64) base64Images.push(b64);
+                    }
+                } catch (e) {}
             }
         }
 
@@ -1266,7 +1288,7 @@ const analyzeExistingItem = async () => {
             });
         }
 
-        const totalPhotos = base64Images.length + remoteUrls.length;
+        const totalPhotos = Math.max(base64Images.length, remoteUrls.length);
         const isLot = (lotQty > 1) || 
                       (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
         const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';

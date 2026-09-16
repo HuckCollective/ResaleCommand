@@ -238,17 +238,52 @@ export const ALL: APIRoute = async ({ request }) => {
                 if (referer) {
                     headers['Referer'] = referer;
                 }
-                if (imgUrl.includes('/storage/buckets/')) {
-                    const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID;
+
+                const isAppwrite = imgUrl.includes('/storage/buckets/');
+                const candidateUrls: string[] = [];
+
+                if (isAppwrite) {
+                    const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
                     const apiKey = process.env.APPWRITE_API_KEY;
                     if (projectId) headers['X-Appwrite-Project'] = projectId;
                     if (apiKey) headers['X-Appwrite-Key'] = apiKey;
-                    console.log("Debug - Added Appwrite auth headers for storage URL fetch");
+
+                    try {
+                        const parsed = new URL(imgUrl);
+                        const existingProj = parsed.searchParams.get('project') || projectId;
+                        // Optimized 1200px preview first to stay well within Gemini 20MB payload limit
+                        const preview = new URL(parsed.toString());
+                        preview.pathname = preview.pathname.replace(/\/view$/, '/preview');
+                        preview.searchParams.set('width', '1200');
+                        preview.searchParams.set('height', '1200');
+                        preview.searchParams.set('output', 'webp');
+                        preview.searchParams.set('quality', '85');
+                        preview.searchParams.set('project', existingProj);
+                        candidateUrls.push(preview.toString());
+
+                        // View fallback
+                        const view = new URL(parsed.toString());
+                        view.searchParams.set('project', existingProj);
+                        candidateUrls.push(view.toString());
+                    } catch {
+                        candidateUrls.push(imgUrl);
+                    }
+                } else {
+                    candidateUrls.push(imgUrl);
                 }
                 
-                const res = await fetch(imgUrl, { headers });
+                let res: Response | null = null;
+                for (const cUrl of candidateUrls) {
+                    try {
+                        const attempt = await fetch(cUrl, { headers, signal: AbortSignal.timeout(15000) });
+                        if (attempt.ok) {
+                            res = attempt;
+                            break;
+                        }
+                    } catch (e) {}
+                }
                 
-                if(res.ok) {
+                if(res && res.ok) {
                     const arrayBuffer = await res.arrayBuffer();
                     
                     // Robust helper to converting ArrayBuffer to Base64 in any env
