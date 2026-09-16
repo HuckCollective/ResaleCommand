@@ -493,7 +493,7 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { databases, Query } from '../../lib/appwrite';
-import { DB_ID, getCollectionId, saveItemToInventory } from '../../lib/inventory';
+import { DB_ID, getCollectionId, saveItemToInventory, duplicateItemMediaInStorage, updateInventoryItem } from '../../lib/inventory';
 import { ID } from 'appwrite';
 
 const props = defineProps<{
@@ -895,7 +895,7 @@ async function executeSplit() {
           const itemUpc = `${cleanPrefix}${currentUpcNum.toString().padStart(4, '0')}`;
           const mainImgId = extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
           const individualPrice = item.customPrice || tier.targetPrice;
-          await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
+          const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
             tenantId: orgId || undefined,
             purchaseId: parent.purchaseId || undefined,
             upc: itemUpc,
@@ -912,6 +912,14 @@ async function executeSplit() {
             status: 'placed'
           });
           createdCount++;
+
+          if (mainImgId && createdDoc?.$id) {
+            duplicateItemMediaInStorage({ imageId: mainImgId }, { copyAll: false }).then(async (deepMedia) => {
+              if (deepMedia.imageId && deepMedia.imageId !== mainImgId) {
+                await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
+              }
+            }).catch(e => console.warn('[LotSplitterWizard] Background media clone skipped:', e));
+          }
         }
       } else if (tier.mode === 'multi_qty') {
         // Create 1 multi-quantity document (Memory Den SKU) & unique UPC
@@ -925,7 +933,7 @@ async function executeSplit() {
           retailTitle = `${cleanSubject} - Reader / Clearance`;
         }
 
-        await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
+        const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
           purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
@@ -942,6 +950,14 @@ async function executeSplit() {
           status: 'placed'
         });
         createdCount++;
+
+        if (firstImgId && createdDoc?.$id) {
+          duplicateItemMediaInStorage({ imageId: firstImgId }, { copyAll: false }).then(async (deepMedia) => {
+            if (deepMedia.imageId && deepMedia.imageId !== firstImgId) {
+              await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
+            }
+          }).catch(e => console.warn('[LotSplitterWizard] Background media clone skipped:', e));
+        }
       } else if (tier.mode === 'bundle') {
         // Create 1 bundled lot set document & unique UPC
         currentUpcNum++;
@@ -950,7 +966,7 @@ async function executeSplit() {
         const totalBundleCost = unitCost * tierItems.length;
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
-        await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
+        const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
           purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
@@ -967,6 +983,14 @@ async function executeSplit() {
           status: 'placed'
         });
         createdCount++;
+
+        if (firstImgId && createdDoc?.$id) {
+          duplicateItemMediaInStorage({ imageId: firstImgId }, { copyAll: false }).then(async (deepMedia) => {
+            if (deepMedia.imageId && deepMedia.imageId !== firstImgId) {
+              await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
+            }
+          }).catch(e => console.warn('[LotSplitterWizard] Background media clone skipped:', e));
+        }
       }
     }
 

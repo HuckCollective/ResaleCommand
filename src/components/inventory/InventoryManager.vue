@@ -3391,6 +3391,22 @@ const submitCombine = async () => {
             teamId
         );
         
+        // Asynchronously duplicate media in Appwrite Storage so the combined lot owns its own dedicated files
+        if (combinedLotDoc?.$id && (mainImageId || combinedGallery.length > 0)) {
+            duplicateItemMediaInStorage({
+                imageId: mainImageId,
+                galleryImageIds: combinedGallery
+            }, { copyAll: true }).then(async (deepMedia) => {
+                if (deepMedia.imageId || (deepMedia.galleryImageIds && deepMedia.galleryImageIds.length > 0)) {
+                    await updateInventoryItem(combinedLotDoc.$id, {
+                        imageId: deepMedia.imageId || undefined,
+                        galleryImageIds: deepMedia.galleryImageIds || []
+                    });
+                    console.log(`[submitCombine] Successfully assigned dedicated storage copies to lot ${combinedLotDoc.$id}`);
+                }
+            }).catch(e => console.warn('[submitCombine] Background media clone skipped/failed:', e));
+        }
+
         // 4. Update all original items: set status to 'combined' and link to new lot
         const updatePromises = items.map(item => 
             updateInventoryItem(item.$id, {
