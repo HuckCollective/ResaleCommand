@@ -94,7 +94,8 @@ export function useInventoryFilters(sourceItems: Ref<Models.Document[]>) {
 
     // -- 2. ROI / MARGIN CALCULATION --
     const calculateRoi = (item: any): number | null => {
-        const cost = parseFloat(item.cost) || 0;
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const cost = (parseFloat(item.cost) || 0) / qty;
         const price = parseFloat(item.resalePrice || item.boutiquePrice) || 0;
         if (cost <= 0 || price <= 0) return null;
         const margin = ((price - cost) / cost) * 100;

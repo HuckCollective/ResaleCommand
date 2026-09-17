@@ -54,8 +54,16 @@
             <!-- Top Reseller Financial Summary Bar (Costs to Top) -->
             <div class="bg-base-200 border-b border-base-300 px-3 md:px-6 py-2.5 grid grid-cols-3 sm:grid-cols-4 gap-2 text-center text-xs z-20">
                 <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs flex flex-col justify-center">
-                    <span class="text-[10px] uppercase font-extrabold opacity-60">Est. Resale</span>
-                    <span class="text-base sm:text-xl font-black text-success font-mono">{{ formatCurrency(estValue) }}</span>
+                    <span class="text-[10px] uppercase font-extrabold opacity-60">
+                        Est. Resale {{ Number(item?.quantity) > 1 ? '(Per Unit)' : '' }}
+                    </span>
+                    <span class="text-base sm:text-xl font-black text-success font-mono">
+                        {{ formatCurrency(estValue) }}
+                        <span v-if="Number(item?.quantity) > 1" class="text-xs font-normal text-base-content/60">/ea</span>
+                    </span>
+                    <span v-if="Number(item?.quantity) > 1" class="text-[10px] opacity-60 font-mono">
+                        Lot: {{ formatCurrency(estValue * Number(item.quantity)) }}
+                    </span>
                 </div>
                 <div class="bg-base-100 p-2 sm:p-3 rounded-xl border border-base-300/80 shadow-xs flex flex-col justify-center">
                     <span class="text-[10px] uppercase font-extrabold opacity-60">Buy Cost</span>
@@ -579,17 +587,20 @@ const paidValue = computed(() => {
 });
 
 const netProfit = computed(() => {
-    const rev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
-    const c = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
-    if (rev === 0 && c === 0) return 0;
-    return rev - c;
+    const unitRev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const totalCost = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const qty = Math.max(1, Number(props.item?.quantity) || 1);
+    if (unitRev === 0 && totalCost === 0) return 0;
+    return (unitRev * qty) - totalCost;
 });
 
 const profitMargin = computed(() => {
-    const rev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
-    const c = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
-    if (rev > 0 && c >= 0) {
-        return Math.round(((rev - c) / rev) * 100);
+    const unitRev = parseFloat(String(estValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const totalCost = parseFloat(String(paidValue.value).replace(/[^0-9.-]+/g, '')) || 0;
+    const qty = Math.max(1, Number(props.item?.quantity) || 1);
+    const unitCost = totalCost / qty;
+    if (unitRev > 0 && unitCost >= 0) {
+        return Math.round(((unitRev - unitCost) / unitRev) * 100);
     }
     return null;
 });

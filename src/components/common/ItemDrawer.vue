@@ -603,19 +603,29 @@ const scoutTotalRange = computed(() => {
         }
     });
 
+    const qty = Math.max(1, Number(editForm.quantity) || (scoutItemsArray.value.length > 1 ? scoutItemsArray.value.length : 1));
+
     const formatRange = (low, high) => {
         if (low === 0 && high === 0) return '-';
         return low === high ? `$${low.toFixed(0)}` : `$${low.toFixed(0)} - $${high.toFixed(0)}`;
+    };
+
+    const formatUnitRange = (low, high) => {
+        if (low === 0 && high === 0) return '-';
+        const uLow = Math.round(low / qty);
+        const uHigh = Math.round(high / qty);
+        return uLow === uHigh ? `$${uLow}` : `$${uLow} - $${uHigh}`;
     };
 
     return {
         low: fairLow,
         high: fairHigh,
         formatted: formatRange(fairLow, fairHigh),
-        mint: { low: mintLow, high: mintHigh, formatted: formatRange(mintLow, mintHigh) },
-        fair: { low: fairLow, high: fairHigh, formatted: formatRange(fairLow, fairHigh) },
-        poor: { low: poorLow, high: poorHigh, formatted: formatRange(poorLow, poorHigh) },
-        boutique: { low: boutiqueLow, high: boutiqueHigh, formatted: formatRange(boutiqueLow, boutiqueHigh) }
+        unitFormatted: formatUnitRange(fairLow, fairHigh),
+        mint: { low: mintLow, high: mintHigh, formatted: formatRange(mintLow, mintHigh), unitFormatted: formatUnitRange(mintLow, mintHigh) },
+        fair: { low: fairLow, high: fairHigh, formatted: formatRange(fairLow, fairHigh), unitFormatted: formatUnitRange(fairLow, fairHigh) },
+        poor: { low: poorLow, high: poorHigh, formatted: formatRange(poorLow, poorHigh), unitFormatted: formatUnitRange(poorLow, poorHigh) },
+        boutique: { low: boutiqueLow, high: boutiqueHigh, formatted: formatRange(boutiqueLow, boutiqueHigh), unitFormatted: formatUnitRange(boutiqueLow, boutiqueHigh) }
     };
 });
 
@@ -696,8 +706,16 @@ const parsePriceRange = (p) => {
 const applyPriceTier = (priceVal) => {
     const p = parsePrice(priceVal);
     if (p > 0) {
-        editForm.resalePrice = p.toFixed(2);
-        addToast({ type: 'success', message: `Applied List Price: $${p.toFixed(2)}` });
+        const qty = Math.max(1, Number(editForm.quantity) || 1);
+        let unitPrice = p;
+        if (scoutTotalRange.value && qty > 1 && scoutItemsArray.value.length > 1) {
+            const avgFairUnit = (scoutTotalRange.value.fair.high + scoutTotalRange.value.fair.low) / (2 * qty);
+            if (p > avgFairUnit * 2) {
+                unitPrice = p / qty;
+            }
+        }
+        editForm.resalePrice = unitPrice.toFixed(2);
+        addToast({ type: 'success', message: `Applied List Price: $${unitPrice.toFixed(2)}${qty > 1 ? '/ea' : ''}` });
     }
 };
 
@@ -1381,13 +1399,15 @@ const analyzeExistingItem = async () => {
                 if (!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') {
                     const fairPrice = parsePrice(data.price_breakdown.fair || data.price_breakdown.boutique_premium || data.price_breakdown.mint);
                     if (fairPrice > 0) {
-                        editForm.resalePrice = fairPrice.toFixed(2);
+                        const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
                     }
                 }
                 const priceRange = parsePriceRange(data.price_breakdown.fair || data.price_breakdown.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
-                    if (!editForm.estLow) editForm.estLow = priceRange.low.toFixed(2);
-                    if (!editForm.estHigh) editForm.estHigh = priceRange.high.toFixed(2);
+                    const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
                 }
             }
 
@@ -1451,13 +1471,15 @@ const analyzeExistingItem = async () => {
                 if ((!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') && (item.pricing_potential || item.price_breakdown)) {
                     const fairPrice = parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                     if (fairPrice > 0) {
-                        editForm.resalePrice = fairPrice.toFixed(2);
+                        const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
                     }
                 }
                 const priceRange = parsePriceRange(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
-                    if (!editForm.estLow) editForm.estLow = priceRange.low.toFixed(2);
-                    if (!editForm.estHigh) editForm.estHigh = priceRange.high.toFixed(2);
+                    const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
                 }
                 if (!editForm.condition_notes && item.condition_notes) {
                     editForm.condition_notes = item.condition_notes;
@@ -1527,6 +1549,20 @@ const analyzeExistingItem = async () => {
                 if (data.price_breakdown?.mint) desc += `- **Mint / High-Grade:** ${data.price_breakdown.mint}\n`;
                 if (data.price_breakdown?.poor) desc += `- **Reader / Clearance:** ${data.price_breakdown.poor}\n`;
                 desc += `\n`;
+
+                if (!editForm.resalePrice || parseFloat(editForm.resalePrice) === 0 || editForm.resalePrice === '') {
+                    const fairPrice = parsePrice(data.pricing_potential?.fair || data.price_breakdown?.fair || data.price_breakdown?.boutique_premium || data.price_breakdown?.mint);
+                    if (fairPrice > 0) {
+                        const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
+                    }
+                }
+                const priceRange = parsePriceRange(data.pricing_potential?.fair || data.price_breakdown?.fair || data.price_breakdown?.mint);
+                if (priceRange.low > 0 || priceRange.high > 0) {
+                    const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
+                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
+                }
             }
 
             if (data.market_report) {
@@ -1596,8 +1632,8 @@ const deconstructAiLot = () => {
 
 const sellOneQuantity = async () => {
     if (!props.item || editForm.quantity <= 1) return;
-    const unitSoldPriceRaw = window.prompt("How much did this 1 item sell for? (Enter a number)", 
-        (parseFloat(editForm.resalePrice || 0) / editForm.quantity).toFixed(2));
+    const defaultUnitPrice = parseFloat(editForm.resalePrice || 0).toFixed(2);
+    const unitSoldPriceRaw = window.prompt("How much did this 1 item sell for? (Enter a number)", defaultUnitPrice);
     if (unitSoldPriceRaw === null) return;
     const unitSoldPrice = parseFloat(unitSoldPriceRaw);
     if (isNaN(unitSoldPrice)) {
@@ -1607,7 +1643,7 @@ const sellOneQuantity = async () => {
 
     try {
         const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
-        const unitResale = parseFloat((parseFloat(editForm.resalePrice || 0) / editForm.quantity).toFixed(2));
+        const unitResale = parseFloat(editForm.resalePrice || 0);
         
         const childTitle = `${editForm.title} (Extracted 1/${editForm.quantity})`;
         
@@ -1660,7 +1696,7 @@ const sellOneQuantity = async () => {
         if (isAcquisitionUnlocked.value) {
             editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);
         }
-        editForm.resalePrice = Math.max(0, parseFloat(editForm.resalePrice || 0) - unitResale).toFixed(2);
+        // editForm.resalePrice is preserved because remaining units share the same per-item price
         saveEdit();
         addToast({ type: 'success', message: 'Extracted 1 sold item!' });
     } catch (e) {
@@ -1672,7 +1708,7 @@ const splitOneActive = async () => {
     if (!props.item || editForm.quantity <= 1) return;
     try {
         const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
-        const unitResale = parseFloat((parseFloat(editForm.resalePrice || 0) / editForm.quantity).toFixed(2));
+        const unitResale = parseFloat(editForm.resalePrice || 0);
         
         const childTitle = `${editForm.title} (Piece ${editForm.quantity})`;
         
@@ -1724,7 +1760,7 @@ const splitOneActive = async () => {
         if (isAcquisitionUnlocked.value) {
             editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);
         }
-        editForm.resalePrice = Math.max(0, parseFloat(editForm.resalePrice || 0) - unitResale).toFixed(2);
+        // editForm.resalePrice is preserved because remaining units share the same per-item price
         saveEdit();
         addToast({ type: 'success', message: 'Split 1 item into active inventory!' });
     } catch (e) {

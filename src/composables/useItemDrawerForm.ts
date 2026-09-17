@@ -39,12 +39,14 @@ export function useItemDrawerForm() {
         countryOfOrigin: ''
     });
 
-    // Auto-calculate ROI / Margin %
+    // Auto-calculate ROI / Margin % (Calculated per-unit so multi-quantity batches reflect accurate margins)
     const calculatedMargin = computed(() => {
-        const cost = parseFloat(editForm.cost || 0);
+        const totalCost = parseFloat(editForm.cost || 0);
+        const qty = Math.max(1, Number(editForm.quantity) || 1);
+        const unitCost = totalCost / qty;
         const price = parseFloat(editForm.resalePrice || editForm.soldPrice || 0);
-        if (price > 0 && cost >= 0) {
-            return Math.round(((price - cost) / price) * 100);
+        if (price > 0 && unitCost >= 0) {
+            return Math.round(((price - unitCost) / price) * 100);
         }
         return null;
     });

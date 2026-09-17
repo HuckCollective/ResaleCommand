@@ -355,8 +355,16 @@
                         <span class="font-mono font-bold text-sm text-base-content">{{ editForm.quantity || 1 }}</span>
                     </div>
                     <div>
-                        <span class="text-[10px] opacity-50 block font-bold uppercase">List Price</span>
-                        <span class="font-mono font-bold text-sm text-base-content">${{ Number(editForm.resalePrice || 0).toFixed(2) }}</span>
+                        <span class="text-[10px] opacity-50 block font-bold uppercase">
+                            {{ Number(editForm.quantity || 1) > 1 ? 'List Price (Per Item)' : 'List Price' }}
+                        </span>
+                        <span class="font-mono font-bold text-sm text-base-content">
+                            ${{ Number(editForm.resalePrice || 0).toFixed(2) }}
+                            <span v-if="Number(editForm.quantity || 1) > 1" class="text-[10px] opacity-60 font-normal ml-0.5">/ea</span>
+                        </span>
+                        <span v-if="Number(editForm.quantity || 1) > 1" class="text-[10px] opacity-50 font-mono block">
+                            Total: ${{ ((Number(editForm.resalePrice) || 0) * (Number(editForm.quantity) || 1)).toFixed(2) }}
+                        </span>
                     </div>
                     <div>
                         <span class="text-[10px] opacity-50 block font-bold uppercase text-success">Sold Price</span>
@@ -384,12 +392,20 @@
                             <input type="number" step="1" min="1" v-model.number="editForm.quantity" class="input input-bordered input-sm w-full h-8 min-h-8 text-center font-bold font-mono bg-base-100 rounded-lg" />
                         </div>
 
-                        <!-- List Price -->
+                        <!-- List Price (Per Item) -->
                         <div class="form-control">
-                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold">List Price</span></label>
+                            <label class="label py-0 h-6 flex items-center justify-between">
+                                <span class="label-text text-xs font-bold truncate">
+                                    {{ Number(editForm.quantity) > 1 ? 'List / Item' : 'List Price' }}
+                                </span>
+                                <span v-if="Number(editForm.quantity) > 1" class="text-[10px] text-secondary font-mono font-bold shrink-0 ml-1" title="Calculated total lot value across all units">
+                                    Lot: ${{ ((Number(editForm.resalePrice) || 0) * (Number(editForm.quantity) || 1)).toFixed(2) }}
+                                </span>
+                            </label>
                             <div class="relative">
                                 <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
-                                <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" />
+                                <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" :class="{ 'pr-8': Number(editForm.quantity) > 1 }" />
+                                <span v-if="Number(editForm.quantity) > 1" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold opacity-50 pointer-events-none">/ea</span>
                             </div>
                         </div>
 
@@ -404,7 +420,10 @@
 
                         <!-- Estimated Comps Range -->
                         <div class="form-control">
-                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-[11px] opacity-60">Est. Range</span></label>
+                            <label class="label py-0 h-6 flex items-center justify-between">
+                                <span class="label-text text-[11px] opacity-60">Est. Range</span>
+                                <span v-if="Number(editForm.quantity) > 1" class="text-[9px] opacity-50">/ea</span>
+                            </label>
                             <div class="text-xs font-mono font-bold bg-base-100 h-8 min-h-8 px-2 flex items-center justify-center rounded-lg border border-base-300 text-center truncate">
                                 <span v-if="editForm.estLow || editForm.estHigh">${{ editForm.estLow || '0' }} - ${{ editForm.estHigh || '0' }}</span>
                                 <span v-else class="opacity-40 font-normal">--</span>
@@ -414,12 +433,15 @@
 
                     <!-- Multi-Quantity Splitting Actions Bar -->
                     <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 mt-2">
-                        <div class="text-[11px] font-bold text-secondary flex items-center gap-1">
-                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-                            <span>Multi-Quantity Batch ({{ editForm.quantity }} Units)</span>
+                        <div class="text-[11px] font-bold text-secondary flex items-center gap-1.5 flex-wrap">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 shrink-0" />
+                            <span>Multi-Quantity Batch: {{ editForm.quantity }} Units @ ${{ Number(editForm.resalePrice || 0).toFixed(2) }}/ea</span>
+                            <span class="badge badge-xs badge-secondary font-mono font-bold text-[10px]">
+                                ${{ ((Number(editForm.resalePrice) || 0) * Number(editForm.quantity)).toFixed(2) }} Total
+                            </span>
                         </div>
                         <div class="flex items-center gap-1.5 flex-wrap">
-                            <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit and subtract cost">
+                            <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit at per-item price and subtract unit cost">
                                 <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
                             </button>
                             <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
@@ -682,38 +704,54 @@
                     <div v-if="scoutTotalRange || scoutItemsArray[0]?.price_breakdown" class="grid grid-cols-2 gap-2 pt-1">
                         <div 
                             class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-success/60 hover:bg-success/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? scoutTotalRange.mint.formatted : scoutItemsArray[0]?.price_breakdown?.mint)"
+                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.mint.unitFormatted ? scoutTotalRange.mint.unitFormatted : scoutTotalRange.mint.formatted) : scoutItemsArray[0]?.price_breakdown?.mint)"
                             title="Click to apply Mint price"
                         >
                             <span class="badge badge-xs font-bold whitespace-nowrap bg-success/20 text-success border-success/40 mb-1">MINT</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.mint.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}</span>
+                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
+                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.mint.unitFormatted ? scoutTotalRange.mint.unitFormatted : scoutTotalRange.mint.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}
+                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.mint?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
+                            </span>
+                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.mint.formatted }}</span>
                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-success font-bold mt-0.5">Use Price ↵</span>
                         </div>
                         <div 
                             class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20 cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? scoutTotalRange.fair.formatted : scoutItemsArray[0]?.price_breakdown?.fair)"
+                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.fair.unitFormatted ? scoutTotalRange.fair.unitFormatted : scoutTotalRange.fair.formatted) : scoutItemsArray[0]?.price_breakdown?.fair)"
                             title="Click to apply Fair market price"
                         >
                             <span class="badge badge-xs font-bold whitespace-nowrap bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.fair.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}</span>
+                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
+                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.fair.unitFormatted ? scoutTotalRange.fair.unitFormatted : scoutTotalRange.fair.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}
+                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.fair?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
+                            </span>
+                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.fair.formatted }}</span>
                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-primary font-bold mt-0.5">Use Price ↵</span>
                         </div>
                         <div 
                             class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-error/60 hover:bg-error/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? scoutTotalRange.poor.formatted : scoutItemsArray[0]?.price_breakdown?.poor)"
+                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.poor.unitFormatted ? scoutTotalRange.poor.unitFormatted : scoutTotalRange.poor.formatted) : scoutItemsArray[0]?.price_breakdown?.poor)"
                             title="Click to apply Poor / Clearance price"
                         >
                             <span class="badge badge-xs font-bold whitespace-nowrap bg-error/20 text-error border-error/40 mb-1">POOR</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.poor.formatted : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}</span>
+                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
+                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.poor.unitFormatted ? scoutTotalRange.poor.unitFormatted : scoutTotalRange.poor.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}
+                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.poor?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
+                            </span>
+                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.poor.formatted }}</span>
                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-error font-bold mt-0.5">Use Price ↵</span>
                         </div>
                         <div 
                             class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs cursor-pointer hover:border-secondary hover:bg-secondary/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? scoutTotalRange.boutique.formatted : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
+                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.boutique.unitFormatted ? scoutTotalRange.boutique.unitFormatted : scoutTotalRange.boutique.formatted) : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
                             title="Click to apply Boutique / Antique Mall price"
                         >
                             <span class="badge badge-xs font-bold whitespace-nowrap bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content">{{ scoutTotalRange ? scoutTotalRange.boutique.formatted : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}</span>
+                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
+                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.boutique.unitFormatted ? scoutTotalRange.boutique.unitFormatted : scoutTotalRange.boutique.formatted) : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}
+                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.boutique?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
+                            </span>
+                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.boutique.formatted }}</span>
                             <span class="text-[9px] opacity-0 group-hover:opacity-80 text-secondary font-bold mt-0.5">Use Price ↵</span>
                         </div>
                     </div>

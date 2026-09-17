@@ -693,7 +693,9 @@
                             </span>
                             <span class="font-semibold truncate">{{ item.title }}</span>
                           </div>
-                          <span class="font-mono text-[11px] opacity-75 shrink-0">${{ Number(item.resalePrice || item.listPrice || 0).toFixed(2) }}</span>
+                          <span class="font-mono text-[11px] opacity-75 shrink-0">
+                            ${{ Number(item.resalePrice || item.listPrice || 0).toFixed(2) }}<span v-if="Number(item.quantity) > 1" class="text-[9px] opacity-60 ml-0.5 font-normal">/ea (x{{ item.quantity }})</span>
+                          </span>
                         </div>
                         <div v-if="getFilteredMatches(row.searchQuery, row).length === 0" class="p-3 text-center text-xs opacity-50">
                           No suggestions found. Type above to search full inventory.

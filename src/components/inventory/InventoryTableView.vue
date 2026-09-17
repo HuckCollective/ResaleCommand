@@ -213,12 +213,20 @@
 
                             <!-- Landed Cost -->
                             <td class="text-right font-mono font-bold text-warning text-xs">
-                                ${{ Number(item.cost || 0).toFixed(2) }}
+                                <div>${{ Number(item.cost || 0).toFixed(2) }}</div>
+                                <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
+                                    ${{ (Number(item.cost || 0) / Number(item.quantity)).toFixed(2) }}/ea
+                                </div>
                             </td>
 
                             <!-- Resale Price -->
                             <td class="text-right font-mono font-bold text-secondary text-xs">
-                                ${{ Number(item.resalePrice || item.boutiquePrice || 0).toFixed(2) }}
+                                <div>
+                                    ${{ Number(item.resalePrice || item.boutiquePrice || 0).toFixed(2) }}<span v-if="Number(item.quantity) > 1" class="text-[9px] opacity-60 font-normal ml-0.5">/ea</span>
+                                </div>
+                                <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
+                                    Total: ${{ (Number(item.resalePrice || item.boutiquePrice || 0) * Number(item.quantity)).toFixed(2) }}
+                                </div>
                             </td>
 
                             <!-- Margin % / ROI -->

@@ -384,7 +384,11 @@ const getItemsForWarehouse = (warehouse: WarehouseDocument) => {
 
 const getItemsTotalValue = (warehouse: WarehouseDocument) => {
   const items = getItemsForWarehouse(warehouse);
-  return items.reduce((acc, i) => acc + (Number(i.resalePrice || i.listPrice || i.estValue || 0)), 0);
+  return items.reduce((acc, i) => {
+    const unitPrice = Number(i.resalePrice || i.listPrice || i.estValue || 0);
+    const qty = Math.max(1, Number(i.quantity) || 1);
+    return acc + (unitPrice * qty);
+  }, 0);
 };
 
 const isItemSynced = (item: any) => {
