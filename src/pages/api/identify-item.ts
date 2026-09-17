@@ -247,18 +247,18 @@ export const ALL: APIRoute = async ({ request }) => {
                     const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
                     const apiKey = process.env.APPWRITE_API_KEY;
                     if (projectId) headers['X-Appwrite-Project'] = projectId;
-                    if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+                    // Do NOT pass X-Appwrite-Key by default for public storage!
 
                     try {
                         const parsed = new URL(imgUrl);
                         const existingProj = parsed.searchParams.get('project') || projectId;
-                        // Optimized 1200px preview first to stay well within Gemini 20MB payload limit
+                        // Optimized 1000px preview first to stay well within Gemini 20MB payload limit
                         const preview = new URL(parsed.toString());
                         preview.pathname = preview.pathname.replace(/\/view$/, '/preview');
-                        preview.searchParams.set('width', '1200');
-                        preview.searchParams.set('height', '1200');
+                        preview.searchParams.set('width', '1000');
+                        preview.searchParams.set('height', '1000');
                         preview.searchParams.set('output', 'webp');
-                        preview.searchParams.set('quality', '85');
+                        preview.searchParams.set('quality', '80');
                         preview.searchParams.set('project', existingProj);
                         candidateUrls.push(preview.toString());
 
@@ -276,10 +276,21 @@ export const ALL: APIRoute = async ({ request }) => {
                 let res: Response | null = null;
                 for (const cUrl of candidateUrls) {
                     try {
-                        const attempt = await fetch(cUrl, { headers, signal: AbortSignal.timeout(15000) });
+                        const attempt = await fetch(cUrl, { headers, signal: AbortSignal.timeout(10000) });
                         if (attempt.ok) {
                             res = attempt;
                             break;
+                        } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && process.env.APPWRITE_API_KEY) {
+                            try {
+                                const authAttempt = await fetch(cUrl, {
+                                    headers: { ...headers, 'X-Appwrite-Key': process.env.APPWRITE_API_KEY },
+                                    signal: AbortSignal.timeout(10000)
+                                });
+                                if (authAttempt.ok) {
+                                    res = authAttempt;
+                                    break;
+                                }
+                            } catch {}
                         }
                     } catch (e) {}
                 }

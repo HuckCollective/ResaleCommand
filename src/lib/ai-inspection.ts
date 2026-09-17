@@ -161,7 +161,7 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
             };
             if (isAppwrite) {
                 if (projectId) headers['X-Appwrite-Project'] = projectId;
-                if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+                // Note: Do NOT send X-Appwrite-Key by default for public storage!
             }
 
             let res: Response | null = null;
@@ -171,15 +171,26 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
                 try {
                     const attempt = await fetch(cUrl, {
                         headers,
-                        signal: AbortSignal.timeout(20000)
+                        signal: AbortSignal.timeout(10000)
                     });
                     if (attempt.ok) {
                         res = attempt;
                         break;
-                    } else {
-                        lastStatus = attempt.status;
-                        console.warn(`[ai-inspection] Fetch failed (${attempt.status}) for ${cUrl.slice(0, 80)}... trying fallback`);
+                    } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && apiKey) {
+                        // Fallback with API key if unauthenticated attempt was rejected
+                        try {
+                            const authAttempt = await fetch(cUrl, {
+                                headers: { ...headers, 'X-Appwrite-Key': apiKey },
+                                signal: AbortSignal.timeout(10000)
+                            });
+                            if (authAttempt.ok) {
+                                res = authAttempt;
+                                break;
+                            }
+                        } catch {}
                     }
+                    lastStatus = attempt.status;
+                    console.warn(`[ai-inspection] Fetch failed (${attempt.status}) for ${cUrl.slice(0, 80)}... trying fallback`);
                 } catch (fetchErr: any) {
                     console.warn(`[ai-inspection] Fetch error for ${cUrl.slice(0, 80)}: ${fetchErr.message}`);
                 }
@@ -520,7 +531,11 @@ OUTPUT STRICT JSON:
 
         const synthResult = await generateContentWithBackoff({
             contents: [{ role: 'user', parts: contentParts }],
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { 
+                responseMimeType: "application/json",
+                // @ts-ignore
+                thinkingConfig: { thinkingBudget: 0 }
+            }
         }, 3, 2000);
 
         const synthText = synthResult.response.text();

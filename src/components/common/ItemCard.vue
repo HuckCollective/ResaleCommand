@@ -123,7 +123,10 @@
                 <div class="absolute inset-0 flex justify-between items-center px-2 font-bold z-10 text-[10px] text-white pointer-events-none drop-shadow-xs">
                     <span class="opacity-90">Cost: {{ formatCurrency(paidValue) }}</span>
                     <span>
-                        <span class="opacity-90">Est: {{ formatCurrency(estValue) }}</span>
+                        <span class="opacity-90" :title="itemQuantity > 1 ? `${formatCurrency(unitEstValue)}/ea × ${itemQuantity}` : ''">
+                            Est: {{ formatCurrency(totalEstValue) }}
+                            <span v-if="itemQuantity > 1 && !compact" class="text-[9px] opacity-80 font-normal">({{ formatCurrency(unitEstValue) }}/ea)</span>
+                        </span>
                         <span v-if="roi !== null" class="ml-1 opacity-100 border-l border-white/30 pl-1">ROI: {{ roi }}%</span>
                     </span>
                 </div>
@@ -261,9 +264,13 @@ const parsePriceObj = (p) => {
     return single ? parseFloat(single[1]) : 0;
 };
 
-const estValue = computed(() => {
+const itemQuantity = computed(() => {
+    return Math.max(1, Number(props.item?.quantity) || 1);
+});
+
+const unitEstValue = computed(() => {
     // Try explicit resalePrice
-    if (props.item.resalePrice) return props.item.resalePrice;
+    if (props.item.resalePrice) return parseFloat(props.item.resalePrice) || 0;
     
     // Try range properties
     if (props.item.estHigh) return parsePriceObj(props.item.estHigh);
@@ -272,7 +279,15 @@ const estValue = computed(() => {
     if (props.item.price_breakdown?.fair) return parsePriceObj(props.item.price_breakdown.fair);
     
     // Try note parsing
-    return getNoteValue(props.item.conditionNotes, 'Est. High', true) || 0;
+    return parseFloat(getNoteValue(props.item.conditionNotes, 'Est. High', true)) || 0;
+});
+
+const totalEstValue = computed(() => {
+    return unitEstValue.value * itemQuantity.value;
+});
+
+const estValue = computed(() => {
+    return totalEstValue.value;
 });
 
 const paidValue = computed(() => {
@@ -288,7 +303,7 @@ const formatCurrency = (val) => {
 // --- ROI HELPERS ---
 const roi = computed(() => {
     const paid = parseFloat(paidValue.value);
-    const est = parseFloat(estValue.value);
+    const est = parseFloat(totalEstValue.value);
     
     if (isNaN(paid)) return null;
     if (paid === 0 && est > 0) return 999;
@@ -301,7 +316,7 @@ const roi = computed(() => {
 
 const profitColor = computed(() => {
     const paid = parseFloat(paidValue.value) || 0;
-    const est = parseFloat(estValue.value);
+    const est = parseFloat(totalEstValue.value);
     
     if (!est || isNaN(est) || est === 0) return 'bg-base-content/30';
     if (isNaN(paid) || paid === 0) return 'bg-info';

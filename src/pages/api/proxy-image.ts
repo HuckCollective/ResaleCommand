@@ -26,16 +26,28 @@ export const GET: APIRoute = async ({ request, url }) => {
             headers['Referer'] = referer;
         }
         if (cleanUrl.includes('/storage/buckets/')) {
-            const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID;
-            const apiKey = process.env.APPWRITE_API_KEY;
+            const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
             if (projectId) headers['X-Appwrite-Project'] = projectId;
-            if (apiKey) headers['X-Appwrite-Key'] = apiKey;
         }
 
-        const response = await fetch(cleanUrl, {
+        let response = await fetch(cleanUrl, {
             redirect: 'follow', // Follow redirects!
             headers
         });
+
+        // Fallback with API key only if unauthenticated request is blocked
+        if ((response.status === 401 || response.status === 403) && cleanUrl.includes('/storage/buckets/')) {
+            const apiKey = process.env.APPWRITE_API_KEY;
+            if (apiKey) {
+                const retryRes = await fetch(cleanUrl, {
+                    redirect: 'follow',
+                    headers: { ...headers, 'X-Appwrite-Key': apiKey }
+                });
+                if (retryRes.ok) {
+                    response = retryRes;
+                }
+            }
+        }
 
         if (!response.ok) {
             return new Response('Failed to fetch image', { status: response.status });
