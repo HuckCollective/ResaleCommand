@@ -163,10 +163,42 @@ export function generatePoshmarkCsv(items: any[]): string {
 }
 
 /**
+ * Helper to strip internal Resale Command tags, database IDs, and diagnostic notes
+ * from customer-facing and POS descriptions.
+ */
+export function sanitizeRicochetDescription(text: string | null | undefined): string {
+    if (!text) return '';
+    return text
+        .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '') // e.g. [MAIN IMAGE ID: ...], [RECEIPT ID: ...]
+        .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
+        .replace(/(Paid|Resale|Sold|Location|Est\. Low|Est\. High|Condition|Order #):[^\n]*/gi, '')
+        .replace(/https?:\/\/[^\s]+/gi, '') // strip internal URLs
+        .replace(/[\r\n"\\]+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
+/**
+ * Checks if a SKU or UPC matches the organization prefix (e.g. HUCK-1460)
+ */
+export function isOrgUpc(upc: string | null | undefined, prefix: string = 'HUCK'): boolean {
+    if (!upc) return false;
+    const clean = upc.trim().toUpperCase();
+    const cleanPrefix = prefix.replace(/[-_]$/, '').toUpperCase();
+    return clean.startsWith(`${cleanPrefix}-`) || clean.startsWith(cleanPrefix);
+}
+
+export interface RicochetExportOptions {
+    orgPrefix?: string; // e.g. 'HUCK'
+    unsyncedOnly?: boolean; // filter out items already verified in Ricochet
+    syncedUpcs?: Set<string> | string[]; // Set/Array of SKUs already in Ricochet
+}
+
+/**
  * Generate Ricochet Consign New Inventory Import CSV
  * Exact official template matching ricoconsign.com (Consigned Inventory)
  */
-export function generateRicochetCsv(items: any[]): string {
+export function generateRicochetCsv(items: any[], options?: RicochetExportOptions): string {
     const headers = [
         'SKU',
         'Item Title',
@@ -180,10 +212,28 @@ export function generateRicochetCsv(items: any[]): string {
     ];
 
     const todayStr = new Date().toLocaleDateString('en-US'); // e.g. 8/30/2026
+    const orgPrefix = (options?.orgPrefix || 'HUCK').replace(/[-_]$/, '').toUpperCase();
 
-    const rows = items.map(item => {
-        let desc = item.conditionNotes || '';
-        let webDesc = item.marketDescription || '';
+    const syncedSet = new Set(
+        Array.isArray(options?.syncedUpcs)
+            ? options.syncedUpcs.map(s => String(s).trim().toUpperCase())
+            : options?.syncedUpcs
+                ? Array.from(options.syncedUpcs).map(s => String(s).trim().toUpperCase())
+                : []
+    );
+
+    const filteredItems = items.filter(item => {
+        if (options?.unsyncedOnly) {
+            const upc = (item.upc || item.sku || '').trim().toUpperCase();
+            if (upc && syncedSet.has(upc)) return false;
+            if (item.ricochetSynced === true) return false;
+        }
+        return true;
+    });
+
+    const rows = filteredItems.map(item => {
+        let desc = item.conditionNotes || item.condition_notes || '';
+        let webDesc = item.marketDescription || item.description || '';
         let brandStr = '';
         let catStr = 'Vintage Collectibles';
 
@@ -231,11 +281,25 @@ export function generateRicochetCsv(items: any[]): string {
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
         const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '0.00';
 
+        // Ensure SKU strictly uses valid org prefix (never raw Appwrite ID)
+        let sku = (item.upc || item.sku || '').trim().toUpperCase();
+        if (!sku || sku.length > 18 || !isOrgUpc(sku, orgPrefix)) {
+            if (item.upc && /^[A-Z]{2,6}-\d+/i.test(item.upc)) {
+                sku = item.upc.trim().toUpperCase();
+            } else {
+                const digits = (sku || item.$id || '').replace(/[^0-9]/g, '').slice(-4);
+                sku = `${orgPrefix}-${digits || '1001'}`;
+            }
+        }
+
+        const cleanDesc = sanitizeRicochetDescription(desc).substring(0, 250);
+        const cleanWebDesc = sanitizeRicochetDescription(webDesc || desc).substring(0, 500);
+
         return [
-            item.upc || item.sku || item.$id, // SKU
+            sku, // SKU strictly formatted with org prefix (e.g. HUCK-1460)
             finalTitle, // Item Title (cleanly fits physical barcode sticker)
-            desc.replace(/[\r\n"\\]+/g, ' ').substring(0, 250), // Description 
-            (webDesc || desc).replace(/[\r\n"\\]+/g, ' ').substring(0, 500), // Web Description
+            cleanDesc, // Description (clean, no internal bracket tags)
+            cleanWebDesc, // Web Description (clean, no internal tags)
             cleanPrice, // Price (no $)
             item.quantity || 1, // Quantity
             todayStr, // In-Stock Date

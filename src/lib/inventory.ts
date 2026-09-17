@@ -415,10 +415,26 @@ export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string)
 
         // Prevent race condition across rapid batch creations / imports in same session
         const currentLock = upcAllocationLocks.get(cleanPrefix) || 0;
-        const nextIndex = Math.max(maxIndex, currentLock) + 1;
-        upcAllocationLocks.set(cleanPrefix, nextIndex);
+        let nextIndex = Math.max(maxIndex, currentLock) + 1;
 
-        return `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+        // Guaranteed Uniqueness Check: verify candidate does not already exist in DB
+        let candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+        let exists = await databases.listDocuments(DB_ID, getCollectionId(), [
+            Query.equal('upc', candidate),
+            Query.limit(1)
+        ]).catch(() => ({ documents: [] }));
+
+        while (exists.documents && exists.documents.length > 0) {
+            nextIndex++;
+            candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+            exists = await databases.listDocuments(DB_ID, getCollectionId(), [
+                Query.equal('upc', candidate),
+                Query.limit(1)
+            ]).catch(() => ({ documents: [] }));
+        }
+
+        upcAllocationLocks.set(cleanPrefix, nextIndex);
+        return candidate;
     } catch (err) {
         console.warn('Auto UPC query fallback:', err);
         const currentLock = upcAllocationLocks.get(cleanPrefix) || 9000;
@@ -426,6 +442,22 @@ export async function generateAutoUpc(prefix: string = 'HUCK-', teamId?: string)
         upcAllocationLocks.set(cleanPrefix, fallbackIndex);
         return `${cleanPrefix}${fallbackIndex.toString().padStart(4, '0')}`;
     }
+}
+
+/**
+ * Checks if a UPC is a valid organization barcode (e.g. HUCK-1464).
+ * Strictly rejects empty strings, raw 20-char Appwrite IDs, and invalid formats.
+ */
+export function isValidOrgUpc(upc: string | null | undefined, prefix: string = 'HUCK'): boolean {
+    if (!upc || typeof upc !== 'string') return false;
+    const trimmed = upc.trim();
+    if (trimmed.length < 5 || trimmed.length > 20) return false;
+    // Disallow raw 20-character Appwrite hex IDs (e.g. 6aa6df24002ea4c5e34b)
+    if (/^[0-9a-f]{20}$/i.test(trimmed)) return false;
+    // Check for org prefix pattern (e.g. HUCK-1460) or standard 8-14 digit retail barcode
+    if (/^[A-Z0-9]{2,8}-\d+$/i.test(trimmed)) return true;
+    if (/^\d{8,14}$/.test(trimmed)) return true;
+    return false;
 }
 
 export function getSafeRawAnalysis(item: any): string | null {
@@ -760,9 +792,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         }
 
         // Guaranteed UPC barcode generation for all created and imported items (Goodwill, thrift receipts, POs)
+        const prefix = extraData.upcPrefix || 'HUCK-';
         let finalUpc = extraData.upc;
-        if (!finalUpc) {
-            const prefix = extraData.upcPrefix || 'HUCK-';
+        if (!isValidOrgUpc(finalUpc, prefix)) {
             try {
                 finalUpc = await generateAutoUpc(prefix, teamId);
             } catch {
@@ -1171,7 +1203,20 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.parentLotId !== undefined) data.parentLotId = updates.parentLotId;
         if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
         if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
-        if (updates.upc !== undefined) data.upc = updates.upc;
+        
+        // Ensure every updated item has a guaranteed valid UPC
+        if (updates.upc !== undefined) {
+            if (isValidOrgUpc(updates.upc)) {
+                data.upc = updates.upc.trim().toUpperCase();
+            } else if (!isValidOrgUpc(currentDoc?.upc)) {
+                const prefix = currentDoc?.upcPrefix || 'HUCK-';
+                data.upc = await generateAutoUpc(prefix, currentDoc?.tenantId);
+            }
+        } else if (currentDoc && !isValidOrgUpc(currentDoc.upc)) {
+            const prefix = currentDoc.upcPrefix || 'HUCK-';
+            data.upc = await generateAutoUpc(prefix, currentDoc.tenantId);
+        }
+
         if (updates.locationSku !== undefined) data.locationSku = updates.locationSku === '' ? null : updates.locationSku;
 
         // --- Handle File Uploads & Update Notes ---

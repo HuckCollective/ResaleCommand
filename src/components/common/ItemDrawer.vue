@@ -1199,12 +1199,35 @@ const analyzeExistingItem = async () => {
             if (u) candidateImageSources.add(u);
         });
 
-        // 2. Safely convert all candidate sources to base64 via proxy/canvas (zero CORS errors)
+        // 2. Safely categorize candidate sources into remote URLs vs local base64
+        // Passing remote URLs directly avoids sending >4.5MB base64 payloads to Vercel
         const fetchPromises = Array.from(candidateImageSources).slice(0, 40).map(async (source) => {
             if (!source) return;
-            if (typeof source === 'string' && (source.startsWith('http://') || source.startsWith('https://'))) {
-                if (!remoteUrls.includes(source)) remoteUrls.push(source);
+
+            // Check if string URL
+            if (typeof source === 'string') {
+                let checkUrl = source;
+                // Unwrap proxied URLs if present
+                if (checkUrl.includes('/api/proxy-image?url=')) {
+                    try {
+                        const parsed = new URL(checkUrl, window.location.origin);
+                        const orig = parsed.searchParams.get('url');
+                        if (orig) checkUrl = orig;
+                    } catch (e) {}
+                }
+
+                // If remote HTTP/HTTPS (and not local blob: / data: / localhost)
+                if (checkUrl.startsWith('http://') || checkUrl.startsWith('https://')) {
+                    if (!checkUrl.includes('localhost:') && !checkUrl.includes('127.0.0.1:')) {
+                        if (!remoteUrls.includes(checkUrl)) {
+                            remoteUrls.push(checkUrl);
+                        }
+                        return; // Remote image handled via remoteUrls! Bypasses base64 conversion & payload limit
+                    }
+                }
             }
+
+            // Otherwise, it is a local asset (File, Blob, local data URL) needing base64 encoding
             try {
                 const b64 = await convertAssetToBase64(source);
                 if (b64 && !base64Images.includes(b64)) {
@@ -1279,7 +1302,7 @@ const analyzeExistingItem = async () => {
             });
         }
 
-        const totalPhotos = Math.max(base64Images.length, remoteUrls.length);
+        const totalPhotos = base64Images.length + remoteUrls.length;
         const isLot = (lotQty > 1) || 
                       (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
         const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';

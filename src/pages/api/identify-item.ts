@@ -3,6 +3,7 @@ import { model, generateContentWithBackoff } from '../../lib/gemini';
 import { normalizeBundleComponents } from '../../lib/bundle-pricing';
 
 export const prerender = false;
+export const maxDuration = 300;
 
 // Helper to parse eBay listing HTML
 function parseEbay(html: string) {

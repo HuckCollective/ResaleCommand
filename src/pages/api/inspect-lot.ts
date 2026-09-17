@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { inspectPhotoGallery, type InspectionImage } from '../../lib/ai-inspection';
 
 export const prerender = false;
+export const maxDuration = 300;
 
 export const POST: APIRoute = async ({ request }) => {
     try {

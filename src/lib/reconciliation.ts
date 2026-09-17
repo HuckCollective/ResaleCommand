@@ -202,3 +202,123 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
         });
     });
 }
+
+export interface RicochetReconciliationResult {
+    orgPrefix: string;
+    totalCsvRows: number;
+    orgMatchedCsvRows: number;
+    ignoredNonOrgRows: any[];
+    syncedMatches: Array<{
+        csvRow: any;
+        appwriteItem: any;
+        priceDifference: number; // 0 if equal
+    }>;
+    newInRicochet: any[]; // SKUs in Ricochet not found in Appwrite
+    pendingExport: any[]; // Active items in Appwrite for this location not yet in Ricochet
+}
+
+/**
+ * Reconciles Ricochet POS inventory CSV against Resale Command Appwrite items.
+ * Strictly filters rows to those matching the tenant's orgPrefix (e.g. HUCK-).
+ * Third-party vendor rows without the org prefix are safely ignored.
+ */
+export async function reconcileRicochetInventory(
+    csvText: string,
+    appwriteItems: any[],
+    orgPrefix: string = 'HUCK-',
+    targetLocation?: string
+): Promise<RicochetReconciliationResult> {
+    const papaModule = await import('papaparse');
+    const Papa = papaModule.default || papaModule;
+    return new Promise((resolve, reject) => {
+        Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const csvItems = results.data as any[];
+                const cleanPrefix = orgPrefix.replace(/[-_]$/, '').toUpperCase();
+
+                const isOrg = (sku: string) => {
+                    if (!sku) return false;
+                    const clean = sku.trim().toUpperCase();
+                    return clean.startsWith(`${cleanPrefix}-`) || clean.startsWith(cleanPrefix);
+                };
+
+                const result: RicochetReconciliationResult = {
+                    orgPrefix: cleanPrefix,
+                    totalCsvRows: csvItems.length,
+                    orgMatchedCsvRows: 0,
+                    ignoredNonOrgRows: [],
+                    syncedMatches: [],
+                    newInRicochet: [],
+                    pendingExport: []
+                };
+
+                // Index appwrite items by normalized UPC and SKU
+                const appwriteByUpc = new Map<string, any>();
+                const matchedUpcs = new Set<string>();
+
+                appwriteItems.forEach(item => {
+                    const upc = (item.upc || item.sku || '').trim().toUpperCase();
+                    if (upc) {
+                        appwriteByUpc.set(upc, item);
+                    }
+                });
+
+                csvItems.forEach(csvRow => {
+                    const sku = (csvRow['SKU'] || csvRow['CustomLabel'] || csvRow['Barcode'] || csvRow['Product ID'] || '').trim();
+                    if (!isOrg(sku)) {
+                        result.ignoredNonOrgRows.push(csvRow);
+                        return;
+                    }
+
+                    result.orgMatchedCsvRows++;
+                    const cleanSku = sku.toUpperCase();
+                    const appwriteItem = appwriteByUpc.get(cleanSku);
+
+                    if (appwriteItem) {
+                        matchedUpcs.add(cleanSku);
+                        const csvPrice = parseFloat(String(csvRow['Price'] || csvRow['Agreed Price'] || '0').replace(/[^0-9.]/g, '')) || 0;
+                        const dbPrice = parseFloat(String(appwriteItem.resalePrice || appwriteItem.price || '0').replace(/[^0-9.]/g, '')) || 0;
+                        const priceDiff = Math.abs(csvPrice - dbPrice);
+
+                        result.syncedMatches.push({
+                            csvRow,
+                            appwriteItem,
+                            priceDifference: priceDiff > 0.01 ? Number((csvPrice - dbPrice).toFixed(2)) : 0
+                        });
+                    } else {
+                        result.newInRicochet.push(csvRow);
+                    }
+                });
+
+                // Determine pending export:
+                // Active items assigned to targetLocation that are NOT yet in Ricochet
+                appwriteItems.forEach(item => {
+                    if (item.status === 'sold') return;
+                    const upc = (item.upc || item.sku || '').trim().toUpperCase();
+                    if (!upc || !isOrg(upc)) return;
+
+                    // If location filter applies
+                    if (targetLocation) {
+                        const tLoc = targetLocation.toLowerCase();
+                        const sLoc = (item.storageLocation || '').toLowerCase();
+                        const matchesSelling = Array.isArray(item.sellingLocations) && item.sellingLocations.some((l: string) => l.toLowerCase().includes(tLoc));
+                        if (!sLoc.includes(tLoc) && !matchesSelling) {
+                            return;
+                        }
+                    }
+
+                    if (!matchedUpcs.has(upc)) {
+                        result.pendingExport.push(item);
+                    }
+                });
+
+                resolve(result);
+            },
+            error: (err) => {
+                reject(err);
+            }
+        });
+    });
+}

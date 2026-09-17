@@ -10,3 +10,4 @@ dist
 .vercel
 scratch/
 *.csv
+.cache-*.json

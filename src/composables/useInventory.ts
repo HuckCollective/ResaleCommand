@@ -4,6 +4,7 @@ import type { Models } from 'appwrite';
 import { useLoader } from './useLoader';
 
 import { isAlphaMode } from '../stores/env';
+import { generateAutoUpc, isValidOrgUpc } from '../lib/inventory';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
 const getCollectionId = () => isAlphaMode.get() 
@@ -178,32 +179,16 @@ export function useInventory() {
         showLoader(`Generating ${prefix} UPCs...`);
 
         try {
-            // Find items without UPC
-            const missingUpcItems = inventoryItems.value.filter((i: any) => !i.upc);
+            // Find items without valid UPC
+            const missingUpcItems = inventoryItems.value.filter((i: any) => !isValidOrgUpc(i.upc, prefix));
             if (missingUpcItems.length === 0) return 0;
             
             generatingTotal.value = missingUpcItems.length;
 
-            // Find current max index for this prefix
-            const existingUpcs = inventoryItems.value
-                .map((i: any) => i.upc)
-                .filter(u => u && u.startsWith(prefix));
-            
-            let maxIndex = 0;
-            existingUpcs.forEach((u: string) => {
-                const numPart = u.replace(prefix, '');
-                const num = parseInt(numPart, 10);
-                if (!isNaN(num) && num > maxIndex) {
-                    maxIndex = num;
-                }
-            });
-
-            // Assign new UPCs
+            // Assign guaranteed unique UPCs via database-verified generateAutoUpc
             let updatedCount = 0;
             for (const item of missingUpcItems) {
-                maxIndex++;
-                // Format to 4 digits minimum (e.g. 0001)
-                const newUpc = `${prefix}${maxIndex.toString().padStart(4, '0')}`;
+                const newUpc = await generateAutoUpc(prefix, currentTeamId || undefined);
                 
                 // Add a 200ms delay to prevent Appwrite rate limits when bulk updating
                 await new Promise(resolve => setTimeout(resolve, 200));
@@ -269,10 +254,17 @@ export function useInventory() {
         });
 
         const currentLock = localUpcLocks.get(cleanPrefix) || 0;
-        const nextIndex = Math.max(maxIndex, currentLock) + 1;
-        localUpcLocks.set(cleanPrefix, nextIndex);
+        let nextIndex = Math.max(maxIndex, currentLock) + 1;
 
-        return `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+        let candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+        const upcSet = new Set(existingUpcs);
+        while (upcSet.has(candidate)) {
+            nextIndex++;
+            candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
+        }
+
+        localUpcLocks.set(cleanPrefix, nextIndex);
+        return candidate;
     };
 
     return {

@@ -104,17 +104,30 @@
             
             <div class="space-y-2 mt-4">
               <!-- Live Inventory Snapshot -->
-              <div class="flex items-center justify-between bg-base-200/70 px-3 py-2 rounded-xl border border-base-300 text-xs">
-                <span class="opacity-70 font-semibold flex items-center gap-1.5">
-                  <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-primary" />
-                  <span>Staged / In-Stock</span>
-                </span>
-                <span class="font-bold font-mono text-primary">
-                  {{ getItemsForWarehouse(warehouse).length }} items
-                  <span v-if="getItemsForWarehouse(warehouse).length > 0" class="opacity-60 text-[10px]">
-                    ({{ formatCurrency(getItemsTotalValue(warehouse)) }})
+              <div class="space-y-1.5 bg-base-200/70 p-3 rounded-xl border border-base-300 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="opacity-70 font-semibold flex items-center gap-1.5">
+                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-primary" />
+                    <span>Staged / In-Stock</span>
                   </span>
-                </span>
+                  <span class="font-bold font-mono text-primary">
+                    {{ getItemsForWarehouse(warehouse).length }} items
+                    <span v-if="getItemsForWarehouse(warehouse).length > 0" class="opacity-60 text-[10px]">
+                      ({{ formatCurrency(getItemsTotalValue(warehouse)) }})
+                    </span>
+                  </span>
+                </div>
+                <!-- Ricochet POS Status Breakdown for consignment booths -->
+                <div v-if="(warehouse.type === 'Consignment Booth' || warehouse.code === 'MD') && getItemsForWarehouse(warehouse).length > 0" class="flex items-center justify-between text-[11px] pt-1.5 border-t border-base-300/60">
+                  <span class="flex items-center gap-1 text-success font-semibold" title="Already synced into Ricochet POS">
+                    <Icon icon="solar:check-circle-bold" class="w-3 h-3" />
+                    {{ getSyncedItemsCount(warehouse) }} in POS
+                  </span>
+                  <span class="flex items-center gap-1 font-semibold" :class="getPendingExportCount(warehouse) > 0 ? 'text-warning' : 'opacity-60'" title="Pending export to Ricochet">
+                    <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
+                    {{ getPendingExportCount(warehouse) }} pending export
+                  </span>
+                </div>
               </div>
 
               <div v-if="warehouse.categories || warehouse.niche" class="border-b border-base-200/60 pb-2 pt-1">
@@ -149,17 +162,51 @@
                 <span>Import &amp; Sync</span>
               </a>
 
-              <!-- Export Ricochet CSV (1-click export for Consignment Booth / On-Site) -->
-              <button 
+              <!-- Export Ricochet CSV Dropdown (with Unsynced Only prevention) -->
+              <div 
                 v-if="warehouse.type === 'Consignment Booth' || warehouse.type === 'On-Site' || warehouse.code === 'MD'"
-                type="button" 
-                class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold gap-1.5 col-span-2 sm:col-span-1"
-                @click="exportRicochetForWarehouse(warehouse)"
-                :title="`Export ${getItemsForWarehouse(warehouse).length} items formatted for Ricochet POS`"
+                class="dropdown dropdown-end dropdown-top sm:dropdown-bottom col-span-2 sm:col-span-1"
               >
-                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
-                <span>Export POS</span>
-              </button>
+                <button 
+                  tabindex="0" 
+                  type="button" 
+                  class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold gap-1.5 w-full"
+                  :title="`Export items formatted for Ricochet POS`"
+                >
+                  <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
+                  <span>Export POS</span>
+                  <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3 opacity-60" />
+                </button>
+                <ul tabindex="0" class="dropdown-content z-30 menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-64 text-xs space-y-1">
+                  <li class="menu-title text-[10px] uppercase font-bold text-primary">Ricochet POS Export</li>
+                  <li>
+                    <button 
+                      type="button" 
+                      @click="exportRicochetForWarehouse(warehouse, true)" 
+                      class="flex flex-col items-start py-2 hover:bg-success/10"
+                    >
+                      <span class="font-bold flex items-center gap-1.5 text-success">
+                        <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" /> Export Unsynced Only
+                      </span>
+                      <span class="text-[10px] opacity-70">
+                        {{ getPendingExportCount(warehouse) }} new items (prevents duplicate SKU errors)
+                      </span>
+                    </button>
+                  </li>
+                  <li>
+                    <button 
+                      type="button" 
+                      @click="exportRicochetForWarehouse(warehouse, false)" 
+                      class="flex flex-col items-start py-2 hover:bg-base-200"
+                    >
+                      <span class="font-bold">Export All Active Items</span>
+                      <span class="text-[10px] opacity-70">
+                        Full catalog ({{ getItemsForWarehouse(warehouse).length }} items)
+                      </span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
 
               <!-- View Items (when export is hidden e.g. Warehouse storage) -->
               <a 
@@ -340,16 +387,47 @@ const getItemsTotalValue = (warehouse: WarehouseDocument) => {
   return items.reduce((acc, i) => acc + (Number(i.resalePrice || i.listPrice || i.estValue || 0)), 0);
 };
 
-const exportRicochetForWarehouse = (warehouse: WarehouseDocument) => {
+const isItemSynced = (item: any) => {
+  return !!(
+    item.locationSku ||
+    item.ricochetSynced === true ||
+    (Array.isArray(item.sellingLocations) && item.sellingLocations.some((l: string) => /ricochet/i.test(l)))
+  );
+};
+
+const getSyncedItemsCount = (warehouse: WarehouseDocument) => {
   const items = getItemsForWarehouse(warehouse);
+  return items.filter(isItemSynced).length;
+};
+
+const getPendingExportCount = (warehouse: WarehouseDocument) => {
+  const items = getItemsForWarehouse(warehouse);
+  return items.filter(i => !isItemSynced(i)).length;
+};
+
+const exportRicochetForWarehouse = (warehouse: WarehouseDocument, unsyncedOnly: boolean = false) => {
+  let items = getItemsForWarehouse(warehouse);
   if (items.length === 0) {
     addToast({ type: 'warning', message: `No active items found staged for ${warehouse.name}.` });
     return;
   }
-  const csv = generateRicochetCsv(items);
+  if (unsyncedOnly) {
+    const pending = items.filter(i => !isItemSynced(i));
+    if (pending.length === 0) {
+      addToast({ type: 'info', message: `All items for ${warehouse.name} are already marked as synced in Ricochet POS!` });
+      return;
+    }
+    items = pending;
+  }
+  const orgPrefix = 'HUCK';
+  const csv = generateRicochetCsv(items, { orgPrefix, unsyncedOnly });
   const safeName = (warehouse.code || warehouse.name).toLowerCase().replace(/[^a-z0-9]+/g, '_');
-  downloadCsv(csv, `${safeName}_ricochet_export_${new Date().toISOString().slice(0, 10)}.csv`);
-  addToast({ type: 'success', message: `Exported ${items.length} items for ${warehouse.name} in Ricochet format!` });
+  const modeTag = unsyncedOnly ? '_new_unsynced' : '_full';
+  downloadCsv(csv, `${safeName}_ricochet${modeTag}_${new Date().toISOString().slice(0, 10)}.csv`);
+  addToast({ 
+    type: 'success', 
+    message: `Exported ${items.length} ${unsyncedOnly ? 'unsynced ' : ''}items for ${warehouse.name} in clean Ricochet format!` 
+  });
 };
 
 const fetchWarehouses = async () => {

@@ -209,9 +209,19 @@
             <Icon icon="solar:upload-track-linear" class="w-12 h-12" />
           </div>
           <h2 class="text-xl font-bold mb-1">Upload Location CSV Export</h2>
-          <p class="text-xs opacity-60 mb-6">
+          <p class="text-xs opacity-60 mb-4">
             Drop your Memory Den product catalog or payout summary CSV to link SKUs, attribute sales, and generate two-way synced barcodes.
           </p>
+
+          <!-- Org Prefix Guard Selector -->
+          <div class="flex items-center gap-2.5 mb-6 bg-base-200/80 px-3.5 py-2 rounded-xl border border-base-300 text-xs">
+            <label class="cursor-pointer flex items-center gap-2 font-bold select-none text-left">
+              <input type="checkbox" v-model="onlySyncOrgPrefix" class="checkbox checkbox-primary checkbox-xs" />
+              <span>Only sync Org Prefix:</span>
+            </label>
+            <input type="text" v-model="upcPrefix" class="input input-xs input-bordered w-24 font-mono font-bold uppercase" placeholder="HUCK-" />
+            <span class="text-[10px] opacity-60">(Ignores 3rd-party items)</span>
+          </div>
 
           <label class="btn btn-primary btn-md gap-2 font-bold shadow-lg shadow-primary/20 cursor-pointer">
             <Icon icon="solar:file-text-bold" class="w-5 h-5" />
@@ -284,6 +294,17 @@
     <!-- Step 2: Full Reconciliation Workspace (once CSV loaded) -->
     <div v-else class="space-y-4">
       
+      <!-- Org Guard Alert Banner -->
+      <div v-if="skippedNonOrgCount > 0" class="alert alert-info py-2.5 px-4 rounded-xl text-xs flex justify-between items-center shadow-sm">
+        <div class="flex items-center gap-2">
+          <Icon icon="solar:shield-check-bold" class="w-5 h-5 text-info-content shrink-0" />
+          <span>
+            <strong>Org Sync Guard Active:</strong> Loaded <strong>{{ syncRows.length }}</strong> items matching org prefix <strong>{{ upcPrefix }}</strong>. 
+            Safely ignored <strong>{{ skippedNonOrgCount }}</strong> third-party/non-org items.
+          </span>
+        </div>
+      </div>
+
       <!-- Metrics & Overview Header -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
@@ -736,6 +757,8 @@ const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'ma
 const searchQuery = ref('');
 const exportUpdatedCsv = ref(true);
 const upcPrefix = ref<string>('HUCK-');
+const onlySyncOrgPrefix = ref<boolean>(true);
+const skippedNonOrgCount = ref<number>(0);
 const currentFileName = ref<string>('');
 const showHistoryModal = ref<boolean>(false);
 const syncHistoryList = ref<SyncHistoryEntry[]>([]);
@@ -1164,6 +1187,8 @@ const processCsvFile = (file: File) => {
       const defaultConsignorPct = 100 - defaultCommission; // e.g. 85%
 
       const rows: any[] = [];
+      const cleanOrg = (upcPrefix.value?.trim() || 'HUCK-').replace(/[-_]$/, '').toUpperCase();
+      let nonOrgSkipped = 0;
 
       for (let i = 1; i < lines.length; i++) {
         const cols = splitCsvLine(lines[i]);
@@ -1183,6 +1208,14 @@ const processCsvFile = (file: File) => {
             cleanSku = skuMatch[1].trim();
             name = fullItemName.replace(skuMatch[0], '').trim();
           }
+        }
+
+        // Strict Org Prefix Filter (e.g. only HUCK-*)
+        const skuUpper = cleanSku.toUpperCase();
+        const isOrgItem = skuUpper.startsWith(`${cleanOrg}-`) || skuUpper.startsWith(cleanOrg);
+        if (onlySyncOrgPrefix.value && cleanSku && !isOrgItem) {
+          nonOrgSkipped++;
+          continue;
         }
 
         // 1. Read Gross Sticker / Agreed Price directly from Memory Den row
@@ -1224,8 +1257,14 @@ const processCsvFile = (file: File) => {
         // Match against existing inventory items
         let matched = null;
 
-        // 1. Match by SKU
+        // 1. Match by exact or normalized UPC (Highest Authority)
         if (cleanSku && activeItems.length > 0) {
+          const target = cleanSku.toLowerCase();
+          matched = activeItems.find(item => (item?.upc || '').toLowerCase().trim() === target);
+        }
+
+        // 2. Match by SKU or locationSku
+        if (!matched && cleanSku && activeItems.length > 0) {
           const target = cleanSku.toLowerCase();
           matched = activeItems.find(item => {
             const iLocSku = (item?.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
@@ -1234,13 +1273,7 @@ const processCsvFile = (file: File) => {
           });
         }
 
-        // 2. Match by exact or normalized UPC
-        if (!matched && cleanSku && activeItems.length > 0) {
-          const target = cleanSku.toLowerCase();
-          matched = activeItems.find(item => (item?.upc || '').toLowerCase().trim() === target);
-        }
-
-        // 3. Smart Fuzzy Match by Title & Keywords
+        // 3. Smart Fuzzy Match by Title & Keywords (Fallback if SKU unmatched)
         if (!matched && name && activeItems.length > 0) {
           matched = findBestItemMatch(name, activeItems);
         }
@@ -1263,9 +1296,17 @@ const processCsvFile = (file: File) => {
         });
       }
 
+      skippedNonOrgCount.value = nonOrgSkipped;
       syncRows.value = rows;
       filterTab.value = 'all';
-      addToast({ type: 'success', message: `Parsed ${rows.length} items from ${file.name}!` });
+      if (nonOrgSkipped > 0) {
+        addToast({ 
+          type: 'success', 
+          message: `Parsed ${rows.length} ${cleanOrg}-* items (skipped ${nonOrgSkipped} non-org rows)` 
+        });
+      } else {
+        addToast({ type: 'success', message: `Parsed ${rows.length} items from ${file.name}!` });
+      }
     } catch (err: any) {
       console.error('CSV Parsing Error:', err);
       addToast({ type: 'error', message: 'Failed to parse CSV: ' + err.message });
@@ -1285,6 +1326,7 @@ const resetSync = () => {
   searchQuery.value = '';
   currentFileName.value = '';
   newItemsCreatedInSession.value = 0;
+  skippedNonOrgCount.value = 0;
 };
 
 // Retry helper for handling Appwrite rate limits with countdown UI
