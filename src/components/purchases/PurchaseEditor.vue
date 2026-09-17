@@ -584,6 +584,9 @@
                       </div>
                       <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
                       <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
+                      <span v-if="item.status === 'combined'" class="badge badge-xs badge-secondary font-bold gap-1">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Merged in Master Lot
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -613,8 +616,12 @@
                     <span>Update</span>
                   </button>
 
+                  <div v-if="item.status === 'combined'" class="badge badge-secondary badge-sm text-secondary-content font-bold gap-1 px-2.5 h-9 rounded-xl">
+                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                    <span>Combined</span>
+                  </div>
                   <button 
-                    v-if="!isReceivedStatus(item.status)" 
+                    v-else-if="!isReceivedStatus(item.status)" 
                     class="btn btn-sm btn-success text-success-content font-black gap-1 flex-1 h-9 rounded-xl shadow-xs border border-success-content/25 active:scale-95" 
                     @click="receiveToStock(item, 'Backstock')"
                     title="Receive into Backstock"
@@ -685,7 +692,10 @@
                           <span v-else-if="item.identity" class="font-mono text-xs opacity-60">{{ item.identity }}</span>
                           <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
                           <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
-                          <span v-if="item.parentLotId" class="badge badge-xs badge-accent">Extracted Component</span>
+                          <span v-if="item.status === 'combined'" class="badge badge-xs badge-secondary font-bold gap-1">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Merged in Master Lot
+                          </span>
+                          <span v-if="item.parentLotId && item.status !== 'combined'" class="badge badge-xs badge-accent">Extracted Component</span>
                         </div>
                       </div>
                     </td>
@@ -700,8 +710,12 @@
                     </td>
                     <td class="text-right">
                       <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                        <div v-if="item.status === 'combined'" class="badge badge-secondary badge-xs font-bold gap-1 px-2 h-7 rounded-lg">
+                          <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" />
+                          <span>Combined</span>
+                        </div>
                         <button 
-                          v-if="!isReceivedStatus(item.status)" 
+                          v-else-if="!isReceivedStatus(item.status)" 
                           class="btn btn-xs btn-success text-success-content font-black shadow-xs border border-success-content/25 gap-1 rounded-lg px-2.5 h-7 active:scale-95" 
                           @click="receiveToStock(item, 'Backstock')"
                           title="Receive into Backstock"
@@ -1145,7 +1159,7 @@ const getStatusClass = (status) => {
 
 const isReceivedStatus = (st) => {
     const s = String(st || '').toLowerCase().trim();
-    return ['received', 'in-stock', 'placed', 'sold'].includes(s);
+    return ['received', 'in-stock', 'placed', 'sold', 'combined'].includes(s);
 };
 
 const getItemStatusBadgeClass = (status) => {
@@ -1153,6 +1167,7 @@ const getItemStatusBadgeClass = (status) => {
     if (s === 'sold') return 'badge-info text-info-content font-bold whitespace-nowrap';
     if (s === 'placed') return 'badge-primary text-primary-content font-bold whitespace-nowrap';
     if (s === 'received' || s === 'in-stock') return 'badge-success text-success-content font-bold whitespace-nowrap';
+    if (s === 'combined') return 'badge-secondary text-secondary-content font-bold whitespace-nowrap';
     return 'badge-ghost text-base-content/80 font-bold whitespace-nowrap';
 };
 
@@ -1381,12 +1396,15 @@ const receiveAllToStock = async (location = 'HG') => {
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
         const collId = getCollectionId();
-        await Promise.all(items.value.map(item => 
-            databases.updateDocument(DB_ID, collId, item.$id, {
-                status: 'in-stock',
-                storageLocation: item.storageLocation || location
-            })
-        ));
+        await Promise.all(items.value
+            .filter(item => item.status !== 'combined')
+            .map(item => 
+                databases.updateDocument(DB_ID, collId, item.$id, {
+                    status: 'in-stock',
+                    storageLocation: item.storageLocation || location
+                })
+            )
+        );
         const docId = activeDocId.value || props.purchaseId;
         if (docId) {
             await purchasesAPI.updatePurchase(docId, { status: 'Received' });
@@ -1422,12 +1440,15 @@ const handleReceiveOrPurchase = async (location = 'HG') => {
             const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
             const collId = getCollectionId();
             if (count > 0) {
-                await Promise.all(items.value.map(item => 
-                    databases.updateDocument(DB_ID, collId, item.$id, {
-                        status: 'in-stock',
-                        storageLocation: item.storageLocation || location
-                    })
-                ));
+                await Promise.all(items.value
+                    .filter(item => item.status !== 'combined')
+                    .map(item => 
+                        databases.updateDocument(DB_ID, collId, item.$id, {
+                            status: 'in-stock',
+                            storageLocation: item.storageLocation || location
+                        })
+                    )
+                );
             }
             const docId = activeDocId.value || props.purchaseId;
             if (docId) {

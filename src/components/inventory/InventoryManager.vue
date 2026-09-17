@@ -3365,13 +3365,13 @@ const submitCombine = async () => {
         // Calculate combined resale price
         const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.listPrice || 0) || 0), 0);
 
-        // 3. Create the new combined item document representing the combined lot
+        // 3. Create the new combined item document representing the combined lot (do not attach purchaseId to avoid double-counting on PO)
         const extraData = {
             cost: combineCost.value,
             resalePrice: totalResale ? totalResale.toFixed(2) : undefined,
-            status: primaryItem.status || 'acquired',
+            status: primaryItem.status === 'acquired' ? 'in-stock' : (primaryItem.status || 'in-stock'),
             sourcingLocation: 'Combined Lot', // Fresh custom lot: no old auction URL
-            storageLocation: primaryItem.storageLocation,
+            storageLocation: primaryItem.storageLocation || 'HG',
             imageId: mainImageId,
             galleryImageIds: combinedGallery,
             keywords: Array.from(new Set(items.flatMap(i => i.keywords || []))),
@@ -3415,6 +3415,9 @@ const submitCombine = async () => {
             })
         );
         await Promise.all(updatePromises);
+        
+        // Auto-sync any linked POs so they immediately recognize combined items and update to 'Received'
+        syncPurchaseStatusForItems(items).catch(err => console.warn('[submitCombine] PO sync warning:', err));
         
         // 5. Optimistically update local state
         // Add new combined document to inventory list

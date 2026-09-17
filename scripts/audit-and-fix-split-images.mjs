@@ -14,6 +14,8 @@ const DB_ID = process.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 
 const isProd = process.argv.includes('--prod');
 const isApply = process.argv.includes('--apply');
+const targetUpcArg = process.argv.find(a => a.startsWith('--upc='));
+const targetUpc = targetUpcArg ? targetUpcArg.replace('--upc=', '').trim() : null;
 
 const COLLECTION_ID = isProd ? 'items' : (process.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 const BUCKET_ID = isProd ? 'item_images' : (process.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images');
@@ -33,29 +35,42 @@ const storage = new Storage(client);
 
 async function run() {
     console.log(`\n🔍 Auditing Split Items in [${DB_ID} / ${COLLECTION_ID}] (Storage Bucket: ${BUCKET_ID})...`);
+    if (targetUpc) console.log(`   Targeting specific UPC: ${targetUpc}`);
     console.log(`   Mode: ${isApply ? '🚀 APPLY (Will duplicate files and update records)' : '⚠️ DRY RUN (Audit only)'}`);
 
-    // 1. Fetch all items with pagination
-    let offset = 0;
-    const limit = 100;
-    const splitItems = [];
+    // 1. Fetch items with pagination or by UPC
+    let splitItems = [];
 
-    while (true) {
-        process.stdout.write(`   Fetching items (offset ${offset})...\r`);
+    if (targetUpc) {
         const res = await databases.listDocuments(DB_ID, COLLECTION_ID, [
-            Query.limit(limit),
-            Query.offset(offset),
-            Query.orderDesc('$createdAt')
+            Query.equal('upc', targetUpc),
+            Query.limit(1)
         ]);
-
-        for (const doc of res.documents) {
-            if (doc.parentLotId) {
-                splitItems.push(doc);
-            }
+        if (res.documents.length === 0) {
+            console.error(`❌ Item with UPC ${targetUpc} not found in ${COLLECTION_ID}!`);
+            return;
         }
+        splitItems = res.documents;
+    } else {
+        let offset = 0;
+        const limit = 100;
+        while (true) {
+            process.stdout.write(`   Fetching items (offset ${offset})...\r`);
+            const res = await databases.listDocuments(DB_ID, COLLECTION_ID, [
+                Query.limit(limit),
+                Query.offset(offset),
+                Query.orderDesc('$createdAt')
+            ]);
 
-        if (res.documents.length < limit) break;
-        offset += limit;
+            for (const doc of res.documents) {
+                if (doc.parentLotId) {
+                    splitItems.push(doc);
+                }
+            }
+
+            if (res.documents.length < limit) break;
+            offset += limit;
+        }
     }
 
     console.log(`\n✅ Scanned total items. Found ${splitItems.length} split items (have parentLotId).\n`);

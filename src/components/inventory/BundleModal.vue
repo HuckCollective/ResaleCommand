@@ -69,6 +69,7 @@ import { Icon } from '@iconify/vue';
 import { databases, ID, Query } from '../../lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { isAlphaMode } from '../../stores/env';
+import { syncPurchaseStatusForItems } from '../../lib/purchases';
 
 const props = defineProps({
     isOpen: { type: Boolean, default: false },
@@ -133,9 +134,9 @@ const submit = async () => {
             quantity: 1, // The bundle is 1 unit for sale
             tenantId: firstItem.tenantId || null,
             userId: firstItem.userId || null,
-            storageLocation: form.storageLocation || null,
+            storageLocation: form.storageLocation || firstItem.storageLocation || 'HG',
             estHigh: form.estHigh || null,
-            purchaseId: sharedPurchaseId,
+            purchaseId: null, // do not attach purchaseId to avoid double-counting on PO
             sourcingLocation: sourceLocations.length > 0 ? sourceLocations[0] : null
         };
         
@@ -152,15 +153,18 @@ const submit = async () => {
 
         const bundleRecord = await databases.createDocument(DB_ID, collId, newBundleId, bundleDoc, permissions);
 
-        // 2. Update all child items to belong to this bundle and mark them as bundled/hidden
+        // 2. Update all child items to belong to this bundle and mark them as combined
         const promises = props.items.map(item => {
             return databases.updateDocument(DB_ID, collId, item.$id, {
                 parentLotId: bundleRecord.$id,
-                status: 'bundled' // Set status to 'bundled' to remove them from main active view if we want
+                status: 'combined'
             });
         });
         
         await Promise.all(promises);
+
+        // Auto-sync any linked POs so they immediately recognize combined items and update to 'Received'
+        syncPurchaseStatusForItems(props.items).catch(err => console.warn('[BundleModal] PO sync warning:', err));
 
         emit('success', bundleRecord.$id);
     } catch (err) {

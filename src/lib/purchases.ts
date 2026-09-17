@@ -422,7 +422,7 @@ export async function syncPurchaseOrderStatus(purchaseIdentifier: string) {
         const total = items.length;
         const isReceived = (st: any) => {
             const lower = String(st || '').toLowerCase().trim();
-            return ['received', 'placed', 'in-stock', 'sold'].includes(lower);
+            return ['received', 'placed', 'in-stock', 'sold', 'combined', 'bundled'].includes(lower);
         };
 
         const receivedCount = items.filter(i => isReceived(i.status)).length;
