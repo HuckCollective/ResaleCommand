@@ -93,7 +93,31 @@ Stores Purchase Orders (POs) and vendor lot receipts.
 
 ---
 
-### 5. `carts` & `expenses` Collections
+### 5. `manifests` Collection
+Stores Outbound Location Manifests (Drops) for staging inventory, packing, in-transit tracking, Ricochet POS exports, and booth shelf placement.
+
+| Attribute | Type | Required | Description |
+|---|---|---|---|
+| `name` | String (255) | Yes | Manifest title (e.g. `Memory Den Drop 2- Sep 18, 2026`) |
+| `tenantId` | String (255) | Yes | Team / tenant owner ID for multi-tenant isolation |
+| `locationId` | String (255) | Yes | Destination location code (e.g. `MD`, `DT`, `WH`) |
+| `locationName` | String (255) | Yes | Destination name (e.g. `Memory Den`, `Dusty Tiger`) |
+| `status` | String (255) | Yes | Lifecycle status (`draft`, `paused`, `exported`, `in-transit`, `placed`, `cancelled`) |
+| `itemIds` | String (65000) | No | Serialized JSON array of staged item document IDs |
+| `placedItemIds`| String (65000) | No | Serialized JSON array of item IDs verified stocked at booth |
+| `itemsSnapshot` | String (65000) | No | Serialized JSON snapshot array of item summaries for instant offline/mobile loading |
+| `itemCount` | Integer | No | Cached total count of staged items |
+| `totalCost` | Float / Double | No | Sum of landed costs of all staged items |
+| `totalRetail` | Float / Double | No | Sum of boutique / tag retail prices |
+| `estimatedNet` | Float / Double | No | Projected net revenue after location commission deduction |
+| `commissionRate`| Float / Double | No | Commission percentage applied (e.g. `15.0`) |
+| `exportedAt` | Datetime | No | Timestamp when POS CSV was generated/exported |
+| `placedAt` | Datetime | No | Timestamp when items were confirmed stocked in booth |
+| `notes` | String (1000) | No | Optional delivery, booth setup, or packing notes |
+
+---
+
+### 6. `carts` & `expenses` Collections
 - **`carts`**: Batches of items being scouted, acquired, or processed concurrently.
 - **`expenses`**: Miscellaneous business overhead, mileage, and supplies linked to purchases or teams.
 
@@ -148,12 +172,19 @@ Stores Purchase Orders (POs) and vendor lot receipts.
 - `tenantId` (type: `key`, order: `ASC`)
 - `name` (type: `key`, order: `ASC`)
 
+### `manifests` Indexes:
+- `tenantId` (type: `key`, order: `ASC`)
+- `locationId` (type: `key`, order: `ASC`)
+- `status` (type: `key`, order: `ASC`)
+- `$updatedAt` (type: `key`, order: `DESC`)
+
 ---
 
 ## 📜 Schema Changelog & Migration History
 
 | Date | Collection | Change / Migration | Details |
 |---|---|---|---|
+| **2026-09-18** | `manifests` | **Outbound Location Manifests (Drops)** | Created `manifests` collection with full lifecycle tracking (`draft`, `paused`, `exported`, `in-transit`, `placed`), JSON item IDs array, and POS export timestamps. |
 | **2026-08-30** | `items` & `items_dev` | **Added Index `parentLotId_idx`** | Created `key` index on `parentLotId` to support real-time lot hierarchy lookups, child deconstruction tracking, and duplicate prevention. |
 | **2026-08-30** | `items` & `items_dev` | **PO Traceability & Cost Anchoring** | Linked `purchaseId` and `parentLotId` across all split child SKUs to guarantee immutable landed PO cost basis. |
 | **2026-08-29** | `sales` & `sales_dev` | **Added Index `idx_warehouseId` & `idx_saleId`** | Enabled fast sales order grouping and consignment payout reconciliation per booth location. |

@@ -70,3 +70,25 @@ Sticky header with tabs, collapsible accordions, and sticky `Show Items` footer:
 ### 5. Table (Spreadsheet) View Integration
 The exact same Command Dock is fully mounted and functional in Table View:
 ![Table View Command Dock](file:///C:/Users/15034/.gemini/antigravity-ide/brain/18ee255e-a2af-442a-b43a-0d37ad95176e/table_view_command_dock_1789066671120.png)
+
+---
+
+## 4. Drop Tray Menu Auto-Fit Width & Badge Integrity
+- **Problem**: In [LocationManifestTray.vue](file:///c:/Users/15034/Projects/ResaleCommand/src/components/inventory/LocationManifestTray.vue), the `Drops (N)` popup menu had a hardcoded `w-64` (256px), which caused longer manifest titles (`Memory Den Drop 2- Sep 18, 2026`) to push the `[draft]` badge out of the container bounds.
+- **Solution**:
+  1. Replaced `w-64` with `w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md`, enabling the container to dynamically auto-fit width to the content while respecting mobile viewport constraints.
+  2. Applied `flex-1 min-w-0 font-medium` to the manifest title, ensuring graceful text truncation (`...`) if the title ever exceeds the maximum width.
+  3. Added `shrink-0` to the badge element to guarantee that status pills are never squished or forced outside the card boundaries.
+
+---
+
+## 5. Selection & Drop Manifest Auto-Staging Fix
+- **Problem**: Selecting an item (e.g. `HUCK-2404`) did not add it to the bottom selection bar or stage it into the active Drop manifest.
+- **Root Cause**:
+  1. `nextTick` was missing from the `import { ... } from 'vue'` import in [InventoryManager.vue](file:///c:/Users/15034/Projects/ResaleCommand/src/components/inventory/InventoryManager.vue), causing an unhandled `ReferenceError` during initial manifest load. This permanently left `isInternalSync` set to `true`, causing `watch(selectedItems)` to immediately abort before staging items.
+  2. In horizontal card mode, [ItemCard.vue](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemCard.vue) lacked the `#absolute-top-left` slot for the checkbox.
+- **Fix Applied**:
+  1. Imported `nextTick` in `InventoryManager.vue`.
+  2. Wrapped all `isInternalSync` operations in `try ... finally { isInternalSync = false; }` across both `InventoryManager.vue` and `InventoryTableView.vue`.
+  3. Supported the `#absolute-top-left` slot inside horizontal card thumbnails so checkboxes render and receive taps consistently across both horizontal and vertical modes.
+

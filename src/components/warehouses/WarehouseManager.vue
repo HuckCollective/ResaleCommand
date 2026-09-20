@@ -21,46 +21,49 @@
       </div>
     </div>
 
-    <!-- Location Two-Way Sync Hub Banner -->
-    <div class="card bg-base-100 border border-base-200 shadow-md p-5 sm:p-6 rounded-2xl">
-      <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
-        <div class="flex items-start gap-4">
-          <div class="p-3.5 bg-secondary/15 text-secondary rounded-2xl shrink-0 mt-0.5">
-            <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-8 h-8" />
-          </div>
-          <div class="space-y-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-base sm:text-lg font-bold">Two-Way Location &amp; Sales Sync Hub</h3>
-              <span class="badge badge-xs badge-secondary font-bold font-mono">Ricochet POS / Memory Den</span>
-            </div>
-            <p class="text-xs opacity-75 max-w-2xl leading-relaxed">
-              Resale Command acts as your single source of truth: export formatted inventory with barcodes to <strong>Memory Den (Ricochet POS)</strong>, and import sales payout reports to automatically record sold items, log net proceeds, and track booth fees.
-            </p>
-            <!-- Workflow Steps Pill Ribbon -->
-            <div class="flex items-center gap-2 text-[11px] font-bold opacity-80 pt-1 flex-wrap">
-              <span class="flex items-center gap-1 bg-base-200/80 px-2 py-0.5 rounded-md border border-base-300">
-                <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5 text-success" />
-                1. Export Barcodes
-              </span>
-              <span>➔</span>
-              <span class="flex items-center gap-1 bg-base-200/80 px-2 py-0.5 rounded-md border border-base-300">
-                <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5 text-primary" />
-                2. Place &amp; Sell in Booth
-              </span>
-              <span>➔</span>
-              <span class="flex items-center gap-1 bg-base-200/80 px-2 py-0.5 rounded-md border border-base-300">
-                <Icon icon="solar:upload-track-bold" class="w-3.5 h-3.5 text-secondary" />
-                3. Import Payout CSV to Sync
-              </span>
-            </div>
-          </div>
+    <!-- Locations KPI Telemetry Ribbon -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="card bg-base-100 border border-base-200 shadow-xs p-4 rounded-2xl flex flex-row items-center gap-3">
+        <div class="p-2.5 bg-primary/15 text-primary rounded-2xl shrink-0">
+          <Icon icon="solar:shop-2-bold" class="w-6 h-6" />
         </div>
+        <div>
+          <div class="text-[11px] uppercase font-bold opacity-60">Locations</div>
+          <div class="font-black text-xl leading-tight">{{ warehouses.length }}</div>
+          <div class="text-[10px] opacity-60 font-mono">booths &amp; storage</div>
+        </div>
+      </div>
 
-        <div class="flex items-center gap-3 shrink-0 w-full lg:w-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-base-200">
-          <a href="/warehouse/sync" class="btn btn-secondary btn-sm gap-2 font-bold shadow-sm w-full lg:w-auto">
-            <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
-            <span>Open Sync Workspace ➔</span>
-          </a>
+      <div class="card bg-base-100 border border-base-200 shadow-xs p-4 rounded-2xl flex flex-row items-center gap-3">
+        <div class="p-2.5 bg-secondary/15 text-secondary rounded-2xl shrink-0">
+          <Icon icon="solar:box-minimalistic-bold" class="w-6 h-6" />
+        </div>
+        <div>
+          <div class="text-[11px] uppercase font-bold opacity-60">Field Inventory</div>
+          <div class="font-black text-xl text-secondary leading-tight">${{ totalFieldValue.toFixed(0) }}</div>
+          <div class="text-[10px] opacity-60 font-mono">{{ totalFieldItems }} items in booths</div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 border border-base-200 shadow-xs p-4 rounded-2xl flex flex-row items-center gap-3">
+        <div class="p-2.5 bg-success/15 text-success rounded-2xl shrink-0">
+          <Icon icon="solar:check-circle-bold" class="w-6 h-6" />
+        </div>
+        <div>
+          <div class="text-[11px] uppercase font-bold opacity-60">POS Sync Health</div>
+          <div class="font-black text-xl text-success leading-tight">{{ totalSyncedItems }} in POS</div>
+          <div class="text-[10px] opacity-60 font-mono">{{ totalPendingExport }} pending export</div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 border border-base-200 shadow-xs p-4 rounded-2xl flex flex-row items-center gap-3">
+        <div class="p-2.5 bg-warning/15 text-warning rounded-2xl shrink-0">
+          <Icon icon="solar:clock-circle-bold" class="w-6 h-6" />
+        </div>
+        <div>
+          <div class="text-[11px] uppercase font-bold opacity-60">Active Drops</div>
+          <div class="font-black text-xl text-warning leading-tight">{{ totalActiveDrops }} Active</div>
+          <div class="text-[10px] opacity-60 font-mono">{{ totalExportedDrops }} to place</div>
         </div>
       </div>
     </div>
@@ -94,65 +97,157 @@
           <div>
             <div class="flex justify-between items-start gap-2">
               <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="card-title text-lg sm:text-xl font-bold leading-tight">{{ warehouse.name }}</h3>
+                <a :href="'/warehouse/' + (warehouse.code || warehouse.$id)" class="card-title text-lg sm:text-xl font-bold leading-tight hover:text-primary transition-colors flex items-center gap-1.5 group">
+                  <span>{{ warehouse.name }}</span>
+                  <Icon icon="solar:arrow-right-up-linear" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-primary shrink-0" />
+                </a>
                 <span v-if="warehouse.code" class="badge badge-sm badge-primary font-mono font-black tracking-wider">{{ warehouse.code }}</span>
               </div>
-              <div class="badge font-bold shrink-0 text-xs" :class="warehouse.type === 'Online' ? 'badge-info' : warehouse.type === 'Warehouse' ? 'badge-neutral' : 'badge-secondary'">
-                {{ warehouse.type }}
+              <div class="flex items-center gap-1 shrink-0">
+                <div class="badge font-bold shrink-0 text-xs" :class="warehouse.type === 'Online' ? 'badge-info' : warehouse.type === 'Warehouse' ? 'badge-neutral' : 'badge-secondary'">
+                  {{ warehouse.type }}
+                </div>
+                <a :href="'/warehouse/' + (warehouse.code || warehouse.$id)" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100" title="Manage Location Details &amp; Drops">
+                  <Icon icon="solar:settings-bold" class="w-4 h-4" />
+                </a>
               </div>
             </div>
             
             <div class="space-y-2 mt-4">
-              <!-- Live Inventory Snapshot -->
-              <div class="space-y-1.5 bg-base-200/70 p-3 rounded-xl border border-base-300 text-xs">
-                <div class="flex items-center justify-between">
-                  <span class="opacity-70 font-semibold flex items-center gap-1.5">
-                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-primary" />
-                    <span>Staged / In-Stock</span>
+              <!-- Live In-Stock Summary -->
+              <div class="flex items-center justify-between bg-base-200/70 px-3.5 py-2.5 rounded-xl border border-base-300 text-xs">
+                <span class="opacity-70 font-semibold flex items-center gap-1.5">
+                  <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-primary" />
+                  <span>In-Stock Inventory</span>
+                </span>
+                <span class="font-bold font-mono text-primary text-sm">
+                  {{ getItemsForWarehouse(warehouse).length }} items
+                  <span v-if="getItemsForWarehouse(warehouse).length > 0" class="opacity-60 text-xs font-normal">
+                    ({{ formatCurrency(getItemsTotalValue(warehouse)) }})
                   </span>
-                  <span class="font-bold font-mono text-primary">
-                    {{ getItemsForWarehouse(warehouse).length }} items
-                    <span v-if="getItemsForWarehouse(warehouse).length > 0" class="opacity-60 text-[10px]">
-                      ({{ formatCurrency(getItemsTotalValue(warehouse)) }})
-                    </span>
-                  </span>
-                </div>
-                <!-- Ricochet POS Status Breakdown for consignment booths -->
-                <div v-if="(warehouse.type === 'Consignment Booth' || warehouse.code === 'MD') && getItemsForWarehouse(warehouse).length > 0" class="flex items-center justify-between text-[11px] pt-1.5 border-t border-base-300/60">
-                  <span class="flex items-center gap-1 text-success font-semibold" title="Already synced into Ricochet POS">
-                    <Icon icon="solar:check-circle-bold" class="w-3 h-3" />
-                    {{ getSyncedItemsCount(warehouse) }} in POS
-                  </span>
-                  <span class="flex items-center gap-1 font-semibold" :class="getPendingExportCount(warehouse) > 0 ? 'text-warning' : 'opacity-60'" title="Pending export to Ricochet">
-                    <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
-                    {{ getPendingExportCount(warehouse) }} pending export
-                  </span>
-                </div>
+                </span>
               </div>
 
-              <div v-if="warehouse.categories || warehouse.niche" class="border-b border-base-200/60 pb-2 pt-1">
-                <span class="opacity-70 text-[10px] uppercase font-bold tracking-wider block mb-1">Niche / Specialties</span>
-                <div class="flex flex-wrap gap-1">
-                  <span v-for="(cat, cIdx) in (warehouse.categories || warehouse.niche).split(',')" :key="cIdx" class="badge badge-xs badge-outline badge-primary">
-                    {{ cat.trim() }}
+              <!-- Active Drop Manifest & In-Store Verification -->
+              <div v-if="warehouse.type === 'Consignment Booth' || warehouse.code === 'MD'" class="bg-base-200/60 p-3 rounded-2xl border border-base-300 space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold flex items-center gap-1.5 text-base-content">
+                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
+                    <span>Active Drop Manifest</span>
                   </span>
+                  <span v-if="getDraftsForWarehouse(warehouse).length > 0" class="badge badge-xs font-mono font-bold" :class="getDraftsForWarehouse(warehouse).some(m => m.status === 'paused') ? 'badge-warning' : 'badge-primary'">
+                    {{ getDraftsForWarehouse(warehouse).length > 1 ? `${getDraftsForWarehouse(warehouse).length} Drops` : (getDraftsForWarehouse(warehouse)[0].status === 'paused' ? 'Paused' : 'Active') }}
+                  </span>
+                  <span v-else-if="getExportedDropsForWarehouse(warehouse).length > 0" class="badge badge-xs badge-info font-mono font-bold">
+                    Ready to Place
+                  </span>
+                  <span v-else class="text-[10px] opacity-50 font-mono">None Active</span>
                 </div>
-              </div>
-              <div class="flex justify-between items-center border-b border-base-200/60 pb-2">
-                <span class="opacity-70 text-xs font-semibold">Commission Rate</span>
-                <span class="font-bold text-sm font-mono">{{ warehouse.commissionRate ? warehouse.commissionRate + '%' : '0%' }}</span>
-              </div>
-              <div class="flex justify-between items-center border-b border-base-200/60 pb-2">
-                <span class="opacity-70 text-xs font-semibold">Monthly Rent</span>
-                <span class="font-bold text-sm font-mono">{{ formatCurrency(warehouse.monthlyRent || 0) }}</span>
+
+                <!-- 1. Active & Paused Drops for this Location -->
+                <div v-if="getDraftsForWarehouse(warehouse).length > 0" class="space-y-1.5">
+                  <div 
+                    v-for="manifest in getDraftsForWarehouse(warehouse)" 
+                    :key="manifest.$id"
+                    class="bg-base-100 p-2.5 rounded-xl border border-base-200 flex items-center justify-between gap-2 shadow-xs"
+                  >
+                    <div class="min-w-0">
+                      <div class="font-bold text-xs truncate flex items-center gap-1.5 text-base-content">
+                        <Icon 
+                          :icon="manifest.status === 'paused' ? 'solar:pause-circle-bold' : (manifest.status === 'in-transit' ? 'solar:lock-bold' : 'solar:clock-circle-bold')" 
+                          class="w-3.5 h-3.5 shrink-0" 
+                          :class="manifest.status === 'paused' ? 'text-warning' : (manifest.status === 'in-transit' ? 'text-info' : 'text-primary')"
+                        />
+                        <span class="truncate">{{ manifest.name }}</span>
+                        <span 
+                          class="badge badge-2xs font-mono font-bold" 
+                          :class="manifest.status === 'paused' ? 'badge-warning' : (manifest.status === 'in-transit' ? 'badge-info' : 'badge-primary')"
+                        >
+                          {{ manifest.status === 'paused' ? 'Paused' : (manifest.status === 'in-transit' ? 'In-Transit' : 'Active') }}
+                        </span>
+                      </div>
+                      <div class="text-[11px] opacity-75 font-mono mt-0.5">
+                        <strong class="text-secondary font-bold">{{ manifest.itemCount || 0 }} items</strong>
+                        <span class="opacity-40"> • </span>
+                        <span class="font-bold">${{ (Number(manifest.totalRetail) || 0).toFixed(2) }}</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <button 
+                        type="button" 
+                        @click="openManifestTrayForManifest(manifest, warehouse)" 
+                        class="btn btn-xs btn-outline border-base-300 font-bold shadow-2xs gap-1"
+                        :title="manifest.status === 'paused' ? 'Resume & Open Manifest Basket' : 'Open Manifest Basket'"
+                      >
+                        <span>{{ manifest.status === 'paused' ? 'Resume' : 'Open Tray' }}</span>
+                        <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                      </button>
+                      <button 
+                        type="button" 
+                        @click="openVerificationModal(manifest, warehouse)" 
+                        class="btn btn-xs btn-success text-success-content font-bold shadow-2xs gap-1"
+                        :disabled="!manifest.itemCount"
+                        title="Verify Stock: verify items on shelves and mark placed"
+                      >
+                        <Icon icon="solar:checklist-bold" class="w-3 h-3" />
+                        <span>Verify Stock</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 2. Exported Drop awaiting in-store placement -->
+                <div v-else-if="getExportedDropsForWarehouse(warehouse).length > 0" class="bg-info/10 border border-info/30 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-bold text-xs text-info flex items-center gap-1 truncate">
+                      <Icon icon="solar:file-check-bold" class="w-3.5 h-3.5 text-info shrink-0" />
+                      <span class="truncate">{{ getExportedDropsForWarehouse(warehouse)[0].name }}</span>
+                    </div>
+                    <div class="text-[11px] opacity-75 font-mono mt-0.5">
+                      {{ getExportedDropsForWarehouse(warehouse)[0].itemCount }} items • ${{ getExportedDropsForWarehouse(warehouse)[0].totalRetail.toFixed(2) }} (Exported)
+                    </div>
+                  </div>
+                  <button 
+                    type="button" 
+                    @click="openVerificationModal(getExportedDropsForWarehouse(warehouse)[0], warehouse)" 
+                    class="btn btn-xs btn-info text-info-content font-bold gap-1 shrink-0 shadow-2xs"
+                    title="Verify Stock: verify items on shelves and mark placed"
+                  >
+                    <Icon icon="solar:checklist-bold" class="w-3 h-3" />
+                    <span>Verify Stock</span>
+                  </button>
+                </div>
+
+                <!-- 3. Clean Empty State -->
+                <div v-else class="text-[11px] opacity-50 py-1 flex items-center justify-between">
+                  <span class="italic">No drop manifest in progress.</span>
+                  <button 
+                    type="button" 
+                    @click="startNewDropForWarehouse(warehouse)"
+                    class="btn btn-ghost btn-xs text-primary font-bold hover:bg-primary/10 gap-1"
+                  >
+                    <Icon icon="solar:add-circle-bold" class="w-3 h-3" />
+                    <span>+ Start Drop</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Location Actions: Two-Way Sync + Catalog -->
+          <!-- Location Actions: Dedicated Cockpit + Two-Way Sync -->
           <div class="space-y-2 pt-3 border-t border-base-200">
             <div class="grid grid-cols-2 gap-2">
-              <!-- Import & Sync Sales (Primary Action for Location Reconciliation) -->
+              <!-- Primary Action: Dedicated Cockpit Hub -->
+              <a 
+                :href="'/warehouse/' + (warehouse.code || warehouse.$id)"
+                class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs col-span-2 sm:col-span-1"
+                title="Open location drops, in-stock catalog & settings"
+              >
+                <Icon icon="solar:shop-2-bold" class="w-4 h-4" />
+                <span>Manage Booth ➔</span>
+              </a>
+
+              <!-- Secondary Action: Import & Sync Sales -->
               <a 
                 :href="'/warehouse/sync?location=' + encodeURIComponent(warehouse.name)" 
                 class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs col-span-2 sm:col-span-1"
@@ -161,80 +256,21 @@
                 <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" /> 
                 <span>Import &amp; Sync</span>
               </a>
-
-              <!-- Export Ricochet CSV Dropdown (with Unsynced Only prevention) -->
-              <div 
-                v-if="warehouse.type === 'Consignment Booth' || warehouse.type === 'On-Site' || warehouse.code === 'MD'"
-                class="dropdown dropdown-end dropdown-top sm:dropdown-bottom col-span-2 sm:col-span-1"
-              >
-                <button 
-                  tabindex="0" 
-                  type="button" 
-                  class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold gap-1.5 w-full"
-                  :title="`Export items formatted for Ricochet POS`"
-                >
-                  <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
-                  <span>Export POS</span>
-                  <Icon icon="solar:alt-arrow-down-linear" class="w-3 h-3 opacity-60" />
-                </button>
-                <ul tabindex="0" class="dropdown-content z-30 menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-64 text-xs space-y-1">
-                  <li class="menu-title text-[10px] uppercase font-bold text-primary">Ricochet POS Export</li>
-                  <li>
-                    <button 
-                      type="button" 
-                      @click="exportRicochetForWarehouse(warehouse, true)" 
-                      class="flex flex-col items-start py-2 hover:bg-success/10"
-                    >
-                      <span class="font-bold flex items-center gap-1.5 text-success">
-                        <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" /> Export Unsynced Only
-                      </span>
-                      <span class="text-[10px] opacity-70">
-                        {{ getPendingExportCount(warehouse) }} new items (prevents duplicate SKU errors)
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button 
-                      type="button" 
-                      @click="exportRicochetForWarehouse(warehouse, false)" 
-                      class="flex flex-col items-start py-2 hover:bg-base-200"
-                    >
-                      <span class="font-bold">Export All Active Items</span>
-                      <span class="text-[10px] opacity-70">
-                        Full catalog ({{ getItemsForWarehouse(warehouse).length }} items)
-                      </span>
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- View Items (when export is hidden e.g. Warehouse storage) -->
-              <a 
-                v-else
-                :href="'/inventory?location=' + encodeURIComponent(warehouse.code || warehouse.name)" 
-                class="btn btn-sm btn-outline border-base-300 font-bold gap-1 col-span-2 sm:col-span-1"
-                title="View all items assigned to this location in inventory"
-              >
-                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 opacity-70" />
-                <span>View Items</span>
-              </a>
             </div>
 
-            <!-- Secondary Links: View Catalog & Manage -->
+            <!-- Secondary Links: View Catalog & Quick Actions -->
             <div class="flex justify-between items-center pt-1 text-xs">
               <a 
-                v-if="warehouse.type === 'Consignment Booth' || warehouse.type === 'On-Site' || warehouse.code === 'MD'"
                 :href="'/inventory?location=' + encodeURIComponent(warehouse.code || warehouse.name)" 
                 class="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
               >
                 <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                 <span>View Catalog ({{ getItemsForWarehouse(warehouse).length }})</span>
               </a>
-              <span v-else></span>
 
               <div class="flex items-center gap-1">
                 <button class="btn btn-xs btn-ghost gap-1 opacity-70 hover:opacity-100" @click="openEditor(warehouse)">
-                  <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> Edit
+                  <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> Quick Edit
                 </button>
                 <button class="btn btn-xs btn-ghost text-error gap-1 opacity-70 hover:opacity-100 hover:bg-error/10" @click="confirmDelete(warehouse)">
                   <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> Delete
@@ -334,6 +370,16 @@
         <div class="modal-backdrop" @click="warehouseToDelete = null"></div>
       </div>
     </Teleport>
+
+    <!-- OUTBOUND LOCATION MANIFEST TRAY -->
+    <LocationManifestTray 
+      :isOpen="isManifestTrayOpen" 
+      :locationId="activeWarehouseForTray?.code"
+      :locationName="activeWarehouseForTray?.name"
+      @toggle-tray="isManifestTrayOpen = false" 
+      @close="isManifestTrayOpen = false"
+      @drop-changed="loadManifests"
+    />
   </div>
 </template>
 
@@ -346,9 +392,25 @@ import { warehousesApi, matchesLocationFilter } from '../../lib/warehouses';
 import { generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { addToast } from '../../stores/toast';
 import type { WarehouseDocument, WarehouseData } from '../../lib/warehouses';
+import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
+import { useManifest } from '../../composables/useManifest';
+import LocationManifestTray from '../inventory/LocationManifestTray.vue';
+import { getAssetUrl } from '../../lib/inventory';
 
 const { currentTeam: team } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
+
+// Manifest composable & state
+const {
+  activeManifest,
+  isTrayOpen: isManifestTrayOpen,
+  initActiveDraft,
+  switchActiveManifest,
+  createNewDraft
+} = useManifest();
+
+const allManifests = ref<ManifestDocument[]>([]);
+const loadingManifests = ref<boolean>(false);
 
 const warehouses = ref<WarehouseDocument[]>([]);
 const loading = ref<boolean>(false);
@@ -356,6 +418,7 @@ const saving = ref<boolean>(false);
 const error = ref<string>('');
 const isEditing = ref<boolean>(false);
 const activeWarehouse = ref<WarehouseDocument | null>(null);
+const activeWarehouseForTray = ref<WarehouseDocument | null>(null);
 const warehouseToDelete = ref<WarehouseDocument | null>(null);
 
 const isModalOpen = computed(() => activeWarehouse.value !== null);
@@ -408,6 +471,30 @@ const getPendingExportCount = (warehouse: WarehouseDocument) => {
   const items = getItemsForWarehouse(warehouse);
   return items.filter(i => !isItemSynced(i)).length;
 };
+
+const totalFieldItems = computed(() => {
+  return warehouses.value.reduce((acc, w) => acc + getItemsForWarehouse(w).length, 0);
+});
+
+const totalFieldValue = computed(() => {
+  return warehouses.value.reduce((acc, w) => acc + getItemsTotalValue(w), 0);
+});
+
+const totalSyncedItems = computed(() => {
+  return warehouses.value.reduce((acc, w) => acc + getSyncedItemsCount(w), 0);
+});
+
+const totalPendingExport = computed(() => {
+  return warehouses.value.reduce((acc, w) => acc + getPendingExportCount(w), 0);
+});
+
+const totalActiveDrops = computed(() => {
+  return warehouses.value.filter(w => getActiveDraftForWarehouse(w)).length;
+});
+
+const totalExportedDrops = computed(() => {
+  return warehouses.value.reduce((acc, w) => acc + getExportedDropsForWarehouse(w).length, 0);
+});
 
 const exportRicochetForWarehouse = (warehouse: WarehouseDocument, unsyncedOnly: boolean = false) => {
   let items = getItemsForWarehouse(warehouse);
@@ -502,8 +589,11 @@ const saveWarehouse = async () => {
       await warehousesApi.updateWarehouse(activeWarehouse.value.$id, payload);
       addToast({ type: 'success', message: 'Location updated successfully!' });
     } else {
-      await warehousesApi.createWarehouse(payload);
+      const created = await warehousesApi.createWarehouse(payload);
       addToast({ type: 'success', message: 'Location created successfully!' });
+      closeEditor();
+      window.location.href = `/warehouse/${created.code || created.$id}`;
+      return;
     }
     closeEditor();
     await fetchWarehouses();
@@ -533,17 +623,90 @@ const executeDelete = async () => {
   }
 };
 
+// -- MANIFESTS & DROPS HUB --
+const loadManifests = async () => {
+  const tId = team.value?.$id;
+  if (!tId) return;
+  loadingManifests.value = true;
+  try {
+    allManifests.value = await manifestsApi.listManifests(tId);
+  } catch (e) {
+    console.warn('Could not load manifests:', e);
+  } finally {
+    loadingManifests.value = false;
+  }
+};
+
+const getManifestsForWarehouse = (warehouse: WarehouseDocument) => {
+  const code = (warehouse.code || '').toLowerCase();
+  const name = (warehouse.name || '').toLowerCase();
+  return allManifests.value.filter(m => {
+    const locId = (m.locationId || '').toLowerCase();
+    const locName = (m.locationName || '').toLowerCase();
+    return locId === code || locName === name || (code === 'md' && (locId.includes('memory') || locName.includes('memory')));
+  });
+};
+
+const getActiveDraftForWarehouse = (warehouse: WarehouseDocument) => {
+  return getManifestsForWarehouse(warehouse).find(m => m.status === 'draft' || m.status === 'paused') || null;
+};
+
+const getDraftsForWarehouse = (warehouse: WarehouseDocument) => {
+  return getManifestsForWarehouse(warehouse).filter(m => m.status === 'draft' || m.status === 'paused' || m.status === 'in-transit');
+};
+
+const openManifestTrayForManifest = async (manifest: ManifestDocument, warehouse?: WarehouseDocument) => {
+  activeWarehouseForTray.value = warehouse || null;
+  await switchActiveManifest(manifest.$id);
+  isManifestTrayOpen.value = true;
+};
+
+const getExportedDropsForWarehouse = (warehouse: WarehouseDocument) => {
+  return getManifestsForWarehouse(warehouse).filter(m => m.status === 'exported');
+};
+
+const getPlacedDropsForWarehouse = (warehouse: WarehouseDocument) => {
+  return getManifestsForWarehouse(warehouse).filter(m => m.status === 'placed');
+};
+
+const openManifestTrayFor = async (warehouse: WarehouseDocument) => {
+  activeWarehouseForTray.value = warehouse;
+  const active = getActiveDraftForWarehouse(warehouse);
+  if (active) {
+    await switchActiveManifest(active.$id);
+  }
+  isManifestTrayOpen.value = true;
+};
+
+const startNewDropForWarehouse = async (warehouse: WarehouseDocument) => {
+  activeWarehouseForTray.value = warehouse;
+  const newDropName = `${warehouse.name} Drop - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  await createNewDraft(newDropName, warehouse.code || 'MD', warehouse.name);
+  await loadManifests();
+  isManifestTrayOpen.value = true;
+};
+
+// -- OPEN MANIFEST TRAY FOR VERIFYING / STAGING --
+const openVerificationModal = async (manifest: ManifestDocument, warehouse: WarehouseDocument) => {
+  activeWarehouseForTray.value = warehouse;
+  await switchActiveManifest(manifest.$id);
+  isManifestTrayOpen.value = true;
+};
+
 onMounted(() => {
   if (team.value) {
     fetchWarehouses();
+    loadManifests();
   }
 });
 
 watch(team, (newTeam) => {
   if (newTeam) {
     fetchWarehouses();
+    loadManifests();
   } else {
     warehouses.value = [];
+    allManifests.value = [];
   }
 });
 </script>

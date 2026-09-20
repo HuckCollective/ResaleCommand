@@ -1,6 +1,6 @@
 <template>
     <Teleport to="body">
-        <div v-if="totalItems > 0">
+        <div v-if="totalItems > 0 || currentManifest">
         <!-- ========================================================================= -->
         <!-- UNIFIED FROZEN BOTTOM CONTAINER: STACKED PAGE TOOLS & DAISYUI DOCK        -->
         <!-- ========================================================================= -->
@@ -10,9 +10,85 @@
                 class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
             >
                 <!-- ------------------------------------------------------------- -->
+                <!-- STACK ROW 0: MANIFEST TRACKER STATUS STRIP (MATCHING SCOUT TRACKER) -->
+                <!-- ------------------------------------------------------------- -->
+                <div 
+                    v-if="currentManifest && (currentManifest.status === 'draft' || currentManifest.status === 'in-transit')" 
+                    class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs"
+                >
+                    <div class="max-w-xl w-full mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
+                        <!-- State A: Active Draft Drop Tracker Status Strip -->
+                        <button 
+                            v-if="currentManifest.status === 'draft'"
+                            type="button" 
+                            @click="isManifestTrayOpen = true"
+                            class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden border border-base-content/20 cursor-pointer"
+                            title="Inspect active drop manifest"
+                        >
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary shrink-0" />
+                            <span class="font-black text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                                {{ currentManifest.name }}
+                            </span>
+                            <span class="badge badge-xs badge-secondary font-black shrink-0">
+                                {{ stagedCount }} {{ stagedCount === 1 ? 'item' : 'items' }}
+                            </span>
+                            <span class="text-[11px] font-mono text-secondary font-black shrink-0">
+                                ${{ totalRetail.toFixed(2) }}
+                            </span>
+                            <span class="text-[10px] uppercase font-bold opacity-60 ml-auto hidden sm:inline">Manifest</span>
+                            <Icon icon="solar:alt-arrow-up-linear" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                        </button>
+
+                        <!-- State B: In-Transit (Locked) Drop Tracker Status Strip -->
+                        <button 
+                            v-else-if="currentManifest.status === 'in-transit'"
+                            type="button" 
+                            @click="isManifestTrayOpen = true"
+                            class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-info/15 hover:bg-info/25 border border-info/30 cursor-pointer select-none transition-all group text-left min-w-0 flex-1 h-7 overflow-hidden"
+                            title="Drop locked in-transit — Tap to verify at booth"
+                        >
+                            <Icon icon="solar:lock-bold" class="w-3.5 h-3.5 text-info shrink-0" />
+                            <span class="badge badge-xs badge-info font-black shrink-0">In-Transit</span>
+                            <span class="font-bold text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                                {{ currentManifest.name }}
+                            </span>
+                            <span class="text-[11px] font-mono opacity-70 shrink-0">
+                                {{ currentManifest.itemCount || stagedCount }} items
+                            </span>
+                            <span class="text-[10px] font-bold text-info ml-auto hidden sm:inline">Verify Stock</span>
+                            <Icon icon="solar:alt-arrow-up-linear" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                        </button>
+
+                        <!-- Quick Pause / Lock Controls -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button 
+                                v-if="currentManifest.status === 'draft'"
+                                type="button" 
+                                @click.stop="pauseActiveManifest" 
+                                class="badge badge-warning badge-xs font-bold gap-1 cursor-pointer hover:opacity-85 active:scale-95 transition-all select-none border-0 shadow-xs"
+                                title="Tap to pause drop (hides from screen)"
+                            >
+                                <Icon icon="solar:pause-circle-bold" class="w-2.5 h-2.5" />
+                                <span class="hidden xs:inline">Pause</span>
+                            </button>
+                            <button 
+                                v-else-if="currentManifest.status === 'in-transit'"
+                                type="button" 
+                                @click.stop="unlockActiveManifest" 
+                                class="badge badge-warning badge-xs font-bold gap-1 cursor-pointer hover:opacity-85 active:scale-95 transition-all select-none border-0 shadow-xs"
+                                title="Drop is locked in transit — tap to unlock for staging new items"
+                            >
+                                <Icon icon="solar:lock-unlocked-bold" class="w-2.5 h-2.5" />
+                                <span>Unlock</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ------------------------------------------------------------- -->
                 <!-- STACK ROW 1: SLIM PAGE TOOLS DOCK (TOP STRIP)                 -->
                 <!-- ------------------------------------------------------------- -->
-                <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+                <div v-if="totalItems > 0" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
                     <div class="max-w-xl w-full mx-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-2">
                         <!-- Scroll to Top & Filtered Total Rows Trigger -->
                         <button 
@@ -126,6 +202,7 @@
                 <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2">
                     <!-- Dock Item 1: Actions & Bulk Operations -->
                     <button 
+                        id="btn-bottom-dock-actions"
                         type="button"
                         class="flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer"
                         :class="selectedCount > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
@@ -134,6 +211,22 @@
                     >
                         <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5" />
                         <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Actions ({{ selectedCount }})</span>
+                    </button>
+
+                    <!-- Dock Item 1.5: Outbound Manifest Pill (Only when no active drop bar in Row 0) -->
+                    <button 
+                        v-if="!currentManifest || (currentManifest.status !== 'draft' && currentManifest.status !== 'in-transit')"
+                        id="btn-bottom-dock-drop-tray"
+                        type="button"
+                        class="flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
+                        @click="handleOpenManifest"
+                        :title="`Open ${manifestName || 'Memory Den'} drop manifest (${manifestItemCount} items)`"
+                    >
+                        <div class="indicator">
+                            <span v-if="manifestItemCount > 0" class="indicator-item badge badge-xs badge-primary text-primary-content font-mono font-bold">{{ manifestItemCount }}</span>
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4.5 h-4.5 text-primary" />
+                        </div>
+                        <span class="font-extrabold uppercase text-[10px] text-base-content tracking-tight leading-none whitespace-nowrap">Drop {{ manifestItemCount > 0 ? `(${manifestItemCount})` : '' }}</span>
                     </button>
 
                     <!-- Dock Item 2: Add & Ingest (Solid Elevated Hero Action) -->
@@ -168,9 +261,11 @@
         <!-- 3. SLIDE-UP BOTTOM ACTION TRAY (CONSISTENT HEIGHT DRAWER)                  -->
         <!-- ========================================================================= -->
         <BottomActionTray 
-            v-model:isOpen="isTrayOpen"
+            :isOpen="isTrayOpen || isActionTrayOpen"
+            @update:isOpen="val => { isTrayOpen = val; isActionTrayOpen = val; }"
             v-model:activeTab="activeTrayTab"
             :selectedCount="selectedCount"
+            :selectedItems="selectedItems"
             :totalItems="totalItems"
             :activeFilterCount="activeFilterCount"
             :locations="locations"
@@ -179,6 +274,8 @@
             :filter-status="filterStatus"
             :filter-channel="filterChannel"
             :is-processing="isProcessing"
+            :manifest-item-count="manifestItemCount"
+            :manifest-name="manifestName"
             @update:filter-location="$emit('update:filterLocation', $event)"
             @update:filter-status="$emit('update:filterStatus', $event)"
             @update:filter-channel="$emit('update:filterChannel', $event)"
@@ -192,6 +289,7 @@
             @export="$emit('export', $event)"
             @delete="$emit('delete')"
             @select-all="$emit('select-all')"
+            @unselect-item="$emit('unselect-item', $event)"
             @clear-selection="$emit('clear-selection')"
             @reset-filters="$emit('clear-filters')"
         >
@@ -204,9 +302,32 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import BottomActionTray from './BottomActionTray.vue';
+import { useManifest } from '../../composables/useManifest';
+
+const {
+    activeManifest,
+    allDrafts,
+    stagedCount,
+    totalRetail,
+    pauseActiveManifest,
+    resumeManifest,
+    isManifestTrayOpen,
+    isActionTrayOpen,
+    openManifestTray,
+    openActionTray,
+    unlockActiveManifest
+} = useManifest();
+
+const currentManifest = computed(() => {
+    if (activeManifest.value) return activeManifest.value;
+    if (allDrafts.value?.length > 0) {
+        return allDrafts.value.find(d => d.status === 'paused') || allDrafts.value[0];
+    }
+    return null;
+});
 
 const props = defineProps({
     currentPage: {
@@ -237,6 +358,10 @@ const props = defineProps({
         type: Number,
         default: 0
     },
+    selectedItems: {
+        type: Array,
+        default: () => []
+    },
     isLoading: {
         type: Boolean,
         default: false
@@ -260,6 +385,14 @@ const props = defineProps({
     filterChannel: {
         type: String,
         default: 'all'
+    },
+    manifestItemCount: {
+        type: Number,
+        default: 0
+    },
+    manifestName: {
+        type: String,
+        default: ''
     },
     isProcessing: {
         type: Boolean,
@@ -303,11 +436,14 @@ const emit = defineEmits([
     'export',
     'delete',
     'select-all',
+    'unselect-item',
     'clear-selection',
     'clear-filters',
     'update:filterLocation',
     'update:filterStatus',
-    'update:filterChannel'
+    'update:filterChannel',
+    'open-manifest',
+    'stage-manifest'
 ]);
 
 // Tray state
@@ -316,12 +452,36 @@ const activeTrayTab = ref('actions'); // 'actions' | 'add-prep' | 'filters'
 
 const openTray = (tab) => {
     activeTrayTab.value = tab;
+    openActionTray();
     isTrayOpen.value = true;
 };
 
 const closeTray = () => {
     isTrayOpen.value = false;
+    isActionTrayOpen.value = false;
 };
+
+const handleOpenManifest = () => {
+    closeTray();
+    openManifestTray();
+    emit('open-manifest');
+};
+
+// Mutual Exclusivity: Swap Trays (close one when the other opens)
+watch(isManifestTrayOpen, (isOpen) => {
+    if (isOpen) {
+        isTrayOpen.value = false;
+        isActionTrayOpen.value = false;
+    }
+});
+
+watch(isActionTrayOpen, (isOpen) => {
+    if (isOpen) {
+        isTrayOpen.value = true;
+    } else {
+        isTrayOpen.value = false;
+    }
+});
 
 // Direct jump page input
 const isJumping = ref(false);

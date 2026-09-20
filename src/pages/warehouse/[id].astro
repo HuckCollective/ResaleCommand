@@ -1,0 +1,12 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import LocationDetailView from '../../components/warehouses/LocationDetailView.vue';
+
+const { id } = Astro.params;
+---
+
+<Layout title="Location Command Hub" hideFooter={true}>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto pb-44 sm:pb-40">
+    <LocationDetailView locationId={id || ''} client:only="vue" />
+  </div>
+</Layout>

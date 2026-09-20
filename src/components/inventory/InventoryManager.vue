@@ -278,6 +278,7 @@
                         :compact="false"
                         :horizontal="isHorizontalCard"
                         :selected="selectedItems.includes(item.$id)"
+                        @click="openEdit(item)"
                         @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
@@ -325,6 +326,7 @@
                     :totalItems="filteredInventory.length"
                     :totalUnfiltered="inventoryItems.length"
                     :selectedCount="selectedItems.length"
+                    :selectedItems="selectedItemsObjects"
                     :activeFilterCount="activeFilterCount"
                     :isLoading="loading"
                     v-model:filterLocation="filterBinLocation"
@@ -333,6 +335,8 @@
                     :locations="allAvailableLocations"
                     :channels="allAvailableChannels"
                     :isProcessing="processingBulk || processingBulkLoc || processingBulkChannel"
+                    :manifest-item-count="manifestItemCount"
+                    :manifest-name="activeManifest?.name || ''"
                     :showBundle="selectedItems.length >= 2"
                     :showCombine="selectedItems.length >= 2"
                     @apply-location="onDockApplyLocation"
@@ -340,13 +344,15 @@
                     @apply-channel="onDockApplyChannel"
                     @export="exportCsv"
                     @select-all="toggleAll"
-                    @clear-selection="selectedItems = []"
+                    @unselect-item="id => selectedItems = selectedItems.filter(i => i !== id)"
+                    @clear-selection="handleClearSelection"
                     @clear-filters="clearAllFilters"
                     @bundle="openBundleModal"
                     @combine="openCombineModal"
                     @add="openAdd"
                     @delete="handleBulkDelete"
                     @import-csv="showImport = true"
+                    @open-manifest="openManifestTray"
                 >
                     <template #filters>
                         <div class="space-y-3 text-xs">
@@ -1016,14 +1022,25 @@
             @close="isBundleModalOpen = false" 
             @success="onBundleSuccess" 
         />
+
+        <!-- OUTBOUND LOCATION MANIFEST TRAY -->
+        <LocationManifestTray 
+            :isOpen="isManifestTrayOpen" 
+            @toggle-tray="isManifestTrayOpen = false" 
+            @close="isManifestTrayOpen = false"
+            @open-actions="openActionTray"
+        />
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
+import { useManifest } from '../../composables/useManifest';
+import { useItemDrawer } from '../../composables/useItemDrawer';
+import LocationManifestTray from './LocationManifestTray.vue';
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
 import { useAuth } from '../../composables/useAuth';
@@ -1093,7 +1110,7 @@ const isBundleModalOpen = ref(false);
 const bundleItemsList = ref([]);
 
 const openBundleModal = () => {
-    bundleItemsList.value = filteredInventory.value.filter(i => selectedItems.value.includes(i.$id));
+    bundleItemsList.value = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
     isBundleModalOpen.value = true;
 };
 
@@ -1137,7 +1154,7 @@ function exportCsv(format = 'generic') {
             format = 'generic';
         }
         const itemsToExport = selectedItems.value.length > 0
-            ? filteredInventory.value.filter(i => selectedItems.value.includes(i.$id))
+            ? inventoryItems.value.filter(i => selectedItems.value.includes(i.$id))
             : filteredInventory.value;
 
         if (itemsToExport.length === 0) {
@@ -2045,7 +2062,12 @@ const cartGroups = computed(() => {
 const processingId = ref(null); // deleting/updating ID
 const processing = ref(false); // general loading state
 const processingBulk = ref(false); // bulk action state
-const activeItem = ref(null); // used for edit drawer
+const { 
+    isDrawerOpen: isEditDrawerOpen, 
+    activeDrawerItem: activeItem, 
+    openItemDrawer, 
+    closeItemDrawer 
+} = useItemDrawer();
 const previewItem = ref(null); // used for full preview modal
 const showReconciliation = ref(false); // Booth sync modal
 
@@ -2058,6 +2080,59 @@ const selectedItems = ref([]);
 const selectedItemsObjects = computed(() => {
     return inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
 });
+
+// Outbound Location Manifest State
+const {
+    activeManifest,
+    stagedCount: manifestItemCount,
+    isTrayOpen: isManifestTrayOpen,
+    openManifestTray,
+    openActionTray,
+    addToActiveManifest,
+    removeFromManifest,
+    clearStagedItems,
+    initActiveDraft
+} = useManifest();
+
+let isInternalSync = false;
+
+// 1. Sync active manifest items to selectedItems when activeManifest loads or switches
+watch(() => activeManifest.value?.$id, async () => {
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        isInternalSync = true;
+        try {
+            selectedItems.value = [...(activeManifest.value.itemIds || [])];
+            await nextTick();
+        } finally {
+            isInternalSync = false;
+        }
+    }
+}, { immediate: true });
+
+// 2. Sync if itemIds change from external tray actions (e.g. removed from Drop Tray)
+watch(() => activeManifest.value?.itemIds, async (newItemIds) => {
+    if (activeManifest.value && activeManifest.value.status === 'draft' && newItemIds && !isInternalSync) {
+        const currentSet = new Set(selectedItems.value);
+        const isDifferent = newItemIds.length !== selectedItems.value.length || newItemIds.some(id => !currentSet.has(id));
+        if (isDifferent) {
+            isInternalSync = true;
+            try {
+                selectedItems.value = [...newItemIds];
+                await nextTick();
+            } finally {
+                isInternalSync = false;
+            }
+        }
+    }
+}, { deep: true });
+
+const stageSelectedItemsToManifest = async () => {
+    if (selectedItems.value.length === 0) return;
+    const itemsToStage = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const locId = activeManifest.value?.locationId || 'MD';
+    const locName = activeManifest.value?.locationName || 'Memory Den';
+    await addToActiveManifest(itemsToStage, locId, locName, false, true);
+};
 const bulkStatusTarget = ref('');
 const bulkLocationTarget = ref('');
 const bulkCustomLocation = ref('');
@@ -2068,10 +2143,45 @@ const bulkUpcPrefixTarget = ref('');
 const bulkCustomUpcPrefix = ref('');
 const bulkOpen = ref(false);
 
-watch(selectedItems, (newVal, oldVal) => {
-    if (newVal.length > 0 && oldVal.length === 0) bulkOpen.value = true;
+// 3. Watch selectedItems to auto-stage to active manifest
+watch(selectedItems, async (newVal, oldVal) => {
+    if (newVal.length > 0 && (!oldVal || oldVal.length === 0)) bulkOpen.value = true;
     else if (newVal.length === 0) bulkOpen.value = false;
-});
+
+    if (isInternalSync) return;
+
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        const currentManifestIds = new Set(activeManifest.value.itemIds || []);
+        const currentSelectedSet = new Set(selectedItems.value);
+        const addedIds = selectedItems.value.filter(id => !currentManifestIds.has(id));
+        const removedIds = (activeManifest.value.itemIds || []).filter(id => !currentSelectedSet.has(id));
+
+        if (addedIds.length > 0) {
+            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
+            if (itemsToAdd.length > 0) {
+                isInternalSync = true;
+                try {
+                    const locId = activeManifest.value.locationId || 'MD';
+                    const locName = activeManifest.value.locationName || 'Memory Den';
+                    await addToActiveManifest(itemsToAdd, locId, locName, false, true);
+                } finally {
+                    isInternalSync = false;
+                }
+            }
+        }
+
+        if (removedIds.length > 0) {
+            isInternalSync = true;
+            try {
+                for (const remId of removedIds) {
+                    await removeFromManifest(remId, true);
+                }
+            } finally {
+                isInternalSync = false;
+            }
+        }
+    }
+}, { deep: true });
 
 const isAllSelected = computed(() => {
     return filteredInventory.value.length > 0 && selectedItems.value.length === filteredInventory.value.length;
@@ -2086,18 +2196,26 @@ const toggleItemSelection = (itemId) => {
     }
 };
 
-const toggleAll = (event) => {
-    if (event.target.checked) {
+const handleClearSelection = async () => {
+    selectedItems.value = [];
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        await clearStagedItems();
+    }
+};
+
+const toggleAll = async (event) => {
+    const isChecked = event && event.target ? event.target.checked : (selectedItems.value.length !== filteredInventory.value.length);
+    if (isChecked) {
         selectedItems.value = filteredInventory.value.map(i => i.$id);
     } else {
-        selectedItems.value = [];
+        await handleClearSelection();
     }
 };
 
 const pruneFilteredOutSelections = () => {
-    // Retain only selected items that are still part of the current filtered inventory view
-    const visibleMatchingIds = new Set(filteredInventory.value.map(i => i.$id));
-    selectedItems.value = selectedItems.value.filter(id => visibleMatchingIds.has(id));
+    // Retain selected items that still exist in inventory catalog (even if on different page or filtered)
+    const validItemIds = new Set(inventoryItems.value.map(i => i.$id));
+    selectedItems.value = selectedItems.value.filter(id => validItemIds.has(id));
 };
 
 const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
@@ -2439,9 +2557,6 @@ const checkoutReceiptPreview = ref(null);
 const checkoutSuccess = ref(false);
 const generatedDescription = ref('');
 
-// Edit Drawer State
-const isEditDrawerOpen = ref(false);
-
 // Camera State (Checkout only)
 const cameraVideo = ref(null);
 const isCameraOpen = ref(false);
@@ -2703,15 +2818,19 @@ function openAdd() {
 }
 
 function openEdit(item) {
-    activeItem.value = item;
-    isEditDrawerOpen.value = true;
+    if (!item) return;
+    openItemDrawer(item);
     syncUrlWithDrawer(item);
 }
 
 function closeEditDrawer() {
-    isEditDrawerOpen.value = false;
+    closeItemDrawer();
     syncUrlWithDrawer(null);
 }
+
+watch(activeItem, (newItem) => {
+    syncUrlWithDrawer(newItem);
+});
 
 function checkUrlForDirectItemOpen() {
     if (typeof window === 'undefined') return;
@@ -3446,6 +3565,10 @@ const submitCombine = async () => {
 };
 
 const showImport = ref(false); // CSV Modal
+
+onMounted(() => {
+    initActiveDraft('MD');
+});
 
 onUnmounted(() => {
     if (typeof window !== 'undefined') {

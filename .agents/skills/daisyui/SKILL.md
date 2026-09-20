@@ -178,3 +178,4 @@ daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component. In R
 6. **Icon Alignment**: Combine daisyUI buttons with Iconify icons using `gap-1.5` or `gap-2` and `items-center`.
 7. **Avoid Duplicating Utilities**: Do not apply `border border-solid` when daisyUI components like `input-bordered` or `table` already provide baseline structure.
 8. **Theme Transitions**: Allow CSS variables to handle dark/light toggles smoothly without manual class toggles like `dark:bg-black`.
+9. **DROPDOWN & POPOVER AUTO-FIT RULE**: When rendering dropdown menus (`.dropdown-content .menu`) containing dynamic labels and trailing badges, NEVER use fixed narrow widths like `w-64`. Always use `w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md` with `flex-1 min-w-0 truncate` on text and `shrink-0` on badges to guarantee zero pill breakout or text clipping across screen sizes.

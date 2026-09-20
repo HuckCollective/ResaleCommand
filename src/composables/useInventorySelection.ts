@@ -40,8 +40,9 @@ export function useInventorySelection(itemsRef?: Ref<Models.Document[]>) {
         selectedItems.value = [];
     };
 
-    const getSelectedObjects = (sourceItems: Models.Document[]) => {
-        return sourceItems.filter(i => selectedItems.value.includes(i.$id));
+    const getSelectedObjects = (sourceItems?: Models.Document[]) => {
+        const pool = sourceItems || itemsRef?.value || [];
+        return pool.filter(i => selectedItems.value.includes(i.$id));
     };
 
     return {

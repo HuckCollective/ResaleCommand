@@ -3,7 +3,7 @@
     <div v-if="horizontal"
          class="card bg-base-100 shadow-xs border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-row rounded-xl p-2.5 gap-2.5 sm:gap-3 items-center"
          :class="containerClass"
-         @click="$emit('click-card', item)">
+         @click="$emit('click-card', item); $emit('click', item)">
         
         <!-- Left Thumbnail (Tap Photo to Select) -->
         <div 
@@ -17,12 +17,16 @@
                 <Icon icon="solar:box-linear" class="w-7 h-7" />
             </div>
 
-            <!-- Selection Indicator Badge (Visible when selected) -->
-            <div 
-                v-if="selected"
-                class="absolute top-1 left-1 w-5 h-5 rounded-md bg-primary text-primary-content flex items-center justify-center font-bold shadow-xs z-20 pointer-events-none"
-            >
-                <Icon icon="solar:check-square-bold" class="w-4 h-4" />
+            <!-- Selection Slot or Indicator Badge -->
+            <div class="absolute top-1 left-1 z-20">
+                <slot name="absolute-top-left">
+                    <div 
+                        v-if="selected"
+                        class="w-5 h-5 rounded-md bg-primary text-primary-content flex items-center justify-center font-bold shadow-xs pointer-events-none"
+                    >
+                        <Icon icon="solar:check-square-bold" class="w-4 h-4" />
+                    </div>
+                </slot>
             </div>
 
             <!-- Lot badges -->
@@ -49,6 +53,12 @@
                     <!-- Status Badge (Liberated from image!) -->
                     <span class="badge badge-xs font-bold uppercase text-[9px] px-1.5 py-0.5" :class="statusBadgeClass">
                         {{ statusText }}
+                    </span>
+
+                    <!-- Staged Drop Badge -->
+                    <span v-if="stagedInfo" class="badge badge-xs badge-info font-black text-[9px] px-1.5 py-0.5 gap-0.5" :title="stagedInfo.manifestName">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5" />
+                        <span>Staged: {{ stagedInfo.locationName || 'Drop' }}</span>
                     </span>
 
                     <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/80 text-[10px] px-1.5" title="UPC">
@@ -86,10 +96,10 @@
     <div v-else
          class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
          :class="containerClass"
-         @click="$emit('click-card', item)">
+         @click="$emit('click-card', item); $emit('click', item)">
         
         <!-- Image Area -->
-        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full">
+        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full cursor-pointer" @click="$emit('click-card', item); $emit('click', item)">
             <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" loading="lazy" />
             <div v-else class="flex flex-col items-center justify-center w-full h-full opacity-30 bg-base-300 p-2">
                 <Icon icon="solar:box-linear" class="w-10 h-10" />
@@ -111,9 +121,15 @@
                     </div>
                 </div>
                 
-                <!-- Right: Status Badge -->
-                <div class="badge badge-xs rounded shadow-xs font-bold border-none pointer-events-auto uppercase text-[10px]" :class="statusBadgeClass">
-                    {{ statusText }}
+                <!-- Right: Status Badge & Staged Badge -->
+                <div class="flex items-center gap-1">
+                    <div v-if="stagedInfo" class="badge badge-xs badge-info font-black text-[9px] px-1.5 py-0.5 gap-0.5 shadow-xs border-none pointer-events-auto" :title="stagedInfo.manifestName">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5" />
+                        <span>Staged: {{ stagedInfo.locationName || 'Drop' }}</span>
+                    </div>
+                    <div class="badge badge-xs rounded shadow-xs font-bold border-none pointer-events-auto uppercase text-[10px]" :class="statusBadgeClass">
+                        {{ statusText }}
+                    </div>
                 </div>
             </div>
             
@@ -181,6 +197,7 @@
 <script setup>
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useManifest } from '../../composables/useManifest';
 
 const props = defineProps({
     item: { type: Object, required: true },
@@ -189,7 +206,10 @@ const props = defineProps({
     selected: { type: Boolean, default: false } // Whether this item is currently selected
 });
 
-const emit = defineEmits(['click-card', 'toggle-select']);
+const emit = defineEmits(['click-card', 'click', 'toggle-select']);
+
+const { getStagedInfo } = useManifest();
+const stagedInfo = computed(() => getStagedInfo(props.item?.$id));
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;

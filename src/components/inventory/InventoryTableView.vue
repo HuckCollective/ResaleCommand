@@ -209,6 +209,10 @@
                                 <span class="badge badge-xs font-bold uppercase tracking-wider py-2" :class="getStatusClass(item.status)">
                                     {{ item.status || 'acquired' }}
                                 </span>
+                                <div v-if="getStagedInfo(item.$id)" class="badge badge-xs badge-info font-black gap-1 mt-1 text-[9px] scale-95" :title="getStagedInfo(item.$id).manifestName">
+                                    <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5" />
+                                    <span>Staged: {{ getStagedInfo(item.$id).locationName || 'Drop' }}</span>
+                                </div>
                             </td>
 
                             <!-- Landed Cost -->
@@ -294,6 +298,7 @@
             :totalItems="filteredItems.length"
             :totalUnfiltered="inventoryItems.length"
             :selectedCount="selectedItems.length"
+            :selectedItems="selectedItemsObjects"
             :activeFilterCount="activeFilterChips.length"
             :isLoading="loading"
             v-model:filterLocation="filterLocation"
@@ -302,6 +307,8 @@
             :locations="allLocations"
             :channels="allChannels"
             :isProcessing="isApplyingBulk"
+            :manifest-item-count="manifestItemCount"
+            :manifest-name="activeManifest?.name || ''"
             @add="openAdd"
             @import-csv="showImport = true"
             @apply-location="handleBulkLocation"
@@ -309,8 +316,11 @@
             @export="handleExport"
             @delete="handleBulkDelete"
             @select-all="toggleAll(filteredItems)"
+            @unselect-item="toggleItem"
             @clear-selection="clearSelection"
             @clear-filters="clearFilters"
+            @stage-manifest="handleStageManifest"
+            @open-manifest="openManifestTray"
         />
 
         <!-- 5. SLIDE-OVER ITEM DRAWER (Async Lazy-Loaded Island) -->
@@ -324,11 +334,19 @@
 
         <!-- 6. BULK IMPORT MODAL (Async Lazy-Loaded Island) -->
         <BulkImport v-if="showImport" @close="showImport = false" @complete="onImportComplete" />
+
+        <!-- 7. OUTBOUND LOCATION MANIFEST TRAY -->
+        <LocationManifestTray 
+            :isOpen="isManifestTrayOpen" 
+            @toggle-tray="isManifestTrayOpen = false" 
+            @close="isManifestTrayOpen = false"
+            @open-actions="openActionTray"
+        />
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, watch, nextTick, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
 import { useInventorySelection } from '../../composables/useInventorySelection';
@@ -341,6 +359,9 @@ import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import InventoryHeader from './InventoryHeader.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
+import LocationManifestTray from './LocationManifestTray.vue';
+import { useManifest } from '../../composables/useManifest';
+import { useItemDrawer } from '../../composables/useItemDrawer';
 
 // Lazy-loaded modal islands (Only downloaded on demand)
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
@@ -366,9 +387,14 @@ const {
     isAllSelected, 
     toggleAll, 
     isSelected, 
+    toggleItem,
     clearSelection, 
     getSelectedObjects 
 } = useInventorySelection();
+
+const selectedItemsObjects = computed(() => {
+    return inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+});
 
 // -- 3. FILTERING & SORTING COMPOSABLE --
 const {
@@ -411,9 +437,105 @@ const {
     await fetchInventory();
 });
 
+// -- 4.5 OUTBOUND MANIFEST STATE --
+const {
+    activeManifest,
+    stagedCount: manifestItemCount,
+    isTrayOpen: isManifestTrayOpen,
+    openManifestTray,
+    openActionTray,
+    addToActiveManifest,
+    removeFromManifest,
+    clearStagedItems,
+    getStagedInfo,
+    initActiveDraft
+} = useManifest();
+
+let isInternalSync = false;
+
+// 1. Sync active manifest items to selectedItems when activeManifest loads or switches
+watch(() => activeManifest.value?.$id, async () => {
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        isInternalSync = true;
+        try {
+            selectedItems.value = [...(activeManifest.value.itemIds || [])];
+            await nextTick();
+        } finally {
+            isInternalSync = false;
+        }
+    }
+}, { immediate: true });
+
+// 2. Sync if itemIds change from external tray actions
+watch(() => activeManifest.value?.itemIds, async (newItemIds) => {
+    if (activeManifest.value && activeManifest.value.status === 'draft' && newItemIds && !isInternalSync) {
+        const currentSet = new Set(selectedItems.value);
+        const isDifferent = newItemIds.length !== selectedItems.value.length || newItemIds.some(id => !currentSet.has(id));
+        if (isDifferent) {
+            isInternalSync = true;
+            try {
+                selectedItems.value = [...newItemIds];
+                await nextTick();
+            } finally {
+                isInternalSync = false;
+            }
+        }
+    }
+}, { deep: true });
+
+// 3. Watch selectedItems to auto-stage to active manifest
+watch(selectedItems, async () => {
+    if (isInternalSync) return;
+
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        const currentManifestIds = new Set(activeManifest.value.itemIds || []);
+        const currentSelectedSet = new Set(selectedItems.value);
+        const addedIds = selectedItems.value.filter(id => !currentManifestIds.has(id));
+        const removedIds = (activeManifest.value.itemIds || []).filter(id => !currentSelectedSet.has(id));
+
+        if (addedIds.length > 0) {
+            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
+            if (itemsToAdd.length > 0) {
+                isInternalSync = true;
+                try {
+                    const locId = activeManifest.value.locationId || 'MD';
+                    const locName = activeManifest.value.locationName || 'Memory Den';
+                    await addToActiveManifest(itemsToAdd, locId, locName, false, true);
+                } finally {
+                    isInternalSync = false;
+                }
+            }
+        }
+
+        if (removedIds.length > 0) {
+            isInternalSync = true;
+            try {
+                for (const remId of removedIds) {
+                    await removeFromManifest(remId, true);
+                }
+            } finally {
+                isInternalSync = false;
+            }
+        }
+    }
+}, { deep: true });
+
+const handleStageManifest = async () => {
+    if (selectedItems.value.length === 0) return;
+    const itemsToStage = getSelectedObjects(inventoryItems.value);
+    const locId = activeManifest.value?.locationId || 'MD';
+    const locName = activeManifest.value?.locationName || 'Memory Den';
+    await addToActiveManifest(itemsToStage, locId, locName, false, true);
+    clearSelection();
+};
+
 // -- 5. DRAWER & MODALS STATE --
-const isDrawerOpen = ref(false);
-const activeItem = ref(null);
+const { 
+    isDrawerOpen, 
+    activeDrawerItem: activeItem, 
+    openItemDrawer, 
+    closeItemDrawer 
+} = useItemDrawer();
 const showImport = ref(false);
 
 // Pagination
@@ -441,6 +563,7 @@ onMounted(async () => {
     if (inventoryItems.value.length === 0) {
         await fetchInventory();
     }
+    await initActiveDraft('MD');
 });
 
 // Reset page on filter change
@@ -470,15 +593,15 @@ const handleBulkDelete = async () => {
 
 const handleExport = (format) => {
     const itemsToExport = selectedItems.value.length > 0 
-        ? getSelectedObjects(filteredItems.value)
+        ? getSelectedObjects(inventoryItems.value)
         : filteredItems.value;
     exportBulkItems(itemsToExport, format);
 };
 
 // -- 7. DRAWER & ROW ACTIONS --
 const openItem = (item) => {
-    activeItem.value = item;
-    isDrawerOpen.value = true;
+    if (!item) return;
+    openItemDrawer(item);
 };
 
 const openAdd = () => {
@@ -487,8 +610,7 @@ const openAdd = () => {
 };
 
 const closeDrawer = () => {
-    isDrawerOpen.value = false;
-    activeItem.value = null;
+    closeItemDrawer();
 };
 
 const isDrawerSaving = ref(false);

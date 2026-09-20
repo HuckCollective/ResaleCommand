@@ -19,6 +19,11 @@ description: Industry-standard mobile UX/UI rules for Resale Command, synthesizi
 
 ## 3. Badges, Pills & Segmented Filter Bars (DaisyUI & M3)
 - **Zero Text Stacking & Shrink Immunity**: Badges & small pills (`badge-xs`, `badge-sm`) MUST ALWAYS include `whitespace-nowrap shrink-0` so multi-word text (*e.g. "AI POWERED"*, *"Google Billed"*) never line-breaks, stacks, or crushes inside fixed-height pills.
+- **Dropdown & Popover Auto-Fit Width Pattern (Zero Breakout Rule)**:
+  - NEVER hardcode narrow fixed widths (such as `w-64` / 256px) on menus or popover containers containing dynamic user strings (e.g. manifest names, item titles) paired with status pills.
+  - Container MUST use `w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md` so it dynamically expands to fit long names without squishing, while safely clamping within mobile viewports.
+  - Dynamic text labels MUST use `truncate flex-1 min-w-0` (in CSS flexbox, `truncate` is ineffective without `min-w-0`).
+  - Status badges inside rows MUST have `shrink-0` to guarantee pills never break out or wrap.
 - **Segmented Filter & Pill Bars on Mobile**:
   - A row of 3 or more filter buttons (e.g. `[All Insights 11] [Tax Write-Offs 7] [Inventory Alerts 4]`) totals >430px in width and WILL clip on mobile viewports (375px–420px) if placed in a standard row.
   - **MANDATORY PATTERN**: Container MUST use `flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none` with `shrink-0` on each button so the bar scrolls naturally without clipping the rightmost button.

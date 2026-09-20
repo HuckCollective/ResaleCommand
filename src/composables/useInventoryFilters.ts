@@ -1,6 +1,6 @@
 import { ref, computed, type Ref } from 'vue';
 import type { Models } from 'appwrite';
-import { BUCKET_ID } from '../lib/inventory';
+import { BUCKET_ID, getAssetUrl } from '../lib/inventory';
 import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
@@ -9,7 +9,7 @@ const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
 export type SortDirection = 'asc' | 'desc';
 
-// -- 0. IMAGE RESOLUTION HELPER (Exact ItemCard standard) --
+// -- 0. IMAGE RESOLUTION HELPER (Universal getAssetUrl standard) --
 export const getItemImageUrl = (item: any, size: number = 100): string | null => {
     if (!item) return null;
     let id = item.imageId;
@@ -27,12 +27,7 @@ export const getItemImageUrl = (item: any, size: number = 100): string | null =>
     
     if (!id) return null;
     
-    if (typeof id === 'string' && id.startsWith('http')) {
-        if (id.includes('/api/proxy-image') || id.includes('/storage/buckets/')) return id;
-        return `/api/proxy-image?url=${encodeURIComponent(id)}`;
-    }
-    
-    return `${ENDPOINT}/storage/buckets/${BUCKET_ID || 'item_images'}/files/${id}/preview?project=${PROJECT}&width=${size}&height=${size}&quality=80&output=webp`;
+    return getAssetUrl(id, { preview: true, width: size, height: size }) || null;
 };
 
 /**

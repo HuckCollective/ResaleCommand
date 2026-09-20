@@ -54,3 +54,49 @@ flowchart LR
   - *Toys/Figures*: `Kenner Star Wars Boba Fett 1979`
   - *Music/Media*: `Def Leppard Rock of Ages (2-CD)`
 - **Multi-Disc Sets**: A 2-CD or double LP set is **1 single inventory SKU**, not 2 separate items.
+
+---
+
+## 4. Outbound Manifest & Destination Routing SOP
+
+When inventory is ready to leave the workbench/staging area, it is grouped into an **Outbound Manifest**. The operational workflow adapts strictly to the destination archetype:
+
+### The 4 Destination Archetypes:
+
+```mermaid
+flowchart TD
+    M[Outbound Manifest Created] --> L{Pick Destination}
+    L -->|1. Automated POS Booth| MD[Memory Den • Ricochet POS]
+    L -->|2. Manual Tagging Booth| DT[Dusty Tiger • Vendor Tagging]
+    L -->|3. Online E-Commerce| ON[eBay / Poshmark / Depop / Mercari]
+    L -->|4. Local Pickup| FB[FB Marketplace / Local Cash]
+
+    MD --> MD1[Export Ricochet CSV] --> MD2[Upload to Ricochet POS] --> MD3[Print Thermal Barcode Stickers at Store Kiosk] --> MD4[At Booth: Match Sticker UPC to Phone -> Stick -> Shelf] --> MD5[Verify Stock in Tray]
+    
+    DT --> DT1[Open Tagging Sheet] --> DT2[Handwrite String Tags with Vendor ID, SKU, Price] --> DT3[Attach Tags & Transport] --> DT4[At Booth: Shelf Items] --> DT5[Verify Stock in Tray]
+
+    ON --> ON1[Assign Physical Bin/Tote e.g. HG-BIN-04] --> ON2[Export Photos & Listing Data] --> ON3[Move to Warehouse Shelf] --> ON4[Confirm Stored in Warehouse]
+
+    FB --> FB1[Assign Garage Stash Bin] --> FB2[Draft Local Listing Copy] --> FB3[Confirm Staged for Pickup]
+```
+
+---
+
+## 5. The In-Store "Sticker & Shelf" Physical Protocol (Memory Den)
+
+Because thermal barcode label printers are located on-site at the consignment mall (not at the home garage), the in-store stocking flow follows a strict physical sequence:
+
+1. **Pre-Arrival (Home/Office)**:
+   - Items staged into a destination drop manifest in Resale Command.
+   - 1-Click Ricochet CSV exported and imported into Ricochet POS.
+   - Items packed into tote bins and driven to the store.
+2. **Kiosk Check-In (Front Desk)**:
+   - User accesses the shop's thermal label printer and prints the freshly imported batch of adhesive barcode stickers.
+   - User enters their booth holding a printed strip/sheet of thermal stickers and the un-stickered items.
+3. **Booth Stocking & Verification (Phone UI)**:
+   - User opens Resale Command on mobile and slides open the **Manifest Tray**.
+   - **Visual & SKU Matching**: The Tray highlights the **UPC / SKU** in high-contrast bold font alongside the photo thumbnail and retail price.
+   - **Stick & Shelf**: User matches the sticker barcode to the phone screen, sticks it onto the physical item, and places it onto the shelf.
+   - **One-Tap Checkoff**: User taps the item row to mark it verified (turns green/struck through).
+   - **Mid-Stock Adjustments**: If a flaw or chip is spotted on an item, tapping the edit icon opens the `ItemDrawer` to adjust the price or condition immediately.
+   - **Commit**: Tapping **`Confirm Stocked`** marks all checked items as `status: 'placed'` at `storageLocation: 'MD'` and archives the manifest to history.

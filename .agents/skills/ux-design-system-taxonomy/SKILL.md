@@ -136,3 +136,28 @@ A standardized two-tier mobile-first interaction pattern synthesizing the Scout 
 1. **Hierarchy**: A view must feature at most **one** Contextual Primary Action in the dock.
 2. **Dynamic Morphing**: When items are checked/selected in a Catalog view, the CPA (`+ Add`) smoothly yields to the **Contextual Batch Action** (`⚡ N Actions`), focusing user intent on resolving the selection.
 3. **Graceful Degradation**: If a view is read-only (e.g. historical sales report), the creation action must be cleanly removed, leaving navigation and filters perfectly balanced.
+
+---
+
+## 6. Outbound Manifest Tray & Staging Interaction Contract
+
+The **Outbound Manifest Tray** governs the preparation, export, and in-store verification of inventory moving to physical booths or online channels. All implementations must adhere to these five architectural rules:
+
+1. **Single Source of Truth (Zero Modal Duplication)**:
+   - The Manifest Tray is the **sole interactive surface** for Staging, Reviewing, Exporting, and Verifying.
+   - **Anti-Pattern**: NEVER pop up an auxiliary modal window (e.g. a "Verify Stock Checklist modal") on top of or alongside the Tray. The Tray itself contains the checklist, checkboxes, thumbnails, and placement actions.
+2. **Pause = Clean Hide (Clutter-Free Workspace)**:
+   - When a user pauses an active manifest, the app updates its status in Appwrite and **completely hides the Tray and the bottom floating tracker bar from the viewport**.
+   - Resuming is cleanly initiated from the **Locations Hub** (`/warehouse`), the booth cockpit (`/warehouse/:code`), or a subtle nav indicator.
+3. **Upfront Destination Context**:
+   - Creating a manifest mandates selecting the target destination up front (e.g., *Memory Den [Ricochet POS]*, *Dusty Tiger [Manual Tagging]*, *Online [Warehouse Backstock]*).
+   - This selection dynamically adapts the Tray's action buttons (CSV export vs. Tagging sheet vs. Bin assignment).
+4. **Main Catalog Staging Telemetry**:
+   - Items included in an active or paused draft manifest MUST render an unmistakable visual pill in the main Inventory catalog table (e.g., `📦 Staged: Memory Den`).
+   - This prevents accidental double-staging, duplicate exports, or confusion over unplaced items.
+5. **The In-Store "Sticker & Shelf" Mobile Pattern**:
+   - At physical booths, the user holds physical items in one hand and printed thermal barcode stickers in the other.
+   - The mobile Tray must render **large, high-contrast UPC/SKU barcodes and prices** next to the image thumbnail for rapid 1-to-1 visual matching.
+   - Each row supports one-tap verification checkoff.
+   - Tapping an item's edit button immediately slides open the **ItemDrawer** for on-the-fly price reductions or condition adjustments without losing verify-stock progress.
+

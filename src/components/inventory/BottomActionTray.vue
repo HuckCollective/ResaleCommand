@@ -22,332 +22,255 @@
                     </div>
                 </div>
 
-                <!-- Close Button -->
-                <button 
-                    type="button" 
-                    @click="closeTray" 
-                    class="btn btn-ghost btn-sm btn-circle shrink-0" 
-                    title="Close Tray"
-                >
-                    <Icon icon="solar:close-circle-bold" class="w-5 h-5 opacity-60 hover:opacity-100" />
-                </button>
-            </div>
-
-            <!-- Segmented Tab Switcher -->
-            <div class="px-4 pt-2.5 pb-1 shrink-0">
-                <div class="grid grid-cols-3 bg-base-200/90 p-1 rounded-xl border border-base-300 text-xs font-bold gap-1">
-                    <!-- Tab 1: Actions & Bulk Ops -->
+                <!-- Header Close -->
+                <div class="flex items-center gap-1.5 shrink-0">
                     <button 
                         type="button" 
-                        class="btn btn-xs sm:btn-sm rounded-lg border-0 transition-all font-bold gap-1.5"
-                        :class="activeTab === 'actions' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost text-base-content/70 hover:bg-base-300/50'"
-                        @click="setTab('actions')"
+                        @click="closeTray" 
+                        class="btn btn-ghost btn-sm btn-circle shrink-0" 
+                        title="Close Tray"
                     >
-                        <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
-                        <span>Actions</span>
-                        <span class="badge badge-xs badge-neutral font-mono font-bold">{{ selectedCount }}</span>
-                    </button>
-
-                    <!-- Tab 2: Add & Ingest -->
-                    <button 
-                        type="button" 
-                        class="btn btn-xs sm:btn-sm rounded-lg border-0 transition-all font-bold gap-1.5"
-                        :class="activeTab === 'add-prep' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost text-base-content/70 hover:bg-base-300/50'"
-                        @click="setTab('add-prep')"
-                    >
-                        <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
-                        <span>Add & Ingest</span>
-                    </button>
-
-                    <!-- Tab 3: Filters -->
-                    <button 
-                        type="button" 
-                        class="btn btn-xs sm:btn-sm rounded-lg border-0 transition-all font-bold gap-1.5"
-                        :class="activeTab === 'filters' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost text-base-content/70 hover:bg-base-300/50'"
-                        @click="setTab('filters')"
-                    >
-                        <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5 text-primary" />
-                        <span>Filters</span>
-                        <span v-if="activeFilterCount > 0" class="badge badge-xs badge-primary font-bold">{{ activeFilterCount }}</span>
+                        <Icon icon="solar:close-circle-bold" class="w-5 h-5 opacity-60 hover:opacity-100" />
                     </button>
                 </div>
             </div>
 
             <!-- ============================================================= -->
-            <!-- TAB 1: BULK ACTIONS TRAY (Operating on Current Records)        -->
+            <!-- MAIN ACTIONS & SELECTION TRAY VIEW (Operating on Selected Records) -->
             <!-- ============================================================= -->
             <div v-show="activeTab === 'actions'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div class="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin text-xs">
-                    <!-- SECTION 1: CHANNEL EXPORTS (Always accessible under Actions!) -->
-                    <div class="bg-base-200/80 p-3.5 rounded-2xl border border-base-300 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="font-black text-xs text-base-content flex items-center gap-1.5">
-                                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
-                                <span>Export Catalog &amp; Channels</span>
-                            </span>
-                            <span class="text-[10px] font-mono font-bold badge badge-xs" :class="selectedCount > 0 ? 'badge-primary' : 'badge-ghost'">
-                                {{ selectedCount > 0 ? `${selectedCount} Selected` : `${totalItems || 'All Filtered'} Records` }}
-                            </span>
-                        </div>
+                <!-- Drop Staging Context Banner (Phase 3) -->
+                <div 
+                    v-if="activeManifest && (activeManifest.status === 'draft' || activeManifest.status === 'in-transit')" 
+                    class="px-4 py-1.5 bg-primary/10 border-b border-primary/20 flex items-center justify-between gap-2 shrink-0 text-xs select-none"
+                >
+                    <div class="flex items-center gap-1.5 min-w-0 text-primary font-bold truncate">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 shrink-0" />
+                        <span class="truncate">Staged in {{ activeManifest.name }}</span>
+                        <span class="badge badge-xs badge-primary font-mono font-bold shrink-0">{{ stagedCount }} items</span>
+                    </div>
+                    <button 
+                        type="button" 
+                        @click="handleOpenDropTray" 
+                        class="btn btn-xs btn-primary text-primary-content font-bold h-6 min-h-6 px-2 rounded-lg shrink-0 gap-0.5"
+                    >
+                        <span>View Drop</span>
+                        <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                    </button>
+                </div>
 
-                        <div class="grid grid-cols-2 gap-2">
-                            <button 
-                                type="button" 
-                                class="btn btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                @click="$emit('export', 'ricochet')"
-                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Memory Den (Ricochet)` : 'Export all filtered items to Memory Den (Ricochet)'"
-                            >
-                                <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-success" />
-                                <span class="truncate">Memory Den (Ricochet)</span>
-                            </button>
-                            <button 
-                                type="button" 
-                                class="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                @click="$emit('export', 'ebay')"
-                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to eBay Hub` : 'Export all filtered items to eBay Hub'"
-                            >
-                                <Icon icon="solar:bag-bold" class="w-4 h-4 text-primary" />
-                                <span class="truncate">eBay Hub</span>
-                            </button>
-                            <button 
-                                type="button" 
-                                class="btn btn-sm btn-outline border-base-300 hover:border-secondary hover:bg-secondary/10 font-bold rounded-xl justify-start gap-2 h-10"
-                                @click="$emit('export', 'poshmark')"
-                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Poshmark` : 'Export all filtered items to Poshmark'"
-                            >
-                                <Icon icon="solar:tag-bold" class="w-4 h-4 text-secondary" />
-                                <span class="truncate">Poshmark</span>
-                            </button>
-                            <button 
-                                type="button" 
-                                class="btn btn-sm btn-outline border-base-300 hover:border-neutral font-bold rounded-xl justify-start gap-2 h-10"
-                                @click="$emit('export', 'generic')"
-                                :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Generic CSV` : 'Export all filtered items to Generic CSV'"
-                            >
-                                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-base-content/70" />
-                                <span class="truncate">Generic CSV</span>
-                            </button>
-                        </div>
+                <!-- Selection Header Bar -->
+                <div class="px-4 py-2 border-b border-base-200 bg-base-200/40 flex items-center justify-between gap-2 shrink-0">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="font-extrabold text-xs text-base-content">
+                            {{ selectedCount > 0 ? `${selectedCount} Selected` : '0 Selected' }}
+                        </span>
+                        <span v-if="selectedCount > 0 && selectedTotalRetail > 0" class="badge badge-xs badge-primary font-mono font-bold">
+                            ${{ selectedTotalRetail.toFixed(2) }}
+                        </span>
+                    </div>
 
-                        <!-- Memory Den / Location Sync Helper -->
-                        <div class="pt-2 border-t border-base-300 flex items-center justify-between text-[11px]">
-                            <span class="opacity-70 flex items-center gap-1">
-                                <Icon icon="solar:shop-2-linear" class="w-3.5 h-3.5 text-success" />
-                                <span>Sold at Memory Den / Booths?</span>
-                            </span>
-                            <a 
-                                href="/warehouse/sync?location=Memory%20Den" 
-                                class="font-bold text-primary hover:underline flex items-center gap-1"
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button 
+                            type="button" 
+                            class="btn btn-ghost btn-xs text-primary font-bold h-6 min-h-6 px-2"
+                            @click="$emit('select-all')"
+                            title="Select all filtered records"
+                        >
+                            Select All ({{ totalItems }})
+                        </button>
+                        <button 
+                            v-if="selectedCount > 0"
+                            type="button" 
+                            class="btn btn-ghost btn-xs text-error font-bold h-6 min-h-6 px-2"
+                            @click="$emit('clear-selection')"
+                            title="Clear selection"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scrollable Body: Selected Items List or Empty State -->
+                <div class="flex-1 overflow-y-auto p-3.5 space-y-2.5 scrollbar-thin text-xs">
+                    <!-- Populated Selection List -->
+                    <div v-if="selectedItems && selectedItems.length > 0" class="space-y-2">
+                        <div 
+                            v-for="item in selectedItems" 
+                            :key="item.$id"
+                            class="p-2.5 rounded-2xl border border-base-300 bg-base-200/40 hover:bg-base-200/80 transition-all flex items-center justify-between gap-3 group"
+                        >
+                            <!-- Thumbnail Image (tap to edit) -->
+                            <div class="cursor-pointer shrink-0" @click="openItemDrawer(item)" title="Edit item in drawer">
+                                <ItemThumbnail :item="item" size="md" rounded="xl" class="w-11 h-11 pointer-events-none" />
+                            </div>
+
+                            <!-- Title & Metadata (tap to edit in drawer) -->
+                            <div 
+                                class="min-w-0 flex-1 cursor-pointer select-none"
+                                @click="openItemDrawer(item)"
+                                title="Edit item in drawer"
                             >
-                                <span>Import &amp; Reconcile in Locations</span>
-                                <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
-                            </a>
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span v-if="item.upc || item.locationSku" class="badge badge-xs font-mono font-bold bg-primary/10 text-primary border-0">
+                                        {{ item.upc || item.locationSku }}
+                                    </span>
+                                    <span v-if="item.status" class="badge badge-xs font-mono font-bold uppercase" :class="item.status === 'placed' ? 'badge-success' : 'badge-ghost'">
+                                        {{ item.status }}
+                                    </span>
+                                    <h4 class="font-bold text-xs text-base-content truncate hover:text-primary transition-colors">
+                                        {{ item.title || 'Untitled Item' }}
+                                    </h4>
+                                </div>
+
+                                <div class="flex items-center gap-2 text-[10px] opacity-75 mt-0.5 font-mono">
+                                    <span>Tag: <strong class="text-secondary font-black">${{ (Number(item.boutiquePrice || item.resalePrice || item.price) || 0).toFixed(2) }}</strong></span>
+                                    <span v-if="item.cost">• Cost: ${{ (Number(item.cost) || 0).toFixed(2) }}</span>
+                                    <span v-if="item.storageLocation" class="opacity-70">({{ item.storageLocation }})</span>
+                                </div>
+                            </div>
+
+                            <!-- Remove from selection button -->
+                            <button 
+                                type="button" 
+                                class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 hover:text-error hover:bg-error/10 shrink-0" 
+                                @click="$emit('unselect-item', item.$id)"
+                                title="Unselect item"
+                            >
+                                <Icon icon="solar:close-circle-linear" class="w-4 h-4" />
+                            </button>
                         </div>
                     </div>
 
-                    <!-- If 0 items selected: Guide for Bulk Edit Operations -->
-                    <div v-if="selectedCount === 0" class="bg-base-200/40 p-4 rounded-2xl border border-dashed border-base-300 text-center space-y-2 text-base-content/60">
-                        <Icon icon="solar:check-square-linear" class="w-6 h-6 mx-auto opacity-40 text-primary" />
-                        <p class="font-bold text-xs text-base-content">Bulk Edit &amp; Lot Operations</p>
-                        <p class="text-[11px] max-w-xs mx-auto">
-                            Check individual records in your catalog or tap below to enable bulk moves, status transitions, or deletions.
+                    <!-- Empty State when 0 items selected -->
+                    <div v-else class="text-center py-10 space-y-2 text-base-content/60">
+                        <div class="w-12 h-12 rounded-2xl bg-base-200 flex items-center justify-center mx-auto text-primary">
+                            <Icon icon="solar:checklist-minimalistic-bold" class="w-6 h-6 opacity-60" />
+                        </div>
+                        <p class="font-bold text-xs sm:text-sm text-base-content">No Items Selected</p>
+                        <p class="text-[11px] max-w-xs mx-auto text-base-content/70">
+                            Check items in your catalog to stage them into a drop, move locations, set status, or bundle.
                         </p>
                         <button 
                             type="button" 
-                            class="btn btn-xs btn-outline btn-primary font-bold rounded-xl gap-1.5 shadow-2xs"
+                            class="btn btn-xs btn-outline btn-primary font-bold rounded-xl gap-1 mt-1 shadow-2xs"
                             @click="$emit('select-all')"
                         >
                             <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
-                            <span>Select All {{ totalItems ? `(${totalItems})` : '' }}</span>
+                            <span>Select All ({{ totalItems }})</span>
                         </button>
-                    </div>
-
-                    <!-- If items are selected: Full Suite of Bulk Record Operations -->
-                    <div v-else class="space-y-4">
-                        <!-- SECTION A: BUNDLING & COMBINING (Lot Merchandising Operations) -->
-                        <div class="bg-base-200/50 p-3 rounded-2xl border border-base-300 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-black text-xs text-base-content flex items-center gap-1.5">
-                                    <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-accent" />
-                                    <span>Bundling &amp; Combining</span>
-                                </span>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] font-mono text-base-content/60">{{ selectedCount }} selected</span>
-                                    <button 
-                                        type="button" 
-                                        class="btn btn-ghost btn-xs text-error font-bold hover:bg-error/15 h-6 min-h-6 px-1.5" 
-                                        @click="$emit('clear-selection')"
-                                        title="Clear selection"
-                                    >
-                                        ✕ Clear
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-2">
-                                <!-- Bundle into Lot Button -->
-                                <button 
-                                    type="button" 
-                                    class="btn btn-xs sm:btn-sm btn-outline btn-accent font-bold rounded-xl gap-1.5 h-10 justify-center"
-                                    :disabled="selectedCount < 2"
-                                    @click="handleBundle"
-                                    :title="selectedCount < 2 ? 'Select at least 2 items to bundle' : 'Bundle selected items into new lot'"
-                                >
-                                    <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
-                                    <span>Bundle ({{ selectedCount }})</span>
-                                </button>
-
-                                <!-- Combine into Lot Button -->
-                                <button 
-                                    type="button" 
-                                    class="btn btn-xs sm:btn-sm btn-outline btn-info font-bold rounded-xl gap-1.5 h-10 justify-center"
-                                    :disabled="selectedCount < 1"
-                                    @click="handleCombine"
-                                    :title="selectedCount < 1 ? 'Select at least 1 item to combine' : 'Combine into existing lot'"
-                                >
-                                    <Icon icon="solar:layers-bold" class="w-4 h-4" />
-                                    <span>Combine ({{ selectedCount }})</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- SECTION B: LOCATION MOVE -->
-                        <div class="bg-base-200/70 p-3.5 rounded-2xl border border-base-300 space-y-2.5">
-                            <div class="flex items-center justify-between">
-                                <label class="font-black text-xs text-base-content flex items-center gap-1.5">
-                                    <Icon icon="solar:map-point-bold" class="w-3.5 h-3.5 text-primary" />
-                                    <span>Move Location ({{ selectedCount }} Records)</span>
-                                </label>
-                                <span v-if="computedLocationPreview" class="text-[10px] font-mono font-bold badge badge-xs badge-primary">
-                                    Target: {{ computedLocationPreview }}
-                                </span>
-                            </div>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <!-- Warehouse / Facility Choice -->
-                                <div class="form-control">
-                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Warehouse / Facility</span></label>
-                                    <select v-model="selectedWarehouse" class="select select-sm select-bordered w-full bg-base-100 text-xs font-bold rounded-xl">
-                                        <option value="HG">Huck's Garage (HG)</option>
-                                        <option value="HD">Hideout (HD)</option>
-                                        <option value="MD">Memory Den - Huck's Adventures Outfitters (MD)</option>
-                                        <option value="DT">Dusty Tiger (DT)</option>
-                                        <option value="__custom__">Custom / Other Location...</option>
-                                    </select>
-                                </div>
-
-                                <!-- Bin / Container Input -->
-                                <div class="form-control" v-if="selectedWarehouse !== '__custom__'">
-                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Bin / Tote / Shelf (Optional)</span></label>
-                                    <input 
-                                        type="text" 
-                                        v-model="customBin" 
-                                        placeholder="e.g. RED BIN-16 or 04" 
-                                        class="input input-sm input-bordered w-full bg-base-100 text-xs font-mono font-bold uppercase rounded-xl"
-                                    />
-                                </div>
-
-                                <!-- Custom Raw Input when __custom__ is selected -->
-                                <div class="form-control" v-else>
-                                    <label class="label py-0.5"><span class="label-text-alt text-[10px] font-bold opacity-70">Custom Location Name</span></label>
-                                    <input 
-                                        type="text" 
-                                        v-model="customRawLocation" 
-                                        placeholder="Enter custom location..." 
-                                        class="input input-sm input-bordered w-full bg-base-100 text-xs font-bold rounded-xl"
-                                    />
-                                </div>
-                            </div>
-
-                            <!-- Fast Action Button & Suggestions -->
-                            <div class="flex items-center justify-between pt-1 gap-2">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="text-[10px] opacity-60 font-semibold">Quick:</span>
-                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('HG', '')">HG</button>
-                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('HD', '')">HD</button>
-                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('MD', '')">MD</button>
-                                    <button type="button" class="badge badge-xs badge-ghost hover:badge-primary cursor-pointer font-mono font-bold" @click="setQuickLoc('DT', '')">DT</button>
-                                </div>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-primary text-primary-content font-bold px-4 rounded-xl shrink-0 gap-1.5 shadow-sm"
-                                    :disabled="!computedLocationPreview || isProcessing"
-                                    @click="onApplyLocation"
-                                >
-                                    <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                                    Apply Move
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- SECTION C: STATUS PIPELINE UPDATE -->
-                        <div class="bg-base-200/70 p-3 rounded-2xl border border-base-300 space-y-2">
-                            <label class="font-black text-xs text-base-content flex items-center gap-1.5">
-                                <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5 text-secondary" />
-                                <span>Set Pipeline Status ({{ selectedCount }} Records)</span>
-                            </label>
-                            <div class="flex items-center gap-2">
-                                <select v-model="targetStatus" class="select select-sm select-bordered flex-1 bg-base-100 text-xs font-bold rounded-xl">
-                                    <option value="" disabled selected>Select new status...</option>
-                                    <option value="acquired">Acquired</option>
-                                    <option value="received">Received</option>
-                                    <option value="placed">Placed</option>
-                                    <option value="sold">Sold</option>
-                                </select>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-sm btn-secondary text-secondary-content font-bold px-4 rounded-xl shrink-0"
-                                    :disabled="!targetStatus || isProcessing"
-                                    @click="onApplyStatus"
-                                >
-                                    Apply
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- SECTION D: DANGER ZONE (BULK DELETION) -->
-                        <div class="bg-error/10 border border-error/20 p-3 rounded-2xl space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-black text-xs text-error flex items-center gap-1.5">
-                                    <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
-                                    <span>Danger Zone</span>
-                                </span>
-                                <span class="text-[10px] font-mono text-error/80">Permanent Action</span>
-                            </div>
-                            <div class="flex items-center justify-between gap-3">
-                                <p class="text-[11px] text-base-content/70">
-                                    Permanently remove all {{ selectedCount }} selected records from database.
-                                </p>
-                                <button 
-                                    type="button" 
-                                    class="btn btn-xs sm:btn-sm btn-error text-error-content font-bold px-3 rounded-xl shrink-0 gap-1"
-                                    @click="isConfirmingDelete = true"
-                                    :disabled="isProcessing"
-                                >
-                                    <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
-                                    <span>Delete ({{ selectedCount }})</span>
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
-                <!-- Sticky Actions Footer -->
-                <div v-if="selectedCount > 0" class="p-3 border-t border-base-300 bg-base-200/90 backdrop-blur-md flex items-center justify-between gap-2 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
-                    <button 
-                        type="button" 
-                        class="btn btn-sm btn-ghost text-error font-bold" 
-                        @click="$emit('clear-selection')"
-                    >
-                        Clear Selection
-                    </button>
-                    <button 
-                        type="button" 
-                        class="btn btn-sm btn-primary font-bold px-6 shadow-md text-primary-content rounded-xl"
-                        @click="closeTray"
-                    >
-                        Done
-                    </button>
+                <!-- STACKED FOOTER DOCK (ALL BULK ACTIONS IN STACKED DOCK) -->
+                <div class="border-t border-base-300 bg-base-100/95 backdrop-blur-md p-3 space-y-2 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+                    <!-- STACK ROW 1: LOCATION & STATUS MOVERS -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-base-200/60 p-2.5 rounded-2xl border border-base-300/80">
+                        <!-- Move Location -->
+                        <div class="flex items-center gap-1.5">
+                            <select v-model="selectedWarehouse" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg flex-1 h-8 min-h-8">
+                                <option value="HG">HG (Garage)</option>
+                                <option value="HD">HD (Hideout)</option>
+                                <option value="MD">MD (Memory Den)</option>
+                                <option value="DT">DT (Dusty Tiger)</option>
+                                <option value="__custom__">Custom...</option>
+                            </select>
+                            <input 
+                                v-if="selectedWarehouse !== '__custom__'"
+                                type="text" 
+                                v-model="customBin" 
+                                placeholder="Bin..." 
+                                class="input input-xs input-bordered bg-base-100 text-xs font-mono font-bold uppercase rounded-lg w-20 h-8 min-h-8"
+                            />
+                            <input 
+                                v-else
+                                type="text" 
+                                v-model="customRawLocation" 
+                                placeholder="Location..." 
+                                class="input input-xs input-bordered bg-base-100 text-xs font-bold rounded-lg w-24 h-8 min-h-8"
+                            />
+                            <button 
+                                type="button" 
+                                class="btn btn-xs btn-primary text-primary-content font-bold rounded-lg h-8 min-h-8 px-2.5 shrink-0"
+                                :disabled="selectedCount === 0 || !computedLocationPreview || isProcessing"
+                                @click="onApplyLocation"
+                                title="Apply new location to selected records"
+                            >
+                                Move
+                            </button>
+                        </div>
+
+                        <!-- Set Status -->
+                        <div class="flex items-center gap-1.5">
+                            <select v-model="targetStatus" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg flex-1 h-8 min-h-8">
+                                <option value="" disabled selected>Select status...</option>
+                                <option value="active">Active Stock</option>
+                                <option value="acquired">Acquired</option>
+                                <option value="received">Received</option>
+                                <option value="placed">Placed</option>
+                                <option value="sold">Sold</option>
+                            </select>
+                            <button 
+                                type="button" 
+                                class="btn btn-xs btn-secondary text-secondary-content font-bold rounded-lg h-8 min-h-8 px-2.5 shrink-0"
+                                :disabled="selectedCount === 0 || !targetStatus || isProcessing"
+                                @click="onApplyStatus"
+                                title="Apply new pipeline status to selected records"
+                            >
+                                Set Status
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STACK ROW 3: BUNDLE, COMBINE, GENERIC CSV EXPORT & DELETE -->
+                    <div class="grid grid-cols-4 gap-1.5 pt-0.5">
+                        <!-- Bundle -->
+                        <button 
+                            type="button" 
+                            class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-accent hover:bg-accent/10 font-bold rounded-xl gap-1 h-9 justify-center"
+                            :disabled="selectedCount < 2"
+                            @click="handleBundle"
+                            title="Bundle selected items into new lot"
+                        >
+                            <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-accent" />
+                            <span class="truncate">Bundle</span>
+                        </button>
+
+                        <!-- Combine -->
+                        <button 
+                            type="button" 
+                            class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-info hover:bg-info/10 font-bold rounded-xl gap-1 h-9 justify-center"
+                            :disabled="selectedCount < 1"
+                            @click="handleCombine"
+                            title="Combine into existing lot"
+                        >
+                            <Icon icon="solar:layers-bold" class="w-3.5 h-3.5 text-info" />
+                            <span class="truncate">Combine</span>
+                        </button>
+
+                        <!-- Generic CSV Export -->
+                        <button 
+                            type="button" 
+                            class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-success hover:bg-success/10 font-bold rounded-xl gap-1 h-9 justify-center"
+                            @click="$emit('export', 'generic')"
+                            :title="selectedCount > 0 ? `Export ${selectedCount} selected items to Generic CSV` : 'Export all filtered items to Generic CSV'"
+                        >
+                            <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5 text-success" />
+                            <span class="truncate">Export CSV</span>
+                        </button>
+
+                        <!-- Delete -->
+                        <button 
+                            type="button" 
+                            class="btn btn-xs sm:btn-sm btn-outline btn-error font-bold rounded-xl gap-1 h-9 justify-center"
+                            :disabled="selectedCount === 0 || isProcessing"
+                            @click="isConfirmingDelete = true"
+                            title="Delete selected records"
+                        >
+                            <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
+                            <span class="truncate">Delete</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -555,12 +478,29 @@
                 <button>close</button>
             </form>
         </dialog>
+
     </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
+import { useManifest } from '../../composables/useManifest';
+import { useItemDrawer } from '../../composables/useItemDrawer';
+
+const { isActionTrayOpen, activeManifest, stagedCount, openManifestTray } = useManifest();
+const { openItemDrawer } = useItemDrawer();
+
+const closeTray = () => {
+    isActionTrayOpen.value = false;
+    emit('update:isOpen', false);
+};
+
+const handleOpenDropTray = () => {
+    closeTray();
+    openManifestTray();
+};
 
 const props = defineProps({
     isOpen: {
@@ -574,6 +514,10 @@ const props = defineProps({
     selectedCount: {
         type: Number,
         default: 0
+    },
+    selectedItems: {
+        type: Array,
+        default: () => []
     },
     totalItems: {
         type: Number,
@@ -606,6 +550,14 @@ const props = defineProps({
     isProcessing: {
         type: Boolean,
         default: false
+    },
+    manifestItemCount: {
+        type: Number,
+        default: 0
+    },
+    manifestName: {
+        type: String,
+        default: ''
     }
 });
 
@@ -624,6 +576,8 @@ const emit = defineEmits([
     'apply-status',
     'export',
     'delete',
+    'select-all',
+    'unselect-item',
     'clear-selection',
     'reset-filters'
 ]);
@@ -660,9 +614,17 @@ const statusOptions = [
     { value: 'combined', label: 'Combined' }
 ];
 
+const selectedTotalRetail = computed(() => {
+    if (!props.selectedItems || props.selectedItems.length === 0) return 0;
+    return props.selectedItems.reduce((sum, item) => {
+        const p = Number(item.boutiquePrice || item.resalePrice || item.price || 0);
+        return sum + p;
+    }, 0);
+});
+
 const headerTitle = computed(() => {
     if (props.activeTab === 'actions') {
-        return props.selectedCount > 0 ? `Actions (${props.selectedCount} Records)` : 'Bulk Actions';
+        return props.selectedCount > 0 ? `Selected Items (${props.selectedCount})` : 'Bulk Actions & Selections';
     }
     if (props.activeTab === 'filters') {
         return 'Filters & View Options';
@@ -672,7 +634,7 @@ const headerTitle = computed(() => {
 
 const headerSubtitle = computed(() => {
     if (props.activeTab === 'actions') {
-        return 'Bundling, combining, locations, statuses, exports & deletions';
+        return props.selectedCount > 0 ? 'Curate selection or run bulk operations' : 'Select items in catalog to move locations or set status';
     }
     if (props.activeTab === 'filters') {
         return 'Refine catalog by status, storage location, or tags';
@@ -681,17 +643,13 @@ const headerSubtitle = computed(() => {
 });
 
 const headerIcon = computed(() => {
-    if (props.activeTab === 'actions') return 'solar:bolt-bold';
+    if (props.activeTab === 'actions') return 'solar:checklist-minimalistic-bold';
     if (props.activeTab === 'filters') return 'solar:tuning-square-2-bold-duotone';
     return 'solar:add-circle-bold';
 });
 
 const setTab = (tab) => {
     emit('update:activeTab', tab);
-};
-
-const closeTray = () => {
-    emit('update:isOpen', false);
 };
 
 const handleScoutQuickAdd = () => {
