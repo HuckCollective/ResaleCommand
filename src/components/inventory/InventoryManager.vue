@@ -37,10 +37,7 @@
             </div>
         </div>
         <!-- MAIN INVENTORY SECTION -->
-        <div class="drawer lg:drawer-open">
-            <input id="inventory-sidebar" type="checkbox" class="drawer-toggle" />
-            
-            <div class="drawer-content flex flex-col pb-44 lg:pl-5 pt-0 min-w-0">
+        <div class="flex flex-col pb-44 pt-0 min-w-0 w-full">
                 <!-- RESPONSIVE STICKY HEADER (Row 1: Title & Controls, Row 2: Full-width Search, Row 3: Quick Filter Pills) -->
                 <!-- STREAMLINED COMPACT HEADER -->
                 <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2 mb-2 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-2xs">
@@ -99,101 +96,59 @@
                             </div>
                         </div>
 
-                        <!-- Row 2: Omnibox Search (Full Width) -->
-                        <div class="relative w-full">
-                            <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
-                            <input 
-                                type="text" 
-                                v-model="searchQuery" 
-                                placeholder="Search title, UPC, PO, vendor, location..." 
-                                class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
-                            />
-                            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
-                        </div>
-
-                        <!-- Row 3: Horizontal Quick-Tap Filter Pills Bar -->
-                        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 shrink-0 max-w-full text-xs">
-                            <!-- Filter Tray Trigger Pill -->
-                            <button type="button" @click="dockRef?.openTab('filters')" class="btn btn-xs rounded-full gap-1 font-bold shrink-0 border border-base-300 cursor-pointer lg:hidden" :class="activeFilterCount > 0 ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost bg-base-200/80 hover:bg-base-200'">
-                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
-                                <span>Filters</span>
-                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-neutral">{{ activeFilterCount }}</span>
-                            </button>
-
-                            <div class="h-3 w-px bg-base-content/20 shrink-0 lg:hidden"></div>
-
-                            <!-- Quick Pill: Active Stock -->
-                            <button 
-                                type="button"
-                                @click="filterStatus = (filterStatus === 'active' ? 'all' : 'active')"
-                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
-                                :class="filterStatus === 'active' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                                title="Toggle Active On-Hand Stock"
-                            >
-                                <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" />
-                                <span>Active Stock</span>
-                                <span class="badge badge-xs" :class="filterStatus === 'active' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus('active') }}</span>
-                            </button>
-
-                            <!-- Quick Pill: Ready to List -->
-                            <button 
-                                type="button"
-                                @click="insightFilter = (insightFilter === 'ready_to_list' ? '' : 'ready_to_list')"
-                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
-                                :class="insightFilter === 'ready_to_list' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                                title="Items with photos, pricing, and descriptions ready"
-                            >
-                                <Icon icon="solar:checklist-linear" class="w-3 h-3" />
-                                <span>Ready to List</span>
-                                <span class="badge badge-xs badge-ghost">{{ readyToListCount }}</span>
-                            </button>
-
-                            <!-- Quick Pill: Missing Photos -->
-                            <button 
-                                type="button"
-                                @click="insightFilter = (insightFilter === 'missing_photos' ? '' : 'missing_photos')"
-                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
-                                :class="insightFilter === 'missing_photos' ? 'bg-error text-error-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                                title="Items needing photo uploads"
-                            >
-                                <Icon icon="solar:camera-linear" class="w-3 h-3" />
-                                <span>Missing Photos</span>
-                                <span class="badge badge-xs badge-ghost">{{ missingPhotosCount }}</span>
-                            </button>
-
-                            <!-- Quick Pill: Missing Pricing -->
-                            <button 
-                                type="button"
-                                @click="insightFilter = (insightFilter === 'missing_est_value' ? '' : 'missing_est_value')"
-                                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all"
-                                :class="insightFilter === 'missing_est_value' ? 'bg-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                                title="Items needing pricing"
-                            >
-                                <Icon icon="solar:dollar-linear" class="w-3 h-3" />
-                                <span>Missing Pricing</span>
-                                <span class="badge badge-xs badge-ghost">{{ missingPricingCount }}</span>
-                            </button>
-
-                            <!-- Quick Location Select Dropdown Pill -->
-                            <div class="shrink-0">
-                                <select 
-                                    v-model="filterBinLocation" 
-                                    class="select select-bordered select-xs rounded-full h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
-                                >
-                                    <option value="">All Locations</option>
-                                    <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
-                                </select>
+                        <!-- Row 2: Omnibox Search + Filters Pill Button -->
+                        <div class="flex items-center gap-2 w-full">
+                            <div class="relative flex-1">
+                                <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
+                                <input 
+                                    type="text" 
+                                    v-model="searchQuery" 
+                                    placeholder="Search title, UPC, PO, vendor, location..." 
+                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                                />
+                                <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
                             </div>
 
-                            <!-- Clear / Reset button if filters active -->
+                            <!-- Mobile & Desktop Filter Button (zero side-scroll!) -->
                             <button 
-                                v-if="activeFilterCount > 0" 
+                                type="button" 
+                                @click="openFilterTray" 
+                                class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold shrink-0 h-8 min-h-8 px-2.5 transition-all"
+                                :class="activeFilterCount > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
+                                title="Open Filter Options"
+                            >
+                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
+                                <span>Filters</span>
+                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ activeFilterCount }}</span>
+                            </button>
+                        </div>
+
+                        <!-- Row 3: Wrapping Active Filter Chips Bar (Conditional - takes ZERO space when no filters active) -->
+                        <div v-if="activeFilterChips && activeFilterChips.length > 0" class="flex flex-wrap items-center gap-1 pt-1 text-xs">
+                            <div 
+                                v-for="chip in activeFilterChips" 
+                                :key="chip.id" 
+                                class="badge badge-sm badge-outline gap-1 font-medium bg-base-100 border-base-300 pl-2 pr-1 h-6"
+                            >
+                                <span>{{ chip.label }}</span>
+                                <button 
+                                    type="button" 
+                                    @click="chip.onRemove ? chip.onRemove() : null" 
+                                    class="hover:text-error transition-colors p-0.5" 
+                                    title="Remove filter"
+                                >
+                                    <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5 opacity-60 hover:opacity-100" />
+                                </button>
+                            </div>
+
+                            <!-- Reset All Filters -->
+                            <button 
                                 type="button" 
                                 @click="clearAllFilters" 
-                                class="btn btn-ghost btn-xs text-error font-bold shrink-0 hover:bg-error/10"
+                                class="btn btn-ghost btn-xs text-error font-bold h-6 min-h-6 px-1.5 hover:bg-error/10"
                                 title="Reset all filters"
                             >
-                                ✕ Reset
+                                Reset All
                             </button>
                         </div>
                 </div>
@@ -342,6 +297,7 @@
                     @apply-location="onDockApplyLocation"
                     @apply-status="onDockApplyStatus"
                     @apply-channel="onDockApplyChannel"
+                    @apply-bulk-unified="onDockApplyBulkUnified"
                     @export="exportCsv"
                     @select-all="toggleAll"
                     @unselect-item="id => selectedItems = selectedItems.filter(i => i !== id)"
@@ -352,429 +308,37 @@
                     @add="openAdd"
                     @delete="handleBulkDelete"
                     @import-csv="showImport = true"
+                    @stage-manifest="stageSelectedItemsToManifest"
                     @open-manifest="openManifestTray"
                 >
                     <template #filters>
-                        <div class="space-y-3 text-xs">
-                            <!-- 1. Status Pipeline (Collapsible, open by default) -->
-                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" open>
-                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                    <span>Status Pipeline</span>
-                                    <span v-if="filterStatus !== 'active' && filterStatus !== 'all'" class="badge badge-xs badge-warning mr-4 uppercase text-[9px] font-bold">{{ filterStatus }}</span>
-                                </summary>
-                                <div class="collapse-content px-3 pb-3 pt-0">
-                                    <ul class="menu menu-xs p-0 gap-0.5 w-full">
-                                        <li>
-                                            <button :class="{'active font-bold text-primary': filterStatus === 'active'}" @click="filterStatus = 'active'">
-                                                <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                                                <span>Active Stock</span>
-                                                <span class="badge badge-xs badge-neutral">{{ countByStatus('active') }}</span>
-                                            </button>
-                                        </li>
-                                        <li><button :class="{'active font-bold text-warning': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
-                                        <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
-                                        <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
-                                        <li><button :class="{'active font-bold text-secondary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
-                                        <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
-                                        <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
-                                    </ul>
-                                </div>
-                            </details>
-
-                            <!-- 2. Location & Channels -->
-                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterBinLocation || !!filterChannel || filterLotType !== 'all'">
-                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                    <span>Location &amp; Channels</span>
-                                    <span v-if="filterBinLocation || filterChannel" class="badge badge-xs badge-primary mr-4 text-[9px] font-bold">Active</span>
-                                </summary>
-                                <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
-                                    <div class="form-control w-full">
-                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
-                                        <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                            <option value="">All Locations</option>
-                                            <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-control w-full">
-                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
-                                        <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                            <option value="">All Channels</option>
-                                            <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-control w-full">
-                                        <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
-                                        <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                            <option value="all">All Items</option>
-                                            <option value="lots_only">Parent Lots Only</option>
-                                            <option value="extracted_only">Extracted Children Only</option>
-                                            <option value="standalone_only">Standalone Items</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </details>
-
-                            <!-- 3. Exclusions ("No-Show") Toggles -->
-                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideSold || hideTracked || hideCombined || filterFlaggedLocated">
-                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                    <span>Exclusions ("No-Show")</span>
-                                </summary>
-                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1">
-                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                        <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
-                                        <input type="checkbox" v-model="hideSold" class="checkbox checkbox-xs checkbox-primary" />
-                                    </label>
-                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                        <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
-                                        <input type="checkbox" v-model="hideTracked" class="checkbox checkbox-xs checkbox-primary" />
-                                    </label>
-                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                        <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
-                                        <input type="checkbox" v-model="hideCombined" class="checkbox checkbox-xs checkbox-primary" />
-                                    </label>
-                                    <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                        <span class="label-text text-xs font-semibold text-base-content">Only Placed & Located</span>
-                                        <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-xs checkbox-primary" />
-                                    </label>
-                                </div>
-                            </details>
-
-                            <!-- 4. AI Health Insights -->
-                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!insightFilter">
-                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                    <span>AI Health Insights</span>
-                                    <span v-if="insightFilter" class="badge badge-xs badge-secondary mr-4 text-[9px] font-bold">Active</span>
-                                </summary>
-                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
-                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
-                                        <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
-                                        <span class="badge badge-xs font-mono font-bold">{{ readyToListCount }}</span>
-                                    </button>
-                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
-                                        <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
-                                        <span class="badge badge-xs font-mono font-bold">{{ missingPhotosCount }}</span>
-                                    </button>
-                                    <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
-                                        <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
-                                        <span class="badge badge-xs font-mono font-bold">{{ missingPricingCount }}</span>
-                                    </button>
-                                </div>
-                            </details>
-
-                            <!-- 5. Barcodes & Prefixes -->
-                            <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterUpcPrefix">
-                                <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                    <span>Barcodes &amp; Prefixes</span>
-                                    <span v-if="filterUpcPrefix" class="badge badge-xs badge-primary mr-4 text-[9px] font-mono font-bold">{{ filterUpcPrefix }}</span>
-                                </summary>
-                                <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
-                                    <div class="flex flex-wrap gap-1">
-                                        <button 
-                                            v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
-                                            :key="p.prefix" 
-                                            class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
-                                            :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
-                                            @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
-                                        >
-                                            {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
-                                        </button>
-                                        <button 
-                                            v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
-                                            class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2 font-bold" 
-                                            :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
-                                            @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
-                                        >
-                                            No Barcode
-                                        </button>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        v-model="filterUpcPrefix" 
-                                        placeholder="Custom prefix..." 
-                                        class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
-                                    />
-                                </div>
-                            </details>
-                        </div>
+                        <InventoryFilterPanel 
+                            v-model:filterStatus="filterStatus"
+                            v-model:filterLocation="filterBinLocation"
+                            v-model:filterChannel="filterChannel"
+                            v-model:filterLotType="filterLotType"
+                            v-model:filterBarcode="filterUpcPrefix"
+                            v-model:filterInsight="insightFilter"
+                            v-model:hideSold="hideSold"
+                            v-model:hideTracked="hideTracked"
+                            v-model:hideCombined="hideCombined"
+                            v-model:filterPlacedLocated="filterFlaggedLocated"
+                            v-model:filterKeywords="filterKeywords"
+                            :locations="allAvailableLocations"
+                            :channels="allAvailableChannels"
+                            :prefixes="allAvailableUpcPrefixes"
+                            :countByStatus="countByStatus"
+                            :readyToListCount="readyToListCount"
+                            :missingPhotosCount="missingPhotosCount"
+                            :missingPricingCount="missingPricingCount"
+                            :totalCount="inventoryItems.length"
+                            :showKeywords="false"
+                        />
                     </template>
                 </InventoryPaginationDock>
             </div> <!-- End v-else -->
 
             <!-- ALL ITEMS LOADED -->
-            </div> <!-- End drawer-content -->
-
-            <!-- LEFT COMMAND & FILTERS SIDEBAR (Desktop Only) -->
-            <div class="drawer-side z-50 lg:z-auto h-dvh max-h-dvh min-h-screen lg:h-auto lg:max-h-none hidden lg:block">
-                <label for="inventory-sidebar" aria-label="close sidebar" class="drawer-overlay bg-black/60 backdrop-blur-xs"></label> 
-                <div class="w-[90vw] max-w-sm sm:w-80 lg:w-64 h-dvh min-h-dvh max-h-dvh self-stretch lg:self-auto lg:h-auto lg:min-h-full lg:max-h-none bg-base-100 lg:bg-transparent border-r lg:border-transparent border-base-200 text-base-content flex flex-col justify-between shadow-2xl lg:shadow-none overflow-hidden p-3.5 sm:p-4 lg:p-0">
-                    
-                    <!-- Sticky Header with Active Count & Quick Reset -->
-                    <div class="shrink-0 flex justify-between items-center pb-2.5 mb-1 border-b border-base-300">
-                        <div class="flex items-center gap-2">
-                            <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5 text-primary" />
-                            <span class="font-black text-base text-base-content">Filters</span>
-                            <span v-if="activeFilterCount > 0" class="badge badge-xs badge-primary font-mono font-bold px-1.5 py-0.5">
-                                {{ activeFilterCount }} Active
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <button 
-                                v-if="activeFilterCount > 0"
-                                type="button" 
-                                class="btn btn-ghost btn-xs text-error font-bold hover:bg-error/15 h-7 min-h-7 px-2"
-                                @click="clearAllFilters"
-                                title="Reset all filters to default"
-                            >
-                                Reset All
-                            </button>
-                            <label for="inventory-sidebar" class="btn btn-sm btn-circle btn-ghost text-base-content/70 hover:text-base-content lg:hidden">✕</label>
-                        </div>
-                    </div>
-
-                    <!-- Scrollable Filter Accordions Container -->
-                    <div class="flex-1 overflow-y-auto space-y-2.5 py-1.5 pr-0.5 scrollbar-thin">
-                        
-                        <!-- 1. Status Pipeline (Collapsible, open by default) -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" open>
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                <span>Status Pipeline</span>
-                                <span v-if="filterStatus !== 'active' && filterStatus !== 'all'" class="badge badge-xs badge-warning mr-4 uppercase text-[9px] font-bold">{{ filterStatus }}</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0">
-                                <ul class="menu menu-xs p-0 gap-0.5 w-full">
-                                    <li>
-                                        <button :class="{'active font-bold text-primary': filterStatus === 'active'}" @click="filterStatus = 'active'">
-                                            <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                                            <span>Active Stock</span>
-                                            <span class="badge badge-xs badge-neutral">{{ countByStatus('active') }}</span>
-                                        </button>
-                                    </li>
-                                    <li><button :class="{'active font-bold text-warning': filterStatus === 'acquired'}" @click="filterStatus = 'acquired'"><span>Acquired</span><span class="badge badge-xs">{{ countByStatus('acquired') }}</span></button></li>
-                                    <li><button :class="{'active font-bold text-info': filterStatus === 'received'}" @click="filterStatus = 'received'"><span>Received</span><span class="badge badge-xs">{{ countByStatus('received') }}</span></button></li>
-                                    <li><button :class="{'active font-bold text-success': filterStatus === 'placed'}" @click="filterStatus = 'placed'"><span>Placed</span><span class="badge badge-xs">{{ countByStatus('placed') }}</span></button></li>
-                                    <li><button :class="{'active font-bold text-secondary': filterStatus === 'tracked'}" @click="filterStatus = 'tracked'"><span>Tracked</span><span class="badge badge-xs">{{ countByStatus('tracked') }}</span></button></li>
-                                    <li><button :class="{'active font-bold opacity-75': filterStatus === 'sold'}" @click="filterStatus = 'sold'"><span>Sold</span><span class="badge badge-xs">{{ countByStatus('sold') }}</span></button></li>
-                                    <li><button :class="{'active font-bold': filterStatus === 'all'}" @click="filterStatus = 'all'"><span>All Items</span><span class="badge badge-xs">{{ inventoryItems.length }}</span></button></li>
-                                </ul>
-                            </div>
-                        </details>
-
-                        <!-- 2. Location & Channels (Collapsible, open if filtered) -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterBinLocation || !!filterChannel || filterLotType !== 'all'">
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                <span>Location &amp; Channels</span>
-                                <span v-if="filterBinLocation || filterChannel" class="badge badge-xs badge-primary mr-4 text-[9px] font-bold">Active</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
-                                <div class="form-control w-full">
-                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
-                                    <select v-model="filterBinLocation" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                        <option value="">All Locations</option>
-                                        <option v-for="loc in allAvailableLocations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-control w-full">
-                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
-                                    <select v-model="filterChannel" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                        <option value="">All Channels</option>
-                                        <option v-for="ch in allAvailableChannels" :key="ch" :value="ch">{{ ch }}</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-control w-full">
-                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
-                                    <select v-model="filterLotType" class="select select-bordered select-xs w-full bg-base-100 font-bold">
-                                        <option value="all">All Items</option>
-                                        <option value="lots_only">Parent Lots Only</option>
-                                        <option value="extracted_only">Extracted Children Only</option>
-                                        <option value="standalone_only">Standalone Items</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-control w-full">
-                                    <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Keywords</span></label>
-                                    <TagInput 
-                                        v-model="filterKeywords" 
-                                        type="keyword" 
-                                        placeholder="Any..." 
-                                        badgeClass="badge-secondary" 
-                                    />
-                                </div>
-                            </div>
-                        </details>
-
-                        <!-- 3. Exclusions ("No-Show") Toggles -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideSold || hideTracked || hideCombined || filterFlaggedLocated">
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                <span>Exclusions ("No-Show")</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1">
-                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                    <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
-                                    <input type="checkbox" v-model="hideSold" class="checkbox checkbox-xs checkbox-primary" />
-                                </label>
-                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                    <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
-                                    <input type="checkbox" v-model="hideTracked" class="checkbox checkbox-xs checkbox-primary" />
-                                </label>
-                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                    <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
-                                    <input type="checkbox" v-model="hideCombined" class="checkbox checkbox-xs checkbox-primary" />
-                                </label>
-                                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                                    <span class="label-text text-xs font-semibold text-base-content">Only Placed &amp; Located</span>
-                                    <input type="checkbox" v-model="filterFlaggedLocated" class="checkbox checkbox-xs checkbox-primary" />
-                                </label>
-                            </div>
-                        </details>
-
-                        <!-- 4. AI Health Insights -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!insightFilter">
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                <span>AI Health Insights</span>
-                                <span v-if="insightFilter" class="badge badge-xs badge-secondary mr-4 text-[9px] font-bold">Active</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
-                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'ready_to_list' ? '' : 'ready_to_list'">
-                                    <span class="flex items-center gap-1"><Icon icon="solar:checklist-linear" class="w-3.5 h-3.5 text-primary" /> Ready to List</span>
-                                    <span class="badge badge-xs font-mono font-bold">{{ readyToListCount }}</span>
-                                </button>
-                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_photos' ? '' : 'missing_photos'">
-                                    <span class="flex items-center gap-1"><Icon icon="solar:camera-linear" class="w-3.5 h-3.5 text-error" /> Missing Photos</span>
-                                    <span class="badge badge-xs font-mono font-bold">{{ missingPhotosCount }}</span>
-                                </button>
-                                <button class="btn btn-xs w-full justify-between" :class="insightFilter === 'missing_est_value' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" @click="insightFilter = insightFilter === 'missing_est_value' ? '' : 'missing_est_value'">
-                                    <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
-                                    <span class="badge badge-xs font-mono font-bold">{{ missingPricingCount }}</span>
-                                </button>
-                            </div>
-                        </details>
-
-                        <!-- 5. Barcodes & Prefixes -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="!!filterUpcPrefix">
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                                <span>Barcodes &amp; Prefixes</span>
-                                <span v-if="filterUpcPrefix" class="badge badge-xs badge-primary mr-4 text-[9px] font-mono font-bold">{{ filterUpcPrefix }}</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
-                                <div class="flex flex-wrap gap-1">
-                                    <button 
-                                        v-for="p in allAvailableUpcPrefixes.filter(x => x.prefix !== '__missing__').slice(0, 6)" 
-                                        :key="p.prefix" 
-                                        class="badge badge-xs font-mono cursor-pointer transition-colors px-1.5 py-2 font-bold" 
-                                        :class="filterUpcPrefix === p.prefix ? 'badge-primary font-bold shadow-xs ring-1 ring-primary' : 'badge-outline'" 
-                                        @click="filterUpcPrefix = filterUpcPrefix === p.prefix ? '' : p.prefix"
-                                    >
-                                        {{ p.prefix }} <span class="text-[8px] opacity-60 ml-0.5">{{ p.count }}</span>
-                                    </button>
-                                    <button 
-                                        v-if="allAvailableUpcPrefixes.find(x => x.prefix === '__missing__')" 
-                                        class="badge badge-xs cursor-pointer transition-colors px-1.5 py-2 font-bold" 
-                                        :class="filterUpcPrefix === '__missing__' ? 'badge-error font-bold shadow-xs' : 'badge-outline'" 
-                                        @click="filterUpcPrefix = filterUpcPrefix === '__missing__' ? '' : '__missing__'"
-                                    >
-                                        No Barcode
-                                    </button>
-                                </div>
-                                <input 
-                                    type="text" 
-                                    v-model="filterUpcPrefix" 
-                                    placeholder="Custom prefix..." 
-                                    class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
-                                />
-                            </div>
-                        </details>
-
-                        <!-- 6. Ingestion & Tools Hub -->
-                        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs">
-                            <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3">
-                                <span>Tools &amp; Imports</span>
-                            </summary>
-                            <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
-                                <button class="btn btn-sm btn-primary w-full gap-1.5 font-bold shadow-xs" @click="openAdd">
-                                    <Icon icon="solar:add-circle-linear" class="w-4 h-4" /> Add New Item
-                                </button>
-                                
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <!-- Generate UPCs Dropdown -->
-                                    <div class="dropdown">
-                                        <div tabindex="0" role="button" class="btn btn-xs btn-outline btn-secondary gap-1 w-full font-bold">
-                                            <Icon icon="solar:barcode-read-linear" class="w-3.5 h-3.5" /> UPCs
-                                        </div>
-                                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
-                                            <li class="menu-title text-[10px] uppercase font-bold opacity-60">Generate for Missing:</li>
-                                            <li>
-                                                <button @click="handleGenerateUpcs('HUCK-')" class="flex items-center justify-between py-1.5">
-                                                    <span class="font-mono font-bold text-primary">HUCK-0001</span>
-                                                    <span class="badge badge-xs badge-primary">Auto</span>
-                                                </button>
-                                            </li>
-                                            <li>
-                                                <button @click="handleGenerateUpcs('PDXGL-')" class="flex items-center justify-between py-1.5">
-                                                    <span class="font-mono font-bold text-secondary">PDXGL-0001</span>
-                                                    <span class="badge badge-xs badge-secondary">Auto</span>
-                                                </button>
-                                            </li>
-                                            <div class="divider my-1"></div>
-                                            <li>
-                                                <button @click="handleCustomGenerateUpcs" class="flex items-center gap-2 py-1.5 text-xs">
-                                                    <Icon icon="solar:pen-new-square-linear" class="w-3.5 h-3.5" />
-                                                    <span>Custom Prefix...</span>
-                                                </button>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <!-- Import Dropdown -->
-                                    <div class="dropdown">
-                                        <div tabindex="0" role="button" class="btn btn-xs btn-outline gap-1 w-full font-bold">
-                                            <Icon icon="solar:import-linear" class="w-3.5 h-3.5" /> Import
-                                        </div>
-                                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 border border-base-200 rounded-xl w-60 mt-1">
-                                            <li>
-                                                <button class="flex items-start gap-2 py-2" @click="showImport = true">
-                                                    <Icon icon="solar:document-text-linear" class="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-                                                    <div>
-                                                        <div class="font-bold text-xs">ShopGoodwill CSV</div>
-                                                        <div class="text-[10px] opacity-60">Bought &amp; shipped items</div>
-                                                    </div>
-                                                </button>
-                                            </li>
-                                            <li>
-                                                <button class="flex items-start gap-2 py-2" @click="showReconciliation = true">
-                                                    <Icon icon="solar:refresh-circle-linear" class="w-4 h-4 mt-0.5 shrink-0 text-accent" />
-                                                    <div>
-                                                        <div class="font-bold text-xs">Booth Sync</div>
-                                                        <div class="text-[10px] opacity-60">Reconcile booth inventory</div>
-                                                    </div>
-                                                </button>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </details>
-                    </div>
-
-                    <!-- Sticky Bottom Apply Footer (Mobile Only) -->
-                    <div class="shrink-0 pt-2.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-base-300 flex items-center justify-between gap-2 lg:hidden">
-                        <button 
-                            type="button" 
-                            class="btn btn-xs btn-ghost text-error font-bold" 
-                            @click="clearAllFilters" 
-                            :disabled="activeFilterCount === 0"
-                        >
-                            Reset
-                        </button>
-                        <label for="inventory-sidebar" class="btn btn-xs btn-primary font-bold px-4 shadow-sm flex-1">
-                            Show {{ filteredInventory.length.toLocaleString() }} Items
-                        </label>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- ----------------------------------------------------------- -->
@@ -1050,13 +614,15 @@ import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from './ItemPreviewModal.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
+import InventoryFilterPanel from './InventoryFilterPanel.vue';
 import BundleModal from './BundleModal.vue';
-import TagInput from '../common/TagInput.vue';
+import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { purchasesAPI, syncPurchaseStatusForItems } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
-import { warehousesApi, matchesLocationFilter, getWarehouseFacilityOptions } from '../../lib/warehouses';
+import { warehousesApi } from '../../lib/warehouses';
+import { useInventoryBulkActions } from '../../composables/useInventoryBulkActions';
 
 const props = defineProps({
     viewMode: {
@@ -1114,12 +680,14 @@ const openBundleModal = () => {
     isBundleModalOpen.value = true;
 };
 
-const onBundleSuccess = (bundleId) => {
+const { applyBulkUnified } = useInventoryBulkActions();
+
+const onBundleSuccess = async (bundleId) => {
     isBundleModalOpen.value = false;
     selectedItems.value = [];
     addToast({ type: 'success', message: 'Bundle created successfully!' });
     // Reload items
-    fetchItems(true);
+    await fetchInventory(currentTeam.value?.$id || '');
 };
 
 const handleBulkDelete = async () => {
@@ -1132,7 +700,7 @@ const handleBulkDelete = async () => {
         }
         addToast({ type: 'success', message: `Deleted ${count} items.` });
         selectedItems.value = [];
-        await fetchItems(true);
+        await fetchInventory(currentTeam.value?.$id || '');
     } catch (e) {
         addToast({ type: 'error', message: 'Bulk delete failed: ' + e.message });
     } finally {
@@ -1235,13 +803,90 @@ const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loa
 const loadMore = loadNextPage; // Alias for template
 const currentTeamId = computed(() => currentTeam.value?.$id); 
 
-// State for Filters
-const searchQuery = ref('');
-const filterStatus = ref('active');
-const hideSold = ref(true);
-const hideTracked = ref(true);
-const hideCombined = ref(true);
-const insightFilter = ref('');
+// Filters & Data Composable
+const orgPlacedLocations = ref([]);
+const warehouseLocations = ref([]);
+
+const fetchLocations = async () => {
+    if (!currentTeam.value) return;
+    try {
+        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+        const res = await databases.listDocuments(DB_ID, 'org_settings', [
+            Query.equal('tenantId', currentTeam.value.$id)
+        ]);
+        if (res.documents.length) {
+            orgPlacedLocations.value = res.documents[0].placedLocations || [];
+        }
+        try {
+            const whs = await warehousesApi.listWarehouses(currentTeam.value.$id);
+            warehouseLocations.value = whs.map(w => w.name);
+        } catch (we) {}
+    } catch(e) {}
+};
+
+const knownTeamPrefixes = computed(() => {
+    const list = [];
+    if (currentTeam.value?.prefs?.upcPrefix) list.push(currentTeam.value.prefs.upcPrefix);
+    if (user.value?.prefs?.upcPrefix) list.push(user.value.prefs.upcPrefix);
+    return list;
+});
+
+const {
+    searchQuery,
+    filterStatus,
+    filterBinLocation,
+    filterChannel,
+    hideSold,
+    hideTracked,
+    hideCombined,
+    filterFlaggedLocated,
+    insightFilter,
+    filterUpcPrefix,
+    filterLotType,
+    filterKeywords,
+    filterPurchaseId,
+    filterParentLotId,
+    filterPO,
+    filterSO,
+    filterParentLotTitle,
+    matchingLotDocIds,
+    matchingPurchaseIds,
+    allAvailableLocations,
+    allAvailableChannels,
+    allAvailableUpcPrefixes,
+    knownOrgPrefixes,
+    cartItems,
+    cartGroups,
+    countActive,
+    countByStatus,
+    readyToListCount,
+    missingPhotosCount,
+    missingPricingCount,
+    activeFilterCount,
+    activeFilterChips,
+    baseInventoryCount,
+    filteredInventory,
+    displayedInventory,
+    gridPage,
+    gridPageSize,
+    gridPageSizeOptions,
+    gridTotalPages,
+    clearAllFilters,
+    clearLineageFilters,
+    initFromUrl
+} = useInventoryFilters(inventoryItems, {
+    purchases: allPurchases,
+    orgPlacedLocations,
+    knownPrefixes: knownTeamPrefixes
+});
+
+watch(currentTeam, (n) => { 
+    if (n) {
+        fetchLocations(); 
+        const val = localStorage.getItem(`resale_command_only_flagged_located_${n.$id}`);
+        filterFlaggedLocated.value = val === 'true';
+    } 
+}, { immediate: true });
 const isEstimating = ref(false);
 const bulkProgress = ref(0);
 const bulkTotal = ref(0);
@@ -1475,570 +1120,16 @@ const runAutoGenerateDescriptions = async () => {
     addToast({ type: 'success', message: msg });
 };
 
-const filterKeywords = ref([]);
-const filterBinLocation = ref('');
-const filterChannel = ref('');
-const filterUpcPrefix = ref('');
-const filterPurchaseId = ref('');
-const filterParentLotId = ref('');
-const filterPO = ref('');
-const filterSO = ref('');
-const filterLotType = ref('all');
-const filterFlaggedLocated = ref(false);
-const orgPlacedLocations = ref([]);
-
-const filterParentLotTitle = computed(() => {
-    if (!filterParentLotId.value || !inventoryItems.value) return '';
-    const target = filterParentLotId.value.trim().toLowerCase();
-    const parent = inventoryItems.value.find(i => i.$id?.toLowerCase() === target || (i.upc && i.upc.toLowerCase() === target));
-    return parent ? (parent.upc ? `${parent.upc} - ${parent.title}` : parent.title) : filterParentLotId.value;
-});
-
-const matchingLotDocIds = computed(() => {
-    const set = new Set();
-    if (!filterParentLotId.value || !inventoryItems.value) return set;
-    const target = filterParentLotId.value.trim().toLowerCase();
-    set.add(target);
-
-    // If target matches a parent item by UPC or ID, also add its document ID and UPC
-    inventoryItems.value.forEach(i => {
-        const idMatch = i.$id && i.$id.toLowerCase() === target;
-        const upcMatch = i.upc && i.upc.toLowerCase() === target;
-        if (idMatch || upcMatch) {
-            if (i.$id) set.add(i.$id.toLowerCase());
-            if (i.upc) set.add(i.upc.toLowerCase());
-        }
-    });
-    return set;
-});
-
-const clearLineageFilters = () => {
-    filterParentLotId.value = '';
-    filterPO.value = '';
-    filterSO.value = '';
-    if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('parentLotId');
-        url.searchParams.delete('lot');
-        url.searchParams.delete('lotId');
-        url.searchParams.delete('po');
-        url.searchParams.delete('purchaseId');
-        url.searchParams.delete('orderId');
-        url.searchParams.delete('so');
-        url.searchParams.delete('saleId');
-        window.history.replaceState({}, '', url.toString());
-    }
-};
-
 onMounted(() => {
     updateIsMobile();
     if (typeof window !== 'undefined') {
         window.addEventListener('resize', updateIsMobile);
     }
     fetchPurchases();
-    // Check URL for AI Insight filters & search / order params
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('insightFilter')) {
-        insightFilter.value = params.get('insightFilter') || '';
-        if (insightFilter.value) {
-            bulkOpen.value = true;
-        }
+    initFromUrl();
+    if (insightFilter.value) {
+        bulkOpen.value = true;
     }
-    if (params.has('search')) {
-        searchQuery.value = params.get('search') || '';
-    }
-    if (params.has('purchaseId')) {
-        filterPurchaseId.value = params.get('purchaseId') || '';
-        filterPO.value = params.get('purchaseId') || '';
-    }
-    if (params.has('orderId')) {
-        if (!filterPurchaseId.value) filterPurchaseId.value = params.get('orderId') || '';
-        filterPO.value = params.get('orderId') || '';
-    } else if (params.has('po')) {
-        if (!filterPurchaseId.value) filterPurchaseId.value = params.get('po') || '';
-        filterPO.value = params.get('po') || '';
-    }
-    if (params.has('parentLotId')) {
-        filterParentLotId.value = params.get('parentLotId') || '';
-    } else if (params.has('lot')) {
-        filterParentLotId.value = params.get('lot') || '';
-    } else if (params.has('lotId')) {
-        filterParentLotId.value = params.get('lotId') || '';
-    }
-    if (params.has('purchaseId')) {
-        filterPO.value = params.get('purchaseId') || '';
-    }
-    if (params.has('so')) {
-        filterSO.value = params.get('so') || '';
-    } else if (params.has('saleId')) {
-        filterSO.value = params.get('saleId') || '';
-    }
-    if (params.has('upcPrefix')) {
-        filterUpcPrefix.value = params.get('upcPrefix') || '';
-    }
-    if (params.has('status')) {
-        filterStatus.value = params.get('status') || 'all';
-    }
-});
-const warehouseLocations = ref([]);
-
-const fetchLocations = async () => {
-    if (!currentTeam.value) return;
-    try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const res = await databases.listDocuments(DB_ID, 'org_settings', [
-            Query.equal('tenantId', currentTeam.value.$id)
-        ]);
-        if (res.documents.length) {
-            orgPlacedLocations.value = res.documents[0].placedLocations || [];
-        }
-        try {
-            const whs = await warehousesApi.listWarehouses(currentTeam.value.$id);
-            warehouseLocations.value = whs.map(w => w.name);
-        } catch (we) {}
-    } catch(e) {}
-};
-
-const allAvailableLocations = computed(() => {
-    return getWarehouseFacilityOptions(inventoryItems.value, orgPlacedLocations.value);
-});
-
-const allAvailableChannels = computed(() => {
-    const set = new Set();
-    (inventoryItems.value || []).forEach(item => {
-        if (Array.isArray(item.sellingLocations)) {
-            item.sellingLocations.forEach(l => l && set.add(String(l).trim()));
-        } else if (typeof item.sellingLocations === 'string' && item.sellingLocations) {
-            set.add(String(item.sellingLocations).trim());
-        }
-    });
-    if (filterChannel.value) set.add(String(filterChannel.value).trim());
-    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
-});
-
-const knownOrgPrefixes = computed(() => {
-    const prefixes = new Set(['HUCK-', 'PDXGL-']);
-    if (currentTeam.value?.prefs?.upcPrefix) {
-        let p = currentTeam.value.prefs.upcPrefix.trim().toUpperCase();
-        if (!p.endsWith('-') && !/^\d+$/.test(p)) p += '-';
-        prefixes.add(p);
-    }
-    if (user.value?.prefs?.upcPrefix) {
-        let p = user.value.prefs.upcPrefix.trim().toUpperCase();
-        if (!p.endsWith('-') && !/^\d+$/.test(p)) p += '-';
-        prefixes.add(p);
-    }
-    return Array.from(prefixes);
-});
-
-const allAvailableUpcPrefixes = computed(() => {
-    const map = new Map();
-    // Pre-populate with known organization prefixes
-    knownOrgPrefixes.value.forEach(p => map.set(p, 0));
-
-    let missingCount = 0;
-    let numericOnlyCount = 0;
-
-    (inventoryItems.value || []).forEach(item => {
-        if (item.status === 'scouted') return;
-        const code = (item.upc || item.locationSku || item.sku || '').trim().toUpperCase();
-        
-        if (!code) {
-            missingCount++;
-            return;
-        }
-
-        // Check against known org prefixes first (e.g. HUCK-, PDXGL-)
-        let matchedKnown = false;
-        for (const kp of knownOrgPrefixes.value) {
-            if (code.startsWith(kp)) {
-                map.set(kp, (map.get(kp) || 0) + 1);
-                matchedKnown = true;
-                break;
-            }
-        }
-        if (matchedKnown) return;
-
-        // 1. Hyphenated prefix: e.g. "RC-045", "SGW-999" -> "RC-", "SGW-"
-        const hyphenMatch = code.match(/^([A-Za-z0-9]+-)/);
-        if (hyphenMatch) {
-            const prefix = hyphenMatch[1].toUpperCase();
-            map.set(prefix, (map.get(prefix) || 0) + 1);
-            return;
-        }
-
-        // 2. Letters followed by numbers: e.g. "HUCK0123", "PDXGL045", "RC45"
-        const alphaNumMatch = code.match(/^([A-Za-z]+)\d+/);
-        if (alphaNumMatch) {
-            const prefix = alphaNumMatch[1].toUpperCase();
-            map.set(prefix, (map.get(prefix) || 0) + 1);
-            return;
-        }
-
-        // 3. Pure numeric barcode (standard retail UPC): e.g. "012345678901"
-        if (/^\d+$/.test(code)) {
-            numericOnlyCount++;
-            return;
-        }
-
-        // 4. Other custom code (take leading 4 chars)
-        const customPrefix = code.length > 6 ? code.substring(0, 4).toUpperCase() : code.toUpperCase();
-        map.set(customPrefix, (map.get(customPrefix) || 0) + 1);
-    });
-    
-    // Sort so known org prefixes come first, then by count
-    const list = Array.from(map.entries()).map(([prefix, count]) => ({
-        prefix,
-        label: `${prefix} (${count})`,
-        count
-    })).sort((a, b) => {
-        const aKnown = knownOrgPrefixes.value.includes(a.prefix);
-        const bKnown = knownOrgPrefixes.value.includes(b.prefix);
-        if (aKnown && !bKnown) return -1;
-        if (!aKnown && bKnown) return 1;
-        return b.count - a.count;
-    });
-
-    if (numericOnlyCount > 0) {
-        list.push({
-            prefix: '__numeric__',
-            label: `Retail / Numeric Barcodes (${numericOnlyCount})`,
-            count: numericOnlyCount
-        });
-    }
-
-    if (missingCount > 0) {
-        list.push({
-            prefix: '__missing__',
-            label: `No Barcode / Missing (${missingCount})`,
-            count: missingCount
-        });
-    }
-    return list;
-});
-
-watch(currentTeam, (n) => { 
-    if (n) {
-        fetchLocations(); 
-        // Load default view preference for Flagged & Located
-        const val = localStorage.getItem(`resale_command_only_flagged_located_${n.$id}`);
-        filterFlaggedLocated.value = val === 'true';
-    } 
-}, { immediate: true });
-
-// Lifecycle
-const cartItems = computed(() => inventoryItems.value.filter(i => i.status === 'scouted'));
-
-const countByStatus = (status) => {
-    return (inventoryItems.value || []).filter(i => i.status === status).length;
-};
-
-const readyToListCount = computed(() => {
-    return (inventoryItems.value || []).filter(item => {
-        if (!['acquired', 'received'].includes(item.status)) return false;
-        if (!item.title || item.title.trim() === '') return false;
-        const hasPrice = item.resalePrice || item.estValue || item.listPrice;
-        if (!hasPrice) return false;
-        const hasPhoto = item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0) || (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:')));
-        return !!hasPhoto;
-    }).length;
-});
-
-const missingPhotosCount = computed(() => {
-    return (inventoryItems.value || []).filter(item => {
-        if (item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0)) return false;
-        if (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:'))) return false;
-        return true;
-    }).length;
-});
-
-const missingPricingCount = computed(() => {
-    return (inventoryItems.value || []).filter(item => {
-        if (item.status === 'sold' || item.status === 'scouted') return false;
-        return !item.resalePrice && !item.estValue && !item.listPrice;
-    }).length;
-});
-
-const activeFilterCount = computed(() => {
-    let c = 0;
-    if (filterStatus.value !== 'all') c++;
-    if (filterUpcPrefix.value) c++;
-    if (filterBinLocation.value) c++;
-    if (filterChannel.value) c++;
-    if (filterLotType.value !== 'all') c++;
-    if (filterFlaggedLocated.value) c++;
-    if (filterKeywords.value && filterKeywords.value.length > 0) c++;
-    if (insightFilter.value) c++;
-    if (searchQuery.value) c++;
-    return c;
-});
-
-const clearAllFilters = () => {
-    filterStatus.value = 'all';
-    filterUpcPrefix.value = '';
-    filterBinLocation.value = '';
-    filterChannel.value = '';
-    filterLotType.value = 'all';
-    filterFlaggedLocated.value = false;
-    filterKeywords.value = [];
-    insightFilter.value = '';
-    searchQuery.value = '';
-    filterPurchaseId.value = '';
-};
-
-// The true "base" total of items that would be shown without any user filters applied
-// (excluding items that are hidden by default like cart items, tracked, and combined items)
-const baseInventoryCount = computed(() => {
-    return inventoryItems.value.filter(i => i.status !== 'scouted' && i.status !== 'tracked' && i.status !== 'combined').length;
-});
-
-const matchingPurchaseIds = computed(() => {
-    const set = new Set();
-    if (filterPurchaseId.value) {
-        set.add(filterPurchaseId.value);
-    }
-    const q = (filterPO.value || searchQuery.value || '').trim().toLowerCase();
-    if (q) {
-        (allPurchases.value || []).forEach(p => {
-            const orderIdMatch = p.orderId && p.orderId.toLowerCase().includes(q);
-            const poMatch = p.poNumber && p.poNumber.toLowerCase().includes(q);
-            const idMatch = p.$id && p.$id.toLowerCase().includes(q);
-            const vendorMatch = p.vendor && p.vendor.toLowerCase().includes(q);
-            if (orderIdMatch || poMatch || idMatch || vendorMatch) {
-                set.add(p.$id);
-                if (p.orderId) set.add(p.orderId);
-            }
-        });
-    }
-    return set;
-});
-
-const filteredInventory = computed(() => {
-    return inventoryItems.value.filter(item => {
-        // Exclude default hidden items ONLY when not searching explicitly or filtering by purchase
-        if (!searchQuery.value && !filterPurchaseId.value) {
-            // Exclude cart items
-            if (item.status === 'scouted') return false;
-
-            // Exclude tracked items by default (unless explicitly filtering for them)
-            if (item.status === 'tracked' && filterStatus.value !== 'tracked') return false;
-
-            // Exclude combined items by default (unless explicitly filtering for them)
-            if (item.status === 'combined' && filterStatus.value !== 'combined') return false;
-        }
-
-        // Filter by Purchase ID (from direct PO links)
-        if (filterPurchaseId.value && !searchQuery.value) {
-            const matchesPurchase = item.purchaseId === filterPurchaseId.value || item.cartId === filterPurchaseId.value || matchingPurchaseIds.value.has(item.purchaseId) || matchingPurchaseIds.value.has(item.cartId);
-            if (!matchesPurchase) return false;
-        }
-
-        // --- AI Insight Filters ---
-        if (insightFilter.value) {
-            const parseVal = (itm, key, noteKey) => {
-                let val = 0;
-                if (itm[key]) {
-                    val = parseFloat(itm[key]);
-                } else if (itm.conditionNotes) {
-                    const regex = new RegExp(`${noteKey}[:\\s]*\\$?([\\d.]+)`, 'i');
-                    const match = itm.conditionNotes.match(regex);
-                    if (match) val = parseFloat(match[1]);
-                }
-                return isNaN(val) ? 0 : val;
-            };
-
-            if (insightFilter.value === 'missing_sold_price') {
-                if (item.status !== 'sold' || (parseVal(item, 'soldPrice', 'Sold') || parseVal(item, 'price', 'Sold'))) return false;
-            } else if (insightFilter.value === 'missing_est_value') {
-                if (item.status === 'sold' || (parseVal(item, 'resalePrice', 'Resale') || parseVal(item, 'estValue', 'Est. Low') || parseVal(item, 'listPrice', 'Est'))) return false;
-            } else if (insightFilter.value === 'missing_cost') {
-                if (item.status === 'sold' || (parseVal(item, 'cost', 'Paid') || parseVal(item, 'purchasePrice', 'Paid'))) return false;
-            } else if (insightFilter.value === 'missing_description') {
-                if (item.marketDescription && item.marketDescription.length >= 10) return false;
-            } else if (insightFilter.value === 'missing_photos') {
-                if (item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0)) return false;
-                if (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:'))) return false;
-            } else if (insightFilter.value === 'ready_to_list') {
-                if (!['acquired', 'received'].includes(item.status)) return false;
-                if (!item.title || item.title.trim() === '') return false;
-                if (!parseVal(item, 'resalePrice', 'Resale') && !parseVal(item, 'estValue', 'Est. Low')) return false;
-                const hasPhoto = item.imageId || (item.galleryImageIds && item.galleryImageIds.length > 0) || (item.conditionNotes && (item.conditionNotes.includes('[MAIN IMAGE ID:') || item.conditionNotes.includes('[IMAGE_ID:')));
-                if (!hasPhoto) return false;
-            }
-        }
-        
-        // Filter by Parent Lot ID (Lineage)
-        if (filterParentLotId.value) {
-            const matchesLot = (item.$id && matchingLotDocIds.value.has(item.$id.toLowerCase())) ||
-                               (item.parentLotId && matchingLotDocIds.value.has(item.parentLotId.toLowerCase())) ||
-                               (item.upc && matchingLotDocIds.value.has(item.upc.toLowerCase()));
-            if (!matchesLot) return false;
-        }
-
-        // Exclusion Toggles ("No-Show") - Applied when not explicitly searching
-        if (!searchQuery.value) {
-            if (hideSold.value && item.status === 'sold' && filterStatus.value !== 'sold') return false;
-            if (hideTracked.value && (item.status === 'tracked' || item.status === 'scouted') && filterStatus.value !== 'tracked') return false;
-            if (hideCombined.value && item.status === 'combined' && filterStatus.value !== 'combined') return false;
-
-            // Filter by Status (Only if not using insight filter that forces status or filtering by lineage)
-            if (!insightFilter.value && !filterParentLotId.value && filterStatus.value !== 'all') {
-                if (filterStatus.value === 'active') {
-                    if (['sold', 'tracked', 'scouted', 'combined'].includes(item.status)) return false;
-                } else if (item.status !== filterStatus.value) {
-                    return false;
-                }
-            }
-        }
-
-        // Filter by PO / Purchase Order / Sourcing Order
-        if (filterPO.value) {
-            const target = filterPO.value.trim().toLowerCase();
-            const matchesPo = (item.purchaseId && (item.purchaseId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(item.purchaseId))) ||
-                              (item.orderId && (item.orderId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(item.orderId))) ||
-                              (item.cartId && (item.cartId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(item.cartId))) ||
-                              (item.sourcingLocation && item.sourcingLocation.toLowerCase().includes(target)) ||
-                              (item.conditionNotes && item.conditionNotes.toLowerCase().includes(target)) ||
-                              (item.upc && item.upc.toLowerCase().startsWith(target));
-            if (!matchesPo) return false;
-        }
-
-        // Filter by SO / Sales Order
-        if (filterSO.value) {
-            const target = filterSO.value.trim().toLowerCase();
-            const matchesSo = (item.saleId && item.saleId.toLowerCase() === target) ||
-                              (item.locationSku && item.locationSku.toLowerCase() === target);
-            if (!matchesSo) return false;
-        }
-
-        // Lot Filtering
-        if (filterLotType.value === 'lots_only') {
-            if (item.quantity <= 1 && !(item.title && item.title.toLowerCase().startsWith('lot of'))) return false;
-        } else if (filterLotType.value === 'extracted_only') {
-            if (!item.parentLotId) return false;
-        } else if (filterLotType.value === 'standalone_only') {
-            if (item.parentLotId || (item.quantity > 1) || (item.title && item.title.toLowerCase().startsWith('lot of'))) return false;
-        }
-
-        // Filter by Sales Channel
-        if (filterChannel.value) {
-            const rawTarget = filterChannel.value.trim().toLowerCase();
-            const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
-            const matchesLoc = (val) => {
-                if (!val) return false;
-                if (Array.isArray(val)) return val.some(v => matchesLoc(v));
-                const str = String(val).trim().toLowerCase();
-                const cleanStr = str.replace(/[^a-z0-9]/g, '');
-                return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
-            };
-            if (!matchesLoc(item.sellingLocations)) return false;
-        }
-
-        // Filter by Location (Physical location or selling booth)
-        if (filterBinLocation.value) {
-            if (!matchesLocationFilter(item, filterBinLocation.value)) {
-                return false;
-            }
-        }
-
-        // Filter by Placed & Located Only
-        if (filterFlaggedLocated.value) {
-            const hasLocation = !!item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0);
-            const isPlaced = item.status === 'placed';
-            if (!hasLocation || !isPlaced) return false;
-        }
-
-        // Filter by specific Keywords (must have all selected keywords)
-        if (filterKeywords.value.length > 0) {
-            if (!item.keywords || item.keywords.length === 0) return false;
-            const itemKeywordsLower = item.keywords.map(k => k.toLowerCase());
-            const hasAllKeywords = filterKeywords.value.every(kw => itemKeywordsLower.includes(kw.toLowerCase()));
-            if (!hasAllKeywords) return false;
-        }
-
-        // Filter by UPC / Barcode Prefix
-        if (filterUpcPrefix.value) {
-            const code = (item.upc || item.locationSku || item.sku || '').trim().toUpperCase();
-            if (filterUpcPrefix.value === '__missing__') {
-                if (code !== '') return false;
-            } else if (filterUpcPrefix.value === '__numeric__') {
-                if (!code || !/^\d+$/.test(code)) return false;
-            } else {
-                const target = filterUpcPrefix.value.toUpperCase();
-                if (!code.startsWith(target) && !code.includes(target)) return false;
-            }
-        }
-
-        // Filter by Search (Free text, UPC, SKU, Cart ID, PO, Order #, External URL, Title, Location, etc.)
-        if (searchQuery.value) {
-            const rawQuery = searchQuery.value.trim();
-            const query = rawQuery.toLowerCase();
-            const numericDigits = rawQuery.replace(/\D/g, '');
-            const itemUpc = (item.upc || item.sku || '').toLowerCase();
-
-            // Explicit prefix query like 'upc:huck-' or 'barcode:0012'
-            if (query.startsWith('upc:') || query.startsWith('barcode:')) {
-                const target = query.replace(/^(upc|barcode):/, '').trim();
-                return itemUpc.includes(target);
-            }
-
-            const titleMatch = (item.title || item.itemName || '').toLowerCase().includes(query);
-            const idMatch = (item.$id || '').toLowerCase().includes(query);
-            const identityMatch = (item.identity || '').toLowerCase().includes(query);
-            const binMatch = (item.storageLocation || '').toLowerCase().includes(query);
-            const orderMatch = (item.orderId || item.sourceOrderId || '').toLowerCase().includes(query);
-            const cartMatch = (item.cartId || '').toLowerCase().includes(query) || (item.cartId && matchingPurchaseIds.value.has(item.cartId));
-            const purchaseMatch = (item.purchaseId || '').toLowerCase().includes(query) || (item.purchaseId && matchingPurchaseIds.value.has(item.purchaseId));
-            const sourcingMatch = (item.sourcingLocation || '').toLowerCase().includes(query);
-            const locSkuMatch = (item.locationSku || '').toLowerCase().includes(query);
-            const notesMatch = (item.conditionNotes || item.marketDescription || '').toLowerCase().includes(query);
-            const rawAnalysisMatch = (item.rawAnalysis || '').toLowerCase().includes(query);
-            const componentsMatch = (item.components || '').toLowerCase().includes(query);
-            const keywordMatch = Array.isArray(item.keywords) && item.keywords.some(k => k.toLowerCase().includes(query));
-            const upcMatch = itemUpc.includes(query);
-
-            // Numeric Suffix & Partial Number Matching (e.g. searching "0735" or "735" matches "HUCK-0735")
-            let numericMatch = false;
-            if (numericDigits.length >= 1) {
-                const itemUpcDigits = itemUpc.replace(/\D/g, '');
-                if (itemUpcDigits) {
-                    if (itemUpcDigits.endsWith(numericDigits) || itemUpcDigits.includes(numericDigits)) {
-                        numericMatch = true;
-                    }
-                    const padded = numericDigits.padStart(4, '0');
-                    if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) {
-                        numericMatch = true;
-                    }
-                }
-            }
-
-            if (!titleMatch && !idMatch && !identityMatch && !binMatch && !keywordMatch && !orderMatch && !cartMatch && !purchaseMatch && !sourcingMatch && !locSkuMatch && !notesMatch && !rawAnalysisMatch && !componentsMatch && !upcMatch && !numericMatch) {
-                return false;
-            }
-        }
-        
-        return true;
-    }).sort((a, b) => {
-        const aTime = new Date(a.$updatedAt || a.updatedAt || a.$createdAt || 0).getTime();
-        const bTime = new Date(b.$updatedAt || b.updatedAt || b.$createdAt || 0).getTime();
-        return bTime - aTime;
-    });
-});
-
-// Grid Pagination
-const gridPage = ref(1);
-const gridPageSize = ref(50);
-const gridPageSizeOptions = [25, 50, 100, 200];
-const gridTotalPages = computed(() => Math.ceil(filteredInventory.value.length / gridPageSize.value) || 1);
-
-const displayedInventory = computed(() => {
-    const start = (gridPage.value - 1) * gridPageSize.value;
-    return filteredInventory.value.slice(start, start + gridPageSize.value);
-});
-
-// Reset page when any filter or query changes
-watch([filterStatus, filterUpcPrefix, filterBinLocation, filterChannel, filterLotType, filterFlaggedLocated, filterKeywords, insightFilter, searchQuery, filterPurchaseId], () => {
-    gridPage.value = 1;
 });
 
 // Smoothly scroll back to top of grid on page change if scrolled down
@@ -2046,15 +1137,6 @@ watch(gridPage, () => {
     if (typeof window !== 'undefined' && window.scrollY > 200) {
         window.scrollTo({ top: 120, behavior: 'smooth' });
     }
-});
-
-const cartGroups = computed(() => {
-    return cartItems.value.reduce((groups, item) => {
-        const loc = item.sourcingLocation || 'Unknown Location';
-        if (!groups[loc]) groups[loc] = [];
-        groups[loc].push(item);
-        return groups;
-    }, {});
 });
 
 
@@ -2094,44 +1176,13 @@ const {
     initActiveDraft
 } = useManifest();
 
-let isInternalSync = false;
-
-// 1. Sync active manifest items to selectedItems when activeManifest loads or switches
-watch(() => activeManifest.value?.$id, async () => {
-    if (activeManifest.value && activeManifest.value.status === 'draft') {
-        isInternalSync = true;
-        try {
-            selectedItems.value = [...(activeManifest.value.itemIds || [])];
-            await nextTick();
-        } finally {
-            isInternalSync = false;
-        }
-    }
-}, { immediate: true });
-
-// 2. Sync if itemIds change from external tray actions (e.g. removed from Drop Tray)
-watch(() => activeManifest.value?.itemIds, async (newItemIds) => {
-    if (activeManifest.value && activeManifest.value.status === 'draft' && newItemIds && !isInternalSync) {
-        const currentSet = new Set(selectedItems.value);
-        const isDifferent = newItemIds.length !== selectedItems.value.length || newItemIds.some(id => !currentSet.has(id));
-        if (isDifferent) {
-            isInternalSync = true;
-            try {
-                selectedItems.value = [...newItemIds];
-                await nextTick();
-            } finally {
-                isInternalSync = false;
-            }
-        }
-    }
-}, { deep: true });
-
 const stageSelectedItemsToManifest = async () => {
     if (selectedItems.value.length === 0) return;
     const itemsToStage = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
     const locId = activeManifest.value?.locationId || 'MD';
     const locName = activeManifest.value?.locationName || 'Memory Den';
     await addToActiveManifest(itemsToStage, locId, locName, false, true);
+    addToast({ type: 'success', message: `Staged ${itemsToStage.length} items to ${locName} Drop.` });
 };
 const bulkStatusTarget = ref('');
 const bulkLocationTarget = ref('');
@@ -2143,41 +1194,25 @@ const bulkUpcPrefixTarget = ref('');
 const bulkCustomUpcPrefix = ref('');
 const bulkOpen = ref(false);
 
-// 3. Watch selectedItems to auto-stage to active manifest
+// Watch selectedItems to:
+// 1. Open bulk dock when items are selected
+// 2. Automatically stage newly selected items into the active drop ONLY IF active and status is 'draft' (not paused, locked, or exported)
+// CRITICAL INVARIANT: Unselecting or clearing selection does NOT remove items from the drop! Drops and catalog selections are separate.
 watch(selectedItems, async (newVal, oldVal) => {
     if (newVal.length > 0 && (!oldVal || oldVal.length === 0)) bulkOpen.value = true;
     else if (newVal.length === 0) bulkOpen.value = false;
 
-    if (isInternalSync) return;
-
+    // Only add to active drop if a drop is active and status is 'draft' (not paused or locked/in-transit)
     if (activeManifest.value && activeManifest.value.status === 'draft') {
         const currentManifestIds = new Set(activeManifest.value.itemIds || []);
-        const currentSelectedSet = new Set(selectedItems.value);
-        const addedIds = selectedItems.value.filter(id => !currentManifestIds.has(id));
-        const removedIds = (activeManifest.value.itemIds || []).filter(id => !currentSelectedSet.has(id));
+        const addedIds = newVal.filter(id => !currentManifestIds.has(id));
 
         if (addedIds.length > 0) {
             const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
             if (itemsToAdd.length > 0) {
-                isInternalSync = true;
-                try {
-                    const locId = activeManifest.value.locationId || 'MD';
-                    const locName = activeManifest.value.locationName || 'Memory Den';
-                    await addToActiveManifest(itemsToAdd, locId, locName, false, true);
-                } finally {
-                    isInternalSync = false;
-                }
-            }
-        }
-
-        if (removedIds.length > 0) {
-            isInternalSync = true;
-            try {
-                for (const remId of removedIds) {
-                    await removeFromManifest(remId, true);
-                }
-            } finally {
-                isInternalSync = false;
+                const locId = activeManifest.value.locationId || 'MD';
+                const locName = activeManifest.value.locationName || 'Memory Den';
+                await addToActiveManifest(itemsToAdd, locId, locName, false, true);
             }
         }
     }
@@ -2196,11 +1231,9 @@ const toggleItemSelection = (itemId) => {
     }
 };
 
-const handleClearSelection = async () => {
+const handleClearSelection = () => {
+    // Clear catalog selection only - NEVER clear drops/manifests!
     selectedItems.value = [];
-    if (activeManifest.value && activeManifest.value.status === 'draft') {
-        await clearStagedItems();
-    }
 };
 
 const toggleAll = async (event) => {
@@ -2372,9 +1405,8 @@ const applyBulkStatus = async () => {
             console.warn('[InventoryManager] Auto-sync PO status error:', syncErr);
         }
 
-        selectedItems.value = [];
+        pruneFilteredOutSelections();
         bulkStatusTarget.value = '';
-        dockRef.value?.closeTray();
     } catch (e) {
         console.error("Bulk status error:", e);
         addToast({ type: 'error', message: "Failed to apply bulk update: " + e.message });
@@ -2547,6 +1579,62 @@ const onDockApplyStatus = async (targetSt) => {
 const onDockApplyChannel = async (targetCh) => {
     bulkChannelTarget.value = targetCh;
     await applyBulkChannel();
+};
+
+const openFilterTray = () => {
+    dockRef.value?.openTab('filters');
+};
+
+const onDockApplyBulkUnified = async (payload) => {
+    const { itemIds, updates, clearSelection } = payload;
+    if (!itemIds || itemIds.length === 0 || !updates) return;
+
+    processingBulk.value = true;
+    try {
+        const success = await applyBulkUnified(itemIds, updates);
+        if (success) {
+            // Update in-memory items immediately for instant UI reactivity
+            inventoryItems.value.forEach(item => {
+                if (itemIds.includes(item.$id)) {
+                    if (updates.storageLocation !== undefined) {
+                        item.storageLocation = updates.storageLocation;
+                        if (['scouted', 'acquired', 'received'].includes(item.status) && !updates.status) {
+                            item.status = 'placed';
+                        }
+                    }
+                    if (updates.status !== undefined) {
+                        item.status = updates.status;
+                    }
+                    if (updates.sellingLocations !== undefined) {
+                        item.sellingLocations = updates.sellingLocations;
+                    }
+                    item.$updatedAt = new Date().toISOString();
+                }
+            });
+
+            // Synchronize linked Purchase Order status (Received / Partial / Pending)
+            try {
+                const updatedItems = inventoryItems.value.filter(i => itemIds.includes(i.$id));
+                const syncedPos = await syncPurchaseStatusForItems(updatedItems);
+                const changedPos = syncedPos.filter(p => p.updated);
+                if (changedPos.length > 0) {
+                    const summary = changedPos.map(p => `${p.poNumber} ➔ ${p.status}`).join(', ');
+                    addToast({ type: 'info', message: `PO Status Synced: ${summary}` });
+                }
+            } catch (syncErr) {
+                console.warn('[InventoryManager] Auto-sync PO status error:', syncErr);
+            }
+
+            pruneFilteredOutSelections();
+
+            // Clear selection only if user explicitly requested it via modal checkbox
+            if (clearSelection) {
+                await handleClearSelection();
+            }
+        }
+    } finally {
+        processingBulk.value = false;
+    }
 };
 
 // Checkout State

@@ -297,12 +297,125 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
         return true;
     };
 
+    const applyBulkUnified = async (
+        itemIds: string[], 
+        updates: { 
+            storageLocation?: string; 
+            status?: string; 
+            channel?: string; 
+            sellingLocations?: string[];
+        }
+    ) => {
+        if (!itemIds || itemIds.length === 0 || !updates || Object.keys(updates).length === 0) return false;
+        
+        // Build clean payload
+        const safeUpdates: Record<string, any> = {};
+        if (updates.storageLocation) safeUpdates.storageLocation = updates.storageLocation;
+        if (updates.status) safeUpdates.status = updates.status;
+        if (updates.sellingLocations && Array.isArray(updates.sellingLocations)) {
+            safeUpdates.sellingLocations = updates.sellingLocations;
+        } else if (updates.channel) {
+            safeUpdates.sellingLocations = [updates.channel];
+        }
+
+        if (Object.keys(safeUpdates).length === 0) return false;
+
+        isApplyingBulk.value = true;
+        const total = itemIds.length;
+        const summaryChanges: string[] = [];
+        if (safeUpdates.storageLocation) summaryChanges.push(`Location ➔ ${safeUpdates.storageLocation}`);
+        if (safeUpdates.status) summaryChanges.push(`Status ➔ ${safeUpdates.status}`);
+        if (safeUpdates.sellingLocations) summaryChanges.push(`Channel ➔ ${safeUpdates.sellingLocations.join(', ')}`);
+
+        showLoader("Updating Records...", {
+            step: `Updating ${total} records (${summaryChanges.join(', ')})...`,
+            progress: null,
+            cancelable: false
+        });
+
+        try {
+            // 1. FAST PATH: Server-Side Bulk Update
+            try {
+                const resp = await fetch('/api/inventory/bulk-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        itemIds,
+                        updates: safeUpdates,
+                        collectionId: getCollectionId(),
+                        dbId: DB_ID
+                    })
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.success) {
+                        const count = data.updatedCount ?? total;
+                        addToast({ 
+                            type: 'success', 
+                            message: `Updated ${count} items (${summaryChanges.join(', ')}).` 
+                        });
+                        if (onSuccess) await onSuccess();
+                        return true;
+                    }
+                }
+                console.warn("Server bulk update fell through, attempting client fallback...");
+            } catch (serverErr) {
+                console.warn("Server bulk-update unreachable, falling back to client execution:", serverErr);
+            }
+
+            // 2. FALLBACK PATH: Paced Client-Side Loop
+            let successCount = 0;
+            for (let idx = 0; idx < total; idx++) {
+                const id = itemIds[idx];
+                const percent = Math.round(((idx + 1) / total) * 100);
+
+                showLoader("Updating Records...", {
+                    step: `Item ${idx + 1} of ${total} (${percent}%)`,
+                    progress: percent,
+                    cancelable: false
+                });
+
+                await withRateLimitRetry(
+                    () => updateInventoryItem(id, safeUpdates),
+                    {
+                        onRetry: (attempt, delayMs) => {
+                            showLoader("Rate Limit Protection...", {
+                                step: `⏳ Pausing ${Math.ceil(delayMs / 1000)}s for rate limit recovery (attempt ${attempt}/5)...`,
+                                progress: percent,
+                                cancelable: false
+                            });
+                        }
+                    }
+                );
+
+                successCount++;
+
+                if (total > 1 && idx < total - 1) {
+                    await new Promise(r => setTimeout(r, 120));
+                }
+            }
+
+            addToast({ type: 'success', message: `Updated ${successCount} items.` });
+            if (onSuccess) await onSuccess();
+            return true;
+        } catch (e: any) {
+            console.error("Bulk unified update failed:", e);
+            addToast({ type: 'error', message: `Bulk update failed: ${e.message}` });
+            return false;
+        } finally {
+            isApplyingBulk.value = false;
+            hideLoader();
+        }
+    };
+
     return {
         isApplyingBulk,
         bulkLocationTarget,
         bulkStatusTarget,
         applyBulkLocation,
         applyBulkStatus,
+        applyBulkUnified,
         deleteBulkItems,
         exportBulkItems,
     };

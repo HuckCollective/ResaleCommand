@@ -286,12 +286,14 @@
             @bundle="$emit('bundle')"
             @apply-location="$emit('apply-location', $event)"
             @apply-status="$emit('apply-status', $event)"
+            @apply-bulk-unified="$emit('apply-bulk-unified', $event)"
             @export="$emit('export', $event)"
             @delete="$emit('delete')"
             @select-all="$emit('select-all')"
             @unselect-item="$emit('unselect-item', $event)"
             @clear-selection="$emit('clear-selection')"
             @reset-filters="$emit('clear-filters')"
+            @stage-manifest="$emit('stage-manifest')"
         >
             <template #filters>
                 <slot name="filters" />
@@ -433,6 +435,7 @@ const emit = defineEmits([
     'bundle',
     'apply-location',
     'apply-status',
+    'apply-bulk-unified',
     'export',
     'delete',
     'select-all',

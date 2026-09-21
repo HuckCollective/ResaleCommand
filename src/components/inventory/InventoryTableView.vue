@@ -313,6 +313,7 @@
             @import-csv="showImport = true"
             @apply-location="handleBulkLocation"
             @apply-status="handleBulkStatus"
+            @apply-bulk-unified="handleBulkUnified"
             @export="handleExport"
             @delete="handleBulkDelete"
             @select-all="toggleAll(filteredItems)"
@@ -430,10 +431,11 @@ const {
     isApplyingBulk,
     applyBulkLocation,
     applyBulkStatus,
+    applyBulkUnified,
     deleteBulkItems,
     exportBulkItems
 } = useInventoryBulkActions(async () => {
-    clearSelection();
+    // Retain selection across actions - do NOT clearSelection() automatically
     await fetchInventory();
 });
 
@@ -451,83 +453,32 @@ const {
     initActiveDraft
 } = useManifest();
 
-let isInternalSync = false;
-
-// 1. Sync active manifest items to selectedItems when activeManifest loads or switches
-watch(() => activeManifest.value?.$id, async () => {
-    if (activeManifest.value && activeManifest.value.status === 'draft') {
-        isInternalSync = true;
-        try {
-            selectedItems.value = [...(activeManifest.value.itemIds || [])];
-            await nextTick();
-        } finally {
-            isInternalSync = false;
-        }
-    }
-}, { immediate: true });
-
-// 2. Sync if itemIds change from external tray actions
-watch(() => activeManifest.value?.itemIds, async (newItemIds) => {
-    if (activeManifest.value && activeManifest.value.status === 'draft' && newItemIds && !isInternalSync) {
-        const currentSet = new Set(selectedItems.value);
-        const isDifferent = newItemIds.length !== selectedItems.value.length || newItemIds.some(id => !currentSet.has(id));
-        if (isDifferent) {
-            isInternalSync = true;
-            try {
-                selectedItems.value = [...newItemIds];
-                await nextTick();
-            } finally {
-                isInternalSync = false;
-            }
-        }
-    }
-}, { deep: true });
-
-// 3. Watch selectedItems to auto-stage to active manifest
-watch(selectedItems, async () => {
-    if (isInternalSync) return;
-
-    if (activeManifest.value && activeManifest.value.status === 'draft') {
-        const currentManifestIds = new Set(activeManifest.value.itemIds || []);
-        const currentSelectedSet = new Set(selectedItems.value);
-        const addedIds = selectedItems.value.filter(id => !currentManifestIds.has(id));
-        const removedIds = (activeManifest.value.itemIds || []).filter(id => !currentSelectedSet.has(id));
-
-        if (addedIds.length > 0) {
-            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
-            if (itemsToAdd.length > 0) {
-                isInternalSync = true;
-                try {
-                    const locId = activeManifest.value.locationId || 'MD';
-                    const locName = activeManifest.value.locationName || 'Memory Den';
-                    await addToActiveManifest(itemsToAdd, locId, locName, false, true);
-                } finally {
-                    isInternalSync = false;
-                }
-            }
-        }
-
-        if (removedIds.length > 0) {
-            isInternalSync = true;
-            try {
-                for (const remId of removedIds) {
-                    await removeFromManifest(remId, true);
-                }
-            } finally {
-                isInternalSync = false;
-            }
-        }
-    }
-}, { deep: true });
-
 const handleStageManifest = async () => {
     if (selectedItems.value.length === 0) return;
     const itemsToStage = getSelectedObjects(inventoryItems.value);
     const locId = activeManifest.value?.locationId || 'MD';
     const locName = activeManifest.value?.locationName || 'Memory Den';
     await addToActiveManifest(itemsToStage, locId, locName, false, true);
-    clearSelection();
+    addToast({ type: 'success', message: `Staged ${itemsToStage.length} items to ${locName} Drop.` });
 };
+
+// Watch selectedItems to automatically stage newly selected items into active drop ONLY IF active and status is 'draft'
+// CRITICAL INVARIANT: Unselecting or clearing selection does NOT remove items from the drop! Drops and catalog selections are separate.
+watch(selectedItems, async (newVal) => {
+    if (activeManifest.value && activeManifest.value.status === 'draft') {
+        const currentManifestIds = new Set(activeManifest.value.itemIds || []);
+        const addedIds = newVal.filter(id => !currentManifestIds.has(id));
+
+        if (addedIds.length > 0) {
+            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
+            if (itemsToAdd.length > 0) {
+                const locId = activeManifest.value.locationId || 'MD';
+                const locName = activeManifest.value.locationName || 'Memory Den';
+                await addToActiveManifest(itemsToAdd, locId, locName, false, true);
+            }
+        }
+    }
+}, { deep: true });
 
 // -- 5. DRAWER & MODALS STATE --
 const { 
@@ -585,6 +536,15 @@ const handleBulkLocation = async (targetLocation) => {
 
 const handleBulkStatus = async (targetStatus) => {
     await applyBulkStatus(selectedItems.value, targetStatus);
+};
+
+const handleBulkUnified = async (payload) => {
+    if (!payload || !payload.itemIds || payload.itemIds.length === 0) return;
+    const { itemIds, updates, clearSelection: shouldClear } = payload;
+    const success = await applyBulkUnified(itemIds, updates);
+    if (success && shouldClear) {
+        clearSelection();
+    }
 };
 
 const handleBulkDelete = async () => {

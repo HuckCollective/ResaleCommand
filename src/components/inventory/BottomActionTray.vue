@@ -49,14 +49,26 @@
                         <span class="truncate">Staged in {{ activeManifest.name }}</span>
                         <span class="badge badge-xs badge-primary font-mono font-bold shrink-0">{{ stagedCount }} items</span>
                     </div>
-                    <button 
-                        type="button" 
-                        @click="handleOpenDropTray" 
-                        class="btn btn-xs btn-primary text-primary-content font-bold h-6 min-h-6 px-2 rounded-lg shrink-0 gap-0.5"
-                    >
-                        <span>View Drop</span>
-                        <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
-                    </button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button 
+                            v-if="selectedCount > 0 && activeManifest.status === 'draft'"
+                            type="button" 
+                            @click="$emit('stage-manifest')" 
+                            class="btn btn-xs btn-primary text-primary-content font-bold h-6 min-h-6 px-2 rounded-lg shrink-0 gap-0.5"
+                            title="Stage selected items into this drop"
+                        >
+                            <Icon icon="solar:add-circle-bold" class="w-3 h-3" />
+                            <span>+ Stage ({{ selectedCount }})</span>
+                        </button>
+                        <button 
+                            type="button" 
+                            @click="handleOpenDropTray" 
+                            class="btn btn-xs btn-outline btn-primary font-bold h-6 min-h-6 px-2 rounded-lg shrink-0 gap-0.5"
+                        >
+                            <span>View Drop</span>
+                            <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Selection Header Bar -->
@@ -73,7 +85,7 @@
                     <div class="flex items-center gap-1.5 shrink-0">
                         <button 
                             type="button" 
-                            class="btn btn-ghost btn-xs text-primary font-bold h-6 min-h-6 px-2"
+                            class="btn btn-ghost btn-xs text-primary font-bold h-7 min-h-7 px-2.5"
                             @click="$emit('select-all')"
                             title="Select all filtered records"
                         >
@@ -82,11 +94,12 @@
                         <button 
                             v-if="selectedCount > 0"
                             type="button" 
-                            class="btn btn-ghost btn-xs text-error font-bold h-6 min-h-6 px-2"
+                            class="btn btn-xs btn-outline btn-error font-bold h-7 min-h-7 px-2.5 gap-1 shadow-2xs"
                             @click="$emit('clear-selection')"
-                            title="Clear selection"
+                            title="Clear all selections across pages"
                         >
-                            Clear
+                            <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
+                            <span>Clear ({{ selectedCount }})</span>
                         </button>
                     </div>
                 </div>
@@ -164,60 +177,91 @@
 
                 <!-- STACKED FOOTER DOCK (ALL BULK ACTIONS IN STACKED DOCK) -->
                 <div class="border-t border-base-300 bg-base-100/95 backdrop-blur-md p-3 space-y-2 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
-                    <!-- STACK ROW 1: LOCATION & STATUS MOVERS -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-base-200/60 p-2.5 rounded-2xl border border-base-300/80">
-                        <!-- Move Location -->
-                        <div class="flex items-center gap-1.5">
-                            <select v-model="selectedWarehouse" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg flex-1 h-8 min-h-8">
-                                <option value="HG">HG (Garage)</option>
-                                <option value="HD">HD (Hideout)</option>
-                                <option value="MD">MD (Memory Den)</option>
-                                <option value="DT">DT (Dusty Tiger)</option>
-                                <option value="__custom__">Custom...</option>
-                            </select>
-                            <input 
-                                v-if="selectedWarehouse !== '__custom__'"
-                                type="text" 
-                                v-model="customBin" 
-                                placeholder="Bin..." 
-                                class="input input-xs input-bordered bg-base-100 text-xs font-mono font-bold uppercase rounded-lg w-20 h-8 min-h-8"
-                            />
-                            <input 
-                                v-else
-                                type="text" 
-                                v-model="customRawLocation" 
-                                placeholder="Location..." 
-                                class="input input-xs input-bordered bg-base-100 text-xs font-bold rounded-lg w-24 h-8 min-h-8"
-                            />
-                            <button 
-                                type="button" 
-                                class="btn btn-xs btn-primary text-primary-content font-bold rounded-lg h-8 min-h-8 px-2.5 shrink-0"
-                                :disabled="selectedCount === 0 || !computedLocationPreview || isProcessing"
-                                @click="onApplyLocation"
-                                title="Apply new location to selected records"
-                            >
-                                Move
-                            </button>
+                    <!-- UNIFIED BATCH CONTROLS BOX -->
+                    <div class="bg-base-200/60 p-2.5 rounded-2xl border border-base-300/80 space-y-2">
+                        <!-- Top Row: Location, Status, Channel pickers -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <!-- 1. Move Location -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1">
+                                    <Icon icon="solar:map-point-bold" class="w-3 h-3 text-primary" />
+                                    <span>Location</span>
+                                </label>
+                                <div class="flex items-center gap-1">
+                                    <select v-model="selectedWarehouse" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg flex-1 h-8 min-h-8">
+                                        <option value="">No change</option>
+                                        <option value="HG">HG (Garage)</option>
+                                        <option value="HD">HD (Hideout)</option>
+                                        <option value="MD">MD (Memory Den)</option>
+                                        <option value="DT">DT (Dusty Tiger)</option>
+                                        <option value="__custom__">Custom...</option>
+                                    </select>
+                                    <input 
+                                        v-if="selectedWarehouse && selectedWarehouse !== '__custom__'"
+                                        type="text" 
+                                        v-model="customBin" 
+                                        placeholder="Bin..." 
+                                        class="input input-xs input-bordered bg-base-100 text-xs font-mono font-bold uppercase rounded-lg w-16 h-8 min-h-8"
+                                    />
+                                    <input 
+                                        v-else-if="selectedWarehouse === '__custom__'"
+                                        type="text" 
+                                        v-model="customRawLocation" 
+                                        placeholder="Location..." 
+                                        class="input input-xs input-bordered bg-base-100 text-xs font-bold rounded-lg w-20 h-8 min-h-8"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- 2. Set Status -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1">
+                                    <Icon icon="solar:tag-bold" class="w-3 h-3 text-secondary" />
+                                    <span>Status</span>
+                                </label>
+                                <select v-model="targetStatus" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg w-full h-8 min-h-8">
+                                    <option value="">No change</option>
+                                    <option value="active">Active Stock</option>
+                                    <option value="acquired">Acquired</option>
+                                    <option value="received">Received</option>
+                                    <option value="placed">Placed</option>
+                                    <option value="sold">Sold</option>
+                                </select>
+                            </div>
+
+                            <!-- 3. Sales Channel -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-1">
+                                    <Icon icon="solar:shop-bold" class="w-3 h-3 text-accent" />
+                                    <span>Channel</span>
+                                </label>
+                                <select v-model="targetChannel" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg w-full h-8 min-h-8">
+                                    <option value="">No change</option>
+                                    <option v-for="ch in availableChannelList" :key="ch" :value="ch">{{ ch }}</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <!-- Set Status -->
-                        <div class="flex items-center gap-1.5">
-                            <select v-model="targetStatus" class="select select-xs select-bordered bg-base-100 text-xs font-bold rounded-lg flex-1 h-8 min-h-8">
-                                <option value="" disabled selected>Select status...</option>
-                                <option value="active">Active Stock</option>
-                                <option value="acquired">Acquired</option>
-                                <option value="received">Received</option>
-                                <option value="placed">Placed</option>
-                                <option value="sold">Sold</option>
-                            </select>
+                        <!-- Apply Button Row -->
+                        <div class="flex items-center justify-between gap-2 pt-1 border-t border-base-300/60">
+                            <div class="text-[11px] text-base-content/70 flex items-center gap-1.5 font-medium">
+                                <span v-if="configuredChangesCount > 0" class="badge badge-xs badge-primary font-bold">
+                                    {{ configuredChangesCount }} field{{ configuredChangesCount > 1 ? 's' : '' }} configured
+                                </span>
+                                <span v-else class="text-base-content/50 italic text-[10px]">
+                                    Pick Location, Status, or Channel above
+                                </span>
+                            </div>
+
                             <button 
                                 type="button" 
-                                class="btn btn-xs btn-secondary text-secondary-content font-bold rounded-lg h-8 min-h-8 px-2.5 shrink-0"
-                                :disabled="selectedCount === 0 || !targetStatus || isProcessing"
-                                @click="onApplyStatus"
-                                title="Apply new pipeline status to selected records"
+                                class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-bold rounded-xl px-3.5 gap-1.5 shadow-md active:scale-95 transition-all"
+                                :disabled="selectedCount === 0 || configuredChangesCount === 0 || isProcessing"
+                                @click="openConfirmationModal"
+                                title="Review and apply configured updates to all selected records"
                             >
-                                Set Status
+                                <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+                                <span>Apply to {{ selectedCount }} Selected</span>
                             </button>
                         </div>
                     </div>
@@ -479,6 +523,114 @@
             </form>
         </dialog>
 
+        <!-- BULK CHANGES CONFIRMATION MODAL -->
+        <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': isConfirmModalOpen }">
+            <div v-if="isConfirmModalOpen" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 max-w-md mx-auto space-y-4">
+                <!-- Header -->
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <Icon icon="solar:checklist-minimalistic-bold" class="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 class="font-black text-base text-base-content">Confirm Bulk Changes</h3>
+                            <p class="text-xs text-base-content/60 font-mono">
+                                Updating {{ selectedCount }} items across catalog
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" @click="isConfirmModalOpen = false" class="btn btn-ghost btn-xs btn-circle">
+                        <Icon icon="solar:close-circle-bold" class="w-5 h-5 opacity-60" />
+                    </button>
+                </div>
+
+                <!-- Itemized Changes Breakdown -->
+                <div class="space-y-2 bg-base-200/60 p-3 rounded-2xl border border-base-300/80 text-xs">
+                    <div class="font-bold text-[10px] uppercase tracking-wider text-base-content/60 mb-1">
+                        Updates to be applied:
+                    </div>
+
+                    <!-- Location -->
+                    <div class="flex items-center justify-between py-1 border-b border-base-300/50">
+                        <div class="flex items-center gap-1.5 text-base-content/80">
+                            <Icon icon="solar:map-point-bold" class="w-4 h-4 text-primary" />
+                            <span class="font-bold">Location</span>
+                        </div>
+                        <div>
+                            <span v-if="computedLocationPreview" class="badge badge-xs badge-primary font-mono font-bold">
+                                {{ computedLocationPreview }}
+                            </span>
+                            <span v-else class="text-base-content/40 italic">Unchanged</span>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="flex items-center justify-between py-1 border-b border-base-300/50">
+                        <div class="flex items-center gap-1.5 text-base-content/80">
+                            <Icon icon="solar:tag-bold" class="w-4 h-4 text-secondary" />
+                            <span class="font-bold">Status</span>
+                        </div>
+                        <div>
+                            <span v-if="targetStatus" class="badge badge-xs badge-secondary font-mono font-bold uppercase">
+                                {{ targetStatus }}
+                            </span>
+                            <span v-else class="text-base-content/40 italic">Unchanged</span>
+                        </div>
+                    </div>
+
+                    <!-- Channel -->
+                    <div class="flex items-center justify-between py-1">
+                        <div class="flex items-center gap-1.5 text-base-content/80">
+                            <Icon icon="solar:shop-bold" class="w-4 h-4 text-accent" />
+                            <span class="font-bold">Sales Channel</span>
+                        </div>
+                        <div>
+                            <span v-if="targetChannel" class="badge badge-xs badge-accent font-mono font-bold">
+                                {{ targetChannel }}
+                            </span>
+                            <span v-else class="text-base-content/40 italic">Unchanged</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explanation Note -->
+                <div class="alert alert-info py-2 px-3 text-[11px] rounded-xl flex items-start gap-2">
+                    <Icon icon="solar:info-circle-bold" class="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                        This will update all <strong>{{ selectedCount }} items</strong> in the database at once via high-speed server batching.
+                    </span>
+                </div>
+
+                <!-- Clear Selection Checkbox Option -->
+                <label class="label cursor-pointer py-0 justify-start gap-2.5">
+                    <input type="checkbox" v-model="clearSelectionAfterApply" class="checkbox checkbox-xs checkbox-primary" />
+                    <span class="label-text text-xs text-base-content/80">Clear selection after applying changes</span>
+                </label>
+
+                <!-- Actions -->
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-base-300">
+                    <button 
+                        type="button" 
+                        class="btn btn-sm btn-ghost font-bold rounded-xl"
+                        @click="isConfirmModalOpen = false"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        type="button" 
+                        class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl px-5 gap-1.5 shadow-md"
+                        @click="executeUnifiedApply"
+                    >
+                        <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+                        <span>Confirm &amp; Apply</span>
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop" @click="isConfirmModalOpen = false">
+                <button>close</button>
+            </form>
+        </dialog>
+
     </div>
 </template>
 
@@ -574,22 +726,35 @@ const emit = defineEmits([
     'bundle',
     'apply-location',
     'apply-status',
+    'apply-bulk-unified',
     'export',
     'delete',
     'select-all',
     'unselect-item',
     'clear-selection',
-    'reset-filters'
+    'reset-filters',
+    'stage-manifest'
 ]);
 
 const targetLocation = ref('');
-const selectedWarehouse = ref('HG');
+const selectedWarehouse = ref('');
 const customBin = ref('');
 const customRawLocation = ref('');
 const targetStatus = ref('');
+const targetChannel = ref('');
+const isConfirmModalOpen = ref(false);
+const clearSelectionAfterApply = ref(false);
 const isConfirmingDelete = ref(false);
 
+const availableChannelList = computed(() => {
+    if (props.channels && props.channels.length > 0) {
+        return props.channels;
+    }
+    return ['Ricochet', 'DustyTiger', 'eBay', 'Poshmark', 'Backstock'];
+});
+
 const computedLocationPreview = computed(() => {
+    if (!selectedWarehouse.value) return '';
     if (selectedWarehouse.value === '__custom__') {
         return customRawLocation.value.trim();
     }
@@ -598,6 +763,47 @@ const computedLocationPreview = computed(() => {
     if (!bin) return wh;
     return `${wh}-${bin}`;
 });
+
+const configuredChangesCount = computed(() => {
+    let c = 0;
+    if (computedLocationPreview.value) c++;
+    if (targetStatus.value) c++;
+    if (targetChannel.value) c++;
+    return c;
+});
+
+const openConfirmationModal = () => {
+    if (props.selectedCount === 0 || configuredChangesCount.value === 0) return;
+    isConfirmModalOpen.value = true;
+};
+
+const executeUnifiedApply = () => {
+    isConfirmModalOpen.value = false;
+    const updates = {};
+    if (computedLocationPreview.value) {
+        updates.storageLocation = computedLocationPreview.value;
+    }
+    if (targetStatus.value) {
+        updates.status = targetStatus.value;
+    }
+    if (targetChannel.value) {
+        updates.channel = targetChannel.value;
+        updates.sellingLocations = [targetChannel.value];
+    }
+    
+    emit('apply-bulk-unified', {
+        itemIds: props.selectedItems.map(i => i.$id),
+        updates,
+        clearSelection: clearSelectionAfterApply.value
+    });
+
+    // Reset local inputs
+    selectedWarehouse.value = '';
+    customBin.value = '';
+    customRawLocation.value = '';
+    targetStatus.value = '';
+    targetChannel.value = '';
+};
 
 const setQuickLoc = (wh, bin = '') => {
     selectedWarehouse.value = wh;
@@ -691,7 +897,6 @@ const onApplyStatus = () => {
     if (!targetStatus.value) return;
     const st = targetStatus.value;
     targetStatus.value = '';
-    closeTray();
     emit('apply-status', st);
 };
 
