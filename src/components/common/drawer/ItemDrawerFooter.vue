@@ -1,8 +1,10 @@
 <template>
-    <div class="p-3 sm:px-6 pb-safe border-t border-base-300 flex flex-row justify-between items-center bg-base-200/90 backdrop-blur-md z-30 shadow-lg gap-3 shrink-0">
+    <div class="p-3 sm:px-6 pb-safe border-t border-base-300 flex flex-row justify-between items-center bg-base-200/90 backdrop-blur-md shadow-lg gap-3 shrink-0 select-none">
         <div class="flex items-center gap-2">
+            <!-- AI Deep Research Button -->
             <button 
-                class="btn btn-secondary btn-sm shadow-xs gap-1.5 font-bold hover:scale-105 transition-all" 
+                type="button"
+                class="btn btn-secondary text-secondary-content btn-sm shadow-xs gap-1.5 font-bold hover:scale-105 active:scale-95 transition-all" 
                 @click="emit('analyze')" 
                 :disabled="analyzing || !canAnalyze"
             >
@@ -14,8 +16,13 @@
         </div>
 
         <div class="flex items-center gap-2">
-            <button class="btn btn-ghost btn-sm" @click="emit('cancel')">Cancel</button>
-            <button class="btn btn-primary btn-sm font-bold px-6 shadow-md" @click="emit('save')" :disabled="processing">
+            <button type="button" class="btn btn-ghost btn-sm font-semibold" @click="emit('cancel')">Cancel</button>
+            <button 
+                type="button" 
+                class="btn btn-primary text-primary-content btn-sm font-black px-6 shadow-md border border-primary-content/25 active:scale-95 transition-all" 
+                @click="emit('save')" 
+                :disabled="processing"
+            >
                 <span v-if="processing" class="loading loading-spinner loading-xs mr-1"></span>
                 <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 mr-1" />
                 Save Item
@@ -28,6 +35,18 @@
 import { Icon } from '@iconify/vue';
 
 defineProps({
+    currentTab: {
+        type: String,
+        default: 'details'
+    },
+    item: {
+        type: Object,
+        default: () => ({})
+    },
+    editForm: {
+        type: Object,
+        default: () => ({})
+    },
     analyzing: {
         type: Boolean,
         default: false

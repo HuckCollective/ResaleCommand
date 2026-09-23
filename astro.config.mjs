@@ -33,13 +33,26 @@ export default defineConfig({
     // On WSL/Linux, use a native temp directory to avoid Windows file lock (EACCES) issues on the mounted /c/ drive
     cacheDir: os.platform() === "linux" ? "/tmp/vite_cache_resalecommand" : undefined,
     server: {
-
+      fs: {
+        strict: true,
+        allow: [process.cwd()]
+      },
       watch: {
-        usePolling: true,
+        usePolling: os.platform() === "linux",
         interval: 1000,
         binaryInterval: 1000,
-        // Native OS file watching is much faster than polling on Windows
-        ignored: ['**/node_modules/**', '**/.git/**', '**/.astro/**']
+        ignored: [
+          '**/node_modules/**', 
+          '**/.git/**', 
+          '**/.astro/**',
+          'C:/*',
+          '**/*.sys',
+          '**/hiberfil.sys',
+          '**/pagefile.sys',
+          '**/swapfile.sys',
+          '**/DumpStack*.*',
+          '**/*DumpStack*'
+        ]
       },
       hmr: {
         protocol: 'ws'

@@ -198,6 +198,18 @@
                 <span>Missing Pricing</span>
             </button>
 
+            <!-- Quick Insight: Needs Shop Update -->
+            <button 
+                type="button"
+                @click="$emit('update:filterInsight', filterInsight === 'needs_shop_update' ? '' : 'needs_shop_update')"
+                class="btn btn-xs rounded-full gap-1 transition-all font-bold shrink-0"
+                :class="filterInsight === 'needs_shop_update' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
+                title="Items needing UPC or price updates in Ricochet POS / shop UI"
+            >
+                <Icon icon="solar:danger-triangle-bold" class="w-3 h-3" />
+                <span>Needs Shop Update</span>
+            </button>
+
             <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
 
             <!-- Quick Location Filter Dropdown Pill -->
@@ -300,6 +312,7 @@
                 <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">AI Health Insights</div>
                 <select :value="filterInsight" @change="$emit('update:filterInsight', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
                     <option value="">All Health Statuses</option>
+                    <option value="needs_shop_update">Needs Shop Update</option>
                     <option value="ready_to_list">Ready to List</option>
                     <option value="missing_photos">Missing Photos</option>
                     <option value="missing_pricing">Missing Pricing</option>

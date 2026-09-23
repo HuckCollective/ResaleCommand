@@ -5,7 +5,7 @@
       class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex flex-col justify-end transition-opacity"
       @click.self="toggleTray"
     >
-      <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
+      <div class="bg-base-100 border-t border-base-300 rounded-t-box max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden">
         
         <!-- Drag Handle Affordance -->
         <div class="w-12 h-1.5 bg-base-content/20 rounded-full mx-auto mt-2.5 mb-0.5 shrink-0"></div>
@@ -53,7 +53,7 @@
                   </h3>
                 </div>
                 <button 
-                  v-if="!isLocked"
+                  v-if="!isLocked && activeManifest.status !== 'placed'"
                   @click="startEditTitle" 
                   class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 hover:bg-base-200"
                   title="Rename Manifest"
@@ -69,7 +69,13 @@
                 <span>{{ activeManifest.locationName || 'Memory Den' }}</span>
               </span>
               <span class="opacity-40">•</span>
-              <span class="shrink-0">{{ stagedCount }} {{ stagedCount === 1 ? 'item' : 'items' }} staged</span>
+              <span class="shrink-0 font-bold">
+                {{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}
+                <template v-if="totalUnits !== stagedCount">({{ stagedCount }} unique)</template> staged
+              </span>
+              <span v-if="activeManifest.status === 'placed'" class="badge badge-xs badge-success text-success-content font-bold uppercase font-mono ml-1">
+                Placed &amp; Closed
+              </span>
             </div>
           </div>
 
@@ -84,36 +90,66 @@
         <!-- Financial Summary Banner (Counterpart to Scout Tray Banner) -->
         <div class="bg-base-200/70 p-3 sm:p-4 border-b border-base-300 shrink-0 space-y-2.5">
           <div class="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
-            <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
+            <div class="bg-base-100 p-1.5 sm:p-2 rounded-box border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Landed Cost</div>
               <div class="font-mono font-black text-xs sm:text-base text-warning truncate">${{ totalCost.toFixed(2) }}</div>
             </div>
-            <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
+            <div class="bg-base-100 p-1.5 sm:p-2 rounded-box border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Tag Retail</div>
               <div class="font-mono font-black text-xs sm:text-base text-secondary truncate">${{ totalRetail.toFixed(2) }}</div>
             </div>
-            <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
+            <div class="bg-base-100 p-1.5 sm:p-2 rounded-box border border-base-300/80">
               <div class="text-[9px] uppercase font-bold opacity-60 truncate">Est. Net (-{{ commissionRate }}%)</div>
               <div class="font-mono font-black text-xs sm:text-base text-success truncate">${{ estimatedNet.toFixed(2) }}</div>
             </div>
-            <div class="bg-base-100 p-1.5 sm:p-2 rounded-xl border border-base-300/80">
-              <div class="text-[9px] uppercase font-bold opacity-60 truncate">Net Profit</div>
-              <div class="font-mono font-black text-xs sm:text-base text-primary truncate">+${{ estimatedProfit.toFixed(2) }}</div>
+            <div class="bg-base-100 p-1.5 sm:p-2 rounded-box border border-base-300/80">
+              <div class="text-[9px] uppercase font-bold opacity-60 truncate">Est. Profit</div>
+              <div class="font-mono font-black text-xs sm:text-base truncate" :class="estimatedProfit >= 0 ? 'text-primary' : 'text-error'">
+                {{ estimatedProfit >= 0 ? '+' : '-' }}${{ Math.abs(estimatedProfit).toFixed(2) }}
+              </div>
             </div>
           </div>
 
           <!-- In-Transit / Verify Tip Banner -->
-          <div v-if="isLocked" class="bg-info/10 border border-info/30 rounded-xl p-2.5 text-xs flex items-center justify-between gap-2 text-info-content">
+          <div v-if="isLocked" class="bg-info/10 border border-info/30 rounded-box p-2.5 text-xs flex items-center justify-between gap-2 text-info-content">
             <div class="flex items-center gap-2 min-w-0">
               <Icon icon="solar:lock-bold" class="w-4 h-4 text-info shrink-0" />
               <span class="truncate">Drop locked in-transit. Tap items as you sticker &amp; place them on shelves:</span>
             </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button 
+                type="button" 
+                class="btn btn-xs btn-ghost text-info font-black"
+                @click="toggleAllVerified"
+              >
+                {{ verifiedItemIds.size === stagedItems.length ? 'Deselect All' : 'Select All' }}
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-xs btn-warning text-warning-content font-bold gap-1 shadow-xs"
+                @click="handleUnlock"
+                title="Unlock drop to add or remove items"
+              >
+                <Icon icon="solar:lock-unlocked-bold" class="w-3.5 h-3.5" />
+                <span>Unlock</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Placed / Closed Finalized Banner -->
+          <div v-else-if="activeManifest.status === 'placed'" class="bg-success/10 border border-success/30 rounded-box p-2.5 text-xs flex items-center justify-between gap-2 text-success-content">
+            <div class="flex items-center gap-2 min-w-0">
+              <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success shrink-0" />
+              <span class="truncate">Drop Placed &amp; Finalized! Items are active in booth.</span>
+            </div>
             <button 
               type="button" 
-              class="btn btn-xs btn-ghost text-info font-black shrink-0 underline"
-              @click="toggleAllVerified"
+              class="btn btn-xs btn-warning font-black gap-1 text-warning-content shadow-xs"
+              @click="handleOpenRollbackModal(activeManifest.$id)"
+              title="Rollback this drop: restores items to backstock and reopens manifest as draft"
             >
-              {{ verifiedItemIds.size === stagedItems.length ? 'Deselect All' : 'Select All' }}
+              <Icon icon="solar:restart-bold" class="w-3.5 h-3.5" />
+              <span>Undo &amp; Reopen</span>
             </button>
           </div>
         </div>
@@ -212,16 +248,17 @@
           <div class="grid grid-cols-3 gap-1.5 sm:gap-2 w-full">
             <!-- 1. Switch Drops Dropdown -->
             <div class="dropdown dropdown-top w-full">
-              <button tabindex="0" type="button" class="btn btn-ghost btn-sm gap-1 font-mono text-[11px] bg-base-100 hover:bg-base-300 border border-base-300 rounded-xl h-10 w-full flex items-center justify-center shadow-xs">
-                <span class="truncate">Drops ({{ displayedDrafts.length }})</span>
+              <button tabindex="0" type="button" class="btn btn-ghost btn-sm gap-1 font-mono text-[11px] bg-base-100 hover:bg-base-300 border border-base-300 rounded-btn h-10 w-full flex items-center justify-center shadow-xs">
+                <span class="truncate">Drops ({{ allAvailableDrops.length }})</span>
                 <Icon icon="solar:alt-arrow-up-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
               </button>
-              <ul tabindex="0" class="dropdown-content menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-2xl w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md z-[90] text-xs space-y-1 mb-1">
+              <ul tabindex="0" class="dropdown-content menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-max min-w-[300px] max-w-[calc(100vw-2rem)] sm:max-w-md z-[90] text-xs space-y-1 mb-1 max-h-80 overflow-y-auto">
+                <li class="menu-title text-[10px] uppercase font-bold text-base-content/50 px-2 py-0.5">Active &amp; In-Transit Drops</li>
                 <li v-for="d in displayedDrafts" :key="d.$id">
                   <a 
                     :class="{'active font-bold': d.$id === activeManifest.$id}"
                     @click="handleResumeOrSwitch(d.$id)"
-                    class="flex items-center justify-between gap-3 py-2 px-2.5"
+                    class="flex items-center justify-between gap-3 py-2 px-2.5 rounded-btn"
                   >
                     <span class="truncate flex-1 min-w-0 font-medium">{{ d.name }}</span>
                     <span 
@@ -232,8 +269,26 @@
                     </span>
                   </a>
                 </li>
+
+                <!-- Recent Placed Drops Archive in Dropdown -->
+                <template v-if="displayedPlacedDrops.length > 0">
+                  <li class="menu-title text-[10px] uppercase font-bold text-base-content/50 px-2 py-0.5 mt-1 border-t border-base-200">Past Placed Drops (Archive)</li>
+                  <li v-for="pd in displayedPlacedDrops" :key="pd.$id">
+                    <a 
+                      :class="{'active font-bold': pd.$id === activeManifest.$id}"
+                      @click="handleResumeOrSwitch(pd.$id)"
+                      class="flex items-center justify-between gap-3 py-2 px-2.5 rounded-btn"
+                    >
+                      <span class="truncate flex-1 min-w-0 font-medium opacity-80">{{ pd.name }}</span>
+                      <span class="badge badge-xs badge-success text-success-content shrink-0 font-mono font-bold uppercase text-[9px]">
+                        placed
+                      </span>
+                    </a>
+                  </li>
+                </template>
+
                 <li class="border-t border-base-200 mt-1 pt-1">
-                  <a @click="handleStartNewDrop" class="text-primary font-bold flex items-center gap-1.5 cursor-pointer">
+                  <a @click="handleStartNewDrop" class="text-primary font-bold flex items-center gap-1.5 cursor-pointer rounded-btn">
                     <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
                     <span>+ Start New Drop</span>
                   </a>
@@ -241,12 +296,22 @@
               </ul>
             </div>
 
-            <!-- 2. Pause / Resume / Unlock -->
+            <!-- 2. Context Action: Pause / Resume / Unlock / Rollback -->
             <button 
-              v-if="activeManifest.status === 'draft'"
+              v-if="activeManifest.status === 'placed'"
+              type="button" 
+              @click="handleOpenRollbackModal(activeManifest.$id)"
+              class="btn btn-ghost btn-sm gap-1 font-bold text-xs rounded-btn bg-base-100 hover:bg-warning/20 hover:text-warning border border-base-300 transition-all h-10 w-full flex items-center justify-center shadow-xs"
+              title="Undo placement and reopen this drop as draft"
+            >
+              <Icon icon="solar:restart-bold" class="w-4 h-4 text-warning" />
+              <span>Reopen</span>
+            </button>
+            <button 
+              v-else-if="activeManifest.status === 'draft'"
               type="button" 
               @click="handlePause"
-              class="btn btn-ghost btn-sm gap-1 font-bold text-xs rounded-xl bg-base-100 hover:bg-warning/20 hover:text-warning border border-base-300 transition-all h-10 w-full flex items-center justify-center shadow-xs"
+              class="btn btn-ghost btn-sm gap-1 font-bold text-xs rounded-btn bg-base-100 hover:bg-warning/20 hover:text-warning border border-base-300 transition-all h-10 w-full flex items-center justify-center shadow-xs"
               title="Pause drop (hides from screen)"
             >
               <Icon icon="solar:pause-circle-bold" class="w-4 h-4 text-warning" />
@@ -256,7 +321,7 @@
               v-else-if="isLocked"
               type="button" 
               @click="handleUnlock"
-              class="btn btn-ghost btn-sm text-warning hover:bg-warning/15 border border-warning/30 rounded-xl gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
+              class="btn btn-ghost btn-sm text-warning hover:bg-warning/15 border border-warning/30 rounded-btn gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
               title="Unlock drop to add or fix items"
             >
               <Icon icon="solar:lock-unlocked-bold" class="w-4 h-4" />
@@ -266,37 +331,77 @@
               v-else-if="activeManifest.status === 'paused'"
               type="button" 
               @click="handleResume(activeManifest.$id)"
-              class="btn btn-ghost btn-sm text-warning hover:bg-warning/15 border border-warning/30 rounded-xl gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
+              class="btn btn-ghost btn-sm text-warning hover:bg-warning/15 border border-warning/30 rounded-btn gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
               title="Resume drop"
             >
               <Icon icon="solar:play-circle-bold" class="w-4 h-4" />
               <span>Resume</span>
             </button>
 
-            <!-- 3. Discard Manifest (or Locked State) -->
+            <!-- 3. Unverify / Discard / Export Action -->
             <button 
-              v-if="!isLocked"
+              v-if="activeManifest.status === 'placed'"
+              type="button" 
+              @click="handleExportCsv"
+              class="btn btn-ghost btn-sm gap-1 font-bold text-xs rounded-btn bg-base-100 hover:bg-base-300 border border-base-300 transition-all h-10 w-full flex items-center justify-center shadow-xs"
+              title="Download POS CSV"
+            >
+              <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
+              <span>Export</span>
+            </button>
+            <button 
+              v-else-if="isLocked"
+              type="button" 
+              @click="handleUnverifyAll"
+              class="btn btn-ghost btn-sm text-info hover:bg-info/15 border border-info/30 rounded-btn gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
+              title="Uncheck all items on this in-transit drop"
+            >
+              <Icon icon="solar:refresh-circle-bold" class="w-4 h-4" />
+              <span>Unverify</span>
+            </button>
+            <button 
+              v-else
               type="button" 
               @click="isDiscardModalOpen = true"
-              class="btn btn-ghost btn-sm text-error hover:bg-error/15 border border-error/25 rounded-xl gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
+              class="btn btn-ghost btn-sm text-error hover:bg-error/15 border border-error/25 rounded-btn gap-1 font-bold text-xs h-10 w-full flex items-center justify-center transition-all shadow-xs"
               title="Discard this manifest"
             >
               <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
               <span>Discard</span>
             </button>
-            <div v-else class="flex items-center justify-center text-[10px] font-mono opacity-50 border border-base-300/50 rounded-xl h-10">
-              <span>🔒 Locked</span>
-            </div>
           </div>
 
-          <!-- Row 2: In-Transit Verification OR Staging Actions -->
-          <div v-if="isLocked" class="w-full">
-            <!-- Primary In-Transit Action: Confirm Stocked -->
+          <!-- Row 2: Contextual Primary Action Button -->
+          <!-- State A: Placed / Closed Finalized Drop -->
+          <div v-if="activeManifest.status === 'placed'" class="w-full">
+            <button 
+              type="button" 
+              @click="handleOpenRollbackModal(activeManifest.$id)"
+              class="btn btn-warning w-full font-black text-warning-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center rounded-btn"
+              title="Rollback this drop: restores items to Backstock and reopens manifest as active draft"
+            >
+              <Icon icon="solar:restart-bold" class="w-5 h-5 shrink-0" />
+              <span>Undo Placement &amp; Reopen Drop ➔</span>
+            </button>
+          </div>
+
+          <!-- State B: In-Transit Verification Mode -->
+          <div v-else-if="isLocked" class="w-full flex flex-col sm:flex-row gap-2">
+            <button 
+              type="button" 
+              @click="handleOpenRollbackModal(activeManifest.$id)"
+              class="btn btn-outline border-warning/40 text-warning hover:bg-warning/10 font-bold px-3.5 gap-1.5 h-11 active:scale-95 transition-all text-xs sm:text-sm flex items-center justify-center rounded-btn shrink-0"
+              title="Rollback this in-transit drop to draft"
+            >
+              <Icon icon="solar:restart-bold" class="w-4 h-4" />
+              <span>Rollback</span>
+            </button>
+
             <button 
               type="button" 
               @click="confirmPlacement" 
               :disabled="verifiedItemIds.size === 0 || isDeploying"
-              class="btn btn-success w-full font-black text-success-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center"
+              class="btn btn-success flex-1 font-black text-success-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center rounded-btn"
               title="Confirm verified items are stocked on booth shelves"
             >
               <span v-if="isDeploying" class="loading loading-spinner loading-xs"></span>
@@ -307,27 +412,26 @@
             </button>
           </div>
 
+          <!-- State C: Draft Staging Mode -->
           <div v-else class="flex flex-col sm:flex-row gap-2 w-full">
-            <!-- Staging Primary: Lock Drop (In-Transit) -->
             <button 
               type="button" 
               @click="handleLock" 
               :disabled="stagedItems.length === 0"
-              class="btn btn-primary flex-1 font-black text-primary-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center"
+              class="btn btn-primary flex-1 font-black text-primary-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center rounded-btn"
               title="Lock drop in-transit: ready to take to the booth"
             >
               <Icon icon="solar:lock-bold" class="w-5 h-5 shrink-0" />
               <span class="whitespace-nowrap">Lock Drop (In-Transit) ➔</span>
             </button>
 
-            <!-- Staging Secondary: Export Ricochet POS CSV (if Memory Den or general) -->
             <button 
               v-if="isRicochetFacility"
               id="btn-download-ricochet-csv"
               type="button" 
               @click="handleExportCsv" 
               :disabled="isExporting || stagedItems.length === 0"
-              class="btn btn-outline border-base-300 hover:btn-success font-bold px-4 gap-2 h-11 active:scale-95 transition-all text-xs sm:text-sm flex items-center justify-center shrink-0"
+              class="btn btn-outline border-base-300 hover:btn-success font-bold px-4 gap-2 h-11 active:scale-95 transition-all text-xs sm:text-sm flex items-center justify-center rounded-btn shrink-0"
               title="Download Ricochet POS CSV &amp; Lock Drop"
             >
               <span v-if="isExporting" class="loading loading-spinner loading-xs"></span>
@@ -595,6 +699,46 @@
       </form>
     </dialog>
 
+    <!-- 4. ROLLBACK / REOPEN MANIFEST CONFIRMATION MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': isRollbackModalOpen }">
+      <div v-if="isRollbackModalOpen" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-box p-5 max-w-sm mx-auto space-y-4">
+        <div class="flex items-center gap-3 text-warning">
+          <div class="w-10 h-10 rounded-box bg-warning/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:restart-bold" class="w-6 h-6" />
+          </div>
+          <div>
+            <h3 class="font-black text-base text-base-content">Undo Drop &amp; Rollback?</h3>
+            <p class="text-xs text-base-content/60 font-mono">{{ activeManifest?.name }}</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/80 leading-relaxed">
+          Rolling back will return all constituent items back to <strong>in-stock</strong> at <strong>Backstock</strong>, unmark placed status, and restore this manifest as an editable draft.
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            class="btn btn-ghost flex-1 font-bold rounded-btn"
+            @click="isRollbackModalOpen = false"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            class="btn btn-warning flex-1 font-black text-warning-content shadow-md border border-warning-content/25 active:scale-95 rounded-btn gap-1"
+            @click="confirmRollbackDrop"
+          >
+            <Icon icon="solar:restart-bold" class="w-4 h-4" />
+            <span>Confirm Rollback</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="isRollbackModalOpen = false">
+        <button>close</button>
+      </form>
+    </dialog>
+
     <!-- 4. FULL ITEM DRAWER FOR INSPECTING & EDITING SPECS -->
     <ItemDrawer 
       v-if="editingItem" 
@@ -675,7 +819,9 @@ const {
   stagedItems,
   isTrayOpen: composableTrayOpen,
   allDrafts,
+  recentPlacedManifests,
   stagedCount,
+  totalUnits,
   totalCost,
   totalRetail,
   commissionRate,
@@ -693,20 +839,39 @@ const {
   resumeManifest,
   lockActiveManifest,
   unlockActiveManifest,
+  rollbackPlacedManifest,
+  unverifyAllItems,
   createNewDraft,
   switchActiveManifest
 } = useManifest();
 
-const displayedDrafts = computed(() => {
-  if (!props.locationId) return allDrafts.value;
+const matchesLocation = (m: any) => {
+  if (!props.locationId) return true;
   const filterLoc = props.locationId.toLowerCase();
   const filterName = (props.locationName || '').toLowerCase();
-  return allDrafts.value.filter(d => {
-    const dLoc = (d.locationId || '').toLowerCase();
-    const dName = (d.locationName || '').toLowerCase();
-    return dLoc === filterLoc || (filterName && dName === filterName) ||
-           (filterLoc === 'md' && (dLoc.includes('memory') || dName.includes('memory')));
-  });
+  const dLoc = (m.locationId || '').toLowerCase();
+  const dName = (m.locationName || '').toLowerCase();
+  if (filterLoc && dLoc === filterLoc) return true;
+  if (filterName && dName === filterName) return true;
+  if (filterLoc === 'md' && (dLoc.includes('memory') || dName.includes('memory'))) return true;
+  if (filterLoc === 'dt' && (dLoc.includes('dusty') || dName.includes('dusty'))) return true;
+  if (filterLoc === 'hg' && (dLoc.includes('huck') || dName.includes('huck') || dLoc.includes('garage') || dName.includes('garage'))) return true;
+  if (filterName && (dName.includes(filterName) || filterName.includes(dName))) return true;
+  return false;
+};
+
+const displayedDrafts = computed(() => {
+  if (!props.locationId) return allDrafts.value;
+  return allDrafts.value.filter(matchesLocation);
+});
+
+const displayedPlacedDrops = computed(() => {
+  if (!props.locationId) return recentPlacedManifests.value;
+  return recentPlacedManifests.value.filter(matchesLocation);
+});
+
+const allAvailableDrops = computed(() => {
+  return [...displayedDrafts.value, ...displayedPlacedDrops.value];
 });
 
 const showTray = computed(() => {
@@ -770,7 +935,7 @@ const toggleTray = () => {
 };
 
 const handleResumeOrSwitch = async (id: string) => {
-  const target = allDrafts.value.find(d => d.$id === id);
+  const target = allAvailableDrops.value.find(d => d.$id === id) || allDrafts.value.find(d => d.$id === id);
   if (target?.status === 'paused') {
     await resumeManifest(id);
   } else {
@@ -787,6 +952,53 @@ const handlePause = async () => {
 const handleResume = async (id: string) => {
   await resumeManifest(id);
   emit('drop-changed');
+};
+
+// Rollback Modal State & Handlers
+const isRollbackModalOpen = ref(false);
+const manifestToRollbackId = ref<string | null>(null);
+
+const handleOpenRollbackModal = (id?: string) => {
+  manifestToRollbackId.value = id || activeManifest.value?.$id || null;
+  isRollbackModalOpen.value = true;
+};
+
+const confirmRollbackDrop = async () => {
+  const targetId = manifestToRollbackId.value || activeManifest.value?.$id;
+  if (!targetId) return;
+  try {
+    await rollbackPlacedManifest(targetId);
+    addToast({
+      type: 'success',
+      message: 'Drop rolled back successfully! Items returned to in-stock at Backstock and manifest restored to draft.'
+    });
+    isRollbackModalOpen.value = false;
+    manifestToRollbackId.value = null;
+    emit('drop-changed');
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Rollback failed: ${err.message || err}`
+    });
+  }
+};
+
+const handleUnverifyAll = async () => {
+  if (!activeManifest.value) return;
+  try {
+    await unverifyAllItems(activeManifest.value.$id);
+    verifiedItemIds.value.clear();
+    addToast({
+      type: 'info',
+      message: 'Unverified all items on this in-transit drop.'
+    });
+    emit('drop-changed');
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Unverify failed: ${err.message || err}`
+    });
+  }
 };
 
 // Title Editing State
@@ -916,6 +1128,20 @@ const cleanTitle = (title?: string): string => {
 // By default, starts UNCHECKED for real physical audit at the booth
 const verifiedItemIds = ref<Set<string>>(new Set());
 const isDeploying = ref(false);
+
+watch(() => activeManifest.value?.$id, () => {
+  if (activeManifest.value) {
+    if (activeManifest.value.status === 'placed') {
+      verifiedItemIds.value = new Set(activeManifest.value.itemIds || []);
+    } else if (activeManifest.value.placedItemIds && activeManifest.value.placedItemIds.length > 0) {
+      verifiedItemIds.value = new Set(activeManifest.value.placedItemIds);
+    } else {
+      verifiedItemIds.value.clear();
+    }
+  } else {
+    verifiedItemIds.value.clear();
+  }
+}, { immediate: true });
 
 const toggleItemVerified = (itemId: string) => {
   if (verifiedItemIds.value.has(itemId)) {

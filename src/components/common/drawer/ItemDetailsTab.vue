@@ -22,7 +22,7 @@
             <div v-else-if="lotChildren && lotChildren.length > 0" class="flex items-center justify-between bg-secondary/10 border border-secondary/25 rounded-2xl px-3.5 py-2 text-xs shadow-2xs">
                 <div class="flex items-center gap-2 min-w-0">
                     <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary shrink-0" />
-                    <span class="opacity-70 text-[11px] shrink-0">Master Lot:</span>
+                    <span class="opacity-70 text-[11px] shrink-0">Main Lot:</span>
                     <strong class="font-bold text-secondary">{{ lotChildren.length }} Split Listings Active</strong>
                 </div>
                 <button type="button" @click="$emit('open-lot-tab')" class="btn btn-ghost btn-xs text-secondary font-bold hover:underline shrink-0 gap-1">
@@ -252,10 +252,22 @@
                 <div v-else class="space-y-3">
                     <div class="grid grid-cols-2 gap-3">
                         <div class="form-control">
-                            <label class="label py-0.5"><span class="label-text text-xs font-bold">Buy Cost Basis ($)</span></label>
+                            <label class="label py-0.5 flex items-center justify-between">
+                                <span class="label-text text-xs font-bold">{{ Number(editForm.quantity || 1) > 1 ? 'Total Cost Basis ($)' : 'Buy Cost Basis ($)' }}</span>
+                                <span v-if="Number(editForm.quantity || 1) > 1" class="text-[10px] opacity-70 font-mono font-bold text-base-content/80">
+                                    ${{ (Number(editForm.cost || 0) / Number(editForm.quantity || 1)).toFixed(2) }}/ea
+                                </span>
+                            </label>
                             <div class="relative">
                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
                                 <input type="number" step="0.01" v-model="editForm.cost" placeholder="0.00" class="input input-bordered input-sm w-full pl-6 font-mono font-bold bg-base-100" />
+                            </div>
+                            <!-- Quick helper if user entered unit cost instead of total cost on a multi-qty item -->
+                            <div v-if="Number(editForm.quantity || 1) > 1 && Number(editForm.cost) > 0 && Number(editForm.cost) < 15 && Number(editForm.resalePrice) >= Number(editForm.cost)" class="mt-1 flex items-center justify-between text-[10px] bg-warning/10 border border-warning/20 rounded-md px-1.5 py-0.5 text-warning-content">
+                                <span class="truncate">Is ${{ editForm.cost }} per-item?</span>
+                                <button type="button" @click="editForm.cost = Number((Number(editForm.cost) * Number(editForm.quantity)).toFixed(2))" class="btn btn-2xs btn-warning font-bold shrink-0 ml-1">
+                                    Set Total (${{ (Number(editForm.cost) * Number(editForm.quantity)).toFixed(2) }})
+                                </button>
                             </div>
                         </div>
                         <div class="form-control">
@@ -431,22 +443,24 @@
                         </div>
                     </div>
 
-                    <!-- Multi-Quantity Splitting Actions Bar -->
-                    <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 mt-2">
-                        <div class="text-[11px] font-bold text-secondary flex items-center gap-1.5 flex-wrap">
-                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 shrink-0" />
-                            <span>Multi-Quantity Batch: {{ editForm.quantity }} Units @ ${{ Number(editForm.resalePrice || 0).toFixed(2) }}/ea</span>
-                            <span class="badge badge-xs badge-secondary font-mono font-bold text-[10px]">
-                                ${{ ((Number(editForm.resalePrice) || 0) * Number(editForm.quantity)).toFixed(2) }} Total
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit at per-item price and subtract unit cost">
-                                <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
-                            </button>
-                            <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
-                                <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
-                            </button>
+                    <!-- Multi-Quantity Splitting & Restocking Actions Bar -->
+                    <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 mt-2 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="text-[11px] font-bold text-secondary flex items-center gap-1.5 flex-wrap">
+                                <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 shrink-0" />
+                                <span>Multi-Quantity Batch: {{ editForm.quantity }} Units @ ${{ Number(editForm.resalePrice || 0).toFixed(2) }}/ea</span>
+                                <span class="badge badge-xs badge-secondary font-mono font-bold text-[10px]">
+                                    ${{ ((Number(editForm.resalePrice) || 0) * Number(editForm.quantity)).toFixed(2) }} Total
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit at per-item price and subtract unit cost">
+                                    <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
+                                </button>
+                                <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
+                                    <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -995,10 +1009,14 @@ const props = defineProps({
     downloadingImageUrls: {
         type: Object,
         default: () => ({})
+    },
+    activeTray: {
+        type: String,
+        default: 'none'
     }
 });
 
-defineEmits([
+const emit = defineEmits([
     'update:isAcquisitionUnlocked',
     'update:showOnStorefront',
     'update:saveIndividually',
@@ -1012,11 +1030,13 @@ defineEmits([
     'select-fetched-image',
     'sell-one-quantity',
     'split-one-active',
+    'restock-quantity',
     'apply-price-tier',
     'deconstruct-ai-lot',
     'apply-bundle-suggestions',
     'open-md-modal',
-    'generate-description'
+    'generate-description',
+    'open-restock'
 ]);
 
 const KNOWN_CODES = ['HG', 'HD', 'MD', 'DT'];

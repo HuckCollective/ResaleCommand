@@ -154,7 +154,7 @@
                             v-for="item in pagedInventory" 
                             :key="item.$id" 
                             class="hover:bg-primary/5 transition-colors cursor-pointer group"
-                            :class="{'bg-primary/10 font-medium': isSelected(item.$id)}"
+                            :class="{'bg-primary/10 font-medium': isSelected(item.$id), 'opacity-60 bg-base-200/40': item.status === 'deconstructed'}"
                             @click="openItem(item)"
                         >
                             <!-- Row Checkbox -->
@@ -177,24 +177,43 @@
                                 <div class="font-bold text-xs truncate group-hover:text-primary transition-colors" :title="item.title">
                                     {{ item.title || 'Untitled Item' }}
                                 </div>
-                                <div class="text-[10px] opacity-50 truncate flex items-center gap-1.5 font-mono mt-0.5">
-                                    <span v-if="item.identity">Lot/ID: {{ item.identity }}</span>
-                                    <span v-if="item.parentLotId" class="badge badge-secondary badge-xs scale-90">Child Lot</span>
-                                    <span v-if="item.quantity > 1" class="badge badge-ghost badge-xs scale-90">Qty: {{ item.quantity }}</span>
+                                <div class="text-[10px] opacity-75 truncate flex items-center gap-1.5 font-mono mt-0.5">
+                                    <span v-if="item.identity" class="opacity-70">Lot/ID: {{ item.identity }}</span>
+                                    <span v-if="item.quantity > 1" class="badge badge-warning text-black font-black badge-xs scale-95 shadow-2xs">📦 x{{ item.quantity }}</span>
+                                    <span v-if="item.parentLotId" class="badge badge-secondary badge-xs scale-90">Split</span>
+                                    <span v-if="item.status === 'deconstructed'" class="badge badge-neutral badge-outline badge-xs scale-90 opacity-70">🗄️ Deconstructed</span>
                                 </div>
                             </td>
 
                             <!-- SKU / Barcode Pill -->
                             <td class="font-mono text-[11px]" @click.stop="copyUpc(item.upc)">
-                                <span 
-                                    v-if="item.upc" 
-                                    class="badge badge-sm font-mono font-bold bg-base-200 border border-base-300 gap-1 hover:border-primary transition-colors cursor-copy"
-                                    title="Click to copy barcode"
-                                >
-                                    <Icon icon="solar:barcode-read-linear" class="w-3 h-3 text-primary" />
-                                    {{ item.upc }}
-                                </span>
-                                <span v-else class="text-[10px] opacity-40 italic">No Barcode</span>
+                                <div class="flex flex-col items-start gap-1">
+                                    <span 
+                                        v-if="item.upc" 
+                                        class="badge badge-sm font-mono font-bold bg-base-200 border border-base-300 gap-1 hover:border-primary transition-colors cursor-copy"
+                                        title="Click to copy barcode"
+                                    >
+                                        <Icon icon="solar:barcode-read-linear" class="w-3 h-3 text-primary" />
+                                        {{ item.upc }}
+                                    </span>
+                                    <span v-else class="text-[10px] opacity-40 italic">No Barcode</span>
+
+                                    <!-- Needs Shop Update reminder with 1-click turn off -->
+                                    <div v-if="hasShopUpdateReminder(item)" class="flex items-center gap-1" @click.stop>
+                                        <span class="badge badge-warning text-[9px] font-bold py-0.5 px-1.5 gap-0.5 shadow-2xs" title="Needs manual update in Ricochet POS / shop UI">
+                                            <Icon icon="solar:danger-triangle-bold" class="w-2.5 h-2.5" />
+                                            Shop Update
+                                        </span>
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-2xs btn-circle btn-ghost text-success hover:bg-success/20 p-0 h-4 w-4 min-h-0"
+                                            @click.stop="dismissTableShopUpdate(item)"
+                                            title="Mark shop updated (turn off reminder)"
+                                        >
+                                            <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
                             </td>
 
                             <!-- Sourcing Vendor -->
@@ -640,6 +659,34 @@ const deleteItemConfirm = async (item) => {
         addToast({ type: 'success', message: 'Item deleted.' });
     } catch (e) {
         addToast({ type: 'error', message: `Delete failed: ${e.message}` });
+    }
+};
+
+const hasShopUpdateReminder = (item) => {
+    if (!item) return false;
+    const inFlags = Array.isArray(item.redFlags) && item.redFlags.includes('needs_shop_update');
+    const inNotes = typeof item.conditionNotes === 'string' && item.conditionNotes.includes('[NEEDS_SHOP_UPDATE]');
+    return inFlags || inNotes;
+};
+
+const dismissTableShopUpdate = async (item) => {
+    if (!item?.$id) return;
+    try {
+        const currentFlags = Array.isArray(item.redFlags) ? [...item.redFlags] : [];
+        const updatedFlags = currentFlags.filter(f => f !== 'needs_shop_update');
+        let updatedNotes = item.conditionNotes;
+        if (typeof updatedNotes === 'string' && updatedNotes.includes('[NEEDS_SHOP_UPDATE]')) {
+            updatedNotes = updatedNotes.replace(/\[NEEDS_SHOP_UPDATE\]/g, '').trim();
+        }
+        await updateInventoryItem(item.$id, {
+            redFlags: updatedFlags,
+            conditionNotes: updatedNotes
+        });
+        item.redFlags = updatedFlags;
+        item.conditionNotes = updatedNotes;
+        addToast({ type: 'success', message: `✓ Cleared shop reminder for "${item.title || item.upc}"` });
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to clear reminder: ' + e.message });
     }
 };
 

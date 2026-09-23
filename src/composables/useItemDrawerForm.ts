@@ -36,7 +36,8 @@ export function useItemDrawerForm() {
         existingGalleryIds: [],
         sellingLocations: [],
         keywords: [],
-        countryOfOrigin: ''
+        countryOfOrigin: '',
+        redFlags: []
     });
 
     // Auto-calculate ROI / Margin % (Calculated per-unit so multi-quantity batches reflect accurate margins)
@@ -88,6 +89,7 @@ export function useItemDrawerForm() {
         editForm.sellingLocations = [];
         editForm.keywords = [];
         editForm.countryOfOrigin = '';
+        editForm.redFlags = [];
         isAcquisitionUnlocked.value = true;
     };
 
@@ -107,6 +109,7 @@ export function useItemDrawerForm() {
             editForm.orderId = item.orderId || getNoteValue(item.conditionNotes, 'Order #') || getNoteValue(item.conditionNotes, 'Imported from Order #') || '';
             editForm.status = item.status || 'acquired';
             editForm.parentLotId = item.parentLotId || null;
+            editForm.redFlags = Array.isArray(item.redFlags) ? [...item.redFlags] : [];
 
             let desc = item.marketDescription || item.description || '';
             if (desc && typeof desc === 'string' && desc.trim().startsWith('{') && desc.includes('"identity"')) {

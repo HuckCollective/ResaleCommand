@@ -1,8 +1,10 @@
 import { ref } from 'vue';
-import type { Models } from 'appwrite';
+import { Permission, Role, type Models } from 'appwrite';
+import { databases, ID, Query } from '../lib/appwrite';
 import { updateInventoryItem, deleteInventoryItem, getCollectionId, DB_ID } from '../lib/inventory';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../lib/exportUtils';
 import { withRateLimitRetry } from '../lib/retry';
+import { syncPurchaseStatusForItems } from '../lib/purchases';
 import { useLoader } from './useLoader';
 import { addToast } from '../stores/toast';
 
@@ -409,6 +411,185 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
         }
     };
 
+    const restockInventoryItem = async (item: any, { unitsToAdd, addedCostBasis }: { unitsToAdd: number; addedCostBasis: number }) => {
+        if (!item || !item.$id || unitsToAdd < 1) return false;
+        isApplyingBulk.value = true;
+        showLoader("Restocking Units...", {
+            step: `Adding ${unitsToAdd} units to "${item.title || item.upc}"...`,
+            progress: null,
+            cancelable: false
+        });
+
+        try {
+            const currentQty = Number(item.quantity || 1);
+            const newQty = currentQty + Number(unitsToAdd);
+            const currentCost = Number(item.cost || 0);
+            const newCost = Number((currentCost + Number(addedCostBasis || 0)).toFixed(2));
+
+            const lotFlags = Array.isArray(item.redFlags) ? [...item.redFlags] : [];
+            if (!lotFlags.includes('needs_shop_update')) {
+                lotFlags.push('needs_shop_update');
+            }
+
+            const timestamp = new Date().toLocaleDateString();
+            const restockLog = `[Restocked +${unitsToAdd} units (+$${Number(addedCostBasis || 0).toFixed(2)}) on ${timestamp}]`;
+            const currentNotes = item.conditionNotes || '';
+            const newNotes = currentNotes ? `${currentNotes}\n${restockLog}` : restockLog;
+
+            const updates: Record<string, any> = {
+                quantity: newQty,
+                cost: newCost,
+                redFlags: lotFlags,
+                conditionNotes: newNotes
+            };
+
+            await withRateLimitRetry(() => updateInventoryItem(item.$id, updates));
+
+            addToast({
+                type: 'success',
+                message: `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.`
+            });
+            if (onSuccess) await onSuccess();
+            return true;
+        } catch (e: any) {
+            console.error("Restock failed:", e);
+            addToast({ type: 'error', message: `Restock failed: ${e.message}` });
+            return false;
+        } finally {
+            isApplyingBulk.value = false;
+            hideLoader();
+        }
+    };
+
+    const createBundle = async ({
+        items,
+        title,
+        description,
+        estHigh,
+        storageLocation
+    }: {
+        items: any[];
+        title: string;
+        description?: string;
+        estHigh?: number;
+        storageLocation?: string;
+    }) => {
+        if (!items || items.length < 2 || !title) return false;
+        isApplyingBulk.value = true;
+        showLoader("Creating Bundle...", {
+            step: `Bundling ${items.length} items into "${title}"...`,
+            progress: null,
+            cancelable: false
+        });
+
+        try {
+            const collId = getCollectionId();
+            const firstItem = items[0];
+            const newBundleId = ID.unique();
+            const combinedCost = items.reduce((sum, item) => sum + Number(item.cost || 0), 0);
+            const sourceIdentities = items.map(i => i.identity || i.upc || i.$id).filter(Boolean);
+            const sourceLocations = items.map(i => i.sourcingLocation).filter(Boolean);
+
+            const bundleDoc: Record<string, any> = {
+                title,
+                identity: `BUNDLE-${Date.now().toString().slice(-6)}`,
+                description: description || '',
+                conditionNotes: `Bundled ${items.length} items together.\nSources: ${sourceIdentities.join(', ')}`,
+                status: 'listed',
+                cost: combinedCost,
+                quantity: 1,
+                tenantId: firstItem.tenantId || null,
+                userId: firstItem.userId || null,
+                storageLocation: storageLocation || firstItem.storageLocation || 'HG',
+                estHigh: estHigh || null,
+                purchaseId: null,
+                sourcingLocation: sourceLocations.length > 0 ? sourceLocations[0] : null
+            };
+
+            Object.keys(bundleDoc).forEach(key => bundleDoc[key] === undefined && delete bundleDoc[key]);
+
+            let permissions = undefined;
+            if (firstItem.tenantId && firstItem.tenantId !== 'default') {
+                const role = Role.team(firstItem.tenantId);
+                permissions = [Permission.read(role), Permission.update(role), Permission.delete(role)];
+            } else if (firstItem.userId) {
+                const role = Role.user(firstItem.userId);
+                permissions = [Permission.read(role), Permission.update(role), Permission.delete(role)];
+            }
+
+            const bundleRecord = await databases.createDocument(DB_ID, collId, newBundleId, bundleDoc, permissions);
+
+            // Update child items
+            const promises = items.map(item => {
+                return databases.updateDocument(DB_ID, collId, item.$id, {
+                    parentLotId: bundleRecord.$id,
+                    status: 'combined'
+                });
+            });
+            await Promise.all(promises);
+
+            syncPurchaseStatusForItems(items).catch(err => console.warn('[createBundle] PO sync warning:', err));
+
+            addToast({
+                type: 'success',
+                message: `🎉 Successfully created bundle "${title}" from ${items.length} items!`
+            });
+            if (onSuccess) await onSuccess();
+            return true;
+        } catch (err: any) {
+            console.error("Bundle creation failed:", err);
+            addToast({ type: 'error', message: 'Failed to create bundle: ' + err.message });
+            return false;
+        } finally {
+            isApplyingBulk.value = false;
+            hideLoader();
+        }
+    };
+
+    const rollbackLot = async (lotItem: any, lotChildren: any[] = []) => {
+        if (!lotItem || !lotItem.$id) return false;
+        isApplyingBulk.value = true;
+        showLoader("Rolling back lot...", {
+            step: `Restoring items from lot "${lotItem.title}"...`,
+            progress: null,
+            cancelable: false
+        });
+
+        try {
+            const collId = getCollectionId();
+            let children = lotChildren;
+            if (!children || children.length === 0) {
+                const res = await databases.listDocuments(DB_ID, collId, [
+                    Query.equal('parentLotId', lotItem.$id)
+                ]);
+                children = res.documents;
+            }
+
+            for (const child of children) {
+                await databases.updateDocument(DB_ID, collId, child.$id, {
+                    parentLotId: null,
+                    status: (child.status === 'combined' || child.status === 'archived') ? 'acquired' : child.status
+                });
+            }
+
+            await databases.deleteDocument(DB_ID, collId, lotItem.$id);
+
+            addToast({
+                type: 'success',
+                message: `Successfully rolled back lot "${lotItem.title}" and restored ${children.length} items to active stock.`
+            });
+            if (onSuccess) await onSuccess();
+            return true;
+        } catch (e: any) {
+            console.error("Rollback failed:", e);
+            addToast({ type: 'error', message: 'Rollback failed: ' + e.message });
+            return false;
+        } finally {
+            isApplyingBulk.value = false;
+            hideLoader();
+        }
+    };
+
     return {
         isApplyingBulk,
         bulkLocationTarget,
@@ -418,5 +599,8 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
         applyBulkUnified,
         deleteBulkItems,
         exportBulkItems,
+        restockInventoryItem,
+        createBundle,
+        rollbackLot
     };
 }

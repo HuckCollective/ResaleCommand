@@ -95,10 +95,17 @@ export function useInventoryFilters(
     // -- ROI / MARGIN CALCULATION --
     const calculateRoi = (item: any): number | null => {
         const qty = Math.max(1, Number(item.quantity) || 1);
-        const cost = (parseFloat(item.cost) || 0) / qty;
+        const rawCost = parseFloat(item.cost) || 0;
         const price = parseFloat(item.resalePrice || item.boutiquePrice) || 0;
-        if (cost <= 0 || price <= 0) return null;
-        const margin = ((price - cost) / cost) * 100;
+        if (rawCost <= 0 || price <= 0) return null;
+        
+        // Detect if rawCost was saved as per-unit cost instead of total cost basis:
+        let costPerUnit = rawCost / qty;
+        if (qty > 1 && ((price - costPerUnit) / costPerUnit) * 100 > 2000 && ((price - rawCost) / rawCost) * 100 < 1500 && ((price - rawCost) / rawCost) * 100 > -50) {
+            costPerUnit = rawCost;
+        }
+
+        const margin = ((price - costPerUnit) / costPerUnit) * 100;
         return Math.round(margin);
     };
 
@@ -361,6 +368,18 @@ export function useInventoryFilters(
     const inventorySearchPredicate = (item: any, q: string, rawQuery: string, digits: string): boolean => {
         const itemUpc = (item.upc || item.sku || '').toLowerCase();
 
+        // Multi-SKU comma-separated list search (e.g. "HUCK-1431, HUCK-0049, HUCK-1475")
+        if (rawQuery.includes(',')) {
+            const tokens = rawQuery.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+            if (tokens.length > 1) {
+                return tokens.some(token => 
+                    itemUpc.includes(token) || 
+                    (item.title || '').toLowerCase().includes(token) ||
+                    (item.$id || '').toLowerCase().includes(token)
+                );
+            }
+        }
+
         // Explicit prefix queries like 'upc:huck-' or 'barcode:0012'
         if (q.startsWith('upc:') || q.startsWith('barcode:')) {
             const target = q.replace(/^(upc|barcode):/, '').trim();
@@ -603,6 +622,10 @@ export function useInventoryFilters(
                     if (!parseVal(anyItem, 'resalePrice', 'Resale') && !parseVal(anyItem, 'estValue', 'Est. Low')) return false;
                     const hasPhoto = anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0) || (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:')));
                     if (!hasPhoto) return false;
+                } else if (insight === 'needs_shop_update') {
+                    const hasFlag = Array.isArray(anyItem.redFlags) && anyItem.redFlags.includes('needs_shop_update');
+                    const hasNote = typeof anyItem.conditionNotes === 'string' && anyItem.conditionNotes.includes('[NEEDS_SHOP_UPDATE]');
+                    if (!hasFlag && !hasNote) return false;
                 }
             }
 
@@ -717,7 +740,8 @@ export function useInventoryFilters(
                 missing_cost: 'Missing Cost Basis',
                 missing_sold_price: 'Missing Sold Price',
                 missing_description: 'Missing Description',
-                ready_to_list: 'Ready to List'
+                ready_to_list: 'Ready to List',
+                needs_shop_update: 'Needs Shop Update'
             };
             chips.push({
                 id: 'insight',
@@ -869,8 +893,8 @@ export function useInventoryFilters(
         if (p.has('insightFilter')) {
             filterInsight.value = p.get('insightFilter') || '';
         }
-        if (p.has('search')) {
-            searchQuery.value = p.get('search') || '';
+        if (p.has('search') || p.has('q')) {
+            searchQuery.value = p.get('search') || p.get('q') || '';
         }
         if (p.has('purchaseId')) {
             filterPurchaseId.value = p.get('purchaseId') || '';

@@ -23,9 +23,10 @@ client
 
 const databases = new Databases(client);
 
+import { Query } from 'node-appwrite';
 async function listAttributes() {
     try {
-        const response = await databases.listAttributes(DB_ID, COLLECTION_ID);
+        const response = await databases.listAttributes(DB_ID, COLLECTION_ID, [Query.limit(100)]);
         console.log("Existing Attributes:");
         response.attributes.forEach(attr => {
             console.log(`- ${attr.key} [${attr.type}] (Size: ${attr.size}, Array: ${attr.array}, Status: ${attr.status})`);

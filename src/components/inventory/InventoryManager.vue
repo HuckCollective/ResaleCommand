@@ -310,6 +310,10 @@
                     @import-csv="showImport = true"
                     @stage-manifest="stageSelectedItemsToManifest"
                     @open-manifest="openManifestTray"
+                    @restock-item="onDockRestockItem"
+                    @submit-bundle="onDockSubmitBundle"
+                    @submit-combine="onDockSubmitCombine"
+                    @uncombine-lot="onDockUncombineLot"
                 >
                     <template #filters>
                         <InventoryFilterPanel 
@@ -400,7 +404,7 @@
         <!-- ----------------------------------------------------------- -->
         <!-- EDIT DRAWER -->
         <!-- ----------------------------------------------------------- -->
-        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" @close="closeEditDrawer" @save="saveEdit" @uncombined="fetchInventory" @deconstruct="openDeconstructModal" @selectItem="openEdit" />
+        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" :inventoryItems="inventoryItems" @close="closeEditDrawer" @save="saveEdit" @uncombined="fetchInventory" @deconstruct="openDeconstructModal" @selectItem="openEdit" />
 
         <!-- FULLSCREEN PREVIEW MODAL -->
         <ItemPreviewModal 
@@ -422,12 +426,33 @@
         <!-- Combine Selected into Lot Modal -->
         <dialog ref="combineModal" class="modal">
             <div class="modal-box max-w-lg">
-                <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
                     <Icon icon="solar:link-minimalistic-bold" class="w-6 h-6 text-secondary" /> 
-                    Combine Selected into Lot
+                    <span>Lot Merchandising Hub</span>
                 </h3>
+
+                <!-- Mode Switcher Tabs -->
+                <div class="tabs tabs-boxed bg-base-200 p-1 mb-4 flex">
+                    <button 
+                        type="button" 
+                        class="tab flex-1 font-bold text-xs" 
+                        :class="{'tab-active': combineMode === 'create_new'}" 
+                        @click="combineMode = 'create_new'"
+                    >
+                        ✨ Create New Main Lot
+                    </button>
+                    <button 
+                        type="button" 
+                        class="tab flex-1 font-bold text-xs" 
+                        :class="{'tab-active': combineMode === 'add_to_existing'}" 
+                        @click="combineMode = 'add_to_existing'"
+                    >
+                        📦 Add to Existing Main Lot
+                    </button>
+                </div>
                 
-                <div class="space-y-4">
+                <!-- MODE 1: CREATE NEW MAIN LOT -->
+                <div v-if="combineMode === 'create_new'" class="space-y-4">
                     <!-- Primary Item Selector -->
                     <div class="form-control w-full">
                         <label class="label">
@@ -443,12 +468,12 @@
                     <!-- Suggested Title -->
                     <div class="form-control w-full">
                         <div class="flex items-center justify-between pb-1">
-                            <label class="label-text font-bold opacity-70">Lot Title</label>
+                            <label class="label-text font-bold opacity-70">Main Lot Title</label>
                             <span class="text-[10px] text-secondary font-bold uppercase tracking-wider flex items-center gap-1">
                                 <Icon icon="solar:magic-stick-3-bold" class="w-3 h-3" /> Smart Suggested
                             </span>
                         </div>
-                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Lot Name" />
+                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Main Lot Name" />
                         
                         <!-- Quick Title Suggestions -->
                         <div v-if="combineTitleSuggestions.length > 0" class="flex flex-wrap gap-1.5 mt-2">
@@ -476,40 +501,84 @@
                             <input type="number" v-model.number="combineTotalUnits" min="1" class="input input-bordered w-full font-mono text-sm" />
                         </div>
                     </div>
+                </div>
 
-                    <!-- List of Items included -->
-                    <div class="border border-base-300 rounded-xl p-3 bg-base-200/50">
-                        <label class="label pt-0 pb-1.5">
-                            <span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span>
+                <!-- MODE 2: ADD TO EXISTING MAIN LOT -->
+                <div v-else class="space-y-4">
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text font-bold opacity-70">Destination Main Lot</span>
                         </label>
-                        <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                            <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm" :class="{'ring-1 ring-secondary': item.$id === combinePrimaryId}">
-                                <div class="flex flex-col min-w-0">
-                                    <div class="flex items-center gap-1.5">
-                                        <span class="font-medium truncate max-w-50" :class="item.$id === combinePrimaryId ? 'text-secondary font-bold' : ''">
-                                            {{ item.title }}
-                                        </span>
-                                        <span v-if="item.$id === combinePrimaryId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Primary</span>
-                                    </div>
-                                    <span class="text-[9px] opacity-50 uppercase font-bold">
-                                        Cost: ${{ Number(item.cost || 0).toFixed(2) }} | Qty: {{ item.quantity || 1 }}
+                        <select v-model="selectedTargetLotId" class="select select-bordered w-full text-xs font-bold">
+                            <option value="">-- Choose an Existing Main Lot --</option>
+                            <option v-for="lot in availableMainLotsInInventory" :key="lot.$id" :value="lot.$id">
+                                {{ lot.title }} (Qty: {{ lot.quantity || 1 }}, Cost: ${{ Number(lot.cost || 0).toFixed(2) }})
+                            </option>
+                        </select>
+                    </div>
+
+                    <div v-if="targetLotPreview" class="bg-base-200/80 p-3 rounded-xl border border-secondary/30 text-xs space-y-1.5">
+                        <div class="flex justify-between font-bold">
+                            <span>Pieces After Merge:</span>
+                            <span class="text-secondary font-mono">{{ targetLotPreview.currentQty }} ➔ {{ targetLotPreview.newQty }} pieces</span>
+                        </div>
+                        <div class="flex justify-between font-bold">
+                            <span>Total Landed Cost:</span>
+                            <span class="font-mono">${{ targetLotPreview.currentCost.toFixed(2) }} ➔ ${{ targetLotPreview.newCost.toFixed(2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shared: Selected Items Included -->
+                <div class="border border-base-300 rounded-xl p-3 bg-base-200/50 mt-4">
+                    <label class="label pt-0 pb-1.5">
+                        <span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span>
+                    </label>
+                    <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                        <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm" :class="{'ring-1 ring-secondary': (combineMode === 'create_new' && item.$id === combinePrimaryId) || (combineMode === 'add_to_existing' && item.$id === selectedTargetLotId)}">
+                            <div class="flex flex-col min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium truncate max-w-50" :class="(combineMode === 'create_new' && item.$id === combinePrimaryId) || (combineMode === 'add_to_existing' && item.$id === selectedTargetLotId) ? 'text-secondary font-bold' : ''">
+                                        {{ item.title }}
                                     </span>
+                                    <span v-if="combineMode === 'create_new' && item.$id === combinePrimaryId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Primary</span>
+                                    <span v-else-if="combineMode === 'add_to_existing' && item.$id === selectedTargetLotId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Target Lot</span>
                                 </div>
-                            </li>
-                        </ul>
-                    </div>
-                    
-                    <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal">
-                        <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
-                        <span>This will merge the selected items into a single Master Lot. The original items will be marked as "combined", linked to the new lot, and hidden from your main inventory view.</span>
-                    </div>
+                                <span class="text-[9px] opacity-50 uppercase font-bold">
+                                    Cost: ${{ Number(item.cost || 0).toFixed(2) }} | Qty: {{ item.quantity || 1 }}
+                                </span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal mt-4">
+                    <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
+                    <span v-if="combineMode === 'create_new'">This will merge the selected items into a single Main Lot. The constituent items will be marked as "combined" and linked to the new lot.</span>
+                    <span v-else>This will fold the selected items into the chosen Main Lot, updating its cost, pieces, and gallery.</span>
+                </div>
+
+                <!-- Smart UPC & Shop Tag Notice -->
+                <div v-if="combineMode === 'create_new' && selectedItemsObjects.some(i => i.upc || i.ricochetSynced)" class="alert alert-info py-2 shadow-sm text-xs leading-normal mt-2">
+                    <Icon icon="solar:info-circle-bold" class="w-5 h-5 shrink-0 text-info" />
+                    <span><b>Shop Barcode Notice:</b> One or more selected items already has a shop barcode (UPC). Creating a <i>New</i> lot will require a new barcode tag. To preserve an existing tag already in the shop, use <b>"Add to Existing Main Lot"</b> instead.</span>
+                </div>
+                <div v-else-if="combineMode === 'add_to_existing' && selectedTargetLotId" class="alert alert-success/15 border border-success/30 py-2 shadow-sm text-xs leading-normal mt-2">
+                    <Icon icon="solar:check-circle-bold" class="w-5 h-5 shrink-0 text-success" />
+                    <span><b>Preserves Shop Tag:</b> The target Main Lot keeps its original barcode / UPC. The tag on your shelf stays valid without re-printing.</span>
                 </div>
 
                 <div class="modal-action">
                     <button type="button" class="btn btn-ghost btn-sm" @click="closeCombineModal" :disabled="savingCombine">Cancel</button>
-                    <button type="button" class="btn btn-secondary btn-sm px-6" @click="submitCombine" :disabled="savingCombine || !combineTitle || combineTotalUnits < 1">
+                    <button 
+                        type="button" 
+                        class="btn btn-secondary btn-sm px-6" 
+                        @click="submitCombine" 
+                        :disabled="savingCombine || (combineMode === 'create_new' && (!combineTitle || combineTotalUnits < 1)) || (combineMode === 'add_to_existing' && !selectedTargetLotId)"
+                    >
                         <span v-if="savingCombine" class="loading loading-spinner loading-xs mr-1"></span>
-                        Combine into Lot
+                        <span v-if="combineMode === 'create_new'">Create Main Lot</span>
+                        <span v-else>Add to Main Lot</span>
                     </button>
                 </div>
             </div>
@@ -680,7 +749,47 @@ const openBundleModal = () => {
     isBundleModalOpen.value = true;
 };
 
-const { applyBulkUnified } = useInventoryBulkActions();
+const { 
+    applyBulkUnified, 
+    restockInventoryItem, 
+    createBundle, 
+    rollbackLot 
+} = useInventoryBulkActions(async () => {
+    await fetchInventory(currentTeam.value?.$id || '');
+});
+
+const onDockRestockItem = async ({ item, unitsToAdd, addedCostBasis }) => {
+    const ok = await restockInventoryItem(item, { unitsToAdd, addedCostBasis });
+    if (ok) {
+        selectedItems.value = [];
+    }
+};
+
+const onDockSubmitBundle = async ({ items, title, description, estHigh, storageLocation }) => {
+    const ok = await createBundle({ items, title, description, estHigh, storageLocation });
+    if (ok) {
+        selectedItems.value = [];
+    }
+};
+
+const onDockSubmitCombine = async ({ items, title, mode, targetLot }) => {
+    if (!items || items.length === 0) return;
+    combineMode.value = mode;
+    combineTitle.value = title;
+    if (targetLot) {
+        selectedTargetLotId.value = targetLot.$id;
+    }
+    await submitCombine();
+    selectedItems.value = [];
+};
+
+const onDockUncombineLot = async (lotItem) => {
+    if (!lotItem) return;
+    const ok = await rollbackLot(lotItem);
+    if (ok) {
+        selectedItems.value = [];
+    }
+};
 
 const onBundleSuccess = async (bundleId) => {
     isBundleModalOpen.value = false;
@@ -2411,9 +2520,37 @@ const combineCost = ref(0);
 const combineTotalUnits = ref(1);
 const combinePrimaryId = ref(null);
 const savingCombine = ref(false);
+const combineMode = ref('create_new'); // 'create_new' | 'add_to_existing'
+const selectedTargetLotId = ref('');
+
+const availableMainLotsInInventory = computed(() => {
+    return (inventoryItems.value || []).filter(i => 
+        !i.parentLotId && 
+        i.status !== 'sold' && 
+        (Number(i.quantity || 1) > 1 || i.status === 'combined' || /\b(?:lot|bundle|collection)\b/i.test(i.title || ''))
+    );
+});
+
+const targetLotPreview = computed(() => {
+    if (!selectedTargetLotId.value) return null;
+    const target = (inventoryItems.value || []).find(i => i.$id === selectedTargetLotId.value);
+    if (!target) return null;
+    const itemsToAdd = selectedItemsObjects.value.filter(i => i.$id !== target.$id);
+    const addedCost = itemsToAdd.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
+    const addedQty = itemsToAdd.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+    const currentCost = Number(target.cost || 0);
+    const currentQty = Number(target.quantity || 1);
+    return {
+        currentCost,
+        currentQty,
+        newCost: Number((currentCost + addedCost).toFixed(2)),
+        newQty: currentQty + addedQty,
+        itemsCount: itemsToAdd.length
+    };
+});
 
 function generateSmartLotTitle(items, totalQty) {
-    if (!items || items.length === 0) return { defaultTitle: `Master Lot (Qty: ${totalQty})`, suggestions: [] };
+    if (!items || items.length === 0) return { defaultTitle: `Main Lot (Qty: ${totalQty})`, suggestions: [] };
 
     // Clean individual title noise (e.g., "12pc", "Lot of 5", "Auction", SGW tags)
     const cleanTitles = items.map(i => {
@@ -2478,7 +2615,7 @@ function generateSmartLotTitle(items, totalQty) {
         suggestions.push(`${shortNames} (Lot of ${totalQty})`);
     }
 
-    const defaultTitle = suggestions[0] || `Master Lot of ${totalQty} Items`;
+    const defaultTitle = suggestions[0] || `Main Lot of ${totalQty} Items`;
     return { defaultTitle, suggestions };
 }
 
@@ -2488,6 +2625,22 @@ const openCombineModal = () => {
     
     // Choose the first item as default primary
     combinePrimaryId.value = items[0].$id;
+
+    // Check if one of the selected items is ALREADY an existing Main Lot
+    const existingLotInSelection = items.find(i => 
+        !i.parentLotId && (
+            Number(i.quantity || 1) > 1 || 
+            i.status === 'combined' || 
+            /\b(?:lot|bundle|collection)\b/i.test(i.title || '')
+        )
+    );
+    if (existingLotInSelection) {
+        combineMode.value = 'add_to_existing';
+        selectedTargetLotId.value = existingLotInSelection.$id;
+    } else {
+        combineMode.value = 'create_new';
+        selectedTargetLotId.value = '';
+    }
     
     // Calculate total cost and total quantity (parsing embedded counts like "12pc", "Lot of 10", "8 Issues")
     const totalCost = items.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
@@ -2538,10 +2691,89 @@ const closeCombineModal = () => {
 
 const submitCombine = async () => {
     const items = selectedItemsObjects.value;
-    if (items.length < 2 || !combinePrimaryId.value) return;
+    if (items.length < 2) return;
     
     savingCombine.value = true;
     try {
+        if (combineMode.value === 'add_to_existing') {
+            const targetLot = inventoryItems.value.find(i => i.$id === selectedTargetLotId.value);
+            if (!targetLot) throw new Error("Destination Main Lot not found.");
+
+            const itemsToAdd = items.filter(i => i.$id !== targetLot.$id);
+            if (itemsToAdd.length === 0) throw new Error("No items selected to add to this lot.");
+
+            // 1. Combine images from all added items with target lot
+            const galleryIdsSet = new Set(targetLot.galleryImageIds || []);
+            if (targetLot.imageId) galleryIdsSet.add(targetLot.imageId);
+
+            itemsToAdd.forEach(item => {
+                if (item.imageId) galleryIdsSet.add(item.imageId);
+                if (Array.isArray(item.galleryImageIds)) {
+                    item.galleryImageIds.forEach(id => galleryIdsSet.add(id));
+                }
+            });
+
+            // 2. Calculate updated cost and quantity
+            const addedCost = itemsToAdd.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
+            const addedQty = itemsToAdd.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+            const newCost = Number((Number(targetLot.cost || 0) + addedCost).toFixed(2));
+            const newQty = Math.max(1, Number(targetLot.quantity || 1) + addedQty);
+
+            // 3. Update target Main Lot in Appwrite
+            await updateInventoryItem(targetLot.$id, {
+                cost: newCost,
+                quantity: newQty,
+                galleryImageIds: Array.from(galleryIdsSet)
+            });
+
+            // 4. Update each added item: set parentLotId and status = combined
+            const updatePromises = itemsToAdd.map(item => 
+                updateInventoryItem(item.$id, {
+                    parentLotId: targetLot.$id,
+                    status: 'combined'
+                })
+            );
+            await Promise.all(updatePromises);
+
+            // 4b. If combining combines: re-parent any existing child items of merged lots to targetLot
+            const nestedChildren = (inventoryItems.value || []).filter(i => 
+                itemsToAdd.some(added => added.$id === i.parentLotId)
+            );
+            if (nestedChildren.length > 0) {
+                await Promise.all(nestedChildren.map(nc => 
+                    updateInventoryItem(nc.$id, { parentLotId: targetLot.$id })
+                ));
+                nestedChildren.forEach(nc => {
+                    nc.parentLotId = targetLot.$id;
+                });
+            }
+
+            // 5. Sync purchase orders
+            syncPurchaseStatusForItems(itemsToAdd).catch(err => console.warn('[submitCombine] PO sync warning:', err));
+
+            // 6. Optimistically update local state
+            targetLot.cost = newCost;
+            targetLot.quantity = newQty;
+            targetLot.galleryImageIds = Array.from(galleryIdsSet);
+
+            inventoryItems.value.forEach(item => {
+                if (itemsToAdd.some(i => i.$id === item.$id)) {
+                    item.status = 'combined';
+                    item.parentLotId = targetLot.$id;
+                }
+            });
+
+            closeCombineModal();
+            selectedItems.value = [];
+            addToast({ 
+                type: 'success', 
+                message: `Successfully added ${itemsToAdd.length} items to Main Lot "${targetLot.title}"!` 
+            });
+            return;
+        }
+
+        // MODE: CREATE NEW MAIN LOT
+        if (!combinePrimaryId.value) return;
         const primaryItem = items.find(i => i.$id === combinePrimaryId.value);
         if (!primaryItem) throw new Error("Primary item not found.");
         
@@ -2622,6 +2854,19 @@ const submitCombine = async () => {
             })
         );
         await Promise.all(updatePromises);
+
+        // 4b. If combining combines: re-parent any existing child items of merged lots to the new lot
+        const nestedChildren = (inventoryItems.value || []).filter(i => 
+            items.some(m => m.$id === i.parentLotId)
+        );
+        if (nestedChildren.length > 0) {
+            await Promise.all(nestedChildren.map(nc => 
+                updateInventoryItem(nc.$id, { parentLotId: combinedLotDoc.$id })
+            ));
+            nestedChildren.forEach(nc => {
+                nc.parentLotId = combinedLotDoc.$id;
+            });
+        }
         
         // Auto-sync any linked POs so they immediately recognize combined items and update to 'Received'
         syncPurchaseStatusForItems(items).catch(err => console.warn('[submitCombine] PO sync warning:', err));

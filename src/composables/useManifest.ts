@@ -16,6 +16,7 @@ const isTrayOpen = isManifestTrayOpen;
 const isSyncing = ref(false);
 const allDrafts = ref<ManifestDocument[]>([]);
 const manifestsList = ref<ManifestDocument[]>([]);
+const recentManifests = ref<ManifestDocument[]>([]);
 const isInitialized = ref(false);
 
 let manifestUpdateQueue = Promise.resolve();
@@ -79,6 +80,11 @@ export function useManifest() {
 
     // -- Reactive Financial Calculations --
     const stagedCount = computed(() => stagedItems.value.length);
+    const totalUnits = computed(() => {
+        return stagedItems.value.reduce((sum, item) => {
+            return sum + Math.max(1, Number(item.quantity || 1));
+        }, 0);
+    });
 
     const placedItemIds = computed(() => new Set(activeManifest.value?.placedItemIds || []));
     const placedCount = computed(() => activeManifest.value?.placedItemIds?.length || 0);
@@ -112,7 +118,7 @@ export function useManifest() {
     });
 
     const estimatedProfit = computed(() => {
-        return Math.max(0, estimatedNet.value - totalCost.value);
+        return estimatedNet.value - totalCost.value;
     });
 
     const roiMultiple = computed(() => {
@@ -137,40 +143,60 @@ export function useManifest() {
 
     // -- Sync Line Items from Appwrite or Local Pool --
     async function loadStagedItems(manifest: ManifestDocument) {
-        if (!manifest || !manifest.itemIds || manifest.itemIds.length === 0) {
+        if (!manifest) {
             stagedItems.value = [];
             return;
         }
 
-        // If snapshot exists and has full coverage, use as initial immediate render
-        if (manifest.itemsSnapshot && manifest.itemsSnapshot.length === manifest.itemIds.length) {
+        let itemIds = manifest.itemIds || [];
+        // Fallback: If itemIds is empty but itemsSnapshot has items, recover from snapshot
+        if (itemIds.length === 0 && manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
+            itemIds = manifest.itemsSnapshot.map((s: any) => s.$id || s.id).filter(Boolean);
+        }
+
+        if (itemIds.length === 0) {
+            stagedItems.value = manifest.itemsSnapshot ? [...manifest.itemsSnapshot] : [];
+            return;
+        }
+
+        // If snapshot exists, use as initial immediate render so UI never flashes blank
+        if (manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
             stagedItems.value = [...manifest.itemsSnapshot];
         }
 
         // Fetch authoritative latest item records from Appwrite
         try {
-            const targetIds = manifest.itemIds.slice(0, 100);
+            const targetIds = itemIds.slice(0, 100);
             const resp = await databases.listDocuments(DB_ID, getCollectionId(), [
                 Query.equal('$id', targetIds),
                 Query.limit(100)
             ]);
             if (resp.documents.length > 0) {
-                // Keep order matching manifest.itemIds
                 const idMap = new Map(resp.documents.map(d => [d.$id, d]));
-                const resolved = manifest.itemIds.map(id => idMap.get(id)).filter(Boolean);
+                const snapMap = new Map((manifest.itemsSnapshot || []).map((s: any) => [s.$id || s.id, s]));
+                // Keep order matching itemIds, falling back to snapshot if an older item document was moved or not returned
+                const resolved = itemIds.map(id => idMap.get(id) || snapMap.get(id)).filter(Boolean);
                 stagedItems.value = resolved as any[];
             }
         } catch (e) {
             console.warn('[useManifest] Could not fetch fresh items from Appwrite, using snapshot:', e);
+            if (manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
+                stagedItems.value = [...manifest.itemsSnapshot];
+            }
         }
     }
 
-    // -- Load / Refresh All Drafts (all locations across the tenant) --
+    // -- Load / Refresh All Drafts & Recent Drops (all locations across the tenant) --
     async function fetchAllDrafts(locationId?: string) {
         const tId = tenantId.value || (typeof localStorage !== 'undefined' ? localStorage.getItem('activeTeamId') : null) || '';
         if (!tId) return;
         try {
-            allDrafts.value = await manifestsApi.listDrafts(tId, locationId);
+            const [drafts, recent] = await Promise.all([
+                manifestsApi.listDrafts(tId, locationId),
+                manifestsApi.listRecentManifests(tId, locationId, 50)
+            ]);
+            allDrafts.value = drafts;
+            recentManifests.value = recent;
         } catch (e) {
             console.warn('[useManifest.fetchAllDrafts] Error:', e);
         }
@@ -614,6 +640,62 @@ export function useManifest() {
         return manifestsList.value;
     }
 
+    // -- Rollback Placed or In-Transit Manifest (Full Revert / Undo) --
+    async function rollbackPlacedManifest(manifestId: string, targetStorageLocation = 'Backstock') {
+        if (!manifestId) return;
+        isSyncing.value = true;
+        try {
+            const rolledBack = await manifestsApi.rollbackManifest(manifestId, {
+                revertItemsToStatus: 'in-stock',
+                targetStorageLocation
+            });
+            activeManifest.value = rolledBack;
+            await loadStagedItems(rolledBack);
+            await fetchAllDrafts();
+            addToast({ 
+                type: 'success', 
+                message: `Drop "${rolledBack.name}" rolled back to draft! Items restored to ${targetStorageLocation}.` 
+            });
+            return rolledBack;
+        } catch (err: any) {
+            addToast({ type: 'error', message: `Failed to rollback manifest: ${err.message}` });
+            throw err;
+        } finally {
+            isSyncing.value = false;
+        }
+    }
+
+    // -- Unverify All Items on Active Manifest --
+    async function unverifyAllItems(manifestId?: string) {
+        const mId = manifestId || activeManifest.value?.$id;
+        if (!mId) return;
+        isSyncing.value = true;
+        try {
+            const updated = await manifestsApi.unverifyManifestItems(mId);
+            if (activeManifest.value && activeManifest.value.$id === mId) {
+                activeManifest.value = updated;
+            }
+            await fetchAllDrafts();
+            addToast({ type: 'info', message: 'All items unverified on manifest.' });
+            return updated;
+        } catch (err: any) {
+            addToast({ type: 'error', message: `Unverify failed: ${err.message}` });
+            throw err;
+        } finally {
+            isSyncing.value = false;
+        }
+    }
+
+    // -- Reopen Closed / Placed Manifest --
+    async function reopenClosedManifest(manifestId: string, targetStorageLocation?: string) {
+        return await rollbackPlacedManifest(manifestId, targetStorageLocation);
+    }
+
+    // Computed list of recent placed/closed drops
+    const recentPlacedManifests = computed(() => {
+        return recentManifests.value.filter(m => m.status === 'placed');
+    });
+
     return {
         activeManifest,
         stagedItems,
@@ -628,8 +710,11 @@ export function useManifest() {
         isSyncing,
         allDrafts,
         manifestsList,
+        recentManifests,
+        recentPlacedManifests,
         isInitialized,
         stagedCount,
+        totalUnits,
         placedItemIds,
         placedCount,
         totalCost,
@@ -645,6 +730,9 @@ export function useManifest() {
         resumeManifest,
         lockActiveManifest,
         unlockActiveManifest,
+        rollbackPlacedManifest,
+        unverifyAllItems,
+        reopenClosedManifest,
         getStagedInfo,
         createNewDraft,
         addToActiveManifest,

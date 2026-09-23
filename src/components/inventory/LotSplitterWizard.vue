@@ -10,7 +10,7 @@
           </div>
           <div class="truncate">
             <h3 class="font-black text-base sm:text-lg tracking-tight truncate">Lot Splitter & Curation Wizard</h3>
-            <p class="text-xs text-base-content/60 truncate">{{ lotItem?.title || 'Master Lot' }} • {{ totalItemCount }} Total Pieces</p>
+            <p class="text-xs text-base-content/60 truncate">{{ lotItem?.title || 'Parent Lot' }} • {{ totalItemCount }} Total Pieces</p>
           </div>
         </div>
         <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeWizard">✕</button>
@@ -904,7 +904,7 @@ async function executeSplit() {
             cost: Number(unitCost.toFixed(2)),
             resalePrice: Number(individualPrice.toFixed(2)),
             quantity: 1,
-            conditionNotes: `Split from master lot: ${parent.title || 'Lot'}`.slice(0, 950),
+            conditionNotes: `Deconstructed from: ${cleanSubject || parent.title || 'Collection'}`.slice(0, 950),
             imageId: mainImgId || undefined,
             storageLocation: parent.storageLocation || 'HG',
             sourcingLocation: parent.sourcingLocation || '',
@@ -933,13 +933,15 @@ async function executeSplit() {
           retailTitle = `${cleanSubject} - Reader / Clearance`;
         }
 
+        const totalTierCost = unitCost * tierItems.length;
+
         const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
           purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
           title: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 250),
           identity: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 950),
-          cost: Number(unitCost.toFixed(2)),
+          cost: Number(totalTierCost.toFixed(2)),
           resalePrice: Number(tier.targetPrice.toFixed(2)),
           quantity: tierItems.length,
           conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`.slice(0, 950),

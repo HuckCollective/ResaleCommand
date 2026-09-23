@@ -193,22 +193,25 @@
               </div>
               <div>
                 <span class="opacity-60 text-[10px] uppercase font-bold block">Total Items</span>
-                <span class="font-mono font-black text-primary text-sm">{{ activeDraft.itemCount }} items</span>
+                <span class="font-mono font-black text-primary text-sm">
+                  {{ activeDraftUnits }} units
+                  <span v-if="activeDraftUnits !== activeDraftItems.length" class="text-[10px] opacity-70 block font-normal font-sans">({{ activeDraftItems.length }} unique)</span>
+                </span>
               </div>
               <div>
                 <span class="opacity-60 text-[10px] uppercase font-bold block">Tag Retail Value</span>
-                <span class="font-mono font-black text-secondary text-sm">${{ activeDraft.totalRetail.toFixed(2) }}</span>
+                <span class="font-mono font-black text-secondary text-sm">${{ (activeDraftRetail || activeDraft.totalRetail || 0).toFixed(2) }}</span>
               </div>
               <div>
                 <span class="opacity-60 text-[10px] uppercase font-bold block">Est. Net (after comm.)</span>
-                <span class="font-mono font-black text-success text-sm">${{ activeDraft.estimatedNet.toFixed(2) }}</span>
+                <span class="font-mono font-black text-success text-sm">${{ (activeDraftNet || activeDraft.estimatedNet || 0).toFixed(2) }}</span>
               </div>
             </div>
 
             <!-- Staged Items List with Links to Inventory -->
             <div v-if="activeDraftItems.length > 0" class="space-y-2">
               <div class="text-xs font-bold opacity-75 flex items-center justify-between">
-                <span>Staged Items ({{ activeDraftItems.length }}):</span>
+                <span>Staged Items ({{ activeDraftUnits }} units<template v-if="activeDraftUnits !== activeDraftItems.length"> • {{ activeDraftItems.length }} unique</template>):</span>
                 <span class="text-[11px] opacity-60">Click item to view in catalog</span>
               </div>
               
@@ -221,17 +224,23 @@
                   title="Click to view full specs & edit in ItemDrawer"
                 >
                   <div class="w-10 h-10 rounded-lg bg-base-300 overflow-hidden shrink-0">
-                    <img v-if="item.imageId" :src="getItemPhotoUrl(item.imageId)" class="w-full h-full object-cover" />
+                    <img 
+                      v-if="item.imageId" 
+                      :src="getItemPhotoUrl(item.imageId)" 
+                      @error="handleImageError($event, item.imageId)"
+                      class="w-full h-full object-cover" 
+                    />
                     <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
                   </div>
                   <div class="min-w-0 flex-1 text-xs">
                     <span class="font-bold truncate block group-hover:text-primary transition-colors">
                       {{ item.title }}
                     </span>
-                    <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
+                    <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5 flex-wrap">
                       <span v-if="item.upc" class="text-primary font-bold">{{ item.upc }}</span>
+                      <span v-if="item.quantity > 1" class="badge badge-xs badge-outline badge-primary font-bold">Qty: {{ item.quantity }}</span>
                       <span>•</span>
-                      <span class="text-secondary font-bold">${{ (Number(item.price || item.boutiquePrice || item.resalePrice) || 0).toFixed(2) }}</span>
+                      <span class="text-secondary font-bold">${{ (Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice) || 0).toFixed(2) }}</span>
                     </div>
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
@@ -259,7 +268,7 @@
             <!-- Drop Primary Actions: Verify Stock & Export CSV -->
             <div class="pt-3 flex items-center justify-between gap-2 border-t border-base-200 flex-wrap">
               <div class="text-xs opacity-60 font-mono">
-                {{ activeDraftItems.length }} items staged • Ready for stocking or POS export
+                {{ activeDraftUnits }} units ({{ activeDraftItems.length }} unique items) staged • Ready for stocking or POS export
               </div>
               <div class="flex items-center gap-2">
                 <button 
@@ -307,29 +316,34 @@
           </div>
         </div>
 
-        <!-- 2. Exported Drops awaiting In-Store Verification (PO Style Receiving) -->
+        <!-- 2. In-Transit & Exported Drops awaiting In-Store Verification (PO Style Receiving) -->
         <div v-if="exportedDrops.length > 0" class="space-y-4">
           <div class="flex items-center gap-2">
             <Icon icon="solar:checklist-bold" class="w-5 h-5 text-info" />
-            <h3 class="font-black text-base sm:text-lg">Exported Drops • Ready for In-Store Shelf Placement</h3>
+            <h3 class="font-black text-base sm:text-lg">In-Transit &amp; Exported Drops • Ready for In-Store Placement</h3>
           </div>
 
-          <div v-for="drop in exportedDrops" :key="drop.$id" class="card bg-base-100 border border-info/30 shadow-md p-5 sm:p-6 rounded-3xl space-y-4">
+          <div v-for="drop in exportedDrops" :key="drop.$id" class="card bg-base-100 border border-info/30 shadow-md p-5 sm:p-6 rounded-box space-y-4">
             <!-- Drop Header -->
             <div class="flex items-center justify-between gap-3 flex-wrap border-b border-base-200/60 pb-3">
               <div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                   <h4 class="font-black text-base">{{ drop.name }}</h4>
-                  <span class="badge badge-xs badge-info font-mono font-bold">Exported to POS</span>
+                  <span 
+                    class="badge badge-xs font-mono font-bold uppercase"
+                    :class="drop.status === 'in-transit' ? 'badge-warning text-warning-content' : 'badge-info text-info-content'"
+                  >
+                    {{ drop.status === 'in-transit' ? '🔒 In-Transit' : 'Exported to POS' }}
+                  </span>
                 </div>
                 <div class="text-xs opacity-60 font-mono mt-0.5">
-                  Exported {{ formatDate(drop.exportedAt) }} • {{ drop.itemCount }} total items • ${{ drop.totalRetail.toFixed(2) }} Tag Retail
+                  Exported {{ formatDate(drop.exportedAt || drop.$updatedAt) }} • {{ drop.itemCount || drop.itemIds.length }} total items • ${{ (Number(drop.totalRetail) || 0).toFixed(2) }} Tag Retail
                 </div>
               </div>
 
-              <!-- Placement Progress Metric -->
-              <div class="flex items-center gap-3">
-                <div class="text-right">
+              <!-- Placement Progress Metric & In-Transit Actions -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-right mr-1">
                   <div class="font-black text-xs font-mono text-success">
                     {{ (drop.placedItemIds || []).length }} of {{ drop.itemIds.length }} Placed
                   </div>
@@ -340,12 +354,44 @@
 
                 <button 
                   type="button" 
-                  class="btn btn-xs btn-outline border-success text-success hover:bg-success/20 font-bold gap-1"
+                  class="btn btn-xs btn-ghost border border-base-300 rounded-btn font-bold gap-1 shadow-2xs"
+                  @click="openDraftInTray(drop)"
+                  title="Open this drop in the Outbound Drop Tray"
+                >
+                  <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                  <span>Tray</span>
+                </button>
+
+                <button 
+                  v-if="(drop.placedItemIds || []).length > 0"
+                  type="button" 
+                  class="btn btn-xs btn-ghost border border-info/40 text-info hover:bg-info/10 rounded-btn font-bold gap-1 shadow-2xs"
+                  @click="handleUnverifyDrop(drop)"
+                  title="Uncheck all items on this drop"
+                >
+                  <Icon icon="solar:refresh-circle-bold" class="w-3.5 h-3.5" />
+                  <span>Unverify All</span>
+                </button>
+
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-warning btn-outline rounded-btn font-bold gap-1 shadow-2xs"
+                  @click="handleUnlockDrop(drop)"
+                  title="Unlock drop back to draft to add or edit items"
+                >
+                  <Icon icon="solar:lock-unlocked-bold" class="w-3.5 h-3.5" />
+                  <span>Unlock to Draft</span>
+                </button>
+
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-outline border-success text-success hover:bg-success/20 font-bold gap-1 rounded-btn shadow-2xs"
                   @click="placeAllRemainingItems(drop)"
                   :disabled="isPlacingBatch"
+                  title="Mark all items as placed at this location"
                 >
                   <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                  <span>Place All Remaining</span>
+                  <span>Place All</span>
                 </button>
               </div>
             </div>
@@ -361,7 +407,7 @@
                 <div 
                   v-for="itemId in drop.itemIds" 
                   :key="itemId"
-                  class="flex items-center gap-3 p-2.5 rounded-2xl border transition-all cursor-pointer select-none"
+                  class="flex items-center gap-3 p-2.5 rounded-box border transition-all cursor-pointer select-none"
                   :class="isItemPlaced(drop, itemId) ? 'bg-success/10 border-success/40' : 'bg-base-200/50 border-base-300 hover:border-primary/40'"
                   @click="toggleItemPlacement(drop, itemId)"
                 >
@@ -371,8 +417,13 @@
                     class="checkbox checkbox-sm checkbox-success"
                     @click.stop="toggleItemPlacement(drop, itemId)"
                   />
-                  <div class="w-10 h-10 rounded-xl bg-base-300 overflow-hidden shrink-0">
-                    <img v-if="getItemRecord(drop, itemId)?.imageId" :src="getItemPhotoUrl(getItemRecord(drop, itemId)?.imageId)" class="w-full h-full object-cover" />
+                  <div class="w-10 h-10 rounded-box bg-base-300 overflow-hidden shrink-0">
+                    <img 
+                      v-if="getItemRecord(drop, itemId)?.imageId" 
+                      :src="getItemPhotoUrl(getItemRecord(drop, itemId)?.imageId)" 
+                      @error="handleImageError($event, getItemRecord(drop, itemId)?.imageId)"
+                      class="w-full h-full object-cover" 
+                    />
                     <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
                   </div>
                   <div class="min-w-0 flex-1">
@@ -382,7 +433,7 @@
                     <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
                       <span v-if="getItemRecord(drop, itemId)?.upc" class="font-bold text-primary">{{ getItemRecord(drop, itemId)?.upc }}</span>
                       <span>•</span>
-                      <span class="text-secondary font-bold">${{ (Number(getItemRecord(drop, itemId)?.price || getItemRecord(drop, itemId)?.boutiquePrice) || 0).toFixed(2) }}</span>
+                      <span class="text-secondary font-bold">${{ (Number(getItemRecord(drop, itemId)?.boutiquePrice || getItemRecord(drop, itemId)?.resalePrice || getItemRecord(drop, itemId)?.price || getItemRecord(drop, itemId)?.listPrice) || 0).toFixed(2) }}</span>
                     </div>
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">
@@ -407,7 +458,7 @@
               </span>
               <button 
                 type="button" 
-                class="btn btn-sm btn-success font-black text-success-content shadow-md gap-1.5"
+                class="btn btn-sm btn-success font-black text-success-content shadow-md gap-1.5 rounded-btn"
                 @click="finalizeDrop(drop)"
               >
                 <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
@@ -417,24 +468,118 @@
           </div>
         </div>
 
-        <!-- 3. Placed Drops Archive History -->
-        <div v-if="placedDrops.length > 0" class="card bg-base-100 border border-base-200 shadow-md p-5 rounded-3xl space-y-3">
-          <div class="flex items-center justify-between">
-            <h3 class="font-black text-base flex items-center gap-2">
-              <Icon icon="solar:history-bold" class="w-4 h-4 text-primary" />
-              <span>Past Placed Drops Archive ({{ placedDrops.length }})</span>
-            </h3>
+        <!-- 3. Placed Drops Archive History with Expandable Inspection & Rollback -->
+        <div v-if="placedDrops.length > 0" class="card bg-base-100 border border-base-200 shadow-md p-5 rounded-box space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-base-200">
+            <div>
+              <h3 class="font-black text-base flex items-center gap-2">
+                <Icon icon="solar:history-bold" class="w-4 h-4 text-primary" />
+                <span>Past Placed Drops Archive ({{ placedDrops.length }})</span>
+              </h3>
+              <p class="text-xs opacity-60">Finalized drops placed at {{ warehouse.name }}. You can inspect items, open in tray, or undo placement.</p>
+            </div>
           </div>
 
-          <div class="divide-y divide-base-200">
-            <div v-for="pd in placedDrops" :key="pd.$id" class="py-2.5 flex items-center justify-between text-xs gap-3">
-              <div>
-                <span class="font-bold text-base-content block">{{ pd.name }}</span>
-                <span class="text-[11px] opacity-60 font-mono">Delivered {{ formatDate(pd.placedAt || pd.$updatedAt) }}</span>
+          <div class="space-y-3">
+            <div 
+              v-for="pd in placedDrops" 
+              :key="pd.$id" 
+              class="border border-base-300 rounded-box bg-base-200/30 overflow-hidden transition-all"
+            >
+              <!-- Placed Drop Header Strip -->
+              <div class="p-3.5 flex items-center justify-between gap-3 flex-wrap bg-base-100">
+                <div class="flex items-center gap-3 min-w-0">
+                  <button 
+                    type="button" 
+                    @click="toggleExpandPlacedDrop(pd.$id)"
+                    class="btn btn-ghost btn-xs btn-circle rounded-btn text-base-content/70 hover:text-primary shrink-0"
+                    :title="expandedPlacedDropIds.has(pd.$id) ? 'Collapse details' : 'Expand items'"
+                  >
+                    <Icon :icon="expandedPlacedDropIds.has(pd.$id) ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
+                  </button>
+
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-black text-xs sm:text-sm text-base-content truncate">{{ pd.name }}</span>
+                      <span class="badge badge-xs badge-success text-success-content font-mono font-bold uppercase text-[9px]">
+                        Placed
+                      </span>
+                    </div>
+                    <div class="text-[11px] opacity-60 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>Delivered {{ formatDate(pd.placedAt || pd.$updatedAt) }}</span>
+                      <span>•</span>
+                      <span>{{ pd.itemCount || (pd.itemIds || []).length }} items</span>
+                      <span>•</span>
+                      <span class="text-secondary font-black">${{ (Number(pd.totalRetail) || 0).toFixed(2) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Placed Drop Action Buttons -->
+                <div class="flex items-center gap-2 shrink-0">
+                  <button 
+                    type="button" 
+                    @click="openDraftInTray(pd)"
+                    class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
+                    title="Open this placed drop in Outbound Drop Tray"
+                  >
+                    <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                    <span>Open in Tray</span>
+                  </button>
+
+                  <button 
+                    type="button" 
+                    @click="openRollbackModal(pd)"
+                    class="btn btn-warning btn-xs rounded-btn gap-1 font-black text-warning-content shadow-2xs active:scale-95"
+                    title="Undo placement and return items to Backstock as active draft"
+                  >
+                    <Icon icon="solar:restart-bold" class="w-3.5 h-3.5" />
+                    <span>Undo Placement / Rollback</span>
+                  </button>
+                </div>
               </div>
-              <div class="text-right font-mono">
-                <span class="badge badge-sm badge-neutral font-bold">{{ pd.itemCount }} items</span>
-                <span class="font-black text-secondary ml-2">${{ pd.totalRetail.toFixed(2) }}</span>
+
+              <!-- Expanded Item Inspection Checklist -->
+              <div v-if="expandedPlacedDropIds.has(pd.$id)" class="p-3 border-t border-base-200 bg-base-200/50 space-y-2">
+                <div class="text-[11px] font-bold opacity-75 flex items-center justify-between">
+                  <span>Constituent Items ({{ (pd.itemIds || []).length }}):</span>
+                  <span class="opacity-60">Click item to view/edit in ItemDrawer</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                  <div 
+                    v-for="itemId in pd.itemIds" 
+                    :key="itemId"
+                    @click="openItemEditor(getItemRecord(pd, itemId))"
+                    class="flex items-center gap-2.5 p-2 rounded-box bg-base-100 border border-base-300 hover:border-primary/40 transition-all cursor-pointer group"
+                    title="Click to view & edit in ItemDrawer"
+                  >
+                    <div class="w-10 h-10 rounded-box bg-base-300 overflow-hidden shrink-0">
+                      <img 
+                        v-if="getItemRecord(pd, itemId)?.imageId" 
+                        :src="getItemPhotoUrl(getItemRecord(pd, itemId)?.imageId)" 
+                        @error="handleImageError($event, getItemRecord(pd, itemId)?.imageId)"
+                        class="w-full h-full object-cover" 
+                      />
+                      <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
+                    </div>
+                    <div class="min-w-0 flex-1 text-xs">
+                      <span class="font-bold truncate block group-hover:text-primary transition-colors">
+                        {{ getItemRecord(pd, itemId)?.title || 'Item ' + itemId }}
+                      </span>
+                      <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
+                        <span v-if="getItemRecord(pd, itemId)?.upc" class="text-primary font-bold">
+                          {{ getItemRecord(pd, itemId)?.upc }}
+                        </span>
+                        <span>•</span>
+                        <span class="text-secondary font-bold">
+                          ${{ (Number(getItemRecord(pd, itemId)?.boutiquePrice || getItemRecord(pd, itemId)?.resalePrice || getItemRecord(pd, itemId)?.price || getItemRecord(pd, itemId)?.listPrice) || 0).toFixed(2) }}
+                        </span>
+                      </div>
+                    </div>
+                    <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success shrink-0" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -481,7 +626,12 @@
                   <td class="cursor-pointer" @click="openItemEditor(item)" title="Click to view & edit in ItemDrawer">
                     <div class="flex items-center gap-2.5">
                       <div class="w-9 h-9 rounded-lg bg-base-300 overflow-hidden shrink-0">
-                        <img v-if="item.imageId" :src="getItemPhotoUrl(item.imageId)" class="w-full h-full object-cover" />
+                        <img 
+                          v-if="item.imageId" 
+                          :src="getItemPhotoUrl(item.imageId)" 
+                          @error="handleImageError($event, item.imageId)"
+                          class="w-full h-full object-cover" 
+                        />
                         <Icon v-else icon="solar:tag-bold" class="w-4 h-4 m-2.5 opacity-40" />
                       </div>
                       <span class="font-bold text-xs truncate max-w-xs block hover:text-primary transition-colors">{{ item.title }}</span>
@@ -490,10 +640,10 @@
                   <td class="font-mono text-xs font-bold text-primary cursor-pointer" @click="openItemEditor(item)">{{ item.upc || item.locationSku || '—' }}</td>
                   <td class="text-xs opacity-75">{{ item.category || 'General' }}</td>
                   <td class="font-mono font-bold text-secondary text-right text-xs">
-                    ${{ (Number(item.price || item.boutiquePrice || item.resalePrice) || 0).toFixed(2) }}
+                    ${{ (Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice) || 0).toFixed(2) }}
                   </td>
                   <td class="text-center">
-                    <span v-if="item.ricochetSynced" class="badge badge-xs badge-success gap-1 font-bold">
+                    <span v-if="isItemSynced(item)" class="badge badge-xs badge-success gap-1 font-bold">
                       <Icon icon="solar:check-circle-bold" class="w-3 h-3" /> Synced
                     </span>
                     <span v-else class="badge badge-xs badge-warning gap-1 font-bold">
@@ -604,6 +754,50 @@
       @drop-changed="loadManifests"
     />
 
+    <!-- ROLLBACK / UNDO PLACEMENT CONFIRMATION MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': !!dropPendingRollback }">
+      <div v-if="dropPendingRollback" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-box p-5 max-w-sm mx-auto space-y-4">
+        <div class="flex items-center gap-3 text-warning">
+          <div class="w-10 h-10 rounded-box bg-warning/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:restart-bold" class="w-6 h-6" />
+          </div>
+          <div>
+            <h3 class="font-black text-base text-base-content">Undo Drop Placement?</h3>
+            <p class="text-xs text-base-content/60 font-mono truncate max-w-48">{{ dropPendingRollback.name }}</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/80 leading-relaxed">
+          This will roll back all <strong>{{ (dropPendingRollback.itemIds || []).length }} items</strong> from <em>placed</em> at {{ warehouse?.name }} back to <strong>in-stock</strong> at <strong>Backstock</strong>, and restore this manifest as an active draft.
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            class="btn btn-ghost flex-1 font-bold rounded-btn"
+            @click="dropPendingRollback = null"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            class="btn btn-warning flex-1 font-black text-warning-content shadow-md border border-warning-content/25 active:scale-95 rounded-btn gap-1"
+            :disabled="isRollingBack"
+            @click="confirmRollbackPlacedDrop"
+          >
+            <span v-if="isRollingBack" class="loading loading-spinner loading-xs"></span>
+            <template v-else>
+              <Icon icon="solar:restart-bold" class="w-4 h-4" />
+              <span>Confirm Rollback</span>
+            </template>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="dropPendingRollback = null">
+        <button>close</button>
+      </form>
+    </dialog>
+
     <!-- FULL ITEM DRAWER FOR INSPECTING & EDITING SPECS -->
     <ItemDrawer 
       v-if="editingItem" 
@@ -669,8 +863,81 @@ const {
   removeFromManifest,
   exportManifestCsv,
   verifyPlacementItem,
-  finalizeActivePlacement
+  finalizeActivePlacement,
+  rollbackPlacedManifest,
+  unverifyAllItems
 } = useManifest();
+
+const expandedPlacedDropIds = ref<Set<string>>(new Set());
+const toggleExpandPlacedDrop = (id: string) => {
+  if (expandedPlacedDropIds.value.has(id)) {
+    expandedPlacedDropIds.value.delete(id);
+  } else {
+    expandedPlacedDropIds.value.add(id);
+  }
+};
+
+const dropPendingRollback = ref<ManifestDocument | null>(null);
+const isRollingBack = ref(false);
+
+const openRollbackModal = (drop: ManifestDocument) => {
+  dropPendingRollback.value = drop;
+};
+
+const confirmRollbackPlacedDrop = async () => {
+  if (!dropPendingRollback.value || isRollingBack.value) return;
+  isRollingBack.value = true;
+  const targetDrop = dropPendingRollback.value;
+  try {
+    await rollbackPlacedManifest(targetDrop.$id);
+    addToast({
+      type: 'success',
+      message: `Rolled back "${targetDrop.name}"! Items returned to Backstock and manifest restored to draft.`
+    });
+    dropPendingRollback.value = null;
+    await loadManifests();
+    await fetchInventory(team.value?.$id);
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Rollback failed: ${err.message || err}`
+    });
+  } finally {
+    isRollingBack.value = false;
+  }
+};
+
+const handleUnlockDrop = async (drop: ManifestDocument) => {
+  try {
+    await manifestsApi.unlockManifest(drop.$id);
+    addToast({
+      type: 'info',
+      message: `Unlocked "${drop.name}" to editable draft!`
+    });
+    await loadManifests();
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Could not unlock: ${err.message || err}`
+    });
+  }
+};
+
+const handleUnverifyDrop = async (drop: ManifestDocument) => {
+  try {
+    await unverifyAllItems(drop.$id);
+    addToast({
+      type: 'info',
+      message: `Unverified all items on "${drop.name}".`
+    });
+    await loadManifests();
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Could not unverify: ${err.message || err}`
+    });
+  }
+};
 
 const warehouse = ref<WarehouseDocument | null>(null);
 const locationManifests = ref<ManifestDocument[]>([]);
@@ -712,8 +979,11 @@ const loadLocationData = async () => {
       categories: found.categories || found.niche || ''
     };
 
-    // Load manifests for this location
-    await loadManifests();
+    // Load manifests and inventory items for this location in parallel
+    await Promise.all([
+      loadManifests(),
+      fetchInventory(team.value?.$id)
+    ]);
     if (activeDraft.value) {
       await switchActiveManifest(activeDraft.value.$id);
     }
@@ -727,7 +997,6 @@ const loadLocationData = async () => {
 const loadManifests = async () => {
   if (!warehouse.value) return;
   const tId = team.value?.$id;
-  if (!tId) return;
   try {
     const all = await manifestsApi.listManifests(tId);
     const code = (warehouse.value.code || '').toLowerCase();
@@ -736,7 +1005,13 @@ const loadManifests = async () => {
     locationManifests.value = all.filter(m => {
       const mLocId = (m.locationId || '').toLowerCase();
       const mLocName = (m.locationName || '').toLowerCase();
-      return mLocId === code || mLocName === name || (code === 'md' && (mLocId.includes('memory') || mLocName.includes('memory')));
+      if (code && mLocId === code) return true;
+      if (name && mLocName === name) return true;
+      if (code === 'md' && (mLocId.includes('memory') || mLocName.includes('memory'))) return true;
+      if (code === 'dt' && (mLocId.includes('dusty') || mLocName.includes('dusty'))) return true;
+      if (code === 'hg' && (mLocId.includes('huck') || mLocName.includes('huck') || mLocId.includes('garage') || mLocName.includes('garage'))) return true;
+      if (name && (mLocName.includes(name) || name.includes(mLocName))) return true;
+      return false;
     });
   } catch (e) {
     console.warn('Could not load manifests:', e);
@@ -756,8 +1031,25 @@ const activeDraftItems = computed(() => {
   return ids.map(id => invMap.get(id) || snapMap.get(id) || { $id: id, title: 'Item ' + id });
 });
 
+const activeDraftUnits = computed(() => {
+  return activeDraftItems.value.reduce((sum, i) => sum + Math.max(1, Number(i.quantity || 1)), 0);
+});
+
+const activeDraftRetail = computed(() => {
+  return activeDraftItems.value.reduce((sum, item) => {
+    const price = Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice || 0);
+    const qty = Math.max(1, Number(item.quantity || 1));
+    return sum + (price * qty);
+  }, 0);
+});
+
+const activeDraftNet = computed(() => {
+  const comm = (warehouse.value?.commissionRate ?? 15) / 100;
+  return activeDraftRetail.value * (1 - comm);
+});
+
 const exportedDrops = computed(() => {
-  return locationManifests.value.filter(m => m.status === 'exported');
+  return locationManifests.value.filter(m => m.status === 'exported' || m.status === 'in-transit');
 });
 
 const placedDrops = computed(() => {
@@ -767,21 +1059,35 @@ const placedDrops = computed(() => {
 // Computed In-Stock Items at this Location
 const inStockItems = computed(() => {
   if (!warehouse.value) return [];
-  return inventoryItems.value.filter(item => matchesLocationFilter(item, warehouse.value!.name));
+  const query = warehouse.value.code || warehouse.value.name;
+  return inventoryItems.value.filter(item => {
+    if (item.status === 'sold') return false;
+    return matchesLocationFilter(item, query) || matchesLocationFilter(item, warehouse.value!.name);
+  });
 });
 
 const inStockValue = computed(() => {
-  return inStockItems.value.reduce((sum, item) => {
-    return sum + (Number(item.price || item.boutiquePrice || item.resalePrice) || 0);
+  return inStockItems.value.reduce((acc, i) => {
+    const unitPrice = Number(i.boutiquePrice || i.resalePrice || i.listPrice || i.price || i.estValue || 0);
+    const qty = Math.max(1, Number(i.quantity) || 1);
+    return acc + (unitPrice * qty);
   }, 0);
 });
 
+const isItemSynced = (item: any) => {
+  return !!(
+    item.locationSku ||
+    item.ricochetSynced === true ||
+    (Array.isArray(item.sellingLocations) && item.sellingLocations.some((l: string) => /ricochet/i.test(l)))
+  );
+};
+
 const syncedItemsCount = computed(() => {
-  return inStockItems.value.filter(i => i.ricochetSynced).length;
+  return inStockItems.value.filter(isItemSynced).length;
 });
 
 const pendingExportCount = computed(() => {
-  return inStockItems.value.filter(i => !i.ricochetSynced).length;
+  return inStockItems.value.filter(i => !isItemSynced(i)).length;
 });
 
 const filteredCatalogItems = computed(() => {
@@ -804,6 +1110,20 @@ const getItemRecord = (drop: ManifestDocument, itemId: string) => {
 const getItemPhotoUrl = (imageId?: string) => {
   if (!imageId) return '';
   return getAssetUrl(imageId);
+};
+
+const handleImageError = (e: Event, imageId?: string) => {
+  const target = e.target as HTMLImageElement;
+  if (!target || !imageId) return;
+  if (target.dataset.triedFallback) return;
+  target.dataset.triedFallback = 'true';
+  const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1';
+  const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
+  if (target.src.includes('item_images_dev')) {
+    target.src = `${ENDPOINT}/storage/buckets/item_images/files/${imageId}/view?project=${PROJECT}`;
+  } else if (target.src.includes('item_images')) {
+    target.src = `${ENDPOINT}/storage/buckets/item_images_dev/files/${imageId}/view?project=${PROJECT}`;
+  }
 };
 
 const isItemPlaced = (drop: ManifestDocument, itemId: string) => {

@@ -11,8 +11,8 @@ export const getCollectionId = () => isAlphaMode.get()
     : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 
 const _isDev = (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || '').endsWith('_dev');
-export const BUCKET_ID = _isDev ? 'item_images_dev' : (import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images');
-export const REPORTS_BUCKET_ID = _isDev ? 'reports_dev' : 'reports';
+export const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || (_isDev ? 'item_images_dev' : 'item_images');
+export const REPORTS_BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_REPORTS_BUCKET_ID || (_isDev ? 'reports_dev' : 'reports');
 
 export const APPWRITE_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) 
     || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ENDPOINT) 

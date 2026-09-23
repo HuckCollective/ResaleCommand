@@ -8,7 +8,13 @@
             <div class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
                 
                 <!-- 1. STICKY HEADER (Extracted Subcomponent) -->
-                <ItemDrawerHeader :item="item" @close="closeDrawer" />
+                <ItemDrawerHeader 
+                    :item="item" 
+                    :editForm="editForm" 
+                    @close="closeDrawer" 
+                    @dismiss-shop-update="handleDismissShopUpdate"
+                    @flag-shop-update="handleFlagShopUpdate"
+                />
 
                 <!-- 2. TABS (Details, Verify, Lot) -->
                 <div class="px-4 sm:px-6 pt-1 pb-0 bg-base-100 border-b border-base-200 flex-none z-20">
@@ -21,8 +27,9 @@
                         </a>
                         <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary font-bold': mainTab === 'lot'}" @click="mainTab = 'lot'">
                             <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" />
-                            <span v-if="props.item?.parentLotId">Lot Lineage</span>
+                            <span v-if="Number(editForm.quantity || item?.quantity || 1) > 1">Multi-Qty Hub ({{ editForm.quantity || item?.quantity }})</span>
                             <span v-else-if="lotChildren?.length > 0">Lot Hub ({{ lotChildren.length }})</span>
+                            <span v-else-if="props.item?.parentLotId">Lot Lineage</span>
                             <span v-else>Lot Tools</span>
                         </a>
                     </div>
@@ -62,6 +69,7 @@
                         @select-fetched-image="selectFetchedImage"
                         @sell-one-quantity="sellOneQuantity"
                         @split-one-active="splitOneActive"
+                        @restock-quantity="restockQuantity"
                         @apply-price-tier="applyPriceTier"
                         @deconstruct-ai-lot="deconstructAiLot"
                         @apply-bundle-suggestions="applyBundleSuggestions"
@@ -97,19 +105,25 @@
                         :item="item"
                         :parentItem="parentItem"
                         :lotChildren="lotChildren"
+                        :siblingItems="siblingItems"
                         :uncombining="uncombining"
                         :lotDashboardItem="lotDashboardItem"
                         :totalSplitResaleValue="totalSplitResaleValue"
                         :lotRealizedRevenue="lotRealizedRevenue"
                         :lotROI="lotROI"
+                        :inventoryItems="inventoryItems"
                         @selectItem="$emit('selectItem', $event)"
                         @open-splitter="isLotSplitterOpen = true"
                         @uncombine="uncombineLot"
+                        @refresh-lot="handleRefreshLot"
                     />
                 </div>
 
-                <!-- 6. STICKY ACTION TOOLBAR FOOTER (Extracted Subcomponent) -->
+                <!-- 6. STICKY ACTION TOOLBAR FOOTER (Clean 2-Button Dock) -->
                 <ItemDrawerFooter
+                    :current-tab="mainTab"
+                    :item="item"
+                    :edit-form="editForm"
                     :analyzing="analyzing"
                     :analysisStatus="analysisStatus"
                     :hasScoutResult="!!scoutResult"
@@ -318,10 +332,14 @@ const props = defineProps({
     isOpen: {
         type: Boolean,
         default: false
+    },
+    inventoryItems: {
+        type: Array,
+        default: () => []
     }
 });
 
-const emit = defineEmits(['close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem']);
+const emit = defineEmits(['close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem', 'refresh']);
 
 // Form Composable
 const {
@@ -377,8 +395,26 @@ const formatSourceDisplayName = (urlOrStr) => {
     return urlOrStr.length > 22 ? urlOrStr.substring(0, 20) + '...' : urlOrStr;
 };
 
+let extractAbortController = null;
+
 const performExtraction = async (imagesPayload) => {
     extracting.value = true;
+    extractAbortController = new AbortController();
+
+    showLoader("Extracting Components from Photo...", {
+        step: "Gemini AI is reading box contents & packaging list...",
+        basket: 'solar:box-minimalistic-bold-duotone',
+        berries: ['solar:document-bold-duotone', 'solar:checklist-bold-duotone'],
+        basketColor: 'text-primary-content',
+        berryColor: 'text-primary-content',
+        backgroundColor: 'bg-primary/80',
+        cancelable: true,
+        onCancel: () => {
+            if (extractAbortController) extractAbortController.abort();
+            extracting.value = false;
+        }
+    });
+
     try {
         const bodyObj = { notes: scoutQuery.value };
         if (Array.isArray(imagesPayload)) {
@@ -389,7 +425,8 @@ const performExtraction = async (imagesPayload) => {
         const res = await fetch('/api/extract-components', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bodyObj)
+            body: JSON.stringify(bodyObj),
+            signal: extractAbortController.signal
         });
         const data = await res.json();
         if (data.components) {
@@ -398,9 +435,14 @@ const performExtraction = async (imagesPayload) => {
             addToast({ type: 'error', message: "Failed to parse list from image. " + (data.error || "") });
         }
     } catch(err) {
-        addToast({ type: 'error', message: "Extraction error: " + err.message });
+        if (err.name === 'AbortError') {
+            addToast({ type: 'info', message: "Extraction cancelled." });
+        } else {
+            addToast({ type: 'error', message: "Extraction error: " + err.message });
+        }
     } finally {
         extracting.value = false;
+        hideLoader();
     }
 };
 
@@ -764,6 +806,7 @@ const isPhotoAssigned = (itemIdx, photoIdx) => {
 };
 
 const lotChildren = ref([]);
+const siblingItems = ref([]);
 const parentItem = ref(null);
 const loadingLot = ref(false);
 const creatingChild = ref(false);
@@ -781,6 +824,7 @@ async function fetchLotChildren() {
     loadingLot.value = true;
     parentItem.value = null;
     lotChildren.value = [];
+    siblingItems.value = [];
 
     try {
         if (props.item.parentLotId) {
@@ -790,15 +834,29 @@ async function fetchLotChildren() {
             } catch (pErr) {
                 console.warn("Could not fetch parent lot doc:", pErr);
             }
+
+            // Fetch siblings from the same parent haul (excluding current item)
+            try {
+                const sRes = await databases.listDocuments(DB_ID, getCollectionId(), [
+                    Query.equal('parentLotId', props.item.parentLotId),
+                    Query.limit(100)
+                ]);
+                const sDocs = (sRes.documents || []).filter(d => d.$id !== props.item.$id);
+                sDocs.sort((a, b) => (a.upc || '').localeCompare(b.upc || '', undefined, { numeric: true }));
+                siblingItems.value = sDocs;
+            } catch (sErr) {
+                console.warn("Could not fetch sibling items:", sErr);
+            }
         }
 
-        const targetParentId = props.item.parentLotId || props.item.$id;
-        const res = await databases.listDocuments(DB_ID, getCollectionId(), [
-            Query.equal('parentLotId', targetParentId),
-            Query.orderAsc('upc'),
+        // Fetch children belonging directly to THIS item (constituent items)
+        const cRes = await databases.listDocuments(DB_ID, getCollectionId(), [
+            Query.equal('parentLotId', props.item.$id),
             Query.limit(100)
         ]);
-        lotChildren.value = res.documents || [];
+        const cDocs = cRes.documents || [];
+        cDocs.sort((a, b) => (a.upc || '').localeCompare(b.upc || '', undefined, { numeric: true }));
+        lotChildren.value = cDocs;
     } catch (e) {
         console.error("Failed to fetch lot items:", e);
     } finally {
@@ -806,19 +864,88 @@ async function fetchLotChildren() {
     }
 }
 
+const handleRefreshLot = async () => {
+    await fetchLotChildren();
+    if (props.item?.$id) {
+        try {
+            const updated = await databases.getDocument(DB_ID, getCollectionId(), props.item.$id);
+            if (updated) {
+                initFormState(updated);
+                emit('saved', updated);
+            }
+        } catch (e) {
+            console.warn('[ItemDrawer] Failed to reload item after lot refresh:', e);
+        }
+    }
+};
+
+const handleDismissShopUpdate = async () => {
+    if (!props.item?.$id) return;
+    try {
+        const currentFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
+        const updatedFlags = currentFlags.filter(f => f !== 'needs_shop_update');
+        editForm.redFlags = updatedFlags;
+
+        let cleanedNotes = editForm.condition_notes || props.item.conditionNotes || '';
+        if (cleanedNotes.includes('[NEEDS_SHOP_UPDATE]')) {
+            cleanedNotes = cleanedNotes.replace(/\[NEEDS_SHOP_UPDATE\]/g, '').trim();
+            editForm.condition_notes = cleanedNotes;
+        }
+
+        await updateInventoryItem(props.item.$id, {
+            redFlags: updatedFlags,
+            conditionNotes: cleanedNotes
+        });
+
+        if (props.item) {
+            props.item.redFlags = updatedFlags;
+            props.item.conditionNotes = cleanedNotes;
+        }
+        addToast({ type: 'success', message: '✓ Shop update reminder turned off!' });
+        emit('saved', { ...props.item, redFlags: updatedFlags, conditionNotes: cleanedNotes });
+    } catch (e) {
+        console.error('Failed to dismiss shop update reminder:', e);
+        addToast({ type: 'error', message: 'Failed to clear reminder: ' + e.message });
+    }
+};
+
+const handleFlagShopUpdate = async () => {
+    if (!props.item?.$id) return;
+    try {
+        const currentFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
+        if (!currentFlags.includes('needs_shop_update')) {
+            currentFlags.push('needs_shop_update');
+        }
+        editForm.redFlags = currentFlags;
+
+        await updateInventoryItem(props.item.$id, {
+            redFlags: currentFlags
+        });
+
+        if (props.item) {
+            props.item.redFlags = currentFlags;
+        }
+        addToast({ type: 'info', message: '⚠️ Flagged for Ricochet POS / shop update.' });
+        emit('saved', { ...props.item, redFlags: currentFlags });
+    } catch (e) {
+        console.error('Failed to flag shop update reminder:', e);
+        addToast({ type: 'error', message: 'Failed to flag reminder: ' + e.message });
+    }
+};
+
 const uncombining = ref(false);
 const uncombineLot = async () => {
     if (!props.item || !props.item.$id) return;
     const count = lotChildren.value.length;
     const confirmMsg = count > 0 
-        ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined master lot.`
-        : `Uncombine and remove this master lot?`;
+        ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined Main Lot.`
+        : `Uncombine and remove this Main Lot?`;
     
     if (!window.confirm(confirmMsg)) return;
 
     uncombining.value = true;
     showLoader("Rolling back lot...", {
-        step: "Restoring original items & removing master lot...",
+        step: "Restoring original items & removing Main Lot...",
         progress: 50,
         cancelable: false
     });
@@ -1257,14 +1384,20 @@ const analyzeExistingItem = async () => {
         });
         await Promise.allSettled(fetchPromises);
 
+        const isChildItem = Boolean(props.item?.parentLotId);
+
         let cleanCondition = (editForm.condition_notes || '')
             .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
             .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
             .replace(/(Paid|Resale|Sold|Location|Est\. Low|Est\. High|Condition|Order #):[^\n]*/gi, '')
+            .replace(/(?:split\s+from\s+(?:master\s+)?lot|deconstructed\s+from)[\s\S]*$/gi, '')
             .trim();
         let notesParts = [];
         if (cleanCondition) {
             notesParts.push("USER-SPECIFIED CORRECTIONS & OVERRIDES (AUTHORITATIVE):\n" + cleanCondition);
+        }
+        if (isChildItem) {
+            notesParts.push("LINEAGE NOTE: This item is a single individual unit deconstructed from a previous collection. Identify and appraise strictly this individual unit. Do NOT appraise or synthesize a lot.");
         }
         if (editForm.description && editForm.description.trim()) {
             notesParts.push("Listing Description:\n" + editForm.description.trim());
@@ -1274,29 +1407,35 @@ const analyzeExistingItem = async () => {
         }
         let contextNotes = notesParts.join('\n\n');
 
-        // Feed verified child items from lot lineage as ground truth
-        const existingChildComponents = (lotChildren.value || []).map(c => ({
-            id: c.$id,
-            upc: c.upc,
-            title: c.title,
-            price: c.resalePrice || c.price,
-            condition: c.condition_notes || c.condition,
-            description: c.description
-        }));
+        // Feed verified child items only if we are truly analyzing a Main Lot container, NEVER for an individual child item!
+        const existingChildComponents = (!isChildItem && lotChildren.value?.length > 0)
+            ? (lotChildren.value || []).map(c => ({
+                id: c.$id,
+                upc: c.upc,
+                title: c.title,
+                price: c.resalePrice || c.price,
+                condition: c.condition_notes || c.condition,
+                description: c.description
+            }))
+            : [];
 
-        if (existingChildComponents.length > 0) {
-            contextNotes += `\n\n=== VERIFIED CONSTITUENT ITEMS IN THIS BUNDLE (${existingChildComponents.length} Split Listings) ===\n` +
+        if (!isChildItem && existingChildComponents.length > 0) {
+            contextNotes += `\n\n=== VERIFIED CONSTITUENT ITEMS IN THIS MAIN LOT (${existingChildComponents.length} Listings) ===\n` +
                 existingChildComponents.map(c => `- [${c.upc || 'ITEM'}] ${c.title}${c.price ? ` ($${c.price})` : ''}`).join('\n') +
-                `\nNOTE: These items are ALREADY verified and cataloged. Appraise and synthesize the master lot based on these known items.`;
+                `\nNOTE: These items are ALREADY verified and cataloged. Appraise and synthesize the Main Lot based on these known items.`;
         }
 
         let lotQty = Number(editForm.quantity || props.item?.quantity || 0);
         if (!lotQty || lotQty <= 1) {
-            const titleMatch = (editForm.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
-            if (titleMatch) {
-                lotQty = parseInt(titleMatch[1], 10);
-            } else if (existingChildComponents.length > 0) {
-                lotQty = existingChildComponents.length;
+            if (!isChildItem) {
+                const titleMatch = (editForm.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
+                if (titleMatch) {
+                    lotQty = parseInt(titleMatch[1], 10);
+                } else if (existingChildComponents.length > 0) {
+                    lotQty = existingChildComponents.length;
+                }
+            } else {
+                lotQty = 1;
             }
         }
 
@@ -1321,8 +1460,13 @@ const analyzeExistingItem = async () => {
         }
 
         const totalPhotos = base64Images.length + remoteUrls.length;
-        const isLot = (lotQty > 1) || 
-                      (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${editForm.condition_notes || ''}`));
+        const cleanNotesForLotCheck = (editForm.condition_notes || '')
+            .replace(/(?:split\s+from\s+(?:master\s+)?lot|deconstructed\s+from)[\s\S]*$/i, '')
+            .replace(/\b(?:split|deconstructed)\b/gi, '');
+        const isLot = !isChildItem && (
+            (lotQty > 1) || 
+            (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${cleanNotesForLotCheck}`))
+        );
         const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
         showLoader("Analyzing with AI Deep Research...", {
@@ -1384,7 +1528,7 @@ const analyzeExistingItem = async () => {
 
         if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
             scoutResult.value = data;
-            let desc = `--- 📦 MASTER LOT APPRAISAL & BOOTH STRATEGY (${data.lot_items.length} Cataloged Items) ---\n\n`;
+            let desc = `--- 📦 MAIN LOT APPRAISAL & BOOTH STRATEGY (${data.lot_items.length} Cataloged Items) ---\n\n`;
             if (data.title) desc += `**Suggested Title:** ${data.title}\n\n`;
             if (data.condition_notes) desc += `**Condition Overview:** ${data.condition_notes}\n\n`;
 
@@ -1701,6 +1845,38 @@ const sellOneQuantity = async () => {
         addToast({ type: 'success', message: 'Extracted 1 sold item!' });
     } catch (e) {
         addToast({ type: 'error', message: 'Error extracting item: ' + e.message });
+    }
+};
+
+const restockQuantity = async ({ unitsToAdd, addedCostBasis }) => {
+    if (!props.item || unitsToAdd < 1) return;
+    try {
+        const currentQty = Number(editForm.quantity || props.item.quantity || 1);
+        const newQty = currentQty + Number(unitsToAdd);
+        const currentCost = Number(editForm.cost || props.item.cost || 0);
+        const newCost = Number((currentCost + Number(addedCostBasis || 0)).toFixed(2));
+        
+        editForm.quantity = newQty;
+        editForm.cost = newCost;
+        
+        const lotFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
+        if (!lotFlags.includes('needs_shop_update')) {
+            lotFlags.push('needs_shop_update');
+        }
+        editForm.redFlags = lotFlags;
+        
+        const timestamp = new Date().toLocaleDateString();
+        const restockLog = `[Restocked +${unitsToAdd} units (+$${Number(addedCostBasis || 0).toFixed(2)}) on ${timestamp}]`;
+        const currentNotes = editForm.conditionNotes || props.item.conditionNotes || '';
+        editForm.conditionNotes = currentNotes ? `${currentNotes}\n${restockLog}` : restockLog;
+        
+        await saveEdit();
+        addToast({ 
+            type: 'success', 
+            message: `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.` 
+        });
+    } catch (e) {
+        addToast({ type: 'error', message: 'Failed to restock units: ' + e.message });
     }
 };
 

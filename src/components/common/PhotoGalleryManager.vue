@@ -116,7 +116,7 @@
             :class="actualMainPhoto?.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
             @click="setMainPhoto('existing', id)"
           >
-            <img :src="getAssetUrl(id)" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
+            <img :src="getAssetUrl(id, { preview: true, width: 220, height: 220, quality: 80 })" referrerpolicy="no-referrer" class="w-full h-full object-cover" loading="lazy" />
             
             <!-- Index Pill -->
             <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
@@ -317,7 +317,7 @@ const actualMainPhoto = computed(() => {
   } else if (sel.type === 'existing' && props.existingImages && props.existingImages.includes(sel.val)) {
     return {
       file: null,
-      url: getAssetUrl(sel.val),
+      url: getAssetUrl(sel.val, { preview: true, width: 900, height: 675, quality: 85 }),
       type: 'existing' as const,
       id: sel.val,
       idx: null
@@ -338,7 +338,7 @@ const actualMainPhoto = computed(() => {
       const firstId = props.existingImages[0];
       return {
         file: null,
-        url: getAssetUrl(firstId),
+        url: getAssetUrl(firstId, { preview: true, width: 900, height: 675, quality: 85 }),
         type: 'existing' as const,
         id: firstId,
         idx: null

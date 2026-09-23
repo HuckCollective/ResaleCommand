@@ -92,8 +92,50 @@ function parseDoc(doc: any): ManifestDocument {
         }
     }
 
+    // Resilience for older / legacy manifests:
+    // 1. Recover itemIds from snapshot if empty in document
+    if (itemIds.length === 0 && itemsSnapshot.length > 0) {
+        itemIds = itemsSnapshot.map((s: any) => s.$id || s.id).filter(Boolean);
+    }
+
+    // 2. Recover from legacy 'items' or 'item_ids' fields
+    if (itemIds.length === 0 && Array.isArray(doc.items)) {
+        itemIds = doc.items.map((i: any) => typeof i === 'string' ? i : (i.$id || i.id)).filter(Boolean);
+    }
+    if (itemIds.length === 0 && typeof doc.item_ids === 'string') {
+        try { 
+            const parsed = JSON.parse(doc.item_ids);
+            if (Array.isArray(parsed)) itemIds = parsed.map((i: any) => typeof i === 'string' ? i : (i.$id || i.id)).filter(Boolean);
+        } catch { /* ignore */ }
+    }
+
+    // 3. Normalize legacy status representations
+    let rawStatus = (doc.status || 'draft').toLowerCase();
+    let status: ManifestDocument['status'] = 'draft';
+    if (rawStatus === 'active') {
+        status = 'draft';
+    } else if (rawStatus === 'closed' || rawStatus === 'completed' || rawStatus === 'archived' || rawStatus === 'placed') {
+        status = 'placed';
+    } else if (rawStatus === 'paused') {
+        status = 'paused';
+    } else if (rawStatus === 'in-transit' || rawStatus === 'intransit' || rawStatus === 'locked') {
+        status = 'in-transit';
+    } else if (rawStatus === 'exported') {
+        status = 'exported';
+    } else if (rawStatus === 'cancelled' || rawStatus === 'canceled') {
+        status = 'cancelled';
+    } else if (doc.placedAt || doc.deployedAt) {
+        status = 'placed';
+    }
+
+    // 4. Default placedItemIds if manifest was marked placed/closed but placedItemIds was not tracked
+    if (status === 'placed' && placedItemIds.length === 0 && itemIds.length > 0) {
+        placedItemIds = [...itemIds];
+    }
+
     return {
         ...doc,
+        status,
         itemIds,
         placedItemIds,
         itemsSnapshot,
@@ -155,6 +197,27 @@ export const manifestsApi = {
             return resp.documents.map(parseDoc);
         } catch (err: any) {
             console.warn('[manifestsApi.listDrafts] Error:', err);
+            return [];
+        }
+    },
+
+    /**
+     * List recent manifests including drafts, in-transit, and recent placed/closed drops
+     */
+    async listRecentManifests(tenantId?: string, locationId?: string, limit = 50): Promise<ManifestDocument[]> {
+        try {
+            const queries = [
+                Query.equal('status', ['draft', 'paused', 'in-transit', 'placed', 'exported', 'active', 'closed', 'completed', 'archived']),
+                Query.orderDesc('$updatedAt'),
+                Query.limit(limit)
+            ];
+            if (tenantId) queries.push(Query.equal('tenantId', tenantId));
+            if (locationId) queries.push(Query.equal('locationId', locationId));
+
+            const resp = await databases.listDocuments(DB_ID, MANIFESTS_COL, queries);
+            return resp.documents.map(parseDoc);
+        } catch (err: any) {
+            console.warn('[manifestsApi.listRecentManifests] Error:', err);
             return [];
         }
     },
@@ -288,6 +351,135 @@ export const manifestsApi = {
         return await this.updateManifest(manifestId, {
             status: 'placed',
             placedAt: new Date().toISOString()
+        });
+    },
+
+    /**
+     * Rollback a placed or in-transit manifest back to draft:
+     * - Reverts all constituent items back to 'in-stock' at specified storage location (e.g. Backstock)
+     * - Clears item placed status and sellingLocations
+     * - Restores manifest document to 'draft' with placedItemIds = [] and placedAt = null
+     */
+    async rollbackManifest(
+        manifestId: string, 
+        options?: { revertItemsToStatus?: string; targetStorageLocation?: string }
+    ): Promise<ManifestDocument> {
+        const manifest = await this.getManifest(manifestId);
+
+        // Recover constituent item IDs from all potential fields (itemIds, placedItemIds, itemsSnapshot, and legacy items)
+        const snapshotIds = (manifest.itemsSnapshot || []).map((s: any) => s.$id || (s as any).id).filter(Boolean);
+        const legacyItems = Array.isArray((manifest as any).items) 
+            ? (manifest as any).items.map((i: any) => typeof i === 'string' ? i : (i.$id || i.id)).filter(Boolean)
+            : [];
+
+        const itemIdsToRevert = Array.from(new Set([
+            ...(manifest.placedItemIds || []),
+            ...(manifest.itemIds || []),
+            ...snapshotIds,
+            ...legacyItems
+        ]));
+
+        const revertStatus = options?.revertItemsToStatus || 'in-stock';
+        const revertLocation = options?.targetStorageLocation || 'Backstock';
+
+        const itemUpdates = {
+            status: revertStatus,
+            storageLocation: revertLocation,
+            sellingLocations: []
+        };
+
+        if (itemIdsToRevert.length > 0) {
+            // 1. FAST PATH: Server Bulk Update API (elevated server permissions)
+            let serverSuccess = false;
+            try {
+                const resp = await fetch('/api/inventory/bulk-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        itemIds: itemIdsToRevert,
+                        updates: itemUpdates,
+                        collectionId: getCollectionId(),
+                        dbId: DB_ID
+                    })
+                });
+                if (resp.ok) {
+                    const res = await resp.json();
+                    if (res.success) serverSuccess = true;
+                }
+            } catch (serverErr) {
+                console.warn('[manifestsApi.rollbackManifest] Server bulk update fallback:', serverErr);
+            }
+
+            // 2. FALLBACK PATH: Client-side rate-limit retry
+            if (!serverSuccess) {
+                for (const id of itemIdsToRevert) {
+                    try {
+                        await withRateLimitRetry(() => updateInventoryItem(id, itemUpdates));
+                    } catch (e) {
+                        console.warn(`[manifestsApi.rollbackManifest] Fallback item revert failed for ${id}:`, e);
+                    }
+                }
+            }
+        }
+
+        // 3. Update Manifest doc back to draft, ensuring itemIds are preserved if recovered from snapshot
+        const manifestUpdates: Partial<ManifestData> = {
+            status: 'draft',
+            placedAt: null,
+            placedItemIds: []
+        };
+        if (manifest.itemIds.length === 0 && itemIdsToRevert.length > 0) {
+            manifestUpdates.itemIds = itemIdsToRevert;
+            manifestUpdates.itemCount = itemIdsToRevert.length;
+        }
+
+        return await this.updateManifest(manifestId, manifestUpdates);
+    },
+
+    /**
+     * Unverify all items on a manifest without removing them from staging:
+     * - Resets all verified placed item records back to 'in-stock'
+     * - Clears placedItemIds to empty array
+     */
+    async unverifyManifestItems(manifestId: string): Promise<ManifestDocument> {
+        const manifest = await this.getManifest(manifestId);
+        let placedIds = manifest.placedItemIds || [];
+        // If older manifest was marked placed/closed but placedItemIds was not tracked, unverify all itemIds
+        if (placedIds.length === 0 && (manifest.status === 'placed' || (manifest as any).placedAt)) {
+            placedIds = manifest.itemIds || [];
+        }
+
+        if (placedIds.length > 0) {
+            const itemUpdates = {
+                status: 'in-stock',
+                sellingLocations: []
+            };
+
+            try {
+                await fetch('/api/inventory/bulk-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        itemIds: placedIds,
+                        updates: itemUpdates,
+                        collectionId: getCollectionId(),
+                        dbId: DB_ID
+                    })
+                });
+            } catch (err) {
+                console.warn('[manifestsApi.unverifyManifestItems] Bulk update fallback:', err);
+                for (const id of placedIds) {
+                    try {
+                        await withRateLimitRetry(() => updateInventoryItem(id, itemUpdates));
+                    } catch (e) {
+                        // continue
+                    }
+                }
+            }
+        }
+
+        return await this.updateManifest(manifestId, {
+            placedItemIds: []
         });
     },
 

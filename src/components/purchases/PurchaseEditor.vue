@@ -585,7 +585,7 @@
                       <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
                       <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
                       <span v-if="item.status === 'combined'" class="badge badge-xs badge-secondary font-bold gap-1">
-                        <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Merged in Master Lot
+                        <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Part of Main Lot
                       </span>
                     </div>
                   </div>
@@ -693,7 +693,7 @@
                           <span v-if="item.storageLocation" class="badge badge-xs badge-outline font-mono">{{ item.storageLocation }}</span>
                           <span v-if="item.quantity > 1 || item.title?.toLowerCase().startsWith('lot of')" class="badge badge-xs badge-secondary font-bold">Lot ({{ item.quantity }})</span>
                           <span v-if="item.status === 'combined'" class="badge badge-xs badge-secondary font-bold gap-1">
-                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Merged in Master Lot
+                            <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> Part of Main Lot
                           </span>
                           <span v-if="item.parentLotId && item.status !== 'combined'" class="badge badge-xs badge-accent">Extracted Component</span>
                         </div>

@@ -16,6 +16,41 @@
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
+            <!-- Needs Shop Update Reminder & 1-Click Dismiss -->
+            <div v-if="hasShopUpdateReminder" class="flex items-center gap-1.5 bg-warning/15 border border-warning/40 rounded-lg px-2 py-1">
+                <span class="badge badge-warning badge-xs font-bold gap-1 py-1 text-[10px] shadow-xs">
+                    <Icon icon="solar:danger-triangle-bold" class="w-3 h-3 text-warning-content" />
+                    Needs Shop Update
+                </span>
+                <button 
+                    type="button" 
+                    class="btn btn-xs btn-success text-[10px] h-6 min-h-0 px-2 font-bold gap-1 shadow-xs"
+                    @click.stop="emit('dismiss-shop-update')"
+                    title="Click when you have updated this item's UPC in Ricochet / shop UI"
+                >
+                    <Icon icon="solar:check-circle-bold" class="w-3 h-3" />
+                    Mark Shop Updated
+                </button>
+            </div>
+
+            <!-- Optional Quick Flag when not set -->
+            <button
+                v-else-if="item?.$id"
+                type="button"
+                class="btn btn-xs btn-ghost border border-dashed border-base-300 text-base-content/60 hover:text-base-content hover:border-base-content/40 text-[10px] h-6 min-h-0 px-2 hidden sm:inline-flex items-center gap-1"
+                @click.stop="emit('flag-shop-update')"
+                title="Flag this item to remind yourself to update its barcode in Ricochet POS"
+            >
+                <Icon icon="solar:bell-linear" class="w-3 h-3" />
+                Remind Shop Update
+            </button>
+
+            <!-- Multi-Quantity Stock Badge -->
+            <div v-if="itemQty > 1" class="hidden sm:flex items-center gap-1 text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-md px-2 py-1 shadow-2xs" :title="`Batch listing with ${itemQty} units`">
+                <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5 text-amber-500" />
+                <span>{{ itemQty }} in Stock</span>
+            </div>
+
             <!-- UPC Badge -->
             <div v-if="item?.upc" class="hidden sm:flex items-center gap-1.5 text-xs font-mono bg-base-200 rounded-md px-2.5 py-1 border border-base-300">
                 <Icon icon="solar:tag-horizontal-bold-duotone" class="w-3.5 h-3.5 text-primary" />
@@ -27,14 +62,31 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 
-defineProps({
+const props = defineProps({
     item: {
         type: Object,
         default: null
+    },
+    editForm: {
+        type: Object,
+        default: () => ({})
     }
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'dismiss-shop-update', 'flag-shop-update']);
+
+const itemQty = computed(() => {
+    return Math.max(1, Number(props.editForm?.quantity || props.item?.quantity || 1));
+});
+
+const hasShopUpdateReminder = computed(() => {
+    const itemFlags = Array.isArray(props.item?.redFlags) ? props.item.redFlags : [];
+    const formFlags = Array.isArray(props.editForm?.redFlags) ? props.editForm.redFlags : [];
+    const inFlags = itemFlags.includes('needs_shop_update') || formFlags.includes('needs_shop_update');
+    const inNotes = typeof props.item?.conditionNotes === 'string' && props.item.conditionNotes.includes('[NEEDS_SHOP_UPDATE]');
+    return inFlags || inNotes;
+});
 </script>

@@ -2,7 +2,7 @@
     <!-- HORIZONTAL LIST ROW MODE -->
     <div v-if="horizontal"
          class="card bg-base-100 shadow-xs border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-row rounded-xl p-2.5 gap-2.5 sm:gap-3 items-center"
-         :class="containerClass"
+         :class="[containerClass, isDeconstructed ? 'opacity-65 border-dashed bg-base-200/40' : '']"
          @click="$emit('click-card', item); $emit('click', item)">
         
         <!-- Left Thumbnail (Tap Photo to Select) -->
@@ -29,14 +29,20 @@
                 </slot>
             </div>
 
-            <!-- Lot badges -->
-            <div v-if="item.parentLotId" class="absolute bottom-1 left-1 badge badge-[8px] bg-black/70 text-white font-bold px-1 py-0" title="Extracted from Lot">
-                <Icon icon="solar:link-minimalistic-bold" class="w-2 h-2 mr-0.5 text-accent" />
-                <span>Extracted</span>
-            </div>
-            <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="absolute bottom-1 left-1 badge badge-[8px] bg-black/70 text-white font-bold px-1 py-0" title="Bulk Lot">
-                <Icon icon="solar:box-minimalistic-bold" class="w-2 h-2 mr-0.5 text-warning" /> 
-                <span>Lot<span v-if="item.quantity > 1" class="ml-0.5">x{{ item.quantity }}</span></span>
+            <!-- Lot & Quantity badges (Non-exclusive) -->
+            <div class="absolute bottom-1 left-1 flex flex-col gap-0.5 items-start">
+                <div v-if="itemQuantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" 
+                     class="badge badge-[8px] bg-amber-500 text-black font-black px-1 py-0 shadow-xs" 
+                     :title="`Multi-Quantity Batch: ${itemQuantity} Units`">
+                    <Icon icon="solar:box-minimalistic-bold" class="w-2 h-2 mr-0.5" /> 
+                    <span>{{ itemQuantity > 1 ? `x${itemQuantity}` : 'Lot' }}</span>
+                </div>
+                <div v-if="item.parentLotId" 
+                     class="badge badge-[8px] bg-black/70 text-white font-bold px-1 py-0" 
+                     title="Split from Parent Lot">
+                    <Icon icon="solar:link-minimalistic-bold" class="w-2 h-2 mr-0.5 text-accent" />
+                    <span>Split</span>
+                </div>
             </div>
         </div>
 
@@ -77,8 +83,14 @@
             <div class="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-base-200/70">
                 <!-- Financial Badges -->
                 <div class="flex items-center gap-2 text-[11px] font-bold">
-                    <span class="opacity-70">Cost: <b class="font-mono text-base-content">{{ formatCurrency(paidValue) }}</b></span>
-                    <span class="text-success">Est: <b class="font-mono">{{ formatCurrency(estValue) }}</b></span>
+                    <span class="opacity-70">
+                        Cost: <b class="font-mono text-base-content">{{ formatCurrency(totalPaidValue) }}</b>
+                        <span v-if="itemQuantity > 1" class="text-[9px] opacity-70 font-normal ml-0.5">({{ formatCurrency(unitPaidValue) }}/ea)</span>
+                    </span>
+                    <span class="text-success">
+                        Est: <b class="font-mono">{{ formatCurrency(totalEstValue) }}</b>
+                        <span v-if="itemQuantity > 1" class="text-[9px] opacity-70 font-normal ml-0.5">({{ formatCurrency(unitEstValue) }}/ea)</span>
+                    </span>
                     <span v-if="roi !== null" class="badge badge-xs font-mono font-bold" :class="roi > 50 ? 'badge-success text-success-content' : 'badge-ghost'">
                         {{ roi }}%
                     </span>
@@ -95,7 +107,7 @@
     <!-- STANDARD VERTICAL CARD GRID MODE -->
     <div v-else
          class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
-         :class="containerClass"
+         :class="[containerClass, isDeconstructed ? 'opacity-65 border-dashed bg-base-200/40' : '']"
          @click="$emit('click-card', item); $emit('click', item)">
         
         <!-- Image Area -->
@@ -111,13 +123,27 @@
                 <div class="pointer-events-auto shrink-0 flex items-center gap-1">
                     <slot name="absolute-top-left"></slot>
                     
-                    <div v-if="item.parentLotId" class="badge badge-xs bg-black/60 backdrop-blur-xs text-white border-white/20 font-bold" title="Extracted from Lot">
-                        <Icon icon="solar:link-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-accent" />
-                        <span>Extracted</span>
+                    <!-- Multi-Quantity Badge (Prominent Amber Pill) -->
+                    <div v-if="itemQuantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" 
+                         class="badge badge-xs bg-amber-500 text-black border-none font-black shadow-xs flex items-center gap-0.5" 
+                         :title="`Multi-Quantity Batch: ${itemQuantity} Units`">
+                        <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5" /> 
+                        <span>{{ itemQuantity > 1 ? `x${itemQuantity}` : 'Lot' }}</span>
                     </div>
-                    <div v-else-if="item.quantity > 1 || (item.title && item.title.toLowerCase().startsWith('lot of'))" class="badge badge-xs bg-black/60 backdrop-blur-xs text-white border-white/20 font-bold" title="Bulk Lot">
-                        <Icon icon="solar:box-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-warning" /> 
-                        <span>Lot<span v-if="item.quantity > 1" class="ml-0.5">x{{ item.quantity }}</span></span>
+
+                    <!-- Lineage Badge: Extracted / Split Child -->
+                    <div v-if="item.parentLotId" 
+                         class="badge badge-xs bg-black/60 backdrop-blur-xs text-white border-white/20 font-bold" 
+                         title="Split from Parent Lot">
+                        <Icon icon="solar:link-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-accent" />
+                        <span>Split</span>
+                    </div>
+
+                    <!-- Deconstructed Parent Badge -->
+                    <div v-if="isDeconstructed" 
+                         class="badge badge-xs bg-black/70 backdrop-blur-xs text-white/90 border-white/20 font-mono text-[9px] uppercase" 
+                         title="Parent lot has been deconstructed into child listings">
+                        <span>🗄️ Deconstructed</span>
                     </div>
                 </div>
                 
@@ -137,7 +163,10 @@
             <div class="absolute bottom-0 left-0 right-0 h-6 bg-black/75 backdrop-blur-xs overflow-hidden flex items-center">
                 <div :class="[profitColor, profitWidth]" class="h-full transition-all duration-500 opacity-80"></div>
                 <div class="absolute inset-0 flex justify-between items-center px-2 font-bold z-10 text-[10px] text-white pointer-events-none drop-shadow-xs">
-                    <span class="opacity-90">Cost: {{ formatCurrency(paidValue) }}</span>
+                    <span class="opacity-90">
+                        Cost: {{ formatCurrency(totalPaidValue) }}
+                        <span v-if="itemQuantity > 1 && !compact" class="text-[9px] opacity-80 font-normal">({{ formatCurrency(unitPaidValue) }}/ea)</span>
+                    </span>
                     <span>
                         <span class="opacity-90" :title="itemQuantity > 1 ? `${formatCurrency(unitEstValue)}/ea × ${itemQuantity}` : ''">
                             Est: {{ formatCurrency(totalEstValue) }}
@@ -237,12 +266,15 @@ const statusText = computed(() => {
     return s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 });
 
+const isDeconstructed = computed(() => props.item?.status === 'deconstructed');
+
 const statusBadgeClass = computed(() => {
     const s = props.item.status;
     if (s === 'received' || s === 'scouted') return 'badge-info badge-sm';
     if (s === 'acquired') return 'badge-secondary badge-sm';
     if (s === 'placed') return 'badge-success badge-sm';
     if (s === 'sold') return 'badge-neutral badge-sm';
+    if (s === 'deconstructed') return 'badge-neutral badge-outline badge-sm opacity-80';
     return 'badge-ghost badge-sm';
 });
 
@@ -310,8 +342,46 @@ const estValue = computed(() => {
     return totalEstValue.value;
 });
 
+const rawPaid = computed(() => {
+    const raw = props.item.cost ?? props.item.purchasePrice ?? getNoteValue(props.item.conditionNotes, 'Paid', true);
+    if (raw === null || raw === undefined || raw === '') return null;
+    const num = parseFloat(String(raw).replace(/[$,]/g, ''));
+    return isNaN(num) ? null : num;
+});
+
+// Normalize single-unit cost vs total cost basis for multi-qty items:
+// If rawPaid was saved as per-unit cost (e.g. $1.87 on 54 items), detect and multiply by quantity so ROI is realistic
+const isDetectedUnitCost = computed(() => {
+    if (itemQuantity.value <= 1 || rawPaid.value === null || rawPaid.value === 0) return false;
+    const rawCost = rawPaid.value;
+    const est = totalEstValue.value;
+    if (est > 0) {
+        const singleRoi = ((est - rawCost) / rawCost) * 100;
+        const batchCost = rawCost * itemQuantity.value;
+        const batchRoi = ((est - batchCost) / batchCost) * 100;
+        // If single unit cost produces an absurd >2000% ROI while batch cost produces standard retail ROI (<1500%)
+        if (singleRoi > 2000 && batchRoi > -50 && batchRoi < 1500) {
+            return true;
+        }
+    }
+    return false;
+});
+
+const totalPaidValue = computed(() => {
+    if (rawPaid.value === null) return 0;
+    if (isDetectedUnitCost.value) {
+        return rawPaid.value * itemQuantity.value;
+    }
+    return rawPaid.value;
+});
+
+const unitPaidValue = computed(() => {
+    if (totalPaidValue.value === 0 || itemQuantity.value <= 1) return totalPaidValue.value;
+    return totalPaidValue.value / itemQuantity.value;
+});
+
 const paidValue = computed(() => {
-    return props.item.cost || props.item.purchasePrice || getNoteValue(props.item.conditionNotes, 'Paid', true) || 0;
+    return totalPaidValue.value;
 });
 
 const formatCurrency = (val) => {
@@ -322,7 +392,7 @@ const formatCurrency = (val) => {
 
 // --- ROI HELPERS ---
 const roi = computed(() => {
-    const paid = parseFloat(paidValue.value);
+    const paid = parseFloat(totalPaidValue.value);
     const est = parseFloat(totalEstValue.value);
     
     if (isNaN(paid)) return null;
@@ -335,7 +405,7 @@ const roi = computed(() => {
 });
 
 const profitColor = computed(() => {
-    const paid = parseFloat(paidValue.value) || 0;
+    const paid = parseFloat(totalPaidValue.value) || 0;
     const est = parseFloat(totalEstValue.value);
     
     if (!est || isNaN(est) || est === 0) return 'bg-base-content/30';

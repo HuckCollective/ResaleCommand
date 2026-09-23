@@ -22,7 +22,7 @@
                             v-if="currentManifest.status === 'draft'"
                             type="button" 
                             @click="isManifestTrayOpen = true"
-                            class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-xl bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden border border-base-content/20 cursor-pointer"
+                            class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-btn bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden border border-base-content/20 cursor-pointer"
                             title="Inspect active drop manifest"
                         >
                             <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary shrink-0" />
@@ -44,7 +44,7 @@
                             v-else-if="currentManifest.status === 'in-transit'"
                             type="button" 
                             @click="isManifestTrayOpen = true"
-                            class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-xl bg-info/15 hover:bg-info/25 border border-info/30 cursor-pointer select-none transition-all group text-left min-w-0 flex-1 h-7 overflow-hidden"
+                            class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-btn bg-info/15 hover:bg-info/25 border border-info/30 cursor-pointer select-none transition-all group text-left min-w-0 flex-1 h-7 overflow-hidden"
                             title="Drop locked in-transit — Tap to verify at booth"
                         >
                             <Icon icon="solar:lock-bold" class="w-3.5 h-3.5 text-info shrink-0" />
@@ -93,7 +93,7 @@
                         <!-- Scroll to Top & Filtered Total Rows Trigger -->
                         <button 
                             type="button"
-                            class="btn btn-xs h-7 px-2.5 bg-base-100 dark:bg-base-100 border border-base-content/25 text-base-content hover:text-primary hover:border-primary/50 hover:bg-primary/10 transition-all active:scale-95 gap-1 shrink-0 shadow-2xs font-mono rounded-lg"
+                            class="btn btn-xs h-7 px-2.5 bg-base-100 dark:bg-base-100 border border-base-content/25 text-base-content hover:text-primary hover:border-primary/50 hover:bg-primary/10 transition-all active:scale-95 gap-1 shrink-0 shadow-2xs font-mono"
                             @click="onScrollTop"
                             :title="isFiltered ? `Scroll to top (${totalItems.toLocaleString()} matching filters)` : `Scroll to top (${totalItems.toLocaleString()} total records)`"
                         >
@@ -128,7 +128,7 @@
 
                         <!-- Tactile Page Pill -->
                         <div 
-                            class="flex items-center gap-1.5 px-2.5 py-0.5 bg-base-100 dark:bg-base-100 rounded-lg border border-base-content/20 font-mono text-xs cursor-pointer hover:border-primary transition-all shadow-xs shrink-0"
+                            class="flex items-center gap-1.5 px-2.5 py-0.5 bg-base-100 dark:bg-base-100 rounded-btn border border-base-content/20 font-mono text-xs cursor-pointer hover:border-primary transition-all shadow-xs shrink-0"
                             @click="toggleJumpInput"
                             title="Click to jump to a specific page"
                         >
@@ -148,7 +148,7 @@
                                 <span class="text-base-content font-sans text-[11px] font-bold">/ {{ totalPages }}</span>
                             </template>
                             <template v-else>
-                                <span class="font-black text-primary-content bg-primary font-mono text-xs px-1.5 py-0.5 rounded shadow-xs">{{ currentPage }}</span>
+                                <span class="font-black text-primary-content bg-primary font-mono text-xs px-1.5 py-0.5 rounded-btn shadow-xs">{{ currentPage }}</span>
                                 <span class="text-base-content/60 font-bold">/</span>
                                 <span class="font-bold text-base-content font-mono text-xs">{{ totalPages || 1 }}</span>
                             </template>
@@ -185,7 +185,7 @@
                             <select 
                                 :value="pageSize" 
                                 @change="onPageSizeChange($event.target.value)"
-                                class="select select-xs h-6 min-h-6 bg-base-100 dark:bg-base-100 text-base-content font-mono font-bold text-[11px] rounded-lg border border-base-content/25 hover:border-primary focus:border-primary shadow-xs pl-2 pr-6 min-w-[4.8rem] cursor-pointer"
+                                class="select select-xs h-6 min-h-6 bg-base-100 dark:bg-base-100 text-base-content font-mono font-bold text-[11px] border border-base-content/25 hover:border-primary focus:border-primary shadow-xs pl-2 pr-6 min-w-[4.8rem] cursor-pointer"
                                 title="Items per page"
                                 :disabled="isLoading"
                             >
@@ -204,8 +204,8 @@
                     <button 
                         id="btn-bottom-dock-actions"
                         type="button"
-                        class="flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer"
-                        :class="selectedCount > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
+                        class="btn flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer"
+                        :class="selectedCount > 0 ? 'btn-warning font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
                         @click="openTray('actions')"
                         :title="selectedCount > 0 ? `${selectedCount} records selected for bulk actions` : 'Open bulk actions tray'"
                     >
@@ -218,7 +218,7 @@
                         v-if="!currentManifest || (currentManifest.status !== 'draft' && currentManifest.status !== 'in-transit')"
                         id="btn-bottom-dock-drop-tray"
                         type="button"
-                        class="flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
+                        class="btn flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
                         @click="handleOpenManifest"
                         :title="`Open ${manifestName || 'Memory Den'} drop manifest (${manifestItemCount} items)`"
                     >
@@ -232,7 +232,7 @@
                     <!-- Dock Item 2: Add & Ingest (Solid Elevated Hero Action) -->
                     <button 
                         type="button"
-                        class="flex-1 sm:flex-initial h-11 px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+                        class="btn btn-primary text-primary-content flex-1 sm:flex-initial h-11 px-3.5 sm:px-4 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
                         @click="openTray('add-prep')"
                         title="Add items, scout quick add & CSV import"
                     >
@@ -243,7 +243,7 @@
                     <!-- Dock Item 3: Filters & View Options -->
                     <button 
                         type="button"
-                        class="flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer"
+                        class="btn flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer"
                         @click="openTray('filters')"
                         title="Open Filters & View Options"
                     >
@@ -294,6 +294,10 @@
             @clear-selection="$emit('clear-selection')"
             @reset-filters="$emit('clear-filters')"
             @stage-manifest="$emit('stage-manifest')"
+            @restock-item="$emit('restock-item', $event)"
+            @submit-bundle="$emit('submit-bundle', $event)"
+            @submit-combine="$emit('submit-combine', $event)"
+            @uncombine-lot="$emit('uncombine-lot', $event)"
         >
             <template #filters>
                 <slot name="filters" />
@@ -446,7 +450,11 @@ const emit = defineEmits([
     'update:filterStatus',
     'update:filterChannel',
     'open-manifest',
-    'stage-manifest'
+    'stage-manifest',
+    'restock-item',
+    'submit-bundle',
+    'submit-combine',
+    'uncombine-lot'
 ]);
 
 // Tray state

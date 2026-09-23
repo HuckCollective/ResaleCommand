@@ -160,6 +160,14 @@
                     <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
                     <span class="badge badge-xs font-mono font-bold">{{ missingPricingCount }}</span>
                 </button>
+                <button 
+                    type="button"
+                    class="btn btn-xs w-full justify-between" 
+                    :class="filterInsight === 'needs_shop_update' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" 
+                    @click="$emit('update:filterInsight', filterInsight === 'needs_shop_update' ? '' : 'needs_shop_update')"
+                >
+                    <span class="flex items-center gap-1"><Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5 text-warning" /> Needs Shop Update</span>
+                </button>
             </div>
         </details>
 
