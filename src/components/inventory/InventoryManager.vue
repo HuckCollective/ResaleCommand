@@ -292,6 +292,7 @@
                     :isProcessing="processingBulk || processingBulkLoc || processingBulkChannel"
                     :manifest-item-count="manifestItemCount"
                     :manifest-name="activeManifest?.name || ''"
+                    :inventory-items="inventoryItems"
                     :showBundle="selectedItems.length >= 2"
                     :showCombine="selectedItems.length >= 2"
                     @apply-location="onDockApplyLocation"
@@ -300,6 +301,7 @@
                     @apply-bulk-unified="onDockApplyBulkUnified"
                     @export="exportCsv"
                     @select-all="toggleAll"
+                    @select-item="id => { if (!selectedItems.includes(id)) selectedItems.push(id); }"
                     @unselect-item="id => selectedItems = selectedItems.filter(i => i !== id)"
                     @clear-selection="handleClearSelection"
                     @clear-filters="clearAllFilters"
@@ -314,6 +316,7 @@
                     @submit-bundle="onDockSubmitBundle"
                     @submit-combine="onDockSubmitCombine"
                     @uncombine-lot="onDockUncombineLot"
+                    @split-one-unit="handleDockSplitOneUnit"
                 >
                     <template #filters>
                         <InventoryFilterPanel 
@@ -326,6 +329,7 @@
                             v-model:hideSold="hideSold"
                             v-model:hideTracked="hideTracked"
                             v-model:hideCombined="hideCombined"
+                            v-model:hideDeconstructed="hideDeconstructed"
                             v-model:filterPlacedLocated="filterFlaggedLocated"
                             v-model:filterKeywords="filterKeywords"
                             :locations="allAvailableLocations"
@@ -402,9 +406,20 @@
         </dialog>
 
         <!-- ----------------------------------------------------------- -->
-        <!-- EDIT DRAWER -->
-        <!-- ----------------------------------------------------------- -->
-        <ItemDrawer v-if="isEditDrawerOpen" :item="activeItem" :inventoryItems="inventoryItems" @close="closeEditDrawer" @save="saveEdit" @uncombined="fetchInventory" @deconstruct="openDeconstructModal" @selectItem="openEdit" />
+        <ItemDrawer 
+            v-if="isEditDrawerOpen" 
+            :item="activeItem" 
+            :inventoryItems="inventoryItems" 
+            @close="closeEditDrawer" 
+            @save="saveEdit" 
+            @uncombined="fetchInventory" 
+            @deconstruct="openDeconstructModal" 
+            @selectItem="openEdit"
+            @open-bundle="handleDrawerOpenBundle"
+            @open-combine="handleDrawerOpenCombine"
+            @open-restock="handleDrawerOpenRestock"
+            @open-splitter="handleDrawerOpenSplit"
+        />
 
         <!-- FULLSCREEN PREVIEW MODAL -->
         <ItemPreviewModal 
@@ -428,7 +443,7 @@
             <div class="modal-box max-w-lg">
                 <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
                     <Icon icon="solar:link-minimalistic-bold" class="w-6 h-6 text-secondary" /> 
-                    <span>Lot Merchandising Hub</span>
+                    <span>Batch & Lot Merchandising Hub</span>
                 </h3>
 
                 <!-- Mode Switcher Tabs -->
@@ -439,7 +454,7 @@
                         :class="{'tab-active': combineMode === 'create_new'}" 
                         @click="combineMode = 'create_new'"
                     >
-                        ✨ Create New Main Lot
+                        ✨ Create New Batch Lot
                     </button>
                     <button 
                         type="button" 
@@ -447,11 +462,11 @@
                         :class="{'tab-active': combineMode === 'add_to_existing'}" 
                         @click="combineMode = 'add_to_existing'"
                     >
-                        📦 Add to Existing Main Lot
+                        📦 Add to Existing Batch / Lot
                     </button>
                 </div>
                 
-                <!-- MODE 1: CREATE NEW MAIN LOT -->
+                <!-- MODE 1: CREATE NEW BATCH LOT -->
                 <div v-if="combineMode === 'create_new'" class="space-y-4">
                     <!-- Primary Item Selector -->
                     <div class="form-control w-full">
@@ -468,12 +483,12 @@
                     <!-- Suggested Title -->
                     <div class="form-control w-full">
                         <div class="flex items-center justify-between pb-1">
-                            <label class="label-text font-bold opacity-70">Main Lot Title</label>
+                            <label class="label-text font-bold opacity-70">Batch Lot Title</label>
                             <span class="text-[10px] text-secondary font-bold uppercase tracking-wider flex items-center gap-1">
                                 <Icon icon="solar:magic-stick-3-bold" class="w-3 h-3" /> Smart Suggested
                             </span>
                         </div>
-                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="Main Lot Name" />
+                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="e.g. Vintage Sci-Fi Paperbacks (Lot of 4)" />
                         
                         <!-- Quick Title Suggestions -->
                         <div v-if="combineTitleSuggestions.length > 0" class="flex flex-wrap gap-1.5 mt-2">
@@ -503,14 +518,14 @@
                     </div>
                 </div>
 
-                <!-- MODE 2: ADD TO EXISTING MAIN LOT -->
+                <!-- MODE 2: ADD TO EXISTING BATCH / LOT -->
                 <div v-else class="space-y-4">
                     <div class="form-control w-full">
                         <label class="label">
-                            <span class="label-text font-bold opacity-70">Destination Main Lot</span>
+                            <span class="label-text font-bold opacity-70">Destination Batch / Lot</span>
                         </label>
                         <select v-model="selectedTargetLotId" class="select select-bordered w-full text-xs font-bold">
-                            <option value="">-- Choose an Existing Main Lot --</option>
+                            <option value="">-- Choose an Existing Batch / Lot --</option>
                             <option v-for="lot in availableMainLotsInInventory" :key="lot.$id" :value="lot.$id">
                                 {{ lot.title }} (Qty: {{ lot.quantity || 1 }}, Cost: ${{ Number(lot.cost || 0).toFixed(2) }})
                             </option>
@@ -554,18 +569,18 @@
                 
                 <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal mt-4">
                     <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
-                    <span v-if="combineMode === 'create_new'">This will merge the selected items into a single Main Lot. The constituent items will be marked as "combined" and linked to the new lot.</span>
-                    <span v-else>This will fold the selected items into the chosen Main Lot, updating its cost, pieces, and gallery.</span>
+                    <span v-if="combineMode === 'create_new'">This will merge the selected items into a single Batch Lot. The constituent items will be archived into the new lot.</span>
+                    <span v-else>This will fold the selected items into the chosen Batch / Lot, updating its cost, pieces, and gallery.</span>
                 </div>
 
                 <!-- Smart UPC & Shop Tag Notice -->
                 <div v-if="combineMode === 'create_new' && selectedItemsObjects.some(i => i.upc || i.ricochetSynced)" class="alert alert-info py-2 shadow-sm text-xs leading-normal mt-2">
                     <Icon icon="solar:info-circle-bold" class="w-5 h-5 shrink-0 text-info" />
-                    <span><b>Shop Barcode Notice:</b> One or more selected items already has a shop barcode (UPC). Creating a <i>New</i> lot will require a new barcode tag. To preserve an existing tag already in the shop, use <b>"Add to Existing Main Lot"</b> instead.</span>
+                    <span><b>Shop Barcode Notice:</b> One or more selected items already has a shop barcode (UPC). Creating a <i>New</i> lot will require a new barcode tag. To preserve an existing tag already in the shop, use <b>"Add to Existing Batch / Lot"</b> instead.</span>
                 </div>
                 <div v-else-if="combineMode === 'add_to_existing' && selectedTargetLotId" class="alert alert-success/15 border border-success/30 py-2 shadow-sm text-xs leading-normal mt-2">
                     <Icon icon="solar:check-circle-bold" class="w-5 h-5 shrink-0 text-success" />
-                    <span><b>Preserves Shop Tag:</b> The target Main Lot keeps its original barcode / UPC. The tag on your shelf stays valid without re-printing.</span>
+                    <span><b>Preserves Shop Tag:</b> The target Batch / Lot keeps its original barcode / UPC. The tag on your shelf stays valid without re-printing.</span>
                 </div>
 
                 <div class="modal-action">
@@ -577,8 +592,8 @@
                         :disabled="savingCombine || (combineMode === 'create_new' && (!combineTitle || combineTotalUnits < 1)) || (combineMode === 'add_to_existing' && !selectedTargetLotId)"
                     >
                         <span v-if="savingCombine" class="loading loading-spinner loading-xs mr-1"></span>
-                        <span v-if="combineMode === 'create_new'">Create Main Lot</span>
-                        <span v-else>Add to Main Lot</span>
+                        <span v-if="combineMode === 'create_new'">Create Batch Lot</span>
+                        <span v-else>Add to Batch / Lot</span>
                     </button>
                 </div>
             </div>
@@ -680,6 +695,7 @@ import { useAuth } from '../../composables/useAuth';
 import { account, databases, Query, storage, ID } from '../../lib/appwrite';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import { useLotSplitter } from '../../composables/useLotSplitter';
 import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from './ItemPreviewModal.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
@@ -777,7 +793,12 @@ const onDockSubmitCombine = async ({ items, title, mode, targetLot }) => {
     combineMode.value = mode;
     combineTitle.value = title;
     if (targetLot) {
-        selectedTargetLotId.value = targetLot.$id;
+        selectedTargetLotId.value = targetLot.$id || targetLot.id;
+    }
+    if (mode === 'add_to_existing' && targetLot) {
+        const targetId = targetLot.$id || targetLot.id;
+        const allIds = [targetId, ...items.map(i => i.$id || i.id)];
+        selectedItems.value = Array.from(new Set(allIds));
     }
     await submitCombine();
     selectedItems.value = [];
@@ -788,6 +809,90 @@ const onDockUncombineLot = async (lotItem) => {
     const ok = await rollbackLot(lotItem);
     if (ok) {
         selectedItems.value = [];
+    }
+};
+
+const { isLotSplitterOpen, activeLotItem, closeLotSplitter } = useLotSplitter();
+
+watch(isLotSplitterOpen, (open) => {
+    if (open && activeLotItem.value) {
+        handleDrawerOpenSplit(activeLotItem.value);
+    }
+});
+
+const onLotSplitCompleted = async () => {
+    closeLotSplitter();
+    selectedItems.value = [];
+    await fetchInventory(currentTeam.value?.$id || '');
+};
+
+const handleDockSplitOneUnit = async (lotItem) => {
+    if (!lotItem || Number(lotItem.quantity || 1) <= 1) return;
+    showLoader("Splitting 1 Unit from Batch...", {
+        step: "Allocating cost basis and generating dedicated SKU..."
+    });
+    try {
+        const qty = Number(lotItem.quantity || 1);
+        const costNum = parseFloat(lotItem.cost || 0);
+        const unitCost = parseFloat((costNum / qty).toFixed(2));
+        const unitResale = parseFloat(lotItem.resalePrice || lotItem.price || 0);
+        const childTitle = `${lotItem.title || 'Inventory Item'} (Piece ${qty})`;
+
+        const mediaPayload = cloneItemMediaPayload({
+            imageId: lotItem.imageId,
+            galleryImageIds: lotItem.galleryImageIds
+        }, { copyAll: false });
+
+        const extraData = {
+            cost: unitCost,
+            resalePrice: unitResale,
+            status: lotItem.status === 'sold' ? 'acquired' : (lotItem.status || 'active'),
+            sourcingLocation: lotItem.sourcingLocation,
+            orderId: lotItem.orderId,
+            storageLocation: lotItem.storageLocation,
+            imageId: mediaPayload.imageId,
+            galleryImageIds: mediaPayload.galleryImageIds,
+            quantity: 1,
+            parentLotId: lotItem.$id,
+            purchaseId: lotItem.purchaseId || null
+        };
+
+        const splitDoc = await saveItemToInventory(
+            { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Split 1 unit from batch: ${lotItem.$id}` },
+            null,
+            extraData,
+            currentTeam.value?.$id
+        );
+
+        if (splitDoc?.$id && mediaPayload.imageId) {
+            duplicateItemMediaInStorage({
+                imageId: lotItem.imageId,
+                galleryImageIds: lotItem.galleryImageIds
+            }, { copyAll: false }).then(async (deepMedia) => {
+                if (deepMedia.imageId && deepMedia.imageId !== mediaPayload.imageId) {
+                    await updateInventoryItem(splitDoc.$id, {
+                        imageId: deepMedia.imageId,
+                        galleryImageIds: deepMedia.galleryImageIds
+                    });
+                }
+            }).catch(e => console.warn('[handleDockSplitOneUnit] Background deep media clone skipped:', e));
+        }
+
+        const remainingQty = qty - 1;
+        const remainingCost = Math.max(0, costNum - unitCost).toFixed(2);
+        await updateInventoryItem(lotItem.$id, {
+            quantity: remainingQty,
+            cost: parseFloat(remainingCost)
+        });
+
+        addToast({ type: 'success', message: `Split 1 unit into dedicated SKU! (${remainingQty} units remaining in batch)` });
+        selectedItems.value = [];
+        await fetchInventory(currentTeam.value?.$id || '');
+    } catch (e) {
+        console.error("Failed to split unit:", e);
+        addToast({ type: 'error', message: "Failed to split unit: " + (e?.message || e) });
+    } finally {
+        hideLoader();
     }
 };
 
@@ -948,6 +1053,7 @@ const {
     hideSold,
     hideTracked,
     hideCombined,
+    hideDeconstructed,
     filterFlaggedLocated,
     insightFilter,
     filterUpcPrefix,
@@ -2023,6 +2129,50 @@ function openEdit(item) {
 function closeEditDrawer() {
     closeItemDrawer();
     syncUrlWithDrawer(null);
+}
+
+function handleDrawerOpenBundle(item) {
+    closeEditDrawer();
+    const target = item || activeItem.value;
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openBundle(target);
+    });
+}
+
+function handleDrawerOpenCombine(item) {
+    closeEditDrawer();
+    const target = item || activeItem.value;
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openCombine(target);
+    });
+}
+
+function handleDrawerOpenRestock(item) {
+    closeEditDrawer();
+    const target = item || activeItem.value;
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openRestock(target);
+    });
+}
+
+function handleDrawerOpenSplit(item) {
+    closeEditDrawer();
+    const target = item || activeItem.value;
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openSplit(target);
+    });
 }
 
 watch(activeItem, (newItem) => {

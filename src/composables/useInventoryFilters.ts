@@ -29,11 +29,11 @@ export const getItemImageUrl = (item: any, size: number = 100): string | null =>
 
 /**
  * Domain definition of active physical on-hand stock:
- * Excludes sold, tracked (not yet acquired), scouted (in shopping cart), and combined items.
+ * Excludes sold, tracked (not yet acquired), scouted (in shopping cart), combined, and deconstructed items.
  */
 export const isActiveInventory = (status: string = ''): boolean => {
     const st = (status || 'acquired').toLowerCase();
-    return !['sold', 'tracked', 'scouted', 'combined'].includes(st);
+    return !['sold', 'tracked', 'scouted', 'combined', 'deconstructed'].includes(st);
 };
 
 export interface UseInventoryFiltersOptions {
@@ -59,6 +59,7 @@ export function useInventoryFilters(
     const hideSold = ref(true);
     const hideTracked = ref(true); // Excludes unacquired tracker and cart items
     const hideCombined = ref(true); // Excludes merged/combined items
+    const hideDeconstructed = ref(true); // Excludes split/deconstructed parent lots
     const filterPlacedLocated = ref(false); // Only placed items with a storage location
     const filterInsight = ref(''); // 'ready_to_list' | 'missing_photos' | 'missing_pricing' | 'missing_cost' | 'missing_sold_price' | 'missing_description'
     const filterBarcode = ref('all'); // 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | string prefix
@@ -470,11 +471,17 @@ export function useInventoryFilters(
         const doHideSold = hideSold.value;
         const doHideTracked = hideTracked.value;
         const doHideCombined = hideCombined.value;
+        const doHideDeconstructed = hideDeconstructed.value;
 
         // Apply pre-filter rules from generic pipeline
         return filteredItems.value.filter(item => {
             const anyItem = item as any;
             const itemStatus = (anyItem.status || 'acquired').toLowerCase();
+
+            // 0. Core Exclusion: Deconstructed / Split lots
+            if (doHideDeconstructed && itemStatus === 'deconstructed' && st !== 'deconstructed') {
+                return false;
+            }
 
             // 1. Core Exclusion: Combined / Merged items
             if (doHideCombined && itemStatus === 'combined' && st !== 'combined') {
@@ -836,6 +843,14 @@ export function useInventoryFilters(
             });
         }
 
+        if (!hideDeconstructed.value && filterStatus.value !== 'deconstructed') {
+            chips.push({
+                id: 'showDeconstructed',
+                label: 'Including Deconstructed',
+                onRemove: () => { hideDeconstructed.value = true; }
+            });
+        }
+
         // Search chip
         if (searchQuery.value.trim()) {
             chips.push({
@@ -854,6 +869,7 @@ export function useInventoryFilters(
         if (!hideSold.value && filterStatus.value !== 'sold') c++;
         if (!hideTracked.value && filterStatus.value !== 'tracked') c++;
         if (!hideCombined.value && filterStatus.value !== 'combined') c++;
+        if (!hideDeconstructed.value && filterStatus.value !== 'deconstructed') c++;
         if (filterBarcode.value && filterBarcode.value !== 'all') c++;
         if (filterLocation.value && filterLocation.value !== 'all') c++;
         if (filterChannel.value && filterChannel.value !== 'all') c++;
@@ -882,6 +898,7 @@ export function useInventoryFilters(
         hideSold.value = true;
         hideTracked.value = true;
         hideCombined.value = true;
+        hideDeconstructed.value = true;
         clearLineageFilters();
     };
 
@@ -943,6 +960,7 @@ export function useInventoryFilters(
         hideSold,
         hideTracked,
         hideCombined,
+        hideDeconstructed,
         filterPlacedLocated,
         filterFlaggedLocated: filterPlacedLocated, // Alias for InventoryManager
         filterInsight,

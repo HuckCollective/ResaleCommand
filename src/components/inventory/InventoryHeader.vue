@@ -75,7 +75,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'active')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'active' ? 'btn-primary text-primary-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Active on-hand inventory (excludes sold, unacquired trackers, and combined lots)"
             >
@@ -90,7 +90,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'acquired')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'acquired' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
             >
                 <span>Acquired</span>
@@ -103,7 +103,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'received')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'received' ? 'bg-info text-info-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
             >
                 <span>Received</span>
@@ -116,7 +116,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'placed')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'placed' ? 'bg-success text-success-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
             >
                 <span>Placed</span>
@@ -129,7 +129,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'tracked')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'tracked' ? 'bg-secondary text-secondary-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
                 title="Unacquired items currently in online trackers, auctions, or scout cart"
             >
@@ -142,7 +142,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'sold')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'sold' ? 'bg-neutral text-neutral-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
             >
                 <span>Sold</span>
@@ -153,7 +153,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterStatus', 'all')"
-                class="btn btn-xs rounded-full gap-1.5 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
                 :class="filterStatus === 'all' ? 'btn-outline border-base-content/30 font-black shadow-sm' : 'btn-ghost opacity-60 hover:opacity-100'"
                 title="All database records including sold and tracker items"
             >
@@ -166,7 +166,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterInsight', filterInsight === 'ready_to_list' ? '' : 'ready_to_list')"
-                class="btn btn-xs rounded-full gap-1 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
                 :class="filterInsight === 'ready_to_list' ? 'btn-secondary text-secondary-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Items ready to list"
             >
@@ -178,7 +178,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterInsight', filterInsight === 'missing_photos' ? '' : 'missing_photos')"
-                class="btn btn-xs rounded-full gap-1 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
                 :class="filterInsight === 'missing_photos' ? 'bg-error text-error-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Items missing photos"
             >
@@ -190,7 +190,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterInsight', filterInsight === 'missing_est_value' ? '' : 'missing_est_value')"
-                class="btn btn-xs rounded-full gap-1 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
                 :class="filterInsight === 'missing_est_value' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Items missing pricing"
             >
@@ -202,7 +202,7 @@
             <button 
                 type="button"
                 @click="$emit('update:filterInsight', filterInsight === 'needs_shop_update' ? '' : 'needs_shop_update')"
-                class="btn btn-xs rounded-full gap-1 transition-all font-bold shrink-0"
+                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
                 :class="filterInsight === 'needs_shop_update' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Items needing UPC or price updates in Ricochet POS / shop UI"
             >
@@ -212,12 +212,12 @@
 
             <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
 
-            <!-- Quick Location Filter Dropdown Pill -->
+            <!-- Quick Location Filter Dropdown -->
             <div class="shrink-0 flex items-center">
                 <select 
                     :value="filterLocation" 
                     @change="$emit('update:filterLocation', $event.target.value)"
-                    class="select select-bordered select-xs rounded-full h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
+                    class="select select-bordered select-xs rounded-sm h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
                     title="Filter by storage location or warehouse facility"
                 >
                     <option value="all">All Locations</option>
@@ -229,7 +229,7 @@
             <button 
                 type="button" 
                 @click="isFiltersOpen = true"
-                class="btn btn-xs rounded-full gap-1 font-bold shrink-0 transition-all border border-base-300"
+                class="btn btn-xs gap-1 font-bold shrink-0 transition-all border border-base-300"
                 :class="activeFilterChips.length > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
                 title="Open Advanced Filters & Exclusions"
             >
@@ -278,24 +278,128 @@
             </div>
 
             <!-- Visibility "No-Show" Toggles -->
-            <div class="space-y-2 bg-base-200/60 p-3 rounded-xl border border-base-300/60">
-                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">Exclusions ("No-Show")</div>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
-                    <input type="checkbox" :checked="hideSold" @change="$emit('update:hideSold', $event.target.checked)" class="checkbox checkbox-sm checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
-                    <input type="checkbox" :checked="hideTracked" @change="$emit('update:hideTracked', $event.target.checked)" class="checkbox checkbox-sm checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
-                    <input type="checkbox" :checked="hideCombined" @change="$emit('update:hideCombined', $event.target.checked)" class="checkbox checkbox-sm checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Only Placed &amp; Located</span>
-                    <input type="checkbox" :checked="filterPlacedLocated" @change="$emit('update:filterPlacedLocated', $event.target.checked)" class="checkbox checkbox-sm checkbox-primary" />
-                </label>
+            <div class="space-y-1.5 bg-base-200/60 p-3 rounded-xl border border-base-300/60">
+                <div class="flex items-center justify-between pb-1">
+                    <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70 flex items-center gap-1.5">
+                        <Icon icon="solar:eye-closed-bold" class="w-3.5 h-3.5 text-primary" />
+                        <span>Exclusions ("No-Show")</span>
+                    </div>
+                </div>
+
+                <!-- Toggle 1: Hide Deconstructed Lots -->
+                <div 
+                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
+                    @click="$emit('update:hideDeconstructed', !hideDeconstructed)"
+                >
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-lg bg-warning/15 text-warning flex items-center justify-center shrink-0">
+                            <Icon icon="solar:scissors-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Deconstructed Lots</span>
+                            <span class="text-[10px] opacity-60 leading-tight block truncate">Parent lots already split into child items</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideDeconstructed" 
+                        @click.stop 
+                        @change="$emit('update:hideDeconstructed', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 2: Hide Merged Items -->
+                <div 
+                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
+                    @click="$emit('update:hideCombined', !hideCombined)"
+                >
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0">
+                            <Icon icon="solar:layers-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Merged Items</span>
+                            <span class="text-[10px] opacity-60 leading-tight block truncate">Items absorbed into batches or lots</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideCombined" 
+                        @click.stop 
+                        @change="$emit('update:hideCombined', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 3: Hide Sold Items -->
+                <div 
+                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
+                    @click="$emit('update:hideSold', !hideSold)"
+                >
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
+                            <Icon icon="solar:tag-price-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Sold Items</span>
+                            <span class="text-[10px] opacity-60 leading-tight block truncate">Completed sales and historical records</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideSold" 
+                        @click.stop 
+                        @change="$emit('update:hideSold', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 4: Hide Trackers / Unacquired -->
+                <div 
+                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
+                    @click="$emit('update:hideTracked', !hideTracked)"
+                >
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-lg bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
+                            <Icon icon="solar:radar-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Trackers &amp; Scouted</span>
+                            <span class="text-[10px] opacity-60 leading-tight block truncate">Watchlists and unacquired items</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideTracked" 
+                        @click.stop 
+                        @change="$emit('update:hideTracked', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 5: Only Placed & Located -->
+                <div 
+                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
+                    @click="$emit('update:filterPlacedLocated', !filterPlacedLocated)"
+                >
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                            <Icon icon="solar:map-point-bold" class="w-3.5 h-3.5" />
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-bold text-xs text-base-content block leading-tight">Only Placed &amp; Located</span>
+                            <span class="text-[10px] opacity-60 leading-tight block truncate">Physical booth or shelf location</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="filterPlacedLocated" 
+                        @click.stop 
+                        @change="$emit('update:filterPlacedLocated', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
             </div>
 
             <!-- Location Filter -->
@@ -380,6 +484,7 @@ const props = defineProps({
     hideSold: { type: Boolean, default: true },
     hideTracked: { type: Boolean, default: true },
     hideCombined: { type: Boolean, default: true },
+    hideDeconstructed: { type: Boolean, default: true },
     filterPlacedLocated: { type: Boolean, default: false },
     filterInsight: { type: String, default: '' },
     filterBarcode: { type: String, default: 'all' },
@@ -406,6 +511,7 @@ defineEmits([
     'update:hideSold',
     'update:hideTracked',
     'update:hideCombined',
+    'update:hideDeconstructed',
     'update:filterPlacedLocated',
     'update:filterInsight',
     'update:filterBarcode',

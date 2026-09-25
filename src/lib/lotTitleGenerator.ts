@@ -56,8 +56,8 @@ export function generateSmartLotTitle(items: any[], totalQty: number): { default
     // Suggestion 1: Clean Subject (Lot of X)
     suggestions.push(`${theme} (Lot of ${totalQty})`);
     
-    // Suggestion 2: Combined Lot of X: Theme
-    suggestions.push(`Combined Lot of ${totalQty}: ${theme}`);
+    // Suggestion 2: Batch Lot of X: Theme
+    suggestions.push(`Batch Lot of ${totalQty}: ${theme}`);
     
     // Suggestion 3: Mega Lot: Theme (X Items)
     suggestions.push(`${theme} Mega Lot (${totalQty} Items)`);

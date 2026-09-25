@@ -1,4 +1,4 @@
-<template>
+                                                                                                                                                                    <template>
   <div class="space-y-6">
     <!-- Top Header -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -207,13 +207,119 @@
               </select>
             </div>
 
-            <div class="form-control w-full">
-              <label class="label">
-                <span class="label-text font-bold">Niche &amp; Allowed Categories</span>
-                <span class="label-text-alt text-[10px] opacity-70">Used by AI Scout</span>
-              </label>
-              <input type="text" v-model="editForm.categories" class="input input-bordered w-full bg-base-200 focus:bg-base-100" placeholder="e.g. Small Collectibles, Vintage Clothes, Games" />
-              <label class="label pt-1 pb-0"><span class="label-text-alt text-[10px] opacity-60">Separate categories with commas</span></label>
+            <!-- Niche Guidelines Textarea -->
+            <div class="form-control w-full space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="label p-0">
+                  <span class="label-text font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
+                    Niche &amp; Sourcing Guidelines (Exclusions &amp; Rules)
+                  </span>
+                </label>
+                <span class="text-[10px] opacity-60 font-mono">Used by AI Scout</span>
+              </div>
+              <textarea 
+                v-model="editForm.categories" 
+                rows="3" 
+                class="textarea textarea-bordered w-full bg-base-200 focus:bg-base-100 font-medium text-xs leading-relaxed" 
+                placeholder="e.g. Small Collectibles, Vintage Jewelry, Pins, Wands, Pocket Curiosities. NO Clothes, NO Apparel, NO Large Toys, Under 8 inches only"
+              ></textarea>
+              
+              <!-- Quick Negative Exclusion Rule Helpers -->
+              <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span class="text-[10px] font-bold uppercase opacity-50">Quick Exclusions:</span>
+                <button 
+                  type="button" 
+                  @click="appendRuleToTextarea('NO Clothes')"
+                  class="badge badge-xs badge-outline hover:badge-error hover:text-error-content cursor-pointer transition-colors text-[10px] font-bold"
+                >
+                  ⛔ NO Clothes
+                </button>
+                <button 
+                  type="button" 
+                  @click="appendRuleToTextarea('NO Large Toys')"
+                  class="badge badge-xs badge-outline hover:badge-error hover:text-error-content cursor-pointer transition-colors text-[10px] font-bold"
+                >
+                  ⛔ NO Large Toys
+                </button>
+                <button 
+                  type="button" 
+                  @click="appendRuleToTextarea('Under 8 inches only')"
+                  class="badge badge-xs badge-outline hover:badge-warning hover:text-warning-content cursor-pointer transition-colors text-[10px] font-bold"
+                >
+                  📏 Under 8" Only
+                </button>
+              </div>
+            </div>
+
+            <!-- Watch Tags (Tags to Watch / Priority Franchises) -->
+            <div class="form-control w-full p-3 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="label p-0">
+                  <span class="label-text font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Icon icon="solar:eye-bold" class="w-4 h-4 text-secondary" />
+                    Tags &amp; Brands to Watch
+                  </span>
+                </label>
+                <span class="badge badge-xs badge-secondary/20 text-secondary font-mono font-bold">
+                  {{ watchTags.length }} tag{{ watchTags.length === 1 ? '' : 's' }} active
+                </span>
+              </div>
+
+              <!-- Active Watch Tags List -->
+              <div v-if="watchTags.length > 0" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                <span 
+                  v-for="(tag, idx) in watchTags" 
+                  :key="tag" 
+                  class="badge badge-sm badge-secondary font-bold gap-1 py-2 px-2 text-xs"
+                >
+                  <span>{{ tag }}</span>
+                  <button 
+                    type="button" 
+                    @click="removeWatchTag(idx)" 
+                    class="hover:text-error ml-0.5 rounded-full hover:bg-black/10 w-3.5 h-3.5 flex items-center justify-center text-[10px]"
+                  >
+                    ✕
+                  </button>
+                </span>
+              </div>
+              <div v-else class="text-[11px] opacity-50 italic">
+                No watch tags added yet. Type below or click quick suggestions to add.
+              </div>
+
+              <!-- Add New Watch Tag Input -->
+              <div class="flex items-center gap-2">
+                <input 
+                  type="text" 
+                  v-model="newWatchTag" 
+                  @keydown.enter.prevent="addWatchTag()"
+                  placeholder="Type tag or brand &amp; press Enter (e.g. Star Trek, Trifari, Enamel Pins)"
+                  class="input input-xs input-bordered w-full font-bold bg-base-100 focus:bg-base-100 flex-1" 
+                />
+                <button 
+                  type="button" 
+                  @click="addWatchTag()" 
+                  class="btn btn-xs btn-secondary text-secondary-content font-bold px-3 shrink-0"
+                  :disabled="!newWatchTag.trim()"
+                >
+                  Add
+                </button>
+              </div>
+
+              <!-- Preset Watch Tags -->
+              <div class="flex flex-wrap gap-1 pt-0.5">
+                <button 
+                  v-for="rec in presetWatchTags" 
+                  :key="rec" 
+                  type="button"
+                  @click="addWatchTag(rec)"
+                  :disabled="watchTags.includes(rec)"
+                  class="badge badge-xs badge-outline hover:badge-primary transition-colors cursor-pointer text-[10px] font-bold"
+                  :class="{'opacity-35 pointer-events-none': watchTags.includes(rec)}"
+                >
+                  + {{ rec }}
+                </button>
+              </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
@@ -432,20 +538,76 @@ const fetchWarehouses = async () => {
   }
 };
 
+const parseNicheAndWatchTags = (raw: string) => {
+  if (!raw) return { rules: '', tags: [] as string[] };
+  const markerRegex = /(?:^|\n)(?:Watch Tags|Tags to Watch|Priority Tags):\s*(.*)$/im;
+  const match = raw.match(markerRegex);
+  if (match) {
+    const rules = raw.replace(markerRegex, '').trim();
+    const tags = match[1]
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+    return { rules, tags };
+  }
+  return { rules: raw, tags: [] as string[] };
+};
+
+const watchTags = ref<string[]>([]);
+const newWatchTag = ref('');
+
+const presetWatchTags = [
+  'Small Collectibles',
+  'Vintage Jewelry',
+  'Enamel Pins',
+  'Pocket Knives',
+  'Sterling 925',
+  'Star Trek',
+  'Miniatures',
+  'Trading Cards',
+  'Micro Machines'
+];
+
+const addWatchTag = (tag?: string) => {
+  const val = (tag || newWatchTag.value || '').trim();
+  if (!val) return;
+  const parts = val.split(',').map(p => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (!watchTags.value.some(t => t.toLowerCase() === part.toLowerCase())) {
+      watchTags.value.push(part);
+    }
+  }
+  newWatchTag.value = '';
+};
+
+const removeWatchTag = (idx: number) => {
+  watchTags.value.splice(idx, 1);
+};
+
+const appendRuleToTextarea = (rule: string) => {
+  const current = (editForm.value.categories || '').trim();
+  if (!current) {
+    editForm.value.categories = rule;
+  } else if (!current.toLowerCase().includes(rule.toLowerCase())) {
+    editForm.value.categories = `${current}, ${rule}`;
+  }
+};
+
 const openEditor = (warehouse?: WarehouseDocument) => {
   if (warehouse) {
     isEditing.value = true;
     activeWarehouse.value = warehouse;
+    const parsed = parseNicheAndWatchTags(warehouse.categories || (warehouse as any).niche || '');
     editForm.value = {
       name: warehouse.name,
       code: warehouse.code || '',
       type: warehouse.type || 'Consignment Booth',
-      categories: warehouse.categories || warehouse.niche || '',
-      niche: warehouse.niche || warehouse.categories || '',
+      categories: parsed.rules,
       commissionRate: warehouse.commissionRate ?? 15,
       monthlyRent: warehouse.monthlyRent ?? 0,
       tenantId: team.value?.$id || ''
     };
+    watchTags.value = parsed.tags;
   } else {
     isEditing.value = false;
     activeWarehouse.value = {} as any;
@@ -454,11 +616,11 @@ const openEditor = (warehouse?: WarehouseDocument) => {
       code: '',
       type: 'Consignment Booth',
       categories: '',
-      niche: '',
       commissionRate: 15,
       monthlyRent: 0,
       tenantId: team.value?.$id || ''
     };
+    watchTags.value = [];
   }
 };
 
@@ -470,12 +632,18 @@ const saveWarehouse = async () => {
   if (!team.value) return;
   saving.value = true;
   try {
+    let finalCategories = editForm.value.categories.trim();
+    if (watchTags.value.length > 0) {
+      finalCategories = finalCategories 
+        ? `${finalCategories}\nWatch Tags: ${watchTags.value.join(', ')}` 
+        : `Watch Tags: ${watchTags.value.join(', ')}`;
+    }
+
     const payload: WarehouseData = {
       name: editForm.value.name.trim(),
       code: (editForm.value.code || '').trim().toUpperCase(),
       type: editForm.value.type,
-      categories: editForm.value.categories || '',
-      niche: editForm.value.categories || '',
+      categories: finalCategories,
       commissionRate: Number(editForm.value.commissionRate || 0),
       monthlyRent: Number(editForm.value.monthlyRent || 0),
       tenantId: team.value.$id

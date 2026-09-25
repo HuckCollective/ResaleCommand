@@ -11,6 +11,7 @@
             v-model:hideSold="hideSold"
             v-model:hideTracked="hideTracked"
             v-model:hideCombined="hideCombined"
+            v-model:hideDeconstructed="hideDeconstructed"
             v-model:filterPlacedLocated="filterPlacedLocated"
             v-model:filterInsight="filterInsight"
             v-model:filterBarcode="filterBarcode"
@@ -310,6 +311,7 @@
 
         <!-- 3. UNIFIED INTEGRATED BOTTOM COMMAND DOCK & TRAY -->
         <InventoryPaginationDock 
+            ref="dockRef"
             v-model:currentPage="currentPage"
             v-model:pageSize="pageSize"
             :pageSizeOptions="pageSizeOptions"
@@ -328,6 +330,7 @@
             :isProcessing="isApplyingBulk"
             :manifest-item-count="manifestItemCount"
             :manifest-name="activeManifest?.name || ''"
+            :inventory-items="inventoryItems"
             @add="openAdd"
             @import-csv="showImport = true"
             @apply-location="handleBulkLocation"
@@ -336,6 +339,7 @@
             @export="handleExport"
             @delete="handleBulkDelete"
             @select-all="toggleAll(filteredItems)"
+            @select-item="toggleItem"
             @unselect-item="toggleItem"
             @clear-selection="clearSelection"
             @clear-filters="clearFilters"
@@ -347,9 +351,12 @@
         <ItemDrawer 
             v-if="isDrawerOpen" 
             :item="activeItem" 
+            :inventoryItems="inventoryItems"
             @close="closeDrawer" 
             @save="onDrawerSaved" 
             @refresh="fetchInventory"
+            @selectItem="openItem"
+            @open-splitter="handleDrawerOpenSplit"
         />
 
         <!-- 6. BULK IMPORT MODAL (Async Lazy-Loaded Island) -->
@@ -386,6 +393,21 @@ import { useItemDrawer } from '../../composables/useItemDrawer';
 // Lazy-loaded modal islands (Only downloaded on demand)
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
 const BulkImport = defineAsyncComponent(() => import('./BulkImport.vue'));
+import { useLotSplitter } from '../../composables/useLotSplitter';
+
+const { isLotSplitterOpen, activeLotItem, closeLotSplitter } = useLotSplitter();
+
+watch(isLotSplitterOpen, (open) => {
+    if (open && activeLotItem.value) {
+        handleDrawerOpenSplit(activeLotItem.value);
+    }
+});
+
+const onLotSplitCompleted = async () => {
+    closeLotSplitter();
+    selectedItems.value = [];
+    await fetchInventory(currentTeam.value?.$id || '');
+};
 
 const props = defineProps({
     viewMode: {
@@ -425,6 +447,7 @@ const {
     hideSold,
     hideTracked,
     hideCombined,
+    hideDeconstructed,
     filterPlacedLocated,
     filterInsight,
     filterBarcode,
@@ -537,7 +560,7 @@ onMounted(async () => {
 });
 
 // Reset page on filter change
-watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, filterPlacedLocated, filterInsight, filterBarcode, filterLotType], () => {
+watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, hideDeconstructed, filterPlacedLocated, filterInsight, filterBarcode, filterLotType], () => {
     currentPage.value = 1;
 });
 
@@ -578,9 +601,50 @@ const handleExport = (format) => {
 };
 
 // -- 7. DRAWER & ROW ACTIONS --
+function syncUrlWithDrawer(item) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (item) {
+        const identifier = item.upc || item.sku || item.$id;
+        if (identifier) url.searchParams.set('upc', identifier);
+    } else {
+        url.searchParams.delete('upc');
+        url.searchParams.delete('item');
+        url.searchParams.delete('sku');
+        url.searchParams.delete('id');
+    }
+    window.history.replaceState({}, '', url.toString());
+}
+
+function checkUrlForDirectItemOpen() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    if (!target || !inventoryItems.value || inventoryItems.value.length === 0) return;
+    
+    const cleanTarget = target.trim().toLowerCase();
+    const found = inventoryItems.value.find(i => 
+        (i?.upc && i.upc.toLowerCase() === cleanTarget) ||
+        (i?.sku && i.sku.toLowerCase() === cleanTarget) ||
+        i?.$id === target.trim()
+    );
+    if (found && !isDrawerOpen.value) {
+        openItem(found);
+    }
+}
+
+watch(activeItem, (newItem) => {
+    syncUrlWithDrawer(newItem);
+});
+
+watch(inventoryItems, () => {
+    checkUrlForDirectItemOpen();
+}, { immediate: true });
+
 const openItem = (item) => {
     if (!item) return;
     openItemDrawer(item);
+    syncUrlWithDrawer(item);
 };
 
 const openAdd = () => {
@@ -588,8 +652,22 @@ const openAdd = () => {
     isDrawerOpen.value = true;
 };
 
+const dockRef = ref(null);
+
 const closeDrawer = () => {
     closeItemDrawer();
+    syncUrlWithDrawer(null);
+};
+
+const handleDrawerOpenSplit = (item) => {
+    closeDrawer();
+    const target = item || activeItem.value;
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openSplit(target);
+    });
 };
 
 const isDrawerSaving = ref(false);

@@ -459,9 +459,31 @@ export const ALL: APIRoute = async ({ request }) => {
                     await Promise.all(promises);
                 }
                 
-                // NEW: Allow passing organization locations with niches (e.g. Memory Den, DustyTiger)
-                if (Array.isArray(json.locations) && json.locations.length > 0) {
-                    const locNames = json.locations.map((l: any) => {
+                // Auto-load organization locations with niches & watch tags (e.g. Memory Den, DustyTiger)
+                let targetLocations = Array.isArray(json.locations) && json.locations.length > 0 ? json.locations : [];
+                if (targetLocations.length === 0) {
+                    try {
+                        const endpoint = process.env.PUBLIC_APPWRITE_ENDPOINT || import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
+                        const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '';
+                        const dbId = process.env.PUBLIC_APPWRITE_DB_ID || import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+                        const apiKey = process.env.APPWRITE_API_KEY || import.meta.env.APPWRITE_API_KEY;
+
+                        if (projectId && apiKey) {
+                            const { Client, Databases } = await import('node-appwrite');
+                            const serverClient = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+                            const serverDb = new Databases(serverClient);
+                            const whRes = await serverDb.listDocuments(dbId, 'warehouses');
+                            if (whRes.documents && whRes.documents.length > 0) {
+                                targetLocations = whRes.documents;
+                            }
+                        }
+                    } catch (whErr) {
+                        console.warn('[identify-item] Auto-load warehouses fallback failed:', whErr);
+                    }
+                }
+
+                if (targetLocations.length > 0) {
+                    const locNames = targetLocations.map((l: any) => {
                         let desc = `${l.name} (Type: ${l.type || 'Physical'}`;
                         if (l.commissionRate !== undefined) desc += `, ${l.commissionRate}% comm.`;
                         if (l.categories || l.niche) desc += `, Niche/Specialties: "${l.categories || l.niche}"`;
@@ -899,7 +921,9 @@ export const ALL: APIRoute = async ({ request }) => {
            - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
              When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
              * If an organization physical location has a specific niche (e.g. DustyTiger = Small Collectibles, Jewelry, Pins, Wands; Memory Den = Vintage Clothing, Arcane / Punk, Jackets), ONLY recommend that physical location if the item strictly matches its niche!
-             * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear): DO NOT recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
+             * STRICT NEGATIVE RULES & EXCLUSIONS: If a location's niche or rules state negative exclusions (e.g. "NO clothes", "NO apparel", "NO large toys", "NO bulky items", "under 8 inches only", "small items only"), you are STRICTLY FORBIDDEN from assigning, routing, or recommending that location for those excluded categories, items, or sizes.
+             * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear, garments, sherwanis, denim): NEVER recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
+             * For large toys, vehicles, or bulky playsets: NEVER recommend a compact collectibles booth (like DustyTiger). Route them to collector online platforms (eBay) or general booths.
              * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
 
            - ACTIVELY READ TEXT & COVERS (VERBATIM OCR): Extract the exact printed title, subtitle, publisher, and visible publication/copyright year directly from the cover, spine, or label.

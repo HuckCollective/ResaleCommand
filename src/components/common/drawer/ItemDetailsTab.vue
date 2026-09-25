@@ -39,17 +39,6 @@
                         Item Title & Identity
                     </label>
                     <div class="flex items-center gap-1.5">
-                        <!-- Persistent Multi-Tier Lot Splitter Button -->
-                        <button 
-                            v-if="item && (Number(editForm.quantity || item.quantity || 1) > 1 || (scoutItemsArray && scoutItemsArray.length > 1) || editForm.title?.toLowerCase().includes('lot') || editForm.title?.toLowerCase().includes('bundle'))"
-                            type="button" 
-                            class="btn btn-xs btn-primary gap-1 font-bold shadow-xs hover:scale-105 transition-all"
-                            @click="$emit('open-splitter')"
-                        >
-                            <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                            <span>✨ Multi-Tier Splitter</span>
-                        </button>
-
                         <span v-if="item?.sku || item?.upc" class="badge badge-sm font-mono font-bold bg-base-300">
                             {{ item.sku || item.upc }}
                         </span>
@@ -397,7 +386,7 @@
 
                 <!-- Editable Unlocked Form when Not Sold (With perfectly aligned labels and controls) -->
                 <div v-else class="space-y-3">
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                    <div class="grid grid-cols-3 gap-3 items-start">
                         <!-- Quantity -->
                         <div class="form-control">
                             <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold">Quantity</span></label>
@@ -419,6 +408,9 @@
                                 <input type="number" step="0.01" v-model="editForm.resalePrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" :class="{ 'pr-8': Number(editForm.quantity) > 1 }" />
                                 <span v-if="Number(editForm.quantity) > 1" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold opacity-50 pointer-events-none">/ea</span>
                             </div>
+                            <div v-if="editForm.estLow || editForm.estHigh" class="text-[10px] font-mono opacity-60 mt-1 truncate" title="Estimated Comps Range">
+                                Comps: ${{ editForm.estLow || '0' }} – ${{ editForm.estHigh || '0' }}
+                            </div>
                         </div>
 
                         <!-- Sold Price -->
@@ -427,18 +419,6 @@
                             <div class="relative">
                                 <span class="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 font-bold text-xs">$</span>
                                 <input type="number" step="0.01" v-model="editForm.soldPrice" placeholder="0.00" class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" />
-                            </div>
-                        </div>
-
-                        <!-- Estimated Comps Range -->
-                        <div class="form-control">
-                            <label class="label py-0 h-6 flex items-center justify-between">
-                                <span class="label-text text-[11px] opacity-60">Est. Range</span>
-                                <span v-if="Number(editForm.quantity) > 1" class="text-[9px] opacity-50">/ea</span>
-                            </label>
-                            <div class="text-xs font-mono font-bold bg-base-100 h-8 min-h-8 px-2 flex items-center justify-center rounded-lg border border-base-300 text-center truncate">
-                                <span v-if="editForm.estLow || editForm.estHigh">${{ editForm.estLow || '0' }} - ${{ editForm.estHigh || '0' }}</span>
-                                <span v-else class="opacity-40 font-normal">--</span>
                             </div>
                         </div>
                     </div>
@@ -621,8 +601,32 @@
                 <!-- Report Contents -->
                 <div v-else-if="scoutResult" class="space-y-4">
                     
-                    <!-- SOURCING STRATEGY VERDICT CARD -->
-                    <div v-if="scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
+                    <!-- RESELLER EXIT PLAYBOOK BANNER (Acquired Inventory) -->
+                    <div v-if="isAcquiredItem && exitPlaybook" class="border-2 border-secondary/40 bg-secondary/10 rounded-2xl p-3.5 shadow-xs">
+                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <Icon icon="solar:clipboard-check-bold" class="w-5 h-5 text-secondary shrink-0" />
+                                <div class="truncate flex items-center gap-1.5">
+                                    <h4 class="font-black text-sm uppercase tracking-wider text-secondary">Exit Playbook</h4>
+                                    <span class="badge badge-xs badge-success font-black font-mono">+{{ Math.round(exitPlaybook.profitIncreasePct || 0) }}% Margin</span>
+                                </div>
+                            </div>
+                            <button type="button" @click="$emit('open-lot-tab')" class="btn btn-xs btn-secondary text-secondary-content gap-1 shrink-0 font-bold shadow-2xs">
+                                <span>View Playbook</span>
+                                <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                        <p class="text-xs opacity-90 leading-relaxed font-medium">
+                            {{ exitPlaybook.summary }}
+                        </p>
+                        <div class="mt-2 pt-2 border-t border-secondary/20 flex items-center justify-between text-[11px] font-mono">
+                            <span class="opacity-70">Bulk Liquidation: ${{ Number(exitPlaybook.projectedBulkYield || 0).toFixed(0) }}</span>
+                            <span class="text-success font-bold">Sliced Playbook Yield: ${{ Number(exitPlaybook.projectedSplitYield || 0).toFixed(0) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- SOURCING STRATEGY VERDICT CARD (Pre-acquisition / Scouting Only) -->
+                    <div v-else-if="!isAcquiredItem && scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
                         'border-success bg-success/10': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
                         'border-error bg-error/10': scoutPurchaseStrategy.verdict === 'PASS',
                         'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
@@ -920,6 +924,7 @@ import {
     calculateMaxBuyPrice, 
     calculateSubItemMaxBidPrice 
 } from '../../../lib/bundle-pricing';
+import { deriveLotExitPlaybook } from '../../../lib/lot-strategy';
 
 const props = defineProps({
     editForm: {
@@ -1047,6 +1052,15 @@ const isSold = computed(() => {
 
 const linkedSaleOrderId = computed(() => {
     return props.item?.saleId || props.item?.$id || '';
+});
+
+const isAcquiredItem = computed(() => {
+    const s = (props.item?.status || props.editForm?.status || '').toLowerCase();
+    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) || (!!props.item?.$id && s !== 'scouting' && s !== 'draft');
+});
+
+const exitPlaybook = computed(() => {
+    return deriveLotExitPlaybook(props.item || props.editForm, props.scoutResult);
 });
 
 const selectedFacility = ref('HG');

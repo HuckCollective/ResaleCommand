@@ -98,7 +98,7 @@
                                     min="0"
                                     step="0.01"
                                     placeholder="0.00"
-                                    @input="updateOrderShipping(orderId, parseFloat(($event.target as HTMLInputElement).value) || 0)"
+                                    @input="updateOrderShipping(orderId, parseFloat($event.target.value) || 0)"
                                 />
                              </div>
                              <span class="block font-bold text-primary" :class="{'opacity-50': order.shippingPerItem === 0}">

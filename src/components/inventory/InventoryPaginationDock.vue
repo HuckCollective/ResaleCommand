@@ -261,6 +261,7 @@
         <!-- 3. SLIDE-UP BOTTOM ACTION TRAY (CONSISTENT HEIGHT DRAWER)                  -->
         <!-- ========================================================================= -->
         <BottomActionTray 
+            ref="actionTrayRef"
             :isOpen="isTrayOpen || isActionTrayOpen"
             @update:isOpen="val => { isTrayOpen = val; isActionTrayOpen = val; }"
             v-model:activeTab="activeTrayTab"
@@ -276,6 +277,8 @@
             :is-processing="isProcessing"
             :manifest-item-count="manifestItemCount"
             :manifest-name="manifestName"
+            :inventory-items="inventoryItems"
+            @select-item="$emit('select-item', $event)"
             @update:filter-location="$emit('update:filterLocation', $event)"
             @update:filter-status="$emit('update:filterStatus', $event)"
             @update:filter-channel="$emit('update:filterChannel', $event)"
@@ -298,6 +301,7 @@
             @submit-bundle="$emit('submit-bundle', $event)"
             @submit-combine="$emit('submit-combine', $event)"
             @uncombine-lot="$emit('uncombine-lot', $event)"
+            @split-one-unit="$emit('split-one-unit', $event)"
         >
             <template #filters>
                 <slot name="filters" />
@@ -407,6 +411,10 @@ const props = defineProps({
     activeFilterCount: {
         type: Number,
         default: 0
+    },
+    inventoryItems: {
+        type: Array,
+        default: () => []
     }
 });
 
@@ -443,6 +451,7 @@ const emit = defineEmits([
     'export',
     'delete',
     'select-all',
+    'select-item',
     'unselect-item',
     'clear-selection',
     'clear-filters',
@@ -454,7 +463,8 @@ const emit = defineEmits([
     'restock-item',
     'submit-bundle',
     'submit-combine',
-    'uncombine-lot'
+    'uncombine-lot',
+    'split-one-unit'
 ]);
 
 // Tray state
@@ -547,9 +557,50 @@ const onScrollTop = () => {
     emit('scroll-top');
 };
 
+const actionTrayRef = ref(null);
+
+const openBundle = (item) => {
+    isActionTrayOpen.value = true;
+    activeTrayTab.value = 'actions';
+    nextTick(() => {
+        actionTrayRef.value?.openBundleSubView();
+    });
+};
+
+const openCombine = (item) => {
+    isActionTrayOpen.value = true;
+    activeTrayTab.value = 'actions';
+    nextTick(() => {
+        actionTrayRef.value?.openCombineSubView();
+    });
+};
+
+const openRestock = (item) => {
+    isActionTrayOpen.value = true;
+    activeTrayTab.value = 'actions';
+    nextTick(() => {
+        actionTrayRef.value?.openRestockSubView();
+    });
+};
+
+const openSplit = (item) => {
+    if (item && (!props.selectedItems || !props.selectedItems.some(i => (i?.$id || i?.id) === (item.$id || item.id)))) {
+        emit('select-item', item.$id || item.id);
+    }
+    isActionTrayOpen.value = true;
+    activeTrayTab.value = 'actions';
+    nextTick(() => {
+        actionTrayRef.value?.openSplitSubView();
+    });
+};
+
 defineExpose({
     openTray,
-    closeTray
+    closeTray,
+    openBundle,
+    openCombine,
+    openRestock,
+    openSplit
 });
 </script>
 

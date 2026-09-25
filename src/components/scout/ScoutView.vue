@@ -342,6 +342,40 @@
                         </div>
                     </div>
 
+                    <!-- Recommended Sales Channel & Booth Routing -->
+                    <div v-if="item.market_report?.best_platform" class="bg-primary/10 border border-primary/25 rounded-2xl p-3.5 sm:p-4 mb-4 space-y-2 shadow-xs">
+                        <div class="flex items-center justify-between gap-2 flex-wrap">
+                            <div class="text-xs uppercase font-extrabold text-primary tracking-wider flex items-center gap-1.5">
+                                <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
+                            </div>
+                            <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
+                                ⚡ {{ item.market_report.sell_through_velocity }}
+                            </span>
+                        </div>
+                        <div class="font-black text-sm sm:text-base text-base-content leading-snug">
+                            {{ item.market_report.best_platform }}
+                        </div>
+                        <p v-if="item.market_report.platform_rationale" class="text-xs opacity-90 leading-relaxed text-base-content font-medium whitespace-pre-wrap">
+                            {{ item.market_report.platform_rationale }}
+                        </p>
+                        <!-- Channel Comparisons / Trade-Offs -->
+                        <div v-if="item.market_report.channels?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div v-for="(ch, cIdx) in item.market_report.channels" :key="cIdx" class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1">
+                                <div class="flex justify-between items-center font-bold">
+                                    <span>{{ ch.name }}</span>
+                                    <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
+                                </div>
+                                <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
+                                    💡 {{ ch.recommendation }}
+                                </div>
+                                <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
+                                    <span>Net Payout:</span>
+                                    <span class="font-bold">{{ ch.net_payout }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 5. Pricing Potential Estimates Grid (Interactive 1-Tap Selectors) -->
                     <div class="space-y-2 mb-3">
                         <div class="flex items-center justify-between px-1">
@@ -873,9 +907,12 @@ const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
 const PURCHASES_COL = getPurchasesCollectionId();
 import { BUCKET_ID, getCollectionId, generateAutoUpc } from '../../lib/inventory';
+import { warehousesApi, type WarehouseDocument } from '../../lib/warehouses';
 
 // -- COMPOSABLES --
 const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
+const availableWarehouses = ref<WarehouseDocument[]>([]);
+
 const { 
     activeCart, addItemToCart, startCart, checkActiveCart, cartItems
 } = useCart();
@@ -1315,15 +1352,17 @@ const analyzeButtonText = computed(() => {
 });
 
 const handleAnalyze = () => {
-    // Check if we have a URL from the input or previously stored in sourcingLocation
-    const urlToScout = (scoutUrl.value && scoutUrl.value.trim()) || 
-                       (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') ? sourcingLocation.value.trim() : '');
+    const rawUrl = scoutUrl.value ? scoutUrl.value.trim() : '';
+    const hasNotes = !!(userNotes.value && userNotes.value.trim());
+    const hasImages = images.value.length > 0 || !!result.value?.items?.[0]?.fetched_image;
 
-    if (urlToScout) {
-        scoutUrl.value = urlToScout;
+    if (rawUrl && rawUrl.startsWith('http')) {
         analyzeListing();
-    } else if (images.value.length > 0 || (userNotes.value && userNotes.value.trim()) || result.value?.items?.[0]?.fetched_image) {
+    } else if (hasImages || hasNotes) {
         analyzeImage();
+    } else if (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http')) {
+        scoutUrl.value = sourcingLocation.value.trim();
+        analyzeListing();
     } else {
         addToast({ type: 'warning', message: 'Take a photo, paste a web link, or enter item details to scout.' });
     }
@@ -1354,14 +1393,28 @@ onMounted(async () => {
         }
     }
 
-
+    await loadWarehousesForRouting();
 });
+
+const loadWarehousesForRouting = async () => {
+    try {
+        if (currentTeam.value?.$id) {
+            availableWarehouses.value = await warehousesApi.listWarehouses(currentTeam.value.$id);
+        } else {
+            availableWarehouses.value = await warehousesApi.listWarehouses();
+        }
+        console.log('[ScoutView] Loaded warehouses for routing:', availableWarehouses.value.length);
+    } catch (e) {
+        console.warn('[ScoutView] Failed to load warehouses for routing:', e);
+    }
+};
 
 // Watch for user to load if not ready on mount
 watch(user, async (newUser) => {
     if (newUser) {
         console.log('[ScoutView] User loaded via watch, checking cart...');
         await initCartCheck();
+        await loadWarehousesForRouting();
         
         // Load ZIP Code from user prefs
         const userZip = (newUser.prefs as any)?.zipCode;
@@ -1592,7 +1645,8 @@ async function analyzeListing() {
         const payload = JSON.stringify({ 
             images: [], 
             notes: targetUrl + '\n\n' + userNotes.value,
-            zipCode: zipCode.value
+            zipCode: zipCode.value,
+            locations: availableWarehouses.value
         });
 
         const response = await fetch(`/api/identify-item`, {
@@ -1724,7 +1778,8 @@ async function analyzeImage() {
             images: base64Images,
             remoteImageUrls,
             notes: userNotes.value,
-            zipCode: zipCode.value
+            zipCode: zipCode.value,
+            locations: availableWarehouses.value
         });
 
         const response = await fetch(`/api/identify-item`, {

@@ -26,11 +26,10 @@
                             <Icon icon="solar:checklist-minimalistic-linear" class="w-4 h-4 mr-1.5 inline" /> Checklist / Verify
                         </a>
                         <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary font-bold': mainTab === 'lot'}" @click="mainTab = 'lot'">
-                            <Icon icon="solar:box-linear" class="w-4 h-4 mr-1.5 inline" />
-                            <span v-if="Number(editForm.quantity || item?.quantity || 1) > 1">Multi-Qty Hub ({{ editForm.quantity || item?.quantity }})</span>
-                            <span v-else-if="lotChildren?.length > 0">Lot Hub ({{ lotChildren.length }})</span>
-                            <span v-else-if="props.item?.parentLotId">Lot Lineage</span>
-                            <span v-else>Lot Tools</span>
+                            <Icon icon="solar:clipboard-check-bold" class="w-4 h-4 mr-1.5 inline" />
+                            <span>Playbook</span>
+                            <span v-if="lotChildren?.length > 0" class="badge badge-2xs badge-secondary font-mono ml-1">({{ lotChildren.length }})</span>
+                            <span v-else-if="Number(editForm.quantity || item?.quantity || 1) > 1" class="badge badge-2xs badge-neutral font-mono ml-1">({{ editForm.quantity || item?.quantity }})</span>
                         </a>
                     </div>
                 </div>
@@ -61,7 +60,7 @@
                         :fetchingImages="fetchingImages"
                         :downloadingImageUrls="downloadingImageUrls"
                         @open-lot-tab="mainTab = 'lot'"
-                        @open-splitter="isLotSplitterOpen = true"
+                        @open-splitter="handleOpenSplitter"
                         @copy-title="copyToClipboard(editForm.title)"
                         @fetch-source-data="fetchSourceData"
                         @add-all-fetched-images="addAllFetchedImages"
@@ -99,7 +98,7 @@
                     />
                 </div>
 
-                <!-- 5. LOT DASHBOARD & LINEAGE TAB (Extracted Subcomponent) -->
+                <!-- 5. PROFIT PLAYBOOK TAB (Extracted Subcomponent) -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'lot'">
                     <ItemLotTab
                         :item="item"
@@ -112,10 +111,16 @@
                         :lotRealizedRevenue="lotRealizedRevenue"
                         :lotROI="lotROI"
                         :inventoryItems="inventoryItems"
+                        :scout-result="scoutResult"
+                        :scout-purchase-strategy="scoutPurchaseStrategy"
                         @selectItem="$emit('selectItem', $event)"
-                        @open-splitter="isLotSplitterOpen = true"
+                        @open-splitter="handleOpenSplitter"
                         @uncombine="uncombineLot"
                         @refresh-lot="handleRefreshLot"
+                        @open-bundle="handleOpenBundle"
+                        @open-combine="handleOpenCombine"
+                        @open-restock="handleOpenRestock"
+                        @apply-single-play="handleApplySinglePlay"
                     />
                 </div>
 
@@ -129,6 +134,7 @@
                     :hasScoutResult="!!scoutResult"
                     :canAnalyze="canAnalyze"
                     :processing="processing"
+                    :is-acquired="isAcquiredItem"
                     @analyze="analyzeExistingItem"
                     @cancel="closeDrawer"
                     @save="saveEdit"
@@ -206,14 +212,6 @@
                 </form>
             </dialog>
 
-            <!-- Dynamic Lot Splitter Wizard -->
-            <LotSplitterWizard 
-                :isOpen="isLotSplitterOpen" 
-                :lotItem="lotSplitterItemData" 
-                @close="isLotSplitterOpen = false" 
-                @completed="onLotSplitCompleted" 
-            />
-
             <!-- Camera / Photo Scanner -->
             <ScannerWidget 
                 ref="scannerWidget" 
@@ -254,7 +252,7 @@ import { marked } from 'marked';
 import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
 import ScannerWidget from './ScannerWidget.vue';
-import LotSplitterWizard from '../inventory/LotSplitterWizard.vue';
+import { useLotSplitter } from '../../composables/useLotSplitter';
 
 // Decomposed Subcomponents & Composables
 import ItemDrawerHeader from './drawer/ItemDrawerHeader.vue';
@@ -339,7 +337,25 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem', 'refresh']);
+const emit = defineEmits([
+    'close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem', 'refresh',
+    'open-bundle', 'open-combine', 'open-restock', 'open-splitter'
+]);
+
+function handleOpenBundle(targetItem) {
+    closeDrawer();
+    emit('open-bundle', targetItem || props.item);
+}
+
+function handleOpenCombine(targetItem) {
+    closeDrawer();
+    emit('open-combine', targetItem || props.item);
+}
+
+function handleOpenRestock(targetItem) {
+    closeDrawer();
+    emit('open-restock', targetItem || props.item);
+}
 
 // Form Composable
 const {
@@ -353,7 +369,8 @@ const mainTab = ref('details');
 const descTab = ref('edit');
 const processing = ref(false);
 const showMdModal = ref(false);
-const isLotSplitterOpen = ref(false);
+
+const { openLotSplitter } = useLotSplitter();
 
 const lotSplitterItemData = computed(() => {
     if (!props.item) return null;
@@ -369,12 +386,37 @@ const lotSplitterItemData = computed(() => {
     };
 });
 
-const onLotSplitCompleted = async () => {
-    isLotSplitterOpen.value = false;
-    emit('save');
-    emit('saved');
-    emit('uncombined');
+const handleOpenSplitter = (payload) => {
+    const itemData = {
+        ...(lotSplitterItemData.value || props.item),
+        exitPlaybook: payload?.exitPlaybook || lotSplitterItemData.value?.exitPlaybook || props.item?.exitPlaybook
+    };
     closeDrawer();
+    openLotSplitter(itemData);
+    emit('open-splitter', itemData);
+};
+
+const handleApplySinglePlay = (payload) => {
+    if (!payload?.play) return;
+    const { play, channel, price } = payload;
+    
+    if (price !== undefined && price !== null && !isNaN(Number(price))) {
+        editForm.resalePrice = Number(price);
+        editForm.boutiquePrice = Number(price);
+    }
+    if (channel) {
+        editForm.channel = channel;
+        if (!editForm.sellingLocations || !Array.isArray(editForm.sellingLocations)) {
+            editForm.sellingLocations = [channel];
+        } else if (!editForm.sellingLocations.includes(channel)) {
+            editForm.sellingLocations.push(channel);
+        }
+    }
+    
+    addToast({
+        type: 'success',
+        message: `Applied Play "${play.name}": Target set to $${Number(price || 0).toFixed(2)} (${channel})`
+    });
 };
 
 const openMdModal = () => {
@@ -542,6 +584,11 @@ const showOnStorefront = computed({
             editForm.sellingLocations = editForm.sellingLocations.filter(loc => loc !== 'storefront');
         }
     }
+});
+
+const isAcquiredItem = computed(() => {
+    const s = (props.item?.status || editForm.status || '').toLowerCase();
+    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) || (!!props.item?.$id && s !== 'scouting' && s !== 'draft');
 });
 
 const scoutResult = ref(null);
@@ -811,12 +858,19 @@ const parentItem = ref(null);
 const loadingLot = ref(false);
 const creatingChild = ref(false);
 
-const lotDashboardItem = computed(() => parentItem.value || props.item);
+// The lot whose contents (lotChildren) are being inspected is props.item itself
+const lotDashboardItem = computed(() => props.item);
 const lotSoldChildren = computed(() => (lotChildren.value || []).filter(c => c.status === 'sold'));
-const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice) || 0), 0));
-const lotROI = computed(() => lotRealizedRevenue.value - Number(lotDashboardItem.value?.cost || 0));
+const lotRealizedRevenue = computed(() => lotSoldChildren.value.reduce((sum, c) => sum + (Number(c.soldPrice || c.price || 0)), 0));
+// Unsold active items listed in this lot/bundle
 const totalSplitResaleValue = computed(() => {
-    return (lotChildren.value || []).reduce((sum, c) => sum + (Number(c.resalePrice || 0) * Number(c.quantity || 1)), 0);
+    return (lotChildren.value || []).filter(c => c.status !== 'sold').reduce((sum, c) => sum + (Number(c.resalePrice || c.boutiquePrice || 0) * Number(c.quantity || 1)), 0);
+});
+// Total Estimated Profit: (Realized Sales + Listed Value of Unsold) - Item Cost Basis
+const lotROI = computed(() => {
+    const cost = Number(props.item?.cost || 0);
+    const totalPotential = lotRealizedRevenue.value + totalSplitResaleValue.value;
+    return totalPotential - cost;
 });
 
 async function fetchLotChildren() {
@@ -1467,10 +1521,11 @@ const analyzeExistingItem = async () => {
             (lotQty > 1) || 
             (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${cleanNotesForLotCheck}`))
         );
-        const apiEndpoint = (isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
+        // Sourcing Lifecycle Guardrail: unacquired items strictly use Speed Scout (/api/identify-item)
+        const apiEndpoint = (isAcquiredItem.value && isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
-        showLoader("Analyzing with AI Deep Research...", {
-            step: isLot ? `Step 1 of 3: Scanning ${totalPhotos} photos for lot cataloging...` : `Step 1 of 3: Scanning item visual details & title...`,
+        showLoader(isAcquiredItem.value ? "Analyzing with AI Deep Research & Playbook..." : "Scanning with Speed Scout AI...", {
+            step: isLot && isAcquiredItem.value ? `Step 1 of 3: Scanning ${totalPhotos} photos for lot cataloging & exit playbook...` : `Step 1 of 3: Scanning item visual details & title...`,
             progress: progressVal,
             basket: 'solar:archive-minimalistic-bold-duotone',
             berries: ['solar:document-bold-duotone', 'solar:chart-square-bold-duotone', 'solar:calculator-bold-duotone', 'solar:folder-with-files-bold-duotone'],
@@ -1771,7 +1826,7 @@ watch(mainTab, (newVal) => {
 
 const deconstructAiLot = () => {
     if (!props.item) return;
-    isLotSplitterOpen.value = true;
+    handleOpenSplitter();
 };
 
 const sellOneQuantity = async () => {

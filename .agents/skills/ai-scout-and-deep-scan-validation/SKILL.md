@@ -56,6 +56,14 @@ This skill documents the architectural invariants, prompt engineering rules, and
 - When a reseller enters notes or corrections (e.g., `"DMG is 3.0, Ashen Crown is 4e"` or `"Lot contains 8 books"`), the AI prompt must treat those notes as **100% authoritative ground truth**.
 - User corrections always override automated visual inferences.
 
+### G. Sourcing Lifecycle Guardrail: Scout vs. Deep Scan
+- **Pre-Acquisition (`status !== 'acquired'` / scouting drafts)**:
+  - Strictly use **Speed Scout AI** (`/api/identify-item.ts`).
+  - Running multi-image Deep Scan or extracting constituent lots on unowned inventory is prohibited to conserve API cost and avoid cluttering catalog with unpurchased goods.
+- **Post-Acquisition (`status === 'acquired'` or in active inventory)**:
+  - Unlocks full multi-image **AI Deep Scan** (`src/lib/ai-inspection.ts`) and the **Lot Profit Playbook**.
+  - Replaces obsolete pre-buy advice with actionable exit merchandising tiers (Hero recovery, Themed Combines, Booth packs).
+
 ---
 
 ## 3. Merchandising & Substrate Rules

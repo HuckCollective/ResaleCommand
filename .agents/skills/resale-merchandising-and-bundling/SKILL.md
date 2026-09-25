@@ -139,3 +139,4 @@ The AI prompt must explicitly mandate:
 | *Verify Placement Item* | **Put on Shelf / Check-In** | Checking off items as you place them on booth shelves. |
 | *Commission Rate %* | **Store Commission** | "Memory Den takes 15% ($1.50 on a $10 lot; you keep $8.50)." |
 | *Monthly Rent $* | **Booth Rent & Breakeven** | "Rent is $150/mo. You need 18 x $10 book lots to cover rent!" |
+| *Lot Merchandising Tools / Lineage* | **Playbook** | The game plan to maximize profit: Hero singles, themed combines, grab bags, and origin lineage. |

@@ -1,30 +1,81 @@
 <template>
-  <dialog ref="modalRef" class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': isOpen }">
-    <div class="modal-box w-full max-w-4xl max-h-[92dvh] flex flex-col p-4 sm:p-6 bg-base-100 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
-      
-      <!-- HEADER -->
-      <div class="flex items-center justify-between border-b border-base-200 pb-3">
-        <div class="flex items-center gap-2 min-w-0">
-          <div class="p-2 bg-primary/10 text-primary rounded-xl shrink-0">
-            <Icon icon="solar:scissors-square-bold-duotone" class="w-6 h-6" />
-          </div>
-          <div class="truncate">
-            <h3 class="font-black text-base sm:text-lg tracking-tight truncate">Lot Splitter & Curation Wizard</h3>
-            <p class="text-xs text-base-content/60 truncate">{{ lotItem?.title || 'Parent Lot' }} • {{ totalItemCount }} Total Pieces</p>
+  <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <!-- Selected Item Summary (Canonical List Item Pattern) -->
+    <div class="p-3 border-b border-base-200/80 bg-base-200/40 shrink-0">
+      <div 
+        class="p-2.5 rounded-box border border-base-300 bg-base-100 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-base-200/60 transition-all group"
+        @click="openItemDrawer(lotItem)"
+        title="Edit item specs in drawer"
+      >
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <ItemThumbnail :item="lotItem" size="sm" class="w-10 h-10 pointer-events-none rounded-box shrink-0" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span v-if="lotItem?.upc || lotItem?.locationSku" class="badge badge-xs font-mono font-bold bg-primary/10 text-primary border-0 shrink-0">
+                {{ lotItem?.upc || lotItem?.locationSku }}
+              </span>
+              <span class="badge badge-xs font-bold shrink-0 badge-warning">
+                {{ totalItemCount }} Pieces
+              </span>
+              <span v-if="lotItem?.storageLocation" class="badge badge-xs badge-ghost font-mono opacity-70 shrink-0">
+                {{ lotItem?.storageLocation }}
+              </span>
+            </div>
+            <h4 class="font-bold text-xs text-base-content truncate mt-0.5 group-hover:text-primary transition-colors">
+              {{ lotItem?.title || 'Parent Lot' }}
+            </h4>
+            <div class="text-[10px] font-mono opacity-70 mt-0.5">
+              Landed Cost: <strong>${{ totalCost.toFixed(2) }}</strong>
+              <span v-if="totalItemCount > 1">
+                (${{ (totalCost / Math.max(1, totalItemCount)).toFixed(2) }}/ea)
+              </span>
+            </div>
           </div>
         </div>
-        <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeWizard">✕</button>
+        <button 
+          type="button" 
+          class="btn btn-ghost btn-xs btn-circle opacity-60 group-hover:opacity-100 group-hover:text-primary shrink-0" 
+          title="Edit item in drawer"
+        >
+          <Icon icon="solar:pen-linear" class="w-4 h-4" />
+        </button>
       </div>
 
-      <!-- PROGRESS STEPS (Mobile scrollable) -->
-      <div class="py-2 border-b border-base-200/60 overflow-x-auto no-scrollbar">
-        <ul class="steps steps-horizontal w-full min-w-[340px] text-xs font-bold">
-          <li class="step" :class="{ 'step-primary': step >= 1 }">1. Tiers Setup</li>
-          <li class="step" :class="{ 'step-primary': step >= 2 }">2. Assign Items</li>
-          <li class="step" :class="{ 'step-primary': step >= 3 }">3. Costs & Pricing</li>
-          <li class="step" :class="{ 'step-primary': step >= 4 }">4. Create SKUs</li>
-        </ul>
+      <!-- Quick Action Pills Strip (Split 1 Unit / Rollback) -->
+      <div v-if="Number(lotItem?.quantity || 1) > 1 || isLot" class="flex items-center gap-2 pt-2">
+        <button 
+          v-if="Number(lotItem?.quantity || 1) > 1"
+          type="button"
+          class="btn btn-2xs btn-outline btn-primary font-bold gap-1"
+          @click="$emit('split-one-unit', lotItem)"
+          title="Break off 1 unit immediately into its own SKU"
+        >
+          <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" />
+          <span>Quick Split 1 Unit</span>
+        </button>
+
+        <button 
+          v-if="isLot"
+          type="button"
+          class="btn btn-2xs btn-outline btn-warning font-bold gap-1"
+          @click="$emit('uncombine')"
+          title="Rollback this combined lot into individual items"
+        >
+          <Icon icon="solar:restart-bold" class="w-3 h-3" />
+          <span>Rollback Lot</span>
+        </button>
       </div>
+    </div>
+
+    <!-- PROGRESS STEPS (Mobile scrollable) -->
+    <div class="px-4 py-2 border-y border-base-200/60 overflow-x-auto no-scrollbar shrink-0 bg-base-100">
+      <ul class="steps steps-horizontal w-full min-w-[340px] text-xs font-bold">
+        <li class="step cursor-pointer" :class="{ 'step-primary': step >= 1 }" @click="step = 1">1. Tiers Setup</li>
+        <li class="step cursor-pointer" :class="{ 'step-primary': step >= 2 }" @click="step = 2">2. Assign Items</li>
+        <li class="step cursor-pointer" :class="{ 'step-primary': step >= 3 }" @click="step = 3">3. Costs & Pricing</li>
+        <li class="step cursor-pointer" :class="{ 'step-primary': step >= 4 }" @click="step = 4">4. Create SKUs</li>
+      </ul>
+    </div>
 
       <!-- WIZARD BODY (Scrollable) -->
       <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
@@ -441,75 +492,83 @@
 
       </div>
 
-      <!-- FOOTER ACTIONS -->
-      <div class="border-t border-base-200 pt-3 flex items-center justify-between gap-3">
+      <!-- WIZARD STICKY FOOTER ACTIONS -->
+      <div class="px-4 py-3 border-t border-base-300 flex items-center justify-between gap-3 shrink-0 bg-base-200/90 backdrop-blur-md">
         <button 
-          v-if="step > 1" 
           type="button" 
-          class="btn btn-sm btn-ghost gap-1"
-          @click="step--"
+          class="btn btn-sm btn-ghost font-semibold gap-1"
+          @click="step > 1 ? step-- : closeWizard()"
           :disabled="isSubmitting"
         >
           <Icon icon="solar:arrow-left-linear" class="w-4 h-4" />
-          Back
+          <span>{{ step > 1 ? 'Back' : 'Cancel' }}</span>
         </button>
-        <div v-else></div>
 
         <div class="flex items-center gap-2">
           <button 
             v-if="step < 4" 
             type="button" 
-            class="btn btn-sm btn-primary font-bold gap-1 shadow-sm"
+            class="btn btn-sm btn-primary font-bold gap-1 shadow-sm active:scale-95 transition-all"
             @click="step++"
           >
-            Continue
+            <span>Continue</span>
             <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
           </button>
 
           <button 
             v-else 
             type="button" 
-            class="btn btn-sm btn-success font-black text-white gap-2 shadow-md"
+            class="btn btn-sm btn-success text-success-content font-black gap-2 shadow-md active:scale-95 transition-all"
             @click="executeSplit"
             :disabled="isSubmitting"
           >
             <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
             <Icon v-else icon="solar:rocket-bold" class="w-4 h-4" />
-            Create {{ totalGeneratedListingCount }} Inventory SKUs
+            <span>Create {{ totalGeneratedListingCount }} Inventory SKUs</span>
           </button>
         </div>
       </div>
-
-    </div>
-    <form method="dialog" class="modal-backdrop" @click="closeWizard">
-      <button>close</button>
-    </form>
-  </dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useAuth } from '../../composables/useAuth';
+import { useItemDrawer } from '../../composables/useItemDrawer';
 import { addToast } from '../../stores/toast';
 import { databases, Query } from '../../lib/appwrite';
 import { DB_ID, getCollectionId, saveItemToInventory, duplicateItemMediaInStorage, updateInventoryItem } from '../../lib/inventory';
 import { ID } from 'appwrite';
 
 const props = defineProps<{
-  isOpen: boolean;
   lotItem: any;
+  isOpen?: boolean;
 }>();
 
-const emit = defineEmits(['close', 'completed']);
+const emit = defineEmits(['close', 'completed', 'uncombine', 'split-one-unit']);
 
 const { currentTeam, user } = useAuth();
+const { openItemDrawer } = useItemDrawer();
 
 const step = ref(1);
 const isSubmitting = ref(false);
 const activeFilterTab = ref('all');
 const costAllocationMode = ref<'equal' | 'weighted'>('equal');
 const selectedItemIndices = ref(new Set<number>());
+
+const isLot = computed(() => {
+  const lot = props.lotItem;
+  if (!lot) return false;
+  return !!(
+    lot.isLot || 
+    lot.status === 'combined' || 
+    (Number(lot.quantity || 1) > 1 && !lot.parentLotId) ||
+    (Array.isArray(lot.lotChildren) && lot.lotChildren.length > 0) ||
+    /\b(?:lot|bundle|crate|pack|collection)\b/i.test(lot.title || '')
+  );
+});
 
 // Custom Tier Definitions
 interface CustomTier {
@@ -544,18 +603,64 @@ function parsePriceFromText(val: any): number {
   return match ? parseFloat(match[1]) : 0;
 }
 
+function closeWizard() {
+  emit('close');
+}
+
 // Initialize items from lotItem
-watch(() => props.isOpen, (open) => {
-  if (open && props.lotItem) {
+watch(() => props.lotItem, (lot) => {
+  if (lot) {
     step.value = 1;
     selectedItemIndices.value.clear();
     initItemsFromLot();
   }
-});
+}, { immediate: true });
 
 function initItemsFromLot() {
   const lot = props.lotItem;
   if (!lot) return;
+
+  // Auto-seed custom tiers directly from exitPlaybook if present
+  if (lot.exitPlaybook) {
+    const ep = lot.exitPlaybook;
+    const customTiersList: CustomTier[] = [];
+    if (ep.heroSingles && ep.heroSingles.length > 0) {
+      const p = parsePriceFromText(ep.heroSingles[0].estPrice) || 55;
+      customTiersList.push({
+        id: 'tier-1',
+        name: `🌟 Hero Singles (${ep.heroSingles[0].targetChannel || 'Showcase'})`,
+        mode: 'single',
+        targetPrice: p
+      });
+    } else {
+      customTiersList.push({ id: 'tier-1', name: '🌟 Tier 1: Showcase', mode: 'single', targetPrice: 55 });
+    }
+
+    if (ep.themedCombines && ep.themedCombines.length > 0) {
+      const p = parsePriceFromText(ep.themedCombines[0].estPrice) || 28;
+      customTiersList.push({
+        id: 'tier-2',
+        name: `🎁 Themed Combine (${ep.themedCombines[0].title || 'Set'})`,
+        mode: 'bundle',
+        targetPrice: p
+      });
+    } else {
+      customTiersList.push({ id: 'tier-2', name: '📦 Tier 2: Core', mode: 'multi_qty', targetPrice: 22 });
+    }
+
+    if (ep.remainderRuns && ep.remainderRuns.length > 0) {
+      const p = parsePriceFromText(ep.remainderRuns[0].estPrice) || 12;
+      customTiersList.push({
+        id: 'tier-3',
+        name: `⚡ Floor Fillers (${ep.remainderRuns[0].title || 'Grab Bag'})`,
+        mode: 'multi_qty',
+        targetPrice: p
+      });
+    } else {
+      customTiersList.push({ id: 'tier-3', name: '⚡ Tier 3: Quick Turn', mode: 'multi_qty', targetPrice: 10 });
+    }
+    tiers.value = customTiersList;
+  }
 
   const rawCandidates: ParsedItem[] = [];
 
@@ -804,10 +909,6 @@ const bundleListingCount = computed(() => {
 const totalGeneratedListingCount = computed(() => {
   return singleItemCount.value + multiQtyListingCount.value + bundleListingCount.value;
 });
-
-function closeWizard() {
-  emit('close');
-}
 
 function extractFileId(urlOrId?: string): string | null {
   if (!urlOrId) return null;

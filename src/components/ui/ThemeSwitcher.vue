@@ -3,7 +3,7 @@
     <div tabindex="0" role="button" class="btn btn-ghost">
       <span class="text-xl">🎨</span>
       <span class="hidden sm:inline font-bold">Theme</span>
-      <svg width="12px" height="12px" class="h-2 w-2 fill-current opacity-60 inline-block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048"><path d="M1799 349l242 241-1017 1017L7 590l242-241 775 775 775-775z"></path></svg>
+      <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 inline-block" />
     </div>
     <ul tabindex="0" class="dropdown-content bg-base-200 text-base-content rounded-box z-[1] w-52 p-2 shadow-2xl h-80 overflow-y-auto outline outline-1 outline-base-300">
       <li v-for="theme in themes" :key="theme">
@@ -23,6 +23,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { Icon } from '@iconify/vue';
 
 const themes = [
   'emerald', 'light', 'dark', 'cupcake', 'bumblebee', 
@@ -34,7 +35,7 @@ const themes = [
   'nord', 'sunset', 'caramellatte', 'abyss', 'silk'
 ].sort();
 
-const currentTheme = ref('forest');
+const currentTheme = ref('emerald');
 
 onMounted(() => {
   const stored = localStorage.getItem('theme');
@@ -43,7 +44,7 @@ onMounted(() => {
   } else {
     // defaults to emerald on first load but verify against html tag
     const current = document.documentElement.getAttribute('data-theme');
-    setTheme(current || 'forest');
+    setTheme(current || 'emerald');
   }
 });
 

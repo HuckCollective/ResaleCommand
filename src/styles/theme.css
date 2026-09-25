@@ -7,3 +7,10 @@
     --color-code-bg: oklch(0.12 0.03 250);
     --color-code-text: oklch(0.85 0.15 100);
 }
+
+/* Customize emerald default theme with crisp plain rectangular buttons */
+[data-theme="emerald"] {
+    --radius-selector: 0.25rem;
+    --radius-field: 0.25rem;
+    --radius-box: 0.5rem;
+}

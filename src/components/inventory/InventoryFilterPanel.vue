@@ -9,7 +9,7 @@
             <div class="collapse-content px-3 pb-3 pt-0">
                 <ul class="menu menu-xs p-0 gap-0.5 w-full">
                     <li>
-                        <button :class="{'active font-bold text-primary': filterStatus === 'active' && hideSold && hideTracked && hideCombined}" @click="selectActiveStock">
+                        <button :class="{'active font-bold text-primary': filterStatus === 'active' && hideSold && hideTracked && hideCombined && hideDeconstructed}" @click="selectActiveStock">
                             <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
                             <span>Active Stock</span>
                             <span class="badge badge-xs badge-neutral">{{ countByStatus('active') }}</span>
@@ -46,7 +46,19 @@
                         </button>
                     </li>
                     <li>
-                        <button :class="{'active font-bold': filterStatus === 'all' && !hideSold && !hideTracked && !hideCombined}" @click="selectAllItems">
+                        <button :class="{'active font-bold text-accent': filterStatus === 'combined'}" @click="selectStatus('combined')">
+                            <span>Merged / Combined</span>
+                            <span class="badge badge-xs">{{ countByStatus('combined') }}</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button :class="{'active font-bold text-warning': filterStatus === 'deconstructed'}" @click="selectStatus('deconstructed')">
+                            <span>Deconstructed Lots</span>
+                            <span class="badge badge-xs">{{ countByStatus('deconstructed') }}</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button :class="{'active font-bold': filterStatus === 'all' && !hideSold && !hideTracked && !hideCombined && !hideDeconstructed}" @click="selectAllItems">
                             <span>All Items</span>
                             <span class="badge badge-xs">{{ totalCount }}</span>
                         </button>
@@ -64,7 +76,7 @@
             <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
-                    <select :value="filterLocation" @change="$emit('update:filterLocation', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterLocation" @change="$emit('update:filterLocation', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                         <option value="all">All Locations</option>
                         <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
                     </select>
@@ -72,7 +84,7 @@
 
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
-                    <select :value="filterChannel" @change="$emit('update:filterChannel', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterChannel" @change="$emit('update:filterChannel', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                         <option value="all">All Channels</option>
                         <option v-for="ch in channels" :key="ch" :value="ch">{{ ch }}</option>
                     </select>
@@ -80,7 +92,7 @@
 
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
-                    <select :value="filterLotType" @change="$emit('update:filterLotType', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterLotType" @change="$emit('update:filterLotType', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                         <option value="all">All Items</option>
                         <option value="lots_only">Parent Lots Only</option>
                         <option value="extracted_only">Extracted Children Only</option>
@@ -102,27 +114,153 @@
         </details>
 
         <!-- 3. Exclusions ("No-Show") Toggles -->
-        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideSold || hideTracked || hideCombined || filterPlacedLocated">
+        <details class="collapse collapse-arrow bg-base-200/50 border border-base-300/70 rounded-xl shadow-2xs" :open="hideDeconstructed || hideSold || hideTracked || hideCombined || filterPlacedLocated">
             <summary class="collapse-title text-xs font-bold uppercase tracking-wider opacity-80 min-h-0 py-2.5 px-3 flex items-center justify-between">
-                <span>Exclusions ("No-Show")</span>
+                <span class="flex items-center gap-1.5">
+                    <Icon icon="solar:eye-closed-bold" class="w-4 h-4 text-primary" />
+                    <span>Exclusions ("No-Show" Toggles)</span>
+                </span>
+                <span v-if="activeExclusionsCount > 0" class="badge badge-xs badge-primary mr-4 text-[9px] font-bold">
+                    {{ activeExclusionsCount }} Active
+                </span>
             </summary>
-            <div class="collapse-content px-3 pb-3 pt-0 space-y-1">
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Sold Items</span>
-                    <input type="checkbox" :checked="hideSold" @change="$emit('update:hideSold', ($event.target as HTMLInputElement).checked)" class="checkbox checkbox-xs checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Trackers / Unacquired</span>
-                    <input type="checkbox" :checked="hideTracked" @change="$emit('update:hideTracked', ($event.target as HTMLInputElement).checked)" class="checkbox checkbox-xs checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Hide Merged Lots</span>
-                    <input type="checkbox" :checked="hideCombined" @change="$emit('update:hideCombined', ($event.target as HTMLInputElement).checked)" class="checkbox checkbox-xs checkbox-primary" />
-                </label>
-                <label class="label cursor-pointer py-1 justify-between hover:bg-base-200/40 rounded-lg px-1">
-                    <span class="label-text text-xs font-semibold text-base-content">Only Placed &amp; Located</span>
-                    <input type="checkbox" :checked="filterPlacedLocated" @change="$emit('update:filterPlacedLocated', ($event.target as HTMLInputElement).checked)" class="checkbox checkbox-xs checkbox-primary" />
-                </label>
+            <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
+                <!-- Toggle 1: Hide Deconstructed Lots -->
+                <div 
+                    class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-3 cursor-pointer select-none"
+                    @click="$emit('update:hideDeconstructed', !hideDeconstructed)"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-warning/15 text-warning flex items-center justify-center shrink-0">
+                            <Icon icon="solar:scissors-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-bold text-xs text-base-content">Hide Deconstructed Lots</span>
+                                <span v-if="countByStatus('deconstructed') > 0" class="badge badge-2xs badge-neutral font-mono font-bold">
+                                    {{ countByStatus('deconstructed') }}
+                                </span>
+                            </div>
+                            <p class="text-[10px] opacity-60 leading-tight">Hide parent lots already split or broken into child items</p>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideDeconstructed" 
+                        @click.stop 
+                        @change="$emit('update:hideDeconstructed', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 2: Hide Merged Items -->
+                <div 
+                    class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-3 cursor-pointer select-none"
+                    @click="$emit('update:hideCombined', !hideCombined)"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0">
+                            <Icon icon="solar:layers-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-bold text-xs text-base-content">Hide Merged Items</span>
+                                <span v-if="countByStatus('combined') > 0" class="badge badge-2xs badge-neutral font-mono font-bold">
+                                    {{ countByStatus('combined') }}
+                                </span>
+                            </div>
+                            <p class="text-[10px] opacity-60 leading-tight">Hide individual items that were absorbed into batches or lots</p>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideCombined" 
+                        @click.stop 
+                        @change="$emit('update:hideCombined', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 3: Hide Sold Items -->
+                <div 
+                    class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-3 cursor-pointer select-none"
+                    @click="$emit('update:hideSold', !hideSold)"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
+                            <Icon icon="solar:tag-price-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-bold text-xs text-base-content">Hide Sold Items</span>
+                                <span v-if="countByStatus('sold') > 0" class="badge badge-2xs badge-neutral font-mono font-bold">
+                                    {{ countByStatus('sold') }}
+                                </span>
+                            </div>
+                            <p class="text-[10px] opacity-60 leading-tight">Hide completed sales and historic inventory items</p>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideSold" 
+                        @click.stop 
+                        @change="$emit('update:hideSold', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 4: Hide Trackers / Unacquired -->
+                <div 
+                    class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-3 cursor-pointer select-none"
+                    @click="$emit('update:hideTracked', !hideTracked)"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
+                            <Icon icon="solar:radar-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-bold text-xs text-base-content">Hide Trackers &amp; Scouted</span>
+                                <span v-if="countByStatus('tracked') > 0" class="badge badge-2xs badge-neutral font-mono font-bold">
+                                    {{ countByStatus('tracked') }}
+                                </span>
+                            </div>
+                            <p class="text-[10px] opacity-60 leading-tight">Hide wishlists, auction watchlists, and unacquired items</p>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="hideTracked" 
+                        @click.stop 
+                        @change="$emit('update:hideTracked', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
+
+                <!-- Toggle 5: Only Placed & Located -->
+                <div 
+                    class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-3 cursor-pointer select-none"
+                    @click="$emit('update:filterPlacedLocated', !filterPlacedLocated)"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                            <Icon icon="solar:map-point-bold" class="w-4 h-4" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-bold text-xs text-base-content">Only Placed &amp; Located</span>
+                            </div>
+                            <p class="text-[10px] opacity-60 leading-tight">Show only items with a physical booth or storage location</p>
+                        </div>
+                    </div>
+                    <input 
+                        type="checkbox" 
+                        :checked="filterPlacedLocated" 
+                        @click.stop 
+                        @change="$emit('update:filterPlacedLocated', $event.target.checked)" 
+                        class="toggle toggle-sm toggle-primary shrink-0" 
+                    />
+                </div>
             </div>
         </details>
 
@@ -211,7 +349,7 @@
                 <input 
                     type="text" 
                     :value="filterBarcode === 'all' || filterBarcode === '__missing__' || filterBarcode === '__numeric__' ? '' : filterBarcode" 
-                    @input="$emit('update:filterBarcode', ($event.target as HTMLInputElement).value || 'all')"
+                    @input="$emit('update:filterBarcode', $event.target.value || 'all')"
                     placeholder="Custom prefix..." 
                     class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
                 />
@@ -221,10 +359,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import TagInput from '../common/TagInput.vue';
 
-defineProps({
+const props = defineProps({
     filterStatus: {
         type: String,
         default: 'active'
@@ -258,6 +397,10 @@ defineProps({
         default: true
     },
     hideCombined: {
+        type: Boolean,
+        default: true
+    },
+    hideDeconstructed: {
         type: Boolean,
         default: true
     },
@@ -317,15 +460,27 @@ const emit = defineEmits([
     'update:hideSold',
     'update:hideTracked',
     'update:hideCombined',
+    'update:hideDeconstructed',
     'update:filterPlacedLocated',
     'update:filterKeywords'
 ]);
+
+const activeExclusionsCount = computed(() => {
+    let count = 0;
+    if (props.hideDeconstructed) count++;
+    if (props.hideCombined) count++;
+    if (props.hideSold) count++;
+    if (props.hideTracked) count++;
+    if (props.filterPlacedLocated) count++;
+    return count;
+});
 
 const selectActiveStock = () => {
     emit('update:filterStatus', 'active');
     emit('update:hideSold', true);
     emit('update:hideTracked', true);
     emit('update:hideCombined', true);
+    emit('update:hideDeconstructed', true);
 };
 
 const selectAllItems = () => {
@@ -333,6 +488,7 @@ const selectAllItems = () => {
     emit('update:hideSold', false);
     emit('update:hideTracked', false);
     emit('update:hideCombined', false);
+    emit('update:hideDeconstructed', false);
 };
 
 const selectStatus = (st: string) => {
@@ -340,6 +496,10 @@ const selectStatus = (st: string) => {
         emit('update:hideSold', false);
     } else if (st === 'tracked') {
         emit('update:hideTracked', false);
+    } else if (st === 'combined') {
+        emit('update:hideCombined', false);
+    } else if (st === 'deconstructed') {
+        emit('update:hideDeconstructed', false);
     }
     emit('update:filterStatus', st);
 };

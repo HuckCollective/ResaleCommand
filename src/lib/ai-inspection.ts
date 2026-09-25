@@ -79,6 +79,15 @@ export interface LotInspectionResult {
         max_landed_cost: number;
         advice: string;
     };
+    exit_strategy?: {
+        summary: string;
+        projected_bulk_yield: number;
+        projected_split_yield: number;
+        profit_increase_pct: number;
+        hero_singles: Array<{ name: string; est_price: string; target_channel: string; reason: string }>;
+        themed_combines: Array<{ name: string; est_price: string; items: string[]; reason: string }>;
+        floor_fillers?: { name: string; est_price: string; count: number; target_channel: string };
+    };
 }
 
 function cleanAndParseJSON(rawText: string): any {
@@ -501,6 +510,24 @@ OUTPUT STRICT JSON:
        { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Channel" },
        { "name": "eBay / Online", "est_price": "$210.00", "net_payout": "~$170.00 after fees/shipping", "speed": "Medium", "recommendation": "Online Reach" }
     ]
+  },
+  "exit_strategy": {
+    "summary": "Pull key standout(s) to recover 100% of purchase cost basis on day 1, combine matching series/themes into high-ticket packs, and clear remainders in booth impulse bags.",
+    "projected_bulk_yield": 180,
+    "projected_split_yield": 275,
+    "profit_increase_pct": 52,
+    "hero_singles": [
+       { "name": "Key Standout Hero Title", "est_price": "$50 - $70", "target_channel": "Online / Showcase", "reason": "High liquidity collector piece that recoups entire initial cost" }
+    ],
+    "themed_combines": [
+       { "name": "Themed Companion 3-Pack", "est_price": "$35 - $45", "items": ["Item A", "Item B", "Item C"], "reason": "Matching era/author elevates basket size and leverages shipping" }
+    ],
+    "floor_fillers": {
+       "name": "Booth Floor Grab Bag",
+       "est_price": "$12 - $15",
+       "count": 5,
+       "target_channel": "Memory Den Booth Basket"
+    }
   },
   "lot_items": [
     {
