@@ -3049,8 +3049,20 @@ const submitCombine = async () => {
 
 const showImport = ref(false); // CSV Modal
 
-onMounted(() => {
+onMounted(async () => {
     initActiveDraft('MD');
+    if (typeof window !== 'undefined') {
+        window.addEventListener('resize', updateIsMobile);
+    }
+    if (inventoryItems.value.length === 0 && !loading.value) {
+        await fetchInventory(currentTeam.value?.$id || '');
+    }
+    if (allPurchases.value.length === 0) {
+        fetchPurchases();
+    }
+    if (currentTeam.value) {
+        fetchLocations();
+    }
 });
 
 onUnmounted(() => {

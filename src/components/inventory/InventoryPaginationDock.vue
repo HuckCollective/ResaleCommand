@@ -317,6 +317,10 @@ import { Icon } from '@iconify/vue';
 import BottomActionTray from './BottomActionTray.vue';
 import { useManifest } from '../../composables/useManifest';
 
+defineOptions({
+    inheritAttrs: false
+});
+
 const {
     activeManifest,
     allDrafts,
@@ -415,6 +419,14 @@ const props = defineProps({
     inventoryItems: {
         type: Array,
         default: () => []
+    },
+    showBundle: {
+        type: Boolean,
+        default: false
+    },
+    showCombine: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -447,6 +459,8 @@ const emit = defineEmits([
     'bundle',
     'apply-location',
     'apply-status',
+    'apply-channel',
+    'applyChannel',
     'apply-bulk-unified',
     'export',
     'delete',
