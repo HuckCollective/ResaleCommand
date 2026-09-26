@@ -31,43 +31,7 @@
                 </button>
             </div>
 
-            <!-- 1. 🏷️ TITLE & IDENTITY (TOP PRIORITY) -->
-            <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3">
-                <div class="flex justify-between items-center">
-                    <label class="font-bold text-xs uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
-                        <Icon icon="solar:text-bold" class="w-4 h-4 text-primary" />
-                        Item Title & Identity
-                    </label>
-                    <div class="flex items-center gap-1.5">
-                        <span v-if="item?.sku || item?.upc" class="badge badge-sm font-mono font-bold bg-base-300">
-                            {{ item.sku || item.upc }}
-                        </span>
-                        <span class="text-[11px] opacity-50 font-mono">{{ editForm.title?.length || 0 }} chars</span>
-                    </div>
-                </div>
-                <button 
-                    v-if="suggestedTitleStr && suggestedTitleStr !== editForm.title" 
-                    type="button" 
-                    class="btn btn-xs btn-outline btn-secondary font-normal w-full text-left h-auto py-1.5 px-3 justify-start items-start rounded-xl shadow-xs"
-                    @click="editForm.title = suggestedTitleStr" 
-                    title="Click to use AI suggested title"
-                >
-                    <Icon icon="solar:magic-stick-linear" class="w-3.5 h-3.5 shrink-0 mt-0.5" /> 
-                    <span class="whitespace-normal break-words leading-tight text-xs"><strong>Use:</strong> {{ suggestedTitleStr }}</span>
-                </button>
 
-                <div class="join w-full flex shadow-xs">
-                    <textarea 
-                        v-model="editForm.title" 
-                        class="textarea textarea-bordered join-item grow font-bold text-sm sm:text-base leading-snug min-h-[3.2rem] py-2 resize-none bg-base-100" 
-                        rows="2" 
-                        placeholder="Brand, Item Name, Model, Edition, Sizing...">
-                    </textarea>
-                    <button class="btn join-item border border-base-300 h-auto px-3 flex items-center justify-center hover:bg-base-200" @click="$emit('copy-title')" title="Copy Title">
-                        <Icon icon="solar:copy-linear" class="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
 
             <!-- 2. 📸 PHOTOS & SOURCING MEDIA -->
             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-3.5">

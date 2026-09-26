@@ -19,6 +19,7 @@ export function useItemDrawerForm() {
 
     const editForm = reactive({
         title: '',
+        tagTitle: '',
         quantity: 1,
         cost: '',
         resalePrice: '',
@@ -71,6 +72,7 @@ export function useItemDrawerForm() {
 
     const resetForm = () => {
         editForm.title = '';
+        editForm.tagTitle = '';
         editForm.quantity = 1;
         editForm.cost = '';
         editForm.resalePrice = '';
@@ -98,6 +100,22 @@ export function useItemDrawerForm() {
 
         if (item) {
             editForm.title = item.title || '';
+            
+            // Extract Tag Title (<= 38 chars for thermal barcode sticker label)
+            let initialTag = item.tagTitle || item.tag_title || '';
+            if (!initialTag && item.conditionNotes && typeof item.conditionNotes === 'string') {
+                const tagMatch = item.conditionNotes.match(/\[TAG_TITLE:[ \t]*([^\]]+)\]/i);
+                if (tagMatch && tagMatch[1]?.trim()) initialTag = tagMatch[1].trim();
+            }
+            if (!initialTag && item.rawAnalysis) {
+                try {
+                    const parsed = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+                    const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+                    if (obj?.tag_title || obj?.tagTitle) initialTag = obj.tag_title || obj.tagTitle;
+                } catch (e) {}
+            }
+            editForm.tagTitle = initialTag || '';
+
             editForm.quantity = item.quantity || 1;
             editForm.cost = formatMoney(item.cost || item.purchasePrice || getNoteValue(item.conditionNotes, 'Paid', true));
             editForm.resalePrice = formatMoney(item.resalePrice || item.priceFair || item.listPrice || getNoteValue(item.conditionNotes, 'Resale', true));

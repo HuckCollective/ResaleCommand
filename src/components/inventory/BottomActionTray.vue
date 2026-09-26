@@ -529,6 +529,23 @@
 
                         <!-- Bundle Form -->
                         <div class="space-y-2.5">
+                            <!-- AI Suggested Title Pattern Banner -->
+                            <button 
+                                v-if="aiSuggestedBundleTitle && aiSuggestedBundleTitle !== bundleForm.title" 
+                                type="button" 
+                                class="btn btn-2xs btn-outline btn-accent font-normal w-full text-left h-auto py-1 px-2.5 justify-between items-center rounded-xl shadow-xs gap-2"
+                                @click="bundleForm.title = aiSuggestedBundleTitle" 
+                                title="Click to apply AI suggested bundle title"
+                            >
+                                <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <Icon icon="solar:magic-stick-linear" class="w-3.5 h-3.5 shrink-0 text-accent" /> 
+                                    <span class="whitespace-normal break-words leading-tight text-xs truncate">
+                                        <strong class="font-bold text-accent">AI Suggested Bundle Title:</strong> {{ aiSuggestedBundleTitle }}
+                                    </span>
+                                </div>
+                                <span class="badge badge-accent badge-2xs font-mono font-bold shrink-0">Apply ↵</span>
+                            </button>
+
                             <div class="space-y-1">
                                 <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/70">Bundle Title</label>
                                 <input 
@@ -538,6 +555,26 @@
                                     placeholder="e.g. Vintage D&D Companion Set (Book + Dice + Minis)" 
                                 />
                             </div>
+
+                            <!-- Smart Bundle Title Suggestions -->
+                            <div v-if="bundleTitleSuggestions.length > 0" class="space-y-1">
+                                <span class="text-[9px] font-bold uppercase opacity-50">Smart Suggestions:</span>
+                                <div class="flex flex-wrap gap-1">
+                                    <button 
+                                        v-for="sug in bundleTitleSuggestions" 
+                                        :key="sug" 
+                                        type="button" 
+                                        @click="bundleForm.title = sug"
+                                        class="btn btn-2xs font-semibold py-0 h-5 min-h-0 px-2 text-[10px] rounded-md transition-all"
+                                        :class="bundleForm.title === sug 
+                                            ? 'btn-accent text-accent-content font-bold shadow-2xs' 
+                                            : 'btn-ghost border border-base-300 bg-base-200 hover:border-accent/50 text-base-content/80'"
+                                    >
+                                        {{ sug }}
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-[10px] opacity-70 leading-tight">Curated companion or lifestyle bundle title for physical booth tags and online listings.</p>
 
                             <div class="space-y-1">
                                 <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/70">Description / Curation Notes</label>
@@ -774,31 +811,52 @@
 
                         <!-- Title Input & Smart Suggestions -->
                         <div v-if="combineMode === 'create_new'" class="space-y-2">
+                            <!-- AI Suggested Title Pattern Banner -->
+                            <button 
+                                v-if="aiSuggestedCombineTitle && aiSuggestedCombineTitle !== combineTitle" 
+                                type="button" 
+                                class="btn btn-2xs btn-outline btn-secondary font-normal w-full text-left h-auto py-1 px-2.5 justify-between items-center rounded-xl shadow-xs gap-2"
+                                @click="combineTitle = aiSuggestedCombineTitle" 
+                                title="Click to apply AI suggested batch title"
+                            >
+                                <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <Icon icon="solar:magic-stick-linear" class="w-3.5 h-3.5 shrink-0 text-secondary" /> 
+                                    <span class="whitespace-normal break-words leading-tight text-xs truncate">
+                                        <strong class="font-bold text-secondary">AI Suggested Batch Title:</strong> {{ aiSuggestedCombineTitle }}
+                                    </span>
+                                </div>
+                                <span class="badge badge-secondary badge-2xs font-mono font-bold shrink-0">Apply ↵</span>
+                            </button>
+
                             <div class="space-y-1">
                                 <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/70">Batch Lot Title</label>
                                 <input 
                                     v-model="combineTitle" 
                                     type="text" 
                                     class="input input-sm input-bordered w-full font-bold bg-base-100" 
-                                    placeholder="e.g. Vintage Fantasy Paperbacks (Lot of 4)" 
+                                    placeholder="e.g. Vintage Action Figures Pair (2-Pack)" 
                                 />
                             </div>
 
                             <!-- Smart Title Suggestions -->
                             <div v-if="combineTitleSuggestions.length > 0" class="space-y-1">
-                                <span class="text-[9px] font-bold uppercase opacity-50">Suggestions:</span>
+                                <span class="text-[9px] font-bold uppercase opacity-50">Smart Suggestions:</span>
                                 <div class="flex flex-wrap gap-1">
                                     <button 
                                         v-for="sug in combineTitleSuggestions" 
-                                        :key="sug"
+                                        :key="sug" 
                                         type="button" 
                                         @click="combineTitle = sug"
-                                        class="btn btn-2xs btn-ghost border border-base-300 bg-base-200 hover:bg-primary/10 hover:border-primary text-[10px] truncate max-w-full font-semibold"
+                                        class="btn btn-2xs font-semibold py-0 h-5 min-h-0 px-2 text-[10px] rounded-md transition-all"
+                                        :class="combineTitle === sug 
+                                            ? 'btn-secondary text-secondary-content font-bold shadow-2xs' 
+                                            : 'btn-ghost border border-base-300 bg-base-200 hover:border-secondary/50 text-base-content/80'"
                                     >
                                         {{ sug }}
                                     </button>
                                 </div>
                             </div>
+                            <p class="text-[10px] opacity-70 leading-tight">Shared catalog and register title for all {{ combineTotalUnits }} units in this batch.</p>
                         </div>
 
                         <div v-else class="p-2.5 rounded-box bg-info/10 border border-info/20 text-xs">
@@ -1503,7 +1561,7 @@ import LotSplitterWizard from './LotSplitterWizard.vue';
 import { useManifest } from '../../composables/useManifest';
 import { useItemDrawer } from '../../composables/useItemDrawer';
 import { useLotSplitter } from '../../composables/useLotSplitter';
-import { generateSmartLotTitle } from '../../lib/lotTitleGenerator';
+import { generateSmartLotTitle, generateSmartBundleTitle } from '../../lib/lotTitleGenerator';
 
 const props = defineProps({
     isOpen: {
@@ -2012,6 +2070,9 @@ const runTrayAiMatches = () => {
     }, 250);
 };
 
+const bundleTitleSuggestions = ref([]);
+const aiSuggestedBundleTitle = ref('');
+
 const openBundleSubView = () => {
     bundleForm.title = '';
     bundleForm.description = '';
@@ -2024,6 +2085,17 @@ const openBundleSubView = () => {
     } else {
         bundleForm.storageLocation = '';
     }
+
+    if (props.selectedItems && props.selectedItems.length > 0) {
+        const { defaultTitle, suggestions } = generateSmartBundleTitle(props.selectedItems);
+        aiSuggestedBundleTitle.value = defaultTitle;
+        bundleTitleSuggestions.value = suggestions;
+        bundleForm.title = defaultTitle;
+    } else {
+        aiSuggestedBundleTitle.value = '';
+        bundleTitleSuggestions.value = [];
+    }
+
     currentSubView.value = 'bundle';
 
     // Automatically trigger companion synergy matching on open!
@@ -2049,6 +2121,7 @@ const handleConfirmBundle = () => {
 // -------------------------------------------------------------
 const combineTitle = ref('');
 const combineTitleSuggestions = ref([]);
+const aiSuggestedCombineTitle = ref('');
 const combineMode = ref('create_new'); // 'create_new' | 'add_to_existing'
 
 const existingLotInSelection = computed(() => {
@@ -2075,11 +2148,13 @@ const openCombineSubView = () => {
     trayAiMatches.value = [];
     if (props.selectedItems && props.selectedItems.length > 0) {
         const { defaultTitle, suggestions } = generateSmartLotTitle(props.selectedItems, combineTotalUnits.value);
+        aiSuggestedCombineTitle.value = defaultTitle;
         combineTitle.value = defaultTitle;
         combineTitleSuggestions.value = suggestions;
     } else {
         combineTitle.value = '';
         combineTitleSuggestions.value = [];
+        aiSuggestedCombineTitle.value = '';
     }
     currentSubView.value = 'combine';
 
@@ -2088,6 +2163,21 @@ const openCombineSubView = () => {
         runTrayAiMatches();
     }
 };
+
+watch(() => props.selectedItems, (newItems) => {
+    if (!newItems || newItems.length === 0) return;
+    if (currentSubView.value === 'combine' && combineMode.value === 'create_new') {
+        const { defaultTitle, suggestions } = generateSmartLotTitle(newItems, combineTotalUnits.value);
+        aiSuggestedCombineTitle.value = defaultTitle;
+        combineTitleSuggestions.value = suggestions;
+        if (!combineTitle.value) combineTitle.value = defaultTitle;
+    } else if (currentSubView.value === 'bundle') {
+        const { defaultTitle, suggestions } = generateSmartBundleTitle(newItems);
+        aiSuggestedBundleTitle.value = defaultTitle;
+        bundleTitleSuggestions.value = suggestions;
+        if (!bundleForm.title) bundleForm.title = defaultTitle;
+    }
+}, { deep: true });
 
 const handleConfirmCombine = () => {
     emit('submit-combine', {

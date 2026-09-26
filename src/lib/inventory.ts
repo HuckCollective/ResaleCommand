@@ -784,6 +784,13 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             safeNotes += '\n\n--- IMPORT DETAILS ---\n' + extraInfo.join('\n');
         }
 
+        if (extraData.tagTitle || itemData?.tag_title || extraData.tag_title) {
+            const shortTag = String(extraData.tagTitle || itemData?.tag_title || extraData.tag_title).trim();
+            if (shortTag && !safeNotes.includes('[TAG_TITLE:')) {
+                safeNotes += (safeNotes ? '\n\n' : '') + `[TAG_TITLE: ${shortTag}]`;
+            }
+        }
+
         // TRUNCATE NOTES to avoid 1000 char limit error
         // Reduced to 800 to account for multi-byte emojis causing byte-length overflow
         if (safeNotes.length > 800) {
@@ -1105,6 +1112,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         const needsDocFetch = !!(
             updates.conditionNotes !== undefined ||
             updates.condition_notes !== undefined ||
+            updates.tagTitle !== undefined ||
+            updates.tag_title !== undefined ||
             updates.cost !== undefined ||
             updates.resalePrice !== undefined ||
             updates.soldPrice !== undefined ||
@@ -1396,6 +1405,15 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.orderId !== undefined) {
             // No top-level orderId column in standard flow, but save to notes
             updateNoteValue('Order #', updates.orderId ? String(updates.orderId) : '');
+        }
+
+        if (updates.tagTitle !== undefined || updates.tag_title !== undefined) {
+            const rawTag = updates.tagTitle !== undefined ? updates.tagTitle : updates.tag_title;
+            if (rawTag && String(rawTag).trim()) {
+                updateTagValue('TAG_TITLE', String(rawTag).trim());
+            } else {
+                notes = notes.replace(/\[TAG_TITLE:[ \t]*[^\]]+\]\n?\n?/gi, '');
+            }
         }
         
         // Save Scout Data (Base64 encoded JSON to avoid regex issues)

@@ -171,11 +171,69 @@ export function sanitizeRicochetDescription(text: string | null | undefined): st
     return text
         .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '') // e.g. [MAIN IMAGE ID: ...], [RECEIPT ID: ...]
         .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
-        .replace(/(Paid|Resale|Sold|Location|Est\. Low|Est\. High|Condition|Order #):[^\n]*/gi, '')
+        .replace(/(?:^|\b)(?:Paid|Resale|Sold|Location|Est\. Low|Est\. High|Order #):\s*[^\n|]*/gi, '')
         .replace(/https?:\/\/[^\s]+/gi, '') // strip internal URLs
         .replace(/[\r\n"\\]+/g, ' ')
         .replace(/\s{2,}/g, ' ')
+        .replace(/[\s|–—\-,;:]+$/, '')
         .trim();
+}
+
+/**
+ * Truncates text cleanly at the nearest word boundary without cutting words in half.
+ */
+export function truncateCleanly(text: string, maxLength: number): string {
+    if (!text || text.length <= maxLength) return text;
+    const cut = text.substring(0, maxLength);
+    const lastSpace = cut.lastIndexOf(' ');
+    const candidate = lastSpace > maxLength * 0.7 ? cut.substring(0, lastSpace) : cut;
+    return candidate.replace(/[\s|–—\-,;:]+$/, '').trim() + '...';
+}
+
+/**
+ * Resolves a realistic brand from item data, AI analysis, or common known brands in title.
+ */
+export function extractItemBrand(item: any, aiObj?: any): string {
+    // 1. Explicit brand/maker/publisher on item or AI analysis
+    const candidate = item.brand || aiObj?.brand || aiObj?.manufacturer || aiObj?.maker || aiObj?.publisher || item.publisher;
+    if (candidate && typeof candidate === 'string' && candidate.trim() && !/^(unknown|generic|unbranded|n\/a)$/i.test(candidate.trim())) {
+        return candidate.trim();
+    }
+
+    // 2. Scan title and identity for prominent collector brands
+    const textToScan = `${item.title || ''} ${item.identity || ''} ${item.name || ''}`;
+    const KNOWN_BRANDS = [
+        'Hallmark', 'WizKids', 'Hasbro', 'Kenner', 'Mattel', 'Nintendo', 'Sega', 'Sony', 'PlayStation', 
+        'Xbox', 'Lego', 'Hot Wheels', 'Funko', 'Disney', 'Marvel', 'DC Comics', 'Star Wars', 
+        'Pokemon', 'Bandai', 'Tamiya', 'McFarlane', 'NECA', 'Sideshow', 'Fisher-Price', 'Playskool',
+        'Nike', 'Adidas', 'Levi\'s', 'Carhartt', 'Patagonia', 'Columbia', 'Champion', 'Ralph Lauren',
+        'Tommy Hilfiger', 'The North Face', 'Pendleton', 'Woolrich', 'Harley-Davidson',
+        'Llewellyn', 'TSR', 'Wizards of the Coast', 'Games Workshop', 'Warhammer', 'Chaosium', 'Avalon Hill',
+        'Penguin', 'Tor', 'Ballantine', 'Bantam', 'Avon', 'Vintage Books', 'Scholastic',
+        'Pyrex', 'CorningWare', 'Fire-King', 'Anchor Hocking', 'Fenton', 'Blenko', 'Westmoreland',
+        'Waterford', 'Wedgwood', 'Lenox', 'Fiesta', 'Homer Laughlin'
+    ];
+
+    for (const b of KNOWN_BRANDS) {
+        const regex = new RegExp(`\\b${b.replace(/['.]/g, '')}\\b`, 'i');
+        if (regex.test(textToScan.replace(/['.]/g, ''))) {
+            return b;
+        }
+    }
+
+    // 3. Scan AI keywords for matching known brands
+    if (aiObj?.keywords && Array.isArray(aiObj.keywords)) {
+        for (const kw of aiObj.keywords) {
+            if (typeof kw === 'string' && kw.trim()) {
+                const cleanKw = kw.trim();
+                for (const b of KNOWN_BRANDS) {
+                    if (cleanKw.toLowerCase() === b.toLowerCase()) return b;
+                }
+            }
+        }
+    }
+
+    return 'Vintage';
 }
 
 /**
@@ -207,7 +265,15 @@ export function extractShortTagTitle(item: any): string {
         return cleanTagTitle(item.tag_title);
     }
 
-    // 2. Check AI Deep Scan / Speed Scout rawAnalysis
+    // 2. Check condition notes bracket tag [TAG_TITLE: ...]
+    if (item.conditionNotes && typeof item.conditionNotes === 'string') {
+        const match = item.conditionNotes.match(/\[TAG_TITLE:[ \t]*([^\]]+)\]/i);
+        if (match && match[1]?.trim()) {
+            return cleanTagTitle(match[1].trim());
+        }
+    }
+
+    // 3. Check AI Deep Scan / Speed Scout rawAnalysis
     if (item.rawAnalysis) {
         try {
             const ai = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
@@ -218,51 +284,92 @@ export function extractShortTagTitle(item: any): string {
         } catch (e) {}
     }
 
-    // 3. Intelligently condense the full title if no explicit tag title exists
+    // 4. Intelligently condense the full title if no explicit tag title exists
     const full = (item.title || item.identity || 'Inventory Item').trim();
     return condenseTitleForTag(full);
 }
 
-function cleanTagTitle(title: string): string {
-    return title
+export function cleanTagTitle(title: string): string {
+    let t = title
         .replace(/["\\]/g, '')
         .replace(/^[📦🛍️🏷️✨]\s*/, '')
         .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
+        // Clean leading broken fragments & prepositions (e.g. "of Wiccan Books" -> "Wiccan Books")
+        .replace(/^\s*(?:(?:lot|bundle|set|pack|box|collection|group|run)\s+(?:of\s+)?)?/i, '')
+        .replace(/^\s*(?:of|and|for|with|in|the|a|an)\s+/i, '')
         .replace(/\s{2,}/g, ' ')
-        .trim()
-        .substring(0, 38);
+        .trim();
+
+    // Prevent trailing dangling prepositions or hyphens
+    t = t.replace(/\s+(?:and|of|with|for|in|at|by|to|a|an|the|&|-|—|–)\s*$/i, '');
+    t = t.replace(/[,;:\-\s]+$/, '').trim();
+
+    if (t.length > 0) {
+        t = t.charAt(0).toUpperCase() + t.slice(1);
+    }
+
+    return t.substring(0, 38);
 }
 
-function condenseTitleForTag(title: string): string {
+export function condenseTitleForTag(title: string): string {
+    if (!title || !title.trim()) return 'Inventory Item';
+
     let t = title
         .replace(/["\\]/g, '')
         .replace(/^[📦🛍️🏷️✨]\s*/, '')
         .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
         .replace(/\b(Women's|Mens'|Men's|Womens)\b/gi, '')
-        .replace(/\b(Vintage Style|Pre-owned|Gently Used)\b/gi, '')
+        .replace(/\b(Vintage Style|Pre-owned|Gently Used|Authentic|Brand New)\b/gi, '')
         .replace(/\bSize\s*([0-9]+|[SMLX]+)\b/gi, '($1)')
+        // Strip broken leading prefixes like "of Wiccan Books" or "Lot of ..."
+        .replace(/^\s*(?:(?:lot|bundle|set|pack|box|collection|group|run)\s+(?:of\s+)?)?/i, '')
+        .replace(/^\s*(?:of|and|for|with|in|the|a|an)\s+/i, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
 
-    if (t.length <= 38) return t;
+    // Detect quantity or choice lot info if present
+    const qtyMatch = title.match(/\((?:Qty|Count):\s*(\d+)\)/i) || title.match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i);
+    const isChoice = /\bchoice\b/i.test(title);
+    const qtyNum = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
 
-    // Check if there is a dash / separator: "Brand Item - Extra Details"
+    // Check if there is a dash / separator: e.g. "Wiccan Books - Choice Issues (Qty: 9)"
     const sepMatch = t.match(/^(.*?)(?:\s+[-–—:|]\s+)/);
-    if (sepMatch && sepMatch[1].length >= 8 && sepMatch[1].length <= 38) {
-        return sepMatch[1].trim();
+    if (sepMatch && sepMatch[1].trim().length >= 4) {
+        let subject = sepMatch[1].trim()
+            .replace(/^\s*(?:of|and|for|with|in|the|a|an)\s+/i, '')
+            .replace(/\s+(?:and|of|with|for|in|at|by|to|a|an|the|&|-|—|–)\s*$/i, '')
+            .trim();
+
+        if (subject.length >= 4) {
+            if (isChoice && qtyNum && qtyNum > 1) {
+                const choiceCandidate = `${subject} (Choice of ${qtyNum})`;
+                if (choiceCandidate.length <= 38) return choiceCandidate;
+            } else if (qtyNum && qtyNum > 1 && !subject.toLowerCase().includes('set') && !subject.toLowerCase().includes('lot')) {
+                const qtyCandidate = `${subject} (${qtyNum} Pk)`;
+                if (qtyCandidate.length <= 38) return qtyCandidate;
+            }
+            if (subject.length <= 38) {
+                return subject.charAt(0).toUpperCase() + subject.slice(1);
+            }
+        }
+    }
+
+    if (t.length <= 38) {
+        return cleanTagTitle(t);
     }
 
     // Try stripping parenthetical details
     const strippedParens = t.replace(/\s*\([^)]*\)/g, '').replace(/\s{2,}/g, ' ').trim();
     if (strippedParens.length >= 8 && strippedParens.length <= 38) {
-        return strippedParens;
+        return cleanTagTitle(strippedParens);
     }
 
     // If still over 38 chars, truncate cleanly at nearest word boundary
     const base = strippedParens.length >= 12 ? strippedParens : t;
     const cut = base.substring(0, 36);
     const lastSpace = cut.lastIndexOf(' ');
-    return (lastSpace > 14 ? cut.substring(0, lastSpace) : cut).trim();
+    const finalCandidate = (lastSpace > 14 ? cut.substring(0, lastSpace) : cut).trim();
+    return cleanTagTitle(finalCandidate);
 }
 
 /**
@@ -311,19 +418,14 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
     const rows = filteredItems.map(item => {
         let conditionText = item.conditionNotes || item.condition_notes || '';
         let webDesc = item.marketDescription || item.description || '';
-        let brandStr = '';
-        let catStr = 'Vintage Collectibles';
+        let aiObj: any = null;
 
         if (item.rawAnalysis) {
             try {
                 const ai = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
-                const aiObj = Array.isArray(ai) ? ai[0] : ai;
+                aiObj = Array.isArray(ai) ? ai[0] : ai;
                 if (aiObj && aiObj.condition_notes) {
                     conditionText = aiObj.condition_notes;
-                }
-                if (aiObj && aiObj.keywords && Array.isArray(aiObj.keywords) && aiObj.keywords.length > 0) {
-                    brandStr = aiObj.keywords[0];
-                    catStr = aiObj.keywords[1] || catStr;
                 }
             } catch (e) {}
         }
@@ -338,15 +440,15 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
             .trim();
         const cleanPosDescription = sanitizeRicochetDescription(fullItemName).substring(0, 250);
 
-        // 3. Web Description (Full catalog description + condition disclosure appended)
-        let fullWebText = webDesc || fullItemName;
-        if (conditionText && conditionText.trim() && conditionText.trim() !== fullItemName) {
-            const cleanCond = sanitizeRicochetDescription(conditionText);
-            if (cleanCond) {
-                fullWebText = fullWebText ? `${fullWebText} | Condition: ${cleanCond}` : `Condition: ${cleanCond}`;
-            }
+        // 3. Web Description (Clean e-commerce writeup + condition disclosure, without dangling pipes or mid-word cuts)
+        let baseWeb = sanitizeRicochetDescription(webDesc || fullItemName);
+        let cleanCond = sanitizeRicochetDescription(conditionText);
+
+        if (cleanCond && !baseWeb.toLowerCase().includes(cleanCond.toLowerCase()) && cleanCond.toLowerCase() !== fullItemName.toLowerCase()) {
+            baseWeb = baseWeb ? `${baseWeb} — Condition: ${cleanCond}` : `Condition: ${cleanCond}`;
         }
-        const cleanWebDesc = sanitizeRicochetDescription(fullWebText).substring(0, 500);
+        baseWeb = baseWeb.replace(/[\s|–—\-,;:]+$/, '').trim();
+        const cleanWebDesc = truncateCleanly(baseWeb, 2000);
 
         // 4. Clean Numeric Price
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
@@ -363,6 +465,9 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
             }
         }
 
+        // 6. Intelligent Brand resolution (e.g. WizKids, Hallmark, Llewellyn, etc.)
+        const brand = extractItemBrand(item, aiObj);
+
         return [
             sku, // SKU strictly formatted with org prefix (e.g. HUCK-1460)
             tagTitle, // Item Title (short & sweet: fits physical barcode sticker tag without wrapping)
@@ -372,7 +477,7 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
             item.quantity || 1, // Quantity
             todayStr, // In-Stock Date
             '', // Category (leave blank so Ricochet uses default/consignor category without format errors)
-            (brandStr || 'Vintage').replace(/["\\]/g, '') // Brand
+            brand.replace(/["\\]/g, '') // Brand
         ];
     });
 

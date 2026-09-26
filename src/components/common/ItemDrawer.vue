@@ -11,9 +11,12 @@
                 <ItemDrawerHeader 
                     :item="item" 
                     :editForm="editForm" 
+                    :suggestedTitleStr="suggestedTitleStr"
+                    :suggestedTagTitleStr="suggestedTagTitleStr"
                     @close="closeDrawer" 
                     @dismiss-shop-update="handleDismissShopUpdate"
                     @flag-shop-update="handleFlagShopUpdate"
+                    @copy-title="copyToClipboard(editForm.title || item?.title)"
                 />
 
                 <!-- 2. TABS (Details, Verify, Lot) -->
@@ -270,6 +273,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { warehousesApi } from '../../lib/warehouses';
+import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
 
 const { currentTeam } = useAuth();
 const { showLoader, hideLoader, updateLoader } = useLoader();
@@ -622,6 +626,47 @@ const suggestedTitleStr = computed(() => {
     if (Array.isArray(scoutResult.value) && scoutResult.value.length > 0) {
         return scoutResult.value[0].title || scoutResult.value[0].identity || null;
     }
+    return null;
+});
+
+const suggestedTagTitleStr = computed(() => {
+    // 1. Check scoutResult
+    if (scoutResult.value) {
+        if (scoutResult.value.tag_title) return cleanTagTitle(scoutResult.value.tag_title);
+        if (scoutResult.value.tagTitle) return cleanTagTitle(scoutResult.value.tagTitle);
+        if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items.length > 0) {
+            const first = scoutResult.value.items[0];
+            if (first.tag_title) return cleanTagTitle(first.tag_title);
+            if (first.tagTitle) return cleanTagTitle(first.tagTitle);
+        }
+        if (Array.isArray(scoutResult.value) && scoutResult.value.length > 0) {
+            const first = scoutResult.value[0];
+            if (first.tag_title) return cleanTagTitle(first.tag_title);
+            if (first.tagTitle) return cleanTagTitle(first.tagTitle);
+        }
+        if (scoutResult.value.lot_items && Array.isArray(scoutResult.value.lot_items) && scoutResult.value.lot_items.length > 0) {
+            const first = scoutResult.value.lot_items[0];
+            if (first.tag_title) return cleanTagTitle(first.tag_title);
+        }
+    }
+
+    // 2. Check props.item rawAnalysis or tag_title
+    if (props.item?.tagTitle || props.item?.tag_title) {
+        return cleanTagTitle(props.item.tagTitle || props.item.tag_title);
+    }
+    if (props.item?.rawAnalysis) {
+        try {
+            const ai = typeof props.item.rawAnalysis === 'string' ? JSON.parse(props.item.rawAnalysis) : props.item.rawAnalysis;
+            const aiObj = Array.isArray(ai) ? ai[0] : ai;
+            if (aiObj?.tag_title || aiObj?.tagTitle) return cleanTagTitle(aiObj.tag_title || aiObj.tagTitle);
+        } catch (e) {}
+    }
+
+    // 3. Fallback: Auto-condense from suggestedTitleStr if available
+    if (suggestedTitleStr.value) {
+        return condenseTitleForTag(suggestedTitleStr.value);
+    }
+
     return null;
 });
 
