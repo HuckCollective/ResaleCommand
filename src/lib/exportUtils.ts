@@ -195,8 +195,85 @@ export interface RicochetExportOptions {
 }
 
 /**
+ * Helper to derive a clean, short physical booth tag title (<= 38 chars)
+ * tailored specifically for thermal label rolls (e.g. Memory Den / DustyTiger).
+ */
+export function extractShortTagTitle(item: any): string {
+    // 1. Direct explicit tagTitle from item document or draft
+    if (item.tagTitle && typeof item.tagTitle === 'string' && item.tagTitle.trim()) {
+        return cleanTagTitle(item.tagTitle);
+    }
+    if (item.tag_title && typeof item.tag_title === 'string' && item.tag_title.trim()) {
+        return cleanTagTitle(item.tag_title);
+    }
+
+    // 2. Check AI Deep Scan / Speed Scout rawAnalysis
+    if (item.rawAnalysis) {
+        try {
+            const ai = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+            const aiObj = Array.isArray(ai) ? ai[0] : ai;
+            if (aiObj && (aiObj.tag_title || aiObj.tagTitle)) {
+                return cleanTagTitle(aiObj.tag_title || aiObj.tagTitle);
+            }
+        } catch (e) {}
+    }
+
+    // 3. Intelligently condense the full title if no explicit tag title exists
+    const full = (item.title || item.identity || 'Inventory Item').trim();
+    return condenseTitleForTag(full);
+}
+
+function cleanTagTitle(title: string): string {
+    return title
+        .replace(/["\\]/g, '')
+        .replace(/^[📦🛍️🏷️✨]\s*/, '')
+        .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .substring(0, 38);
+}
+
+function condenseTitleForTag(title: string): string {
+    let t = title
+        .replace(/["\\]/g, '')
+        .replace(/^[📦🛍️🏷️✨]\s*/, '')
+        .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
+        .replace(/\b(Women's|Mens'|Men's|Womens)\b/gi, '')
+        .replace(/\b(Vintage Style|Pre-owned|Gently Used)\b/gi, '')
+        .replace(/\bSize\s*([0-9]+|[SMLX]+)\b/gi, '($1)')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    if (t.length <= 38) return t;
+
+    // Check if there is a dash / separator: "Brand Item - Extra Details"
+    const sepMatch = t.match(/^(.*?)(?:\s+[-–—:|]\s+)/);
+    if (sepMatch && sepMatch[1].length >= 8 && sepMatch[1].length <= 38) {
+        return sepMatch[1].trim();
+    }
+
+    // Try stripping parenthetical details
+    const strippedParens = t.replace(/\s*\([^)]*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+    if (strippedParens.length >= 8 && strippedParens.length <= 38) {
+        return strippedParens;
+    }
+
+    // If still over 38 chars, truncate cleanly at nearest word boundary
+    const base = strippedParens.length >= 12 ? strippedParens : t;
+    const cut = base.substring(0, 36);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 14 ? cut.substring(0, lastSpace) : cut).trim();
+}
+
+/**
  * Generate Ricochet Consign New Inventory Import CSV
  * Exact official template matching ricoconsign.com (Consigned Inventory)
+ *
+ * MAPPING STANDARD:
+ * - SKU: Clean org barcode (e.g. HUCK-1460)
+ * - Item Title: Short & sweet booth tag title (<= 38 chars) for physical thermal label stickers
+ * - Description: Full longer product name / title (for POS register search, cashier screen & receipts)
+ * - Web Description: Rich market writeup + condition notes for e-commerce
  */
 export function generateRicochetCsv(items: any[], options?: RicochetExportOptions): string {
     const headers = [
@@ -232,17 +309,17 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
     });
 
     const rows = filteredItems.map(item => {
-        let desc = item.conditionNotes || item.condition_notes || '';
+        let conditionText = item.conditionNotes || item.condition_notes || '';
         let webDesc = item.marketDescription || item.description || '';
         let brandStr = '';
         let catStr = 'Vintage Collectibles';
 
         if (item.rawAnalysis) {
             try {
-                const ai = JSON.parse(item.rawAnalysis);
+                const ai = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
                 const aiObj = Array.isArray(ai) ? ai[0] : ai;
                 if (aiObj && aiObj.condition_notes) {
-                    desc = aiObj.condition_notes;
+                    conditionText = aiObj.condition_notes;
                 }
                 if (aiObj && aiObj.keywords && Array.isArray(aiObj.keywords) && aiObj.keywords.length > 0) {
                     brandStr = aiObj.keywords[0];
@@ -251,37 +328,31 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
             } catch (e) {}
         }
 
-        // Prioritize concise booth tag title for physical thermal sticker labels (<= 42 chars)
-        let tagTitle = item.tagTitle || item.tag_title || '';
-        if (!tagTitle && item.rawAnalysis) {
-            try {
-                const ai = JSON.parse(item.rawAnalysis);
-                const aiObj = Array.isArray(ai) ? ai[0] : ai;
-                if (aiObj && (aiObj.tag_title || aiObj.tagTitle)) {
-                    tagTitle = aiObj.tag_title || aiObj.tagTitle;
-                }
-            } catch (e) {}
-        }
-        
-        let finalTitle = tagTitle || item.title || 'Inventory Item';
-        // Clean up redundant symbols & phrases that clutter physical barcode tags
-        finalTitle = finalTitle
+        // 1. Physical Barcode Sticker Title (Short & sweet, strictly <= 38 chars)
+        const tagTitle = extractShortTagTitle(item);
+
+        // 2. POS Register & Receipt Description (The full, longer descriptive name!)
+        const fullItemName = (item.title || item.identity || tagTitle)
             .replace(/["\\]/g, '')
-            .replace(/^[📦🛍️🏷️✨]\s*/, '')
-            .replace(/ - Multi-Quantity Lot Run of \d+ Issues/i, '')
+            .replace(/\s{2,}/g, ' ')
             .trim();
+        const cleanPosDescription = sanitizeRicochetDescription(fullItemName).substring(0, 250);
 
-        // If longer than 45 chars, truncate at nearest clean word boundary
-        if (finalTitle.length > 45) {
-            const cut = finalTitle.substring(0, 42);
-            const lastSpace = cut.lastIndexOf(' ');
-            finalTitle = (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
+        // 3. Web Description (Full catalog description + condition disclosure appended)
+        let fullWebText = webDesc || fullItemName;
+        if (conditionText && conditionText.trim() && conditionText.trim() !== fullItemName) {
+            const cleanCond = sanitizeRicochetDescription(conditionText);
+            if (cleanCond) {
+                fullWebText = fullWebText ? `${fullWebText} | Condition: ${cleanCond}` : `Condition: ${cleanCond}`;
+            }
         }
+        const cleanWebDesc = sanitizeRicochetDescription(fullWebText).substring(0, 500);
 
+        // 4. Clean Numeric Price
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
         const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '0.00';
 
-        // Ensure SKU strictly uses valid org prefix (never raw Appwrite ID)
+        // 5. Ensure SKU strictly uses valid org prefix (never raw Appwrite ID)
         let sku = (item.upc || item.sku || '').trim().toUpperCase();
         if (!sku || sku.length > 18 || !isOrgUpc(sku, orgPrefix)) {
             if (item.upc && /^[A-Z]{2,6}-\d+/i.test(item.upc)) {
@@ -292,15 +363,12 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
             }
         }
 
-        const cleanDesc = sanitizeRicochetDescription(desc).substring(0, 250);
-        const cleanWebDesc = sanitizeRicochetDescription(webDesc || desc).substring(0, 500);
-
         return [
             sku, // SKU strictly formatted with org prefix (e.g. HUCK-1460)
-            finalTitle, // Item Title (cleanly fits physical barcode sticker)
-            cleanDesc, // Description (clean, no internal bracket tags)
-            cleanWebDesc, // Web Description (clean, no internal tags)
-            cleanPrice, // Price (no $)
+            tagTitle, // Item Title (short & sweet: fits physical barcode sticker tag without wrapping)
+            cleanPosDescription, // Description (longer descriptive name: shown on POS register screen & receipt)
+            cleanWebDesc, // Web Description (clean e-commerce writeup + condition disclosure)
+            cleanPrice, // Price (clean decimal, no $)
             item.quantity || 1, // Quantity
             todayStr, // In-Stock Date
             '', // Category (leave blank so Ricochet uses default/consignor category without format errors)
