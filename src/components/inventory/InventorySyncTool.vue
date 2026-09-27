@@ -385,7 +385,9 @@ const parseMemoryDenProducts = (csvText) => {
   const idIdx = headers.findIndex(h => h === 'product id');
   const skuIdx = headers.findIndex(h => h === 'sku');
   const upcIdx = headers.findIndex(h => h === 'upc');
-  const nameIdx = headers.findIndex(h => h === 'name');
+  const nameIdx = headers.findIndex(h => h === 'name' || h === 'title');
+  const priceIdx = headers.findIndex(h => h === 'agreed price' || h === 'price');
+  const agedPriceIdx = headers.findIndex(h => h === 'aged price');
 
   if (nameIdx === -1 || upcIdx === -1) {
     addToast({ type: 'error', message: 'Could not find "Name" or "UPC" column in MemoryDen CSV.' });
@@ -398,21 +400,36 @@ const parseMemoryDenProducts = (csvText) => {
     const cols = splitCsvLine(lines[i]);
     if (cols.length < nameIdx) continue; // Skip invalid lines
     
-    const productId = idIdx !== -1 ? cols[idIdx] : '';
-    const extractedSku = skuIdx !== -1 ? cols[skuIdx]?.replace(/'/g, '').trim() : ''; // MD puts ' in front of SKU sometimes
+    const productId = idIdx !== -1 ? cols[idIdx]?.trim() : '';
+    const extractedSku = skuIdx !== -1 ? cols[skuIdx]?.replace(/['"]/g, '').trim() : ''; // MD puts ' in front of SKU sometimes
+    const extractedUpc = upcIdx !== -1 ? cols[upcIdx]?.replace(/['"]/g, '').trim() : '';
     const originalTitle = cols[nameIdx]?.trim() || '';
     if (!originalTitle) continue;
+
+    let csvPrice = 0;
+    if (priceIdx !== -1 && cols[priceIdx]) {
+      csvPrice = parseFloat(cols[priceIdx].replace(/[^0-9.]/g, '')) || 0;
+    }
+    if (csvPrice === 0 && agedPriceIdx !== -1 && cols[agedPriceIdx]) {
+      csvPrice = parseFloat(cols[agedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
+    }
 
     // Matching Logic Priority
     let matched = null;
     
-    // 1. Exact UPC match 
-    if (extractedSku) {
-      matched = activeInventory.value.find(item => item.upc === extractedSku);
+    // 1. Exact UPC match from CSV's UPC column (e.g. HUCK-5064 uploaded from Resale Command)
+    if (extractedUpc) {
+      const upcTarget = extractedUpc.toLowerCase();
+      matched = activeInventory.value.find(item => (item.upc || '').toLowerCase().trim() === upcTarget);
     }
-    // 2. Exact Location SKU match
+    // 2. Exact match by extractedSku against inventory UPC or locationSku
     if (!matched && extractedSku) {
-      matched = activeInventory.value.find(item => item.locationSku === extractedSku);
+      const skuTarget = extractedSku.toLowerCase();
+      matched = activeInventory.value.find(item => {
+        const u = (item.upc || '').toLowerCase().trim();
+        const l = (item.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
+        return u === skuTarget || l === skuTarget;
+      });
     }
     // 3. Fuzzy Title Fallback
     if (!matched) {
@@ -429,6 +446,8 @@ const parseMemoryDenProducts = (csvText) => {
       originalCols: cols,
       productId,
       extractedSku,
+      extractedUpc,
+      csvPrice,
       originalTitle,
       upcIdx,
       skuIdx,
@@ -502,6 +521,11 @@ const executeSync = async () => {
         const updates = {};
         if (row.extractedSku && item.locationSku !== row.extractedSku) {
           updates.locationSku = row.extractedSku;
+        }
+
+        // Sync list price if it changed in Ricochet POS
+        if (row.csvPrice > 0 && Math.abs((Number(item.resalePrice || item.price) || 0) - row.csvPrice) > 0.01) {
+          updates.resalePrice = row.csvPrice;
         }
         
         if (item.status !== 'placed' && item.status !== 'Sold' && item.status !== 'sold') {

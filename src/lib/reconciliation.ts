@@ -266,14 +266,17 @@ export async function reconcileRicochetInventory(
                 });
 
                 csvItems.forEach(csvRow => {
-                    const sku = (csvRow['SKU'] || csvRow['CustomLabel'] || csvRow['Barcode'] || csvRow['Product ID'] || '').trim();
-                    if (!isOrg(sku)) {
+                    const upc = (csvRow['UPC'] || csvRow['upc'] || '').trim();
+                    const sku = (csvRow['SKU'] || csvRow['sku'] || csvRow['CustomLabel'] || csvRow['Barcode'] || csvRow['Product ID'] || '').trim();
+                    const primaryCode = isOrg(upc) ? upc : (isOrg(sku) ? sku : (upc || sku));
+
+                    if (!isOrg(primaryCode)) {
                         result.ignoredNonOrgRows.push(csvRow);
                         return;
                     }
 
                     result.orgMatchedCsvRows++;
-                    const cleanSku = sku.toUpperCase();
+                    const cleanSku = primaryCode.toUpperCase();
                     const appwriteItem = appwriteByUpc.get(cleanSku);
 
                     if (appwriteItem) {

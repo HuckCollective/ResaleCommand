@@ -305,6 +305,31 @@
         </div>
       </div>
 
+      <!-- Booth Rent Deductions Alert Banner -->
+      <div v-if="detectedRentDeductions.length > 0" class="alert alert-secondary py-3 px-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm border border-secondary/20 bg-secondary/10">
+        <div class="flex items-start sm:items-center gap-2.5">
+          <Icon icon="solar:tag-price-bold" class="w-6 h-6 text-secondary shrink-0 mt-0.5 sm:mt-0" />
+          <div>
+            <div class="font-bold text-xs sm:text-sm text-base-content">
+              Found {{ detectedRentDeductions.length }} Space Rental Deductions (${{ totalRentDetected.toFixed(2) }} total)
+            </div>
+            <div class="text-[11px] opacity-75">
+              Memory Den deducted booth rent from these payouts. These are 100% tax-deductible operating expenses (Schedule C Line 20b).
+            </div>
+          </div>
+        </div>
+        <button 
+          type="button" 
+          class="btn btn-xs sm:btn-sm btn-secondary font-bold shrink-0 shadow-xs" 
+          :disabled="isLoggingRent" 
+          @click="logRentDeductionsToExpenses"
+        >
+          <Icon v-if="isLoggingRent" icon="solar:refresh-circle-bold" class="w-4 h-4 animate-spin" />
+          <Icon v-else icon="solar:document-add-bold" class="w-4 h-4" />
+          Log to Tax Expenses (${{ totalRentDetected.toFixed(2) }})
+        </button>
+      </div>
+
       <!-- Metrics & Overview Header -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
@@ -734,7 +759,7 @@ import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
-import { databases } from '../../lib/appwrite';
+import { databases, ID } from '../../lib/appwrite';
 import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem } from '../../lib/inventory';
 import { 
   getSyncHistory, 
@@ -780,6 +805,42 @@ const selectedLocationId = ref<string>('');
 const syncRows = ref<any[]>([]);
 const rawCsvHeader = ref<string>('');
 const rawCsvLines = ref<string[]>([]);
+
+const detectedRentDeductions = ref<{ title: string; amount: number; date: string }[]>([]);
+const isLoggingRent = ref<boolean>(false);
+
+const totalRentDetected = computed(() => {
+  return detectedRentDeductions.value.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+});
+
+const logRentDeductionsToExpenses = async () => {
+  if (detectedRentDeductions.value.length === 0) return;
+  isLoggingRent.value = true;
+  try {
+    const locName = currentLocation.value?.name || 'Memory Den';
+    let count = 0;
+    for (const rent of detectedRentDeductions.value) {
+      await databases.createDocument(DB_ID, 'expenses', ID.unique(), {
+        cartId: `RENT-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        tenantId: team.value?.$id || 'personal',
+        amount: Number(rent.amount) || 382.50,
+        note: `${locName} Booth Rent - ${rent.title} (${rent.date || 'Monthly'})`,
+        date: rent.date ? new Date(rent.date).toISOString() : new Date().toISOString()
+      });
+      count++;
+    }
+    addToast({ 
+      type: 'success', 
+      message: `Successfully logged ${count} booth rent deductions ($${totalRentDetected.value.toFixed(2)}) to your tax expenses ledger!` 
+    });
+    detectedRentDeductions.value = [];
+  } catch (err: any) {
+    console.error('Failed to log rent expenses:', err);
+    addToast({ type: 'error', message: 'Failed to log rent expenses: ' + err.message });
+  } finally {
+    isLoggingRent.value = false;
+  }
+};
 
 const currentLocation = computed(() => {
   return locations.value.find(l => l.$id === selectedLocationId.value) || null;
@@ -1173,12 +1234,16 @@ const processCsvFile = (file: File) => {
 
       const headerCols = splitCsvLine(lines[0]).map(h => (h || '').trim().toLowerCase().replace(/["']/g, ''));
       const skuIdx = headerCols.findIndex(h => h === 'sku' || h.includes('sku') || h.includes('barcode') || h.includes('custom sku'));
+      const upcIdx = headerCols.findIndex(h => h === 'upc' || h.includes('upc'));
       const prodIdIdx = headerCols.findIndex(h => h === 'product id' || h.includes('product id') || h.includes('item id'));
-      const nameIdx = headerCols.findIndex(h => h === 'name' || h.includes('name') || h.includes('title') || h.includes('item'));
+      const nameIdx = headerCols.findIndex(h => h === 'item' || h === 'name' || h.includes('name') || h.includes('title') || h.includes('item'));
+      const saleIdx = headerCols.findIndex(h => h === 'sale' || h.includes('ticket') || h.includes('receipt') || h.includes('invoice'));
+      const soldDateIdx = headerCols.findIndex(h => h === 'sold' || h === 'sale date' || h === 'date sold');
+      const paidDateIdx = headerCols.findIndex(h => h === 'paid' || h === 'payout date');
       
       const amountIdx = headerCols.findIndex(h => h === 'payout' || h === 'net' || h === 'net payout' || h === 'vendor payout' || h === 'consignor amount' || h === 'net amount' || h === 'sold amount' || h === 'take home' || h === 'final amount' || h === 'amount');
       const agedPriceIdx = headerCols.findIndex(h => h === 'aged price' || h.includes('aged price'));
-      const agreedPriceIdx = headerCols.findIndex(h => h === 'agreed price' || h.includes('agreed price') || h === 'gross' || h === 'gross amount' || h === 'price' || h.includes('price') || h.includes('total'));
+      const agreedPriceIdx = headerCols.findIndex(h => h === 'agreed' || h === 'agreed price' || h.includes('agreed') || h === 'gross' || h === 'gross amount' || h === 'price' || h.includes('price') || h.includes('total'));
       
       const splitIdx = headerCols.findIndex(h => h === 'consignor %' || h.includes('consignor %') || h === 'split / cost' || h.includes('split') || h.includes('consignor percent'));
       const statusIdx = headerCols.findIndex(h => h === 'status' || h.includes('status') || h === 'inventory' || h.includes('state'));
@@ -1191,16 +1256,45 @@ const processCsvFile = (file: File) => {
       const rows: any[] = [];
       const cleanOrg = (upcPrefix.value?.trim() || 'HUCK-').replace(/[-_]$/, '').toUpperCase();
       let nonOrgSkipped = 0;
+      detectedRentDeductions.value = [];
 
       for (let i = 1; i < lines.length; i++) {
         const cols = splitCsvLine(lines[i]);
         if (cols.length === 0 || !cols.some(c => c.trim().length > 0)) continue;
 
+        let fullItemName = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : `Item ${i}`;
+
+        // Ignore summary lines or empty lines
+        const lowerName = fullItemName.toLowerCase();
+        if (
+          lowerName.startsWith('total for payout') || 
+          lowerName.startsWith('total paid') || 
+          lowerName.startsWith('total:') ||
+          (!fullItemName && !cols.some(c => c.trim().length > 0))
+        ) {
+          continue;
+        }
+
+        // Check for booth rent deduction rows (e.g. "(Credit) Space Rental 08/31/2026")
+        if (lowerName.includes('space rental') || lowerName.includes('booth rent')) {
+          const rentAmt = Math.abs(parseFloat((cols[amountIdx] || cols[agreedPriceIdx] || '382.50').replace(/[^0-9.]/g, '')) || 382.50);
+          const rentDate = (soldDateIdx !== -1 && cols[soldDateIdx]) || (paidDateIdx !== -1 && cols[paidDateIdx]) || '';
+          detectedRentDeductions.value.push({
+            title: fullItemName,
+            amount: rentAmt,
+            date: rentDate
+          });
+          continue;
+        }
+
         let rawSku = skuIdx !== -1 ? cols[skuIdx] : (prodIdIdx !== -1 ? cols[prodIdIdx] : '');
         let cleanSku = (rawSku || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+        let rawUpc = upcIdx !== -1 ? cols[upcIdx] : '';
+        let cleanUpc = (rawUpc || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
         let rowQty = qtyIdx !== -1 ? parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || 1 : 1;
+        let saleTicketId = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
+        let soldDate = soldDateIdx !== -1 ? (cols[soldDateIdx] || '').trim() : '';
 
-        let fullItemName = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : `Item ${i}`;
         let name = fullItemName;
 
         // Fallback SKU extraction from title like "Item Title - 0EJ001"
@@ -1213,9 +1307,19 @@ const processCsvFile = (file: File) => {
         }
 
         // Strict Org Prefix Filter (e.g. only HUCK-*)
-        const skuUpper = cleanSku.toUpperCase();
-        const isOrgItem = skuUpper.startsWith(`${cleanOrg}-`) || skuUpper.startsWith(cleanOrg);
-        if (onlySyncOrgPrefix.value && cleanSku && !isOrgItem) {
+        const hasOrgPrefix = (cleanUpc && (cleanUpc.toUpperCase().startsWith(`${cleanOrg}-`) || cleanUpc.toUpperCase().startsWith(cleanOrg))) ||
+                             (cleanSku && (cleanSku.toUpperCase().startsWith(`${cleanOrg}-`) || cleanSku.toUpperCase().startsWith(cleanOrg)));
+        const matchesInventoryItem = activeItems.some(item => {
+          const l = (item.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
+          const u = (item.upc || '').toLowerCase().trim();
+          const s = (item.sku || '').toLowerCase().trim();
+          const target = cleanSku.toLowerCase();
+          return (l && l === target) || (u && u === target) || (s && s === target);
+        });
+
+        const isOrgItem = hasOrgPrefix || matchesInventoryItem;
+
+        if (onlySyncOrgPrefix.value && (cleanSku || cleanUpc) && !isOrgItem) {
           nonOrgSkipped++;
           continue;
         }
@@ -1259,19 +1363,20 @@ const processCsvFile = (file: File) => {
         // Match against existing inventory items
         let matched = null;
 
-        // 1. Match by exact or normalized UPC (Highest Authority)
-        if (cleanSku && activeItems.length > 0) {
-          const target = cleanSku.toLowerCase();
+        // 1. Match by exact UPC from CSV's UPC column (Highest Authority: e.g. HUCK-5064)
+        if (cleanUpc && activeItems.length > 0) {
+          const target = cleanUpc.toLowerCase();
           matched = activeItems.find(item => (item?.upc || '').toLowerCase().trim() === target);
         }
 
-        // 2. Match by SKU or locationSku
+        // 2. Match by cleanSku against UPC or locationSku
         if (!matched && cleanSku && activeItems.length > 0) {
           const target = cleanSku.toLowerCase();
           matched = activeItems.find(item => {
+            const iUpc = (item?.upc || '').toLowerCase().trim();
             const iLocSku = (item?.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
             const iSku = (item?.sku || '').toLowerCase().trim();
-            return iLocSku === target || iSku === target;
+            return iUpc === target || iLocSku === target || iSku === target;
           });
         }
 
@@ -1283,6 +1388,7 @@ const processCsvFile = (file: File) => {
         rows.push({
           originalLineIndex: i,
           extractedSku: cleanSku,
+          extractedUpc: cleanUpc,
           itemName: name,
           listedPrice: grossPrice,
           netSoldPrice: netSoldPrice,
@@ -1291,6 +1397,8 @@ const processCsvFile = (file: File) => {
           csvQty: rowQty,
           salePrice: netSoldPrice, // Fallback compatibility
           status: isSoldOrPaid ? 'sold' : 'instock',
+          saleTicketId,
+          soldDate,
           mappedItem: matched || null,
           searchQuery: '',
           isSearching: false,
@@ -1753,8 +1861,8 @@ const executeSync = async () => {
             saleDoc = await withRetry(() => salesApi.createSale({
               soNumber: soNum,
               warehouseId: currentLocation.value?.$id || '',
-              orderId: item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`,
-              saleDate: new Date().toISOString(),
+              orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
+              saleDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString(),
               status: 'Sold',
               grossAmount: gross,
               commissionFee: commFee,
@@ -1814,8 +1922,8 @@ const executeSync = async () => {
             const saleDoc = await withRetry(() => salesApi.createSale({
               soNumber: soNum,
               warehouseId: currentLocation.value?.$id || '',
-              orderId: item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`,
-              saleDate: new Date().toISOString(),
+              orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
+              saleDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString(),
               status: 'Sold',
               grossAmount: gross,
               commissionFee: commFee,
@@ -1839,6 +1947,10 @@ const executeSync = async () => {
         }
         if (row.csvQty !== undefined && row.csvQty > 0 && item.quantity !== row.csvQty) {
           updateData.quantity = row.csvQty;
+        }
+        // Sync updated list price if changed in Ricochet POS
+        if (row.listedPrice > 0 && Math.abs((Number(item.resalePrice || item.price) || 0) - row.listedPrice) > 0.01) {
+          updateData.resalePrice = row.listedPrice;
         }
       }
 

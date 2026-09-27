@@ -1,7 +1,7 @@
 # 🛡️ Appwrite Complete Schema & Storage Audit Report
 
 > **Audit Type:** 100% Read-Only Full Database Inspection (Zero changes made)
-> **Last Audited:** Wednesday, September 9, 2026 at 8:35:58 AM PDT
+> **Last Audited:** Saturday, September 26, 2026 at 5:26:51 PM PDT
 > **Endpoint:** `https://sfo.cloud.appwrite.io/v1`
 > **Project ID:** `69714b35003a8adab6bb`
 > **Database ID:** `resale_db`
@@ -10,7 +10,7 @@
 
 ## 1. Database Collections Overview
 
-Found **15** total collections in database `resale_db`:
+Found **16** total collections in database `resale_db`:
 
 | Collection ID | Name | Document Security | Status |
 |---|---|---|---|
@@ -29,6 +29,7 @@ Found **15** total collections in database `resale_db`:
 | `purchases` | Purchases | DLS Enabled | ✅ Active |
 | `sales` | Sales | DLS Enabled | ✅ Active |
 | `warehouses` | Warehouses | DLS Enabled | ✅ Active |
+| `manifests` | Outbound Manifests | Standard | ✅ Active |
 
 ---
 
@@ -263,8 +264,10 @@ Found **15** total collections in database `resale_db`:
 | `commissionRate` | `double` | - | ✅ Active (Status: available) | ⚪ Synced |
 | `monthlyRent` | `double` | - | ✅ Active (Status: available) | ⚪ Synced |
 | `tenantId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `code` | `string` | 16 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `categories` | `string` | 500 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 
-**Collection Summary:** ✅ **5** matched | ➕ **0** missing | ℹ️ **0** extra custom attributes
+**Collection Summary:** ✅ **5** matched | ➕ **0** missing | ℹ️ **2** extra custom attributes
 
 **Indexes (1 active):**
 
@@ -447,6 +450,35 @@ Found **15** total collections in database `resale_db`:
 | `description` | `string` | 255 | No | ✅ available |
 
 **Total Attributes:** 5
+
+*No custom indexes configured for this collection.*
+
+---
+
+### 📁 Collection: `manifests` (Outbound Manifests)
+
+*Auxiliary / Custom Collection (No strict blueprint assigned)*
+
+| Attribute Key | Live Type | Size / Format | Required | Status |
+|---|---|---|---|---|
+| `name` | `string` | 255 | Yes | ✅ available |
+| `tenantId` | `string` | 255 | Yes | ✅ available |
+| `locationId` | `string` | 255 | No | ✅ available |
+| `locationName` | `string` | 255 | Yes | ✅ available |
+| `status` | `string` | 50 | Yes | ✅ available |
+| `itemIds` | `string` | 1000000 | No | ✅ available |
+| `itemsSnapshot` | `string` | 1000000 | No | ✅ available |
+| `itemCount` | `integer` | - | No | ✅ available |
+| `totalCost` | `double` | - | No | ✅ available |
+| `totalRetail` | `double` | - | No | ✅ available |
+| `estimatedNet` | `double` | - | No | ✅ available |
+| `commissionRate` | `double` | - | No | ✅ available |
+| `exportedAt` | `datetime` | - | No | ✅ available |
+| `placedAt` | `datetime` | - | No | ✅ available |
+| `notes` | `string` | 5000 | No | ✅ available |
+| `placedItemIds` | `string` | 1000000 | No | ✅ available |
+
+**Total Attributes:** 16
 
 *No custom indexes configured for this collection.*
 
