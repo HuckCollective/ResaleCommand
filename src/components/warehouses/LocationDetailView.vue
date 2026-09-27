@@ -148,448 +148,361 @@
       <!-- ========================================================================= -->
       <div v-if="activeTab === 'manifests'" class="space-y-6">
 
-        <!-- 1. Active / Paused Draft Drop -->
-        <div class="card bg-base-100 border border-base-200 shadow-md p-5 sm:p-6 rounded-3xl space-y-4">
-          <div class="flex items-center justify-between gap-3 flex-wrap border-b border-base-200/60 pb-3">
+        <!-- Unified Outbound Drops & Manifests Hub -->
+        <div class="card bg-base-100 border border-base-200 shadow-md p-5 rounded-box space-y-4">
+          <!-- Card Header & Actions -->
+          <div class="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-base-200">
+            <div>
+              <h3 class="font-black text-base sm:text-lg flex items-center gap-2">
+                <Icon icon="solar:box-minimalistic-bold" class="w-5 h-5 text-primary" />
+                <span>Outbound Drops &amp; Manifests ({{ locationManifests.length }})</span>
+              </h3>
+              <p class="text-xs opacity-60">
+                All drops staged, exported, and placed at {{ warehouse.name }}. Inspect items, export to POS, open in tray, or manage shipments.
+              </p>
+            </div>
+            
             <div class="flex items-center gap-2">
-              <div class="w-9 h-9 rounded-2xl bg-warning/15 text-warning flex items-center justify-center shrink-0">
-                <Icon icon="solar:clock-circle-bold" class="w-5 h-5" />
-              </div>
-              <div>
-                <h3 class="font-black text-base sm:text-lg">Active Drop Draft</h3>
-                <p class="text-xs opacity-60">Staged inventory preparing for delivery to {{ warehouse.name }}</p>
-              </div>
-            </div>
-
-            <!-- Header Actions for Draft -->
-            <div v-if="activeDraft" class="flex items-center gap-2">
-              <button 
-                v-if="activeDraft.status === 'draft'"
-                type="button" 
-                @click="pauseActiveManifest" 
-                class="btn btn-xs btn-outline border-warning text-warning hover:bg-warning/20 font-bold gap-1"
-                title="Pause this drop"
-              >
-                <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5" />
-                <span>Pause</span>
-              </button>
-              <button 
-                v-else-if="activeDraft.status === 'paused'"
-                type="button" 
-                @click="resumeManifest(activeDraft.$id)" 
-                class="btn btn-xs btn-warning font-bold gap-1"
-                title="Resume this drop"
-              >
-                <Icon icon="solar:play-circle-bold" class="w-3.5 h-3.5" />
-                <span>Resume</span>
-              </button>
-
               <button 
                 type="button" 
-                @click="openDraftInTray(activeDraft)" 
-                class="btn btn-xs btn-primary font-bold gap-1 shadow-xs"
+                @click="openLocationStagingTray"
+                class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 rounded-btn font-bold gap-1.5 shadow-2xs"
+                title="Open the Outbound Staging Tray"
               >
-                <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5" />
-                <span>Open in Tray</span>
+                <Icon icon="solar:inbox-out-bold" class="w-4 h-4 text-primary" />
+                <span>Staging Tray</span>
               </button>
-            </div>
-          </div>
-
-          <!-- Active Draft Content -->
-          <div v-if="activeDraft" class="space-y-4">
-            <!-- Summary Banner -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-base-200/60 p-3 rounded-2xl border border-base-300/70 text-center text-xs">
-              <div>
-                <span class="opacity-60 text-[10px] uppercase font-bold block">Drop Name</span>
-                <span class="font-bold text-base-content truncate block">{{ activeDraft.name }}</span>
-              </div>
-              <div>
-                <span class="opacity-60 text-[10px] uppercase font-bold block">Total Items</span>
-                <span class="font-mono font-black text-primary text-sm">
-                  {{ activeDraftUnits }} units
-                  <span v-if="activeDraftUnits !== activeDraftItems.length" class="text-[10px] opacity-70 block font-normal font-sans">({{ activeDraftItems.length }} unique)</span>
-                </span>
-              </div>
-              <div>
-                <span class="opacity-60 text-[10px] uppercase font-bold block">Tag Retail Value</span>
-                <span class="font-mono font-black text-secondary text-sm">${{ (activeDraftRetail || activeDraft.totalRetail || 0).toFixed(2) }}</span>
-              </div>
-              <div>
-                <span class="opacity-60 text-[10px] uppercase font-bold block">Est. Net (after comm.)</span>
-                <span class="font-mono font-black text-success text-sm">${{ (activeDraftNet || activeDraft.estimatedNet || 0).toFixed(2) }}</span>
-              </div>
-            </div>
-
-            <!-- Staged Items List with Links to Inventory -->
-            <div v-if="activeDraftItems.length > 0" class="space-y-2">
-              <div class="text-xs font-bold opacity-75 flex items-center justify-between">
-                <span>Staged Items ({{ activeDraftUnits }} units<template v-if="activeDraftUnits !== activeDraftItems.length"> • {{ activeDraftItems.length }} unique</template>):</span>
-                <span class="text-[11px] opacity-60">Click item to view in catalog</span>
-              </div>
               
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                <div 
-                  v-for="item in activeDraftItems" 
-                  :key="item.$id"
-                  @click="openItemEditor(item)"
-                  class="flex items-center gap-2.5 p-2 rounded-xl bg-base-200/50 border border-base-300 hover:border-primary/40 hover:bg-base-200/80 transition-all group cursor-pointer"
-                  title="Click to view full specs & edit in ItemDrawer"
-                >
-                  <div class="w-10 h-10 rounded-lg bg-base-300 overflow-hidden shrink-0">
-                    <img 
-                      v-if="item.imageId" 
-                      :src="getItemPhotoUrl(item.imageId)" 
-                      @error="handleImageError($event, item.imageId)"
-                      class="w-full h-full object-cover" 
-                    />
-                    <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
-                  </div>
-                  <div class="min-w-0 flex-1 text-xs">
-                    <span class="font-bold truncate block group-hover:text-primary transition-colors">
-                      {{ item.title }}
-                    </span>
-                    <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5 flex-wrap">
-                      <span v-if="item.upc" class="text-primary font-bold">{{ item.upc }}</span>
-                      <span v-if="item.quantity > 1" class="badge badge-xs badge-outline badge-primary font-bold">Qty: {{ item.quantity }}</span>
-                      <span>•</span>
-                      <span class="text-secondary font-bold">${{ (Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice) || 0).toFixed(2) }}</span>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-1 shrink-0">
-                    <button 
-                      type="button" 
-                      class="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 text-primary hover:bg-primary/15 transition-opacity"
-                      title="Edit item specs"
-                      @click.stop="openItemEditor(item)"
-                    >
-                      <Icon icon="solar:pen-bold" class="w-3 h-3" />
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 text-error hover:bg-error/15 transition-opacity"
-                      title="Remove from drop"
-                      @click.stop="handleRemoveItemFromDraft(item.$id)"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Drop Primary Actions: Verify Stock & Export CSV -->
-            <div class="pt-3 flex items-center justify-between gap-2 border-t border-base-200 flex-wrap">
-              <div class="text-xs opacity-60 font-mono">
-                {{ activeDraftUnits }} units ({{ activeDraftItems.length }} unique items) staged • Ready for stocking or POS export
-              </div>
-              <div class="flex items-center gap-2">
-                <button 
-                  type="button" 
-                  @click="exportDraftCsv" 
-                  class="btn btn-sm btn-outline border-base-300 hover:border-base-content/40 font-bold gap-1.5"
-                  :disabled="activeDraftItems.length === 0"
-                  title="Download clean CSV for Ricochet POS"
-                >
-                  <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success" />
-                  <span>Export POS CSV</span>
-                </button>
-                <button 
-                  type="button" 
-                  @click="placeAllDraftItems" 
-                  class="btn btn-sm btn-success font-black text-success-content shadow-md gap-1.5"
-                  :disabled="activeDraftItems.length === 0 || isPlacingBatch"
-                  title="Verify Stock: marks all items PLACED at this location"
-                >
-                  <span v-if="isPlacingBatch" class="loading loading-spinner loading-xs"></span>
-                  <template v-else>
-                    <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
-                    <span>Verify Stock (${{ activeDraft.totalRetail.toFixed(2) }})</span>
-                  </template>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Empty Active Draft State -->
-          <div v-else class="text-center py-8 bg-base-200/30 rounded-2xl border border-dashed border-base-300 space-y-2">
-            <Icon icon="solar:box-minimalistic-bold" class="w-8 h-8 opacity-40 mx-auto text-primary" />
-            <div class="font-bold text-sm">No Active Drop Draft</div>
-            <p class="text-xs opacity-60 max-w-sm mx-auto">Stage items from Inventory to build a drop manifest, or create a new draft drop here.</p>
-            <div class="pt-2">
               <button 
                 type="button" 
-                class="btn btn-sm btn-primary font-bold gap-1"
-                @click="handleCreateNewDraft"
+                @click="handleCreateNewDraft" 
+                class="btn btn-xs sm:btn-sm btn-primary rounded-btn font-bold gap-1.5 shadow-xs"
+                title="Create a new drop draft for this location"
               >
                 <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
-                <span>+ Create New Drop for {{ warehouse.name }}</span>
+                <span>+ Create New Drop</span>
               </button>
             </div>
           </div>
-        </div>
 
-        <!-- 2. In-Transit & Exported Drops awaiting In-Store Verification (PO Style Receiving) -->
-        <div v-if="exportedDrops.length > 0" class="space-y-4">
-          <div class="flex items-center gap-2">
-            <Icon icon="solar:checklist-bold" class="w-5 h-5 text-info" />
-            <h3 class="font-black text-base sm:text-lg">In-Transit &amp; Exported Drops • Ready for In-Store Placement</h3>
+          <!-- Status Filter Pills -->
+          <div v-if="locationManifests.length > 0" class="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-mono">
+            <button 
+              type="button" 
+              @click="dropStatusFilter = 'all'" 
+              class="btn btn-xs rounded-btn font-bold gap-1"
+              :class="dropStatusFilter === 'all' ? 'btn-neutral' : 'btn-ghost border border-base-300'"
+            >
+              <span>All Drops</span>
+              <span class="badge badge-xs">{{ locationManifests.length }}</span>
+            </button>
+
+            <button 
+              v-if="draftDropsCount > 0"
+              type="button" 
+              @click="dropStatusFilter = 'draft'" 
+              class="btn btn-xs rounded-btn font-bold gap-1"
+              :class="dropStatusFilter === 'draft' ? 'btn-primary' : 'btn-ghost border border-base-300'"
+            >
+              <span>Drafts</span>
+              <span class="badge badge-xs badge-primary">{{ draftDropsCount }}</span>
+            </button>
+
+            <button 
+              v-if="exportedDropsCount > 0"
+              type="button" 
+              @click="dropStatusFilter = 'exported'" 
+              class="btn btn-xs rounded-btn font-bold gap-1"
+              :class="dropStatusFilter === 'exported' ? 'btn-info text-info-content' : 'btn-ghost border border-base-300'"
+            >
+              <span>Exported &amp; In-Transit</span>
+              <span class="badge badge-xs badge-info">{{ exportedDropsCount }}</span>
+            </button>
+
+            <button 
+              v-if="placedDropsCount > 0"
+              type="button" 
+              @click="dropStatusFilter = 'placed'" 
+              class="btn btn-xs rounded-btn font-bold gap-1"
+              :class="dropStatusFilter === 'placed' ? 'btn-success text-success-content' : 'btn-ghost border border-base-300'"
+            >
+              <span>Placed Archive</span>
+              <span class="badge badge-xs badge-success">{{ placedDropsCount }}</span>
+            </button>
           </div>
 
-          <div v-for="drop in exportedDrops" :key="drop.$id" class="card bg-base-100 border border-info/30 shadow-md p-5 sm:p-6 rounded-box space-y-4">
-            <!-- Drop Header -->
-            <div class="flex items-center justify-between gap-3 flex-wrap border-b border-base-200/60 pb-3">
-              <div>
-                <div class="flex items-center gap-2 flex-wrap">
-                  <h4 class="font-black text-base">{{ drop.name }}</h4>
-                  <span 
-                    class="badge badge-xs font-mono font-bold uppercase"
-                    :class="drop.status === 'in-transit' ? 'badge-warning text-warning-content' : 'badge-info text-info-content'"
-                  >
-                    {{ drop.status === 'in-transit' ? '🔒 In-Transit' : 'Exported to POS' }}
-                  </span>
-                </div>
-                <div class="text-xs opacity-60 font-mono mt-0.5">
-                  Exported {{ formatDate(drop.exportedAt || drop.$updatedAt) }} • {{ drop.itemCount || drop.itemIds.length }} total items • ${{ (Number(drop.totalRetail) || 0).toFixed(2) }} Tag Retail
-                </div>
-              </div>
-
-              <!-- Placement Progress Metric & In-Transit Actions -->
-              <div class="flex items-center gap-2 flex-wrap">
-                <div class="text-right mr-1">
-                  <div class="font-black text-xs font-mono text-success">
-                    {{ (drop.placedItemIds || []).length }} of {{ drop.itemIds.length }} Placed
-                  </div>
-                  <div class="text-[10px] opacity-60 font-mono">
-                    {{ Math.round(((drop.placedItemIds || []).length / Math.max(1, drop.itemIds.length)) * 100) }}% complete
-                  </div>
-                </div>
-
-                <button 
-                  type="button" 
-                  class="btn btn-xs btn-ghost border border-base-300 rounded-btn font-bold gap-1 shadow-2xs"
-                  @click="openDraftInTray(drop)"
-                  title="Open this drop in the Outbound Drop Tray"
-                >
-                  <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
-                  <span>Tray</span>
-                </button>
-
-                <button 
-                  v-if="(drop.placedItemIds || []).length > 0"
-                  type="button" 
-                  class="btn btn-xs btn-ghost border border-info/40 text-info hover:bg-info/10 rounded-btn font-bold gap-1 shadow-2xs"
-                  @click="handleUnverifyDrop(drop)"
-                  title="Uncheck all items on this drop"
-                >
-                  <Icon icon="solar:refresh-circle-bold" class="w-3.5 h-3.5" />
-                  <span>Unverify All</span>
-                </button>
-
-                <button 
-                  type="button" 
-                  class="btn btn-xs btn-warning btn-outline rounded-btn font-bold gap-1 shadow-2xs"
-                  @click="handleUnlockDrop(drop)"
-                  title="Unlock drop back to draft to add or edit items"
-                >
-                  <Icon icon="solar:lock-unlocked-bold" class="w-3.5 h-3.5" />
-                  <span>Unlock to Draft</span>
-                </button>
-
-                <button 
-                  type="button" 
-                  class="btn btn-xs btn-outline border-success text-success hover:bg-success/20 font-bold gap-1 rounded-btn shadow-2xs"
-                  @click="placeAllRemainingItems(drop)"
-                  :disabled="isPlacingBatch"
-                  title="Mark all items as placed at this location"
-                >
-                  <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                  <span>Place All</span>
-                </button>
-              </div>
+          <!-- Empty State -->
+          <div v-if="filteredManifests.length === 0" class="text-center py-10 bg-base-200/30 rounded-2xl border border-dashed border-base-300 space-y-2">
+            <Icon icon="solar:box-minimalistic-bold" class="w-8 h-8 opacity-40 mx-auto text-primary" />
+            <div class="font-bold text-sm">No drops found</div>
+            <p class="text-xs opacity-60 max-w-sm mx-auto">
+              {{ dropStatusFilter === 'all' ? 'No drops have been created for this location yet.' : 'No drops matching the selected filter.' }}
+            </p>
+            <div v-if="dropStatusFilter !== 'all'" class="pt-1">
+              <button type="button" @click="dropStatusFilter = 'all'" class="btn btn-xs btn-ghost border border-base-300">
+                Show All Drops
+              </button>
             </div>
-
-            <!-- In-Store Item-by-Item Receiving Checklist (PO Style) -->
-            <div class="space-y-2">
-              <div class="flex items-center justify-between text-xs opacity-75">
-                <span class="font-bold">Check off items as you place them on physical booth shelves:</span>
-                <span class="text-[11px] opacity-60">Tap item to toggle placed status</span>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
-                <div 
-                  v-for="itemId in drop.itemIds" 
-                  :key="itemId"
-                  class="flex items-center gap-3 p-2.5 rounded-box border transition-all cursor-pointer select-none"
-                  :class="isItemPlaced(drop, itemId) ? 'bg-success/10 border-success/40' : 'bg-base-200/50 border-base-300 hover:border-primary/40'"
-                  @click="toggleItemPlacement(drop, itemId)"
-                >
-                  <input 
-                    type="checkbox" 
-                    :checked="isItemPlaced(drop, itemId)"
-                    class="checkbox checkbox-sm checkbox-success"
-                    @click.stop="toggleItemPlacement(drop, itemId)"
-                  />
-                  <div class="w-10 h-10 rounded-box bg-base-300 overflow-hidden shrink-0">
-                    <img 
-                      v-if="getItemRecord(drop, itemId)?.imageId" 
-                      :src="getItemPhotoUrl(getItemRecord(drop, itemId)?.imageId)" 
-                      @error="handleImageError($event, getItemRecord(drop, itemId)?.imageId)"
-                      class="w-full h-full object-cover" 
-                    />
-                    <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="font-bold text-xs truncate hover:text-primary transition-colors cursor-pointer" :class="{'line-through opacity-70': isItemPlaced(drop, itemId)}" @click.stop="openItemEditor(getItemRecord(drop, itemId))" title="Click to view & edit in ItemDrawer">
-                      {{ getItemRecord(drop, itemId)?.title || 'Item ' + itemId }}
-                    </div>
-                    <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
-                      <span v-if="getItemRecord(drop, itemId)?.upc" class="font-bold text-primary">{{ getItemRecord(drop, itemId)?.upc }}</span>
-                      <span>•</span>
-                      <span class="text-secondary font-bold">${{ (Number(getItemRecord(drop, itemId)?.boutiquePrice || getItemRecord(drop, itemId)?.resalePrice || getItemRecord(drop, itemId)?.price || getItemRecord(drop, itemId)?.listPrice) || 0).toFixed(2) }}</span>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-1.5 shrink-0">
-                    <span v-if="isItemPlaced(drop, itemId)" class="badge badge-xs badge-success text-success-content font-bold">Placed</span>
-                    <button 
-                      type="button" 
-                      class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary hover:bg-base-300 transition-colors"
-                      title="Inspect & edit item specs in ItemDrawer"
-                      @click.stop="openItemEditor(getItemRecord(drop, itemId))"
-                    >
-                      <Icon icon="solar:pen-bold" class="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Footer: Finalize Drop Action -->
-            <div class="pt-3 border-t border-base-200 flex items-center justify-between gap-2 flex-wrap">
-              <span class="text-xs opacity-60">
-                When all items are placed in the booth, finalize this drop to archive it.
-              </span>
-              <button 
-                type="button" 
-                class="btn btn-sm btn-success font-black text-success-content shadow-md gap-1.5 rounded-btn"
-                @click="finalizeDrop(drop)"
-              >
-                <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
-                <span>Finish &amp; Finalize Drop Placement</span>
+            <div v-else class="pt-2">
+              <button type="button" @click="handleCreateNewDraft" class="btn btn-sm btn-primary font-bold gap-1">
+                <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
+                <span>+ Create First Drop for {{ warehouse.name }}</span>
               </button>
             </div>
           </div>
-        </div>
 
-        <!-- 3. Placed Drops Archive History with Expandable Inspection & Rollback -->
-        <div v-if="placedDrops.length > 0" class="card bg-base-100 border border-base-200 shadow-md p-5 rounded-box space-y-4">
-          <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-base-200">
-            <div>
-              <h3 class="font-black text-base flex items-center gap-2">
-                <Icon icon="solar:history-bold" class="w-4 h-4 text-primary" />
-                <span>Past Placed Drops Archive ({{ placedDrops.length }})</span>
-              </h3>
-              <p class="text-xs opacity-60">Finalized drops placed at {{ warehouse.name }}. You can inspect items, open in tray, or undo placement.</p>
-            </div>
-          </div>
-
-          <div class="space-y-3">
+          <!-- All Drops Accordion List (Unified with Archived Drop styling) -->
+          <div v-else class="space-y-3">
             <div 
-              v-for="pd in placedDrops" 
-              :key="pd.$id" 
+              v-for="drop in filteredManifests" 
+              :key="drop.$id" 
               class="border border-base-300 rounded-box bg-base-200/30 overflow-hidden transition-all"
             >
-              <!-- Placed Drop Header Strip -->
-              <div class="p-3.5 flex items-center justify-between gap-3 flex-wrap bg-base-100">
+              <!-- Drop Header Strip -->
+              <div 
+                class="p-3.5 flex items-center justify-between gap-3 flex-wrap bg-base-100 cursor-pointer hover:bg-base-200/40 transition-colors select-none"
+                @click="toggleExpandDrop(drop.$id)"
+              >
                 <div class="flex items-center gap-3 min-w-0">
                   <button 
                     type="button" 
-                    @click="toggleExpandPlacedDrop(pd.$id)"
+                    @click.stop="toggleExpandDrop(drop.$id)"
                     class="btn btn-ghost btn-xs btn-circle rounded-btn text-base-content/70 hover:text-primary shrink-0"
-                    :title="expandedPlacedDropIds.has(pd.$id) ? 'Collapse details' : 'Expand items'"
+                    :title="isDropExpanded(drop.$id) ? 'Collapse details' : 'Expand items'"
                   >
-                    <Icon :icon="expandedPlacedDropIds.has(pd.$id) ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
+                    <Icon :icon="isDropExpanded(drop.$id) ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
                   </button>
 
                   <div class="min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
-                      <span class="font-black text-xs sm:text-sm text-base-content truncate">{{ pd.name }}</span>
-                      <span class="badge badge-xs badge-success text-success-content font-mono font-bold uppercase text-[9px]">
-                        Placed
+                      <span class="font-black text-xs sm:text-sm text-base-content truncate">{{ drop.name }}</span>
+                      <span 
+                        class="badge badge-xs font-mono font-bold uppercase text-[9px]"
+                        :class="getDropBadgeClass(drop.status)"
+                      >
+                        {{ getDropBadgeLabel(drop.status) }}
                       </span>
                     </div>
                     <div class="text-[11px] opacity-60 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
-                      <span>Delivered {{ formatDate(pd.placedAt || pd.$updatedAt) }}</span>
+                      <span>{{ getDropDateLabel(drop) }}</span>
                       <span>•</span>
-                      <span>{{ pd.itemCount || (pd.itemIds || []).length }} items</span>
+                      <span>{{ getDropUnits(drop) }} units ({{ (drop.itemIds || []).length }} items)</span>
                       <span>•</span>
-                      <span class="text-secondary font-black">${{ (Number(pd.totalRetail) || 0).toFixed(2) }}</span>
+                      <span class="text-secondary font-black">${{ getDropRetail(drop).toFixed(2) }}</span>
+                      <template v-if="drop.status === 'in-transit' || drop.status === 'exported'">
+                        <span>•</span>
+                        <span class="text-success font-bold">{{ (drop.placedItemIds || []).length }} of {{ drop.itemIds.length }} Placed</span>
+                      </template>
                     </div>
                   </div>
                 </div>
 
-                <!-- Placed Drop Action Buttons -->
-                <div class="flex items-center gap-2 shrink-0">
-                  <button 
-                    type="button" 
-                    @click="openDraftInTray(pd)"
-                    class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
-                    title="Open this placed drop in Outbound Drop Tray"
-                  >
-                    <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
-                    <span>Open in Tray</span>
-                  </button>
+                <!-- Drop Action Buttons -->
+                <div class="flex items-center gap-2 shrink-0 flex-wrap" @click.stop>
+                  <!-- 1. Placed Drop Actions -->
+                  <template v-if="drop.status === 'placed'">
+                    <button 
+                      type="button" 
+                      @click="openDraftInTray(drop)"
+                      class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
+                      title="Open this placed drop in Outbound Drop Tray"
+                    >
+                      <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                      <span>Open in Tray</span>
+                    </button>
 
-                  <button 
-                    type="button" 
-                    @click="openRollbackModal(pd)"
-                    class="btn btn-warning btn-xs rounded-btn gap-1 font-black text-warning-content shadow-2xs active:scale-95"
-                    title="Undo placement and return items to Backstock as active draft"
-                  >
-                    <Icon icon="solar:restart-bold" class="w-3.5 h-3.5" />
-                    <span>Undo Placement / Rollback</span>
-                  </button>
+                    <button 
+                      type="button" 
+                      @click="openRollbackModal(drop)"
+                      class="btn btn-warning btn-xs rounded-btn gap-1 font-black text-warning-content shadow-2xs active:scale-95"
+                      title="Undo placement and return items to Backstock as active draft"
+                    >
+                      <Icon icon="solar:restart-bold" class="w-3.5 h-3.5" />
+                      <span>Undo Placement / Rollback</span>
+                    </button>
+                  </template>
+
+                  <!-- 2. Exported & In-Transit Drop Actions -->
+                  <template v-else-if="drop.status === 'exported' || drop.status === 'in-transit'">
+                    <button 
+                      type="button" 
+                      @click="exportSingleDropCsv(drop)" 
+                      class="btn btn-xs btn-outline border-base-300 hover:border-base-content/40 font-bold gap-1 rounded-btn"
+                      title="Download clean CSV for Ricochet POS"
+                    >
+                      <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5 text-success" />
+                      <span>Export POS CSV</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="openDraftInTray(drop)"
+                      class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
+                      title="Open in Outbound Drop Tray"
+                    >
+                      <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                      <span>Open in Tray</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="handleUnlockDrop(drop)"
+                      class="btn btn-xs btn-warning btn-outline rounded-btn font-bold gap-1 shadow-2xs"
+                      title="Unlock drop back to editable draft"
+                    >
+                      <Icon icon="solar:lock-unlocked-bold" class="w-3.5 h-3.5" />
+                      <span>Unlock to Draft</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="placeAllRemainingItems(drop)"
+                      :disabled="isPlacingBatch"
+                      class="btn btn-xs btn-success font-black text-success-content gap-1 rounded-btn shadow-2xs"
+                      title="Mark all items placed at this location"
+                    >
+                      <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                      <span>Place All</span>
+                    </button>
+                  </template>
+
+                  <!-- 3. Draft Drop Actions -->
+                  <template v-else-if="drop.status === 'draft'">
+                    <button 
+                      type="button" 
+                      @click="pauseActiveManifest" 
+                      class="btn btn-xs btn-outline border-warning text-warning hover:bg-warning/20 font-bold gap-1 rounded-btn"
+                      title="Pause this drop"
+                    >
+                      <Icon icon="solar:pause-circle-bold" class="w-3.5 h-3.5" />
+                      <span>Pause</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="exportSingleDropCsv(drop)" 
+                      class="btn btn-xs btn-outline border-base-300 hover:border-base-content/40 font-bold gap-1 rounded-btn"
+                      :disabled="(drop.itemIds || []).length === 0"
+                      title="Download clean CSV for Ricochet POS"
+                    >
+                      <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5 text-success" />
+                      <span>Export POS CSV</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="openDraftInTray(drop)"
+                      class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
+                      title="Open in Outbound Drop Tray"
+                    >
+                      <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                      <span>Open in Tray</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="placeAllRemainingItems(drop)"
+                      :disabled="(drop.itemIds || []).length === 0 || isPlacingBatch"
+                      class="btn btn-xs btn-success font-black text-success-content gap-1 rounded-btn shadow-2xs"
+                      title="Verify Stock: mark all items as placed at this location"
+                    >
+                      <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                      <span>Verify Stock</span>
+                    </button>
+                  </template>
+
+                  <!-- 4. Paused Drop Actions -->
+                  <template v-else-if="drop.status === 'paused'">
+                    <button 
+                      type="button" 
+                      @click="resumeManifest(drop.$id)" 
+                      class="btn btn-xs btn-warning font-bold gap-1 rounded-btn"
+                      title="Resume this drop"
+                    >
+                      <Icon icon="solar:play-circle-bold" class="w-3.5 h-3.5" />
+                      <span>Resume</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      @click="openDraftInTray(drop)"
+                      class="btn btn-ghost btn-xs rounded-btn gap-1 font-bold border border-base-300 hover:bg-base-200 shadow-2xs"
+                      title="Open in Outbound Drop Tray"
+                    >
+                      <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5 text-primary" />
+                      <span>Open in Tray</span>
+                    </button>
+                  </template>
                 </div>
               </div>
 
-              <!-- Expanded Item Inspection Checklist -->
-              <div v-if="expandedPlacedDropIds.has(pd.$id)" class="p-3 border-t border-base-200 bg-base-200/50 space-y-2">
+              <!-- Expanded Item Inspection Checklist (Matching Archived Drops) -->
+              <div v-if="isDropExpanded(drop.$id)" class="p-3 border-t border-base-200 bg-base-200/50 space-y-2">
                 <div class="text-[11px] font-bold opacity-75 flex items-center justify-between">
-                  <span>Constituent Items ({{ (pd.itemIds || []).length }}):</span>
+                  <span>Constituent Items ({{ (drop.itemIds || []).length }}):</span>
                   <span class="opacity-60">Click item to view/edit in ItemDrawer</span>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                <!-- Empty items inside drop -->
+                <div v-if="(drop.itemIds || []).length === 0" class="text-center py-6 border border-dashed border-base-300 rounded-box bg-base-100/50 space-y-2">
+                  <Icon icon="solar:box-minimalistic-bold" class="w-6 h-6 opacity-30 mx-auto text-primary" />
+                  <div class="text-xs font-bold opacity-60">No items staged in this drop yet</div>
+                  <button type="button" @click="openDraftInTray(drop)" class="btn btn-xs btn-primary font-bold gap-1">
+                    <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5" />
+                    <span>Stage Items in Tray</span>
+                  </button>
+                </div>
+
+                <!-- Items Grid -->
+                <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
                   <div 
-                    v-for="itemId in pd.itemIds" 
-                    :key="itemId"
-                    @click="openItemEditor(getItemRecord(pd, itemId))"
+                    v-for="item in getDropItems(drop)" 
+                    :key="item.$id"
+                    @click="openItemEditor(item)"
                     class="flex items-center gap-2.5 p-2 rounded-box bg-base-100 border border-base-300 hover:border-primary/40 transition-all cursor-pointer group"
                     title="Click to view & edit in ItemDrawer"
                   >
                     <div class="w-10 h-10 rounded-box bg-base-300 overflow-hidden shrink-0">
                       <img 
-                        v-if="getItemRecord(pd, itemId)?.imageId" 
-                        :src="getItemPhotoUrl(getItemRecord(pd, itemId)?.imageId)" 
-                        @error="handleImageError($event, getItemRecord(pd, itemId)?.imageId)"
+                        v-if="item.imageId" 
+                        :src="getItemPhotoUrl(item.imageId)" 
+                        @error="handleImageError($event, item.imageId)"
                         class="w-full h-full object-cover" 
                       />
                       <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
                     </div>
                     <div class="min-w-0 flex-1 text-xs">
                       <span class="font-bold truncate block group-hover:text-primary transition-colors">
-                        {{ getItemRecord(pd, itemId)?.title || 'Item ' + itemId }}
+                        {{ item.title || 'Item ' + item.$id }}
                       </span>
-                      <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
-                        <span v-if="getItemRecord(pd, itemId)?.upc" class="text-primary font-bold">
-                          {{ getItemRecord(pd, itemId)?.upc }}
+                      <div class="text-[10px] font-mono opacity-70 flex items-center gap-1.5 flex-wrap">
+                        <span v-if="item.upc" class="text-primary font-bold">
+                          {{ item.upc }}
                         </span>
+                        <span v-if="item.quantity > 1" class="badge badge-xs badge-outline badge-primary font-bold">Qty: {{ item.quantity }}</span>
                         <span>•</span>
                         <span class="text-secondary font-bold">
-                          ${{ (Number(getItemRecord(pd, itemId)?.boutiquePrice || getItemRecord(pd, itemId)?.resalePrice || getItemRecord(pd, itemId)?.price || getItemRecord(pd, itemId)?.listPrice) || 0).toFixed(2) }}
+                          ${{ (Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice) || 0).toFixed(2) }}
                         </span>
                       </div>
                     </div>
-                    <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success shrink-0" />
+                    <div class="flex items-center gap-1 shrink-0">
+                      <Icon v-if="drop.status === 'placed'" icon="solar:check-circle-bold" class="w-4 h-4 text-success" />
+                      <template v-else-if="drop.status === 'draft'">
+                        <button 
+                          type="button" 
+                          class="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 text-error hover:bg-error/15 transition-opacity"
+                          title="Remove from drop"
+                          @click.stop="handleRemoveItemFromDraftDirect(drop, item.$id)"
+                        >
+                          ✕
+                        </button>
+                      </template>
+                      <template v-else>
+                        <span v-if="isItemPlaced(drop, item.$id)" class="badge badge-xs badge-success text-success-content font-bold">Placed</span>
+                        <Icon v-else icon="solar:box-minimalistic-bold" class="w-4 h-4 text-info opacity-60" />
+                      </template>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1275,14 +1188,19 @@ const {
   unverifyAllItems
 } = useManifest();
 
-const expandedPlacedDropIds = ref<Set<string>>(new Set());
-const toggleExpandPlacedDrop = (id: string) => {
-  if (expandedPlacedDropIds.value.has(id)) {
-    expandedPlacedDropIds.value.delete(id);
+const expandedDropIds = ref<Set<string>>(new Set());
+const isDropExpanded = (id: string) => expandedDropIds.value.has(id);
+const toggleExpandDrop = (id: string) => {
+  if (expandedDropIds.value.has(id)) {
+    expandedDropIds.value.delete(id);
   } else {
-    expandedPlacedDropIds.value.add(id);
+    expandedDropIds.value.add(id);
   }
+  expandedDropIds.value = new Set(expandedDropIds.value);
 };
+// Aliases for compatibility
+const expandedPlacedDropIds = expandedDropIds;
+const toggleExpandPlacedDrop = toggleExpandDrop;
 
 const dropPendingRollback = ref<ManifestDocument | null>(null);
 const isRollingBack = ref(false);
@@ -1626,6 +1544,12 @@ const loadManifests = async () => {
       if (name && (mLocName.includes(name) || name.includes(mLocName))) return true;
       return false;
     });
+
+    // Auto-expand the first drop if none are currently expanded
+    if (expandedDropIds.value.size === 0 && locationManifests.value.length > 0) {
+      expandedDropIds.value.add(locationManifests.value[0].$id);
+      expandedDropIds.value = new Set(expandedDropIds.value);
+    }
   } catch (e) {
     console.warn('Could not load manifests:', e);
   }
@@ -1661,6 +1585,12 @@ const activeDraftNet = computed(() => {
   return activeDraftRetail.value * (1 - comm);
 });
 
+const dropStatusFilter = ref<'all' | 'draft' | 'exported' | 'placed'>('all');
+
+const draftDrops = computed(() => {
+  return locationManifests.value.filter(m => m.status === 'draft' || m.status === 'paused');
+});
+
 const exportedDrops = computed(() => {
   return locationManifests.value.filter(m => m.status === 'exported' || m.status === 'in-transit');
 });
@@ -1668,6 +1598,96 @@ const exportedDrops = computed(() => {
 const placedDrops = computed(() => {
   return locationManifests.value.filter(m => m.status === 'placed');
 });
+
+const draftDropsCount = computed(() => draftDrops.value.length);
+const exportedDropsCount = computed(() => exportedDrops.value.length);
+const placedDropsCount = computed(() => placedDrops.value.length);
+
+const filteredManifests = computed(() => {
+  if (dropStatusFilter.value === 'all') return locationManifests.value;
+  if (dropStatusFilter.value === 'draft') return draftDrops.value;
+  if (dropStatusFilter.value === 'exported') return exportedDrops.value;
+  if (dropStatusFilter.value === 'placed') return placedDrops.value;
+  return locationManifests.value;
+});
+
+const getDropItems = (drop: ManifestDocument) => {
+  const ids = drop.itemIds || [];
+  const invMap = new Map(inventoryItems.value.map(i => [i.$id, i]));
+  const snapMap = new Map((drop.itemsSnapshot || []).map(s => [s.$id, s]));
+  return ids.map(id => invMap.get(id) || snapMap.get(id) || { $id: id, title: 'Item ' + id });
+};
+
+const getDropUnits = (drop: ManifestDocument) => {
+  const items = getDropItems(drop);
+  return items.reduce((sum, i) => sum + Math.max(1, Number(i.quantity || 1)), 0);
+};
+
+const getDropRetail = (drop: ManifestDocument) => {
+  if (drop.totalRetail && Number(drop.totalRetail) > 0) return Number(drop.totalRetail);
+  const items = getDropItems(drop);
+  return items.reduce((sum, item) => {
+    const price = Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice || 0);
+    const qty = Math.max(1, Number(item.quantity || 1));
+    return sum + (price * qty);
+  }, 0);
+};
+
+const getDropDateLabel = (drop: ManifestDocument) => {
+  if (drop.status === 'placed') {
+    return `Delivered ${formatDate(drop.placedAt || drop.$updatedAt)}`;
+  }
+  if (drop.status === 'exported') {
+    return `Exported ${formatDate(drop.exportedAt || drop.$updatedAt)}`;
+  }
+  return `Created ${formatDate(drop.$createdAt || drop.$updatedAt)}`;
+};
+
+const getDropBadgeClass = (status: string) => {
+  switch (status) {
+    case 'placed':
+      return 'badge-success text-success-content';
+    case 'exported':
+      return 'badge-info text-info-content';
+    case 'in-transit':
+      return 'badge-warning text-warning-content';
+    case 'draft':
+      return 'badge-primary text-primary-content';
+    case 'paused':
+      return 'badge-ghost';
+    default:
+      return 'badge-ghost';
+  }
+};
+
+const getDropBadgeLabel = (status: string) => {
+  switch (status) {
+    case 'placed':
+      return 'Placed';
+    case 'exported':
+      return 'Exported to POS';
+    case 'in-transit':
+      return 'In-Transit';
+    case 'draft':
+      return 'Active Draft';
+    case 'paused':
+      return 'Paused';
+    default:
+      return status;
+  }
+};
+
+const exportSingleDropCsv = async (drop: ManifestDocument) => {
+  await switchActiveManifest(drop.$id);
+  await exportManifestCsv('ricochet');
+  await loadManifests();
+};
+
+const handleRemoveItemFromDraftDirect = async (drop: ManifestDocument, itemId: string) => {
+  await switchActiveManifest(drop.$id);
+  await removeFromManifest(itemId);
+  await loadManifests();
+};
 
 // Computed In-Stock Items at this Location
 const inStockItems = computed(() => {
