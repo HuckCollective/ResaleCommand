@@ -26,6 +26,37 @@
         </div>
       </div>
 
+      <!-- How Ricochet Sync Works Explainer on Upload Screen -->
+      <div v-if="!parsedRows.length" class="mt-6 p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-3">
+        <div class="flex items-center gap-2">
+          <Icon icon="solar:info-circle-bold" class="w-5 h-5 text-secondary" />
+          <h4 class="font-bold text-sm">How Ricochet POS Barcode Sync Works</h4>
+        </div>
+        <p class="text-xs opacity-70">
+          Ricochet POS does not support re-uploading modified CSVs for existing items (it rejects existing SKUs as duplicates). Resale Command provides 2 automated browser options to update your barcodes directly:
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+          <div class="p-3.5 rounded-xl bg-base-100 border border-base-300">
+            <div class="flex items-center gap-1.5 font-bold mb-1 text-primary">
+              <span class="badge badge-xs badge-primary font-mono">1</span>
+              <span>Option 1: Preloaded DevTools Script (Fastest)</span>
+            </div>
+            <p class="opacity-75 text-[11px] leading-relaxed">
+              Upload your CSV, match items, click <strong>Copy Option 1 Script</strong>, and paste into Chrome DevTools (F12) inside Ricochet to update all items automatically in real-time.
+            </p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-base-100 border border-base-300">
+            <div class="flex items-center gap-1.5 font-bold mb-1 text-secondary">
+              <span class="badge badge-xs badge-secondary font-mono">2</span>
+              <span>Option 2: Userscript / Bookmarklet</span>
+            </div>
+            <p class="opacity-75 text-[11px] leading-relaxed">
+              Install the Tampermonkey userscript or drag the bookmarklet to your browser. A floating sync widget appears directly inside your Ricochet dashboard screen.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- Step 2: Reconciliation UI -->
       <div v-else>
         <div class="flex justify-between items-end mb-4">
@@ -45,10 +76,130 @@
             </button>
             
             <button class="btn btn-sm btn-ghost" @click="reset">Cancel</button>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-primary gap-1.5 font-bold shadow-md" 
+              :disabled="matchedCount === 0 || isSyncing" 
+              @click="showBrowserSyncModal = true"
+              title="Inject UPCs directly into Ricochet POS via Browser (Bypasses CSV restriction)"
+            >
+              <Icon icon="solar:bolt-bold" class="w-4 h-4 text-warning" />
+              <span>Browser Auto-Sync</span>
+            </button>
             <button class="btn btn-sm btn-secondary" :disabled="isSyncing || isAskingAi" @click="executeSync">
               <span v-if="isSyncing" class="loading loading-spinner loading-sm"></span>
               Export Synced CSV
             </button>
+          </div>
+        </div>
+
+        <!-- How to Sync into Ricochet Instructions Panel -->
+        <div class="mb-5 bg-base-200/60 border border-base-300 rounded-2xl p-4 shadow-xs space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-base-300/60 pb-3">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 bg-warning/10 text-warning rounded-lg">
+                <Icon icon="solar:bolt-bold" class="w-5 h-5" />
+              </div>
+              <div>
+                <h4 class="font-black text-sm text-base-content">How to Sync Barcodes to Ricochet POS</h4>
+                <p class="text-[11px] opacity-70">
+                  Ricochet blocks CSV re-imports for existing SKUs. Choose <strong>Option 1 (Easiest)</strong> or <strong>Option 2</strong> below to inject your barcodes directly.
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button 
+                type="button" 
+                class="btn btn-xs btn-primary gap-1 font-bold shadow-xs"
+                :disabled="matchedCount === 0"
+                @click="copyPreloadedConsoleScript"
+              >
+                <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
+                <span>⚡ Copy Option 1 Script ({{ matchedCount }})</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2 Columns: Option 1 vs Option 2 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            <!-- Option 1 -->
+            <div class="p-4 rounded-xl bg-base-100 border border-base-300/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-1.5 font-bold text-xs text-primary">
+                    <span class="badge badge-xs badge-primary font-mono">1</span>
+                    <span>Option 1: Preloaded Console Script (Recommended • Easiest)</span>
+                  </div>
+                  <span class="badge badge-xs badge-success text-[10px] font-bold">Fastest</span>
+                </div>
+                <p class="text-[11px] opacity-70 mb-2.5">
+                  Zero extensions or installation needed. Runs directly inside your open Ricochet browser tab via DevTools.
+                </p>
+                <ol class="list-decimal list-inside space-y-1.5 text-[11px] opacity-85 leading-relaxed bg-base-200/40 p-2.5 rounded-lg border border-base-300/40 font-medium">
+                  <li>Click <button type="button" class="btn btn-link btn-xs p-0 text-primary font-bold h-auto inline align-baseline" @click="copyPreloadedConsoleScript">Copy Script</button> to copy all {{ matchedCount }} items with your custom barcodes.</li>
+                  <li>Switch to your open <strong>Memory Den / Ricochet</strong> tab (<code>memoryden.ricoconsign.com</code>).</li>
+                  <li>Press <kbd class="kbd kbd-xs">F12</kbd> (or right-click anywhere ➔ <strong>Inspect</strong> ➔ click <strong>Console</strong>).</li>
+                  <li>Paste (<kbd class="kbd kbd-xs">Ctrl + V</kbd>) and press <kbd class="kbd kbd-xs">Enter</kbd>.</li>
+                  <li>Watch the real-time progress update each item:
+                    <div class="font-mono text-[10px] bg-neutral text-neutral-content px-2 py-1 rounded mt-1">
+                      ✓ [1/{{ matchedCount || 785 }}] 0EJ001 ➔ HUCK-0001<br/>
+                      🎉 Sync Finished! {{ matchedCount || 785 }} items updated in Ricochet.
+                    </div>
+                  </li>
+                </ol>
+              </div>
+              <div class="pt-3">
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-primary font-bold w-full gap-1.5 shadow-xs"
+                  :disabled="matchedCount === 0"
+                  @click="copyPreloadedConsoleScript"
+                >
+                  <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
+                  <span>Copy Option 1 Script ({{ matchedCount }} items)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Option 2 -->
+            <div class="p-4 rounded-xl bg-base-100 border border-base-300/80 shadow-xs flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-1.5 font-bold text-xs text-secondary">
+                    <span class="badge badge-xs badge-secondary font-mono">2</span>
+                    <span>Option 2: Visual Browser Button (Tampermonkey / Bookmarklet)</span>
+                  </div>
+                  <span class="badge badge-xs badge-ghost text-[10px]">Extension</span>
+                </div>
+                <p class="text-[11px] opacity-70 mb-2.5">
+                  Adds a floating <strong>⚡ Ricochet UPC Sync</strong> widget directly inside your Ricochet dashboard screen.
+                </p>
+                <ol class="list-decimal list-inside space-y-1.5 text-[11px] opacity-85 leading-relaxed bg-base-200/40 p-2.5 rounded-lg border border-base-300/40 font-medium">
+                  <li>Click <a href="/ricochet-upc-sync.user.js" target="_blank" class="link link-secondary font-bold">Install Userscript</a> (Tampermonkey) or drag the <strong>Bookmarklet</strong> to your bookmarks bar.</li>
+                  <li>Open or refresh your Ricochet portal (<code>memoryden.ricoconsign.com</code>).</li>
+                  <li>A floating widget appears in the bottom-right corner. Click it to open.</li>
+                  <li>Drop your exported CSV from step 1 or click <strong>Start Auto-Sync</strong>.</li>
+                  <li>Watch the live visual progress bar fill up until complete.</li>
+                </ol>
+              </div>
+              <div class="pt-3 flex gap-2">
+                <a 
+                  href="/ricochet-upc-sync.user.js" 
+                  target="_blank" 
+                  class="btn btn-xs btn-secondary font-bold flex-1"
+                >
+                  Install Userscript
+                </a>
+                <a 
+                  :href="bookmarkletHref" 
+                  class="btn btn-xs btn-outline btn-secondary font-bold cursor-grab active:cursor-grabbing flex-1"
+                  title="Drag this button to your Bookmarks Bar!"
+                  @click.prevent="copyBookmarkletCode"
+                >
+                  Drag Bookmarklet
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -182,6 +333,114 @@
         <button>close</button>
       </form>
     </dialog>
+
+    <!-- Browser Auto-Sync Helper Modal -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': showBrowserSyncModal }">
+      <div v-if="showBrowserSyncModal" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-6 max-w-2xl mx-auto space-y-4">
+        <div class="flex items-center justify-between border-b border-base-200 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2.5 bg-primary/10 text-primary rounded-2xl">
+              <Icon icon="solar:bolt-bold" class="w-6 h-6 text-warning" />
+            </div>
+            <div>
+              <h3 class="font-black text-lg">Ricochet In-Browser UPC Auto-Sync</h3>
+              <p class="text-xs opacity-60">Inject your HUCK-XXXX barcodes directly into Ricochet POS through your browser</p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-xs btn-ghost btn-circle" @click="showBrowserSyncModal = false">✕</button>
+        </div>
+
+        <div class="alert alert-info py-2.5 px-3.5 text-xs rounded-2xl flex items-start gap-2 shadow-xs">
+          <Icon icon="solar:info-circle-bold" class="w-5 h-5 shrink-0 mt-0.5" />
+          <span>
+            Ricochet POS <strong>blocks CSV re-imports</strong> for existing SKUs. This browser tool uses your active Ricochet session to update the UPC fields automatically!
+          </span>
+        </div>
+
+        <!-- 2 Clear Options -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+          <!-- Option 1: Preloaded Script -->
+          <div class="p-4 rounded-2xl bg-base-200/60 border border-primary/30 flex flex-col justify-between shadow-xs">
+            <div>
+              <div class="flex items-center justify-between gap-1.5 mb-1.5">
+                <div class="flex items-center gap-1.5 font-bold text-xs text-primary">
+                  <span class="badge badge-xs badge-primary font-mono">1</span>
+                  <span>Option 1: Preloaded Script</span>
+                </div>
+                <span class="badge badge-xs badge-success text-[10px] font-bold">Recommended • Fastest</span>
+              </div>
+              <p class="text-[11px] opacity-70 leading-relaxed mb-3">
+                Zero extensions needed. Copies all {{ matchedCount }} matched items pre-bundled to paste into Chrome DevTools.
+              </p>
+              <div class="text-[11px] opacity-80 space-y-1 bg-base-100 p-2.5 rounded-xl border border-base-300 mb-3">
+                <div class="font-bold text-[10px] uppercase tracking-wider text-base-content/60">Steps:</div>
+                <div>1. Click <strong>Copy Option 1 Script</strong> below.</div>
+                <div>2. Switch to your Ricochet tab.</div>
+                <div>3. Press <kbd class="kbd kbd-xs">F12</kbd> ➔ <strong>Console</strong>.</div>
+                <div>4. Paste & press <kbd class="kbd kbd-xs">Enter</kbd>.</div>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-primary font-bold text-white w-full gap-1.5 shadow-sm"
+              :disabled="matchedCount === 0"
+              @click="copyPreloadedConsoleScript"
+            >
+              <Icon icon="solar:copy-bold" class="w-4 h-4" />
+              <span>Copy Option 1 Script ({{ matchedCount }})</span>
+            </button>
+          </div>
+
+          <!-- Option 2: Tampermonkey Userscript / Bookmarklet -->
+          <div class="p-4 rounded-2xl bg-base-200/60 border border-secondary/30 flex flex-col justify-between shadow-xs">
+            <div>
+              <div class="flex items-center justify-between gap-1.5 mb-1.5">
+                <div class="flex items-center gap-1.5 font-bold text-xs text-secondary">
+                  <span class="badge badge-xs badge-secondary font-mono">2</span>
+                  <span>Option 2: Userscript / Bookmarklet</span>
+                </div>
+                <span class="badge badge-xs badge-ghost text-[10px]">Extension</span>
+              </div>
+              <p class="text-[11px] opacity-70 leading-relaxed mb-3">
+                Installs a floating <strong>⚡ Ricochet UPC Sync</strong> button that appears directly inside your Ricochet dashboard.
+              </p>
+              <div class="text-[11px] opacity-80 space-y-1 bg-base-100 p-2.5 rounded-xl border border-base-300 mb-3">
+                <div class="font-bold text-[10px] uppercase tracking-wider text-base-content/60">Steps:</div>
+                <div>1. Install Userscript (or drag Bookmarklet).</div>
+                <div>2. Visit <code>memoryden.ricoconsign.com</code>.</div>
+                <div>3. Click the floating widget in the bottom-right.</div>
+                <div>4. Drop your CSV or click <strong>Start Auto-Sync</strong>.</div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <a 
+                href="/ricochet-upc-sync.user.js" 
+                target="_blank" 
+                class="btn btn-sm btn-secondary font-bold flex-1"
+              >
+                Install Userscript
+              </a>
+              <a 
+                :href="bookmarkletHref" 
+                class="btn btn-sm btn-outline btn-secondary font-bold cursor-grab active:cursor-grabbing flex-1"
+                title="Drag this button to your Bookmarks Bar!"
+                @click.prevent="copyBookmarkletCode"
+              >
+                Drag Bookmarklet
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-action border-t border-base-200 pt-3 flex justify-between items-center">
+          <span class="text-xs opacity-60 font-mono">{{ matchedCount }} item{{ matchedCount === 1 ? '' : 's' }} ready</span>
+          <button type="button" class="btn btn-sm btn-ghost" @click="showBrowserSyncModal = false">Close</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showBrowserSyncModal = false">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -204,6 +463,101 @@ const rawHeaders = ref<string[]>([]);
 // Search Modal State
 const searchQuery = ref('');
 const activeMappingRowIndex = ref<number | null>(null);
+
+// Browser Auto-Sync Helper State
+const showBrowserSyncModal = ref(false);
+
+const bookmarkletHref = computed(() => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4321';
+  return `javascript:(function(){const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+});
+
+const copyBookmarkletCode = () => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(bookmarkletHref.value);
+    addToast({ type: 'info', message: 'Bookmarklet code copied! Drag it to your bookmarks bar or paste into a new bookmark URL.' });
+  }
+};
+
+const copyPreloadedConsoleScript = () => {
+  const matched = parsedRows.value
+    .filter(r => r.mappedItem && r.mappedItem.upc)
+    .map(r => ({
+      id: r.productId || '',
+      sku: r.extractedSku || '',
+      upc: r.mappedItem.upc || '',
+      title: r.mappedItem.title || r.originalTitle || ''
+    }));
+
+  if (matched.length === 0) {
+    addToast({ type: 'warning', message: 'No mapped items with UPCs to export.' });
+    return;
+  }
+
+  const script = `// ⚡ Resale Command ➔ Ricochet Preloaded UPC Auto-Sync
+(async function() {
+  const items = ${JSON.stringify(matched, null, 2)};
+  console.log('%c[Resale Command]%c Starting bulk UPC sync for ' + items.length + ' items...', 'background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;', 'color:#fff;');
+  
+  if (!window.axios) {
+    alert('Please run this script inside your logged-in Ricochet portal (e.g. memoryden.ricoconsign.com)');
+    return;
+  }
+
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const targetId = item.id;
+    if (!targetId) {
+      console.warn(\`Skipping [\${i+1}/\${items.length}] without Product ID:\`, item);
+      failed++;
+      continue;
+    }
+
+    try {
+      // 1. Fetch current item details from Ricochet
+      const detailRes = await window.axios.get('/api/product/show/' + targetId);
+      const payload = detailRes.data.product || detailRes.data.data || detailRes.data;
+      const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items).flat();
+      const targetItem = allItems.find(it => it.sku === item.sku) || allItems[0];
+
+      if (!targetItem) {
+        failed++;
+        console.warn(\`✕ [\${i+1}/\${items.length}] No item found for SKU \${item.sku} in product \${targetId}\`);
+        continue;
+      }
+
+      // 2. Set store: 1 and new UPC
+      targetItem.store = 1;
+      targetItem.upc_code = item.upc;
+
+      // 3. Save via verified PUT /api/product/items
+      const saveRes = await window.axios.put('/api/product/items', targetItem);
+      if (saveRes.status === 201 || saveRes.status === 200) {
+        success++;
+        console.log(\`%c✓ [\${i+1}/\${items.length}] \${targetItem.sku} ➔ \${item.upc}\`, 'color:#10b981; font-weight:bold;');
+      } else {
+        failed++;
+        console.warn(\`✕ [\${i+1}/\${items.length}] \${targetItem.sku} HTTP \${saveRes.status}\`);
+      }
+    } catch (err) {
+      failed++;
+      console.error(\`✕ Error on \${item.sku || targetId}:\`, err.response?.data || err.message);
+    }
+
+    // Safe 200ms rate-limiting delay
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  console.log(\`%c🎉 Sync Finished! \${success} updated, \${failed} failed.\`, 'color:#10b981; font-weight:bold; font-size:16px;');
+  alert(\`🎉 Sync Finished!\\n\\n\${success} items updated successfully in Ricochet.\\n\${failed} errors.\\nRefresh your page to verify.\`);
+})();`;
+
+  navigator.clipboard.writeText(script);
+  addToast({ type: 'success', message: `Copied preloaded script for ${matched.length} items to clipboard!` });
+};
 
 const getAssetUrl = (id: string) => {
   if (!id) return '';

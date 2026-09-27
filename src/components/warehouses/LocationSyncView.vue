@@ -441,157 +441,97 @@
           </div>
         </div>
 
-        <!-- Actions -->
+        <!-- Top Toolbar: Prefix Config, CSV Download Toggle & Clear -->
         <div class="flex items-center gap-3 w-full lg:w-auto justify-end flex-wrap">
-          <label class="label cursor-pointer gap-2 py-0">
-            <input type="checkbox" v-model="exportUpdatedCsv" class="checkbox checkbox-sm checkbox-primary" />
-            <span class="label-text text-xs font-semibold">Download Synced CSV with UPCs</span>
-          </label>
-
-          <button class="btn btn-sm btn-ghost" @click="resetSync">Clear File</button>
-          
-          <button 
-            class="btn btn-sm btn-primary font-bold shadow-md shadow-primary/20" 
-            :disabled="matchedCount === 0 || isCommitting" 
-            @click="executeSync"
-          >
-            <span v-if="isCommitting" class="loading loading-spinner loading-sm"></span>
-            Sync & Commit {{ matchedCount }} {{ matchedCount === 1 ? 'Item' : 'Items' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- PERMANENT BULK UPC & QUICK-ACTION TOOLBAR (Always Visible when file loaded) -->
-      <div class="bg-base-100 p-3.5 rounded-xl border border-base-300 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        <!-- Left: Interactive UPC Prefix Selector & Next Barcode Preview -->
-        <div class="flex items-center gap-2.5 flex-wrap">
-          <div class="flex items-center gap-1.5 font-bold text-xs opacity-80">
-            <Icon icon="solar:barcode-bold" class="w-4 h-4 text-primary" />
-            <span>Barcode Prefix (Code Start):</span>
-          </div>
-
-          <!-- Quick Select Buttons: HUCK- vs PDXGL- -->
-          <div class="join border border-base-300 rounded-lg p-0.5 bg-base-200">
-            <button 
-              type="button" 
-              class="btn btn-xs join-item" 
-              :class="upcPrefix === 'HUCK-' ? 'btn-active btn-primary font-black shadow-xs' : 'btn-ghost'"
-              @click="upcPrefix = 'HUCK-'"
-            >
-              HUCK-
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-xs join-item" 
-              :class="upcPrefix === 'PDXGL-' ? 'btn-active btn-secondary text-white font-black shadow-xs' : 'btn-ghost'"
-              @click="upcPrefix = 'PDXGL-'"
-            >
-              PDXGL-
-            </button>
-          </div>
-
-          <!-- Custom Prefix Text Input -->
-          <div class="relative w-28">
+          <!-- Interactive UPC Prefix Selector -->
+          <div class="flex items-center gap-1.5 bg-base-200/80 px-2.5 py-1 rounded-xl border border-base-300">
+            <span class="text-[11px] font-bold opacity-60 flex items-center gap-1">
+              <Icon icon="solar:barcode-bold" class="w-3.5 h-3.5 text-primary" />
+              Prefix:
+            </span>
+            <div class="join">
+              <button 
+                type="button" 
+                class="btn btn-xs join-item" 
+                :class="upcPrefix === 'HUCK-' ? 'btn-active btn-primary text-primary-content font-black shadow-xs' : 'btn-ghost'"
+                @click="upcPrefix = 'HUCK-'"
+              >
+                HUCK-
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-xs join-item" 
+                :class="upcPrefix === 'PDXGL-' ? 'btn-active btn-secondary text-secondary-content font-black shadow-xs' : 'btn-ghost'"
+                @click="upcPrefix = 'PDXGL-'"
+              >
+                PDXGL-
+              </button>
+            </div>
             <input 
               type="text" 
               v-model="upcPrefix" 
-              placeholder="e.g. PDXGL-" 
-              class="input input-bordered input-xs w-full font-mono uppercase font-bold text-xs"
+              class="input input-bordered input-xs w-20 font-mono uppercase font-bold text-xs" 
+              placeholder="PREFIX-" 
             />
+            <span class="text-[10px] font-mono opacity-70 hidden sm:inline">
+              Next: <code class="text-primary font-bold">{{ nextPreviewUpc }}</code>
+            </span>
           </div>
 
-          <span class="text-xs opacity-75">
-            Next: <code class="font-bold text-primary font-mono bg-base-200 px-2 py-0.5 rounded border border-base-300">{{ nextPreviewUpc }}</code>
-          </span>
-        </div>
+          <label class="label cursor-pointer gap-2 py-0">
+            <input type="checkbox" v-model="exportUpdatedCsv" class="checkbox checkbox-sm checkbox-primary" />
+            <span class="label-text text-xs font-semibold">Download Synced CSV</span>
+          </label>
 
-        <!-- Right: Clear Bulk Action Buttons -->
-        <div class="flex items-center gap-2 flex-wrap justify-end">
-          <!-- 0. Gemini AI Auto-Matcher -->
-          <button 
-            v-if="unmatchedCount > 0"
-            type="button"
-            class="btn btn-xs bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-sm gap-1.5 border-none"
-            :disabled="isAiMatching || isBulkQuickAdding"
-            @click="triggerAiMatching"
-            title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks"
-          >
-            <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5 text-yellow-300" />
-            ✨ AI Match ({{ unmatchedCount }})
-          </button>
-
-          <!-- 1. Track All Sold Items -->
-          <button 
-            v-if="unmatchedSoldCount > 0"
-            type="button"
-            class="btn btn-xs btn-error text-white font-extrabold shadow-sm gap-1.5"
-            :disabled="isBulkQuickAdding || isAiMatching"
-            @click="bulkQuickAddUnmatched(true)"
-          >
-            <span v-if="isBulkQuickAdding" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:cart-check-bold" class="w-3.5 h-3.5" />
-            ⚡ Save & Track All {{ unmatchedSoldCount }} Sold ({{ upcPrefix }})
-          </button>
-
-          <!-- 2. Auto-Create All In-Stock -->
-          <button 
-            v-if="unmatchedInStockCount > 0"
-            type="button"
-            class="btn btn-xs btn-warning text-black font-bold shadow-sm gap-1.5"
-            :disabled="isBulkQuickAdding || isAiMatching"
-            @click="bulkQuickAddUnmatched(false)"
-          >
-            <span v-if="isBulkQuickAdding" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:box-minimalistic-bold-duotone" class="w-3.5 h-3.5" />
-            + Bulk Add {{ unmatchedInStockCount }} In-Stock ({{ upcPrefix }})
-          </button>
-
-          <!-- 3. If all items matched -->
-          <span v-if="unmatchedCount === 0" class="badge badge-success text-white font-bold text-xs gap-1 py-2 px-3">
-            <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-            All {{ syncRows.length }} Items Mapped to Inventory
-          </span>
+          <button class="btn btn-sm btn-ghost text-xs" @click="resetSync">Clear File</button>
         </div>
       </div>
 
-      <!-- Main Reconciliation Table -->
-      <div class="bg-base-100 rounded-2xl border border-base-200 shadow-sm">
-        <table class="table table-sm w-full">
+      <!-- Main Reconciliation Table Container (pb-44 for bottom dock clearance) -->
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-x-auto pb-44">
+        <table class="table w-full">
             <thead>
-              <tr class="bg-base-200 text-xs uppercase tracking-wider">
-                <th class="w-12">Match</th>
-                <th class="w-24">CSV Status</th>
-                <th class="w-28">Location SKU</th>
-                <th>CSV Product Title</th>
-                <th class="w-24 text-right">Agreed Price</th>
-                <th class="w-32 text-right text-success">Net Made (Take-Home)</th>
-                <th class="min-w-85">Map to ResaleCommand Inventory Item</th>
+              <tr class="bg-base-200/90 text-xs font-black uppercase tracking-wider text-base-content/80 border-b border-base-300">
+                <th class="w-12 text-center">Match</th>
+                <th class="w-24">Status</th>
+                <th class="w-28 font-mono">Booth SKU</th>
+                <th class="min-w-64">Incoming CSV Product Title</th>
+                <th class="w-24 text-right font-mono">Price</th>
+                <th class="w-32 text-right font-mono text-success">Net Payout</th>
+                <th class="min-w-96">Resale Command Matched Item & Barcode</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="(row, idx) in displayedRows" :key="row.originalLineIndex" :class="{'bg-success/10': row.mappedItem}">
+            <tbody class="divide-y divide-base-200">
+              <tr 
+                v-for="(row, idx) in displayedRows" 
+                :key="row.originalLineIndex" 
+                class="transition-colors border-l-4"
+                :class="[
+                  row.mappedItem ? 'border-l-success hover:bg-success/5' : 'border-l-warning hover:bg-warning/5',
+                  idx % 2 === 0 ? 'bg-base-100' : 'bg-base-200/30'
+                ]"
+              >
                 
                 <!-- Match Indicator -->
-                <td>
+                <td class="text-center align-middle">
                   <div class="tooltip tooltip-right" :data-tip="row.mappedItem ? 'Mapped to ' + (row.mappedItem.upc || row.mappedItem.title) : 'Unmatched item'">
-                    <Icon v-if="row.mappedItem" icon="solar:check-circle-bold" class="w-5 h-5 text-success" />
-                    <Icon v-else icon="solar:danger-circle-bold" class="w-5 h-5 text-error" />
+                    <Icon v-if="row.mappedItem" icon="solar:check-circle-bold" class="w-5 h-5 text-success inline-block" />
+                    <Icon v-else icon="solar:danger-circle-bold" class="w-5 h-5 text-warning inline-block" />
                   </div>
                 </td>
 
                 <!-- Status Badge -->
-                <td>
+                <td class="align-middle">
                   <span 
-                    class="badge badge-xs font-bold" 
-                    :class="(row.status === 'sold' || row.status === 'paid') ? 'badge-success text-white' : 'badge-info text-white'"
+                    class="badge badge-sm font-black whitespace-nowrap shrink-0" 
+                    :class="(row.status === 'sold' || row.status === 'paid') ? 'badge-success text-success-content' : 'badge-info text-info-content'"
                   >
                     {{ (row.status === 'sold' || row.status === 'paid') ? 'Sold / Paid' : 'In Stock' }}
                   </span>
                 </td>
 
                 <!-- Extracted SKU -->
-                <td>
+                <td class="align-middle">
                   <div v-if="row.isEditingSku" class="flex items-center gap-1">
                     <input 
                       type="text" 
@@ -604,7 +544,7 @@
                     </button>
                   </div>
                   <div v-else class="group flex items-center gap-1">
-                    <span class="font-mono text-xs font-bold text-secondary bg-base-200/80 px-2 py-0.5 rounded border border-base-300">
+                    <span class="font-mono text-xs font-black text-secondary bg-base-200/90 px-2.5 py-1 rounded-lg border border-base-300">
                       {{ row.extractedSku || '—' }}
                     </span>
                     <button 
@@ -618,8 +558,8 @@
                   </div>
                 </td>
 
-                <!-- CSV Name (Editable if unmapped) -->
-                <td class="text-xs max-w-70">
+                <!-- CSV Name (Auto-wrapping, clear font, zero awkward truncation) -->
+                <td class="align-middle py-3">
                   <div v-if="row.isEditing" class="flex items-center gap-1">
                     <input 
                       type="text" 
@@ -631,11 +571,13 @@
                       <Icon icon="solar:check-read-linear" class="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div v-else class="group flex items-center justify-between gap-1">
-                    <span class="font-semibold truncate flex-1" :title="row.itemName">{{ row.itemName }}</span>
+                  <div v-else class="group flex items-start justify-between gap-2 max-w-lg">
+                    <div class="font-bold text-xs sm:text-sm text-base-content leading-snug break-words">
+                      {{ row.itemName }}
+                    </div>
                     <button 
                       v-if="!row.mappedItem" 
-                      class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-80 transition-opacity shrink-0" 
+                      class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-80 transition-opacity shrink-0 mt-0.5" 
                       @click="row.isEditing = true"
                       title="Edit title / fix typos"
                     >
@@ -645,12 +587,12 @@
                 </td>
 
                 <!-- Listed Agreed Price -->
-                <td class="text-right font-mono text-xs opacity-75">
+                <td class="text-right font-mono text-xs sm:text-sm font-semibold opacity-80 align-middle whitespace-nowrap">
                   ${{ (row.listedPrice || 0).toFixed(2) }}
                 </td>
 
                 <!-- Net Take-Home Price (What you made after fees) -->
-                <td class="text-right font-mono font-bold text-success text-xs">
+                <td class="text-right font-mono font-black text-success text-xs sm:text-sm align-middle whitespace-nowrap">
                   <div>${{ (row.netSoldPrice || 0).toFixed(2) }}</div>
                   <div v-if="row.consignorPct && row.consignorPct < 100" class="text-[10px] font-normal text-base-content/60 font-sans">
                     {{ row.consignorPct }}% split (-${{ (row.commissionFee || 0).toFixed(2) }})
@@ -658,24 +600,24 @@
                 </td>
 
                 <!-- Mapping Picker or Matched Item Info -->
-                <td>
-                  <!-- Matched Display -->
-                  <div v-if="row.mappedItem" class="flex items-center gap-2 p-1 bg-base-200 rounded-lg border border-base-300">
+                <td class="align-middle py-3">
+                  <!-- Matched Display Card -->
+                  <div v-if="row.mappedItem" class="flex items-center gap-2.5 p-2 bg-base-100 dark:bg-base-200 rounded-xl border border-base-300 shadow-2xs">
                     <span 
-                      class="badge badge-xs font-mono font-bold cursor-pointer hover:badge-secondary transition-all" 
-                      :class="row.mappedItem.upc ? 'badge-primary' : 'badge-ghost'"
+                      class="badge badge-sm font-mono font-black cursor-pointer hover:brightness-110 active:scale-95 transition-all whitespace-nowrap shrink-0 shadow-xs" 
+                      :class="row.mappedItem.upc ? 'badge-primary text-primary-content' : 'badge-ghost'"
                       @click="cycleUpcPrefix(row.mappedItem)"
-                      title="Click to toggle or generate next HUCK- / PDXGL- UPC"
+                      title="Click to toggle or generate next sequential barcode"
                     >
                       {{ row.mappedItem.upc || 'NO UPC' }}
                     </span>
-                    <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-bold gap-0.5" :title="row.aiReason || 'Matched by Gemini AI'">
+                    <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-black gap-0.5 whitespace-nowrap shrink-0" :title="row.aiReason || 'Matched by Gemini AI'">
                       ✨ AI
                     </span>
-                    <span class="text-xs font-semibold truncate flex-1" :title="row.mappedItem.title">
+                    <div class="text-xs font-semibold leading-tight text-base-content flex-1 min-w-0 break-words" :title="row.mappedItem.title">
                       {{ row.mappedItem.title }}
-                    </span>
-                    <button class="btn btn-xs btn-ghost btn-circle text-error ml-1 shrink-0" @click="row.mappedItem = null; row.aiMatched = false;" title="Unlink Item">
+                    </div>
+                    <button class="btn btn-xs btn-ghost btn-circle text-error/80 hover:text-error hover:bg-error/10 shrink-0 ml-1" @click="row.mappedItem = null; row.aiMatched = false;" title="Unlink Item">
                       ✕
                     </button>
                   </div>
@@ -747,6 +689,291 @@
           </table>
       </div>
 
+    <!-- Canonical Interactive Bottom Sheet: Ricochet UPC Sync Guide & Execution Tray -->
+    <div 
+      v-if="showBrowserSyncModal" 
+      class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+      @click.self="showBrowserSyncModal = false"
+    >
+      <div 
+        class="bg-base-100 dark:bg-base-200 border-t border-base-300 shadow-2xl rounded-t-3xl max-h-[85vh] flex flex-col w-full max-w-3xl mx-auto overflow-hidden animate-in slide-in-from-bottom duration-300"
+      >
+        <!-- Drag Handle Affordance -->
+        <div class="pt-3 pb-1 cursor-grab flex justify-center" @click="showBrowserSyncModal = false">
+          <div class="w-12 h-1.5 rounded-full bg-base-content/25 hover:bg-base-content/40 transition-colors"></div>
+        </div>
+
+        <!-- Sticky Header -->
+        <div class="px-6 py-3 border-b border-base-200 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 bg-primary/10 text-primary rounded-xl shrink-0">
+              <Icon icon="solar:bolt-bold" class="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <h3 class="font-black text-base leading-tight">Ricochet POS In-Browser Barcode Sync</h3>
+              <p class="text-xs opacity-60">Two-way barcode sync bypassing Ricochet's CSV import block</p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost btn-circle" @click="showBrowserSyncModal = false">✕</button>
+        </div>
+
+        <!-- Sheet Scrollable Content -->
+        <div class="overflow-y-auto p-6 space-y-5">
+          <!-- Why This is Needed Alert -->
+          <div class="alert alert-info py-2.5 px-4 text-xs rounded-2xl flex items-start gap-2.5 shadow-xs border border-info/20">
+            <Icon icon="solar:info-circle-bold" class="w-5 h-5 text-info-content shrink-0 mt-0.5" />
+            <span>
+              Ricochet POS <strong>blocks CSV re-imports</strong> for existing inventory SKUs. These browser tools utilize your active authenticated Ricochet session (<code>PUT /api/product/items</code>) to safely update barcode UPCs with zero manual data entry!
+            </span>
+          </div>
+
+          <!-- 2 Clear Option Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Option 1: Console Script -->
+            <div class="p-4 rounded-2xl bg-base-200/50 border-2 border-primary/40 flex flex-col justify-between shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-1.5 mb-2">
+                  <div class="flex items-center gap-1.5 font-bold text-xs text-primary">
+                    <span class="badge badge-xs badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0">1</span>
+                    <span>Option 1: Preloaded Console Script</span>
+                  </div>
+                  <span class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap shrink-0">Recommended • Fastest</span>
+                </div>
+                <p class="text-[11px] opacity-75 leading-relaxed mb-3">
+                  Zero extensions or setup needed. Pre-bundles all {{ matchedCount }} matched items to run directly inside your open Ricochet tab.
+                </p>
+                <div class="text-[11px] space-y-1.5 bg-base-100 p-3 rounded-xl border border-base-300 font-medium">
+                  <div class="font-bold text-[10px] uppercase tracking-wider opacity-60">4-Step Execution:</div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">1</span>
+                    <span>Click <strong>Copy Option 1 Script</strong> below.</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">2</span>
+                    <span>Switch to your <strong>Memory Den / Ricochet</strong> tab.</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">3</span>
+                    <span>Press <kbd class="kbd kbd-xs">F12</kbd> ➔ click <strong>Console</strong>.</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">4</span>
+                    <span>Paste (<kbd class="kbd kbd-xs">Ctrl + V</kbd>) & press <kbd class="kbd kbd-xs">Enter</kbd>.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-4 flex flex-col sm:flex-row gap-2">
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-outline btn-primary font-bold gap-1.5 active:scale-95 flex-1"
+                  :disabled="matchedCount === 0"
+                  @click="copyPreloadedConsoleScript('single')"
+                  title="Safely test 1 single item first on your live Ricochet store"
+                >
+                  <Icon icon="solar:test-tube-bold" class="w-4 h-4 text-warning" />
+                  <span>Test 1 Item Only</span>
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-primary text-primary-content font-black gap-2 shadow-md active:scale-95 flex-2"
+                  :disabled="matchedCount === 0"
+                  @click="copyPreloadedConsoleScript('full')"
+                >
+                  <Icon icon="solar:copy-bold" class="w-4 h-4" />
+                  <span>Copy All ({{ matchedCount }} Items)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Option 2: Tampermonkey / Bookmarklet -->
+            <div class="p-4 rounded-2xl bg-base-200/50 border border-secondary/30 flex flex-col justify-between shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-1.5 mb-2">
+                  <div class="flex items-center gap-1.5 font-bold text-xs text-secondary">
+                    <span class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold whitespace-nowrap shrink-0">2</span>
+                    <span>Option 2: Userscript / Bookmarklet</span>
+                  </div>
+                  <span class="badge badge-xs badge-neutral text-neutral-content font-bold whitespace-nowrap shrink-0">Visual Widget</span>
+                </div>
+                <p class="text-[11px] opacity-75 leading-relaxed mb-3">
+                  Installs a floating <strong>⚡ Ricochet UPC Sync</strong> button that appears automatically in the corner of your Ricochet screen.
+                </p>
+                <div class="text-[11px] space-y-1.5 bg-base-100 p-3 rounded-xl border border-base-300 font-medium">
+                  <div class="font-bold text-[10px] uppercase tracking-wider opacity-60">Installation Steps:</div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-secondary/10 text-secondary text-[10px] flex items-center justify-center font-bold shrink-0">1</span>
+                    <span>Install Userscript into Tampermonkey (or drag Bookmarklet).</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-secondary/10 text-secondary text-[10px] flex items-center justify-center font-bold shrink-0">2</span>
+                    <span>Visit <code>memoryden.ricoconsign.com</code>.</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-secondary/10 text-secondary text-[10px] flex items-center justify-center font-bold shrink-0">3</span>
+                    <span>Click the floating widget in the bottom-right corner.</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-4 h-4 rounded-full bg-secondary/10 text-secondary text-[10px] flex items-center justify-center font-bold shrink-0">4</span>
+                    <span>Click <strong>Start Auto-Sync</strong> with live progress bar.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-4 flex gap-2">
+                <a 
+                  href="/ricochet-upc-sync.user.js" 
+                  target="_blank" 
+                  class="btn btn-sm btn-secondary text-secondary-content font-bold flex-1"
+                >
+                  Install Userscript
+                </a>
+                <a 
+                  :href="bookmarkletHref" 
+                  class="btn btn-sm btn-outline btn-secondary font-bold cursor-grab active:cursor-grabbing flex-1"
+                  title="Drag this button to your Bookmarks Bar!"
+                  @click.prevent="copyBookmarkletCode"
+                >
+                  Drag Bookmarklet
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sticky Footer with Thumb Clearance -->
+        <div class="p-4 border-t border-base-200 bg-base-200/40 flex justify-between items-center pb-[max(1rem,env(safe-area-inset-bottom,1rem))]">
+          <span class="text-xs opacity-60 font-mono">{{ matchedCount }} item{{ matchedCount === 1 ? '' : 's' }} ready for {{ currentLocation?.name || 'Location' }}</span>
+          <button type="button" class="btn btn-sm btn-ghost" @click="showBrowserSyncModal = false">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- CANONICAL CONTEXTUAL COMMAND DOCK (NN/g, Apple HIG, Material 3 Standard)   -->
+    <!-- ========================================================================= -->
+    <Teleport to="body">
+      <div 
+        v-if="syncRows.length > 0"
+        class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-8px_30px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
+      >
+        <!-- TIER 1: STATUS & TELEMETRY STRIP -->
+        <div class="border-b border-base-content/10 bg-base-200/60 dark:bg-base-300/60 py-1.5 px-4 flex items-center justify-between text-xs">
+          <div class="max-w-5xl w-full mx-auto flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="badge badge-xs badge-primary text-primary-content font-black font-mono whitespace-nowrap shrink-0">
+                {{ matchedCount }} / {{ syncRows.length }} Items Ready
+              </span>
+              <span class="text-[11px] font-mono opacity-75">
+                Prefix: <strong class="text-primary">{{ upcPrefix }}</strong> (Next: {{ nextPreviewUpc }})
+              </span>
+              <span v-if="unmatchedCount > 0" class="badge badge-xs badge-warning text-warning-content font-bold whitespace-nowrap shrink-0">
+                {{ unmatchedCount }} Unlinked
+              </span>
+            </div>
+
+            <!-- Deep Drawer Trigger for Full Guide -->
+            <button 
+              type="button" 
+              class="btn btn-ghost btn-xs gap-1 font-bold text-base-content/80 hover:text-primary transition-colors shrink-0"
+              @click="showBrowserSyncModal = true"
+              title="Open full Ricochet sync guide, Userscript, and Bookmarklet options"
+            >
+              <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5 text-warning" />
+              <span>Ricochet Sync Guide & Bookmarklet ⌃</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- TIER 2: ACTION BUTTONS STRIP (THUMB ZONE) -->
+        <div class="py-2.5 px-4 flex items-center justify-center">
+          <div class="max-w-5xl w-full mx-auto flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
+            <!-- Left: Batch Resolution Actions -->
+            <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+              <button 
+                v-if="unmatchedCount > 0"
+                type="button"
+                class="btn btn-xs sm:btn-sm bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-xs gap-1.5 border-none active:scale-95 shrink-0 min-h-[40px]"
+                :disabled="isAiMatching || isBulkQuickAdding"
+                @click="triggerAiMatching"
+                title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks"
+              >
+                <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4 text-yellow-300" />
+                <span class="hidden md:inline">✨ AI Match</span>
+                <span class="md:hidden">✨ AI</span>
+                <span>({{ unmatchedCount }})</span>
+              </button>
+
+              <button 
+                v-if="unmatchedSoldCount > 0"
+                type="button"
+                class="btn btn-xs sm:btn-sm btn-error text-white font-extrabold shadow-xs gap-1.5 active:scale-95 shrink-0 min-h-[40px]"
+                :disabled="isBulkQuickAdding || isAiMatching"
+                @click="bulkQuickAddUnmatched(true)"
+                title="Auto-create inventory items for sold lines so net profit is recorded"
+              >
+                <span v-if="isBulkQuickAdding" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:cart-check-bold" class="w-4 h-4" />
+                <span>Save Sold ({{ unmatchedSoldCount }})</span>
+              </button>
+
+              <button 
+                v-if="unmatchedInStockCount > 0"
+                type="button"
+                class="btn btn-xs sm:btn-sm btn-warning text-black font-bold shadow-xs gap-1.5 active:scale-95 shrink-0 min-h-[40px]"
+                :disabled="isBulkQuickAdding || isAiMatching"
+                @click="bulkQuickAddUnmatched(false)"
+                title="Auto-create in-stock items with sequential barcodes"
+              >
+                <span v-if="isBulkQuickAdding" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:box-minimalistic-bold" class="w-4 h-4" />
+                <span>+ In-Stock ({{ unmatchedInStockCount }})</span>
+              </button>
+            </div>
+
+            <!-- Center: CONTEXTUAL PRIMARY ACTION (Solid Elevated Tactile Pill) & Safe Test Pill -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline btn-primary font-bold shadow-xs active:scale-95 gap-1.5 min-h-[44px] text-xs px-3"
+                :disabled="matchedCount === 0"
+                @click="copyPreloadedConsoleScript('single')"
+                title="Safely test 1 single item first on your live Ricochet store before syncing all 240"
+              >
+                <Icon icon="solar:test-tube-bold" class="w-4 h-4 text-warning" />
+                <span>Test 1 Item</span>
+              </button>
+
+              <button 
+                type="button" 
+                class="btn btn-sm btn-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 gap-2 px-5 min-h-[44px] text-xs sm:text-sm shrink-0"
+                :disabled="matchedCount === 0"
+                @click="copyPreloadedConsoleScript('full')"
+                title="1-Click copy pre-bundled script with all matched items and barcodes"
+              >
+                <Icon icon="solar:copy-bold" class="w-4 h-4" />
+                <span>⚡ Copy All ({{ matchedCount }})</span>
+              </button>
+            </div>
+
+            <!-- Right: Commit to Local DB -->
+            <button 
+              type="button"
+              class="btn btn-sm btn-secondary text-secondary-content font-bold shadow-md shadow-secondary/20 active:scale-95 min-h-[44px] gap-1.5 px-4 text-xs sm:text-sm shrink-0"
+              :disabled="matchedCount === 0 || isCommitting" 
+              @click="executeSync"
+              title="Record sales transactions and assign SKUs in local database"
+            >
+              <span v-if="isCommitting" class="loading loading-spinner loading-xs"></span>
+              <Icon v-else icon="solar:check-read-linear" class="w-4 h-4" />
+              <span>Sync & Commit</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     </div>
   </div>
 </template>
@@ -757,6 +984,141 @@ import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
+
+// Browser Auto-Sync Helper State
+const showBrowserSyncModal = ref(false);
+
+const bookmarkletHref = computed(() => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4321';
+  return `javascript:(function(){const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+});
+
+const copyBookmarkletCode = () => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(bookmarkletHref.value);
+    addToast({ type: 'info', message: 'Bookmarklet code copied! Drag it to your bookmarks bar or paste into a new bookmark URL.' });
+  }
+};
+
+const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
+  let matched = syncRows.value
+    .filter(r => r.mappedItem && (r.mappedItem.upc || r.extractedUpc))
+    .map(r => ({
+      id: r.productId || '',
+      sku: r.extractedSku || '',
+      upc: r.mappedItem?.upc || r.extractedUpc || '',
+      title: r.mappedItem?.title || r.itemName || ''
+    }));
+
+  if (matched.length === 0) {
+    addToast({ type: 'warning', message: 'No mapped items with UPCs to export.' });
+    return;
+  }
+
+  const isTest = mode === 'single';
+  if (isTest) {
+    matched = matched.slice(0, 1);
+  }
+
+  const script = `// ⚡ Resale Command ➔ Ricochet Preloaded UPC Auto-Sync (${isTest ? 'TEST 1 ITEM' : 'ALL ' + matched.length + ' ITEMS'})
+(async function() {
+  const isTestMode = ${isTest};
+  const items = ${JSON.stringify(matched, null, 2)};
+  console.log('%c[Resale Command]%c ' + (isTestMode ? '🧪 Starting SAFE TEST RUN for 1 item only...' : 'Starting bulk UPC sync for ' + items.length + ' items...'), 'background:#4f46e5;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;', 'color:#fff;');
+  
+  if (!window.axios) {
+    console.error('❌ Please run this script inside your logged-in Ricochet tab (memoryden.ricoconsign.com)');
+    alert('Please run this script inside your logged-in Ricochet portal (e.g. memoryden.ricoconsign.com)');
+    return;
+  }
+
+  // 1. If any items lack Product IDs, build a SKU lookup table from Ricochet catalog
+  const needsSkuLookup = items.some(it => !it.id && it.sku);
+  const skuToIdMap = {};
+
+  if (needsSkuLookup) {
+    console.log('%c[Resale Command]%c Scanning Ricochet catalog to map SKUs to Product IDs...', 'background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;', 'color:#fff;');
+    for (let offset = 0; offset < 2000; offset += 100) {
+      try {
+        const catRes = await window.axios.get('/api/product?store=1&limit=100&offset=' + offset);
+        const prods = catRes.data.products || [];
+        for (const p of prods) {
+          if (p.sku_quantities) {
+            Object.keys(p.sku_quantities).forEach(s => {
+              skuToIdMap[s.trim().toUpperCase()] = p.id;
+            });
+          }
+        }
+        if (prods.length < 100) break;
+      } catch (e) {
+        console.warn('Catalog scan error at offset ' + offset, e);
+        break;
+      }
+    }
+  }
+
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const cleanSku = (item.sku || '').trim().toUpperCase();
+    const targetId = item.id || skuToIdMap[cleanSku];
+
+    if (!targetId) {
+      console.warn(\`✕ [\${i+1}/\${items.length}] Skipping \${cleanSku || item.title}: No Product ID found\`);
+      failed++;
+      continue;
+    }
+
+    try {
+      // 1. Fetch current item details from Ricochet
+      const detailRes = await window.axios.get('/api/product/show/' + targetId);
+      const payload = detailRes.data.product || detailRes.data.data || detailRes.data;
+      const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items).flat();
+      const targetItem = allItems.find(it => (it.sku || '').trim().toUpperCase() === cleanSku) || allItems[0];
+
+      if (!targetItem) {
+        failed++;
+        console.warn(\`✕ [\${i+1}/\${items.length}] Item \${cleanSku} not found in product \${targetId}\`);
+        continue;
+      }
+
+      // 2. Set store: 1 and new UPC
+      targetItem.store = 1;
+      targetItem.upc_code = item.upc;
+
+      // 3. Save via verified PUT /api/product/items
+      const saveRes = await window.axios.put('/api/product/items', targetItem);
+      if (saveRes.status === 201 || saveRes.status === 200) {
+        success++;
+        console.log(\`%c✓ [\${i+1}/\${items.length}] \${targetItem.sku} ➔ \${item.upc}\`, 'color:#10b981; font-weight:bold; font-size:13px;');
+      } else {
+        failed++;
+        console.warn(\`✕ [\${i+1}/\${items.length}] \${targetItem.sku} HTTP \${saveRes.status}\`);
+      }
+    } catch (err) {
+      failed++;
+      console.error(\`✕ Error on \${cleanSku || targetId}:\`, err.response?.data || err.message);
+    }
+
+    // Safe 200ms rate-limiting delay
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  console.log(\`%c🎉 \${isTestMode ? 'Test Run Complete!' : 'Sync Finished!'} \${success} updated, \${failed} failed.\`, 'color:#10b981; font-weight:bold; font-size:15px;');
+  if (isTestMode) {
+    console.log('%c💡 Refresh your Ricochet inventory table now to verify this 1 test item before running all items!', 'color:#38bdf8; font-weight:bold;');
+  }
+})();`;
+
+  navigator.clipboard.writeText(script);
+  if (isTest) {
+    addToast({ type: 'info', message: 'Copied TEST script (1 item only) to clipboard! Paste into Ricochet console to verify.' });
+  } else {
+    addToast({ type: 'success', message: `Copied preloaded script for ${matched.length} items to clipboard!` });
+  }
+};
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
 import { databases, ID } from '../../lib/appwrite';
@@ -1400,6 +1762,7 @@ const processCsvFile = (file: File) => {
 
         rows.push({
           originalLineIndex: i,
+          productId: prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim() : '',
           extractedSku: cleanSku,
           extractedUpc: cleanUpc,
           itemName: name,

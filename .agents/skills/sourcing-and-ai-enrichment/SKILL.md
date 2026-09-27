@@ -19,9 +19,11 @@ ShopGoodwill is currently our most comprehensive automated online source.
 | **Shipped Orders CSV** (`BulkImport.vue`) | • `Order #` (PO identification)<br/>• `Item Id` (Numeric ID: `274480963`)<br/>• `Order Date` / Shipped Date<br/>• **Landed Cost Allocation**: Base bid, shipping, handling, and tax accurately divided across lines<br/>• `Tracking #` & Carrier<br/>• Shipping facility/seller | • **Truncated Titles**: SGW truncates titles to 20 characters in CSV exports (e.g., `Dehen University Vin`).<br/>• **BOM Character**: Often contains an invisible Byte Order Mark (`\ufeff`) on `Order #`.<br/>• **No Photos**: CSV does not contain auction images. |
 | **ShopGoodwill Buyer API** (`/api/proxy-item-details`) | • **Full, Untruncated Title** (e.g. `Dehen 1920 Vintage Wool Letterman Jacket`)<br/>• Full seller description & condition notes<br/>• Official auction photos (`imageURL` + gallery array)<br/>• Winning bid price | • Buyer API can occasionally rate-limit or fail if items are older than 90 days. |
 
-### B. In-Person Retail & Thrift Receipts (`SpeedEntryForm.vue`)
+### B. In-Person Retail & Thrift Receipts (`SpeedEntryForm.vue`, `PurchaseEditor.vue`)
 Used for live thrifting runs (Goodwill, St. Vincent de Paul, Estate Sales).
-* **Live Camera Receipt OCR**:
+* **Live Camera Receipt OCR (`ScannerWidget.vue`)**:
+  * Viewfinder: Uses `overlayMode="receipt"` with receipt alignment boundary guide (pink dashed frame with top/bottom tags).
+  * WebRTC Architecture: Must strictly adhere to `vue-component-standards` (zero `v-if` on `<video>` refs, `autoplay playsinline muted`, `await nextTick()`, and reactive watcher) to avoid black-screen viewfinder race conditions.
   * Extracts: Store/Vendor name, Date, Total Spent, and line-item prices.
   * Landed Cost: Usually $0 shipping/handling, just subtotal + local sales tax.
   * Limitation: Receipts do not contain product names—only cryptic register codes like `BL WMN SWTR $7.99` or `HH GOOD $4.50`.

@@ -23,7 +23,7 @@
 
         <dialog ref="cameraModal" class="modal">
             <div class="modal-box p-0 bg-black w-full max-w-none h-dvh max-h-none rounded-none flex flex-col overflow-hidden shadow-none relative">
-                <video v-if="isCameraOpen" ref="cameraVideoDialog" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline></video>
+                <video ref="cameraVideoDialog" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline muted></video>
                 
                 <!-- Top Bar -->
                 <div class="absolute top-0 left-0 right-0 bg-linear-to-b from-black/80 to-transparent p-4 flex justify-between items-center text-white z-10 pt-safe">
@@ -87,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 
@@ -183,8 +183,13 @@ const startCamera = async () => {
         }
         isCameraOpen.value = true;
 
+        await nextTick();
+
         if (cameraVideoDialog.value) {
-            cameraVideoDialog.value.srcObject = cameraStream.value;
+            cameraVideoDialog.value.srcObject = stream;
+            cameraVideoDialog.value.play().catch(playErr => {
+                console.warn("Video play error:", playErr);
+            });
         }
     } catch (err) {
         console.warn("Live viewfinder unavailable, falling back to native camera input:", err);
@@ -194,10 +199,23 @@ const startCamera = async () => {
     }
 };
 
+// Keep video element synchronized whenever stream or element reference changes
+watch([cameraVideoDialog, cameraStream], ([videoEl, stream]) => {
+    if (videoEl && stream && videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(playErr => {
+            console.warn("Watcher video play error:", playErr);
+        });
+    }
+});
+
 const stopCamera = () => {
     if (cameraStream.value) {
          cameraStream.value.getTracks().forEach(track => track.stop());
          cameraStream.value = null;
+    }
+    if (cameraVideoDialog.value) {
+         cameraVideoDialog.value.srcObject = null;
     }
     isCameraOpen.value = false;
     if (cameraModal.value) cameraModal.value.close();
