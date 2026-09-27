@@ -50,6 +50,16 @@
           <span>History</span>
           <span v-if="locationHistory.length > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ locationHistory.length }}</span>
         </button>
+
+        <button 
+          type="button" 
+          class="btn btn-sm btn-outline btn-warning gap-1.5 font-bold"
+          @click="showBrowserSyncModal = true"
+          title="Open Ricochet In-Browser Barcode Sync Guide"
+        >
+          <Icon icon="solar:bolt-bold" class="w-4 h-4 text-warning" />
+          <span>⚡ Ricochet Sync Guide</span>
+        </button>
       </div>
     </div>
 
@@ -784,6 +794,10 @@
                   <span>Copy All ({{ matchedCount }} Items)</span>
                 </button>
               </div>
+              <p v-if="matchedCount === 0" class="text-[11px] text-warning font-semibold mt-2.5 flex items-center gap-1.5">
+                <Icon icon="solar:info-circle-bold" class="w-4 h-4 shrink-0" />
+                <span>Drop your CSV or manifest file on this page to pre-bundle your items into this script.</span>
+              </p>
             </div>
 
             <!-- Option 2: Tampermonkey / Bookmarklet -->
