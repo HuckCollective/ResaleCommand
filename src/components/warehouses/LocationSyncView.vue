@@ -807,6 +807,17 @@ const rawCsvHeader = ref<string>('');
 const rawCsvLines = ref<string[]>([]);
 
 const detectedRentDeductions = ref<{ title: string; amount: number; date: string }[]>([]);
+function parseFlexibleDate(dateStr: string): string {
+  if (!dateStr) return new Date().toISOString();
+  const m = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const [, month, day, year] = m;
+    return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T12:00:00.000Z`).toISOString();
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 const isLoggingRent = ref<boolean>(false);
 
 const totalRentDetected = computed(() => {
@@ -818,14 +829,16 @@ const logRentDeductionsToExpenses = async () => {
   isLoggingRent.value = true;
   try {
     const locName = currentLocation.value?.name || 'Memory Den';
+    const locId = selectedLocationId.value || 'booth';
     let count = 0;
     for (const rent of detectedRentDeductions.value) {
       await databases.createDocument(DB_ID, 'expenses', ID.unique(), {
-        cartId: `RENT-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        cartId: `RENT-${locId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         tenantId: team.value?.$id || 'personal',
         amount: Number(rent.amount) || 382.50,
         note: `${locName} Booth Rent - ${rent.title} (${rent.date || 'Monthly'})`,
-        date: rent.date ? new Date(rent.date).toISOString() : new Date().toISOString()
+        date: parseFlexibleDate(rent.date),
+        purchaseId: locId !== 'booth' ? locId : undefined
       });
       count++;
     }

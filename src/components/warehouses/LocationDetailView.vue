@@ -123,6 +123,18 @@
 
         <a 
           class="tab gap-2 pb-3"
+          :class="{'tab-active !border-primary text-primary': activeTab === 'expenses'}"
+          @click="activeTab = 'expenses'"
+        >
+          <Icon icon="solar:wallet-money-bold" class="w-4 h-4" />
+          <span>Rent &amp; Expenses</span>
+          <span v-if="locationExpenses.length > 0" class="badge badge-xs font-mono font-bold" :class="activeTab === 'expenses' ? 'badge-primary text-primary-content' : 'badge-neutral'">
+            {{ locationExpenses.length }}
+          </span>
+        </a>
+
+        <a 
+          class="tab gap-2 pb-3"
           :class="{'tab-active !border-primary text-primary': activeTab === 'settings'}"
           @click="activeTab = 'settings'"
         >
@@ -865,6 +877,167 @@
         </form>
       </div>
 
+      <!-- ========================================================================= -->
+      <!-- TAB 4: RENT & EXPENSES LEDGER (SCHEDULE C WRITE-OFFS)                     -->
+      <!-- ========================================================================= -->
+      <div v-if="activeTab === 'expenses'" class="space-y-6">
+        <!-- Top Summary Cards (Calculated Rollups) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="bg-base-100 p-4 rounded-3xl border border-base-200 shadow-sm flex items-center gap-3">
+            <div class="p-3 bg-secondary/10 text-secondary rounded-2xl shrink-0">
+              <Icon icon="solar:wallet-money-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <div class="text-[11px] uppercase font-bold opacity-60">Total Rent Paid</div>
+              <div class="text-xl font-black font-mono text-secondary">${{ totalRentPaid.toFixed(2) }}</div>
+              <div class="text-[10px] opacity-60">{{ rentPaymentsCount }} deduction{{ rentPaymentsCount === 1 ? '' : 's' }} logged</div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-4 rounded-3xl border border-base-200 shadow-sm flex items-center gap-3">
+            <div class="p-3 bg-primary/10 text-primary rounded-2xl shrink-0">
+              <Icon icon="solar:calculator-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <div class="text-[11px] uppercase font-bold opacity-60">Monthly Average</div>
+              <div class="text-xl font-black font-mono text-primary">${{ averageMonthlyRent.toFixed(2) }}</div>
+              <div class="text-[10px] opacity-60">per active month</div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-4 rounded-3xl border border-base-200 shadow-sm flex items-center gap-3">
+            <div class="p-3 bg-success/10 text-success rounded-2xl shrink-0">
+              <Icon icon="solar:document-text-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <div class="text-[11px] uppercase font-bold opacity-60">Tax Deduction</div>
+              <div class="text-sm font-black text-success">Schedule C Line 20b</div>
+              <div class="text-[10px] opacity-60">100% OpEx Write-Off</div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-4 rounded-3xl border border-base-200 shadow-sm flex items-center gap-3">
+            <div class="p-3 bg-warning/10 text-warning rounded-2xl shrink-0">
+              <Icon icon="solar:calendar-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <div class="text-[11px] uppercase font-bold opacity-60">YTD Rent Total</div>
+              <div class="text-xl font-black font-mono text-warning">${{ ytdRentPaid.toFixed(2) }}</div>
+              <div class="text-[10px] opacity-60">Calendar Year {{ currentYear }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ledger Table Card -->
+        <div class="card bg-base-100 border border-base-200 shadow-md p-5 sm:p-6 rounded-3xl space-y-4">
+          <div class="flex items-center justify-between gap-3 flex-wrap border-b border-base-200/60 pb-3">
+            <div>
+              <h3 class="font-black text-base sm:text-lg flex items-center gap-2">
+                <Icon icon="solar:bill-list-bold" class="w-5 h-5 text-secondary" />
+                <span>Itemized Rent &amp; Expenses Ledger</span>
+              </h3>
+              <p class="text-xs opacity-60">
+                Each periodic space rental charge is recorded as an individual line-item expense with exact payment date for IRS audit compliance.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a 
+                :href="'/warehouse/sync?location=' + encodeURIComponent(warehouse.name)" 
+                class="btn btn-xs sm:btn-sm btn-outline border-base-300 gap-1.5 font-bold"
+                title="Import from Mall Settlement Report"
+              >
+                <Icon icon="solar:upload-bold" class="w-4 h-4 text-secondary" />
+                <span>Import Settlement CSV</span>
+              </a>
+              <button 
+                type="button" 
+                @click="openAddExpenseModal" 
+                class="btn btn-xs sm:btn-sm btn-primary gap-1.5 font-bold shadow-xs"
+              >
+                <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
+                <span>Record Rent / Expense</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div v-if="loadingExpenses" class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="locationExpenses.length === 0" class="text-center py-12 px-4 border border-dashed border-base-300 rounded-2xl space-y-3">
+            <div class="w-12 h-12 rounded-2xl bg-base-200 text-secondary flex items-center justify-center mx-auto">
+              <Icon icon="solar:wallet-money-bold" class="w-6 h-6" />
+            </div>
+            <div>
+              <h4 class="font-bold text-sm">No Rent Deductions Logged Yet</h4>
+              <p class="text-xs opacity-60 max-w-md mx-auto mt-1">
+                When you import a Memory Den or mall settlement CSV in the Sales Sync Hub, booth space rentals (e.g. $382.50/mo) are automatically detected and logged line-by-line. You can also record off-cycle rent payments manually.
+              </p>
+            </div>
+            <div class="pt-2 flex justify-center gap-2">
+              <button type="button" @click="openAddExpenseModal" class="btn btn-xs btn-primary font-bold">
+                Record First Rent Charge
+              </button>
+            </div>
+          </div>
+
+          <!-- Expenses Table -->
+          <div v-else class="overflow-x-auto">
+            <table class="table table-sm w-full">
+              <thead>
+                <tr class="text-[11px] uppercase tracking-wider text-base-content/60 border-b border-base-200">
+                  <th>Payment Date</th>
+                  <th>Description / Statement Note</th>
+                  <th>Tax Category</th>
+                  <th class="text-right">Deduction Amount</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="exp in locationExpenses" :key="exp.$id" class="hover:bg-base-200/40 transition-colors">
+                  <td class="font-mono text-xs font-bold text-base-content">
+                    {{ formatExpenseDate(exp.date) }}
+                  </td>
+                  <td class="text-xs">
+                    <span class="font-bold block">{{ exp.note || 'Space Rental' }}</span>
+                    <span v-if="exp.cartId" class="text-[10px] opacity-40 font-mono">{{ exp.cartId }}</span>
+                  </td>
+                  <td>
+                    <span class="badge badge-xs badge-outline badge-success font-bold">
+                      Schedule C Line 20b
+                    </span>
+                  </td>
+                  <td class="font-mono font-black text-secondary text-right text-xs sm:text-sm">
+                    -${{ Number(exp.amount || 0).toFixed(2) }}
+                  </td>
+                  <td class="text-right">
+                    <button 
+                      type="button" 
+                      class="btn btn-ghost btn-xs text-error opacity-70 hover:opacity-100" 
+                      @click="confirmDeleteExpense(exp)"
+                      title="Delete expense line"
+                    >
+                      <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="font-bold border-t-2 border-base-300">
+                  <td colspan="3" class="text-right text-xs uppercase opacity-75">Calculated Total Rolled Up:</td>
+                  <td class="font-mono font-black text-secondary text-right text-sm">
+                    -${{ totalRentPaid.toFixed(2) }}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- SHARED OUTBOUND LOCATION MANIFEST TRAY -->
@@ -921,6 +1094,116 @@
       </form>
     </dialog>
 
+    <!-- RECORD RENT / EXPENSE MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': showAddExpenseModal }">
+      <div v-if="showAddExpenseModal" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-6 max-w-md mx-auto space-y-4">
+        <div class="flex items-center justify-between border-b border-base-200 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 bg-secondary/10 text-secondary rounded-xl">
+              <Icon icon="solar:wallet-money-bold" class="w-5 h-5" />
+            </div>
+            <div>
+              <h3 class="font-black text-base">Record Rent / Booth Expense</h3>
+              <p class="text-xs opacity-60">{{ warehouse?.name || 'Location' }}</p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-xs btn-ghost btn-circle" @click="showAddExpenseModal = false">✕</button>
+        </div>
+
+        <form @submit.prevent="submitNewExpense" class="space-y-3.5">
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Deduction Amount ($)</span></label>
+            <input 
+              type="number" 
+              step="0.01" 
+              min="0.01" 
+              v-model.number="newExpenseForm.amount" 
+              required 
+              class="input input-bordered input-sm font-mono font-bold text-base" 
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Charge / Payment Date</span></label>
+            <input 
+              type="date" 
+              v-model="newExpenseForm.date" 
+              required 
+              class="input input-bordered input-sm font-mono" 
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Description / Note</span></label>
+            <input 
+              type="text" 
+              v-model="newExpenseForm.note" 
+              required 
+              class="input input-bordered input-sm" 
+              placeholder="e.g. Memory Den Space Rental - August 2026"
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Tax Category</span></label>
+            <select v-model="newExpenseForm.category" class="select select-bordered select-sm">
+              <option value="Schedule C Line 20b (Rent on business property)">Schedule C Line 20b (Rent on business property)</option>
+              <option value="Schedule C Line 22 (Supplies &amp; materials)">Schedule C Line 22 (Supplies &amp; materials)</option>
+              <option value="Schedule C Line 27a (Other expenses)">Schedule C Line 27a (Other expenses)</option>
+            </select>
+          </div>
+
+          <div class="modal-action border-t border-base-200 pt-3 flex justify-end gap-2">
+            <button type="button" class="btn btn-sm btn-ghost" @click="showAddExpenseModal = false">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-secondary font-bold" :disabled="isSubmittingExpense">
+              <span v-if="isSubmittingExpense" class="loading loading-spinner loading-xs"></span>
+              <span>Record Expense Line</span>
+            </button>
+          </div>
+        </form>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showAddExpenseModal = false">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- DELETE EXPENSE CONFIRMATION MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': !!expenseToDelete }">
+      <div v-if="expenseToDelete" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 max-w-sm mx-auto space-y-4">
+        <div class="flex items-center gap-3 text-error">
+          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6" />
+          </div>
+          <div>
+            <h3 class="font-black text-base text-base-content">Delete Expense Line?</h3>
+            <p class="text-xs text-base-content/60 font-mono">${{ Number(expenseToDelete.amount).toFixed(2) }}</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/80 leading-relaxed">
+          Are you sure you want to remove the expense line <strong>"{{ expenseToDelete.note }}"</strong>? This will remove it from the calculated rollup and tax records.
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button type="button" class="btn btn-ghost flex-1 font-bold" @click="expenseToDelete = null">
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            class="btn btn-error flex-1 font-bold text-white shadow-md gap-1"
+            :disabled="isDeletingExpense"
+            @click="executeDeleteExpense"
+          >
+            <span v-if="isDeletingExpense" class="loading loading-spinner loading-xs"></span>
+            <span>Confirm Delete</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="expenseToDelete = null">
+        <button>close</button>
+      </form>
+    </dialog>
+
     <!-- FULL ITEM DRAWER FOR INSPECTING & EDITING SPECS -->
     <ItemDrawer 
       v-if="editingItem" 
@@ -942,6 +1225,7 @@ import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
+import { databases, ID, Query } from '../../lib/appwrite';
 
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
 
@@ -1066,7 +1350,154 @@ const warehouse = ref<WarehouseDocument | null>(null);
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
 const error = ref('');
-const activeTab = ref<'manifests' | 'catalog' | 'settings'>('manifests');
+const activeTab = ref<'manifests' | 'catalog' | 'expenses' | 'settings'>('manifests');
+
+const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+
+const locationExpenses = ref<any[]>([]);
+const loadingExpenses = ref<boolean>(false);
+const showAddExpenseModal = ref<boolean>(false);
+const isSubmittingExpense = ref<boolean>(false);
+const expenseToDelete = ref<any | null>(null);
+const isDeletingExpense = ref<boolean>(false);
+
+const currentYear = new Date().getFullYear();
+
+const newExpenseForm = ref({
+  amount: 382.50,
+  date: new Date().toISOString().slice(0, 10),
+  note: '',
+  category: 'Schedule C Line 20b (Rent on business property)'
+});
+
+const openAddExpenseModal = () => {
+  const locName = warehouse.value?.name || 'Booth';
+  const defRent = warehouse.value?.monthlyRent || 382.50;
+  newExpenseForm.value = {
+    amount: defRent,
+    date: new Date().toISOString().slice(0, 10),
+    note: `${locName} Space Rental`,
+    category: 'Schedule C Line 20b (Rent on business property)'
+  };
+  showAddExpenseModal.value = true;
+};
+
+const formatExpenseDate = (isoOrStr: string) => {
+  if (!isoOrStr) return '—';
+  try {
+    return new Date(isoOrStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return isoOrStr;
+  }
+};
+
+const loadExpenses = async () => {
+  if (!warehouse.value) return;
+  loadingExpenses.value = true;
+  try {
+    const locId = warehouse.value.$id;
+    const locName = (warehouse.value.name || '').toLowerCase();
+    const locCode = (warehouse.value.code || '').toLowerCase();
+
+    const queries = [Query.orderDesc('date'), Query.limit(100)];
+    if (team.value?.$id) {
+      queries.push(Query.equal('tenantId', team.value.$id));
+    }
+
+    const res = await databases.listDocuments(DB_ID, 'expenses', queries);
+    locationExpenses.value = res.documents.filter((doc: any) => {
+      const cId = (doc.cartId || '').toLowerCase();
+      const pId = (doc.purchaseId || '').toLowerCase();
+      const note = (doc.note || '').toLowerCase();
+
+      return (
+        (locId && (cId.includes(locId.toLowerCase()) || pId === locId.toLowerCase())) ||
+        (locName && note.includes(locName)) ||
+        (locCode && cId.includes(locCode))
+      );
+    });
+  } catch (err: any) {
+    console.warn('Failed to load expenses for location:', err);
+  } finally {
+    loadingExpenses.value = false;
+  }
+};
+
+const submitNewExpense = async () => {
+  if (!warehouse.value) return;
+  isSubmittingExpense.value = true;
+  try {
+    const locId = warehouse.value.$id;
+    const doc = await databases.createDocument(DB_ID, 'expenses', ID.unique(), {
+      cartId: `RENT-${locId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      tenantId: team.value?.$id || 'personal',
+      amount: Number(newExpenseForm.value.amount) || 0,
+      note: newExpenseForm.value.note || `${warehouse.value.name} Booth Rent`,
+      date: new Date(newExpenseForm.value.date + 'T12:00:00.000Z').toISOString(),
+      purchaseId: locId
+    });
+    locationExpenses.value.unshift(doc);
+    addToast({
+      type: 'success',
+      message: `Recorded $${Number(newExpenseForm.value.amount).toFixed(2)} rent expense line!`
+    });
+    showAddExpenseModal.value = false;
+  } catch (err: any) {
+    console.error('Failed to create expense:', err);
+    addToast({ type: 'error', message: 'Failed to record expense: ' + err.message });
+  } finally {
+    isSubmittingExpense.value = false;
+  }
+};
+
+const confirmDeleteExpense = (exp: any) => {
+  expenseToDelete.value = exp;
+};
+
+const executeDeleteExpense = async () => {
+  if (!expenseToDelete.value) return;
+  isDeletingExpense.value = true;
+  try {
+    await databases.deleteDocument(DB_ID, 'expenses', expenseToDelete.value.$id);
+    locationExpenses.value = locationExpenses.value.filter(e => e.$id !== expenseToDelete.value.$id);
+    addToast({ type: 'info', message: 'Expense line removed.' });
+    expenseToDelete.value = null;
+  } catch (err: any) {
+    console.error('Failed to delete expense:', err);
+    addToast({ type: 'error', message: 'Could not delete expense: ' + err.message });
+  } finally {
+    isDeletingExpense.value = false;
+  }
+};
+
+const totalRentPaid = computed(() => {
+  return locationExpenses.value.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+});
+
+const rentPaymentsCount = computed(() => {
+  return locationExpenses.value.length;
+});
+
+const averageMonthlyRent = computed(() => {
+  if (rentPaymentsCount.value === 0) return warehouse.value?.monthlyRent || 0;
+  return totalRentPaid.value / rentPaymentsCount.value;
+});
+
+const ytdRentPaid = computed(() => {
+  return locationExpenses.value
+    .filter(exp => {
+      try {
+        return new Date(exp.date).getFullYear() === currentYear;
+      } catch {
+        return false;
+      }
+    })
+    .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+});
 
 // Settings Form State & Watch Tags
 const parseNicheAndWatchTags = (raw: string) => {
@@ -1160,10 +1591,11 @@ const loadLocationData = async () => {
     };
     watchTags.value = parsed.tags;
 
-    // Load manifests and inventory items for this location in parallel
+    // Load manifests, inventory items, and expenses for this location in parallel
     await Promise.all([
       loadManifests(),
-      fetchInventory(team.value?.$id)
+      fetchInventory(team.value?.$id),
+      loadExpenses()
     ]);
     if (activeDraft.value) {
       await switchActiveManifest(activeDraft.value.$id);
