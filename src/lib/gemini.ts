@@ -51,11 +51,25 @@ export const generateContentWithBackoff = async (
     maxRetries = 10, 
     baseDelayMs = 2500
 ) => {
-    let requestPayload = modelOrRequest;
-    if (Array.isArray(maybeRequestOrRetries) || (maybeRequestOrRetries && typeof maybeRequestOrRetries === 'object' && ('contents' in maybeRequestOrRetries || 'inlineData' in maybeRequestOrRetries))) {
-        requestPayload = maybeRequestOrRetries;
-    } else if (typeof maybeRequestOrRetries === 'number') {
-        maxRetries = maybeRequestOrRetries;
+    let requestPayload: any;
+
+    // Check if the first argument is a GenerativeModel instance
+    if (modelOrRequest && typeof modelOrRequest === 'object' && typeof modelOrRequest.generateContent === 'function') {
+        if (maybeRequestOrRetries !== undefined && typeof maybeRequestOrRetries !== 'number') {
+            requestPayload = maybeRequestOrRetries;
+        } else {
+            throw new Error("[Gemini] generateContentWithBackoff received a GenerativeModel without a prompt or request payload.");
+        }
+    } else {
+        requestPayload = modelOrRequest;
+        if (typeof maybeRequestOrRetries === 'number') {
+            maxRetries = maybeRequestOrRetries;
+        }
+    }
+
+    // Safety check: ensure requestPayload is never a GenerativeModel or undefined
+    if (!requestPayload || (typeof requestPayload === 'object' && typeof requestPayload.generateContent === 'function')) {
+        throw new Error("[Gemini] Invalid generateContent request payload: payload cannot be a GenerativeModel or empty.");
     }
 
     const candidateModels = ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"];
@@ -121,3 +135,92 @@ export const generateContentWithBackoff = async (
     }
     throw new Error("Failed to receive a valid response from the AI model after retries.");
 };
+
+/**
+ * Universal JSON response parser for LLM outputs.
+ * Robustly strips markdown fences (```json ... ```), extracts the outermost JSON
+ * object or array, handles common formatting quirks (trailing commas, newlines),
+ * and parses typed data with optional fallback.
+ */
+export function parseAiJson<T = any>(rawText: string, fallback?: T): T {
+    if (!rawText || typeof rawText !== 'string') {
+        if (fallback !== undefined) return fallback;
+        throw new Error('[Gemini Parser] Empty or non-string response text received.');
+    }
+
+    // 1. Strip markdown fences if present
+    let cleaned = rawText
+        .replace(/^```(?:json)?\s*/im, '')
+        .replace(/\s*```$/im, '')
+        .trim();
+
+    // 2. Try direct JSON.parse first (fast path)
+    try {
+        return JSON.parse(cleaned) as T;
+    } catch {
+        // Fall through to boundary extraction
+    }
+
+    // 3. Find outer JSON boundaries ({ ... } or [ ... ])
+    const firstBrace = cleaned.indexOf('{');
+    const firstBracket = cleaned.indexOf('[');
+    
+    let startIndex = -1;
+    let endIndex = -1;
+
+    // Determine if array or object comes first
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        startIndex = firstBrace;
+        endIndex = cleaned.lastIndexOf('}');
+    } else if (firstBracket !== -1) {
+        startIndex = firstBracket;
+        endIndex = cleaned.lastIndexOf(']');
+    }
+
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+        const extracted = cleaned.substring(startIndex, endIndex + 1);
+        try {
+            return JSON.parse(extracted) as T;
+        } catch (extractErr: any) {
+            // Attempt minor sanitization: strip trailing commas before } or ]
+            const sanitized = extracted
+                .replace(/,\s*([}\]])/g, '$1')
+                .replace(/[\u0000-\u0019]+/g, ' '); // remove control chars
+            try {
+                return JSON.parse(sanitized) as T;
+            } catch {
+                if (fallback !== undefined) return fallback;
+                throw new Error(`[Gemini Parser] Failed to parse extracted JSON block: ${extractErr.message}`);
+            }
+        }
+    }
+
+    if (fallback !== undefined) return fallback;
+    throw new Error('[Gemini Parser] Could not find valid JSON object or array in AI response.');
+}
+
+/**
+ * Universal plain-text response cleaner for LLM outputs.
+ * Strips conversational preambles, accidental code block wrappers,
+ * and excess blank lines.
+ */
+export function parseAiPlainText(rawText: string): string {
+    if (!rawText || typeof rawText !== 'string') return '';
+
+    let text = rawText.trim();
+
+    // Strip markdown code fences if model accidentally wrapped output in ```markdown or ```
+    if (text.startsWith('```')) {
+        text = text.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
+    }
+
+    // Strip common conversational preambles (e.g., "Here is your post:", "Sure! Here is the caption:")
+    const preambleRegex = /^(?:here(?:'s| is) (?:a |the |your )?(?:draft|post|caption|text|announcement|copy)?(?::|-|\n)+|sure!?[^\n]*\n+|certainly!?[^\n]*\n+)/i;
+    text = text.replace(preambleRegex, '').trim();
+
+    // Normalize multiple consecutive blank lines to at most two
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return text;
+}
+

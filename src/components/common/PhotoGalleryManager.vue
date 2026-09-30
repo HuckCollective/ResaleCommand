@@ -28,7 +28,7 @@
       </div>
       <div class="pointer-events-none">
         <div class="font-bold text-xs text-base-content">Tap to upload or drag photos here</div>
-        <p class="text-[11px] opacity-60 max-w-xs mt-0.5">High-res photos or screenshots will attach to this item</p>
+        <p class="text-[11px] opacity-60 max-w-xs mt-0.5">{{ dropzoneSubtitle }}</p>
       </div>
 
       <!-- Quick Action: Prominent Large Camera Button -->
@@ -46,7 +46,15 @@
     </div>
 
     <!-- 2. POPULATED STATE (Hero Main Cover Photo + Supporting Thumbnails) -->
-    <div v-else class="space-y-3">
+    <div 
+      v-else 
+      class="space-y-3 relative rounded-2xl transition-all"
+      :class="{ 'ring-2 ring-primary bg-primary/5 p-2': isDragging }"
+      @dragenter.prevent="isDragging = true"
+      @dragover.prevent="isDragging = true"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="handleDrop"
+    >
       <!-- A. Hero Main Cover Photo Card -->
       <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-base-300/40 shadow-sm group aspect-4/3 sm:aspect-16/9 max-h-64 flex items-center justify-center">
         <img 
@@ -254,6 +262,7 @@ const props = withDefaults(defineProps<{
   showHeader?: boolean;
   scannerWidget?: any;
   outputFormat?: 'file' | 'object';
+  dropzoneSubtitle?: string;
 }>(), {
   existingImages: () => [],
   newPhotos: () => [],
@@ -265,7 +274,8 @@ const props = withDefaults(defineProps<{
   title: 'Photos & Sourcing Media',
   showHeader: true,
   scannerWidget: null,
-  outputFormat: 'file'
+  outputFormat: 'file',
+  dropzoneSubtitle: 'High-res photos or screenshots will attach to this item'
 });
 
 const emit = defineEmits<{

@@ -915,7 +915,7 @@
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
                             <button 
-                                v-if="selectedCount > 0 && activeManifest.status === 'draft'"
+                                v-if="selectedCount > 0 && activeManifest.status === 'draft'" 
                                 type="button" 
                                 @click="$emit('stage-manifest')" 
                                 class="btn btn-xs btn-primary text-primary-content font-bold h-6 min-h-6 px-2 shrink-0 gap-0.5"
@@ -930,6 +930,37 @@
                                 class="btn btn-xs btn-outline btn-primary font-bold h-6 min-h-6 px-2 shrink-0 gap-0.5"
                             >
                                 <span>View Drop</span>
+                                <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dropcast Staging Context Banner -->
+                    <div 
+                        class="px-4 py-1.5 bg-secondary/10 border-b border-secondary/20 flex items-center justify-between gap-2 shrink-0 text-xs select-none"
+                    >
+                        <div class="flex items-center gap-1.5 min-w-0 text-secondary font-bold truncate">
+                            <Icon icon="solar:broadcast-bold" class="w-4 h-4 shrink-0" />
+                            <span class="truncate">Cast: {{ activeCast ? activeCast.title : 'Active Dropcast' }}</span>
+                            <span class="badge badge-xs badge-secondary font-mono font-bold shrink-0">{{ stagedCastCount }} staged</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button 
+                                v-if="selectedCount > 0" 
+                                type="button" 
+                                @click="handleStageForDropcast" 
+                                class="btn btn-xs btn-secondary text-secondary-content font-bold h-6 min-h-6 px-2.5 shrink-0 gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                                title="Stage selected items into this Dropcast"
+                            >
+                                <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                                <span>+ Cast ({{ selectedCount }})</span>
+                            </button>
+                            <button 
+                                type="button" 
+                                @click="handleOpenDropcastTray" 
+                                class="btn btn-xs btn-outline btn-secondary font-bold h-6 min-h-6 px-2 shrink-0 gap-0.5 cursor-pointer"
+                            >
+                                <span>View Cast</span>
                                 <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
                             </button>
                         </div>
@@ -1227,6 +1258,18 @@
                                     <span class="truncate">Bundle ({{ selectedCount }})</span>
                                 </button>
                             </template>
+
+                            <!-- Stage for Dropcast -->
+                            <button 
+                                type="button" 
+                                class="btn btn-xs sm:btn-sm btn-outline border-secondary/50 text-secondary hover:bg-secondary hover:text-secondary-content font-bold gap-1 h-9 justify-center"
+                                :disabled="selectedCount === 0"
+                                @click="handleStageForDropcast"
+                                :title="`Stage ${selectedCount} selected items into Dropcast`"
+                            >
+                                <Icon icon="solar:broadcast-bold" class="w-3.5 h-3.5" />
+                                <span class="truncate">Stage Cast ({{ selectedCount }})</span>
+                            </button>
 
                             <!-- Generic CSV Export -->
                             <button 
@@ -1562,6 +1605,7 @@ import { useManifest } from '../../composables/useManifest';
 import { useItemDrawer } from '../../composables/useItemDrawer';
 import { useLotSplitter } from '../../composables/useLotSplitter';
 import { generateSmartLotTitle, generateSmartBundleTitle } from '../../lib/lotTitleGenerator';
+import { useDropcasts } from '../../composables/useDropcasts';
 
 const props = defineProps({
     isOpen: {
@@ -1657,6 +1701,7 @@ const emit = defineEmits([
 ]);
 
 const { isActionTrayOpen, activeManifest, stagedCount, openManifestTray } = useManifest();
+const { activeCast, stagedCastCount, stageItemsForCast, openCastTray } = useDropcasts();
 const { openItemDrawer } = useItemDrawer();
 const { isLotSplitterOpen, activeLotItem, openLotSplitter, closeLotSplitter } = useLotSplitter();
 
@@ -1689,6 +1734,28 @@ const closeTray = () => {
 const handleOpenDropTray = () => {
     closeTray();
     openManifestTray();
+};
+
+const resolveSelectedObjects = () => {
+    if (!props.selectedItems || props.selectedItems.length === 0) return [];
+    return props.selectedItems.map(itemOrId => {
+        if (typeof itemOrId === 'object' && itemOrId !== null) return itemOrId;
+        return props.inventoryItems?.find(it => (it.$id || it.id) === itemOrId);
+    }).filter(Boolean);
+};
+
+const handleOpenDropcastTray = () => {
+    closeTray();
+    openCastTray();
+};
+
+const handleStageForDropcast = () => {
+    const items = resolveSelectedObjects();
+    if (items && items.length > 0) {
+        stageItemsForCast(items, { openTray: true });
+        closeTray();
+        openCastTray();
+    }
 };
 
 // Open split subview automatically when isLotSplitterOpen is triggered globally

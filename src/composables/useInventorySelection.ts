@@ -30,9 +30,9 @@ export function useInventorySelection(itemsRef?: Ref<Models.Document[]>) {
     const toggleItem = (id: string) => {
         const idx = selectedItems.value.indexOf(id);
         if (idx !== -1) {
-            selectedItems.value.splice(idx, 1);
+            selectedItems.value = selectedItems.value.filter(i => i !== id);
         } else {
-            selectedItems.value.push(id);
+            selectedItems.value = [...selectedItems.value, id];
         }
     };
 

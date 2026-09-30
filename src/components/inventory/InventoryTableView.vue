@@ -369,6 +369,9 @@
             @close="isManifestTrayOpen = false"
             @open-actions="openActionTray"
         />
+
+        <!-- 8. ACTIVE DROPCAST STAGING TRAY -->
+        <DropcastStagingTray />
     </div>
 </template>
 
@@ -387,7 +390,9 @@ import ItemThumbnail from '../common/ItemThumbnail.vue';
 import InventoryHeader from './InventoryHeader.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import LocationManifestTray from './LocationManifestTray.vue';
+import DropcastStagingTray from '../social/DropcastStagingTray.vue';
 import { useManifest } from '../../composables/useManifest';
+import { useDropcasts } from '../../composables/useDropcasts';
 import { useItemDrawer } from '../../composables/useItemDrawer';
 
 // Lazy-loaded modal islands (Only downloaded on demand)
@@ -495,6 +500,8 @@ const {
     initActiveDraft
 } = useManifest();
 
+const { activeCast, stageItemsForCast } = useDropcasts();
+
 const handleStageManifest = async () => {
     if (selectedItems.value.length === 0) return;
     const itemsToStage = getSelectedObjects(inventoryItems.value);
@@ -504,19 +511,35 @@ const handleStageManifest = async () => {
     addToast({ type: 'success', message: `Staged ${itemsToStage.length} items to ${locName} Drop.` });
 };
 
-// Watch selectedItems to automatically stage newly selected items into active drop ONLY IF active and status is 'draft'
-// CRITICAL INVARIANT: Unselecting or clearing selection does NOT remove items from the drop! Drops and catalog selections are separate.
+// Watch selectedItems to:
+// 1. Automatically stage newly selected items into active drop ONLY IF active and status is 'draft' (not paused or locked/in-transit)
+// 2. Automatically stage newly selected items into active Dropcast ONLY IF active and status is 'draft' (not paused, ready, or archived)
+// CRITICAL INVARIANT: Unselecting or clearing selection does NOT remove items from drop or cast! Drops and catalog selections are separate.
 watch(selectedItems, async (newVal) => {
+    // A. Outbound Manifest auto-staging
     if (activeManifest.value && activeManifest.value.status === 'draft') {
         const currentManifestIds = new Set(activeManifest.value.itemIds || []);
         const addedIds = newVal.filter(id => !currentManifestIds.has(id));
 
         if (addedIds.length > 0) {
-            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id));
+            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)));
             if (itemsToAdd.length > 0) {
                 const locId = activeManifest.value.locationId || 'MD';
                 const locName = activeManifest.value.locationName || 'Memory Den';
                 await addToActiveManifest(itemsToAdd, locId, locName, false, true);
+            }
+        }
+    }
+
+    // B. Dropcast auto-staging
+    if (activeCast.value && activeCast.value.status === 'draft') {
+        const currentCastIds = new Set((activeCast.value.items || []).map(i => String(i.$id || i.id)));
+        const addedIds = newVal.filter(id => !currentCastIds.has(String(id)));
+
+        if (addedIds.length > 0) {
+            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)));
+            if (itemsToAdd.length > 0) {
+                stageItemsForCast(itemsToAdd, { openTray: false, silent: false });
             }
         }
     }

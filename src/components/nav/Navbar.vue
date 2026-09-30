@@ -9,7 +9,7 @@
       <!-- Nav Links / Combined Scout & Tracker -->
       <template v-if="isAuthenticated">
         <!-- Desktop & Mobile: Direct Speed Scout Button -->
-        <div class="indicator flex items-center mr-2 md:mr-4">
+        <div class="indicator flex items-center mr-2 md:mr-2">
           <span v-if="displayTrackedCount > 0" class="indicator-item badge badge-primary badge-sm font-bold z-10">{{ displayTrackedCount }}</span>
           <a href="/scout?quick=true" 
              @click="handleScoutClick"
@@ -20,6 +20,15 @@
             <span class="hidden sm:inline">Speed Scout</span>
           </a>
         </div>
+
+        <!-- Direct Dropcast Hub Button -->
+        <a href="/social" 
+           class="btn btn-ghost btn-sm border border-base-300 bg-base-200/50 rounded-lg gap-1.5 normal-case font-semibold hover:bg-base-200 flex items-center px-2.5 sm:px-3 mr-2 md:mr-3"
+           title="Dropcast Hub & Social Studio"
+           aria-label="Dropcast Hub">
+          <Icon icon="solar:broadcast-bold" class="w-4 h-4 text-secondary" />
+          <span class="hidden md:inline">Dropcasts</span>
+        </a>
       </template>
       <template v-else>
         <a href="/scout?quick=true" class="hidden md:inline-flex btn btn-ghost hover:bg-base-200 mr-2" title="Speed Scout">
@@ -101,6 +110,12 @@
                      <a href="/warehouse" class="gap-2 font-semibold">
                          <Icon icon="solar:buildings-linear" class="w-4 h-4 text-primary" />
                          Warehousing
+                     </a>
+                  </li>
+                  <li>
+                     <a href="/social" class="gap-2 font-semibold">
+                         <Icon icon="solar:camera-bold" class="w-4 h-4 text-primary" />
+                         Social Studio
                      </a>
                   </li>
                   
@@ -233,6 +248,9 @@
                     </a>
                     <a href="/warehouse" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
                         <Icon icon="solar:buildings-linear" class="w-5 h-5 text-primary" /> Warehousing
+                    </a>
+                    <a href="/social" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
+                        <Icon icon="solar:camera-bold" class="w-5 h-5 text-primary" /> Social Studio
                     </a>
                     
                     <div class="flex flex-wrap gap-2 mt-1">

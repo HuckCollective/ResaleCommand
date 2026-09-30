@@ -1,0 +1,12 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SocialHubView from '../../components/social/SocialHubView.vue';
+
+const { id } = Astro.params;
+---
+
+<Layout title={`Dropcast Studio — ${id || 'Workstation'}`}>
+  <div class="py-4 sm:py-6">
+    <SocialHubView client:only="vue" initialCastId={id} />
+  </div>
+</Layout>

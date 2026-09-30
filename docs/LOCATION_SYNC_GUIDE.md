@@ -99,12 +99,16 @@ A formal sales record is created:
 
 ---
 
-## 5. Two-Way CSV Export with Barcodes / UPCs
+## 5. Two-Way Barcode Sync & Ricochet In-Browser Tool
 
-When the **"Download Synced CSV with UPCs"** checkbox is enabled (default), committing the sync automatically downloads a modified version of your original CSV file:
-- An extra `"UPC"` column is appended (or updated if already present).
-- Every mapped or quick-added row contains its corresponding ResaleCommand barcode (e.g., `HUCK-0931`).
-- You can re-upload this CSV into Memory Den or your booth label software to print barcode stickers matching your internal ResaleCommand inventory tags.
+Because **Ricochet POS blocks CSV re-imports** for existing inventory SKUs, Resale Command provides a built-in **In-Browser Barcode Sync** tool:
+
+1. **Ricochet CSV Export**: You can download a CSV with appended `UPC` barcodes for initial imports or offline records.
+2. **In-Browser UPC Injector (`⚡ Copy All`)**:
+   - For items already imported into Ricochet, click **⚡ Ricochet Sync Guide** or **⚡ Copy All** on `/warehouse/sync`.
+   - Paste into Chrome DevTools (<kbd>F12</kbd> Console) inside your Ricochet dashboard (`memoryden.ricoconsign.com`).
+   - The script auto-scopes to your consignor account, sorts newest-first, matches by title/SKU, and executes `PUT /api/product/items` setting `upc_code` directly with zero manual data entry.
+   - For full technical details and architecture, see [RICOCHET_UPC_SYNC_SOP.md](./RICOCHET_UPC_SYNC_SOP.md).
 
 ---
 

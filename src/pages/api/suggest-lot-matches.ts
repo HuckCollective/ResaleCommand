@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { model, generateContentWithBackoff, parseAiJson } from '../../lib/gemini';
 
 export const prerender = false;
 export const maxDuration = 60;
@@ -119,14 +119,7 @@ Do NOT include markdown formatting or backticks. Return only valid JSON.`;
 
             const result = await generateContentWithBackoff(prompt);
             const text = result.response.text().trim();
-            let cleanJson = text;
-            if (cleanJson.startsWith('```json')) {
-                cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-            } else if (cleanJson.startsWith('```')) {
-                cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-            }
-
-            const parsed = JSON.parse(cleanJson);
+            const parsed = parseAiJson(text, { matches: [] });
             if (Array.isArray(parsed?.matches)) {
                 parsed.matches = parsed.matches.filter((m: any) => m?.id && !excludedSet.has(m.id));
             }
@@ -190,14 +183,7 @@ Do NOT include markdown formatting or backticks. Return only valid JSON.`;
 
             const result = await generateContentWithBackoff(prompt);
             const text = result.response.text().trim();
-            let cleanJson = text;
-            if (cleanJson.startsWith('```json')) {
-                cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-            } else if (cleanJson.startsWith('```')) {
-                cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-            }
-
-            const parsed = JSON.parse(cleanJson);
+            const parsed = parseAiJson(text, { matches: [] });
             return new Response(JSON.stringify(parsed), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }

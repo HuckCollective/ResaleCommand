@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { model, generateContentWithBackoff, parseAiJson } from '../../lib/gemini';
 
 export const prerender = false;
 
@@ -83,28 +83,7 @@ Return a STRICT JSON object:
             }
         }
         
-        // Clean up markdown formatting
-        responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        
-        let parsedJson;
-        try {
-            parsedJson = JSON.parse(responseText);
-        } catch (e) {
-            // Attempt to find JSON object substring
-            const firstBrace = responseText.indexOf('{');
-            const lastBrace = responseText.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace > firstBrace) {
-                try {
-                    parsedJson = JSON.parse(responseText.substring(firstBrace, lastBrace + 1));
-                } catch (subErr) {
-                    console.error("Failed to parse extracted JSON substring:", responseText);
-                    return new Response(JSON.stringify({ error: "Failed to parse receipt correctly. Please try again." }), { status: 500 });
-                }
-            } else {
-                console.error("Gemini did not return valid JSON:", responseText);
-                return new Response(JSON.stringify({ error: "Failed to parse receipt correctly. Please try again." }), { status: 500 });
-            }
-        }
+        const parsedJson = parseAiJson(responseText);
 
         // Deterministic post-processing: Ensure any duplicate or generic titles are clearly numbered
         if (parsedJson && parsedJson.items && Array.isArray(parsedJson.items)) {

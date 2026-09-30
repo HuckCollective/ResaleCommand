@@ -1,0 +1,417 @@
+/**
+ * Dropcast Data Model & Persistence
+ * Manages Quick Casts, Custom Casts, and Draft/Ready/Broadcasted Lifecycles
+ */
+
+import type { SocialStudioItem, PostMediaSlide } from './socialMediaStudio';
+import type { LocationPhoto } from './locationPhotos';
+
+export type CastType = 'restock' | 'grail' | 'haul' | 'recap' | 'custom' | 'event';
+export type CastStatus = 'draft' | 'paused' | 'ready' | 'broadcasted' | 'archived';
+
+export interface Dropcast {
+  id: string;
+  title: string;
+  type: CastType;
+  status: CastStatus;
+  locationName: string;
+  locationCode?: string; // 'MD' | 'DT' | etc.
+  manifestId?: string;
+  items: SocialStudioItem[];
+  slides: PostMediaSlide[];
+  boothPhotos?: LocationPhoto[];
+  personaId: string;
+  customTonePrompt?: string;
+  customNotes?: string;
+  platform: 'instagram' | 'facebook' | 'story';
+  authorHandle: string;
+  includePrices: boolean;
+  generatedCaption?: string;
+  hashtags?: string[];
+  totalRetailValue: number;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
+
+export const CAST_TYPE_META: Record<CastType, { label: string; icon: string; emoji: string; colorBadge: string; description: string }> = {
+  restock: {
+    label: 'Restock Dropcast',
+    icon: 'solar:box-minimalistic-bold',
+    emoji: '🚨',
+    colorBadge: 'badge-primary',
+    description: 'Fresh booth drop & restock to drive in-store hunt foot traffic'
+  },
+  grail: {
+    label: 'Grail Spotlight',
+    icon: 'solar:star-bold',
+    emoji: '💎',
+    colorBadge: 'badge-secondary',
+    description: 'Showcases high-ticket vintage treasure, maker pedigree & craftsmanship'
+  },
+  haul: {
+    label: 'Haul Teaser',
+    icon: 'solar:delivery-bold',
+    emoji: '📦',
+    colorBadge: 'badge-accent',
+    description: 'Unboxing fresh thrift & estate finds before pricing'
+  },
+  recap: {
+    label: 'Sales Wrap-Up',
+    icon: 'solar:dollar-bold',
+    emoji: '💰',
+    colorBadge: 'badge-success',
+    description: 'Recap of grails claimed & sold this week'
+  },
+  custom: {
+    label: 'Custom Cast',
+    icon: 'solar:magic-stick-3-bold',
+    emoji: '🎨',
+    colorBadge: 'badge-neutral',
+    description: 'Hand-crafted multi-channel broadcast with custom aesthetic tone'
+  },
+  event: {
+    label: 'Event & Popup',
+    icon: 'solar:shop-2-bold',
+    emoji: '🎪',
+    colorBadge: 'badge-warning',
+    description: 'Oddities expos, flea markets, and popups announcement'
+  }
+};
+
+export const CAST_STATUS_META: Record<CastStatus, { label: string; badgeClass: string; icon: string }> = {
+  draft: {
+    label: 'Draft',
+    badgeClass: 'badge-warning text-warning-content font-bold',
+    icon: 'solar:pen-new-square-linear'
+  },
+  paused: {
+    label: 'Paused',
+    badgeClass: 'badge-warning badge-outline font-bold',
+    icon: 'solar:pause-circle-bold'
+  },
+  ready: {
+    label: 'Ready to Post',
+    badgeClass: 'badge-info text-info-content font-bold',
+    icon: 'solar:check-circle-bold'
+  },
+  broadcasted: {
+    label: 'Broadcasted',
+    badgeClass: 'badge-success text-success-content font-bold',
+    icon: 'solar:broadcast-bold'
+  },
+  archived: {
+    label: 'Archived',
+    badgeClass: 'badge-ghost opacity-60',
+    icon: 'solar:archive-linear'
+  }
+};
+
+const STORAGE_KEY = 'resale_command_dropcasts';
+
+// Built-in seed data so user has immediate rich dropcasts to test
+const SEED_DROPCASTS: Dropcast[] = [
+  {
+    id: 'cast_md_sep27_restock',
+    title: 'Memory Den Autumn Restock — Sep 27 Drop',
+    type: 'restock',
+    status: 'draft',
+    locationName: 'Memory Den',
+    locationCode: 'MD',
+    personaId: 'lestat',
+    customTonePrompt: 'Vampire Lestat — decadent, poetic, darkly romantic gothic aristocrat from Anne Rice. Velvet relics, dark aesthetic curio, nocturnal allure.',
+    platform: 'instagram',
+    authorHandle: 'resalecommand',
+    includePrices: true,
+    customNotes: 'Booth 42 main aisle curio cabinet restock',
+    totalRetailValue: 345.00,
+    createdAt: '2026-09-27T14:30:00.000Z',
+    updatedAt: '2026-09-29T10:15:00.000Z',
+    items: [
+      {
+        id: 'item_md_1',
+        title: 'Victorian Ornate Brass Table Easel Mirror',
+        resalePrice: 65,
+        boutiquePrice: 65,
+        brand: 'Heirloom Brass',
+        category: 'Home Decor & Curios',
+        condition: 'Vintage Excellent'
+      },
+      {
+        id: 'item_md_2',
+        title: '90s Whimsigoth Celestial Velvet Duster Coat',
+        resalePrice: 125,
+        boutiquePrice: 125,
+        brand: 'Midnight Velvet',
+        category: 'Outerwear',
+        condition: 'Mint Vintage'
+      },
+      {
+        id: 'item_md_3',
+        title: 'Dark Academia Leather-Bound Poetry Anthology (1924)',
+        resalePrice: 48,
+        boutiquePrice: 48,
+        brand: 'Antiquarian Press',
+        category: 'Books & Ephemera',
+        condition: 'Antique Patina'
+      },
+      {
+        id: 'item_md_4',
+        title: 'Hand-Carved Black Forest Wood Curio Box',
+        resalePrice: 55,
+        boutiquePrice: 55,
+        brand: 'Folk Art Woodcraft',
+        category: 'Curiosities',
+        condition: 'Very Good'
+      },
+      {
+        id: 'item_md_5',
+        title: 'Heavy Pewter Candlestick Candelabra Pair',
+        resalePrice: 52,
+        boutiquePrice: 52,
+        brand: 'Continental Pewter',
+        category: 'Curiosities',
+        condition: 'Aged Patina'
+      }
+    ],
+    slides: [
+      {
+        id: 'slide_md_1',
+        type: 'booth_display',
+        url: '',
+        title: "Memory Den - Huck's Adventures Booth 42"
+      }
+    ],
+    generatedCaption: `🥀 FRESH RESTOCK AT MEMORY DEN (BOOTH 42) 🥀\n\nShadows lengthen and new relics have emerged from the twilight. Five decadent pieces just landed in our curio alcove on SE 2nd Ave:\n\n• 90s Whimsigoth Celestial Velvet Duster Coat — $125\n• Victorian Ornate Brass Table Easel Mirror — $65\n• Heavy Pewter Candlestick Candelabra Pair — $52\n• Dark Academia Leather-Bound Poetry Anthology (1924) — $48\n• Hand-Carved Black Forest Wood Curio Box — $55\n\n📍 Find us at Memory Den Booth 42, Portland, OR.\nDM to claim or visit the booth before twilight takes them.\n\n#vintagerestock #memoryden #portlandvintage #gothicaesthetic #darkacademia #whimsigoth #antiquecurio #secondhandpdx`,
+    hashtags: ['#vintagerestock', '#memoryden', '#portlandvintage', '#gothicaesthetic', '#darkacademia']
+  },
+  {
+    id: 'cast_grail_velvet_jacket',
+    title: '1993 Tim Burton Nightmare Velvet Hero Grail',
+    type: 'grail',
+    status: 'ready',
+    locationName: 'Dusty Tiger',
+    locationCode: 'DT',
+    personaId: 'grail',
+    customTonePrompt: 'Museum archivist and pedigree specialist. Focus on era provenance, authentic tags, and collector value.',
+    platform: 'instagram',
+    authorHandle: 'resalecommand',
+    includePrices: true,
+    totalRetailValue: 195.00,
+    createdAt: '2026-09-28T11:00:00.000Z',
+    updatedAt: '2026-09-29T09:30:00.000Z',
+    items: [
+      {
+        id: 'item_grail_1',
+        title: '1993 Tim Burton Nightmare Before Christmas Velvet Reversible Bomber',
+        resalePrice: 195,
+        boutiquePrice: 195,
+        brand: 'Touchstone / Disney Originals',
+        category: 'Vintage Apparel',
+        condition: 'Archival Grade'
+      }
+    ],
+    slides: [],
+    generatedCaption: `💎 GRAIL SPOTLIGHT // 1993 TOUCHSTONE ORIGINAL 💎\n\nAn authentic museum-grade relic of 90s gothic cinema history: the official 1993 Tim Burton Nightmare Before Christmas reversible velvet bomber.\n\nFeaturing deep midnight velvet, jacquard lining, and original copyright tags. True piece of animation provenance.\n\nTag Price: $195.00\nLocation: Dusty Tiger Booth & Online\n\n#vintagegrail #90svintage #timburton #nightmarebeforechristmas #grailheat #vintagejacket #vintageclothing #resalecommand`,
+    hashtags: ['#vintagegrail', '#90svintage', '#timburton', '#grailheat', '#vintageclothing']
+  },
+  {
+    id: 'cast_dusty_tiger_drop_sep20',
+    title: 'Dusty Tiger Mid-Century Barware & Curios Drop',
+    type: 'restock',
+    status: 'broadcasted',
+    locationName: 'Dusty Tiger',
+    locationCode: 'DT',
+    personaId: 'hustler',
+    platform: 'instagram',
+    authorHandle: 'resalecommand',
+    includePrices: true,
+    totalRetailValue: 280.00,
+    createdAt: '2026-09-20T16:00:00.000Z',
+    updatedAt: '2026-09-20T18:00:00.000Z',
+    publishedAt: '2026-09-20T18:15:00.000Z',
+    items: [
+      {
+        id: 'item_dt_1',
+        title: 'MCM Culver 22k Gold Barware Set (6 Tumblers)',
+        resalePrice: 120,
+        boutiquePrice: 120,
+        brand: 'Culver LTD',
+        category: 'Barware'
+      },
+      {
+        id: 'item_dt_2',
+        title: 'Cast Iron Dachshund Boot Scraper',
+        resalePrice: 75,
+        boutiquePrice: 75,
+        brand: 'Mid-Century Iron',
+        category: 'Folk Art'
+      }
+    ],
+    slides: [],
+    generatedCaption: `🔥 JUST PLACED AT DUSTY TIGER HAWTHORNE 🔥\nFresh batch of mid-century barware and oddities just hit our shelves! Come grab these before the weekend rush!`,
+    hashtags: ['#dustytiger', '#mcmbarware', '#hawthornepdx', '#vintagepdx']
+  }
+];
+
+export function getSavedDropcasts(): Dropcast[] {
+  if (typeof window === 'undefined') return SEED_DROPCASTS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_DROPCASTS));
+      return SEED_DROPCASTS;
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return SEED_DROPCASTS;
+  } catch (err) {
+    console.warn('[DropcastModel] Error reading dropcasts from storage:', err);
+    return SEED_DROPCASTS;
+  }
+}
+
+export function saveDropcast(cast: Dropcast): Dropcast[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const list = getSavedDropcasts();
+    const idx = list.findIndex(c => c.id === cast.id);
+    const now = new Date().toISOString();
+    cast.updatedAt = now;
+    if (cast.status === 'broadcasted' && !cast.publishedAt) {
+      cast.publishedAt = now;
+    }
+
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...cast };
+    } else {
+      list.unshift(cast);
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return list;
+  } catch (err) {
+    console.error('[DropcastModel] Failed to save dropcast:', err);
+    return [];
+  }
+}
+
+export function deleteDropcast(id: string): Dropcast[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const list = getSavedDropcasts().filter(c => c.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return list;
+  } catch (err) {
+    console.error('[DropcastModel] Failed to delete dropcast:', err);
+    return [];
+  }
+}
+
+export function duplicateDropcast(id: string): Dropcast | null {
+  const list = getSavedDropcasts();
+  const source = list.find(c => c.id === id);
+  if (!source) return null;
+
+  const copy: Dropcast = {
+    ...source,
+    id: `cast_${Date.now()}`,
+    title: `${source.title} (Copy)`,
+    status: 'draft',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    publishedAt: undefined
+  };
+
+  saveDropcast(copy);
+  return copy;
+}
+
+/**
+ * Creates a Quick Cast based on archetype and optional context
+ */
+export function createQuickCast(
+  type: CastType, 
+  options?: {
+    manifest?: any;
+    items?: any[];
+    locationName?: string;
+    locationCode?: string;
+    title?: string;
+  }
+): Dropcast {
+  const now = new Date().toISOString();
+  const id = `cast_${type}_${Date.now()}`;
+  const loc = options?.locationName || (options?.locationCode === 'DT' ? 'Dusty Tiger' : 'Memory Den');
+  const items = options?.items || [];
+  const totalValue = items.reduce((acc, it) => acc + Number(it.boutiquePrice || it.resalePrice || it.price || 0), 0);
+
+  let defaultTitle = '';
+  let defaultPersona = 'lestat';
+  let defaultCustomTone = '';
+
+  switch (type) {
+    case 'restock':
+      defaultTitle = options?.title || `${loc} Fresh Restock Drop`;
+      defaultPersona = 'lestat';
+      defaultCustomTone = 'Fresh retail booth drop. Urgent, evocative, inviting followers to hunt physical shelves.';
+      break;
+    case 'grail':
+      defaultTitle = options?.title || `Grail Spotlight // ${items[0]?.title || 'Featured Relic'}`;
+      defaultPersona = 'curator';
+      defaultCustomTone = 'Heritage curator, provenance and collector value breakdown.';
+      break;
+    case 'haul':
+      defaultTitle = options?.title || `Fresh Estate & Thrift Haul Preview`;
+      defaultPersona = 'hustler';
+      defaultCustomTone = 'Fast-flipping deal alert, treasure hunt enthusiasm, behind-the-scenes.';
+      break;
+    case 'recap':
+      defaultTitle = options?.title || `Weekly Sold Grails Wrap-Up`;
+      defaultPersona = 'hustler';
+      defaultCustomTone = 'Celebratory wrap-up of grails claimed by collectors this week.';
+      break;
+    case 'event':
+      defaultTitle = options?.title || `Popup & Expo Announcement`;
+      defaultPersona = 'curator';
+      defaultCustomTone = 'Community rally, weekend hours, booth number and venue directions.';
+      break;
+    default:
+      defaultTitle = options?.title || `New Dropcast`;
+      defaultPersona = 'lestat';
+  }
+
+  const cast: Dropcast = {
+    id,
+    title: defaultTitle,
+    type,
+    status: 'draft',
+    locationName: loc,
+    locationCode: options?.locationCode || (loc.includes('Tiger') ? 'DT' : 'MD'),
+    manifestId: options?.manifest?.$id || options?.manifest?.id,
+    items,
+    slides: [],
+    personaId: defaultPersona,
+    customTonePrompt: defaultCustomTone,
+    platform: 'instagram',
+    authorHandle: 'resalecommand',
+    includePrices: true,
+    totalRetailValue: totalValue,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  saveDropcast(cast);
+  return cast;
+}
+
+/**
+ * Creates an empty Custom Cast
+ */
+export function createCustomCast(title?: string, locationName: string = 'Memory Den'): Dropcast {
+  return createQuickCast('custom', {
+    title: title || 'Custom Dropcast',
+    locationName
+  });
+}

@@ -79,8 +79,17 @@
             </div>
           </div>
 
-          <!-- Close button -->
+          <!-- Header Action & Close buttons -->
           <div class="flex items-center gap-1.5 shrink-0">
+            <a 
+              v-if="stagedItems.length > 0 && activeManifest?.$id"
+              :href="`/social?dropId=${activeManifest.$id}`"
+              class="btn btn-xs sm:btn-sm btn-ghost hover:bg-secondary/15 text-secondary font-bold gap-1 px-2.5 rounded-btn shadow-2xs"
+              title="Create Social Post & Download Photos in Social Studio"
+            >
+              <Icon icon="solar:camera-bold" class="w-4 h-4 text-secondary" />
+              <span class="hidden sm:inline">Social Post</span>
+            </a>
             <button @click="toggleTray" type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close Tray">
               <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
             </button>
@@ -373,15 +382,23 @@
 
           <!-- Row 2: Contextual Primary Action Button -->
           <!-- State A: Placed / Closed Finalized Drop -->
-          <div v-if="activeManifest.status === 'placed'" class="w-full">
+          <div v-if="activeManifest.status === 'placed'" class="w-full flex flex-col sm:flex-row gap-2">
+            <a 
+              :href="`/social?dropId=${activeManifest.$id}`"
+              class="btn btn-secondary flex-1 font-black text-secondary-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center rounded-btn"
+              title="Create Social Post & Download Photos in Social Studio"
+            >
+              <Icon icon="solar:camera-bold" class="w-5 h-5 shrink-0" />
+              <span>📱 Create Social Post &amp; Download Photos ➔</span>
+            </a>
             <button 
               type="button" 
               @click="handleOpenRollbackModal(activeManifest.$id)"
-              class="btn btn-warning w-full font-black text-warning-content shadow-lg px-4 gap-2 h-11 active:scale-95 transition-all text-sm sm:text-base flex items-center justify-center rounded-btn"
+              class="btn btn-outline border-warning/40 text-warning hover:bg-warning/10 font-bold px-3.5 gap-1.5 h-11 active:scale-95 transition-all text-xs sm:text-sm flex items-center justify-center rounded-btn shrink-0"
               title="Rollback this drop: restores items to Backstock and reopens manifest as active draft"
             >
-              <Icon icon="solar:restart-bold" class="w-5 h-5 shrink-0" />
-              <span>Undo Placement &amp; Reopen Drop ➔</span>
+              <Icon icon="solar:restart-bold" class="w-4 h-4" />
+              <span>Undo Placement</span>
             </button>
           </div>
 

@@ -301,6 +301,15 @@
                 <div class="flex items-center gap-2 shrink-0 flex-wrap" @click.stop>
                   <!-- 1. Placed Drop Actions -->
                   <template v-if="drop.status === 'placed'">
+                    <a 
+                      :href="`/social?dropId=${drop.$id}`"
+                      class="btn btn-secondary btn-xs rounded-btn gap-1 font-bold shadow-2xs"
+                      title="Create social media post & download images for this drop"
+                    >
+                      <Icon icon="solar:camera-bold" class="w-3.5 h-3.5" />
+                      <span>Social Post</span>
+                    </a>
+
                     <button 
                       type="button" 
                       @click="openDraftInTray(drop)"
@@ -324,6 +333,15 @@
 
                   <!-- 2. Exported & In-Transit Drop Actions -->
                   <template v-else-if="drop.status === 'exported' || drop.status === 'in-transit'">
+                    <a 
+                      :href="`/social?dropId=${drop.$id}`"
+                      class="btn btn-secondary btn-xs rounded-btn gap-1 font-bold shadow-2xs"
+                      title="Create social media post & download images for this drop"
+                    >
+                      <Icon icon="solar:camera-bold" class="w-3.5 h-3.5" />
+                      <span>Social Post</span>
+                    </a>
+
                     <button 
                       type="button" 
                       @click="exportSingleDropCsv(drop)" 
@@ -368,6 +386,16 @@
 
                   <!-- 3. Draft Drop Actions -->
                   <template v-else-if="drop.status === 'draft'">
+                    <a 
+                      v-if="(drop.itemIds || []).length > 0"
+                      :href="`/social?dropId=${drop.$id}`"
+                      class="btn btn-ghost btn-xs text-secondary hover:bg-secondary/10 rounded-btn gap-1 font-bold shadow-2xs border border-secondary/20"
+                      title="Create social media post & download images"
+                    >
+                      <Icon icon="solar:camera-bold" class="w-3.5 h-3.5" />
+                      <span>Social Post</span>
+                    </a>
+
                     <button 
                       type="button" 
                       @click="pauseActiveManifest" 

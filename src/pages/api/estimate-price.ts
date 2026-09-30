@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { model, generateContentWithBackoff, parseAiJson } from '../../lib/gemini';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -20,10 +20,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     const result = await generateContentWithBackoff(prompt);
     const text = result.response.text();
-    
-    // Clean markdown
-    const jsonStr = text.replace(/```json|```/g, '').trim();
-    const data = JSON.parse(jsonStr);
+    const data = parseAiJson(text);
 
     return new Response(JSON.stringify(data), {
       status: 200,

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { model, generateContentWithBackoff, parseAiJson } from '../../lib/gemini';
 
 export const POST: APIRoute = async ({ request }) => {
     try {
@@ -51,17 +51,7 @@ Do NOT include markdown formatting or backticks. Return only pure JSON array.
 
         const result = await generateContentWithBackoff(prompt);
         const text = result.response.text().trim();
-        
-        // Clean out possible markdown code blocks
-        let cleanJson = text;
-        if (cleanJson.startsWith('```json')) {
-            cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (cleanJson.startsWith('```')) {
-            cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
-        const parsedMappings = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+        const parsedMappings = parseAiJson(text, []);
 
         return new Response(JSON.stringify({ mappings: parsedMappings }), {
             status: 200,

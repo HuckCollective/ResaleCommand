@@ -1,6 +1,6 @@
 <template>
     <Teleport to="body">
-        <div v-if="totalItems > 0 || currentManifest">
+        <div v-if="totalItems > 0 || currentManifest || activeCast">
         <!-- ========================================================================= -->
         <!-- UNIFIED FROZEN BOTTOM CONTAINER: STACKED PAGE TOOLS & DAISYUI DOCK        -->
         <!-- ========================================================================= -->
@@ -80,6 +80,50 @@
                             >
                                 <Icon icon="solar:lock-unlocked-bold" class="w-2.5 h-2.5" />
                                 <span>Unlock</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ------------------------------------------------------------- -->
+                <!-- STACK ROW 0b: DROPCAST TRACKER STATUS STRIP                   -->
+                <!-- ------------------------------------------------------------- -->
+                <div 
+                    v-if="activeCast && activeCast.status === 'draft'" 
+                    class="border-b border-secondary/25 bg-secondary/10 dark:bg-secondary/20 py-1 px-3 flex items-center justify-center text-xs shadow-2xs"
+                >
+                    <div class="max-w-xl w-full mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
+                        <button 
+                            type="button" 
+                            @click="handleOpenCastTray"
+                            class="btn btn-ghost btn-xs h-7 px-2.5 flex items-center gap-1.5 sm:gap-2 rounded-btn bg-base-100 dark:bg-base-100 hover:bg-base-300 text-left min-w-0 flex-1 overflow-hidden border border-secondary/30 cursor-pointer"
+                            title="Inspect active Dropcast staging tray"
+                        >
+                            <span class="w-2 h-2 rounded-full bg-secondary animate-ping shrink-0"></span>
+                            <Icon icon="solar:broadcast-bold" class="w-4 h-4 text-secondary shrink-0" />
+                            <span class="font-black text-xs text-base-content truncate max-w-[110px] sm:max-w-[200px]">
+                                {{ activeCast.title }}
+                            </span>
+                            <span class="badge badge-xs badge-secondary font-black shrink-0">
+                                {{ stagedCastCount }} {{ stagedCastCount === 1 ? 'item' : 'items' }}
+                            </span>
+                            <span class="text-[11px] font-mono text-secondary font-black shrink-0">
+                                ${{ stagedCastTotalRetail.toFixed(2) }}
+                            </span>
+                            <span class="text-[10px] uppercase font-bold text-secondary opacity-75 ml-auto hidden sm:inline">Active Cast</span>
+                            <Icon icon="solar:alt-arrow-up-linear" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />
+                        </button>
+
+                        <!-- Quick Pause Control -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button 
+                                type="button" 
+                                @click.stop="pauseActiveCast" 
+                                class="badge badge-warning badge-xs font-bold gap-1 cursor-pointer hover:opacity-85 active:scale-95 transition-all select-none border-0 shadow-xs"
+                                title="Tap to pause dropcast (stops auto-staging inventory selections)"
+                            >
+                                <Icon icon="solar:pause-circle-bold" class="w-2.5 h-2.5" />
+                                <span class="hidden xs:inline">Pause</span>
                             </button>
                         </div>
                     </div>
@@ -229,6 +273,28 @@
                         <span class="font-extrabold uppercase text-[10px] text-base-content tracking-tight leading-none whitespace-nowrap">Drop {{ manifestItemCount > 0 ? `(${manifestItemCount})` : '' }}</span>
                     </button>
 
+                    <!-- Dock Item 1.6: Dropcast Staging Pill (Only when no active Cast bar in Row 0) -->
+                    <button 
+                        v-if="!activeCast || activeCast.status !== 'draft'"
+                        id="btn-bottom-dock-cast-tray"
+                        type="button"
+                        class="btn flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
+                        @click="handleOpenCastTray"
+                        :title="activeCast?.status === 'paused' ? `Dropcast Paused (${stagedCastCount} items) — tap to open or resume` : `Open Dropcast staging tray (${stagedCastCount} items)`"
+                    >
+                        <div class="indicator">
+                            <span v-if="stagedCastCount > 0" class="indicator-item badge badge-xs badge-secondary text-secondary-content font-mono font-bold">{{ stagedCastCount }}</span>
+                            <Icon 
+                                :icon="activeCast?.status === 'paused' ? 'solar:pause-circle-bold' : 'solar:broadcast-bold'" 
+                                class="w-4.5 h-4.5" 
+                                :class="activeCast?.status === 'paused' ? 'text-warning' : 'text-secondary'" 
+                            />
+                        </div>
+                        <span class="font-extrabold uppercase text-[10px] text-base-content tracking-tight leading-none whitespace-nowrap">
+                            {{ activeCast?.status === 'paused' ? 'Cast ⏸' : `Cast ${stagedCastCount > 0 ? `(${stagedCastCount})` : ''}` }}
+                        </span>
+                    </button>
+
                     <!-- Dock Item 2: Add & Ingest (Solid Elevated Hero Action) -->
                     <button 
                         type="button"
@@ -316,10 +382,29 @@ import { ref, computed, nextTick, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import BottomActionTray from './BottomActionTray.vue';
 import { useManifest } from '../../composables/useManifest';
+import { useDropcasts } from '../../composables/useDropcasts';
 
 defineOptions({
     inheritAttrs: false
 });
+
+const {
+    activeCast,
+    isCastTrayOpen,
+    stagedCastCount,
+    stagedCastTotalRetail,
+    openCastTray,
+    stageItemsForCast,
+    pauseActiveCast,
+    resumeActiveCast,
+    isCastActive,
+    isCastPaused
+} = useDropcasts();
+
+function handleOpenCastTray() {
+    closeTray();
+    openCastTray();
+}
 
 const {
     activeManifest,
@@ -504,6 +589,13 @@ const handleOpenManifest = () => {
 
 // Mutual Exclusivity: Swap Trays (close one when the other opens)
 watch(isManifestTrayOpen, (isOpen) => {
+    if (isOpen) {
+        isTrayOpen.value = false;
+        isActionTrayOpen.value = false;
+    }
+});
+
+watch(isCastTrayOpen, (isOpen) => {
     if (isOpen) {
         isTrayOpen.value = false;
         isActionTrayOpen.value = false;

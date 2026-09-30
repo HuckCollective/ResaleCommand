@@ -496,63 +496,114 @@ const copyPreloadedConsoleScript = () => {
 
   const script = `// ⚡ Resale Command ➔ Ricochet Preloaded UPC Auto-Sync
 (async function() {
-  const items = ${JSON.stringify(matched, null, 2)};
-  console.log('%c[Resale Command]%c Starting bulk UPC sync for ' + items.length + ' items...', 'background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;', 'color:#fff;');
+  const items = \${JSON.stringify(matched, null, 2)};
+  console.log('%c[Resale Command]%c Starting bulk UPC sync for ' + items.length + ' items...', 'background:#4f46e5;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;', '');
   
   if (!window.axios) {
     alert('Please run this script inside your logged-in Ricochet portal (e.g. memoryden.ricoconsign.com)');
     return;
   }
 
+  // 1. Fetch recent products for consignor (scans up to 800 items sorted desc)
+  console.log('%c[Resale Command]%c Scanning your consignor catalog in Ricochet...', 'background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;', '');
+  let catalog = [];
+  let consignorId = null;
+
+  for (let offset = 0; offset < 800; offset += 100) {
+    try {
+      const q = consignorId ? '&consignor_id=' + consignorId : '';
+      const catRes = await window.axios.get('/api/product?store=1&limit=100&offset=' + offset + '&order_by=id&direction=desc' + q);
+      const prods = catRes.data.products || (Array.isArray(catRes.data) ? catRes.data : []);
+      if (!consignorId && prods[0]?.consignor_id) {
+        consignorId = prods[0].consignor_id;
+      }
+      const myProds = consignorId ? prods.filter(p => !p.consignor_id || p.consignor_id === consignorId) : prods;
+      catalog.push(...myProds);
+      if (prods.length < 100) break;
+    } catch (e) {
+      break;
+    }
+  }
+  console.log('📡 Loaded ' + catalog.length + ' consignor products from Ricochet.');
+
   let success = 0;
   let failed = 0;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const targetId = item.id;
-    if (!targetId) {
-      console.warn(\`Skipping [\${i+1}/\${items.length}] without Product ID:\`, item);
+    const cleanSku = (item.sku || '').trim().toUpperCase();
+    const cleanTitle = (item.title || '').trim().toLowerCase();
+
+    // Matching Strategy: Exact ID -> Direct SKU -> Exact Title -> Fuzzy Title
+    let prod = null;
+    if (item.id) {
+      prod = catalog.find(p => String(p.id) === String(item.id));
+    }
+    if (!prod && cleanSku) {
+      prod = catalog.find(p => {
+        if (p.sku && p.sku.toUpperCase() === cleanSku) return true;
+        if (p.sku_quantities && Object.keys(p.sku_quantities).some(s => s.trim().toUpperCase() === cleanSku)) return true;
+        return false;
+      });
+    }
+    if (!prod && cleanTitle) {
+      const titleWords = cleanTitle.replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2);
+      prod = catalog.find(p => {
+        const pName = (p.name || p.title || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '');
+        if (pName === cleanTitle.replace(/[^a-z0-9\\s]/g, '')) return true;
+        if (titleWords.length >= 2) {
+          const prefix = titleWords[0] + ' ' + titleWords[1];
+          if (pName.includes(prefix)) return true;
+        }
+        return false;
+      });
+    }
+
+    if (!prod) {
+      console.warn('✕ [' + (i+1) + '/' + items.length + '] Skipping "' + (item.title || cleanSku) + '": No match found in Ricochet catalog');
       failed++;
       continue;
     }
 
     try {
-      // 1. Fetch current item details from Ricochet
-      const detailRes = await window.axios.get('/api/product/show/' + targetId);
+      const detailRes = await window.axios.get('/api/product/show/' + prod.id);
       const payload = detailRes.data.product || detailRes.data.data || detailRes.data;
-      const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items).flat();
-      const targetItem = allItems.find(it => it.sku === item.sku) || allItems[0];
+      const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items || {}).flat();
+      const targetItem = allItems[0];
 
       if (!targetItem) {
+        console.warn('✕ Product ' + prod.id + ' (' + prod.name + ') has no items payload');
         failed++;
-        console.warn(\`✕ [\${i+1}/\${items.length}] No item found for SKU \${item.sku} in product \${targetId}\`);
         continue;
       }
 
-      // 2. Set store: 1 and new UPC
+      if (targetItem.upc_code === item.upc) {
+        console.log('ℹ️ [' + (prod.name || targetItem.sku) + '] Already has UPC: ' + item.upc);
+        success++;
+        continue;
+      }
+
       targetItem.store = 1;
       targetItem.upc_code = item.upc;
 
-      // 3. Save via verified PUT /api/product/items
       const saveRes = await window.axios.put('/api/product/items', targetItem);
-      if (saveRes.status === 201 || saveRes.status === 200) {
+      if (saveRes.status === 200 || saveRes.status === 201) {
         success++;
-        console.log(\`%c✓ [\${i+1}/\${items.length}] \${targetItem.sku} ➔ \${item.upc}\`, 'color:#10b981; font-weight:bold;');
+        console.log('%c✓ [' + (i+1) + '/' + items.length + '] ' + (prod.name || targetItem.sku) + ' ➔ UPC: ' + item.upc, 'color:#10b981;font-weight:bold;font-size:12px;');
       } else {
+        console.warn('✕ HTTP ' + saveRes.status + ' on ' + prod.name);
         failed++;
-        console.warn(\`✕ [\${i+1}/\${items.length}] \${targetItem.sku} HTTP \${saveRes.status}\`);
       }
     } catch (err) {
+      console.error('✕ Error on ' + (prod?.name || cleanSku) + ':', err.response?.data || err.message);
       failed++;
-      console.error(\`✕ Error on \${item.sku || targetId}:\`, err.response?.data || err.message);
     }
 
-    // Safe 200ms rate-limiting delay
     await new Promise(r => setTimeout(r, 200));
   }
 
-  console.log(\`%c🎉 Sync Finished! \${success} updated, \${failed} failed.\`, 'color:#10b981; font-weight:bold; font-size:16px;');
-  alert(\`🎉 Sync Finished!\\n\\n\${success} items updated successfully in Ricochet.\\n\${failed} errors.\\nRefresh your page to verify.\`);
+  console.log('%c🎉 Sync Finished! ' + success + ' updated, ' + failed + ' failed.', 'color:#10b981;font-weight:bold;font-size:14px;');
+  alert('🎉 Ricochet Barcode Sync Finished!\\n\\n' + success + ' items verified/updated in Ricochet.\\n' + failed + ' failed.\\nRefresh page to verify!');
 })();`;
 
   navigator.clipboard.writeText(script);

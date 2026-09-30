@@ -148,40 +148,82 @@ export function useManifest() {
             return;
         }
 
-        let itemIds = manifest.itemIds || [];
-        // Fallback: If itemIds is empty but itemsSnapshot has items, recover from snapshot
-        if (itemIds.length === 0 && manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
-            itemIds = manifest.itemsSnapshot.map((s: any) => s.$id || s.id).filter(Boolean);
+        let itemIds: string[] = [];
+        if (Array.isArray(manifest.itemIds)) {
+            itemIds = [...manifest.itemIds];
+        } else if (typeof (manifest as any).itemIds === 'string' && (manifest as any).itemIds.trim()) {
+            try {
+                itemIds = JSON.parse((manifest as any).itemIds);
+            } catch {
+                itemIds = (manifest as any).itemIds.split(',').map((s: string) => s.trim()).filter(Boolean);
+            }
+        }
+
+        let snapshot: any[] = [];
+        if (Array.isArray(manifest.itemsSnapshot)) {
+            snapshot = manifest.itemsSnapshot;
+        } else if (typeof (manifest as any).itemsSnapshot === 'string' && (manifest as any).itemsSnapshot.trim()) {
+            try {
+                snapshot = JSON.parse((manifest as any).itemsSnapshot);
+            } catch {
+                snapshot = [];
+            }
+        }
+
+        // Fallback: If itemIds is empty but snapshot has items, recover from snapshot
+        if (itemIds.length === 0 && snapshot.length > 0) {
+            itemIds = snapshot.map((s: any) => s.$id || s.id).filter(Boolean);
         }
 
         if (itemIds.length === 0) {
-            stagedItems.value = manifest.itemsSnapshot ? [...manifest.itemsSnapshot] : [];
+            stagedItems.value = [...snapshot];
             return;
         }
 
         // If snapshot exists, use as initial immediate render so UI never flashes blank
-        if (manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
-            stagedItems.value = [...manifest.itemsSnapshot];
+        if (snapshot.length > 0) {
+            stagedItems.value = [...snapshot];
         }
 
         // Fetch authoritative latest item records from Appwrite
         try {
             const targetIds = itemIds.slice(0, 100);
-            const resp = await databases.listDocuments(DB_ID, getCollectionId(), [
-                Query.equal('$id', targetIds),
-                Query.limit(100)
-            ]);
-            if (resp.documents.length > 0) {
-                const idMap = new Map(resp.documents.map(d => [d.$id, d]));
-                const snapMap = new Map((manifest.itemsSnapshot || []).map((s: any) => [s.$id || s.id, s]));
+            const collId = getCollectionId();
+            let fetchedDocs: any[] = [];
+            try {
+                const resp = await databases.listDocuments(DB_ID, collId, [
+                    Query.equal('$id', targetIds),
+                    Query.limit(100)
+                ]);
+                fetchedDocs = resp.documents;
+            } catch (err) {
+                console.warn('[useManifest] Primary collection lookup failed, checking fallback:', err);
+            }
+
+            if (fetchedDocs.length === 0) {
+                const fallbackColl = collId === 'items_dev' ? 'items' : 'items_dev';
+                try {
+                    const respFallback = await databases.listDocuments(DB_ID, fallbackColl, [
+                        Query.equal('$id', targetIds),
+                        Query.limit(100)
+                    ]);
+                    fetchedDocs = respFallback.documents;
+                } catch {
+                    // ignore fallback error
+                }
+            }
+
+            if (fetchedDocs.length > 0) {
+                const idMap = new Map(fetchedDocs.map(d => [d.$id, d]));
+                const snapMap = new Map(snapshot.map((s: any) => [s.$id || s.id, s]));
                 // Keep order matching itemIds, falling back to snapshot if an older item document was moved or not returned
                 const resolved = itemIds.map(id => idMap.get(id) || snapMap.get(id)).filter(Boolean);
                 stagedItems.value = resolved as any[];
             }
         } catch (e) {
             console.warn('[useManifest] Could not fetch fresh items from Appwrite, using snapshot:', e);
-            if (manifest.itemsSnapshot && manifest.itemsSnapshot.length > 0) {
-                stagedItems.value = [...manifest.itemsSnapshot];
+            if (snapshot.length > 0) {
+                stagedItems.value = [...snapshot];
             }
         }
     }
@@ -743,6 +785,7 @@ export function useManifest() {
         exportManifestCsv,
         verifyPlacementItem,
         finalizeActivePlacement,
-        fetchManifests
+        fetchManifests,
+        loadStagedItems
     };
 }

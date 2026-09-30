@@ -161,3 +161,49 @@ The **Outbound Manifest Tray** governs the preparation, export, and in-store ver
    - Each row supports one-tap verification checkoff.
    - Tapping an item's edit button immediately slides open the **ItemDrawer** for on-the-fly price reductions or condition adjustments without losing verify-stock progress.
 
+---
+
+## 7. Canonical Photo Intake Pattern (`PhotoGalleryManager.vue`)
+
+All photo capture, image ingestion, and gallery curation across Resale Command must use the single canonical component: `src/components/common/PhotoGalleryManager.vue`.
+
+### A. Two Image Paradigms in Resale Command
+Across the entire application, there are strictly two types of visual assets:
+1. **Item Images**: Photos tied directly to an inventory SKU / product listing. Managed via `ItemDrawer.vue` (which embeds `PhotoGalleryManager.vue`) or quick-attached by dropping onto an item card.
+2. **User-Provided (Booth / Context / Vibe) Images**: Real photos of booth shelving, store displays, aisle signage, or haul unboxing. Managed directly via `PhotoGalleryManager.vue` at the view's top intake shelf.
+
+### B. Strict Anti-Pattern: Zero Ad-Hoc Photo Rails & Zero Fragmented Buttons
+* **FORBIDDEN**: NEVER create custom, ad-hoc photo rails or split image ingestion across multiple disjointed buttons (e.g. having `[Snap Booth Photo]` next to `[Upload Real Booth Photo]` next to a custom card `[+ Snap Photo]`).
+* **MANDATORY**: Always embed `<PhotoGalleryManager>`. It encapsulates all upload, camera, drag-drop, cover-starring, thumbnail reordering, and full-resolution lightbox viewing into a single cohesive, accessible widget.
+
+### C. Anatomical States:
+1. **Empty State (`totalCount === 0`)**:
+   - Large tactile dashed dropzone (`border-2 border-dashed border-base-300`).
+   - Primary icon + title: *"Tap to upload or drag photos here"*.
+   - Contextual subtitle (`dropzone-subtitle` prop).
+   - Full-width prominent Contextual Action Button: `[ 📷 Add Photo with Camera ]` ($\ge 48\text{px}$ touch target) wired to `ScannerWidget.vue`.
+2. **Populated State (`totalCount > 0`)**:
+   - **Hero Main Cover Photo Card**: Large top preview featuring the `⭐ Main Cover Photo` badge, full-resolution zoom lightbox trigger (`[ 🔍 ]`), and delete button (`[ 🗑 ]`).
+   - **Supporting Photos Grid**: Zero-side-scroll, responsive wrapping thumbnail grid with index pills, tap-to-set-as-main ⭐ button, and an inline dashed `[ + Add ]` upload tile.
+   - **Dropzone Area**: The entire populated container actively accepts drag & drop file uploads.
+   - **Bottom Action Button**: Clean `[ 📷 Add with Camera ]` button for continuous multi-shot capture.
+
+### D. Integration Signature:
+```vue
+<PhotoGalleryManager 
+  v-model:new-photos="galleryPhotos"
+  v-model:main-selection="mainPhotoSelection"
+  :existing-images="itemExistingAppwriteIds"
+  :scanner-widget="scannerWidgetRef"
+  output-format="object"
+  :show-header="false"
+  :allow-camera="true"
+  :allow-upload="true"
+  dropzone-subtitle="High-res photos or booth displays will attach to this post"
+  title="Booth Displays"
+  @open-camera="handleOpenCamera"
+  @photos-added="handlePhotosAdded"
+  @photo-removed="handlePhotoRemoved"
+/>
+```
+
