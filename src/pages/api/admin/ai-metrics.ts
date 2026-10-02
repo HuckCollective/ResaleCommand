@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { Client, Databases, Query, ID, Permission, Role } from 'node-appwrite';
+import { DEFAULT_GEMINI_MODEL } from '../../../lib/gemini';
 
 export const prerender = false;
 
@@ -219,7 +220,7 @@ export const GET: APIRoute = async ({ request }) => {
 
         const responsePayload = {
             success: true,
-            model: 'gemini-2.5-flash',
+            model: DEFAULT_GEMINI_MODEL,
             pricingRates: PRICING_RATES,
             googleBilled: GOOGLE_BILLED_DATA,
             summary: {

@@ -16,7 +16,7 @@ This skill documents the architectural invariants, prompt engineering rules, and
 | **Primary Use Case** | Rapid single-item or lot intake, auction scouting, live purchase verdicts | Full multi-item lot breakdown, 3-tier booth cataloging, deep condition & channel strategy |
 | **Image Input** | Single image or multi-photo array (all photos passed in 1 call) | Full multi-photo gallery (all photos passed directly via unified multimodal vision) |
 | **Output Payload** | Single item or `lot_items` array with purchase strategy | `LotInspectionResult`: 3-tier `lot_items`, channel payouts, comprehensive condition overview |
-| **Execution Model** | Single multimodal pass (Gemini 2.5 Flash) | Single unified multimodal pass (Gemini 2.5 Flash) |
+| **Execution Model** | Single multimodal pass (`gemini-flash-latest`) | Single unified multimodal pass (`gemini-flash-latest`) |
 
 ---
 

@@ -1,7 +1,6 @@
 export const prerender = false;
 
 import { Client, Databases, Storage } from 'node-appwrite';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Buffer } from 'node:buffer';
 import type { APIRoute } from 'astro';
 import { generateContentWithBackoff } from '../../lib/gemini';

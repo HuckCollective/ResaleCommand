@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff } from '../../lib/gemini';
+import { model, generateContentWithBackoff, DEFAULT_GEMINI_MODEL } from '../../lib/gemini';
 import { normalizeBundleComponents } from '../../lib/bundle-pricing';
 
 export const prerender = false;
@@ -211,7 +211,7 @@ export const ALL: APIRoute = async ({ request }) => {
         const urlObj = new URL(request.url);
         const expectedLen = urlObj.searchParams.get("len");
         console.log(`Debug - URL Received: ${request.url}`);
-        console.log(`Debug - Using Model: gemini-2.5-flash`); // Confirm model update
+        console.log(`Debug - Using Model: ${DEFAULT_GEMINI_MODEL}`);
 
         let imageParts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
         let successfulImageUrl: string | null = null;

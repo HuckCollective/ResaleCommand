@@ -30,7 +30,12 @@ export const RESALE_SAFETY_SETTINGS = [
 
 const SYSTEM_INSTRUCTION = "You are a master multi-category resale appraiser and inventory valuation expert. Strictly ground all item identifications and conditions in physical OCR, printed copyright dates, and visible features from provided images or verified user notes.";
 
-export const getModel = (modelName = "gemini-2.5-flash") => {
+export const DEFAULT_GEMINI_MODEL = 
+    (typeof process !== 'undefined' && process.env?.GEMINI_MODEL) || 
+    (typeof import.meta !== 'undefined' && import.meta.env?.GEMINI_MODEL) || 
+    'gemini-flash-latest';
+
+export const getModel = (modelName = DEFAULT_GEMINI_MODEL) => {
     const key = getApiKey();
     if (!key) throw new Error("Gemini API key not configured (GEMINI_API_KEY)");
     const ai = new GoogleGenerativeAI(key);
@@ -72,14 +77,18 @@ export const generateContentWithBackoff = async (
         throw new Error("[Gemini] Invalid generateContent request payload: payload cannot be a GenerativeModel or empty.");
     }
 
-    const candidateModels = ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"];
+    const candidateModels = Array.from(new Set([
+        DEFAULT_GEMINI_MODEL,
+        "gemini-flash-latest",
+        "gemini-pro-latest"
+    ]));
     let modelIdx = 0;
     
     let retries = maxRetries;
     let delayMs = baseDelayMs;
     
     while (retries > 0) {
-        const currentModelName = candidateModels[modelIdx] || "gemini-2.5-flash";
+        const currentModelName = candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL;
         const activeModel = getModel(currentModelName);
         
         try {
