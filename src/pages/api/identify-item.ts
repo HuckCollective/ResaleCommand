@@ -179,6 +179,144 @@ function parseMercari(html: string) {
     };
 }
 
+// Helper to parse CTBids (Caring Transitions) listing HTML
+function parseCTBids(html: string) {
+    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+                       html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(/ \| CTBids$/i, '').trim() : '';
+
+    // Price / Current Bid
+    let price = '';
+    const bidMatch = html.match(/(?:current\s*bid|starting\s*bid|price):\s*\$?([0-9.,]+)/i) ||
+                     html.match(/class=["'][^"']*current-bid[^"']*["'][^>]*>\s*\$?([0-9.,]+)/i) ||
+                     html.match(/itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+    if (bidMatch) {
+        price = `$${bidMatch[1].trim()}`;
+    }
+
+    // Time Remaining / End Time
+    let timeLeft = '';
+    const timeMatch = html.match(/(?:time\s*remaining|ends|closing\s*in):\s*([^<\n\r]+)/i) ||
+                      html.match(/class=["'][^"']*(?:countdown|timer|time-left)[^"']*["'][^>]*>([^<]+)/i);
+    if (timeMatch) {
+        timeLeft = timeMatch[1].replace(/<[^>]*>/g, '').trim();
+    }
+
+    // Buyer's Premium (default 15% for CTBids)
+    let buyersPremium = '15%';
+    const bpMatch = html.match(/buyer'?s?\s*premium:?\s*(\d+)%/i);
+    if (bpMatch) {
+        buyersPremium = `${bpMatch[1]}%`;
+    }
+
+    // Pickup vs Shipping
+    let terms = 'Local Pickup';
+    if (/shipping\s*available/i.test(html) && !/no\s*shipping/i.test(html)) {
+        terms = 'Shipping Available (or Local Pickup)';
+    } else if (/local\s*pick\s*up\s*only/i.test(html)) {
+        terms = 'Local Pickup Only';
+    }
+
+    // Description
+    const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+                      html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+    const description = descMatch ? descMatch[1].trim() : '';
+
+    // Images
+    const imageUrls = new Set<string>();
+    const ogImg = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    if (ogImg) imageUrls.add(ogImg[1]);
+
+    const imgRegex = /<img[^>]+src=["'](https:\/\/[^"'\s]+)["'][^>]*>/gi;
+    let match;
+    let count = 0;
+    while ((match = imgRegex.exec(html)) !== null && count < 10) {
+        const src = match[1];
+        if (src.includes('ctbids') || src.includes('azure') || src.includes('s3') || src.includes('cloudinary')) {
+            imageUrls.add(src);
+        }
+        count++;
+    }
+
+    return {
+        platform: 'CTBids',
+        title,
+        price,
+        timeLeft,
+        buyersPremium,
+        terms,
+        description,
+        images: Array.from(imageUrls).slice(0, 5)
+    };
+}
+
+// Helper to parse HiBid listing HTML
+function parseHiBid(html: string) {
+    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+                       html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(/ \| HiBid$/i, '').trim() : '';
+
+    // Current / Internet Bid
+    let price = '';
+    const bidMatch = html.match(/(?:internet\s*bid|current\s*bid|lead\s*bid):\s*\$?([0-9.,]+)/i) ||
+                     html.match(/class=["'][^"']*lot-bid[^"']*["'][^>]*>\s*\$?([0-9.,]+)/i) ||
+                     html.match(/itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+    if (bidMatch) {
+        price = `$${bidMatch[1].trim()}`;
+    }
+
+    // Time Left
+    let timeLeft = '';
+    const timeMatch = html.match(/(?:time\s*remaining|bidding\s*closes|ends):\s*([^<\n\r]+)/i) ||
+                      html.match(/class=["'][^"']*(?:countdown|time-left)[^"']*["'][^>]*>([^<]+)/i);
+    if (timeMatch) {
+        timeLeft = timeMatch[1].replace(/<[^>]*>/g, '').trim();
+    }
+
+    // Buyer's Premium (typically 10% - 18%)
+    let buyersPremium = '15%';
+    const bpMatch = html.match(/buyer'?s?\s*premium:?\s*(\d+)%/i) ||
+                    html.match(/(\d+)%\s*buyer'?s?\s*premium/i);
+    if (bpMatch) {
+        buyersPremium = `${bpMatch[1]}%`;
+    }
+
+    // Shipping vs Pickup
+    let terms = 'Check Listing';
+    if (/shipping\s*available/i.test(html) && !/no\s*shipping/i.test(html)) {
+        terms = 'Shipping Available';
+    } else if (/local\s*pickup\s*only/i.test(html) || /no\s*shipping/i.test(html)) {
+        terms = 'Local Pickup Only';
+    }
+
+    const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+                      html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+    const description = descMatch ? descMatch[1].trim() : '';
+
+    const imageUrls = new Set<string>();
+    const ogImg = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    if (ogImg) imageUrls.add(ogImg[1]);
+
+    const imgRegex = /<img[^>]+src=["'](https:\/\/[^"'\s]+hibid[^"'\s]+)["'][^>]*>/gi;
+    let match;
+    let count = 0;
+    while ((match = imgRegex.exec(html)) !== null && count < 10) {
+        imageUrls.add(match[1]);
+        count++;
+    }
+
+    return {
+        platform: 'HiBid',
+        title,
+        price,
+        timeLeft,
+        buyersPremium,
+        terms,
+        description,
+        images: Array.from(imageUrls).slice(0, 5)
+    };
+}
+
 // Handle both POST and PUT, plus OPTIONS for CORS
 export const ALL: APIRoute = async ({ request }) => {
     
@@ -217,6 +355,7 @@ export const ALL: APIRoute = async ({ request }) => {
         let successfulImageUrl: string | null = null;
         let scrapedImages: string[] = [];
         let scrapedShipping: any = null;
+        let scrapedAuctionMeta: any = null;
         let zipCode: string | null = null;
         
         // Helper 3b: Fetch Image from URL and add to parts
@@ -563,6 +702,11 @@ export const ALL: APIRoute = async ({ request }) => {
                         }
 
                         if (parsedData) {
+                             const sellerId = parsedData.sellerId || parsedData.seller_id || null;
+                             const sellerName = parsedData.sellerName || parsedData.seller_name || parsedData.location || null;
+                             const canCombineShipping = parsedData.canCombineShipping !== undefined ? Boolean(parsedData.canCombineShipping) : true;
+                             const shippingWeight = parseFloat(parsedData.shippingWeight || parsedData.weight || parsedData.dimensionalWeight || 0) || 0;
+
                              // Parse multiple images
                              const imgServer = parsedData.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
                              const imgUrls: string[] = [];
@@ -616,7 +760,11 @@ export const ALL: APIRoute = async ({ request }) => {
                                                  handling: handMatch ? parseFloat(handMatch[1]) : 0,
                                                  total: parseFloat(totalMatch[1]),
                                                  carrier: carrierMatch ? carrierMatch[1].trim() : 'FedEx',
-                                                 zipCode: zipCode
+                                                 zipCode: zipCode,
+                                                 weight: shippingWeight,
+                                                 sellerId: sellerId,
+                                                 sellerName: sellerName,
+                                                 canCombineShipping: canCombineShipping
                                              };
                                              console.log(`[Deep Parse - SGW] Calculated Shipping Total: $${scrapedShipping.total}`);
                                          }
@@ -628,11 +776,34 @@ export const ALL: APIRoute = async ({ request }) => {
 
                              let contextText = `[Deep Parse - ShopGoodwill]\n`;
                              contextText += `Title: ${parsedData.title || parsedData.itemName}\n`;
+                             contextText += `Seller: ${sellerName || 'Goodwill Regional'} (ID: ${sellerId || 'N/A'})\n`;
+                             contextText += `Weight: ${shippingWeight} lbs | Combined Shipping: ${canCombineShipping ? 'Eligible' : 'Ineligible'}\n`;
                              contextText += `Current Bid: $${parsedData.currentPrice} | Bids: ${parsedData.bidCount} | Ends: ${parsedData.endTime}\n`;
                              if (scrapedShipping) {
                                  contextText += `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode} (Shipping: $${scrapedShipping.shipping}, Handling: $${scrapedShipping.handling})\n`;
                              }
                              
+                             if (parsedData.endTime) {
+                                 let parsedIso: string | null = null;
+                                 try {
+                                     const d = new Date(parsedData.endTime);
+                                     if (!isNaN(d.getTime())) {
+                                         parsedIso = d.toISOString();
+                                     }
+                                 } catch {}
+                                 scrapedAuctionMeta = {
+                                     is_auction: true,
+                                     end_time: parsedIso,
+                                     time_left_text: parsedData.endTime,
+                                     current_bid: parseFloat(parsedData.currentPrice) || null,
+                                     platform: 'ShopGoodwill',
+                                     seller_id: sellerId,
+                                     seller_name: sellerName,
+                                     shipping_weight: shippingWeight,
+                                     can_combine_shipping: canCombineShipping
+                                 };
+                             }
+
                              const rawDesc = parsedData.description || "";
                              const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').substring(0, 3000); // Strip HTML, keep 3000 chars
                              contextText += `Description: ${cleanDesc}\n\n`;
@@ -717,7 +888,11 @@ export const ALL: APIRoute = async ({ request }) => {
                                 let scrapedData: any = null;
                                 const finalUrl = (pageRes.url || targetUrl).toLowerCase();
                                 
-                                if (finalUrl.includes('facebook.com') || targetUrl.includes('facebook.com')) {
+                                if (finalUrl.includes('ctbids.com') || targetUrl.includes('ctbids.com')) {
+                                    scrapedData = parseCTBids(html);
+                                } else if (finalUrl.includes('hibid.com') || targetUrl.includes('hibid.com')) {
+                                    scrapedData = parseHiBid(html);
+                                } else if (finalUrl.includes('facebook.com') || targetUrl.includes('facebook.com')) {
                                     scrapedData = parseFacebookMarketplace(html);
                                 } else if (finalUrl.includes('poshmark.com') || targetUrl.includes('poshmark.com')) {
                                     scrapedData = parsePoshmark(html);
@@ -732,8 +907,22 @@ export const ALL: APIRoute = async ({ request }) => {
                                     contextText = `[Deep Parse - ${scrapedData.platform}]\n`;
                                     contextText += `Title: ${scrapedData.title}\n`;
                                     if (scrapedData.price) contextText += `Asking/Current Price: ${scrapedData.price}\n`;
+                                    if (scrapedData.timeLeft) contextText += `Time Left / Ending: ${scrapedData.timeLeft}\n`;
+                                    if (scrapedData.buyersPremium) contextText += `Buyer's Premium: ${scrapedData.buyersPremium}\n`;
+                                    if (scrapedData.terms) contextText += `Terms: ${scrapedData.terms}\n`;
                                     if (scrapedData.brand) contextText += `Brand: ${scrapedData.brand}\n`;
                                     if (scrapedData.location) contextText += `Location: ${scrapedData.location}\n`;
+
+                                    if (scrapedData.platform === 'CTBids' || scrapedData.platform === 'HiBid') {
+                                        scrapedAuctionMeta = {
+                                            is_auction: true,
+                                            platform: scrapedData.platform,
+                                            time_left_text: scrapedData.timeLeft || null,
+                                            buyers_premium_pct: parseFloat(scrapedData.buyersPremium) || 15,
+                                            current_bid: scrapedData.price ? parseFloat(scrapedData.price.replace(/[^0-9.]/g, '')) || null : null,
+                                            is_local_pickup_only: String(scrapedData.terms).toLowerCase().includes('local pickup only')
+                                        };
+                                    }
                                     if (scrapedData.shipping) {
                                         contextText += `Shipping: ${scrapedData.shipping}\n`;
                                         
@@ -902,21 +1091,31 @@ export const ALL: APIRoute = async ({ request }) => {
                 - Core items: Resale price >= $20.00 with >= $12.00 net profit.
                 - Quick Turn impulse items: Resale price $8.00 - $18.00, BUT acquisition cost must be <= $4.00 (ensuring at least $5.00 - $12.00 net gain). Do NOT recommend passing on low-cost items if they can flip quickly for $8 - $15!
              
-           - SCREENSHOT RECOGNITION (ONLINE SOURCING BYPASS):
-             If the image depicts a smartphone or computer screenshot of an online marketplace (eBay, ShopGoodwill, Facebook Marketplace, Poshmark, Mercari, HiBid):
+           - SCREENSHOT & ONLINE AUCTION RECOGNITION (CTBids, HiBid, ShopGoodwill, eBay, EstateSales):
+             If the image depicts a smartphone or computer screenshot of an online marketplace or auction:
              - Inspect the UI to read the current asking price or active auction bid and place it in 'purchase_strategy.current_asking_price'.
-             - Inspect the UI for stated shipping fees (e.g. "+$14.25 Shipping") and factor it into 'max_landed_cost'.
+             - Inspect the UI for stated shipping fees (e.g. "+$14.25 Shipping") or Buyer's Premium (e.g. "15% BP", "18% Buyer's Premium").
+             - CTBids (ctbids.com): Estate sale online auctions. Standard Buyer's Premium is 15%. Often "Local Pickup Only". Starting bids often $1.
+             - HiBid (hibid.com): Online auction aggregator. Buyer's Premium typically 10% - 18%. Look for "Shipping Available" vs "Local Pickup Only".
+             - ShopGoodwill: Watch for handling fees ($3-$6) and dimensional shipping.
+             - If "Local Pickup Only" is detected, flag it prominently in 'condition_notes' or 'why_pass' (e.g. "🚗 Local Pickup Only - verify pickup date & location before bidding").
+             - Read live countdown timers (e.g. "3m 42s", "Ends 7:00 PM EST") and populate 'auction_meta'.
              - Extract the listing title and seller condition notes directly from the screenshot layout.
              
            - PURCHASE STRATEGY VERDICT DECISION FLOW:
              Evaluate the 'purchase_strategy' based on the asking price (if found in notes/scraped data/screenshot) and the item's value:
              1. "BUY_NOW": If acquisition price leaves healthy margin (e.g. <= 35% of fair market value OR <= 35% of boutique booth value) AND meets profit thresholds.
-             2. "PASS": If asking price is too high, margin is eaten by shipping/fees, or if the item is a slow shelf-warmer with low velocity.
+             2. "PASS": If asking price or current bid is too high, margin is eaten by shipping/buyer's premium fees, or if the item is a slow shelf-warmer with low velocity.
              3. "WATCH": If it's an auction and the current bid is reasonable, or if the profit margin is marginal.
              4. "NEGOTIATE": If it's a fixed-price listing but allows offers, and the asking price is slightly above the BUY_NOW threshold.
              5. "CHASE_AUCTION": If it is a live auction and current price/bid is low compared to the estimated Max Buy Price.
              *IMPORTANT*: Many users sell in curated booth locations (antique malls, physical consignment booths like Memory Den & DustyTiger) where they can realize the higher 'boutique_premium' price. When evaluating profit margins and determining the verdict, factor in the 'boutique_premium' value as a valid resale target.
-             *AUCTION BID LIMITS*: If the item is an auction (or the verdict is CHASE_AUCTION or WATCH), calculate the Suggested Max Bid as: (Max Landed Cost - Estimated Shipping - Handling). Explicitly state this Max Bid limit in the 'advice' string.
+             *AUCTION BID LIMITS WITH BUYER'S PREMIUM*:
+             If the item is an auction (or the verdict is CHASE_AUCTION or WATCH):
+             Calculate: Max Landed Cost = Max Buy Target.
+             If Buyer's Premium (BP%) applies: Net Bid Ceiling = (Max Landed Cost - Estimated Shipping - Handling) / (1 + (BP% / 100)).
+             Set 'purchase_strategy.max_bid' to this rounded number.
+             Explicitly state this Max Bid limit in the 'advice' string (e.g. "Bid up to $34.50. 15% BP + $12 shipping keeps landed cost under $52 for a $120 boutique resale.").
              
            - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
              When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
@@ -1024,6 +1223,15 @@ export const ALL: APIRoute = async ({ request }) => {
                  - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
                  - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
                  - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
+            - 'auction_meta': (Include if this is an auction listing or has bids/timer, especially for CTBids, HiBid, ShopGoodwill, eBay):
+                 - 'is_auction': (Boolean) true if this is an auction format.
+                 - 'end_time': (ISO-8601 string or null) Estimated closing timestamp if discernible.
+                 - 'time_left_text': (String) e.g. "3m 42s", "Ends 7:00 PM EST", or "1d 4h".
+                 - 'urgency': (Enum) "CRITICAL" (< 15 mins remaining), "SOON" (< 2 hrs), "NORMAL" (> 2 hrs), or "NONE" (if Buy It Now/thrift).
+                 - 'platform': "CTBids" | "HiBid" | "ShopGoodwill" | "eBay" | "Other"
+                 - 'buyers_premium_pct': (Number) Buyer's Premium percentage (e.g. 15 for 15%). Default 15 for CTBids and HiBid if unknown.
+                 - 'is_local_pickup_only': (Boolean) true if local pickup only (no shipping).
+                 - 'current_bid': (Number or null) The active bid amount.
             - 'market_report': An object analyzing sales channels, velocity, and profit:
                  - 'best_platform': String naming the recommended platform/channel.
                  - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit.
@@ -1087,9 +1295,40 @@ export const ALL: APIRoute = async ({ request }) => {
         // Clean up potential markdown code blocks ```json ... ```
         let cleanedResponse = taskResponse.replace(/```json|```/g, '').trim();
 
-        // Inject fetched image URLs and shipping info into response if available
+        // Inject fetched image URLs, shipping info, and auction metadata into response if available
         try {
             const jsonObj = JSON.parse(cleanedResponse);
+
+            const normalizeAuctionFields = (target: any) => {
+                if (!target) return;
+                if (scrapedAuctionMeta) {
+                    target.auction_meta = { ...target.auction_meta, ...scrapedAuctionMeta };
+                }
+                if (target.auction_meta) {
+                    if (target.auction_meta.end_time) {
+                        target.auctionEndsAt = target.auction_meta.end_time;
+                    }
+                    if (target.auction_meta.current_bid !== undefined && target.auction_meta.current_bid !== null) {
+                        target.currentBid = target.auction_meta.current_bid;
+                    }
+                }
+                if (target.purchase_strategy?.max_bid) {
+                    target.maxBid = target.purchase_strategy.max_bid;
+                }
+                if (scrapedAuctionMeta?.seller_name || scrapedAuctionMeta?.seller_id || target.seller_info) {
+                    target.seller_info = {
+                        seller_id: scrapedAuctionMeta?.seller_id || target.seller_info?.seller_id || null,
+                        seller_name: scrapedAuctionMeta?.seller_name || target.seller_info?.seller_name || null,
+                        shipping_weight: scrapedAuctionMeta?.shipping_weight || target.seller_info?.shipping_weight || target.shipping_info?.weight || 0,
+                        can_combine_shipping: scrapedAuctionMeta?.can_combine_shipping !== undefined ? scrapedAuctionMeta.can_combine_shipping : (target.seller_info?.can_combine_shipping !== false)
+                    };
+                    target.sellerId = target.seller_info.seller_id;
+                    target.sellerName = target.seller_info.seller_name;
+                    target.shippingWeight = target.seller_info.shipping_weight;
+                    target.canCombineShipping = target.seller_info.can_combine_shipping;
+                }
+            };
+
             if (jsonObj.items && jsonObj.items.length > 0) {
                 jsonObj.items.forEach((item: any, idx: number) => {
                     // Normalize bundle lot items so pricing fields are 100% complete and consistent
@@ -1108,9 +1347,16 @@ export const ALL: APIRoute = async ({ request }) => {
                         if (scrapedShipping) {
                             item.shipping_info = scrapedShipping;
                         }
+                        normalizeAuctionFields(item);
                     }
                 });
+            } else if (jsonObj.identity || jsonObj.title) {
+                if (successfulImageUrl) jsonObj.fetched_image = successfulImageUrl;
+                if (scrapedImages && scrapedImages.length > 0) jsonObj.fetched_images = scrapedImages;
+                if (scrapedShipping) jsonObj.shipping_info = scrapedShipping;
+                normalizeAuctionFields(jsonObj);
             }
+
             if (jsonObj.lot_items && Array.isArray(jsonObj.lot_items)) {
                 jsonObj.lot_items = normalizeBundleComponents(jsonObj.lot_items);
             }

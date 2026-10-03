@@ -142,8 +142,51 @@
             <p class="text-xs max-w-xs mx-auto">Scan photos or paste screenshots in Scout to tally items here!</p>
           </div>
 
+          <!-- ShopGoodwill Shipment Clusters & 20-lb Weight Guard -->
+          <div v-if="sellerClusters.length > 0" class="space-y-2 mb-3">
+            <div v-for="cluster in sellerClusters" :key="cluster.sellerKey"
+                 class="rounded-2xl p-3 border shadow-xs transition-all"
+                 :class="cluster.isOver20Lbs ? 'bg-error/10 border-error/40' : 'bg-base-200/70 border-base-300'">
+              <div class="flex items-center justify-between gap-2 text-xs flex-wrap">
+                <div class="flex items-center gap-1.5 font-bold">
+                  <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
+                  <span class="truncate max-w-[200px]">{{ cluster.sellerName }}</span>
+                  <span class="badge badge-neutral badge-xs font-mono font-bold">{{ cluster.items.length }} {{ cluster.items.length === 1 ? 'item' : 'items' }}</span>
+                </div>
+                <div v-if="cluster.estSavings > 0" class="badge badge-success text-success-content badge-xs font-mono font-bold">
+                  +${{ cluster.estSavings.toFixed(2) }} Saved on Shipping
+                </div>
+              </div>
+
+              <!-- 20-lb Weight Progress Bar -->
+              <div class="mt-2 space-y-1">
+                <div class="flex items-center justify-between text-[10px] font-mono opacity-80">
+                  <span>Weight: <strong>{{ cluster.totalWeight }} lbs</strong> / 20.0 lbs limit</span>
+                  <span :class="cluster.isOver20Lbs ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
+                    {{ cluster.isOver20Lbs ? '🚨 OVER 20 LBS (SPLIT SHIPMENT!)' : `${cluster.remainingWeight} lbs headroom` }}
+                  </span>
+                </div>
+                <progress 
+                  class="progress w-full h-2 rounded-full"
+                  :class="cluster.isOverWeightLimit ? 'progress-error' : (cluster.totalWeight > 15 ? 'progress-warning' : 'progress-success')"
+                  :value="cluster.weightPercentage" 
+                  max="100"
+                ></progress>
+              </div>
+
+              <!-- Cluster Warnings (7-day window, 20 items, penny notice) -->
+              <div v-if="cluster.warnings && cluster.warnings.length > 0" class="mt-2 pt-1.5 border-t border-base-300/60 space-y-1">
+                <div v-for="(warn, wIdx) in cluster.warnings" :key="wIdx" class="flex items-start gap-1 text-[11px] opacity-90 leading-tight">
+                  <Icon icon="solar:info-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+                  <span>{{ warn }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Item Rows (Sorted by ending-soonest auctions first) -->
           <div 
-            v-for="item in purchaseItems" 
+            v-for="item in sortedManifestItems" 
             :key="item.$id"
             @click="openEdit(item)"
             class="bg-base-200/50 border border-base-300 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-all cursor-pointer group"
@@ -161,29 +204,90 @@
               <Icon v-else icon="solar:tag-bold" class="w-6 h-6 opacity-40" />
             </div>
 
-            <!-- Title & Details (Clicking row opens edit directly) -->
+            <!-- Title & Details -->
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 flex-wrap">
+                <!-- Auction Countdown Badge -->
+                <span v-if="isAuctionItem(item) && item.auctionStatus !== 'won'"
+                      class="badge badge-xs font-mono font-bold"
+                      :class="formatItemCountdown(item.auctionEndsAt).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral'">
+                  {{ formatItemCountdown(item.auctionEndsAt).text }}
+                </span>
+                <!-- Won Badge -->
+                <span v-if="item.auctionStatus === 'won'" class="badge badge-xs badge-success text-success-content font-bold">
+                  🏆 Won (${{ (item.cost || 0).toFixed(2) }})
+                </span>
                 <span v-if="getItemTier(item)" class="badge badge-xs font-bold whitespace-nowrap" :class="getItemTier(item)?.class">
                   {{ getItemTier(item)?.label }}
                 </span>
                 <span v-if="item.isLot" class="badge badge-xs badge-outline badge-secondary font-bold whitespace-nowrap">
                   {{ item.lotItemsCount || 0 }} Items In Lot
                 </span>
+                <span v-if="item.shippingWeight" class="badge badge-xs badge-ghost font-mono">
+                  ⚖️ {{ item.shippingWeight }} lbs
+                </span>
                 <h4 class="font-bold text-xs text-base-content truncate group-hover:text-primary transition-colors">
                   {{ cleanItemTitle(item.title) }}
                 </h4>
               </div>
 
-              <div class="flex items-center gap-2 text-[10px] opacity-70 mt-1">
+              <!-- Price & Sniper Row -->
+              <div class="flex items-center gap-2 text-[10px] opacity-70 mt-1 flex-wrap">
                 <span>Cost: <strong class="text-warning font-mono">${{ (item.cost || 0).toFixed(2) }}</strong></span>
                 <span>•</span>
                 <span>Boutique: <strong class="text-secondary font-mono">${{ (item.boutiquePrice || item.resalePrice || 0).toFixed(2) }}</strong></span>
+                <template v-if="isAuctionItem(item) && item.maxBid">
+                  <span>•</span>
+                  <span>Max Bid: <strong class="text-primary font-mono">${{ item.maxBid.toFixed(2) }}</strong></span>
+                  <button 
+                    type="button"
+                    @click.stop="copyMaxBid(item)"
+                    class="badge badge-xs badge-outline badge-primary font-bold gap-0.5 cursor-pointer hover:bg-primary hover:text-primary-content transition-colors"
+                    title="Copy max bid to clipboard"
+                  >
+                    <Icon icon="solar:copy-linear" class="w-2.5 h-2.5" />
+                    <span>Copy</span>
+                  </button>
+                </template>
               </div>
             </div>
 
-            <!-- Item Action: Delete icon (opens confirmation modal) -->
-            <div class="shrink-0" @click.stop>
+            <!-- Action buttons: Won / Lost quick-actions or Delete icon -->
+            <div class="flex items-center gap-1.5 shrink-0" @click.stop>
+              <!-- Fast Won/Lost buttons for active auction items -->
+              <template v-if="isAuctionItem(item) && item.auctionStatus !== 'won'">
+                <a 
+                  v-if="getItemSourceUrl(item)" 
+                  :href="getItemSourceUrl(item)" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  @click.stop
+                  class="btn btn-ghost btn-xs text-primary hover:bg-primary/10 px-2 h-7 font-bold gap-1 text-[11px]" 
+                  title="Open live auction listing in new tab"
+                >
+                  <Icon icon="solar:link-linear" class="w-3.5 h-3.5" />
+                  <span>Auction</span>
+                </a>
+                <button 
+                  type="button"
+                  @click.stop="openWinModal(item)"
+                  class="btn btn-success btn-xs btn-outline px-2 h-7 font-bold gap-1 text-[11px]"
+                  title="Mark as won and record winning bid"
+                >
+                  <Icon icon="solar:cup-star-bold" class="w-3.5 h-3.5" />
+                  <span>Won</span>
+                </button>
+                <button 
+                  type="button"
+                  @click.stop="itemPendingLoss = item"
+                  class="btn btn-ghost btn-xs text-error/70 hover:text-error hover:bg-error/10 px-1.5 h-7"
+                  title="Mark outbid / remove from tracker"
+                >
+                  ✕
+                </button>
+              </template>
+              
+              <!-- Regular delete button -->
               <button 
                 type="button"
                 @click.stop="itemPendingDelete = item"
@@ -355,6 +459,110 @@
       </form>
     </dialog>
 
+    <!-- 3. RECORD AUCTION WIN MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingWin }">
+      <div v-if="itemPendingWin" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
+        <div class="flex items-center gap-3 text-success mb-3">
+          <div class="w-10 h-10 rounded-2xl bg-success/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:cup-star-bold" class="w-6 h-6 text-success" />
+          </div>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-base-content">Record Auction Win!</h3>
+            <p class="text-xs opacity-60 font-mono">{{ cleanItemTitle(itemPendingWin.title) }}</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/80 mb-4 leading-relaxed">
+          Enter your final winning hammer price to update your cost basis and mark this item as acquired.
+        </p>
+
+        <div class="form-control mb-5">
+          <label class="label py-1">
+            <span class="label-text text-xs font-bold">Winning Bid Amount ($)</span>
+          </label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 font-bold opacity-60">$</span>
+            <input 
+              v-model="winningBidInput"
+              type="number"
+              step="0.01"
+              min="0"
+              class="input input-bordered w-full pl-7 font-mono font-bold text-sm"
+              placeholder="0.00"
+              @keyup.enter="confirmRecordWin"
+            />
+          </div>
+        </div>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            @click="itemPendingWin = null" 
+            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isRecordingWin"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="confirmRecordWin" 
+            class="btn btn-success flex-1 rounded-xl font-black text-success-content shadow-md gap-1.5"
+            :disabled="isRecordingWin || !winningBidInput"
+          >
+            <span v-if="isRecordingWin" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:check-circle-bold" class="w-4 h-4" />
+            <span>Save Win</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="itemPendingWin = null">
+        <button>close</button>
+      </form>
+    </dialog>
+
+    <!-- 4. RECORD AUCTION LOSS MODAL -->
+    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingLoss }">
+      <div v-if="itemPendingLoss" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
+        <div class="flex items-center gap-3 text-warning mb-3">
+          <div class="w-10 h-10 rounded-2xl bg-warning/15 flex items-center justify-center shrink-0">
+            <Icon icon="solar:close-circle-bold" class="w-6 h-6 text-warning" />
+          </div>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-base-content">Outbid / Lost Item?</h3>
+            <p class="text-xs opacity-60 font-mono">{{ cleanItemTitle(itemPendingLoss.title) }}</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-base-content/80 mb-5 leading-relaxed">
+          Remove this outbid auction from your tracker so it doesn't inflate your planned cost and item count?
+        </p>
+
+        <div class="modal-action flex items-center gap-2 mt-0">
+          <button 
+            type="button" 
+            @click="itemPendingLoss = null" 
+            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isRecordingLoss"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="confirmRecordLoss" 
+            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            :disabled="isRecordingLoss"
+          >
+            <span v-if="isRecordingLoss" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Remove Outbid</span>
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="itemPendingLoss = null">
+        <button>close</button>
+      </form>
+    </dialog>
+
     <!-- FULLSCREEN PREVIEW MODAL -->
     <ItemPreviewModal 
       v-if="previewItem"
@@ -374,13 +582,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
 import { addToast } from '../../stores/toast';
 import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import { evaluateSellerClusters, type SellerCluster } from '../../lib/shipping-rules';
 
 const emit = defineEmits<{
   (e: 'toggle-tray'): void;
@@ -414,7 +623,9 @@ const {
   updatePurchaseTitle,
   fetchPurchaseItems,
   loadDraftPurchases,
-  refreshActivePurchaseItems
+  refreshActivePurchaseItems,
+  recordAuctionWin,
+  recordAuctionLoss
 } = useScoutPurchase();
 
 const showTray = computed(() => {
@@ -424,6 +635,143 @@ const showTray = computed(() => {
 const currentTracker = computed(() => {
   return activePurchase.value || props.pausedTracker || composablePausedTracker.value;
 });
+
+// -- LIVE CLOCK & AUCTION COUNTDOWN --
+const currentTime = ref(Date.now());
+let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  timerInterval = setInterval(() => {
+    currentTime.value = Date.now();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (timerInterval) clearInterval(timerInterval);
+});
+
+const getItemSourceUrl = (item: any): string | null => {
+  if (item.sourcingLocation && item.sourcingLocation.startsWith('http')) return item.sourcingLocation;
+  if (item.url && item.url.startsWith('http')) return item.url;
+  if (item.conditionNotes) {
+    const match = item.conditionNotes.match(/https?:\/\/[^\s\n\]]+/);
+    if (match) return match[0];
+  }
+  if (item.rawAnalysis) {
+    try {
+      const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+      const target = Array.isArray(raw) ? raw[0] : raw;
+      if (target?.sourcingLocation && target.sourcingLocation.startsWith('http')) return target.sourcingLocation;
+      if (target?.source_url && target.source_url.startsWith('http')) return target.source_url;
+      if (target?.url && target.url.startsWith('http')) return target.url;
+    } catch(e) {}
+  }
+  return null;
+};
+
+const isAuctionItem = (item: ScoutPurchaseItem): boolean => {
+  return Boolean(item.auctionEndsAt || item.maxBid || item.currentBid);
+};
+
+const formatItemCountdown = (endTimeStr?: string | null): { text: string; urgent: boolean; ended: boolean } => {
+  if (!endTimeStr) return { text: 'Live Auction', urgent: false, ended: false };
+  const target = new Date(endTimeStr).getTime();
+  if (isNaN(target)) return { text: 'Live Auction', urgent: false, ended: false };
+  const diff = target - currentTime.value;
+  if (diff <= 0) {
+    return { text: 'AUCTION ENDED', urgent: true, ended: true };
+  }
+  const seconds = Math.floor((diff / 1000) % 60);
+  const minutes = Math.floor((diff / (1000 * 60)) % 60);
+  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  if (days > 0) return { text: `${days}d ${hours}h left`, urgent: false, ended: false };
+  if (hours > 0) {
+    const padM = String(minutes).padStart(2, '0');
+    return { text: `${hours}h ${padM}m left`, urgent: hours < 2, ended: false };
+  }
+  const padM = String(minutes).padStart(2, '0');
+  const padS = String(seconds).padStart(2, '0');
+  return { text: `🚨 ${padM}m ${padS}s`, urgent: true, ended: false };
+};
+
+// -- AUTO-SORT MANIFEST: ENDING SOONEST AUCTIONS AT TOP --
+const sortedManifestItems = computed(() => {
+  return [...purchaseItems.value].sort((a, b) => {
+    const aIsAuction = isAuctionItem(a);
+    const bIsAuction = isAuctionItem(b);
+    if (aIsAuction && !bIsAuction) return -1;
+    if (!aIsAuction && bIsAuction) return 1;
+
+    if (aIsAuction && bIsAuction) {
+      const aTime = a.auctionEndsAt ? new Date(a.auctionEndsAt).getTime() : Infinity;
+      const bTime = b.auctionEndsAt ? new Date(b.auctionEndsAt).getTime() : Infinity;
+      return aTime - bTime;
+    }
+
+    return 0;
+  });
+});
+
+// -- SELLER SHIPMENT CLUSTERS & WEIGHT GUARD --
+const sellerClusters = computed<SellerCluster[]>(() => {
+  return evaluateSellerClusters(purchaseItems.value);
+});
+
+// -- 1-TAP COPY MAX BID --
+const copyMaxBid = async (item: ScoutPurchaseItem) => {
+  const amount = item.maxBid || item.cost;
+  if (!amount) return;
+  try {
+    await navigator.clipboard.writeText(Number(amount).toFixed(2));
+    addToast({ type: 'success', message: `📋 Copied $${Number(amount).toFixed(2)} to clipboard!` });
+  } catch {
+    addToast({ type: 'info', message: `Max Bid: $${Number(amount).toFixed(2)}` });
+  }
+};
+
+// -- WIN / LOSS MODAL STATE & HANDLERS --
+const itemPendingWin = ref<ScoutPurchaseItem | null>(null);
+const winningBidInput = ref<number | string>('');
+const isRecordingWin = ref(false);
+
+const openWinModal = (item: ScoutPurchaseItem) => {
+  itemPendingWin.value = item;
+  winningBidInput.value = item.currentBid || item.maxBid || item.cost || '';
+};
+
+const confirmRecordWin = async () => {
+  if (!itemPendingWin.value) return;
+  const bid = parseFloat(String(winningBidInput.value)) || 0;
+  isRecordingWin.value = true;
+  try {
+    await recordAuctionWin(itemPendingWin.value.$id, bid);
+    addToast({ type: 'success', message: `🏆 Won! Recorded winning bid of $${bid.toFixed(2)}.` });
+    itemPendingWin.value = null;
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to record auction win: ' + err.message });
+  } finally {
+    isRecordingWin.value = false;
+  }
+};
+
+const itemPendingLoss = ref<ScoutPurchaseItem | null>(null);
+const isRecordingLoss = ref(false);
+
+const confirmRecordLoss = async () => {
+  if (!itemPendingLoss.value) return;
+  isRecordingLoss.value = true;
+  try {
+    await recordAuctionLoss(itemPendingLoss.value.$id, true);
+    addToast({ type: 'info', message: 'Outbid item removed from tracker.' });
+    itemPendingLoss.value = null;
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to record auction loss: ' + err.message });
+  } finally {
+    isRecordingLoss.value = false;
+  }
+};
 
 // Auto-fetch line items whenever tray is opened for a tracker
 watch(

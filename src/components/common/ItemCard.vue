@@ -261,7 +261,35 @@ const tags = computed(() => {
     return list.filter(t => t && String(t).trim().toLowerCase() !== currentLoc);
 });
 
+const auctionStatus = computed(() => {
+    const s = props.item?.status;
+    const isAuctionWatch = s === 'tracked' || s === 'draft' || !!props.item?.auctionEndsAt || !!props.item?.currentBid;
+    if (!isAuctionWatch) return null;
+
+    const current = Number(props.item?.currentBid || props.item?.cost || 0);
+    const max = Number(props.item?.maxBid || 0);
+    if (max > 0 && current > 0) {
+        if (current > max) {
+            return {
+                isOutbid: true,
+                text: '🛑 Outbid',
+                badgeClass: 'badge-error text-error-content font-black shadow-xs'
+            };
+        } else {
+            return {
+                isOutbid: false,
+                text: `🎯 In Play`,
+                badgeClass: 'badge-success text-success-content font-bold shadow-xs'
+            };
+        }
+    }
+    return null;
+});
+
 const statusText = computed(() => {
+    if (auctionStatus.value) {
+        return auctionStatus.value.text;
+    }
     const s = props.item.status || 'received';
     return s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 });
@@ -269,6 +297,9 @@ const statusText = computed(() => {
 const isDeconstructed = computed(() => props.item?.status === 'deconstructed');
 
 const statusBadgeClass = computed(() => {
+    if (auctionStatus.value) {
+        return auctionStatus.value.badgeClass;
+    }
     const s = props.item.status;
     if (s === 'received' || s === 'scouted') return 'badge-info badge-sm';
     if (s === 'acquired') return 'badge-secondary badge-sm';

@@ -591,34 +591,67 @@
 
                     <!-- SOURCING STRATEGY VERDICT CARD (Pre-acquisition / Scouting Only) -->
                     <div v-else-if="!isAcquiredItem && scoutPurchaseStrategy" class="border-2 rounded-2xl p-3.5 shadow-xs" :class="{
-                        'border-success bg-success/10': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
-                        'border-error bg-error/10': scoutPurchaseStrategy.verdict === 'PASS',
-                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
-                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
+                        'border-error bg-error/15 ring-2 ring-error/20': scoutPurchaseStrategy.isOutbid || scoutPurchaseStrategy.verdict === 'PASS',
+                        'border-success bg-success/10': !scoutPurchaseStrategy.isOutbid && ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
+                        'border-warning bg-warning/10': !scoutPurchaseStrategy.isOutbid && ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
+                        'border-primary bg-primary/10': !scoutPurchaseStrategy.isOutbid && !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
                     }">
-                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                             <div class="flex items-center gap-2">
-                                <Icon icon="solar:magic-stick-bold" class="w-5 h-5 text-success" v-if="['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)" />
-                                <Icon icon="solar:stop-circle-bold" class="w-5 h-5 text-error" v-else-if="scoutPurchaseStrategy.verdict === 'PASS'" />
+                                <Icon icon="solar:stop-circle-bold" class="w-5 h-5 text-error animate-pulse" v-if="scoutPurchaseStrategy.isOutbid || scoutPurchaseStrategy.verdict === 'PASS'" />
+                                <Icon icon="solar:magic-stick-bold" class="w-5 h-5 text-success" v-else-if="['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)" />
                                 <Icon icon="solar:eye-bold" class="w-5 h-5 text-warning" v-else />
                                 <h4 class="font-black text-sm uppercase tracking-wider" :class="{
-                                    'text-success': ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
-                                    'text-error': scoutPurchaseStrategy.verdict === 'PASS',
-                                    'text-warning': ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
-                                    'text-primary': !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
-                                }">{{ String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}</h4>
+                                    'text-error': scoutPurchaseStrategy.isOutbid || scoutPurchaseStrategy.verdict === 'PASS',
+                                    'text-success': !scoutPurchaseStrategy.isOutbid && ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict),
+                                    'text-warning': !scoutPurchaseStrategy.isOutbid && ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy.verdict),
+                                    'text-primary': !scoutPurchaseStrategy.isOutbid && !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy.verdict)
+                                }">
+                                    {{ scoutPurchaseStrategy.isOutbid ? '🛑 STOP BIDDING (OUTBID)' : String(scoutPurchaseStrategy.verdict || '').replace('_', ' ') }}
+                                </h4>
                             </div>
                             <div v-if="scoutPurchaseStrategy.current_asking_price && !String(scoutPurchaseStrategy.current_asking_price).includes('No Asking Price')" class="my-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-base-100 border border-base-300 flex flex-wrap items-center gap-1.5 leading-snug">
                                 <span class="opacity-60 text-[10px] uppercase font-black">Asking/Bid:</span>
                                 <span>{{ scoutPurchaseStrategy.current_asking_price }}</span>
                             </div>
-                            <div v-else-if="scoutPurchaseStrategy.max_bid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
-                                Max Bid: ${{ scoutPurchaseStrategy.max_bid }}
+                            <div v-else-if="scoutPurchaseStrategy.max_bid || scoutPurchaseStrategy.maxBid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
+                                Max Bid: ${{ Number(scoutPurchaseStrategy.maxBid || scoutPurchaseStrategy.max_bid).toFixed(2) }}
                             </div>
                         </div>
-                        <p v-if="scoutPurchaseStrategy.advice" class="text-xs opacity-90 leading-relaxed font-medium">
+
+                        <!-- Live Bidding Headroom vs Over-Ceiling Strip -->
+                        <div v-if="scoutPurchaseStrategy.headroom !== undefined && scoutPurchaseStrategy.currentBid && scoutPurchaseStrategy.maxBid" 
+                             class="my-2 p-2 rounded-xl bg-base-100/90 border border-base-300 flex items-center justify-between text-xs font-mono shadow-xs">
+                            <div>
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">Current Bid</span>
+                                <span class="font-black text-xs sm:text-sm" :class="scoutPurchaseStrategy.isOutbid ? 'text-error' : 'text-base-content'">${{ Number(scoutPurchaseStrategy.currentBid).toFixed(2) }}</span>
+                            </div>
+                            <div class="text-center">
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">Max Ceiling</span>
+                                <span class="font-bold text-xs sm:text-sm text-primary">${{ Number(scoutPurchaseStrategy.maxBid).toFixed(2) }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">{{ scoutPurchaseStrategy.isOutbid ? 'Over Ceiling' : 'Headroom' }}</span>
+                                <span class="font-black text-xs sm:text-sm" :class="scoutPurchaseStrategy.isOutbid ? 'text-error' : 'text-success'">
+                                    {{ scoutPurchaseStrategy.headroom >= 0 ? `+$${Number(scoutPurchaseStrategy.headroom).toFixed(2)}` : `-$${Math.abs(Number(scoutPurchaseStrategy.headroom)).toFixed(2)}` }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <p v-if="scoutPurchaseStrategy.advice" class="text-xs opacity-90 leading-relaxed font-medium" :class="{'text-error font-bold': scoutPurchaseStrategy.isOutbid}">
                             {{ scoutPurchaseStrategy.advice }}
                         </p>
+                        <!-- Combined Shipping & Weight Details -->
+                        <div v-if="(scoutAuctionMeta?.can_combine_shipping ?? scoutItemsArray[0]?.canCombineShipping) !== undefined" class="mt-2.5 pt-2 border-t border-base-300 flex items-center justify-between text-xs font-mono">
+                            <span class="flex items-center gap-1 font-bold" :class="(scoutAuctionMeta?.can_combine_shipping ?? scoutItemsArray[0]?.canCombineShipping) ? 'text-success' : 'text-error'">
+                                <Icon :icon="(scoutAuctionMeta?.can_combine_shipping ?? scoutItemsArray[0]?.canCombineShipping) ? 'solar:box-minimalistic-bold' : 'solar:forbidden-circle-bold'" class="w-3.5 h-3.5" />
+                                {{ (scoutAuctionMeta?.can_combine_shipping ?? scoutItemsArray[0]?.canCombineShipping) ? 'Combined Shipping: Eligible' : 'Combined Shipping: Ineligible' }}
+                                <span v-if="scoutAuctionMeta?.seller_id || scoutItemsArray[0]?.sellerId" class="opacity-75 font-mono text-[10px]">(Seller #{{ scoutAuctionMeta?.seller_id || scoutItemsArray[0]?.sellerId }})</span>
+                            </span>
+                            <span v-if="scoutAuctionMeta?.shipping_weight || scoutItemsArray[0]?.shippingWeight" class="opacity-70">
+                                ⚖️ {{ scoutAuctionMeta?.shipping_weight || scoutItemsArray[0]?.shippingWeight }} lbs
+                            </span>
+                        </div>
                     </div>
 
                     <!-- VISUAL CONDITION ASSESSMENT -->
@@ -1020,7 +1053,7 @@ const linkedSaleOrderId = computed(() => {
 
 const isAcquiredItem = computed(() => {
     const s = (props.item?.status || props.editForm?.status || '').toLowerCase();
-    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) || (!!props.item?.$id && s !== 'scouting' && s !== 'draft');
+    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) && !['tracked', 'scouting', 'draft', 'pending_bid'].includes(s);
 });
 
 const exitPlaybook = computed(() => {

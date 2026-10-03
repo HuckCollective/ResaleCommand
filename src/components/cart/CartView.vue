@@ -47,16 +47,22 @@
                       :compact="true"
                       @click-card="openPreview(item)">
 
-                      <template #absolute-top-left>
-                           <!-- Actions Menu Override -->
-                            <div class="dropdown dropdown-bottom z-20" @click.stop>
-                                <label tabindex="0" class="btn btn-ghost btn-sm btn-circle bg-base-100/80 backdrop-blur shadow-sm cursor-pointer">⋮</label>
-                                <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-40 border border-base-200">
-                                    <li><a @click="openEditModal(item)"><Icon icon="solar:pen-linear" class="w-4 h-4 inline" /> Edit</a></li>
-                                    <li><a :href="`/scout?rescout=${item.$id}`"><Icon icon="solar:magnifer-linear" class="w-4 h-4 inline" /> Scout</a></li>
-                                    <li><a @click="handleDeleteItem(item.$id)" class="text-error"><Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4 inline" /> Delete</a></li>
-                                </ul>
-                            </div>
+                      <template #actions>
+                          <!-- Docked Bottom Actions -->
+                              <a v-if="getItemSourceUrl(item)" :href="getItemSourceUrl(item)" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs join-item flex-1 text-primary opacity-80 hover:opacity-100" title="Open live auction listing in new tab">
+                                  <Icon icon="solar:link-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Open
+                              </a>
+                              <button v-if="getItemSourceUrl(item)" @click="reEvaluateAuction(item)" :disabled="reEvaluatingIds[item.$id]" class="btn btn-ghost btn-xs join-item flex-1 text-secondary opacity-80 hover:opacity-100" title="Re-evaluate live auction and current bids">
+                                  <span v-if="reEvaluatingIds[item.$id]" class="loading loading-spinner loading-xs inline"></span>
+                                  <Icon v-else icon="solar:refresh-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Re-Eval
+                              </button>
+                              <button @click="openEditModal(item)" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100">
+                                  <Icon icon="solar:pen-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Edit
+                              </button>
+                              <a :href="`/scout?rescout=${item.$id}`" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100">
+                                  <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Scout
+                              </a>
+                          </div>
                       </template>
                       
                       <template #image-overlay>
@@ -123,17 +129,115 @@ import { storage, databases, ID } from '../../lib/appwrite';
 import { useCart, type CartItem } from '../../composables/useCart';
 import { useAuth } from '../../composables/useAuth';
 import ItemDrawer from '../common/ItemDrawer.vue';
-import { updateInventoryItem } from '../../lib/inventory';
+import { updateInventoryItem, getSafeRawAnalysis, BUCKET_ID } from '../../lib/inventory';
 import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
+import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
-
-import { BUCKET_ID } from '../../lib/inventory';
 
 const { user, currentTeam } = useAuth();
 const currentTeamId = computed(() => currentTeam.value?.$id);
+const { showLoader, hideLoader } = useLoader();
+const reEvaluatingIds = ref<Record<string, boolean>>({});
+
+function getItemSourceUrl(item: any): string | null {
+    if (item.sourcingLocation && item.sourcingLocation.startsWith('http')) return item.sourcingLocation;
+    if (item.url && item.url.startsWith('http')) return item.url;
+    if (item.conditionNotes) {
+        const match = item.conditionNotes.match(/https?:\/\/[^\s\n\]]+/);
+        if (match) return match[0];
+    }
+    if (item.rawAnalysis) {
+        try {
+            const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+            const target = Array.isArray(raw) ? raw[0] : raw;
+            if (target?.sourcingLocation && target.sourcingLocation.startsWith('http')) return target.sourcingLocation;
+            if (target?.source_url && target.source_url.startsWith('http')) return target.source_url;
+            if (target?.url && target.url.startsWith('http')) return target.url;
+        } catch(e) {}
+    }
+    return null;
+}
+
+async function reEvaluateAuction(item: any) {
+    const targetUrl = getItemSourceUrl(item);
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+        addToast({ type: 'warning', message: 'No valid URL to re-evaluate this auction.' });
+        return;
+    }
+    reEvaluatingIds.value[item.$id] = true;
+    showLoader("Re-evaluating Live Auction...", {
+        step: "Fetching latest bids, shipping & stop-bidding rules...",
+        progress: 45
+    });
+
+    try {
+        const res = await fetch('/api/identify-item', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                notes: targetUrl + '\n\n' + (item.conditionNotes || '')
+            })
+        });
+
+        if (!res.ok) throw new Error('Failed to fetch live auction data');
+        const data = await res.json();
+        const candidate = (data.items && data.items.length > 0) ? data.items[0] : data;
+
+        const liveBid = candidate.currentBid || candidate.auction_meta?.current_bid || parseFloat(String(candidate.purchase_strategy?.current_asking_price || 0).replace(/[$,]/g, ''));
+        const maxBid = candidate.maxBid || candidate.purchase_strategy?.max_bid;
+        
+        const updatePayload: any = {
+            rawAnalysis: getSafeRawAnalysis(candidate)
+        };
+        if (!item.sourcingLocation && targetUrl) {
+            updatePayload.sourcingLocation = targetUrl;
+        }
+        if (liveBid > 0) {
+            updatePayload.cost = liveBid;
+        }
+        if (candidate.auctionEndsAt || candidate.auction_meta?.end_time) {
+            updatePayload.auctionEndsAt = candidate.auctionEndsAt || candidate.auction_meta?.end_time;
+        }
+        if (maxBid && Number(maxBid) > 0) {
+            updatePayload.maxBid = Number(maxBid);
+        }
+        if (candidate.canCombineShipping !== undefined) {
+            updatePayload.canCombineShipping = candidate.canCombineShipping;
+        }
+
+        await updateItem(item.$id, updatePayload);
+
+        // Optimistically update the cartItems array with new values
+        const idx = cartItems.value.findIndex(i => i.$id === item.$id);
+        if (idx !== -1) {
+            Object.assign(cartItems.value[idx], updatePayload);
+        }
+
+        if (liveBid > 0 && maxBid && Number(maxBid) > 0) {
+            if (liveBid > Number(maxBid)) {
+                addToast({ 
+                    type: 'error', 
+                    message: `🚨 STOP BIDDING on "${item.title || item.identity}"! Outbid at $${liveBid.toFixed(2)} (Max Bid: $${Number(maxBid).toFixed(2)}).` 
+                });
+            } else {
+                addToast({ 
+                    type: 'success', 
+                    message: `🎯 Live bid updated: $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBid) - liveBid).toFixed(2)})` 
+                });
+            }
+        } else {
+            addToast({ type: 'success', message: `Auction data updated for "${item.title || item.identity}"!` });
+        }
+    } catch (err: any) {
+        addToast({ type: 'error', message: 'Re-evaluation failed: ' + (err.message || 'Network error') });
+    } finally {
+        reEvaluatingIds.value[item.$id] = false;
+        hideLoader();
+    }
+}
 
 const scrollToTop = () => {
     const el = document.getElementById('tracker-scroll');

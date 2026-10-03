@@ -135,6 +135,82 @@
                         </div>
                     </div>
 
+                    <!-- Live Auction Bidding Strategy Card -->
+                    <div v-if="scoutPurchaseStrategy || isAuctionItem" class="border-2 rounded-2xl p-4 shadow-sm" :class="{
+                        'border-error bg-error/15 ring-2 ring-error/20': scoutPurchaseStrategy?.isOutbid || scoutPurchaseStrategy?.verdict === 'PASS',
+                        'border-success bg-success/10': !scoutPurchaseStrategy?.isOutbid && ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy?.verdict),
+                        'border-warning bg-warning/10': !scoutPurchaseStrategy?.isOutbid && ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy?.verdict),
+                        'border-primary bg-primary/10': !scoutPurchaseStrategy?.isOutbid && !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy?.verdict)
+                    }">
+                        <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                            <div class="flex items-center gap-2">
+                                <Icon icon="solar:stop-circle-bold" class="w-5 h-5 text-error animate-pulse" v-if="scoutPurchaseStrategy?.isOutbid || scoutPurchaseStrategy?.verdict === 'PASS'" />
+                                <Icon icon="solar:magic-stick-bold" class="w-5 h-5 text-success" v-else-if="['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy?.verdict)" />
+                                <Icon icon="solar:eye-bold" class="w-5 h-5 text-warning" v-else />
+                                <h4 class="font-black text-sm uppercase tracking-wider" :class="{
+                                    'text-error': scoutPurchaseStrategy?.isOutbid || scoutPurchaseStrategy?.verdict === 'PASS',
+                                    'text-success': !scoutPurchaseStrategy?.isOutbid && ['BUY_NOW', 'BUY', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy?.verdict),
+                                    'text-warning': !scoutPurchaseStrategy?.isOutbid && ['WATCH', 'NEGOTIATE'].includes(scoutPurchaseStrategy?.verdict),
+                                    'text-primary': !scoutPurchaseStrategy?.isOutbid && !['PASS', 'WATCH', 'BUY_NOW', 'BUY', 'NEGOTIATE', 'CHASE_AUCTION'].includes(scoutPurchaseStrategy?.verdict)
+                                }">
+                                    {{ scoutPurchaseStrategy?.isOutbid ? '🛑 STOP BIDDING (OUTBID)' : String(scoutPurchaseStrategy?.verdict || 'AUCTION TRACKED').replace(/_/g, ' ') }}
+                                </h4>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <a v-if="item.sourcingLocation && item.sourcingLocation.startsWith('http')" 
+                                   :href="item.sourcingLocation" 
+                                   target="_blank" 
+                                   rel="noopener noreferrer" 
+                                   class="btn btn-xs btn-primary gap-1 font-bold shadow-xs">
+                                    <span>Live Auction</span>
+                                    <Icon icon="solar:external-link-linear" class="w-3.5 h-3.5" />
+                                </a>
+                                <div v-if="scoutPurchaseStrategy?.maxBid" class="badge badge-sm font-mono font-bold bg-base-100 border border-base-300">
+                                    Max Bid: ${{ Number(scoutPurchaseStrategy.maxBid).toFixed(2) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Bidding Headroom vs Over-Ceiling Strip -->
+                        <div v-if="scoutPurchaseStrategy?.headroom !== undefined && scoutPurchaseStrategy?.currentBid && scoutPurchaseStrategy?.maxBid" 
+                             class="my-2.5 p-2.5 rounded-xl bg-base-100/90 border border-base-300 flex items-center justify-between text-xs font-mono shadow-xs">
+                            <div>
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">Current Bid</span>
+                                <span class="font-black text-xs sm:text-sm" :class="scoutPurchaseStrategy.isOutbid ? 'text-error' : 'text-base-content'">${{ Number(scoutPurchaseStrategy.currentBid).toFixed(2) }}</span>
+                            </div>
+                            <div class="text-center">
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">Max Ceiling</span>
+                                <span class="font-bold text-xs sm:text-sm text-primary">${{ Number(scoutPurchaseStrategy.maxBid).toFixed(2) }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="opacity-60 text-[9px] uppercase font-bold block">{{ scoutPurchaseStrategy.isOutbid ? 'Over Ceiling' : 'Headroom' }}</span>
+                                <span class="font-black text-xs sm:text-sm" :class="scoutPurchaseStrategy.isOutbid ? 'text-error' : 'text-success'">
+                                    {{ scoutPurchaseStrategy.headroom >= 0 ? `+$${Number(scoutPurchaseStrategy.headroom).toFixed(2)}` : `-$${Math.abs(Number(scoutPurchaseStrategy.headroom)).toFixed(2)}` }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <p v-if="scoutPurchaseStrategy?.advice" class="text-xs opacity-90 leading-relaxed font-medium" :class="{'text-error font-bold': scoutPurchaseStrategy?.isOutbid}">
+                            {{ scoutPurchaseStrategy.advice }}
+                        </p>
+
+                        <!-- Combined Shipping & Auction Details Row -->
+                        <div v-if="(item.canCombineShipping !== undefined || item.sellerName || item.shippingWeight || item.auctionEndsAt)" class="mt-2.5 pt-2 border-t border-base-300 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                            <span v-if="item.canCombineShipping !== undefined" :class="item.canCombineShipping ? 'text-success font-bold' : 'opacity-60'">
+                                {{ item.canCombineShipping ? '📦 Combined Shipping Eligible' : '🚫 Single Item Shipping Only' }}
+                            </span>
+                            <span v-if="item.shippingWeight" class="opacity-70">
+                                Weight: {{ item.shippingWeight }} lbs
+                            </span>
+                            <span v-if="item.sellerName" class="opacity-70">
+                                Seller: {{ item.sellerName }}
+                            </span>
+                            <span v-if="item.auctionEndsAt" class="text-primary font-bold">
+                                Ends: {{ new Date(item.auctionEndsAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
+                            </span>
+                        </div>
+                    </div>
+
                     <!-- Condition Notes -->
                     <div v-if="cleanConditionNotes" class="bg-warning/10 border-l-4 border-warning p-4 rounded-r-lg">
                         <h3 class="font-bold text-warning-content text-sm uppercase mb-1">Condition Notes</h3>
@@ -227,7 +303,17 @@
                                 <Icon icon="solar:magic-stick-bold" class="w-4 h-4" />
                                 AI Scout Report
                             </span>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span v-if="(parsedScoutData.canCombineShipping ?? parsedScoutData.seller_info?.can_combine_shipping) !== undefined"
+                                      class="badge badge-sm font-bold gap-1 shadow-xs"
+                                      :class="(parsedScoutData.canCombineShipping ?? parsedScoutData.seller_info?.can_combine_shipping) ? 'badge-success text-success-content' : 'badge-error text-error-content'">
+                                    <Icon :icon="(parsedScoutData.canCombineShipping ?? parsedScoutData.seller_info?.can_combine_shipping) ? 'solar:box-minimalistic-bold' : 'solar:forbidden-circle-bold'" class="w-3.5 h-3.5" />
+                                    {{ (parsedScoutData.canCombineShipping ?? parsedScoutData.seller_info?.can_combine_shipping) ? 'Combine Eligible' : 'Ships Alone' }}
+                                    <span v-if="parsedScoutData.seller_info?.seller_id || parsedScoutData.sellerId" class="opacity-80 font-mono text-[10px]">#{{ parsedScoutData.seller_info?.seller_id || parsedScoutData.sellerId }}</span>
+                                </span>
+                                <span v-if="parsedScoutData.seller_info?.shipping_weight || parsedScoutData.shippingWeight" class="badge badge-neutral font-mono font-bold text-xs">
+                                    ⚖️ {{ parsedScoutData.seller_info?.shipping_weight || parsedScoutData.shippingWeight }} lbs
+                                </span>
                                 <span v-if="scoutTierBadge" class="badge font-bold" :class="scoutTierBadge.class">
                                     {{ scoutTierBadge.label }}
                                 </span>
@@ -522,7 +608,7 @@ const loading = ref(true);
 const error = ref(null);
 
 import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
-import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl } from '../../lib/inventory';
+import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
@@ -970,13 +1056,19 @@ const loadScoutData = async (currentItem) => {
         let raw = currentItem.scoutData;
         if (typeof raw === 'object') {
             parsedScoutData.value = Array.isArray(raw) ? raw[0] : raw;
-            return;
+        } else {
+            try { 
+                let parsed = JSON.parse(raw);
+                parsedScoutData.value = Array.isArray(parsed) ? parsed[0] : parsed;
+            } catch (e) { }
         }
-        try { 
-            let parsed = JSON.parse(raw);
-            parsedScoutData.value = Array.isArray(parsed) ? parsed[0] : parsed;
-            return;
-        } catch (e) { }
+    }
+
+    if (!parsedScoutData.value && currentItem.rawAnalysis) {
+         try {
+             const parsed = JSON.parse(currentItem.rawAnalysis);
+             parsedScoutData.value = Array.isArray(parsed) ? parsed[0] : (parsed.items ? parsed.items[0] : parsed);
+         } catch (e) {}
     }
 
     if (currentItem.conditionNotes) {
@@ -994,7 +1086,7 @@ const loadScoutData = async (currentItem) => {
         }
 
         const fileMatch = currentItem.conditionNotes.match(/\[SCOUT_REPORT_ID:\s*([^\]]+)\]/);
-        if (fileMatch) {
+        if (fileMatch && !parsedScoutData.value) {
             const fileId = fileMatch[1].trim();
             const downloadUrl = `${ENDPOINT}/storage/buckets/${REPORTS_BUCKET}/files/${fileId}/download?project=${PROJECT}`;
             try {
@@ -1002,26 +1094,30 @@ const loadScoutData = async (currentItem) => {
                 if (res.ok) {
                     const data = await res.json();
                     parsedScoutData.value = Array.isArray(data) ? data[0] : (data.items ? data.items[0] : data);
-                    return;
                 }
             } catch (e) { console.warn("Failed to fetch scout file", e); }
         }
         
-        const liteMatch = currentItem.conditionNotes.match(/\[SCOUT_DATA_LITE:\s*([^\]]+)\]/);
-        if (liteMatch) {
-            try { parsedScoutData.value = JSON.parse(atob(liteMatch[1])); return; } catch(e) {}
-        }
-        const dataMatch = currentItem.conditionNotes.match(/\[SCOUT_DATA:\s*([^\]]+)\]/);
-        if (dataMatch) {
-            try { parsedScoutData.value = JSON.parse(atob(dataMatch[1])); return; } catch(e) {}
+        if (!parsedScoutData.value) {
+            const liteMatch = currentItem.conditionNotes.match(/\[SCOUT_DATA_LITE:\s*([^\]]+)\]/);
+            if (liteMatch) {
+                try { parsedScoutData.value = JSON.parse(atob(liteMatch[1])); } catch(e) {}
+            }
+            const dataMatch = currentItem.conditionNotes.match(/\[SCOUT_DATA:\s*([^\]]+)\]/);
+            if (dataMatch) {
+                try { parsedScoutData.value = JSON.parse(atob(dataMatch[1])); } catch(e) {}
+            }
         }
     }
-    
-    if (currentItem.rawAnalysis) {
-         try {
-             const parsed = JSON.parse(currentItem.rawAnalysis);
-             parsedScoutData.value = Array.isArray(parsed) ? parsed[0] : (parsed.items ? parsed.items[0] : parsed);
-         } catch (e) {}
+
+    if (!scoutMarkdownText.value && currentItem.marketDescription) {
+        scoutMarkdownText.value = marked.parse(currentItem.marketDescription);
+    }
+    if (!scoutMarkdownText.value && parsedScoutData.value) {
+        const md = formatScoutReportMarkdown(parsedScoutData.value);
+        if (md) {
+            scoutMarkdownText.value = marked.parse(md);
+        }
     }
 };
 
@@ -1101,19 +1197,71 @@ const proxify = (url) => {
 const gallery = computed(() => {
     if (!item.value) return [];
     
+    const urls = [];
+
     if (item.value.galleryImageIds && item.value.galleryImageIds.length > 0) {
-        return item.value.galleryImageIds.map(id => {
-            if (id.startsWith('http')) return proxify(id);
-            return getAssetUrl(id);
+        item.value.galleryImageIds.forEach(id => {
+            if (id) urls.push(id.startsWith('http') ? proxify(id) : getAssetUrl(id));
         });
-    }
-    
-    if (item.value.imageId) {
+    } else if (item.value.imageId) {
         const id = item.value.imageId;
-        return [id.startsWith('http') ? proxify(id) : getAssetUrl(id)];
+        urls.push(id.startsWith('http') ? proxify(id) : getAssetUrl(id));
     }
-    
-    return [];
+
+    // Fallback to parsedScoutData or rawAnalysis fetched_images if urls is empty
+    if (urls.length === 0 && parsedScoutData.value) {
+        const scout = parsedScoutData.value;
+        const remoteImages = scout.fetched_images || scout.images || (scout.fetched_image ? [scout.fetched_image] : []);
+        if (Array.isArray(remoteImages)) {
+            remoteImages.forEach(img => {
+                if (img) urls.push(proxify(img));
+            });
+        }
+    }
+
+    return urls;
+});
+
+const isAuctionItem = computed(() => {
+    return !!(
+        item.value?.status === 'tracked' ||
+        item.value?.auctionEndsAt ||
+        item.value?.maxBid ||
+        (item.value?.sourcingLocation && (item.value.sourcingLocation.includes('shopgoodwill.com') || item.value.sourcingLocation.includes('auction')))
+    );
+});
+
+const scoutPurchaseStrategy = computed(() => {
+    const rawStrat = parsedScoutData.value?.purchase_strategy || null;
+    const currentCost = parseFloat(String(item.value?.currentBid || item.value?.cost || parsedScoutData.value?.currentBid || rawStrat?.current_asking_price || 0).replace(/[$,]/g, ''));
+    const maxBid = parseFloat(String(item.value?.maxBid || parsedScoutData.value?.maxBid || rawStrat?.max_bid || 0).replace(/[$,]/g, ''));
+
+    if (currentCost > 0 && maxBid > 0) {
+        const isOutbid = currentCost > maxBid;
+        const headroom = maxBid - currentCost;
+        return {
+            verdict: isOutbid ? 'PASS' : (rawStrat?.verdict || 'CHASE_AUCTION'),
+            isOutbid,
+            currentBid: currentCost,
+            maxBid,
+            headroom,
+            current_asking_price: `$${currentCost.toFixed(2)}`,
+            max_bid: `$${maxBid.toFixed(2)}`,
+            advice: isOutbid
+                ? `🚨 STOP BIDDING — OUTBID! Current bid ($${currentCost.toFixed(2)}) exceeds your max bid ceiling ($${maxBid.toFixed(2)}). Landed cost wipes out your target resale margin. Do not chase.`
+                : (rawStrat?.advice || `🎯 IN PLAY: Current bid is $${currentCost.toFixed(2)}. You have $${headroom.toFixed(2)} in bidding headroom before reaching your $${maxBid.toFixed(2)} ceiling.`)
+        };
+    }
+    if (rawStrat) return rawStrat;
+    if (maxBid > 0) {
+        return {
+            verdict: 'WATCH',
+            isOutbid: false,
+            maxBid,
+            advice: `Target ceiling: $${maxBid.toFixed(2)}. Monitor live auction.`
+        };
+    }
+    return null;
 });
 
 const sellingRecommendation = computed(() => {

@@ -112,44 +112,506 @@
                 <div id="scout-results-section" class="space-y-6">
             <div v-for="(item, index) in ((result.items && result.items.length > 0) ? result.items : [result])" :key="index" class="card bg-base-100 shadow-sm border border-base-200">
                 <div class="card-body p-4 md:p-6">
-                                    <!-- 1. Title Header & Input (Top of Card) -->
-                    <div class="space-y-1 mb-4">
-                        <div class="flex items-center gap-2 mb-1 flex-wrap">
-                            <span class="text-xs uppercase font-bold tracking-widest text-primary font-mono">Scouted Listing</span>
+                    <!-- TOP IDENTIFICATION & STATUS RIBBON -->
+                    <div class="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-base-200 flex-wrap">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-xs uppercase font-extrabold tracking-widest text-primary font-mono">
+                                Scouted Listing
+                            </span>
                             <span v-if="getTierBadgeInfo(item)" class="badge font-bold gap-1 shadow-xs" :class="getTierBadgeInfo(item).class">
                                 {{ getTierBadgeInfo(item).label }}
+                            </span>
+                            <span v-if="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) !== undefined"
+                                  class="badge font-bold gap-1 shadow-xs"
+                                  :class="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'badge-success text-success-content' : 'badge-error text-error-content'">
+                                <Icon :icon="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'solar:box-minimalistic-bold' : 'solar:forbidden-circle-bold'" class="w-3.5 h-3.5" />
+                                {{ (item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'Combine Eligible' : 'Ships Alone' }}
+                                <span v-if="item.seller_info?.seller_id || item.sellerId" class="opacity-80 font-mono text-[10px]">#{{ item.seller_info?.seller_id || item.sellerId }}</span>
+                            </span>
+                            <span v-if="item.seller_info?.shipping_weight || item.shippingWeight" class="badge badge-neutral font-mono font-bold text-xs">
+                                ⚖️ {{ item.seller_info?.shipping_weight || item.shippingWeight }} lbs
                             </span>
                             <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                         </div>
                         
-                        <!-- Suggested Title Input -->
-                        <div class="form-control w-full mt-1">
-                            <div class="relative">
-                                <input v-model="item.title" type="text" class="input input-bordered w-full font-black text-sm sm:text-base pr-8" placeholder="Item Title..." />
-                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-30 pointer-events-none"><Icon icon="solar:pen-linear" class="w-4 h-4" /></span>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-wrap gap-2 pt-1">
-                            <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-xs btn-outline btn-secondary gap-1 shadow-xs rounded-lg">
-                                <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> View Source Listing
-                            </a>
-                            <a v-if="getItemDisplayImage(item) && getItemDisplayImage(item).startsWith('http')" :href="'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(getItemDisplayImage(item))" target="_blank" class="btn btn-xs btn-outline btn-primary gap-1 shadow-xs rounded-lg">
-                                <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Search Google Lens
-                            </a>
+                        <!-- Quick Identity Preview -->
+                        <div class="text-xs font-bold text-base-content/70 truncate max-w-xs sm:max-w-md">
+                            {{ item.identity || item.title || 'Identified Item' }}
                         </div>
                     </div>
 
-                    <!-- 2. COLLAPSIBLE PHOTOS & DETAILS SECTION (Compact on mobile so Verdict & Estimates are immediately visible!) -->
-                    <div class="card bg-base-200/80 border border-base-300 rounded-2xl overflow-hidden mb-3 transition-all duration-200 shadow-xs">
-                        <!-- Compact Preview & Toggle Bar -->
+                    <!-- COMBINED SHIPPING SYNERGY & WEIGHT GUARD BANNER -->
+                    <div v-if="getCombinedShippingAlert(item)" class="mb-4">
+                        <div class="rounded-2xl p-4 border-2 shadow-sm space-y-2.5 transition-all"
+                             :class="{
+                                 'bg-gradient-to-r from-success/15 via-base-100 to-success/10 border-success/40': getCombinedShippingAlert(item).isEligible && !getCombinedShippingAlert(item).allPennyShipping,
+                                 'bg-gradient-to-r from-accent/15 via-base-100 to-accent/10 border-accent/40': getCombinedShippingAlert(item).isEligible && getCombinedShippingAlert(item).allPennyShipping,
+                                 'bg-gradient-to-r from-error/15 via-base-100 to-error/10 border-error/50': !getCombinedShippingAlert(item).isEligible
+                             }">
+                            <!-- Header Row: Status Badge, Seller Info, Item Count -->
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="badge font-black text-xs gap-1 shadow-xs" :class="getCombinedShippingAlert(item).noticeBadge.badgeClass">
+                                        <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+                                        {{ getCombinedShippingAlert(item).noticeBadge.title }}
+                                    </span>
+                                    <span class="text-xs font-bold text-base-content/80">
+                                        {{ getCombinedShippingAlert(item).sellerName }}
+                                    </span>
+                                    <span class="badge badge-neutral badge-xs font-mono">
+                                        {{ getCombinedShippingAlert(item).totalItemCount }} / {{ getCombinedShippingAlert(item).itemLimit }} items
+                                    </span>
+                                </div>
+                                <div v-if="getCombinedShippingAlert(item).estimatedSavings > 0" class="badge badge-success badge-outline font-mono font-black text-xs">
+                                    ~${{ getCombinedShippingAlert(item).estimatedSavings.toFixed(2) }} Saved on Shipping
+                                </div>
+                            </div>
+
+                            <!-- Weight Guard Bar -->
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between text-[11px] font-mono">
+                                    <span class="text-base-content/70">
+                                        Weight Guard: <strong>{{ getCombinedShippingAlert(item).totalWeight }} lbs</strong> / {{ getCombinedShippingAlert(item).weightLimit }}.0 lbs limit
+                                    </span>
+                                    <span :class="getCombinedShippingAlert(item).isOverWeightLimit ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
+                                        {{ getCombinedShippingAlert(item).isOverWeightLimit ? '🚨 SPLIT SHIPMENT FEE TRIGGERED' : `${getCombinedShippingAlert(item).remainingWeight} lbs headroom left` }}
+                                    </span>
+                                </div>
+                                <div class="w-full bg-base-300 rounded-full h-2.5 overflow-hidden">
+                                    <div class="h-2.5 rounded-full transition-all duration-300"
+                                         :class="getCombinedShippingAlert(item).isOverWeightLimit ? 'bg-error' : (getCombinedShippingAlert(item).totalWeight > 15 ? 'bg-warning' : 'bg-success')"
+                                         :style="{ width: `${getCombinedShippingAlert(item).weightPercentage}%` }"></div>
+                                </div>
+                            </div>
+
+                            <!-- Policy Warnings (7-day window, 20 items, 1¢ notice, format conflict, fragile) -->
+                            <div v-if="getCombinedShippingAlert(item).warnings.length > 0" class="pt-2 border-t border-base-300/60 space-y-1.5">
+                                <div v-for="(warn, wIdx) in getCombinedShippingAlert(item).warnings" :key="wIdx"
+                                     class="flex items-start gap-1.5 text-xs text-base-content/85 leading-snug">
+                                    <Icon icon="solar:info-circle-bold" class="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                                    <span>{{ warn }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ZONE 1: DECISIONAL HUD (AUCTION SNIPER vs THRIFT / FIXED PRICE) -->
+                    <!-- 1A: AUCTION SNIPER HUD -->
+                    <div v-if="isAuctionItem(item)" 
+                         class="rounded-2xl p-4 sm:p-5 mb-5 border-2 shadow-md transition-all relative overflow-hidden"
+                         :class="{
+                             'border-success bg-gradient-to-br from-success/15 via-base-100 to-success/5 shadow-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy?.verdict),
+                             'border-error bg-gradient-to-br from-error/15 via-base-100 to-error/5 shadow-error/10': item.purchase_strategy?.verdict === 'PASS',
+                             'border-warning bg-gradient-to-br from-warning/15 via-base-100 to-warning/5 shadow-warning/10': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy?.verdict),
+                             'border-primary bg-gradient-to-br from-primary/15 via-base-100 to-primary/5 shadow-primary/10': !item.purchase_strategy?.verdict || !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy?.verdict)
+                         }">
+                        <!-- Platform & Live Countdown Bar -->
+                        <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span v-if="getAuctionPlatform(item)" class="badge badge-sm sm:badge-md gap-1.5 shadow-xs" :class="getAuctionPlatform(item).badgeClass">
+                                    <Icon :icon="getAuctionPlatform(item).icon" class="w-4 h-4" />
+                                    {{ getAuctionPlatform(item).name }}
+                                </span>
+                                <!-- Live Countdown Pill -->
+                                <span v-if="getAuctionEndTime(item)" 
+                                      class="badge badge-sm sm:badge-md font-mono font-black gap-1 shadow-xs transition-colors"
+                                      :class="formatAuctionCountdown(getAuctionEndTime(item)).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral'">
+                                    <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
+                                    {{ formatAuctionCountdown(getAuctionEndTime(item)).text }}
+                                </span>
+                                <!-- Local Pickup Badge -->
+                                <span v-if="getAuctionFinancials(item).isLocalPickup" class="badge badge-sm sm:badge-md badge-warning text-warning-content font-bold gap-1 shadow-xs">
+                                    <Icon icon="solar:map-point-wave-bold" class="w-3.5 h-3.5" />
+                                    Local Pickup Only
+                                </span>
+                                <!-- Combined Shipping Badge -->
+                                <span v-if="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) !== undefined"
+                                      class="badge badge-sm sm:badge-md gap-1 font-bold shadow-xs"
+                                      :class="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'badge-success text-success-content' : 'badge-error text-error-content'">
+                                    <Icon :icon="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'solar:box-minimalistic-bold' : 'solar:forbidden-circle-bold'" class="w-3.5 h-3.5" />
+                                    {{ (item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'Combine Eligible' : 'Ships Alone' }}
+                                </span>
+                            </div>
+
+                            <!-- Glowing Verdict Badge -->
+                            <div v-if="item.purchase_strategy?.verdict" class="badge badge-md sm:badge-lg font-black tracking-wider uppercase shadow-xs"
+                                 :class="{
+                                     'badge-success text-success-content': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
+                                     'badge-error text-error-content': item.purchase_strategy.verdict === 'PASS',
+                                     'badge-warning text-warning-content': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
+                                     'badge-primary text-primary-content': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
+                                 }">
+                                {{ item.purchase_strategy.verdict.replace('_', ' ') }}
+                            </div>
+                        </div>
+
+                        <!-- Suggested Max Bid Hero with 1-Tap Copy Action -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
+                            <!-- Suggested Max Bid Box -->
+                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-primary/30 flex items-center justify-between shadow-xs">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider text-primary flex items-center gap-1">
+                                        <Icon icon="solar:target-bold" class="w-3.5 h-3.5" />
+                                        Suggested Max Bid
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-medium">Bidding ceiling before fees</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono font-black text-2xl sm:text-3xl text-primary">
+                                        ${{ getAuctionFinancials(item).suggestedMaxBid }}
+                                    </span>
+                                    <button type="button" 
+                                            @click="copyMaxBid(getAuctionFinancials(item).suggestedMaxBid, 'item-' + index)"
+                                            class="btn btn-sm btn-primary gap-1 font-bold shadow-xs active:scale-95"
+                                            title="Copy Max Bid to Clipboard">
+                                        <Icon :icon="copiedBidItemKey === ('item-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-4 h-4" />
+                                        <span>{{ copiedBidItemKey === ('item-' + index) ? 'Copied!' : 'Copy' }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Max Landed Cost All-In -->
+                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-base-300 flex items-center justify-between shadow-xs">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider text-success flex items-center gap-1">
+                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
+                                        Max Landed Cost
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-medium">All-in ceiling (fees + ship)</span>
+                                </div>
+                                <span class="font-mono font-black text-2xl sm:text-3xl text-success">
+                                    ${{ getAuctionFinancials(item).maxBuyTarget }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Live Landed Math Formula Strip -->
+                        <div class="bg-base-100/80 dark:bg-base-200/80 rounded-xl p-2.5 sm:p-3 border border-base-300 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs font-mono">
+                            <div class="flex items-center gap-1.5 flex-wrap text-base-content/80 text-[11px] sm:text-xs font-semibold">
+                                <span class="text-base-content font-bold">Current Bid: ${{ getAuctionFinancials(item).currentBid }}</span>
+                                <span class="opacity-40">+</span>
+                                <span>BP ({{ getAuctionFinancials(item).bpPercent }}%): ${{ getAuctionFinancials(item).bpAmount }}</span>
+                                <span class="opacity-40">+</span>
+                                <span>Ship: ${{ getAuctionFinancials(item).shipping.toFixed(2) }}</span>
+                                <span class="opacity-40">=</span>
+                                <span class="font-black text-base-content underline decoration-primary decoration-2">Landed: ${{ getAuctionFinancials(item).currentLanded }}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-[11px] sm:text-xs font-bold ml-auto">
+                                <span class="text-success font-black">Est. Resale: ${{ getAuctionFinancials(item).estResale }}</span>
+                                <span class="badge badge-xs badge-success font-mono font-bold">{{ getAuctionFinancials(item).roi }}x ROI</span>
+                            </div>
+                        </div>
+
+                        <!-- AI Strategy Advice -->
+                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2.5 px-0.5">
+                            {{ item.purchase_strategy.advice }}
+                        </p>
+                    </div>
+
+                    <!-- 1B: THRIFT / FIXED PRICE DECISIONAL HUD -->
+                    <div v-else 
+                         class="rounded-2xl p-4 sm:p-5 mb-5 border-2 shadow-md transition-all relative overflow-hidden"
+                         :class="{
+                             'border-success bg-gradient-to-br from-success/15 via-base-100 to-success/5 shadow-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy?.verdict),
+                             'border-error bg-gradient-to-br from-error/15 via-base-100 to-error/5 shadow-error/10': item.purchase_strategy?.verdict === 'PASS',
+                             'border-warning bg-gradient-to-br from-warning/15 via-base-100 to-warning/5 shadow-warning/10': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy?.verdict),
+                             'border-primary bg-gradient-to-br from-primary/15 via-base-100 to-primary/5 shadow-primary/10': !item.purchase_strategy?.verdict || !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy?.verdict)
+                         }">
+                        <!-- Store Badge & Verdict Ribbon -->
+                        <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                            <div class="flex items-center gap-2">
+                                <span class="badge badge-sm sm:badge-md badge-neutral gap-1.5 shadow-xs font-black">
+                                    <Icon icon="solar:shop-2-bold" class="w-4 h-4 text-primary" />
+                                    {{ sourcingLocation ? 'In-Store / Fixed Price' : 'Thrift / Buy Now' }}
+                                </span>
+                            </div>
+
+                            <!-- Verdict Pill -->
+                            <div v-if="item.purchase_strategy?.verdict" class="badge badge-md sm:badge-lg font-black tracking-wider uppercase shadow-xs"
+                                 :class="{
+                                     'badge-success text-success-content': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
+                                     'badge-error text-error-content': item.purchase_strategy.verdict === 'PASS',
+                                     'badge-warning text-warning-content': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
+                                     'badge-primary text-primary-content': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
+                                 }">
+                                {{ item.purchase_strategy.verdict.replace('_', ' ') }}
+                            </div>
+                        </div>
+
+                        <!-- Max Buy Target vs Asking Price (NO AUCTION TIMERS / BID CEILINGS) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
+                            <!-- Max Buy Target -->
+                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-success/30 flex items-center justify-between shadow-xs">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider text-success flex items-center gap-1">
+                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
+                                        Max Buy Target
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-medium">Purchase ceiling (margin protected)</span>
+                                </div>
+                                <span class="font-mono font-black text-2xl sm:text-3xl text-success">
+                                    ${{ calculateMaxBuy(item) }}
+                                </span>
+                            </div>
+
+                            <!-- Current Asking Price -->
+                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-base-300 flex items-center justify-between shadow-xs">
+                                <div class="flex flex-col text-left">
+                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider opacity-70">
+                                        Current Asking Price
+                                    </span>
+                                    <span class="text-[10px] opacity-60 font-medium">Sticker price / tag</span>
+                                </div>
+                                <span class="font-mono font-black text-xl sm:text-2xl text-base-content">
+                                    {{ item.purchase_strategy?.current_asking_price || (cost ? '$' + cost : 'Not set') }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- AI Strategy Advice -->
+                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
+                            {{ item.purchase_strategy.advice }}
+                        </p>
+                    </div>
+
+                    <!-- ZONE 2: TACTICAL EXIT PLAY -->
+                    <div class="space-y-3 mb-5">
+                        <!-- Why Pay Up (Collector Catalyst / Hero Anchor) -->
+                        <div v-if="item.why_pay_up" class="p-3.5 rounded-2xl bg-success/15 border border-success/30 text-xs shadow-xs">
+                            <div class="font-extrabold text-success flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
+                                <Icon icon="solar:fire-bold" class="w-4 h-4" /> Sourcing Catalyst (Why Pay Up):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
+                        </div>
+
+                        <!-- Why Pass (Risk & Fee Warnings / Traps) -->
+                        <div v-if="item.why_pass" class="p-3.5 rounded-2xl bg-error/15 border border-error/30 text-xs shadow-xs">
+                            <div class="font-extrabold text-error flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
+                                <Icon icon="solar:danger-triangle-bold" class="w-4 h-4" /> Risk Rationale &amp; Traps (Why Pass):
+                            </div>
+                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
+                        </div>
+
+                        <!-- Recommended Sales Channel & Velocity -->
+                        <div v-if="item.market_report?.best_platform" class="bg-primary/10 border border-primary/25 rounded-2xl p-3.5 sm:p-4 space-y-2 shadow-xs">
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <div class="text-xs uppercase font-extrabold text-primary tracking-wider flex items-center gap-1.5">
+                                    <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
+                                </div>
+                                <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
+                                    ⚡ {{ item.market_report.sell_through_velocity }}
+                                </span>
+                            </div>
+                            <div class="font-black text-sm sm:text-base text-base-content leading-snug">
+                                {{ item.market_report.best_platform }}
+                            </div>
+                            <p v-if="item.market_report.platform_rationale" class="text-xs opacity-90 leading-relaxed text-base-content font-medium whitespace-pre-wrap">
+                                {{ item.market_report.platform_rationale }}
+                            </p>
+                            <!-- Channel Comparisons / Trade-Offs -->
+                            <div v-if="item.market_report.channels?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                <div v-for="(ch, cIdx) in item.market_report.channels" :key="cIdx" class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1">
+                                    <div class="flex justify-between items-center font-bold">
+                                        <span>{{ ch.name }}</span>
+                                        <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
+                                    </div>
+                                    <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
+                                        💡 {{ ch.recommendation }}
+                                    </div>
+                                    <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
+                                        <span>Net Payout:</span>
+                                        <span class="font-bold">{{ ch.net_payout }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ZONE 3: ELEVATED LOT BREAKDOWN (Anchor/Hero Extraction) -->
+                    <div v-if="item.lot_items && item.lot_items.length > 0" class="mb-5 bg-base-200/90 border border-base-300 rounded-2xl p-4 shadow-sm">
+                        <div class="font-extrabold text-sm mb-3 flex items-center justify-between text-primary">
+                            <div class="flex items-center gap-2">
+                                <Icon icon="solar:box-bold" class="w-5 h-5 text-primary" />
+                                <span>Bundle Components ({{ item.lot_items.length }} Items)</span>
+                            </div>
+                            <span class="badge badge-primary badge-outline text-[10px] font-bold">Lot Sourcing Strategy</span>
+                        </div>
+                        
+                        <ul class="space-y-2.5 text-xs font-medium">
+                            <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-xl border border-base-300 flex flex-col gap-1.5 shadow-2xs transition-all"
+                                :class="isHeroAnchor(subItem, item.lot_items) ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : ''">
+                                <div class="flex justify-between items-start gap-3 w-full">
+                                    <div class="flex items-start gap-2">
+                                        <span class="badge badge-sm font-mono font-bold shrink-0 mt-0.5"
+                                              :class="isHeroAnchor(subItem, item.lot_items) ? 'badge-warning text-warning-content' : 'badge-neutral'">
+                                            {{ subIdx + 1 }}
+                                        </span>
+                                        <div class="flex flex-col">
+                                            <span class="text-base-content font-bold leading-snug text-left">
+                                                {{ subItem.name || subItem.title || subItem.identity || subItem.item }}
+                                            </span>
+                                            <span v-if="isHeroAnchor(subItem, item.lot_items)" class="text-[10px] font-black text-warning flex items-center gap-1 mt-0.5">
+                                                <Icon icon="solar:crown-star-bold" class="w-3.5 h-3.5" /> Hero Anchor (Recoups Lot Basis)
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ subItem.condition || 'Used' }}</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-80 border-t border-base-200/80 pt-2 mt-0.5">
+                                    <span>Boutique: <strong class="text-secondary font-mono">{{ getSubItemBoutique(subItem) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Fair: <strong class="text-primary font-mono">{{ getSubItemFair(subItem) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Buy Range: <strong class="text-success font-mono">{{ getSubItemBuyRange(subItem) }}</strong></span>
+                                    <span class="opacity-30">|</span>
+                                    <span>Split Cost: <strong class="text-warning font-mono">{{ getSubItemCostBasis(subItem, item.lot_items.length, cost) }}</strong></span>
+                                </div>
+                            </li>
+                        </ul>
+
+                        <!-- Save Mode Preference -->
+                        <div class="form-control mt-4 border-t border-base-300 pt-3">
+                            <label class="label pb-1.5"><span class="label-text text-xs font-bold opacity-75">Inventory Import Preference</span></label>
+                            <div class="join grid grid-cols-2 w-full font-bold">
+                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !item.save_individually }" @click="item.save_individually = false">
+                                    Save as Single Bundle
+                                </button>
+                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': item.save_individually }" @click="item.save_individually = true">
+                                    Split Individually (x{{ item.lot_items.length }})
+                                </button>
+                            </div>
+                            <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
+                                <span v-if="item.save_individually">
+                                    Creates {{ item.lot_items.length }} separate inventory items. Cost basis will be split evenly (${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }} each).
+                                </span>
+                                <span v-else>
+                                    Saves the entire lot as a single combined inventory item.
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ZONE 4: 1-TAP PRICING ESTIMATES & TARGETS -->
+                    <div class="space-y-3 mb-5">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-bold uppercase tracking-wider opacity-75 flex items-center gap-1.5">
+                                <Icon icon="solar:graph-up-linear" class="w-4 h-4 text-primary" />
+                                Pricing Estimates
+                            </span>
+                            <span class="text-[10px] opacity-60 font-semibold">Tap to select target price</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                            <!-- Fair Market -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.pricing_potential?.fair || item.price_breakdown?.fair)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
+                                    :class="isPriceSelected(item, item.pricing_potential?.fair || item.price_breakdown?.fair) ? 'border-primary bg-primary/15 ring-2 ring-primary/30' : 'border-base-300 bg-base-200/80'">
+                                <span class="badge badge-primary badge-xs font-bold mb-1">FAIR MARKET</span>
+                                <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.pricing_potential?.fair || item.price_breakdown?.fair) }}</span>
+                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Online Comps</span>
+                            </button>
+                            <!-- Boutique Retail -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
+                                    :class="isPriceSelected(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30' : 'border-base-300 bg-base-200/80'">
+                                <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
+                                <span class="font-mono font-extrabold text-sm md:text-base text-secondary">{{ formatBoutiquePriceDisplay(item) }}</span>
+                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Booth Retail</span>
+                            </button>
+                            <!-- Mint -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.price_breakdown?.mint)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
+                                    :class="isPriceSelected(item, item.price_breakdown?.mint) ? 'border-success bg-success/15 ring-2 ring-success/30' : 'border-base-300 bg-base-200/60'">
+                                <span class="badge badge-success badge-xs font-bold mb-1">MINT / NEW</span>
+                                <span class="font-mono font-bold text-xs md:text-sm text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
+                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Pristine</span>
+                            </button>
+                            <!-- Poor -->
+                            <button type="button" 
+                                    @click="selectPricePreset(item, item.price_breakdown?.poor)"
+                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
+                                    :class="isPriceSelected(item, item.price_breakdown?.poor) ? 'border-warning bg-warning/15 ring-2 ring-warning/30' : 'border-base-300 bg-base-200/60'">
+                                <span class="badge badge-warning badge-xs font-bold mb-1">POOR / AS-IS</span>
+                                <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
+                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Damaged</span>
+                            </button>
+                        </div>
+
+                        <!-- Cost Basis ($) & Target Resale Price Inputs -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                            <!-- Cost Basis Input -->
+                            <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                                <label class="label pt-0 pb-1">
+                                    <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                        <Icon icon="solar:wallet-money-bold" class="w-4 h-4 text-warning" />
+                                        Cost Basis ($)
+                                    </span>
+                                </label>
+                                <div class="join w-full shadow-xs">
+                                    <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
+                                    <input v-model="cost" type="number" step="0.01" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0.00" />
+                                </div>
+                            </div>
+
+                            <!-- Target Resale Price Input -->
+                            <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                                <label class="label pt-0 pb-1">
+                                    <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                        <Icon icon="solar:tag-bold" class="w-4 h-4 text-success" />
+                                        Target Resale ($)
+                                    </span>
+                                </label>
+                                <div class="join w-full shadow-xs">
+                                    <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
+                                    <input v-model.number="item.selected_resale_price" type="number" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shipping Info Breakdown (if present) -->
+                        <div v-if="item.shipping_info" class="bg-base-200 border border-base-300 rounded-xl p-3.5 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2.5 bg-primary/10 text-primary rounded-xl shrink-0">
+                                    <Icon icon="solar:delivery-linear" class="text-xl" />
+                                </div>
+                                <div>
+                                    <div class="font-bold text-xs sm:text-sm text-base-content flex items-center gap-1.5">
+                                        Shipping via {{ item.shipping_info.carrier || 'Carrier' }}
+                                    </div>
+                                    <div class="text-[11px] opacity-65 font-medium">
+                                        Calculated to ZIP {{ item.shipping_info.zipCode }} &bull; Ship: ${{ item.shipping_info.shipping?.toFixed(2) }} &bull; Handle: ${{ item.shipping_info.handling?.toFixed(2) }}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between md:justify-end gap-5 border-t md:border-t-0 border-base-300 pt-2.5 md:pt-0 w-full md:w-auto">
+                                <div class="text-right">
+                                    <span class="text-[9px] uppercase font-bold opacity-50 block leading-none">Total Shipping</span>
+                                    <span class="text-lg font-black text-primary">${{ item.shipping_info.total?.toFixed(2) }}</span>
+                                </div>
+                                
+                                <div class="form-control">
+                                    <label class="label cursor-pointer gap-2 p-0">
+                                        <span class="label-text text-xs font-bold opacity-75">Add to Cost</span>
+                                        <input type="checkbox" v-model="includeShippingInCost" class="toggle toggle-primary toggle-sm" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ZONE 5: COLLAPSIBLE ASSETS DRAWER (Photos, Titles, Comps, Notes) -->
+                    <div class="card bg-base-200/70 border border-base-300 rounded-2xl overflow-hidden mb-3 transition-all duration-200 shadow-xs">
+                        <!-- Toggle Header -->
                         <div 
-                            @click="isMediaDetailsExpanded = !isMediaDetailsExpanded"
-                            class="p-2.5 sm:p-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-base-300/60 transition-colors select-none"
+                            @click="toggleAssetsDrawer(index)"
+                            class="p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-base-300/60 transition-colors select-none"
                         >
                             <div class="flex items-center gap-2.5 min-w-0">
-                                <!-- Small Thumbnail Preview -->
-                                <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-base-300 shrink-0 overflow-hidden border border-base-content/10 relative flex items-center justify-center shadow-xs">
+                                <div class="w-10 h-10 rounded-xl bg-base-300 shrink-0 overflow-hidden border border-base-content/10 relative flex items-center justify-center shadow-xs">
                                     <img 
                                         v-if="getItemDisplayImage(item)" 
                                         :src="proxify(getItemDisplayImage(item))" 
@@ -158,44 +620,74 @@
                                         class="w-full h-full object-cover" 
                                         alt="Thumbnail" 
                                     />
-                                    <Icon v-else icon="solar:camera-linear" class="w-6 h-6 opacity-40 text-base-content" />
-                                    
-                                    <!-- Photo Count Badge -->
-                                    <span v-if="(images.length + (itemGalleryImages?.length || 0)) > 1" class="absolute bottom-0.5 right-0.5 badge badge-neutral badge-xs font-mono text-[9px] px-1 py-0 h-3.5 leading-none opacity-90">
+                                    <Icon v-else icon="solar:camera-linear" class="w-5 h-5 opacity-40 text-base-content" />
+                                    <span v-if="(images.length + (itemGalleryImages?.length || 0)) > 1" class="absolute bottom-0.5 right-0.5 badge badge-neutral badge-xs font-mono text-[8px] px-1 py-0 h-3 leading-none opacity-90">
                                         {{ images.length + (itemGalleryImages?.length || 0) }}
                                     </span>
                                 </div>
-
-                                <!-- Summary Text (Photos count + Notes excerpt) -->
                                 <div class="min-w-0 flex flex-col justify-center">
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         <span class="text-xs font-black text-base-content flex items-center gap-1">
-                                            <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5 text-primary" />
-                                            Photos &amp; Notes
+                                            <Icon icon="solar:folder-with-files-bold" class="w-3.5 h-3.5 text-primary" />
+                                            Assets, Photos &amp; Comps
                                         </span>
                                         <span class="badge badge-ghost badge-xs font-bold text-[10px] opacity-70 shrink-0">
-                                            {{ (images.length + (itemGalleryImages?.length || 0)) }} {{ (images.length + (itemGalleryImages?.length || 0)) === 1 ? 'photo' : 'photos' }}
+                                            {{ (images.length + (itemGalleryImages?.length || 0)) }} photos
                                         </span>
                                     </div>
                                     <p class="text-[11px] opacity-65 truncate max-w-xs sm:max-w-md mt-0.5 font-medium">
-                                        {{ userNotes && userNotes.trim() ? userNotes : 'No notes added. Tap to edit photos or add details.' }}
+                                        {{ item.title || item.identity || 'Item Title, Photos, Notes & Comparables' }}
                                     </p>
                                 </div>
                             </div>
 
-                            <!-- Toggle Button & Icon -->
                             <button 
                                 type="button" 
                                 class="btn btn-xs sm:btn-sm btn-ghost gap-1 font-bold text-[11px] shrink-0 text-primary hover:bg-primary/10"
                             >
-                                <span class="hidden sm:inline">{{ isMediaDetailsExpanded ? 'Collapse' : 'Expand' }}</span>
-                                <span>{{ isMediaDetailsExpanded ? 'Hide' : 'Edit' }}</span>
-                                <Icon :icon="isMediaDetailsExpanded ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
+                                <span class="hidden sm:inline">{{ isAssetsExpanded(index) ? 'Collapse' : 'Expand' }}</span>
+                                <span>{{ isAssetsExpanded(index) ? 'Hide' : 'Edit' }}</span>
+                                <Icon :icon="isAssetsExpanded(index) ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" class="w-4 h-4" />
                             </button>
                         </div>
 
-                        <!-- Collapsible Body (Details textarea + full PhotoGalleryManager) -->
-                        <div v-show="isMediaDetailsExpanded" class="p-3 sm:p-4 border-t border-base-300 space-y-3 bg-base-100 animate-in fade-in duration-150">
+                        <!-- Collapsible Body -->
+                        <div v-show="isAssetsExpanded(index)" class="p-3.5 sm:p-5 border-t border-base-300 space-y-4 bg-base-100 animate-in fade-in duration-150">
+                            <!-- Title & External Search -->
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-bold text-base-content flex items-center gap-1.5 px-0.5">
+                                    <Icon icon="solar:pen-bold" class="w-3.5 h-3.5 text-primary" />
+                                    Item Listing Title
+                                </label>
+                                <div class="relative">
+                                    <input v-model="item.title" type="text" class="input input-bordered w-full font-bold text-sm pr-8" placeholder="Item Title..." />
+                                    <span class="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-30 pointer-events-none"><Icon icon="solar:pen-linear" class="w-4 h-4" /></span>
+                                </div>
+                                <div class="flex flex-wrap gap-2 pt-1">
+                                    <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="btn btn-xs btn-outline btn-secondary gap-1 shadow-xs rounded-lg">
+                                        <Icon icon="solar:link-linear" class="w-3.5 h-3.5" /> View Source Listing
+                                    </a>
+                                    <a v-if="getItemDisplayImage(item) && getItemDisplayImage(item).startsWith('http')" :href="'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(getItemDisplayImage(item))" target="_blank" class="btn btn-xs btn-outline btn-primary gap-1 shadow-xs rounded-lg">
+                                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" /> Search Google Lens
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Sourcing URL Input -->
+                            <div class="form-control bg-base-200/70 p-2.5 rounded-xl border border-base-300">
+                                <label class="label pt-0 pb-1 flex justify-between items-center">
+                                    <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                        <Icon icon="solar:link-bold" class="w-4 h-4 text-primary" />
+                                        Source URL
+                                    </span>
+                                    <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="text-[10px] text-primary font-bold link hover:underline flex items-center gap-0.5">
+                                        <span>Open</span>
+                                        <Icon icon="solar:square-top-down-linear" class="w-3.5 h-3.5" />
+                                    </a>
+                                </label>
+                                <input v-model="sourcingLocation" type="text" class="input input-xs input-bordered w-full font-mono text-xs" placeholder="e.g. https://... or Goodwill" />
+                            </div>
+
                             <!-- Additional Details Textarea -->
                             <div class="form-control w-full">
                                 <div class="mb-1 text-xs font-bold text-base-content flex items-center justify-between px-1">
@@ -248,359 +740,59 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- 4. Sourcing Strategy Verdict (Pass / No Pass) with Max Landed & Max Bid Built-in -->
-                    <div v-if="item.purchase_strategy" class="border-2 rounded-2xl p-4 shadow-sm mb-4" :class="{
-                        'border-success bg-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
-                        'border-error bg-error/10': item.purchase_strategy.verdict === 'PASS',
-                        'border-warning bg-warning/10': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
-                        'border-primary bg-primary/10': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
-                    }">
-                        <!-- Verdict Header -->
-                        <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                            <div class="flex items-center gap-2">
-                                <Icon icon="solar:magic-stick-linear" class="text-2xl" v-if="['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)" />
-                                <Icon icon="solar:stop-circle-linear" class="text-2xl" v-if="item.purchase_strategy.verdict === 'PASS'" />
-                                <Icon icon="solar:eye-linear" class="text-2xl" v-if="['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)" />
-                                <h3 class="font-black text-lg uppercase tracking-wider" :class="{
-                                    'text-success': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
-                                    'text-error': item.purchase_strategy.verdict === 'PASS',
-                                    'text-warning': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict)
-                                }">{{ item.purchase_strategy.verdict.replace('_', ' ') }}</h3>
-                            </div>
-                            
-                            <div 
-                                v-if="item.purchase_strategy.current_asking_price && !String(item.purchase_strategy.current_asking_price).includes('No Asking Price')" 
-                                class="px-2.5 py-1 rounded-lg bg-base-300/80 border border-base-content/10 text-xs font-semibold text-base-content flex items-center gap-1.5"
-                            >
-                                <span class="text-base-content/70 font-extrabold uppercase text-[10px] tracking-wider shrink-0">Asking / Bid:</span>
-                                <span class="text-base-content font-bold text-xs">{{ item.purchase_strategy.current_asking_price }}</span>
-                            </div>
-                        </div>
-
-                        <!-- Max Landed & Max Bid for Auctions (Directly within Pass / No Pass!) -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 my-3">
-                            <!-- Max Landed Cost -->
-                            <div class="bg-base-100 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
-                                <div class="flex flex-col text-left">
-                                    <span class="text-[10px] uppercase font-black tracking-wider opacity-70">Max Landed Cost (All-in)</span>
-                                    <span class="text-[10px] opacity-60 font-medium">Incl. shipping &amp; fees</span>
+                            <!-- Visual Condition Assessment -->
+                            <div v-if="item.condition_notes" class="bg-base-200/80 p-3.5 border border-base-300 rounded-xl">
+                                <div class="font-bold text-xs mb-1 opacity-70 uppercase tracking-wide flex gap-2 items-center">
+                                    <Icon icon="solar:magnifer-linear" class="w-4 h-4 text-primary" /> Visual Condition Assessment
                                 </div>
-                                <span class="font-mono font-black text-success text-xl">${{ calculateMaxBuy(item) }}</span>
+                                <p class="text-xs sm:text-sm font-medium leading-relaxed">{{ item.condition_notes }}</p>
                             </div>
 
-                            <!-- Max Bid (Auction) -->
-                            <div class="bg-base-100 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
-                                <div class="flex flex-col text-left">
-                                    <span class="text-[10px] uppercase font-black tracking-wider text-primary">Suggested Max Bid</span>
-                                    <span class="text-[10px] opacity-60 font-medium">Site bid limit (excl. shipping)</span>
+                            <!-- Comparables Dropdown -->
+                            <div class="collapse collapse-arrow bg-base-200/80 border border-base-300 rounded-xl">
+                                <input type="checkbox" /> 
+                                <div class="collapse-title font-bold text-xs flex items-center gap-1.5">
+                                    <Icon icon="solar:chart-square-linear" class="w-4 h-4 text-primary" />
+                                    View Market Comparables
                                 </div>
-                                <span class="font-mono font-black text-xl" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
-                                    ${{ calculateMaxBid(item) }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <p class="text-sm font-medium leading-relaxed opacity-90 mt-1">{{ item.purchase_strategy.advice }}</p>
-
-                        <!-- Why Pay Up (Collector Catalyst) -->
-                        <div v-if="item.why_pay_up" class="mt-3 p-3 rounded-lg bg-success/15 border border-success/30 text-xs">
-                            <div class="font-bold text-success flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
-                                <Icon icon="solar:fire-bold" class="w-3.5 h-3.5" /> Sourcing Catalyst (Why Pay Up):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
-                        </div>
-
-                        <!-- Why Pass (Risk & Fee Warnings) -->
-                        <div v-if="item.why_pass" class="mt-3 p-3 rounded-lg bg-error/15 border border-error/30 text-xs">
-                            <div class="font-bold text-error flex items-center gap-1 mb-0.5 uppercase text-[10px] tracking-wider">
-                                <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" /> Risk Rationale (Why Pass):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
-                        </div>
-                    </div>
-
-                    <!-- Fallback: Max Landed & Max Bid if purchase_strategy is absent -->
-                    <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
-                        <div class="bg-base-200 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
-                            <div class="flex flex-col text-left">
-                                <span class="text-[10px] uppercase font-black tracking-wider opacity-70">Max Landed Cost (All-in)</span>
-                                <span class="text-[10px] opacity-60 font-medium">Incl. shipping &amp; fees</span>
-                            </div>
-                            <span class="font-mono font-black text-success text-xl">${{ calculateMaxBuy(item) }}</span>
-                        </div>
-                        <div class="bg-base-200 p-3 rounded-xl flex justify-between items-center shadow-xs border border-base-300">
-                            <div class="flex flex-col text-left">
-                                <span class="text-[10px] uppercase font-black tracking-wider text-primary">Suggested Max Bid</span>
-                                <span class="text-[10px] opacity-60 font-medium">Auction site limit</span>
-                            </div>
-                            <span class="font-mono font-black text-xl" :class="calculateMaxBid(item) > 0 ? 'text-primary' : 'text-error'">
-                                ${{ calculateMaxBid(item) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Recommended Sales Channel & Booth Routing -->
-                    <div v-if="item.market_report?.best_platform" class="bg-primary/10 border border-primary/25 rounded-2xl p-3.5 sm:p-4 mb-4 space-y-2 shadow-xs">
-                        <div class="flex items-center justify-between gap-2 flex-wrap">
-                            <div class="text-xs uppercase font-extrabold text-primary tracking-wider flex items-center gap-1.5">
-                                <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
-                            </div>
-                            <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
-                                ⚡ {{ item.market_report.sell_through_velocity }}
-                            </span>
-                        </div>
-                        <div class="font-black text-sm sm:text-base text-base-content leading-snug">
-                            {{ item.market_report.best_platform }}
-                        </div>
-                        <p v-if="item.market_report.platform_rationale" class="text-xs opacity-90 leading-relaxed text-base-content font-medium whitespace-pre-wrap">
-                            {{ item.market_report.platform_rationale }}
-                        </p>
-                        <!-- Channel Comparisons / Trade-Offs -->
-                        <div v-if="item.market_report.channels?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            <div v-for="(ch, cIdx) in item.market_report.channels" :key="cIdx" class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1">
-                                <div class="flex justify-between items-center font-bold">
-                                    <span>{{ ch.name }}</span>
-                                    <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
+                                <div class="collapse-content"> 
+                                    <table class="table table-xs w-full">
+                                        <thead>
+                                            <tr><th>Item</th><th>Price</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(comp, i) in (item.comparables || [])" :key="i">
+                                                <td>{{ comp.name }}</td>
+                                                <td class="font-mono font-bold">{{ comp.price }}</td>
+                                            </tr>
+                                            <tr v-if="!item.comparables?.length">
+                                                <td colspan="2" class="text-center opacity-50 italic">No comparables found</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
-                                    💡 {{ ch.recommendation }}
-                                </div>
-                                <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
-                                    <span>Net Payout:</span>
-                                    <span class="font-bold">{{ ch.net_payout }}</span>
+                            </div>
+
+                            <!-- Keywords Tags -->
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold opacity-70 px-0.5">Keywords &amp; Search Tags</label>
+                                <div class="border border-base-300 rounded-xl p-2 bg-base-100 flex flex-wrap gap-2 items-center">
+                                    <span v-for="(kw, idx) in item.keywords" :key="idx" class="badge badge-secondary gap-1 text-xs">
+                                        {{ kw }}
+                                        <button type="button" @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">✕</button>
+                                    </span>
+                                    <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-20" @keydown.enter.prevent="addKeyword(item, $event)" />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 5. Pricing Potential Estimates Grid (Interactive 1-Tap Selectors) -->
-                    <div class="space-y-2 mb-3">
-                        <div class="flex items-center justify-between px-1">
-                            <span class="text-xs font-bold uppercase tracking-wider opacity-75 flex items-center gap-1.5">
-                                <Icon icon="solar:graph-up-linear" class="w-4 h-4 text-primary" />
-                                Pricing Estimates
-                            </span>
-                            <span class="text-[10px] opacity-60 font-semibold">Tap to select target price</span>
-                        </div>
-
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                            <!-- Fair Market -->
-                            <button type="button" 
-                                    @click="selectPricePreset(item, item.pricing_potential?.fair || item.price_breakdown?.fair)"
-                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
-                                    :class="isPriceSelected(item, item.pricing_potential?.fair || item.price_breakdown?.fair) ? 'border-primary bg-primary/15 ring-2 ring-primary/30' : 'border-base-300 bg-base-200/80'">
-                                <span class="badge badge-primary badge-xs font-bold mb-1">FAIR MARKET</span>
-                                <span class="font-mono font-extrabold text-sm md:text-base text-primary">{{ formatPriceDisplay(item.pricing_potential?.fair || item.price_breakdown?.fair) }}</span>
-                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Online Comps</span>
-                            </button>
-                            <!-- Boutique Retail -->
-                            <button type="button" 
-                                    @click="selectPricePreset(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium)"
-                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
-                                    :class="isPriceSelected(item, item.pricing_potential?.boutique || item.price_breakdown?.boutique_premium) ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30' : 'border-base-300 bg-base-200/80'">
-                                <span class="badge badge-secondary badge-xs font-bold mb-1">BOUTIQUE</span>
-                                <span class="font-mono font-extrabold text-sm md:text-base text-secondary">{{ formatBoutiquePriceDisplay(item) }}</span>
-                                <span class="text-[9px] opacity-60 font-medium mt-0.5">Booth Retail</span>
-                            </button>
-                            <!-- Mint -->
-                            <button type="button" 
-                                    @click="selectPricePreset(item, item.price_breakdown?.mint)"
-                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
-                                    :class="isPriceSelected(item, item.price_breakdown?.mint) ? 'border-success bg-success/15 ring-2 ring-success/30' : 'border-base-300 bg-base-200/60'">
-                                <span class="badge badge-success badge-xs font-bold mb-1">MINT / NEW</span>
-                                <span class="font-mono font-bold text-xs md:text-sm text-base-content">{{ formatPriceDisplay(item.price_breakdown?.mint) }}</span>
-                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Pristine</span>
-                            </button>
-                            <!-- Poor -->
-                            <button type="button" 
-                                    @click="selectPricePreset(item, item.price_breakdown?.poor)"
-                                    class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
-                                    :class="isPriceSelected(item, item.price_breakdown?.poor) ? 'border-warning bg-warning/15 ring-2 ring-warning/30' : 'border-base-300 bg-base-200/60'">
-                                <span class="badge badge-warning badge-xs font-bold mb-1">POOR / AS-IS</span>
-                                <span class="font-mono font-bold text-xs md:text-sm text-base-content/80">{{ formatPriceDisplay(item.price_breakdown?.poor) }}</span>
-                                <span class="text-[9px] opacity-50 font-medium mt-0.5">Damaged</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 6. Cost Basis ($) & Target Resale Price Inputs -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
-                        <!-- Cost Basis Input -->
-                        <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
-                            <label class="label pt-0 pb-1">
-                                <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
-                                    <Icon icon="solar:wallet-money-bold" class="w-4 h-4 text-warning" />
-                                    Cost Basis ($)
-                                </span>
-                            </label>
-                            <div class="join w-full shadow-xs">
-                                <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
-                                <input v-model="cost" type="number" step="0.01" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0.00" />
-                            </div>
-                        </div>
-
-                        <!-- Target Resale Price Input -->
-                        <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
-                            <label class="label pt-0 pb-1">
-                                <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
-                                    <Icon icon="solar:tag-bold" class="w-4 h-4 text-success" />
-                                    Target Resale ($)
-                                </span>
-                            </label>
-                            <div class="join w-full shadow-xs">
-                                <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
-                                <input v-model.number="item.selected_resale_price" type="number" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 7. Source Link URL Input -->
-                    <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300 mb-3">
-                        <label class="label pt-0 pb-1 flex justify-between items-center">
-                            <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
-                                <Icon icon="solar:link-bold" class="w-4 h-4 text-primary" />
-                                Source Link
-                            </span>
-                            <a v-if="sourcingLocation && sourcingLocation.startsWith('http')" :href="sourcingLocation" target="_blank" class="text-[10px] text-primary font-bold link hover:underline flex items-center gap-0.5">
-                                <span>Open</span>
-                                <Icon icon="solar:square-top-down-linear" class="w-3 h-3" />
-                            </a>
-                        </label>
-                        <input v-model="sourcingLocation" type="text" class="input input-xs input-bordered w-full font-mono text-xs" placeholder="e.g. https://... or Goodwill" />
-                    </div>
-
-                    <!-- 8. Shipping Info Breakdown -->
-                    <div v-if="item.shipping_info" class="mb-4 bg-base-200 border border-base-300 rounded-xl p-4 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-3 bg-primary/10 text-primary rounded-xl">
-                                <Icon icon="solar:delivery-linear" class="text-2xl" />
-                            </div>
-                            <div>
-                                <div class="font-bold text-sm text-base-content flex items-center gap-1.5">
-                                    Estimated Shipping via {{ item.shipping_info.carrier || 'Carrier' }}
-                                </div>
-                                <div class="text-xs opacity-65 font-medium">
-                                    Calculated to ZIP {{ item.shipping_info.zipCode }} &bull; Ship: ${{ item.shipping_info.shipping?.toFixed(2) }} &bull; Handle: ${{ item.shipping_info.handling?.toFixed(2) }}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-base-300 pt-3 md:pt-0 w-full md:w-auto">
-                            <div class="text-right">
-                                <span class="text-[10px] uppercase font-bold opacity-50 block leading-none">Total Shipping</span>
-                                <span class="text-xl font-black text-primary">${{ item.shipping_info.total?.toFixed(2) }}</span>
-                            </div>
-                            
-                            <!-- Include Shipping Toggle -->
-                            <div class="form-control">
-                                <label class="label cursor-pointer gap-2 p-0">
-                                    <span class="label-text text-xs font-bold opacity-75">Add to Cost</span>
-                                    <input type="checkbox" v-model="includeShippingInCost" class="toggle toggle-primary toggle-sm" />
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Condition Assessment -->
-                    <div v-if="item.condition_notes" class="mt-4 bg-base-200 p-4 border border-base-300 rounded-lg">
-                        <div class="font-bold text-sm mb-1 opacity-70 uppercase tracking-wide flex gap-2 items-center">
-                            <span><Icon icon="solar:magnifer-linear" class="w-4 h-4" /></span> Visual Condition Assessment
-                        </div>
-                        <p class="text-sm font-medium">{{ item.condition_notes }}</p>
-                    </div>
-
-                    <!-- Comparables Dropdown -->
-                    <div class="collapse collapse-arrow bg-base-200 rounded-box mt-4">
-                        <input type="checkbox" /> 
-                        <div class="collapse-title font-bold text-sm">
-                             View Market Comparables
-                        </div>
-                        <div class="collapse-content"> 
-                            <table class="table table-xs w-full">
-                                <thead>
-                                    <tr><th>Item</th><th>Price</th></tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="(comp, i) in (item.comparables || [])" :key="i">
-                                        <td>{{ comp.name }}</td>
-                                        <td class="font-mono font-bold">{{ comp.price }}</td>
-                                    </tr>
-                                    <tr v-if="!item.comparables?.length">
-                                        <td colspan="2" class="text-center opacity-50 italic">No comparables found</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Bundle Lot Components -->
-                    <div v-if="item.lot_items && item.lot_items.length > 0" class="mt-4 bg-base-200 border border-base-300 rounded-xl p-4">
-                        <div class="font-bold text-sm mb-2 flex items-center gap-2 text-primary">
-                            <Icon icon="solar:box-linear" class="w-5 h-5" />
-                            <span>Bundle Components ({{ item.lot_items.length }} Items)</span>
-                        </div>
-                        <ul class="space-y-2 text-xs font-medium">
-                            <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-lg border border-base-300 flex flex-col gap-1.5 shadow-sm">
-                                <div class="flex justify-between items-start gap-3 w-full">
-                                    <div class="flex items-start gap-2">
-                                        <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
-                                        <span class="text-base-content font-bold leading-snug text-left">{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
-                                    </div>
-                                    <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ subItem.condition }}</span>
-                                </div>
-                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-2 mt-0.5">
-                                    <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Fair: <strong class="text-primary">{{ getSubItemFair(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(subItem, item.lot_items.length, cost) }}</strong></span>
-                                </div>
-                            </li>
-                        </ul>
-
-                        <!-- Save Mode Select -->
-                        <div class="form-control mt-4 border-t border-base-300 pt-3">
-                            <label class="label pb-1.5"><span class="label-text text-xs font-bold opacity-75">Inventory Import Preference</span></label>
-                            <div class="join grid grid-cols-2 w-full font-bold">
-                                <button class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !item.save_individually }" @click="item.save_individually = false">
-                                    Save as Single Bundle
-                                </button>
-                                <button class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': item.save_individually }" @click="item.save_individually = true">
-                                    Split Individually (x{{ item.lot_items.length }})
-                                </button>
-                            </div>
-                            <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
-                                <span v-if="item.save_individually">
-                                    Creates {{ item.lot_items.length }} separate inventory items. Cost basis will be split evenly (${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }} each).
-                                </span>
-                                <span v-else>
-                                    Saves the entire lot as a single combined inventory item.
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <label class="label pt-0"><span class="label-text font-bold opacity-70">Keywords</span></label>
-                        <div class="border border-base-300 rounded-lg p-2 bg-base-100 flex flex-wrap gap-2 items-center">
-                            <span v-for="(kw, idx) in item.keywords" :key="idx" class="badge badge-secondary gap-1">
-                                {{ kw }}
-                                <button @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">✕</button>
-                            </span>
-                            <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-20" @keydown.enter.prevent="addKeyword(item, $event)" />
-                        </div>
-                    </div>
-
-                </div>
-            </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
         <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, matching unified dock pattern) -->
         <div class="flex-none border-t border-base-300 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)] z-30">
@@ -692,14 +884,22 @@
                     <button 
                         type="button" 
                         @click="handleAddButtonClick" 
-                        :class="savingAll || !canSaveReport
+                        :class="savingAll 
                                 ? 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'
-                                : 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110'"
+                                : (!canSaveReport 
+                                    ? 'bg-success/20 text-success border border-success/40 font-black' 
+                                    : 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110')"
                         class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                         :disabled="savingAll || !canSaveReport"
-                        title="Save to Buy Tracker"
+                        :title="canSaveReport ? 'Save to Buy Tracker' : 'Saved to Tracker'"
                     >
                         <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
+                        <template v-else-if="!canSaveReport">
+                            <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
+                            <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
+                                Saved ✓
+                            </span>
+                        </template>
                         <template v-else>
                             <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
                             <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
@@ -842,15 +1042,23 @@
             <!-- Dock Item 3: Add to Tracker Button -->
             <button 
                 type="button" 
-                @click="result ? handleAddButtonClick() : null" 
+                @click="result && canSaveReport ? handleAddButtonClick() : null" 
                 :class="result && canSaveReport 
                         ? 'bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110' 
-                        : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none'"
+                        : (result && !canSaveReport 
+                            ? 'bg-success/20 text-success border border-success/40 font-black' 
+                            : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none')"
                 class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                 :disabled="!result || savingAll || !canSaveReport"
                 :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
             >
                 <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
+                <template v-else-if="result && !canSaveReport">
+                    <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
+                    <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
+                        Saved ✓
+                    </span>
+                </template>
                 <template v-else>
                     <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
                     <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">
@@ -886,6 +1094,7 @@ import {
     calculateMaxBuyPrice, 
     calculateSubItemMaxBidPrice 
 } from '../../lib/bundle-pricing';
+import { evaluateCombinedShipping } from '../../lib/shipping-rules';
 
 interface Props {
     initialPurchaseId?: string | null;
@@ -906,7 +1115,7 @@ const emit = defineEmits<{
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; 
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
 const PURCHASES_COL = getPurchasesCollectionId();
-import { BUCKET_ID, getCollectionId, generateAutoUpc } from '../../lib/inventory';
+import { BUCKET_ID, getCollectionId, generateAutoUpc, getSafeRawAnalysis, formatScoutReportMarkdown } from '../../lib/inventory';
 import { warehousesApi, type WarehouseDocument } from '../../lib/warehouses';
 
 // -- COMPOSABLES --
@@ -1195,6 +1404,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     window.removeEventListener('paste', onWindowPaste);
+    if (timerInterval) clearInterval(timerInterval);
 });
 
 function getTierBadgeInfo(item: any) {
@@ -1243,6 +1453,145 @@ const loading = ref(false);
 const analyzing = ref(false); // Added for re-scout feature
 const isResultsModalOpen = ref(false);
 const isMediaDetailsExpanded = ref(false);
+
+// -- AUCTION SNIPER & TIMING STATE --
+const currentTime = ref(Date.now());
+let timerInterval: any = null;
+const copiedBidItemKey = ref<string | null>(null);
+const expandedAssetsDrawers = ref<Record<number, boolean>>({});
+
+function toggleAssetsDrawer(index: number) {
+    expandedAssetsDrawers.value[index] = !expandedAssetsDrawers.value[index];
+}
+
+function isAssetsExpanded(index: number) {
+    return !!expandedAssetsDrawers.value[index];
+}
+
+async function copyMaxBid(amount: number, itemKey: string) {
+    try {
+        await navigator.clipboard.writeText(String(amount));
+        copiedBidItemKey.value = itemKey;
+        addToast({ type: 'success', message: `📋 Copied Max Bid: $${amount}` });
+        setTimeout(() => {
+            if (copiedBidItemKey.value === itemKey) {
+                copiedBidItemKey.value = null;
+            }
+        }, 2000);
+    } catch (e) {
+        console.warn('Clipboard copy failed:', e);
+    }
+}
+
+function getAuctionEndTime(item: any): string | null {
+    return item?.auctionEndsAt || item?.auction_meta?.end_time || null;
+}
+
+function isAuctionItem(item: any): boolean {
+    if (!item) return false;
+    if (item.auction_meta?.is_auction !== undefined) {
+        return Boolean(item.auction_meta.is_auction);
+    }
+    if (item.auctionEndsAt || item.auction_meta?.end_time) return true;
+    if (['CHASE_AUCTION'].includes(item.purchase_strategy?.verdict)) return true;
+    const url = (sourcingLocation.value || scoutUrl.value || '').toLowerCase();
+    if (url.includes('ctbids.com') || url.includes('hibid.com') || url.includes('shopgoodwill.com')) return true;
+    return false;
+}
+
+function getAuctionPlatform(item: any) {
+    const url = (sourcingLocation.value || scoutUrl.value || '').toLowerCase();
+    const platformMeta = item?.auction_meta?.platform;
+    if (platformMeta === 'CTBIDS' || url.includes('ctbids.com')) {
+        return { name: 'CTBids', badgeClass: 'badge-warning text-warning-content font-black', icon: 'solar:hammer-bold' };
+    }
+    if (platformMeta === 'HIBID' || url.includes('hibid.com')) {
+        return { name: 'HiBid', badgeClass: 'badge-secondary text-secondary-content font-black', icon: 'solar:tag-price-bold' };
+    }
+    if (platformMeta === 'SHOPGOODWILL' || url.includes('shopgoodwill.com')) {
+        return { name: 'ShopGoodwill', badgeClass: 'badge-info text-info-content font-black', icon: 'solar:shop-bold' };
+    }
+    if (platformMeta === 'EBAY' || url.includes('ebay.com')) {
+        return { name: 'eBay Auction', badgeClass: 'badge-accent text-accent-content font-black', icon: 'solar:bolt-bold' };
+    }
+    if (isAuctionItem(item)) {
+        return { name: 'Live Auction', badgeClass: 'badge-neutral font-black', icon: 'solar:hammer-bold' };
+    }
+    return null;
+}
+
+function formatAuctionCountdown(endTimeStr: string | null | undefined): { text: string; urgent: boolean; ended: boolean } {
+    if (!endTimeStr) return { text: 'Live Auction', urgent: false, ended: false };
+    const target = new Date(endTimeStr).getTime();
+    if (isNaN(target)) return { text: 'Live Auction', urgent: false, ended: false };
+    const diff = target - currentTime.value;
+    if (diff <= 0) {
+        return { text: 'AUCTION ENDED', urgent: true, ended: true };
+    }
+    const seconds = Math.floor((diff / 1000) % 60);
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days > 0) {
+        return { text: `${days}d ${hours}h left`, urgent: false, ended: false };
+    }
+    if (hours > 0) {
+        const padM = String(minutes).padStart(2, '0');
+        return { text: `${hours}h ${padM}m left`, urgent: hours < 2, ended: false };
+    }
+    const padM = String(minutes).padStart(2, '0');
+    const padS = String(seconds).padStart(2, '0');
+    return { text: `🚨 ${padM}m ${padS}s LEFT`, urgent: true, ended: false };
+}
+
+function getAuctionFinancials(item: any) {
+    const currentBid = Number(item?.currentBid || item?.auction_meta?.current_bid || parsePrice(item?.purchase_strategy?.current_asking_price) || 0);
+    const platform = getAuctionPlatform(item)?.name;
+    const bpPercent = typeof item?.auction_meta?.buyers_premium_percent === 'number'
+        ? item.auction_meta.buyers_premium_percent
+        : platform === 'CTBids' ? 15 : platform === 'HiBid' ? 15 : 0;
+    const bpAmount = Math.round(currentBid * (bpPercent / 100) * 100) / 100;
+    const shipping = Number(item?.shipping_info?.total || item?.auction_meta?.estimated_shipping || 0);
+    const currentLanded = Math.round((currentBid + bpAmount + shipping) * 100) / 100;
+    const suggestedMaxBid = calculateMaxBid(item);
+    const maxBuyTarget = calculateMaxBuy(item);
+    const estResale = Number(item?.selected_resale_price || parsePrice(item?.pricing_potential?.boutique || item?.price_breakdown?.boutique_premium || item?.pricing_potential?.fair || item?.price_breakdown?.fair) || 0);
+    const estNetProfit = estResale > currentLanded ? Math.round((estResale - currentLanded) * 100) / 100 : 0;
+    const roi = currentLanded > 0 ? (estResale / currentLanded).toFixed(1) : '0';
+    const isLocalPickup = Boolean(
+        item?.auction_meta?.is_local_pickup_only ||
+        item?.shipping_info?.carrier?.toLowerCase().includes('pickup') ||
+        item?.condition_notes?.toLowerCase().includes('local pickup')
+    );
+    return {
+        currentBid,
+        bpPercent,
+        bpAmount,
+        shipping,
+        currentLanded,
+        suggestedMaxBid,
+        maxBuyTarget,
+        estResale,
+        estNetProfit,
+        roi,
+        isLocalPickup
+    };
+}
+
+function getCombinedShippingAlert(item: any) {
+    if (!item || !purchaseItems.value || purchaseItems.value.length === 0) return null;
+    return evaluateCombinedShipping(item, purchaseItems.value);
+}
+
+function isHeroAnchor(subItem: any, lotItems: any[]): boolean {
+    if (!subItem || !lotItems || lotItems.length <= 1) return false;
+    if (subItem.anchor || subItem.hero || subItem.is_anchor || subItem.is_hero) return true;
+    const thisVal = parsePrice(subItem.estimated_value) || parsePrice(subItem.fair) || 0;
+    if (thisVal <= 0) return false;
+    const maxVal = Math.max(...lotItems.map(i => parsePrice(i.estimated_value) || parsePrice(i.fair) || 0));
+    return thisVal === maxVal && maxVal > 0;
+}
 const result = ref<any>(null);
 const cost = ref('');
 const isAcquired = ref(false);
@@ -1378,6 +1727,9 @@ const initCartCheck = async () => {
 
 onMounted(async () => {
     console.log('[ScoutView] onMounted');
+    timerInterval = setInterval(() => {
+        currentTime.value = Date.now();
+    }, 1000);
     await initCartCheck();
     
     // Check for ZIP code in localStorage first
@@ -1671,6 +2023,12 @@ async function analyzeListing() {
                 const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
                 const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
                 it.selected_resale_price = Math.round(boutique || fair || 0);
+
+                // Auto-sync cost to live current bid / asking price for unacquired items
+                const liveBid = it.currentBid || it.auction_meta?.current_bid || parsePrice(it.purchase_strategy?.current_asking_price);
+                if (!isAcquired.value && liveBid > 0) {
+                    cost.value = liveBid.toFixed(2);
+                }
             });
             if (data.items.length > 0 && images.value.length > 0) {
                 const firstImg = typeof images.value[0] === 'string' ? images.value[0] : images.value[0]?.url;
@@ -1841,6 +2199,7 @@ function startNewScan() {
     result.value = null;
     isResultsModalOpen.value = false;
     isMediaDetailsExpanded.value = false;
+    expandedAssetsDrawers.value = {};
     images.value = [];
     mainPhotoSelection.value = { type: 'none', val: null };
     scoutUrl.value = '';
@@ -1902,16 +2261,9 @@ async function saveAllItems() {
 
         if (savedAny) {
             isResultsModalOpen.value = false;
-            let cartItem = null;
-            if (rescoutId.value) {
-                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value) || (purchaseItems.value as any[]).find(pi => pi.$id === rescoutId.value);
-            } else {
-                cartItem = cartItems.value[0] || purchaseItems.value[0] || cartItems.value[cartItems.value.length - 1];
-            }
-            
-
-            
-            startNewScan();
+            const dealName = activePurchase.value?.vendor || 'Inventory';
+            successMessage.value = `Saved ${toSave.length > 1 ? `${toSave.length} items` : 'item'} to ${dealName}!`;
+            addToast({ type: 'success', message: `✅ Saved to ${dealName}!` });
         }
     } finally {
         savingAll.value = false;
@@ -2034,58 +2386,7 @@ function getSliderColor(item: any) {
     return 'range-secondary';
 }
 
-const getSafeRawAnalysis = (item: any) => {
-    try {
-        let str = JSON.stringify(item);
-        if (str.length <= 4900) return str;
-        
-        const processItem = (obj: any) => {
-            if (!obj) return obj;
-            const pruned = { ...obj };
-            if (pruned.comparables && pruned.comparables.length > 3) {
-                pruned.comparables = pruned.comparables.slice(0, 3);
-            }
-            if (pruned.lot_items && pruned.lot_items.length > 5) {
-                pruned.lot_items = pruned.lot_items.slice(0, 5);
-            }
-            return pruned;
-        };
 
-        let pruned;
-        if (Array.isArray(item)) {
-            pruned = item.map(processItem);
-        } else if (item.items && Array.isArray(item.items)) {
-            pruned = { ...item, items: item.items.map(processItem) };
-        } else {
-            pruned = processItem(item);
-        }
-        
-        str = JSON.stringify(pruned);
-        if (str.length <= 4900) return str;
-
-        // Absolute fallback: keep only main fields
-        const fallbackObj = (obj: any) => ({
-            identity: obj.identity,
-            title: obj.title,
-            price_breakdown: obj.price_breakdown,
-            shipping_info: obj.shipping_info,
-            purchase_strategy: obj.purchase_strategy,
-            condition_notes: obj.condition_notes,
-            keywords: obj.keywords,
-            lot_items: obj.lot_items ? obj.lot_items.map((li: any) => ({ identity: li.identity, price_breakdown: li.price_breakdown })) : undefined
-        });
-
-        if (Array.isArray(item)) {
-            return JSON.stringify(item.map(fallbackObj));
-        } else if (item.items && Array.isArray(item.items)) {
-            return JSON.stringify({ ...item, items: item.items.map(fallbackObj) });
-        } else {
-            return JSON.stringify(fallbackObj(item));
-        }
-    } catch (e) {
-        return null;
-    }
-};
 
 const urlToFile = async (url: string, filename: string): Promise<File | null> => {
     try {
@@ -2406,12 +2707,15 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  noteDetails += `\n[RECEIPT: ${receiptId}]`;
             }
 
+            const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
+            const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
+
             const updatePayload: any = {
                 identity: item.identity,
                 title: item.title || item.identity,
                 conditionNotes: noteDetails,
                 redFlags: item.red_flags || [],
-                cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : 0.0,
+                cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : (liveBid > 0 ? liveBid : 0.0),
                 resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
                 maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
@@ -2420,6 +2724,10 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 keywords: item.keywords || [],
                 rawAnalysis: getSafeRawAnalysis(item) || undefined
             };
+            if (liveBid > 0) updatePayload.currentBid = liveBid;
+            if (maxBidCeiling > 0) updatePayload.maxBid = maxBidCeiling;
+            if (item.auctionEndsAt || item.auction_meta?.end_time) updatePayload.auctionEndsAt = item.auctionEndsAt || item.auction_meta?.end_time;
+            if (item.canCombineShipping !== undefined) updatePayload.canCombineShipping = item.canCombineShipping;
             if (galleryIds.length > 0) {
                 updatePayload.galleryImageIds = galleryIds;
                 updatePayload.imageId = galleryIds[0];
@@ -2583,6 +2891,15 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          cost: individualCost,
                          resalePrice: parsePrice(subItem.estimated_value) || 0.0,
                          boutiquePrice: parsePrice(subItem.estimated_value) || 0.0,
+                         maxBuyPrice: calculateMaxBuy(subItem) || individualCost,
+                         maxBid: calculateSubItemMaxBid(subItem, item) || undefined,
+                         currentBid: undefined,
+                         auctionEndsAt: item.auctionEndsAt || item.auction_meta?.end_time || undefined,
+                         sourcingLocation: sourcingLocation.value || scoutUrl.value || undefined,
+                         sellerId: item.sellerId || item.seller_info?.seller_id || undefined,
+                         sellerName: item.sellerName || item.seller_info?.seller_name || undefined,
+                         shippingWeight: item.shippingWeight || item.seller_info?.shipping_weight || undefined,
+                         canCombineShipping: item.canCombineShipping !== undefined ? item.canCombineShipping : item.seller_info?.can_combine_shipping,
                          imageId: subItemImage,
                          conditionNotes: noteDetails,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -2614,21 +2931,32 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              if (primaryImage && galleryIds.length === 0) {
                  galleryIds.push(primaryImage);
              }
+             if (Array.isArray(item.fetched_images)) {
+                 for (const u of item.fetched_images) {
+                     if (u && typeof u === 'string' && !galleryIds.includes(u)) galleryIds.push(u);
+                 }
+             }
+
+             const autoMdReport = formatScoutReportMarkdown(item);
 
              const itemPayload: any = {
                  identity: item.identity,
                  title: item.title || item.identity,
                  conditionNotes: noteDetails,
                  redFlags: item.red_flags || [],
-                 cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
+                 cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : (item.currentBid || 0.0),
                  resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
-                 maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
-                 sourcingLocation: sourcingLocation.value || '',
+                 maxBuyPrice: calculateMaxBuy(item) || 0.0,
+                 maxBid: calculateMaxBid(item) || undefined,
+                 currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
+                 auctionEndsAt: item.auctionEndsAt || item.auction_meta?.end_time || undefined,
+                 sourcingLocation: sourcingLocation.value || scoutUrl.value || '',
                  storageLocation: storageLocation.value || '',
-                 status: 'acquired',
+                 status: isAcquired.value ? 'acquired' : 'tracked',
                  keywords: item.keywords || [],
                  imageId: primaryImage,
-                 galleryImageIds: galleryIds,
+                 galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
+                 marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                  rawAnalysis: getSafeRawAnalysis(item) || undefined,
                  components: item.lot_items ? JSON.stringify(item.lot_items).slice(0, 65000) : undefined
              };
@@ -2637,12 +2965,22 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  if (item.lot_items && item.lot_items.length > 0) {
                      const doc = await addLotToPurchase({
                          title: item.title || item.identity,
-                         lotCost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
+                         lotCost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : (item.currentBid || 0.0),
                          totalEstValue: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
                          boutiqueValue: parsePrice(item.price_breakdown?.boutique_premium) || (item.selected_resale_price || 0),
                          lotItems: item.lot_items,
+                         sourcingLocation: sourcingLocation.value || scoutUrl.value || undefined,
+                         sellerId: item.sellerId || item.seller_info?.seller_id || undefined,
+                         sellerName: item.sellerName || item.seller_info?.seller_name || undefined,
+                         shippingWeight: item.shippingWeight || item.seller_info?.shipping_weight || undefined,
+                         canCombineShipping: item.canCombineShipping !== undefined ? item.canCombineShipping : item.seller_info?.can_combine_shipping,
+                         auctionEndsAt: item.auctionEndsAt || item.auction_meta?.end_time || undefined,
+                         maxBid: calculateMaxBid(item) || undefined,
+                         currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
                          imageId: primaryImage,
+                         galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
                          conditionNotes: noteDetails,
+                         marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
                      });
                      if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
@@ -2651,11 +2989,22 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  } else {
                      const doc = await addItemToPurchase({
                          title: item.title || item.identity,
-                         cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : 0.0,
+                         cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : (item.currentBid || 0.0),
                          resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
                          boutiquePrice: parsePrice(item.price_breakdown?.boutique_premium) || (item.selected_resale_price || 0),
+                         maxBuyPrice: calculateMaxBuy(item) || 0.0,
+                         maxBid: calculateMaxBid(item) || undefined,
+                         currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
+                         auctionEndsAt: item.auctionEndsAt || item.auction_meta?.end_time || undefined,
+                         sourcingLocation: sourcingLocation.value || scoutUrl.value || undefined,
+                         sellerId: item.sellerId || item.seller_info?.seller_id || undefined,
+                         sellerName: item.sellerName || item.seller_info?.seller_name || undefined,
+                         shippingWeight: item.shippingWeight || item.seller_info?.shipping_weight || undefined,
+                         canCombineShipping: item.canCombineShipping !== undefined ? item.canCombineShipping : item.seller_info?.can_combine_shipping,
                          imageId: primaryImage,
+                         galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
                          conditionNotes: noteDetails,
+                         marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
                      });
                      if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
@@ -2674,18 +3023,10 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         successMessage.value = `Added to ${dealName}!`;
         addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
 
-        if (!isBatch) {
-            let cartItem = null;
-            if (rescoutId.value) {
-                cartItem = cartItems.value.find(ci => ci.$id === rescoutId.value) || (purchaseItems.value as any[]).find(pi => pi.$id === rescoutId.value);
-            } else {
-                cartItem = cartItems.value[0] || purchaseItems.value[0] || cartItems.value[cartItems.value.length - 1];
-            }
-            
-
-            
-            startNewScan();
-        }
+        // Keep item on screen with saved confirmation so user never feels item was lost
+        setTimeout(() => {
+            successMessage.value = null;
+        }, 4000);
 
         // Reset inputs smoothly
         setTimeout(() => {

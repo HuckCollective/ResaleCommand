@@ -266,7 +266,7 @@ import ItemLotTab from './drawer/ItemLotTab.vue';
 import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
-import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
+import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage, formatScoutReportMarkdown } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
@@ -592,7 +592,7 @@ const showOnStorefront = computed({
 
 const isAcquiredItem = computed(() => {
     const s = (props.item?.status || editForm.status || '').toLowerCase();
-    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) || (!!props.item?.$id && s !== 'scouting' && s !== 'draft');
+    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) && !['tracked', 'scouting', 'draft', 'pending_bid'].includes(s);
 });
 
 const scoutResult = ref(null);
@@ -672,10 +672,31 @@ const suggestedTagTitleStr = computed(() => {
 
 const scoutPurchaseStrategy = computed(() => {
     if (!scoutResult.value) return null;
-    if (scoutResult.value.purchase_strategy) return scoutResult.value.purchase_strategy;
-    if (Array.isArray(scoutResult.value) && scoutResult.value[0]?.purchase_strategy) return scoutResult.value[0].purchase_strategy;
-    if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items[0]?.purchase_strategy) return scoutResult.value.items[0].purchase_strategy;
-    return null;
+    let strat = null;
+    if (scoutResult.value.purchase_strategy) strat = scoutResult.value.purchase_strategy;
+    else if (Array.isArray(scoutResult.value) && scoutResult.value[0]?.purchase_strategy) strat = scoutResult.value[0].purchase_strategy;
+    else if (scoutResult.value.items && Array.isArray(scoutResult.value.items) && scoutResult.value.items[0]?.purchase_strategy) strat = scoutResult.value.items[0].purchase_strategy;
+    if (!strat) return null;
+
+    const currentCost = parseFloat(String(editForm.cost || props.item?.currentBid || scoutResult.value.currentBid || strat.current_asking_price || 0).replace(/[$,]/g, ''));
+    const maxBid = parseFloat(String(props.item?.maxBid || scoutResult.value.maxBid || strat.max_bid || 0).replace(/[$,]/g, ''));
+
+    if (currentCost > 0 && maxBid > 0) {
+        const isOutbid = currentCost > maxBid;
+        const headroom = maxBid - currentCost;
+        return {
+            ...strat,
+            verdict: isOutbid ? 'PASS' : (strat.verdict || 'CHASE_AUCTION'),
+            isOutbid,
+            currentBid: currentCost,
+            maxBid,
+            headroom,
+            advice: isOutbid 
+                ? `🚨 STOP BIDDING — OUTBID! Current bid ($${currentCost.toFixed(2)}) exceeds your max bid ceiling ($${maxBid.toFixed(2)}). Landed cost wipes out your target resale margin. Do not chase.`
+                : (strat.advice || `🎯 IN PLAY: Current bid is $${currentCost.toFixed(2)}. You have $${headroom.toFixed(2)} in bidding headroom before reaching your $${maxBid.toFixed(2)} ceiling.`)
+        };
+    }
+    return strat;
 });
 
 const scoutTotalRange = computed(() => {
@@ -1099,6 +1120,12 @@ const initForm = () => {
                 const parsed = JSON.parse(i.rawAnalysis);
                 scoutResult.value = parsed;
             } catch (e) {}
+        }
+
+        if (i.marketDescription) {
+            scoutMdText.value = i.marketDescription;
+        } else if (scoutResult.value) {
+            scoutMdText.value = formatScoutReportMarkdown(scoutResult.value);
         }
     } else {
         mainPhotoSelection.value = { type: 'none', val: null };
@@ -1597,7 +1624,7 @@ const analyzeExistingItem = async () => {
             if (progressVal >= 80) {
                 stepMsg = isLot ? `Step 3 of 3: Consolidating lot appraisal & split strategy...` : `Step 3 of 3: Calculating fair resale pricing & condition...`;
             }
-            updateLoader("Analyzing with AI Deep Research...", stepMsg, progressVal);
+            updateLoader(isAcquiredItem.value ? "Analyzing with AI Deep Research..." : "Scanning with Speed Scout AI...", stepMsg, progressVal);
         }, 1000);
 
         const response = await fetch(apiEndpoint, {
@@ -1730,6 +1757,40 @@ const analyzeExistingItem = async () => {
                 }
                 if ((!editForm.keywords || editForm.keywords.length === 0) && item.keywords?.length > 0) {
                     editForm.keywords = [...item.keywords];
+                }
+
+                // LIVE AUCTION UPDATE FOR UNACQUIRED / TRACKED ITEMS:
+                const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
+                const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
+                
+                if (!isAcquiredItem.value && liveBid > 0) {
+                    editForm.cost = liveBid.toFixed(2);
+                }
+                if (item.auctionEndsAt || item.auction_meta?.end_time) {
+                    editForm.auctionEndsAt = item.auctionEndsAt || item.auction_meta?.end_time;
+                }
+                if (maxBidCeiling && Number(maxBidCeiling) > 0) {
+                    editForm.maxBid = maxBidCeiling;
+                }
+                if (liveBid > 0) {
+                    editForm.currentBid = liveBid;
+                }
+                if (item.canCombineShipping !== undefined) {
+                    editForm.canCombineShipping = item.canCombineShipping;
+                }
+
+                if (liveBid > 0 && maxBidCeiling && Number(maxBidCeiling) > 0) {
+                    if (liveBid > maxBidCeiling) {
+                        addToast({ 
+                            type: 'error', 
+                            message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.` 
+                        });
+                    } else {
+                        addToast({ 
+                            type: 'success', 
+                            message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})` 
+                        });
+                    }
                 }
                 
                 let report = `--- 🕵️ SCOUT REPORT ---\n\n`;

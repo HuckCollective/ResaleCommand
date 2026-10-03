@@ -5,7 +5,7 @@ import { useAuth } from './useAuth';
 import { useCart, type Cart, type CartItem } from './useCart';
 import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
-import { getItemsByPurchaseId } from '../lib/inventory';
+import { getItemsByPurchaseId, getSafeRawAnalysis, formatScoutReportMarkdown } from '../lib/inventory';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const PURCHASES_COL = getPurchasesCollectionId();
@@ -33,6 +33,7 @@ export interface ScoutPurchaseItem extends Models.Document {
     cost?: number;
     resalePrice?: number;
     boutiquePrice?: number;
+    maxBuyPrice?: number;
     condition?: string;
     imageId?: string | null;
     galleryImageIds?: string[];
@@ -42,6 +43,15 @@ export interface ScoutPurchaseItem extends Models.Document {
     purchaseId?: string;
     isLot?: boolean;
     lotItemsCount?: number;
+    sourcingLocation?: string;
+    auctionEndsAt?: string | null;
+    maxBid?: number | null;
+    currentBid?: number | null;
+    auctionStatus?: 'watching' | 'won' | 'lost';
+    sellerId?: string | number | null;
+    sellerName?: string | null;
+    shippingWeight?: number | null;
+    canCombineShipping?: boolean;
 }
 
 // Shared module state across Scout components
@@ -499,6 +509,7 @@ export function useScoutPurchase() {
                 let bPrice = doc.resalePrice || 0;
                 let isLot = false;
                 let lotCount = 0;
+                let parsedTarget: any = null;
                 if (doc.conditionNotes && (doc.conditionNotes.includes('[LOT_BUNDLE]') || doc.conditionNotes.includes('[LOT]'))) {
                     isLot = true;
                 }
@@ -508,13 +519,13 @@ export function useScoutPurchase() {
                 if (doc.rawAnalysis) {
                     try {
                         const parsed = JSON.parse(doc.rawAnalysis);
-                        const target = Array.isArray(parsed) ? parsed[0] : parsed;
-                        if (target?.boutiquePrice && !isNaN(Number(target.boutiquePrice))) {
-                            bPrice = Number(target.boutiquePrice);
+                        parsedTarget = Array.isArray(parsed) ? parsed[0] : parsed;
+                        if (parsedTarget?.boutiquePrice && !isNaN(Number(parsedTarget.boutiquePrice))) {
+                            bPrice = Number(parsedTarget.boutiquePrice);
                         }
-                        if (target?.isLot || (target?.lot_items && target.lot_items.length > 0)) {
+                        if (parsedTarget?.isLot || (parsedTarget?.lot_items && parsedTarget.lot_items.length > 0)) {
                             isLot = true;
-                            lotCount = target?.lot_items?.length || 0;
+                            lotCount = parsedTarget?.lot_items?.length || 0;
                         }
                     } catch (e) {}
                 }
@@ -526,7 +537,15 @@ export function useScoutPurchase() {
                     ...doc,
                     boutiquePrice: bPrice || doc.resalePrice || 0,
                     isLot,
-                    lotItemsCount: lotCount
+                    lotItemsCount: lotCount,
+                    sellerId: doc.sellerId || parsedTarget?.sellerId || parsedTarget?.seller_id || parsedTarget?.seller_info?.seller_id || null,
+                    sellerName: doc.sellerName || parsedTarget?.sellerName || parsedTarget?.seller_name || parsedTarget?.seller_info?.seller_name || null,
+                    shippingWeight: doc.shippingWeight || parsedTarget?.shippingWeight || parsedTarget?.shipping_weight || parsedTarget?.seller_info?.shipping_weight || 0,
+                    canCombineShipping: doc.canCombineShipping !== undefined ? doc.canCombineShipping : (parsedTarget?.canCombineShipping !== undefined ? parsedTarget.canCombineShipping : (parsedTarget?.seller_info?.can_combine_shipping !== undefined ? parsedTarget.seller_info.can_combine_shipping : true)),
+                    auctionEndsAt: doc.auctionEndsAt || parsedTarget?.auctionEndsAt || parsedTarget?.auction_meta?.end_time || null,
+                    maxBid: doc.maxBid || parsedTarget?.maxBid || null,
+                    currentBid: doc.currentBid || parsedTarget?.currentBid || null,
+                    auctionStatus: parsedTarget?.auctionStatus || 'watching'
                 } as ScoutPurchaseItem;
             });
 
@@ -567,10 +586,24 @@ export function useScoutPurchase() {
         cost?: number | string;
         resalePrice?: number | string;
         boutiquePrice?: number | string;
+        maxBuyPrice?: number | string;
+        maxBid?: number | string;
+        currentBid?: number | string;
+        auctionEndsAt?: string | null;
+        sourcingLocation?: string;
+        sellerId?: string | number | null;
+        sellerName?: string | null;
+        shippingWeight?: number | null;
+        canCombineShipping?: boolean;
         imageId?: string | null;
+        galleryImageIds?: string[];
         rawAnalysis?: any;
         conditionNotes?: string;
+        marketDescription?: string;
+        keywords?: string[];
+        components?: string;
         tier?: string;
+        status?: string;
     }) => {
         if (!activePurchase.value) throw new Error("No active purchase selected");
 
@@ -592,6 +625,9 @@ export function useScoutPurchase() {
             const cleanCost = parseFloat(String(itemData.cost || 0)) || 0;
             const cleanResale = parseFloat(String(itemData.resalePrice || 0)) || 0;
             const cleanBoutique = parseFloat(String(itemData.boutiquePrice || cleanResale)) || 0;
+            const cleanMaxBuy = itemData.maxBuyPrice !== undefined && itemData.maxBuyPrice !== null ? (parseFloat(String(itemData.maxBuyPrice)) || null) : null;
+            const cleanMaxBid = itemData.maxBid !== undefined && itemData.maxBid !== null ? (parseFloat(String(itemData.maxBid)) || null) : null;
+            const cleanCurrentBid = itemData.currentBid !== undefined && itemData.currentBid !== null ? (parseFloat(String(itemData.currentBid)) || null) : null;
 
             let rawObj: any = {};
             if (typeof itemData.rawAnalysis === 'string') {
@@ -605,8 +641,17 @@ export function useScoutPurchase() {
             }
             rawObj.boutiquePrice = cleanBoutique;
             if (itemData.tier) rawObj.tier = itemData.tier;
+            if (itemData.auctionEndsAt) rawObj.auctionEndsAt = itemData.auctionEndsAt;
+            if (cleanMaxBid) rawObj.maxBid = cleanMaxBid;
+            if (cleanCurrentBid) rawObj.currentBid = cleanCurrentBid;
+            if (itemData.sellerId) rawObj.sellerId = itemData.sellerId;
+            if (itemData.sellerName) rawObj.sellerName = itemData.sellerName;
+            if (itemData.shippingWeight) rawObj.shippingWeight = itemData.shippingWeight;
+            if (itemData.canCombineShipping !== undefined) rawObj.canCombineShipping = itemData.canCombineShipping;
+            if (itemData.sourcingLocation) rawObj.sourcingLocation = itemData.sourcingLocation;
 
-            const safeRaw = JSON.stringify(rawObj).slice(0, 4900);
+            const safeRaw = getSafeRawAnalysis(rawObj);
+            const autoMdReport = itemData.marketDescription || formatScoutReportMarkdown(rawObj);
             const notes = (itemData.conditionNotes || '') + (cleanBoutique ? `\n[Boutique: $${cleanBoutique.toFixed(2)}]` : '');
 
             const payload: any = {
@@ -614,12 +659,21 @@ export function useScoutPurchase() {
                 identity: itemData.title,
                 cost: cleanCost,
                 resalePrice: cleanResale,
+                maxBuyPrice: cleanMaxBuy ?? undefined,
+                maxBid: cleanMaxBid ?? undefined,
+                currentBid: cleanCurrentBid ?? undefined,
+                auctionEndsAt: itemData.auctionEndsAt || undefined,
+                sourcingLocation: itemData.sourcingLocation || undefined,
                 imageId: itemData.imageId || null,
+                galleryImageIds: (itemData.galleryImageIds && itemData.galleryImageIds.length > 0) ? itemData.galleryImageIds : undefined,
                 purchaseId: activePurchase.value.$id,
                 cartId: activePurchase.value.$id,
                 tenantId: teamId || null,
-                status: 'draft',
-                rawAnalysis: safeRaw,
+                status: itemData.status || 'draft',
+                rawAnalysis: safeRaw || undefined,
+                marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
+                keywords: (itemData.keywords && itemData.keywords.length > 0) ? itemData.keywords : (rawObj.keywords && Array.isArray(rawObj.keywords) ? rawObj.keywords : undefined),
+                components: itemData.components || undefined,
                 conditionNotes: notes.slice(0, 4900)
             };
 
@@ -645,14 +699,13 @@ export function useScoutPurchase() {
                 cartItems.value.unshift(purchaseItem as unknown as CartItem);
             }
 
-            // Update subtotal and itemCount on purchase record
+            // Update subtotal on purchase record
             const newSubtotal = totalCost.value;
             const newCount = purchaseItems.value.length;
             try {
                 await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
                     subtotal: newSubtotal,
-                    grandTotal: newSubtotal,
-                    itemCount: newCount
+                    grandTotal: newSubtotal
                 });
             } catch (upErr) {
                 console.warn('[useScoutPurchase] Failed to update purchase record:', upErr);
@@ -690,8 +743,20 @@ export function useScoutPurchase() {
         boutiqueValue?: number | string;
         lotItems: any[];
         imageId?: string | null;
+        galleryImageIds?: string[];
         rawAnalysis?: any;
         conditionNotes?: string;
+        marketDescription?: string;
+        keywords?: string[];
+        sourcingLocation?: string;
+        sellerId?: string | number | null;
+        sellerName?: string | null;
+        shippingWeight?: number | null;
+        canCombineShipping?: boolean;
+        auctionEndsAt?: string | null;
+        maxBid?: number | string | null;
+        currentBid?: number | string | null;
+        status?: string;
     }) => {
         if (!activePurchase.value) throw new Error("No active purchase selected");
 
@@ -714,6 +779,8 @@ export function useScoutPurchase() {
             const cleanResale = parseFloat(String(lotData.totalEstValue || 0)) || 0;
             const cleanBoutique = parseFloat(String(lotData.boutiqueValue || cleanResale)) || 0;
             const lotCount = lotData.lotItems?.length || 0;
+            const cleanMaxBid = lotData.maxBid !== undefined && lotData.maxBid !== null ? (parseFloat(String(lotData.maxBid)) || null) : null;
+            const cleanCurrentBid = lotData.currentBid !== undefined && lotData.currentBid !== null ? (parseFloat(String(lotData.currentBid)) || null) : null;
 
             let rawObj: any = {};
             if (typeof lotData.rawAnalysis === 'string') {
@@ -728,8 +795,17 @@ export function useScoutPurchase() {
             rawObj.isLot = true;
             rawObj.lot_items = lotData.lotItems;
             rawObj.boutiquePrice = cleanBoutique;
+            if (lotData.sellerId) rawObj.sellerId = lotData.sellerId;
+            if (lotData.sellerName) rawObj.sellerName = lotData.sellerName;
+            if (lotData.shippingWeight) rawObj.shippingWeight = lotData.shippingWeight;
+            if (lotData.canCombineShipping !== undefined) rawObj.canCombineShipping = lotData.canCombineShipping;
+            if (lotData.sourcingLocation) rawObj.sourcingLocation = lotData.sourcingLocation;
+            if (lotData.auctionEndsAt) rawObj.auctionEndsAt = lotData.auctionEndsAt;
+            if (cleanMaxBid) rawObj.maxBid = cleanMaxBid;
+            if (cleanCurrentBid) rawObj.currentBid = cleanCurrentBid;
 
-            const safeRaw = JSON.stringify(rawObj).slice(0, 4900);
+            const safeRaw = getSafeRawAnalysis(rawObj);
+            const autoMdReport = lotData.marketDescription || formatScoutReportMarkdown(rawObj);
             const notes = (lotData.conditionNotes ? `${lotData.conditionNotes}\n` : '') +
                 `[LOT_BUNDLE: ${lotCount} items]\n` +
                 (lotData.lotItems || []).map((li, idx) => `${idx + 1}. ${li.name || li.title || li.identity} ($${li.estimated_value || '0'})`).join('\n') +
@@ -740,14 +816,21 @@ export function useScoutPurchase() {
                 identity: lotData.title,
                 cost: cleanCost,
                 resalePrice: cleanResale,
+                maxBid: cleanMaxBid ?? undefined,
+                currentBid: cleanCurrentBid ?? undefined,
+                auctionEndsAt: lotData.auctionEndsAt || undefined,
+                sourcingLocation: lotData.sourcingLocation || undefined,
                 imageId: lotData.imageId || null,
+                galleryImageIds: (lotData.galleryImageIds && lotData.galleryImageIds.length > 0) ? lotData.galleryImageIds : undefined,
                 purchaseId: activePurchase.value.$id,
                 cartId: activePurchase.value.$id,
                 tenantId: teamId || null,
-                status: 'draft',
+                status: lotData.status || 'draft',
                 components: lotData.lotItems ? JSON.stringify(lotData.lotItems).slice(0, 65000) : undefined,
+                marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
+                keywords: (lotData.keywords && lotData.keywords.length > 0) ? lotData.keywords : (rawObj.keywords && Array.isArray(rawObj.keywords) ? rawObj.keywords : undefined),
                 conditionNotes: notes.slice(0, 4900),
-                rawAnalysis: safeRaw
+                rawAnalysis: safeRaw || undefined
             };
 
             Object.keys(lotPayload).forEach(key => lotPayload[key] === undefined && delete lotPayload[key]);
@@ -764,7 +847,16 @@ export function useScoutPurchase() {
                 ...(doc as unknown as ScoutPurchaseItem),
                 boutiquePrice: cleanBoutique,
                 isLot: true,
-                lotItemsCount: lotCount
+                lotItemsCount: lotCount,
+                sellerId: lotData.sellerId || null,
+                sellerName: lotData.sellerName || null,
+                shippingWeight: lotData.shippingWeight || 0,
+                canCombineShipping: lotData.canCombineShipping !== undefined ? lotData.canCombineShipping : true,
+                sourcingLocation: lotData.sourcingLocation || undefined,
+                auctionEndsAt: lotData.auctionEndsAt || null,
+                maxBid: cleanMaxBid,
+                currentBid: cleanCurrentBid,
+                auctionStatus: 'watching'
             };
 
             purchaseItems.value.unshift(purchaseItem);
@@ -772,14 +864,13 @@ export function useScoutPurchase() {
                 cartItems.value.unshift(purchaseItem as unknown as CartItem);
             }
 
-            // Update subtotal and itemCount on purchase record
+            // Update subtotal on purchase record
             const newSubtotal = totalCost.value;
             const newCount = purchaseItems.value.length;
             try {
                 await databases.updateDocument(DB_ID, PURCHASES_COL, activePurchase.value.$id, {
                     subtotal: newSubtotal,
-                    grandTotal: newSubtotal,
-                    itemCount: newCount
+                    grandTotal: newSubtotal
                 });
             } catch (upErr) {
                 console.warn('[useScoutPurchase] Failed to update purchase record:', upErr);
@@ -838,11 +929,14 @@ export function useScoutPurchase() {
             cartItems.value = cartItems.value.filter(i => i.$id !== itemId);
 
             const newSubtotal = totalCost.value;
-            await databases.updateDocument(DB_ID, PURCHASES_COL, targetPurchaseId, {
-                subtotal: newSubtotal,
-                grandTotal: newSubtotal,
-                itemCount: purchaseItems.value.length
-            });
+            try {
+                await databases.updateDocument(DB_ID, PURCHASES_COL, targetPurchaseId, {
+                    subtotal: newSubtotal,
+                    grandTotal: newSubtotal
+                });
+            } catch (upErr) {
+                console.warn('[useScoutPurchase] Failed to update purchase totals after deletion:', upErr);
+            }
 
             if (activePurchase.value && activePurchase.value.$id === targetPurchaseId) {
                 activePurchase.value.itemCount = purchaseItems.value.length;
@@ -1085,6 +1179,72 @@ export function useScoutPurchase() {
         return target;
     };
 
+    /**
+     * Record an auction win: updates final cost, sets status to 'acquired', and records winningBid
+     */
+    const recordAuctionWin = async (itemId: string, winningBid: number) => {
+        loading.value = true;
+        try {
+            const item = purchaseItems.value.find(i => i.$id === itemId);
+            let rawObj: any = {};
+            if (item?.rawAnalysis) {
+                try { rawObj = JSON.parse(item.rawAnalysis); } catch {}
+            }
+            rawObj.auctionStatus = 'won';
+            rawObj.winningBid = winningBid;
+
+            await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, {
+                cost: winningBid,
+                status: 'acquired',
+                rawAnalysis: JSON.stringify(rawObj).slice(0, 4900)
+            });
+
+            if (item) {
+                item.cost = winningBid;
+                item.status = 'acquired';
+                item.auctionStatus = 'won';
+            }
+            return true;
+        } catch (e) {
+            console.error('[useScoutPurchase] Failed to record auction win:', e);
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    /**
+     * Record an auction loss: marks as lost or removes from active purchase
+     */
+    const recordAuctionLoss = async (itemId: string, removeFromTracker: boolean = true) => {
+        loading.value = true;
+        try {
+            if (removeFromTracker) {
+                const trackerId = activePurchase.value?.$id;
+                await removeItemFromPurchase(itemId, trackerId);
+            } else {
+                const item = purchaseItems.value.find(i => i.$id === itemId);
+                let rawObj: any = {};
+                if (item?.rawAnalysis) {
+                    try { rawObj = JSON.parse(item.rawAnalysis); } catch {}
+                }
+                rawObj.auctionStatus = 'lost';
+                await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, {
+                    rawAnalysis: JSON.stringify(rawObj).slice(0, 4900)
+                });
+                if (item) {
+                    item.auctionStatus = 'lost';
+                }
+            }
+            return true;
+        } catch (e) {
+            console.error('[useScoutPurchase] Failed to record auction loss:', e);
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    };
+
     return {
         // State
         activePurchase,
@@ -1121,6 +1281,8 @@ export function useScoutPurchase() {
         addItemToPurchase,
         addLotToPurchase,
         removeItemFromPurchase,
+        recordAuctionWin,
+        recordAuctionLoss,
         completePurchase,
         discardPurchase
     };

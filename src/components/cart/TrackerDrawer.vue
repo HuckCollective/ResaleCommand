@@ -50,14 +50,25 @@
                       <template #actions>
                           <!-- Docked Bottom Actions -->
                           <div class="join w-full mt-1 pt-1 border-t border-base-200/50" @click.stop>
-                              <button @click="openEditModal(item)" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100"><Icon icon="solar:pen-linear" class="w-4 h-4 inline" /> Edit</button>
-                              <a :href="`/scout?rescout=${item.$id}`" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100"><Icon icon="solar:magnifer-linear" class="w-4 h-4 inline" /> Scout</a>
-                              <button @click="handleDeleteItem(item.$id)" class="btn btn-ghost btn-xs join-item flex-1 text-error opacity-80 hover:opacity-100 hover:bg-error/10"><Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4 inline" /> Drop</button>
+                              <a v-if="getItemSourceUrl(item)" :href="getItemSourceUrl(item)" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs join-item flex-1 text-primary opacity-80 hover:opacity-100" title="Open live auction listing in new tab">
+                                  <Icon icon="solar:link-linear" class="w-3.5 h-3.5 inline" /> Open
+                              </a>
+                              <button v-if="getItemSourceUrl(item)" @click="reEvaluateAuction(item)" :disabled="reEvaluatingIds[item.$id]" class="btn btn-ghost btn-xs join-item flex-1 text-secondary opacity-80 hover:opacity-100" title="Re-evaluate live auction and current bids">
+                                  <span v-if="reEvaluatingIds[item.$id]" class="loading loading-spinner loading-xs inline"></span>
+                                  <Icon v-else icon="solar:refresh-linear" class="w-3.5 h-3.5 inline" /> Re-Eval
+                              </button>
+                              <button @click="openEditModal(item)" class="btn btn-ghost btn-xs join-item flex-1 opacity-70 hover:opacity-100"><Icon icon="solar:pen-linear" class="w-3.5 h-3.5 inline" /> Edit</button>
+                              <button @click="handleDeleteItem(item.$id)" class="btn btn-ghost btn-xs join-item flex-1 text-error opacity-80 hover:opacity-100 hover:bg-error/10"><Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5 inline" /> Drop</button>
                           </div>
                       </template>
                       
                       <template #image-overlay>
-                          <!-- Image overlay removed since ROI is now built into ItemCard -->
+                          <div v-if="getAuctionBadge(item)" class="absolute top-1 right-1 z-20 pointer-events-none">
+                              <span class="badge badge-xs font-black shadow-xs gap-0.5" :class="getAuctionBadge(item).badgeClass">
+                                  <Icon :icon="getAuctionBadge(item).icon" class="w-2.5 h-2.5" />
+                                  {{ getAuctionBadge(item).label }}
+                              </span>
+                          </div>
                       </template>
                   </ItemCard>
               </div>
@@ -129,8 +140,8 @@ import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
-
-import { BUCKET_ID } from '../../lib/inventory';
+import { showLoader, hideLoader } from '../../stores/loader';
+import { BUCKET_ID, getSafeRawAnalysis } from '../../lib/inventory';
 
 const { user } = useAuth();
 const { 
@@ -141,6 +152,142 @@ const {
 
 const newExpenseNote = ref('');
 const newExpenseAmount = ref<number | ''>(''); 
+
+// -- LIVE AUCTION RE-EVALUATION --
+const reEvaluatingIds = ref<Record<string, boolean>>({});
+
+function getAuctionBadge(item: any) {
+    if (!item) return null;
+    let currentBid = item.currentBid;
+    let maxBid = item.maxBid;
+
+    if (!currentBid || !maxBid) {
+        if (item.rawAnalysis) {
+            try {
+                const parsed = JSON.parse(item.rawAnalysis);
+                const first = Array.isArray(parsed) ? parsed[0] : (parsed.items ? parsed.items[0] : parsed);
+                if (first) {
+                    if (!currentBid) currentBid = first.currentBid || first.auction_meta?.current_bid || parseFloat(String(first.purchase_strategy?.current_asking_price || 0).replace(/[$,]/g, ''));
+                    if (!maxBid) maxBid = first.maxBid || first.purchase_strategy?.max_bid;
+                }
+            } catch {}
+        }
+    }
+
+    if (!currentBid && item.cost) {
+        currentBid = parseFloat(String(item.cost));
+    }
+
+    if (currentBid && maxBid) {
+        const c = Number(currentBid);
+        const m = Number(maxBid);
+        if (c > m) {
+            return {
+                label: `STOP ($${c.toFixed(0)})`,
+                badgeClass: 'badge-error text-error-content animate-pulse',
+                icon: 'solar:stop-circle-bold'
+            };
+        } else {
+            return {
+                label: `+$${(m - c).toFixed(0)} Left`,
+                badgeClass: 'badge-success text-success-content',
+                icon: 'solar:check-circle-bold'
+            };
+        }
+    }
+    return null;
+}
+
+function getItemSourceUrl(item: any): string | null {
+    if (item.sourcingLocation && item.sourcingLocation.startsWith('http')) return item.sourcingLocation;
+    if (item.url && item.url.startsWith('http')) return item.url;
+    if (item.conditionNotes) {
+        const match = item.conditionNotes.match(/https?:\/\/[^\s\n\]]+/);
+        if (match) return match[0];
+    }
+    if (item.rawAnalysis) {
+        try {
+            const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+            const target = Array.isArray(raw) ? raw[0] : raw;
+            if (target?.sourcingLocation && target.sourcingLocation.startsWith('http')) return target.sourcingLocation;
+            if (target?.source_url && target.source_url.startsWith('http')) return target.source_url;
+            if (target?.url && target.url.startsWith('http')) return target.url;
+        } catch(e) {}
+    }
+    return null;
+}
+
+async function reEvaluateAuction(item: any) {
+    const targetUrl = getItemSourceUrl(item);
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+        addToast({ type: 'warning', message: 'No valid URL to re-evaluate this auction.' });
+        return;
+    }
+    reEvaluatingIds.value[item.$id] = true;
+    showLoader("Re-evaluating Live Auction...", {
+        step: "Fetching latest bids, shipping & stop-bidding rules...",
+        progress: 45
+    });
+
+    try {
+        const res = await fetch('/api/identify-item', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                notes: targetUrl + '\n\n' + (item.conditionNotes || '')
+            })
+        });
+
+        if (!res.ok) throw new Error('Failed to fetch live auction data');
+        const data = await res.json();
+        const candidate = (data.items && data.items.length > 0) ? data.items[0] : data;
+
+        const liveBid = candidate.currentBid || candidate.auction_meta?.current_bid || parseFloat(String(candidate.purchase_strategy?.current_asking_price || 0).replace(/[$,]/g, ''));
+        const maxBid = candidate.maxBid || candidate.purchase_strategy?.max_bid;
+        
+        const updatePayload: any = {
+            rawAnalysis: getSafeRawAnalysis(candidate)
+        };
+        if (!item.sourcingLocation && targetUrl) {
+            updatePayload.sourcingLocation = targetUrl;
+        }
+        if (liveBid > 0) {
+            updatePayload.cost = liveBid;
+        }
+        if (candidate.auctionEndsAt || candidate.auction_meta?.end_time) {
+            updatePayload.auctionEndsAt = candidate.auctionEndsAt || candidate.auction_meta?.end_time;
+        }
+        if (maxBid && Number(maxBid) > 0) {
+            updatePayload.maxBid = Number(maxBid);
+        }
+        if (candidate.canCombineShipping !== undefined) {
+            updatePayload.canCombineShipping = candidate.canCombineShipping;
+        }
+
+        await updateItem(item.$id, updatePayload);
+
+        if (liveBid > 0 && maxBid && Number(maxBid) > 0) {
+            if (liveBid > Number(maxBid)) {
+                addToast({ 
+                    type: 'error', 
+                    message: `🚨 STOP BIDDING on "${item.title || item.identity}"! Outbid at $${liveBid.toFixed(2)} (Max Bid: $${Number(maxBid).toFixed(2)}).` 
+                });
+            } else {
+                addToast({ 
+                    type: 'success', 
+                    message: `🎯 Live bid updated: $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBid) - liveBid).toFixed(2)})` 
+                });
+            }
+        } else {
+            addToast({ type: 'success', message: `Auction data updated for "${item.title || item.identity}"!` });
+        }
+    } catch (err: any) {
+        addToast({ type: 'error', message: err.message || 'Re-evaluation failed.' });
+    } finally {
+        delete reEvaluatingIds.value[item.$id];
+        hideLoader();
+    }
+}
 
 // -- EDIT/PREVIEW STATE --
 const editingItem = ref<CartItem | null>(null);

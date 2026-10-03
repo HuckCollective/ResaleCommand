@@ -383,6 +383,9 @@ export interface ExtraItemData {
     upc?: string;
     upcPrefix?: string;
     locationSku?: string;
+    auctionEndsAt?: string | null;
+    maxBid?: number | null;
+    currentBid?: number | null;
 }
 
 const upcAllocationLocks = new Map<string, number>();
@@ -460,6 +463,78 @@ export function isValidOrgUpc(upc: string | null | undefined, prefix: string = '
     return false;
 }
 
+export function formatScoutReportMarkdown(item: any): string {
+    if (!item) return '';
+    const obj = typeof item === 'string' ? (() => { try { return JSON.parse(item); } catch { return null; } })() : item;
+    if (!obj) return '';
+    const target = Array.isArray(obj) ? obj[0] : (obj.items ? obj.items[0] : obj);
+    if (!target) return '';
+
+    let report = `### 🕵️ Speed Scout Appraisal Report\n\n`;
+    if (target.tier_label || target.tier) {
+        const tierName = target.tier_label || (target.tier === 'showcase' ? '🌟 Showcase' : target.tier === 'quick_turn' ? '⚡ Quick Turn' : '📦 Core');
+        report += `**Inventory Tier:** ${tierName}\n\n`;
+    }
+    if (target.title) {
+        const cleanTitle = target.title.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+        report += `**Title:** ${cleanTitle}\n\n`;
+    }
+    if (target.why_pay_up) report += `**💎 Sourcing Catalyst (Why Pay Up):** ${target.why_pay_up}\n\n`;
+    if (target.why_pass) report += `**⚠️ Risk Rationale (Why Pass):** ${target.why_pass}\n\n`;
+    if (target.condition_notes) report += `**Condition:** ${target.condition_notes}\n\n`;
+    if (target.red_flags && target.red_flags.length > 0) {
+        const flags = Array.isArray(target.red_flags) ? target.red_flags.join(', ') : target.red_flags;
+        report += `**🚩 Red Flags:** ${flags}\n\n`;
+    }
+
+    if (target.pricing_potential || target.price_breakdown) {
+        report += `**Valuation Breakdown:**\n`;
+        const fair = target.pricing_potential?.fair || target.price_breakdown?.fair;
+        const boutique = target.pricing_potential?.boutique || target.price_breakdown?.boutique_premium;
+        if (fair) report += `- **Fair Market:** ${fair}\n`;
+        if (boutique) report += `- **Boutique Booth:** ${boutique}\n`;
+        if (target.price_breakdown?.mint) report += `- **Mint / New:** ${target.price_breakdown.mint}\n`;
+        if (target.price_breakdown?.poor) report += `- **Poor / As-Is:** ${target.price_breakdown.poor}\n`;
+        report += `\n`;
+    }
+    if (target.purchase_strategy) {
+        report += `**Sourcing Strategy:**\n`;
+        if (target.purchase_strategy.verdict) report += `- **Verdict:** ${target.purchase_strategy.verdict}\n`;
+        if (target.purchase_strategy.max_bid !== undefined && target.purchase_strategy.max_bid !== null) {
+            report += `- **Max Bid Target:** $${Number(target.purchase_strategy.max_bid).toFixed(2)}\n`;
+        }
+        if (target.purchase_strategy.max_landed_cost !== undefined && target.purchase_strategy.max_landed_cost !== null) {
+            report += `- **Max Landed Cost:** $${Number(target.purchase_strategy.max_landed_cost).toFixed(2)}\n`;
+        }
+        if (target.purchase_strategy.advice) report += `- **Advice:** ${target.purchase_strategy.advice}\n`;
+        report += `\n`;
+    }
+    if (target.market_report) {
+        report += `**Market & Channels:**\n`;
+        if (target.market_report.best_platform) report += `- **Best Platform:** ${target.market_report.best_platform}\n`;
+        if (target.market_report.sell_through_velocity) report += `- **Velocity:** ${target.market_report.sell_through_velocity}\n`;
+        if (target.market_report.platform_rationale) report += `- **Rationale:** ${target.market_report.platform_rationale}\n`;
+        if (target.market_report.channels && Array.isArray(target.market_report.channels)) {
+            target.market_report.channels.forEach((ch: any) => {
+                report += `  - *${ch.name}*: ${ch.est_price || ''} (Payout: ${ch.net_payout || ''}) ${ch.recommendation ? `[${ch.recommendation}]` : ''}\n`;
+            });
+        }
+        report += `\n`;
+    }
+    if (target.comparables && target.comparables.length > 0) { 
+        report += `**Comparables:**\n`; 
+        target.comparables.forEach((c: any) => report += `- ${c.name} (${c.price}) [${c.status || 'Sold'}]\n`); 
+        report += `\n`;
+    }
+    if (target.lot_items && target.lot_items.length > 0) {
+        report += `**📦 Lot Items (${target.lot_items.length}):**\n`;
+        target.lot_items.forEach((li: any, idx: number) => {
+            report += `${idx + 1}. **${li.name || li.title || li.identity}** - Est: ${li.estimated_value || '-'}\n`;
+        });
+    }
+    return report.trim();
+}
+
 export function getSafeRawAnalysis(item: any): string | null {
     if (!item) return null;
     try {
@@ -503,21 +578,45 @@ export function getSafeRawAnalysis(item: any): string | null {
 
         const compactData = (obj: any) => {
             if (!obj || typeof obj !== 'object') return obj;
-            const cleanImg = (obj.image || obj.image_url || '');
+            const cleanImg = (obj.image || obj.image_url || obj.fetched_image || '');
             const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:image') && cleanImg.length < 500 ? cleanImg : undefined;
 
             const res: any = {
                 identity: obj.identity || obj.title,
                 title: obj.title,
-                price_breakdown: obj.price_breakdown,
-                purchase_strategy: obj.purchase_strategy,
-                condition_notes: obj.condition_notes ? String(obj.condition_notes).substring(0, 1000) : undefined,
+                tag_title: obj.tag_title || obj.tagTitle || undefined,
+                tier: obj.tier || undefined,
+                why_pay_up: obj.why_pay_up || undefined,
+                why_pass: obj.why_pass || undefined,
+                red_flags: obj.red_flags || undefined,
+                pricing_potential: obj.pricing_potential || undefined,
+                price_breakdown: obj.price_breakdown || undefined,
+                purchase_strategy: obj.purchase_strategy || undefined,
+                auction_meta: obj.auction_meta || undefined,
+                condition_notes: obj.condition_notes ? String(obj.condition_notes).substring(0, 1500) : undefined,
+                comparables: Array.isArray(obj.comparables) ? obj.comparables.slice(0, 10) : undefined,
+                keywords: Array.isArray(obj.keywords) ? obj.keywords : undefined,
+                seller_info: obj.seller_info || undefined,
+                shipping_info: obj.shipping_info || undefined,
+                sellerId: obj.sellerId || obj.seller_info?.seller_id || undefined,
+                sellerName: obj.sellerName || obj.seller_info?.seller_name || undefined,
+                shippingWeight: obj.shippingWeight || obj.seller_info?.shipping_weight || undefined,
+                canCombineShipping: obj.canCombineShipping !== undefined ? obj.canCombineShipping : obj.seller_info?.can_combine_shipping,
+                auctionEndsAt: obj.auctionEndsAt || obj.auction_meta?.end_time || undefined,
+                maxBid: obj.maxBid !== undefined ? obj.maxBid : undefined,
+                currentBid: obj.currentBid !== undefined ? obj.currentBid : undefined,
+                boutiquePrice: obj.boutiquePrice !== undefined ? obj.boutiquePrice : undefined,
+                sourcingLocation: obj.sourcingLocation || obj.source_url || obj.url || undefined,
+                fetched_image: typeof obj.fetched_image === 'string' && obj.fetched_image.length < 500 ? obj.fetched_image : undefined,
+                fetched_images: Array.isArray(obj.fetched_images) ? obj.fetched_images.filter((u: any) => typeof u === 'string' && u.length < 500).slice(0, 10) : undefined,
+                original_scout_analysis: obj.original_scout_analysis || undefined,
                 image: safeImg,
                 market_report: obj.market_report ? {
                     best_platform: obj.market_report.best_platform,
                     sell_through_velocity: obj.market_report.sell_through_velocity,
                     platform_rationale: obj.market_report.platform_rationale,
-                    target_buyer: obj.market_report.target_buyer
+                    target_buyer: obj.market_report.target_buyer,
+                    channels: obj.market_report.channels
                 } : undefined
             };
 
@@ -527,6 +626,9 @@ export function getSafeRawAnalysis(item: any): string | null {
             } else if (Array.isArray(obj.items)) {
                 res.lot_items = obj.items.map(cleanLotItem).filter(Boolean);
             }
+
+            // Remove undefined keys to keep JSON tidy
+            Object.keys(res).forEach(k => res[k] === undefined && delete res[k]);
 
             return res;
         };
@@ -546,7 +648,9 @@ export function getSafeRawAnalysis(item: any): string | null {
             }
             resultStr = JSON.stringify(compacted);
             if (resultStr.length > 60000) {
-                resultStr = resultStr.substring(0, 60000);
+                // Remove comparables to stay under limit if still oversized
+                if (compacted && compacted.comparables) delete compacted.comparables;
+                resultStr = JSON.stringify(compacted);
             }
         }
 
@@ -845,6 +949,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             locationId: extraData.locationId || undefined,
             upc: finalUpc,
             locationSku: extraData.locationSku || undefined,
+            auctionEndsAt: extraData.auctionEndsAt || undefined,
+            maxBid: extraData.maxBid !== undefined && extraData.maxBid !== null ? parseFloat(extraData.maxBid.toString()) || 0 : undefined,
+            currentBid: extraData.currentBid !== undefined && extraData.currentBid !== null ? parseFloat(extraData.currentBid.toString()) || 0 : undefined,
             rawAnalysis: extraData.rawAnalysis !== undefined 
                 ? (extraData.rawAnalysis === '' ? null : getSafeRawAnalysis(extraData.rawAnalysis))
                 : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
@@ -1405,6 +1512,18 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.orderId !== undefined) {
             // No top-level orderId column in standard flow, but save to notes
             updateNoteValue('Order #', updates.orderId ? String(updates.orderId) : '');
+        }
+
+        if (updates.auctionEndsAt !== undefined) {
+            data.auctionEndsAt = (updates.auctionEndsAt === '' || updates.auctionEndsAt === null) ? null : String(updates.auctionEndsAt);
+        }
+
+        if (updates.maxBid !== undefined) {
+            data.maxBid = (updates.maxBid === '' || updates.maxBid === null) ? null : parseFloat(String(updates.maxBid)) || null;
+        }
+
+        if (updates.currentBid !== undefined) {
+            data.currentBid = (updates.currentBid === '' || updates.currentBid === null) ? null : parseFloat(String(updates.currentBid)) || null;
         }
 
         if (updates.tagTitle !== undefined || updates.tag_title !== undefined) {

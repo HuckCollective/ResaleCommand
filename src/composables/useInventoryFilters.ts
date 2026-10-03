@@ -17,6 +17,18 @@ export const getItemImageUrl = (item: any, size: number = 100): string | null =>
     if (!id && Array.isArray(item.images) && item.images.length > 0) {
         id = typeof item.images[0] === 'string' ? item.images[0] : (item.images[0]?.url || item.images[0]?.id);
     }
+    if (!id && (item.fetched_image || (Array.isArray(item.fetched_images) && item.fetched_images.length > 0))) {
+        id = item.fetched_image || item.fetched_images[0];
+    }
+    if (!id && item.rawAnalysis) {
+        try {
+            const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+            const target = Array.isArray(raw) ? raw[0] : (raw.items ? raw.items[0] : raw);
+            if (target?.fetched_image) id = target.fetched_image;
+            else if (target?.fetched_images && target.fetched_images.length > 0) id = target.fetched_images[0];
+            else if (target?.image) id = target.image;
+        } catch (e) {}
+    }
     
     if (!id && item.conditionNotes && typeof item.conditionNotes === 'string') {
         const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
@@ -24,6 +36,9 @@ export const getItemImageUrl = (item: any, size: number = 100): string | null =>
     }
     
     if (!id) return null;
+    if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:') || id.startsWith('blob:'))) {
+        return id;
+    }
     return getAssetUrl(id, { preview: true, width: size, height: size }) || null;
 };
 
