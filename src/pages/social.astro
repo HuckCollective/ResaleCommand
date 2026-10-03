@@ -5,8 +5,8 @@ import SocialHubView from '../components/social/SocialHubView.vue';
 const initialCastId = Astro.url.searchParams.get('cast') || Astro.url.searchParams.get('id') || '';
 ---
 
-<Layout title="Dropcast Hub & Social Studio">
-  <div class="py-4 sm:py-6">
+<Layout title="Dropcast Hub & Social Studio" hideFooter={true}>
+  <div class="pt-3 sm:pt-4 pb-0 min-h-full">
     <SocialHubView client:only="vue" initialCastId={initialCastId} />
   </div>
 </Layout>

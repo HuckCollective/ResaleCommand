@@ -189,38 +189,95 @@ export async function convertAssetToBase64(
 
 
 /**
- * Resolves all available image URLs for an item across its main image and gallery references.
+ * Universal, global image resolver for any inventory item, purchase item, manifest item, or dropcast item.
+ * Searches all canonical and legacy fields (imageId, imageUrl, imageURL, images, photos, photo, photoUrl,
+ * conditionNotes regex, customPhotoDataUrl, etc.) to guarantee that photos are never lost or ignored.
  */
 export function resolveItemImageUrls(item: any, additionalSources: (string | null | undefined)[] = []): string[] {
     const urls = new Set<string>();
     
-    if (additionalSources && additionalSources.length > 0) {
-        additionalSources.forEach(s => {
-            const u = getAssetUrl(s);
+    const addUrl = (val: any) => {
+        if (!val) return;
+        if (typeof val === 'string') {
+            const trimmed = val.trim();
+            if (!trimmed) return;
+            // Check if string is a JSON array
+            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach(addUrl);
+                        return;
+                    }
+                } catch {}
+            }
+            const u = getAssetUrl(trimmed);
             if (u) urls.add(u);
-        });
+        } else if (typeof val === 'object') {
+            if (val.url) addUrl(val.url);
+            else if (val.imageURL) addUrl(val.imageURL);
+            else if (val.imageUrl) addUrl(val.imageUrl);
+            else if (val.id) addUrl(val.id);
+            else if (val.$id) addUrl(val.$id);
+        }
+    };
+
+    if (additionalSources && additionalSources.length > 0) {
+        additionalSources.forEach(addUrl);
     }
 
-    if (item) {
-        if (item.imageId) {
-            const u = getAssetUrl(item.imageId);
-            if (u) urls.add(u);
+    if (!item) return Array.from(urls);
+
+    // If item itself is a string (e.g. imageId or URL)
+    if (typeof item === 'string') {
+        addUrl(item);
+        return Array.from(urls);
+    }
+
+    // 1. Direct custom/enhanced photo data URLs
+    if (item.customPhotoDataUrl) addUrl(item.customPhotoDataUrl);
+
+    // 2. Primary image fields
+    if (item.imageId) addUrl(item.imageId);
+    if (item.imageUrl) addUrl(item.imageUrl);
+    if (item.imageURL) addUrl(item.imageURL);
+    if (item.imagePreview) addUrl(item.imagePreview);
+    if (item.image) addUrl(item.image);
+    if (item.photo) addUrl(item.photo);
+    if (item.photoUrl) addUrl(item.photoUrl);
+    if (item.primaryPhoto) addUrl(item.primaryPhoto);
+    if (item.heroImage) addUrl(item.heroImage);
+    if (item.thumbnail) addUrl(item.thumbnail);
+    if (item.url && typeof item.url === 'string' && /\.(jpg|jpeg|png|webp|gif|avif)/i.test(item.url)) {
+        addUrl(item.url);
+    }
+
+    // 3. Gallery image ID arrays
+    if (Array.isArray(item.galleryImageIds)) item.galleryImageIds.forEach(addUrl);
+    if (Array.isArray(item.existingGalleryIds)) item.existingGalleryIds.forEach(addUrl);
+
+    // 4. Object/String Arrays (images, photos, gallery)
+    if (Array.isArray(item.images)) item.images.forEach(addUrl);
+    if (Array.isArray(item.photos)) item.photos.forEach(addUrl);
+    if (Array.isArray(item.gallery)) item.gallery.forEach(addUrl);
+
+    // 5. Nested objects (manifestItem, purchase, etc.)
+    if (item.manifestItem) {
+        if (item.manifestItem.imageUrl) addUrl(item.manifestItem.imageUrl);
+        if (item.manifestItem.imageURL) addUrl(item.manifestItem.imageURL);
+        if (item.manifestItem.imageId) addUrl(item.manifestItem.imageId);
+    }
+
+    // 6. Embedded image tags in conditionNotes or notes
+    const notes = typeof item.conditionNotes === 'string' ? item.conditionNotes : (typeof item.notes === 'string' ? item.notes : '');
+    if (notes) {
+        const matchMain = notes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/i);
+        if (matchMain && matchMain[1]) {
+            matchMain[1].split(',').forEach(s => addUrl(s.trim()));
         }
-        if (Array.isArray(item.galleryImageIds)) {
-            item.galleryImageIds.forEach((id: string) => {
-                const u = getAssetUrl(id);
-                if (u) urls.add(u);
-            });
-        }
-        if (Array.isArray(item.existingGalleryIds)) {
-            item.existingGalleryIds.forEach((id: string) => {
-                const u = getAssetUrl(id);
-                if (u) urls.add(u);
-            });
-        }
-        if (item.imageUrl) {
-            const u = getAssetUrl(item.imageUrl);
-            if (u) urls.add(u);
+        const matchExt = notes.match(/\[EXTERNAL_IMAGE: ([^\]]+)\]/i);
+        if (matchExt && matchExt[1]) {
+            matchExt[1].split(',').forEach(s => addUrl(s.trim()));
         }
     }
 

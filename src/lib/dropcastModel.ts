@@ -23,7 +23,7 @@ export interface Dropcast {
   personaId: string;
   customTonePrompt?: string;
   customNotes?: string;
-  platform: 'instagram' | 'facebook' | 'story';
+  platform: 'instagram' | 'tiktok' | 'facebook' | 'story' | string;
   authorHandle: string;
   includePrices: boolean;
   generatedCaption?: string;
@@ -110,7 +110,7 @@ export const CAST_STATUS_META: Record<CastStatus, { label: string; badgeClass: s
 const STORAGE_KEY = 'resale_command_dropcasts';
 
 // Built-in seed data so user has immediate rich dropcasts to test
-const SEED_DROPCASTS: Dropcast[] = [
+export const SEED_DROPCASTS: Dropcast[] = [
   {
     id: 'cast_md_sep27_restock',
     title: 'Memory Den Autumn Restock — Sep 27 Drop',
@@ -135,7 +135,8 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 65,
         brand: 'Heirloom Brass',
         category: 'Home Decor & Curios',
-        condition: 'Vintage Excellent'
+        condition: 'Vintage Excellent',
+        imageUrl: 'https://images.unsplash.com/photo-1618220179428-22790b461013?w=1080&auto=format&fit=crop&q=80'
       },
       {
         id: 'item_md_2',
@@ -144,7 +145,8 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 125,
         brand: 'Midnight Velvet',
         category: 'Outerwear',
-        condition: 'Mint Vintage'
+        condition: 'Mint Vintage',
+        imageUrl: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=1080&auto=format&fit=crop&q=80'
       },
       {
         id: 'item_md_3',
@@ -153,7 +155,8 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 48,
         brand: 'Antiquarian Press',
         category: 'Books & Ephemera',
-        condition: 'Antique Patina'
+        condition: 'Antique Patina',
+        imageUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1080&auto=format&fit=crop&q=80'
       },
       {
         id: 'item_md_4',
@@ -162,7 +165,8 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 55,
         brand: 'Folk Art Woodcraft',
         category: 'Curiosities',
-        condition: 'Very Good'
+        condition: 'Very Good',
+        imageUrl: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=1080&auto=format&fit=crop&q=80'
       },
       {
         id: 'item_md_5',
@@ -171,15 +175,55 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 52,
         brand: 'Continental Pewter',
         category: 'Curiosities',
-        condition: 'Aged Patina'
+        condition: 'Aged Patina',
+        imageUrl: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?w=1080&auto=format&fit=crop&q=80'
       }
     ],
     slides: [
       {
         id: 'slide_md_1',
-        type: 'booth_display',
-        url: '',
-        title: "Memory Den - Huck's Adventures Booth 42"
+        type: 'item_hero',
+        url: 'https://images.unsplash.com/photo-1618220179428-22790b461013?w=1080&auto=format&fit=crop&q=80',
+        title: 'Victorian Ornate Brass Table Easel Mirror',
+        price: 65,
+        locationName: 'Memory Den',
+        description: 'Ornate Victorian filigree brass mirror for an alcove or curio altar.'
+      },
+      {
+        id: 'slide_md_2',
+        type: 'item_gallery',
+        url: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=1080&auto=format&fit=crop&q=80',
+        title: '90s Whimsigoth Celestial Velvet Duster Coat',
+        price: 125,
+        locationName: 'Memory Den',
+        description: 'Deep midnight velvet duster with celestial star embroidery.'
+      },
+      {
+        id: 'slide_md_3',
+        type: 'item_gallery',
+        url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1080&auto=format&fit=crop&q=80',
+        title: 'Dark Academia Leather-Bound Poetry Anthology (1924)',
+        price: 48,
+        locationName: 'Memory Den',
+        description: 'Gold-embossed spine with original gilded edges from 1924.'
+      },
+      {
+        id: 'slide_md_4',
+        type: 'item_gallery',
+        url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=1080&auto=format&fit=crop&q=80',
+        title: 'Hand-Carved Black Forest Wood Curio Box',
+        price: 55,
+        locationName: 'Memory Den',
+        description: 'Deep relief foliate carvings with original brass clasp.'
+      },
+      {
+        id: 'slide_md_5',
+        type: 'item_gallery',
+        url: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?w=1080&auto=format&fit=crop&q=80',
+        title: 'Heavy Pewter Candlestick Candelabra Pair',
+        price: 52,
+        locationName: 'Memory Den',
+        description: 'Solid continental pewter with natural aged gunmetal patina.'
       }
     ],
     generatedCaption: `🥀 FRESH RESTOCK AT MEMORY DEN (BOOTH 42) 🥀\n\nShadows lengthen and new relics have emerged from the twilight. Five decadent pieces just landed in our curio alcove on SE 2nd Ave:\n\n• 90s Whimsigoth Celestial Velvet Duster Coat — $125\n• Victorian Ornate Brass Table Easel Mirror — $65\n• Heavy Pewter Candlestick Candelabra Pair — $52\n• Dark Academia Leather-Bound Poetry Anthology (1924) — $48\n• Hand-Carved Black Forest Wood Curio Box — $55\n\n📍 Find us at Memory Den Booth 42, Portland, OR.\nDM to claim or visit the booth before twilight takes them.\n\n#vintagerestock #memoryden #portlandvintage #gothicaesthetic #darkacademia #whimsigoth #antiquecurio #secondhandpdx`,
@@ -208,10 +252,21 @@ const SEED_DROPCASTS: Dropcast[] = [
         boutiquePrice: 195,
         brand: 'Touchstone / Disney Originals',
         category: 'Vintage Apparel',
-        condition: 'Archival Grade'
+        condition: 'Archival Grade',
+        imageUrl: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=1080&auto=format&fit=crop&q=80'
       }
     ],
-    slides: [],
+    slides: [
+      {
+        id: 'slide_grail_1',
+        type: 'item_hero',
+        url: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=1080&auto=format&fit=crop&q=80',
+        title: '1993 Tim Burton Nightmare Velvet Reversible Bomber',
+        price: 195,
+        locationName: 'Dusty Tiger',
+        description: 'Authentic 1993 Touchstone original in rich midnight velvet.'
+      }
+    ],
     generatedCaption: `💎 GRAIL SPOTLIGHT // 1993 TOUCHSTONE ORIGINAL 💎\n\nAn authentic museum-grade relic of 90s gothic cinema history: the official 1993 Tim Burton Nightmare Before Christmas reversible velvet bomber.\n\nFeaturing deep midnight velvet, jacquard lining, and original copyright tags. True piece of animation provenance.\n\nTag Price: $195.00\nLocation: Dusty Tiger Booth & Online\n\n#vintagegrail #90svintage #timburton #nightmarebeforechristmas #grailheat #vintagejacket #vintageclothing #resalecommand`,
     hashtags: ['#vintagegrail', '#90svintage', '#timburton', '#grailheat', '#vintageclothing']
   },
@@ -226,7 +281,7 @@ const SEED_DROPCASTS: Dropcast[] = [
     platform: 'instagram',
     authorHandle: 'resalecommand',
     includePrices: true,
-    totalRetailValue: 280.00,
+    totalRetailValue: 195.00,
     createdAt: '2026-09-20T16:00:00.000Z',
     updatedAt: '2026-09-20T18:00:00.000Z',
     publishedAt: '2026-09-20T18:15:00.000Z',
@@ -237,7 +292,8 @@ const SEED_DROPCASTS: Dropcast[] = [
         resalePrice: 120,
         boutiquePrice: 120,
         brand: 'Culver LTD',
-        category: 'Barware'
+        category: 'Barware',
+        imageUrl: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=1080&auto=format&fit=crop&q=80'
       },
       {
         id: 'item_dt_2',
@@ -245,10 +301,30 @@ const SEED_DROPCASTS: Dropcast[] = [
         resalePrice: 75,
         boutiquePrice: 75,
         brand: 'Mid-Century Iron',
-        category: 'Folk Art'
+        category: 'Folk Art',
+        imageUrl: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=1080&auto=format&fit=crop&q=80'
       }
     ],
-    slides: [],
+    slides: [
+      {
+        id: 'slide_dt_1',
+        type: 'item_hero',
+        url: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=1080&auto=format&fit=crop&q=80',
+        title: 'MCM Culver 22k Gold Barware Set (6 Tumblers)',
+        price: 120,
+        locationName: 'Dusty Tiger',
+        description: 'Iconic 22-karat gilded geometric glassware from the 1960s.'
+      },
+      {
+        id: 'slide_dt_2',
+        type: 'item_gallery',
+        url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=1080&auto=format&fit=crop&q=80',
+        title: 'Cast Iron Dachshund Boot Scraper',
+        price: 75,
+        locationName: 'Dusty Tiger',
+        description: 'Heavy solid cast iron folk art dachshund with rustic weathered finish.'
+      }
+    ],
     generatedCaption: `🔥 JUST PLACED AT DUSTY TIGER HAWTHORNE 🔥\nFresh batch of mid-century barware and oddities just hit our shelves! Come grab these before the weekend rush!`,
     hashtags: ['#dustytiger', '#mcmbarware', '#hawthornepdx', '#vintagepdx']
   }
@@ -264,7 +340,43 @@ export function getSavedDropcasts(): Dropcast[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      // Auto-heal seed casts if corrupted or contaminated by other casts
+      let needsResave = false;
+      const healed = parsed.map(c => {
+        const seed = SEED_DROPCASTS.find(s => s.id === c.id);
+        if (seed) {
+          // If Tim Burton cast was contaminated by Cyberpunk items, missing images, or wrong location
+          if (c.id === 'cast_grail_velvet_jacket') {
+            const hasBurton = c.items?.some((i: any) => (i.title || '').toLowerCase().includes('burton'));
+            const isSingle = Array.isArray(c.items) && c.items.length === 1;
+            const hasPhoto = Boolean(c.items?.[0]?.imageUrl || c.items?.[0]?.photo);
+            if (!hasBurton || !isSingle || !hasPhoto || c.locationName !== 'Dusty Tiger') {
+              needsResave = true;
+              return { ...seed };
+            }
+          }
+          // If Memory Den seed cast was emptied or corrupted
+          if (c.id === 'cast_md_sep27_restock') {
+            if (!Array.isArray(c.items) || c.items.length === 0 || !c.items[0]?.imageUrl) {
+              needsResave = true;
+              return { ...seed };
+            }
+          }
+          // If Dusty Tiger barware seed cast was emptied
+          if (c.id === 'cast_dusty_tiger_drop_sep20') {
+            if (!Array.isArray(c.items) || c.items.length === 0) {
+              needsResave = true;
+              return { ...seed };
+            }
+          }
+        }
+        return c;
+      });
+
+      if (needsResave) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(healed));
+      }
+      return healed;
     }
     return SEED_DROPCASTS;
   } catch (err) {

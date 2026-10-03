@@ -559,9 +559,7 @@ OUTPUT STRICT JSON:
         const synthResult = await generateContentWithBackoff({
             contents: [{ role: 'user', parts: contentParts }],
             generationConfig: { 
-                responseMimeType: "application/json",
-                // @ts-ignore
-                thinkingConfig: { thinkingBudget: 0 }
+                responseMimeType: "application/json"
             }
         }, 3, 2000);
 

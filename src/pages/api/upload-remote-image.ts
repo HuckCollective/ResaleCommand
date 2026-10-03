@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request }) => {
         const cleanUrl = url.replace(/\\/g, '/').trim();
 
         // ShopGoodwill block standard Node fetch user-agents and require a referer, so we spoof a standard browser
-        let referer = undefined;
+        let referer: string | undefined = undefined;
         try {
             const u = new URL(cleanUrl);
             referer = u.origin + '/';

@@ -1,15 +1,45 @@
 ---
 name: ux-design-system-taxonomy
-description: Canonical UX terminology, design system taxonomy, and view archetypes (Catalog, Prep & Merchandising, Ledger, Terminal) for Resale Command, synthesizing Nielsen Norman Group (NN/g), Apple Human Interface Guidelines (HIG), and Google Material Design 3 (M3).
+description: Canonical UX/UI patterns, design system taxonomy, reusable UI primitive catalog (BottomActionDock, ItemDrawer, ScannerWidget, PhotoGalleryManager, etc.), and view archetypes for Resale Command. Use this skill whenever designing, building, or refactoring UI components, pages, docks, modals, or trays to identify and reuse existing patterns.
 ---
 
-# Resale Command UX Taxonomy & Design System Architecture
+# Resale Command UX Taxonomy & UI Pattern Architecture
 
-This standard codifies the human-centered design language, interaction patterns, and view archetypes for Resale Command. All AI agents, contributors, and features must adhere to this taxonomy to maintain visual harmony and predictable user interactions across desktop, tablet, and mobile.
+This standard codifies the human-centered design language, interaction patterns, view archetypes, and reusable component catalog for Resale Command. **Before building or refactoring any interface**, consult this catalog to reuse existing pattern primitives rather than inventing one-off UI.
 
 ---
 
-## 1. Canonical UX Terminology vs. Implementation Jargon
+## 1. Canonical UI Pattern Catalog & Opportunity Radar
+
+Whenever you are about to create or modify UI, consult this decision matrix:
+
+| If You Need To... | Reusable UI Pattern Primitive | Implementation / Component | Key Capability |
+| :--- | :--- | :--- | :--- |
+| **Pin action buttons or telemetry** to page, modal, drawer, or tray | **Contextual Command Dock** | [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) | Glassmorphic surface, iOS safe-area, auto-teleport or sticky placement (`placement="viewport"` vs `"container"`). |
+| **Inspect or edit full item details** without leaving the view | **Slide-Over Item Drawer** | [`ItemDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemDrawer.vue) | Standard 400px side panel, photos, pricing, venue sync, Rollo barcode printing. |
+| **Capture photos via live webcam / mobile camera** | **Camera Viewfinder HUD** | [`ScannerWidget.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ScannerWidget.vue) | Zero-blackout WebRTC lifecycle, camera flip, multi-shot gallery buffering. |
+| **Upload, reorder, preview, and delete photos** | **Photo Gallery Manager** | [`PhotoGalleryManager.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PhotoGalleryManager.vue) | Drag-drop upload, thumbnail strip, primary photo selection. |
+| **Display an inventory SKU card in grids or lists** | **Item Card / Thumbnail** | [`ItemCard.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemCard.vue) / [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) | Standard resale badges, status color coding, venue location badge. |
+| **Select single or multiple categories/bins** | **Filter Dropdowns** | [`SingleSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SingleSelectDropdown.vue) / [`MultiSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/MultiSelectDropdown.vue) | DaisyUI dropdown shell, search filter inside dropdown, keyboard accessible. |
+| **Add and remove tags or keywords** | **Tag Input Pill Group** | [`TagInput.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/TagInput.vue) | Chip tags with auto-suggest, Enter/Comma creation, delete chip buttons. |
+| **Paginate through large database tables** | **Pagination Dock** | [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) | Numeric jump pill, First/Prev/Next/Last controls, rows-per-page selector. |
+| **Slide up deep filters or batch operations** | **Interactive Bottom Sheet / Detent Tray** | [`DropcastStagingTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/social/DropcastStagingTray.vue) pattern | Rounded-t-3xl card, drag pill, sticky header tabs, sticky dock footer. |
+| **Full-bleed visual editing or media previews** | **Fullscreen Studio Workspace** | `SlideImageEditorModal.vue` pattern | Header filmstrip toolbar, centered preview canvas, sticky `BottomActionDock`. |
+
+### ⚠️ Opportunity Radar (Code Smell Detection):
+Watch out for these red flags in existing or new code, and refactor them to use the catalog:
+1. **Red Flag: Writing `fixed bottom-0 inset-x-0` manually**
+   👉 *Refactor To*: `<BottomActionDock placement="viewport">`.
+2. **Red Flag: Writing an action button bar at the bottom of a modal or drawer**
+   👉 *Refactor To*: `<BottomActionDock placement="container">`.
+3. **Red Flag: Writing a `<video ref="...">` camera loop**
+   👉 *Refactor To*: `<ScannerWidget>`.
+4. **Red Flag: Astro page with a dock showing a footer gap**
+   👉 *Fix*: Add `hideFooter={true}` to `<Layout>` and `pb-36 sm:pb-44` to the content container.
+
+---
+
+## 2. Canonical UX Terminology vs. Implementation Jargon
 
 To ensure design-led, maintainable systems, use formal UX/HCI terms rather than raw implementation language:
 
@@ -86,7 +116,22 @@ Tapping any tab triggers a smooth upward expansion:
 - **Drag Handle**: Centered pill affordance (`w-12 h-1.5 rounded-full bg-base-content/25`).
 - **Sticky Tab Bar (Top)**: Pinned at top of sheet with tabs and `[ ✕ ]` close button.
 - **Spacious Content Body**: Full-width inputs ($\ge 44\text{px}$ touch targets), zero horizontal clipping on 375px–412px viewports.
-- **Sticky Action Footer (Bottom)**: Primary affirmative CTA (`Show N Items` / `Apply Location`) permanently pinned in thumb reach.
+### C. Reusable Implementation Primitive: `BottomActionDock.vue`
+To ensure all pages implement this pattern identically with zero layout collisions or ancestor overflow traps:
+- **Canonical Component**: [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) (`src/components/common/BottomActionDock.vue`)
+- **Built-in Capabilities**:
+  1. **Direct Root Teleportation**: Wraps in `<Teleport to="body">` (immune to nested page margins, transforms, or overflow constraints).
+  2. **Canonical Styling**: `fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]`.
+  3. **Safe-Area Inset Handling**: Automatically incorporates iOS home-indicator clearances via `env(safe-area-inset-bottom)`.
+  4. **Semantic Slot Contract**:
+     - `#top`: Optional slim telemetry or status bar (e.g. Manifest status, active Buy tracker, or bulk selection counter).
+     - `#left`: View telemetry, icon, title, item counts, or retail values.
+     - `#center`: Optional paginator pill or segmented view switcher.
+     - `#right`: Action buttons dock (CPA, AI tools, export, save) with horizontal scroll protection.
+     - `#default`: Unconstrained custom layout when custom row structures are needed.
+- **Page Layout Invariant**: Any Astro page using a bottom action dock MUST:
+  1. Pass `hideFooter={true}` to `<Layout>` so the static footer does not render.
+  2. Add bottom padding clearance to its content container (`pb-36 sm:pb-44`) so scrolled items are never obscured.
 
 ---
 

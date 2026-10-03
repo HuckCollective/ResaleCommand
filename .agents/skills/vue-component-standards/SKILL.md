@@ -117,11 +117,37 @@ When `isCameraOpen.value = true` is set, Vue's DOM update is **asynchronous**. A
 
 ---
 
-## 3. Component Auditing Checklist
+## 3. UI Pattern Primitive Extraction & Anti-Duplication Rule
+
+### The "Rule of Two" (Extract on 2nd Occurrence):
+Whenever you encounter recurring UI patterns or structural containers (e.g. bottom action docks, detent bottom sheets, slide-over item drawers, full-screen studio workspaces, badge clusters):
+- **NEVER copy-paste inline markup** across multiple views or pages.
+- **NEVER treat patterns as view-specific** (e.g. "inventory-only dock" or "scout-only tray"). If the interaction archetype exists in more than 1 place, extract it into a pure UI primitive in `src/components/common/`.
+
+### Architectural Requirements for Pattern Primitives:
+1. **Decouple Shell Mechanics from Business Domain**:
+   - The primitive handles viewport anchoring, `<Teleport>`, responsive media queries, backdrop blur, border tokens, and transition physics.
+   - Use semantic Vue slots (`#top`, `#left`, `#center`, `#right`, `#default`) so any view (Inventory, Sales, Social, Scout, Purchases) can project its own domain state without polluting the primitive.
+2. **Built-in Root Teleportation**:
+   - Fixed floating elements (like [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) or full-screen dialogs) MUST encapsulate `<Teleport to="body">` by default.
+   - This guarantees immunity against ancestor layout constraints, flex wrappers, nested scroll contexts, CSS `transform` / `filter` containing block resets, and margin collapse.
+3. **Hardware-Level Mobile Clearances**:
+   - Primitives positioned along viewport edges MUST automatically include `env(safe-area-inset-bottom)` or `env(safe-area-inset-top)` so hardware indicators (e.g. iPhone home bar) never collide with action targets.
+4. **Establish & Enforce Page-Level Layout Contracts**:
+   - If a page consumes a fixed bottom dock primitive:
+     - The Astro page layout MUST pass `hideFooter={true}` to `<Layout>` to prevent footer collisions and double-scrollbars.
+     - The page's scrollable container MUST provide bottom clearance padding (`pb-36 sm:pb-44`) so the bottom-most list items can scroll completely above the dock.
+
+---
+
+## 4. Component Auditing Checklist
 
 Before marking any Vue component task complete, verify:
+- [ ] **Primitive Reusability**: Did you identify any recurring UI patterns that should be extracted to `src/components/common/` rather than hardcoded inline?
+- [ ] **Dock Page Contract**: If using a bottom dock, does the `.astro` page pass `hideFooter={true}` and does the container have `pb-36 sm:pb-44` clearance?
 - [ ] Every prop passed in `<ChildComponent :prop="val" />` exists in the child's `defineProps`.
 - [ ] Every event listened to in `<ChildComponent @event="fn" />` exists in the child's `defineEmits`.
 - [ ] No `[Vue warn]` messages appear in the browser console when opening/closing or interacting with the component.
 - [ ] Camera/viewfinder components avoid `v-if` on `<video>` refs, include `autoplay playsinline muted`, and clear `srcObject = null` on close.
 - [ ] Responsive design obeys `mobile-ux-standards` (touch targets >= 44px, no horizontal overflows).
+

@@ -3,18 +3,31 @@ export const prerender = false;
 
 import type { APIRoute } from 'astro';
 
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': '*'
+};
+
+export const OPTIONS: APIRoute = async () => {
+    return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS
+    });
+};
+
 export const GET: APIRoute = async ({ request, url }) => {
     const imageUrl = url.searchParams.get('url');
 
     if (!imageUrl) {
-        return new Response('Missing URL', { status: 400 });
+        return new Response('Missing URL', { status: 400, headers: CORS_HEADERS });
     }
 
     // Sanitize any broken shopgoodwill backslashes
     const cleanUrl = imageUrl.replace(/\\/g, '/').trim();
 
     try {
-        let referer = undefined;
+        let referer: string | undefined = undefined;
         try {
             const u = new URL(cleanUrl);
             referer = u.origin + '/';
@@ -52,7 +65,7 @@ export const GET: APIRoute = async ({ request, url }) => {
         }
 
         if (!response.ok) {
-            return new Response('Failed to fetch image', { status: response.status });
+            return new Response('Failed to fetch image', { status: response.status, headers: CORS_HEADERS });
         }
 
         const blob = await response.blob();
@@ -61,12 +74,13 @@ export const GET: APIRoute = async ({ request, url }) => {
         return new Response(blob, {
             status: 200,
             headers: {
+                ...CORS_HEADERS,
                 'Content-Type': contentType,
                 'Cache-Control': 'public, max-age=3600'
             }
         });
 
     } catch (error) {
-        return new Response('Proxy Error', { status: 500 });
+        return new Response('Proxy Error', { status: 500, headers: CORS_HEADERS });
     }
 };

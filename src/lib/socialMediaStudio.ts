@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { getAssetUrl } from './inventory';
+import { getAssetUrl, resolveItemImageUrls } from './inventory';
 
 export interface SocialStudioItem {
     id?: string;
@@ -14,8 +14,13 @@ export interface SocialStudioItem {
     category?: string;
     condition?: string;
     imageId?: string;
+    imageUrl?: string;
+    imageURL?: string;
+    imagePreview?: string;
     galleryImageIds?: string[];
-    images?: (string | { id?: string; url?: string })[];
+    images?: (string | { id?: string; url?: string; imageURL?: string })[];
+    photos?: any[];
+    photo?: string;
     conditionNotes?: string;
     storageLocation?: string;
     customPhotoDataUrl?: string;
@@ -37,52 +42,10 @@ export interface PostMediaSlide {
 }
 
 /**
- * Resolves all available image URLs for an item.
+ * Resolves all available image URLs for an item using the universal resolver.
  */
 export function getItemImageUrls(item: SocialStudioItem): string[] {
-    if (!item) return [];
-    const urls: string[] = [];
-
-    // 1. Primary imageId
-    if (item.imageId) {
-        const u = getAssetUrl(item.imageId, { preview: false });
-        if (u) urls.push(u);
-    }
-
-    // 2. Gallery images
-    if (Array.isArray(item.galleryImageIds)) {
-        for (const gId of item.galleryImageIds) {
-            if (gId && gId !== item.imageId) {
-                const u = getAssetUrl(gId, { preview: false });
-                if (u && !urls.includes(u)) urls.push(u);
-            }
-        }
-    }
-
-    // 3. Array of images
-    if (Array.isArray(item.images)) {
-        for (const img of item.images) {
-            const rawId = typeof img === 'string' ? img : (img?.url || img?.id);
-            if (rawId) {
-                const u = getAssetUrl(rawId, { preview: false });
-                if (u && !urls.includes(u)) urls.push(u);
-            }
-        }
-    }
-
-    // 4. Fallback conditionNotes regex [MAIN IMAGE ID: ...]
-    if (urls.length === 0 && item.conditionNotes && typeof item.conditionNotes === 'string') {
-        const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-        if (match && match[1]) {
-            const ids = match[1].split(',').map(s => s.trim());
-            for (const id of ids) {
-                const u = getAssetUrl(id, { preview: false });
-                if (u && !urls.includes(u)) urls.push(u);
-            }
-        }
-    }
-
-    return urls;
+    return resolveItemImageUrls(item);
 }
 
 /**
@@ -231,11 +194,13 @@ export async function downloadMediaSlidesAsZip(
     slides: PostMediaSlide[],
     options?: {
         zipName?: string;
+        captionText?: string;
+        manifestData?: any;
         onProgress?: (percent: number, statusMsg: string) => void;
     }
 ): Promise<{ success: number; failed: number }> {
     const zip = new JSZip();
-    const zipName = options?.zipName || `Drop_Post_Reel_${new Date().toISOString().slice(0, 10)}.zip`;
+    const zipName = options?.zipName || `Cast_Pack_${new Date().toISOString().slice(0, 10)}.zip`;
     const onProgress = options?.onProgress || (() => {});
 
     let success = 0;
@@ -280,6 +245,13 @@ export async function downloadMediaSlidesAsZip(
             console.warn(`[SocialMediaStudio] Failed to package slide ${i + 1}:`, err);
             failed++;
         }
+    }
+
+    if (options?.captionText) {
+        zip.file('post_caption.txt', options.captionText);
+    }
+    if (options?.manifestData) {
+        zip.file('cast_manifest.json', JSON.stringify(options.manifestData, null, 2));
     }
 
     onProgress(85, 'Packaging ZIP archive...');

@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref } from 'vue';
 import type { Models } from 'appwrite';
-import { getAssetUrl } from '../lib/inventory';
+import { getAssetUrl, resolveItemImageUrls } from '../lib/inventory';
 import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 
@@ -10,21 +10,8 @@ export type { SortDirection, FilterChip };
 // -- 0. IMAGE RESOLUTION HELPER (Universal getAssetUrl standard) --
 export const getItemImageUrl = (item: any, size: number = 100): string | null => {
     if (!item) return null;
-    let id = item.imageId;
-    if (!id && Array.isArray(item.galleryImageIds) && item.galleryImageIds.length > 0) {
-        id = item.galleryImageIds[0];
-    }
-    if (!id && Array.isArray(item.images) && item.images.length > 0) {
-        id = typeof item.images[0] === 'string' ? item.images[0] : (item.images[0]?.url || item.images[0]?.id);
-    }
-    
-    if (!id && item.conditionNotes && typeof item.conditionNotes === 'string') {
-        const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-        if (match && match[1]) id = match[1].split(',')[0].trim();
-    }
-    
-    if (!id) return null;
-    return getAssetUrl(id, { preview: true, width: size, height: size }) || null;
+    const urls = resolveItemImageUrls(item);
+    return urls.length > 0 ? urls[0] : null;
 };
 
 /**

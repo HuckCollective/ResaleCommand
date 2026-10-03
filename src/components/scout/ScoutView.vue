@@ -430,11 +430,34 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
                         <!-- Cost Basis Input -->
                         <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
-                            <label class="label pt-0 pb-1">
+                            <label class="label pt-0 pb-1 flex justify-between items-center">
                                 <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
                                     <Icon icon="solar:wallet-money-bold" class="w-4 h-4 text-warning" />
                                     Cost Basis ($)
                                 </span>
+                                <!-- Quick chips: Max Cost / Opening Bid -->
+                                <div class="flex items-center gap-1" v-if="item.purchase_strategy">
+                                    <button 
+                                        type="button" 
+                                        v-if="item.purchase_strategy.max_landed_cost" 
+                                        @click="cost = String(parsePrice(item.purchase_strategy.max_landed_cost).toFixed(2))"
+                                        class="badge badge-xs cursor-pointer font-bold transition-all"
+                                        :class="parsePrice(cost) === parsePrice(item.purchase_strategy.max_landed_cost) ? 'badge-primary text-primary-content' : 'badge-ghost opacity-70 hover:opacity-100'"
+                                        title="Set to Max Landed Cost (Conservative ROI)"
+                                    >
+                                        Max: ${{ parsePrice(item.purchase_strategy.max_landed_cost) }}
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        v-if="item.purchase_strategy.current_asking_price" 
+                                        @click="cost = String(parsePrice(item.purchase_strategy.current_asking_price).toFixed(2))"
+                                        class="badge badge-xs cursor-pointer font-bold transition-all"
+                                        :class="parsePrice(cost) === parsePrice(item.purchase_strategy.current_asking_price) ? 'badge-neutral text-neutral-content' : 'badge-ghost opacity-70 hover:opacity-100'"
+                                        title="Set to Opening Bid (Best Case)"
+                                    >
+                                        Bid: ${{ parsePrice(item.purchase_strategy.current_asking_price) }}
+                                    </button>
+                                </div>
                             </label>
                             <div class="join w-full shadow-xs">
                                 <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
@@ -1249,7 +1272,7 @@ const isAcquired = ref(false);
 const sourcingLocation = ref('');
 const storageLocation = ref('');
 const zipCode = ref('');
-const includeShippingInCost = ref(false);
+const includeShippingInCost = ref(true);
 const images = ref<{ url: string; file?: File }[]>([]);
 const mainPhotoSelection = ref<{ type: 'existing' | 'new' | 'none'; val: any }>({ type: 'none', val: null });
 const receiptFile = ref<File | null>(null);
@@ -1354,13 +1377,19 @@ const analyzeButtonText = computed(() => {
 const handleAnalyze = () => {
     const rawUrl = scoutUrl.value ? scoutUrl.value.trim() : '';
     const hasNotes = !!(userNotes.value && userNotes.value.trim());
-    const hasImages = images.value.length > 0 || !!result.value?.items?.[0]?.fetched_image;
+    const hasLocalImages = images.value.length > 0;
+    const hasFetchedImage = !!result.value?.items?.[0]?.fetched_image;
+    const hasSourcingUrl = !!(sourcingLocation.value && sourcingLocation.value.trim().startsWith('http'));
 
     if (rawUrl && rawUrl.startsWith('http')) {
         analyzeListing();
-    } else if (hasImages || hasNotes) {
+    } else if (hasSourcingUrl && !hasLocalImages) {
+        // If re-identifying an online listing and no new local camera photos were added, re-run with listing URL metadata
+        scoutUrl.value = sourcingLocation.value.trim();
+        analyzeListing();
+    } else if (hasLocalImages || hasFetchedImage || hasNotes) {
         analyzeImage();
-    } else if (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http')) {
+    } else if (hasSourcingUrl) {
         scoutUrl.value = sourcingLocation.value.trim();
         analyzeListing();
     } else {
@@ -1455,8 +1484,18 @@ watch([includeShippingInCost, result], () => {
     const item = result.value.items[0];
     const askingPrice = parsePrice(item.purchase_strategy?.current_asking_price) || 0;
     const shippingTotal = item.shipping_info?.total || 0;
-    
-    if (includeShippingInCost.value) {
+    const maxLanded = item.purchase_strategy?.max_landed_cost ? parsePrice(item.purchase_strategy.max_landed_cost) : 0;
+    const maxBid = item.purchase_strategy?.max_bid ? parsePrice(item.purchase_strategy.max_bid) : 0;
+
+    // As a reseller evaluating prospective purchases/auctions, cost basis should default
+    // to Max Landed Cost (or Max Bid if shipping excluded) to ensure realistic worst-case ROI calculations
+    if (maxLanded > 0) {
+        if (includeShippingInCost.value) {
+            cost.value = maxLanded.toFixed(2);
+        } else {
+            cost.value = (maxBid > 0 ? maxBid : Math.max(0, maxLanded - shippingTotal)).toFixed(2);
+        }
+    } else if (includeShippingInCost.value) {
         cost.value = (askingPrice + shippingTotal).toFixed(2);
     } else {
         cost.value = askingPrice > 0 ? askingPrice.toFixed(2) : '';
@@ -1774,10 +1813,14 @@ async function analyzeImage() {
             }
         }
 
+        const combinedNotes = (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') && !userNotes.value.includes(sourcingLocation.value.trim()))
+            ? `${sourcingLocation.value.trim()}\n\n${userNotes.value}`
+            : userNotes.value;
+
         const payload = JSON.stringify({ 
             images: base64Images,
             remoteImageUrls,
-            notes: userNotes.value,
+            notes: combinedNotes,
             zipCode: zipCode.value,
             locations: availableWarehouses.value
         });
@@ -2106,10 +2149,15 @@ const urlToFile = async (url: string, filename: string): Promise<File | null> =>
              finalName = `${finalName}.${ext}`;
         }
         
-        // Check if this is a ShopGoodwill image to crop the watermark at the bottom
-        const isSgw = url.includes('shopgoodwill');
+        // Check if this is an auction / ShopGoodwill image to crop the watermark banners at top & bottom
+        const lowerUrl = (url || '').toLowerCase();
+        const isSgw = lowerUrl.includes('shopgoodwill') || 
+                      lowerUrl.includes('azureedge') || 
+                      lowerUrl.includes('goodwill') || 
+                      lowerUrl.includes('sgw') || 
+                      (sourcingLocation.value && sourcingLocation.value.toLowerCase().includes('goodwill'));
         if (isSgw) {
-            console.log('[ImageProcessor] ShopGoodwill image detected. Cropping watermark...', url);
+            console.log('[ImageProcessor] Auction/Goodwill image detected. Cropping watermarks...', url);
             const img = new Image();
             const objectUrl = URL.createObjectURL(blob);
             
@@ -2122,9 +2170,9 @@ const urlToFile = async (url: string, filename: string): Promise<File | null> =>
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Crop top ~5% and bottom ~9% of the image height to remove watermarks cleanly
-            const cropTop = Math.round(img.height * 0.05);
-            const cropBottom = Math.round(img.height * 0.09);
+            // Cleanly crop top ~7% ("Property of Goodwill") and bottom ~11% ("ShopGoodwill.com") banners
+            const cropTop = Math.round(img.height * 0.07);
+            const cropBottom = Math.round(img.height * 0.11);
             const targetWidth = img.width;
             const targetHeight = img.height - cropTop - cropBottom;
             

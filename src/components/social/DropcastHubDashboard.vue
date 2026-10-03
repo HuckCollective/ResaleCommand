@@ -300,7 +300,12 @@
               <li class="menu-title text-[9px] uppercase font-bold opacity-50 px-2">Change Status</li>
               <li>
                 <a @click="setStatus(cast.id, 'draft')" :class="{'active font-bold': cast.status === 'draft'}">
-                  🟡 Draft (Started)
+                  🟡 Draft (Active)
+                </a>
+              </li>
+              <li>
+                <a @click="setStatus(cast.id, 'paused')" :class="{'active font-bold': cast.status === 'paused'}">
+                  ⏸️ Paused
                 </a>
               </li>
               <li>
@@ -421,6 +426,7 @@ import { useDropcasts } from '../../composables/useDropcasts';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { type Dropcast } from '../../lib/dropcastModel';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';
+import { resolveItemImageUrls } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
 
 const {
@@ -448,10 +454,7 @@ const emit = defineEmits<{
 
 function resolveItemPhoto(item: any): string | null {
   if (!item) return null;
-  if (item.customPhotoDataUrl) return item.customPhotoDataUrl;
-  const invUrl = getItemImageUrl(item, 100);
-  if (invUrl) return invUrl;
-  const urls = getItemImageUrls(item);
+  const urls = resolveItemImageUrls(item);
   return urls.length > 0 ? urls[0] : null;
 }
 

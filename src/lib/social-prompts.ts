@@ -29,6 +29,9 @@ export interface SocialPostItemInput {
     upc?: string;
     condition?: string;
     conditionNotes?: string;
+    historicalNotes?: string;
+    provenance?: string;
+    storageLocation?: string;
 }
 
 export interface SocialPostOptions {
@@ -74,6 +77,22 @@ export const SOCIAL_PERSONAS: SocialPersona[] = [
             '📖 Marginalia scrawled in sepia ink, cracked spine leather, and artifacts rescued from long-shuttered campus collections.'
         ],
         cta: (author, location) => `📜 Uncover them in person at ${location}.\n💬 Inquire via DM (@${author}) for private viewings or holds.`
+    },
+    {
+        id: 'spike_spegel',
+        label: 'Spike Spiegel (Neo Bebop)',
+        emoji: '🚬',
+        prompt: 'Spike Spiegel (Cowboy Bebop Neo Bounty Hunter) — detached, philosophical, smoky neon noir, space cowboy cool, jazz & blues melancholy. Cynical yet charismatic bounty hunter evaluating futuristic relics, tactical gear, and cyberpunk grails.',
+        directives: 'Channel the voice of Spike Spiegel from Cowboy Bebop: effortlessly cool, lazy swagger, philosophical, laconic, existential noir. Speak like a bounty hunter who has seen it all across the syndicate underworld. The items are fugitive grails, cold tactical steel, forgotten relics from a neon future, or pieces with a past. Use short, punchy sentences, dry wit, and world-weary charm. Signature energy: "Whatever happens, happens", "You\'re gonna carry that weight", "Just watching a dream I couldn\'t wake up from", "Bang." Avoid cheesy corporate sales talk—Spike doesn\'t hustle, he just puts the bounty on the table.',
+        hooks: [
+            '🚬 "Whatever happens, happens." Found this tactical piece floating in the neon smog. If you want it, claim it before it drifts away.',
+            '⚡ Just another bounty from the syndicate streets. Cold visor, zero regrets. Bang.',
+            '🎷 "I\'m not running. I\'m just watching a dream I couldn\'t wake up from." Unboxed this futuristic relic from the outer rim.',
+            '🌌 You\'re gonna carry that weight. Rare cyber-tactical grail secured from the neon underworld.',
+            '🚬 You want advice? Don\'t look back. Look at the gear. Rare tactical headwear waiting at the hideout.',
+            '⚡ "Hungry? Forget it. Check the bounty board instead." Fresh cyberpunk grail just tagged and shelved.'
+        ],
+        cta: (author, location) => `🚬 Find it docked at ${location} before the Syndicate moves in.\n💬 Transmit a line to @${author}. Bang.`
     },
     {
         id: 'cyberpunk',
@@ -130,6 +149,9 @@ export function resolvePersona(toneOrId?: string): SocialPersona {
     if (byId) return byId;
 
     // Fuzzy match keywords
+    if (raw.includes('spike') || raw.includes('spegel') || raw.includes('spiegel') || raw.includes('bebop') || raw.includes('bounty') || raw.includes('neo')) {
+        return SOCIAL_PERSONAS.find(p => p.id === 'spike_spegel') || SOCIAL_PERSONAS[0];
+    }
     if (raw.includes('lestat') || raw.includes('vampire') || raw.includes('goth')) {
         return SOCIAL_PERSONAS[0];
     }
@@ -137,13 +159,13 @@ export function resolvePersona(toneOrId?: string): SocialPersona {
         return SOCIAL_PERSONAS[1];
     }
     if (raw.includes('cyber') || raw.includes('tech') || raw.includes('y2k') || raw.includes('synth')) {
-        return SOCIAL_PERSONAS[2];
+        return SOCIAL_PERSONAS.find(p => p.id === 'cyberpunk') || SOCIAL_PERSONAS[2];
     }
     if (raw.includes('scandi') || raw.includes('curio') || raw.includes('minimal') || raw.includes('vintage') || raw.includes('heirloom')) {
-        return SOCIAL_PERSONAS[3];
+        return SOCIAL_PERSONAS.find(p => p.id === 'scandi') || SOCIAL_PERSONAS[3];
     }
     if (raw.includes('hype') || raw.includes('grail') || raw.includes('street')) {
-        return SOCIAL_PERSONAS[4];
+        return SOCIAL_PERSONAS.find(p => p.id === 'hype_drop') || SOCIAL_PERSONAS[4];
     }
 
     return SOCIAL_PERSONAS[0];
@@ -164,7 +186,7 @@ export function buildSocialPostPrompt(options: SocialPostOptions): string {
         platform = 'instagram',
         tone,
         customTone,
-        includePrices = true,
+        includePrices = false,
         customNotes,
         hasLocationPhotos,
         hasMeasurements
@@ -177,7 +199,10 @@ export function buildSocialPostPrompt(options: SocialPostOptions): string {
         const priceStr = it.resalePrice ? ` - $${Number(it.resalePrice).toFixed(2)}` : '';
         const brandStr = it.brand ? ` [Brand: ${it.brand}]` : '';
         const condStr = it.condition ? ` (Condition: ${it.condition})` : '';
-        return `${idx + 1}. ${it.title}${priceStr}${brandStr}${condStr}`;
+        const notesStr = it.historicalNotes ? ` | Notes: ${it.historicalNotes}` : '';
+        const provStr = it.provenance ? ` | Provenance: ${it.provenance}` : '';
+        const locStr = it.storageLocation ? ` | Shelf/Location: ${it.storageLocation}` : '';
+        return `${idx + 1}. ${it.title}${priceStr}${brandStr}${condStr}${notesStr}${provStr}${locStr}`;
     }).join('\n');
 
     return `You are a master literary copywriter and atmospheric storyteller for @${authorHandle}, a curated collector, vintage archivist, and antique dealer with an in-person booth inside "${locationName}".
@@ -227,7 +252,7 @@ export function generateDynamicFallbackPost(options: SocialPostOptions): string 
         authorHandle = 'resalecommand',
         platform = 'instagram',
         tone,
-        includePrices = true,
+        includePrices = false,
         customNotes,
         hasLocationPhotos,
         hasMeasurements

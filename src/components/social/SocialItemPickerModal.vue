@@ -195,6 +195,7 @@ import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';
+import { resolveItemImageUrls } from '../../lib/inventory';
 
 const props = withDefaults(defineProps<{
   isOpen: boolean;
@@ -313,14 +314,25 @@ function confirmAddItems() {
   const idSet = new Set(selectedIds.value);
   const itemsToAdd: SocialStudioItem[] = inventoryItems.value
     .filter(it => idSet.has(it.$id))
-    .map(it => ({
-      ...it,
-      title: it.title || 'Item ' + it.$id,
-      resalePrice: it.boutiquePrice || it.resalePrice || it.price || 0,
-      boutiquePrice: it.boutiquePrice || it.resalePrice || it.price || 0,
-      upc: it.upc,
-      imageId: it.imageId || (Array.isArray(it.images) && it.images[0])
-    }));
+    .map(it => {
+      const allUrls = resolveItemImageUrls(it);
+      return {
+        ...it,
+        id: it.$id || it.id,
+        $id: it.$id || it.id,
+        title: it.title || 'Item ' + (it.$id || it.id),
+        resalePrice: it.boutiquePrice || it.resalePrice || it.price || 0,
+        boutiquePrice: it.boutiquePrice || it.resalePrice || it.price || 0,
+        upc: it.upc,
+        imageId: it.imageId || (typeof it.images?.[0] === 'string' ? it.images[0] : it.images?.[0]?.id) || undefined,
+        imageUrl: it.imageUrl || it.imageURL || (allUrls.length > 0 ? allUrls[0] : undefined),
+        galleryImageIds: Array.isArray(it.galleryImageIds) ? it.galleryImageIds : undefined,
+        images: it.images,
+        photos: it.photos,
+        conditionNotes: it.conditionNotes,
+        storageLocation: it.storageLocation
+      };
+    });
 
   emit('add-items', itemsToAdd);
   handleClose();
