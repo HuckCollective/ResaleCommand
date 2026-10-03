@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref } from 'vue';
 import type { Models } from 'appwrite';
-import { getAssetUrl } from '../lib/inventory';
+import { getAssetUrl, resolveItemImageUrls } from '../lib/inventory';
 import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 
@@ -10,36 +10,30 @@ export type { SortDirection, FilterChip };
 // -- 0. IMAGE RESOLUTION HELPER (Universal getAssetUrl standard) --
 export const getItemImageUrl = (item: any, size: number = 100): string | null => {
     if (!item) return null;
-    let id = item.imageId;
-    if (!id && Array.isArray(item.galleryImageIds) && item.galleryImageIds.length > 0) {
-        id = item.galleryImageIds[0];
+    const urls = resolveItemImageUrls(item);
+    if (urls.length > 0) return urls[0];
+
+    // Fallback checks for auction tracker items / raw analysis
+    if (item.fetched_image || (Array.isArray(item.fetched_images) && item.fetched_images.length > 0)) {
+        const id = item.fetched_image || item.fetched_images[0];
+        return getAssetUrl(id, { preview: true, width: size, height: size });
     }
-    if (!id && Array.isArray(item.images) && item.images.length > 0) {
-        id = typeof item.images[0] === 'string' ? item.images[0] : (item.images[0]?.url || item.images[0]?.id);
-    }
-    if (!id && (item.fetched_image || (Array.isArray(item.fetched_images) && item.fetched_images.length > 0))) {
-        id = item.fetched_image || item.fetched_images[0];
-    }
-    if (!id && item.rawAnalysis) {
+    if (item.rawAnalysis) {
         try {
             const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
             const target = Array.isArray(raw) ? raw[0] : (raw.items ? raw.items[0] : raw);
-            if (target?.fetched_image) id = target.fetched_image;
-            else if (target?.fetched_images && target.fetched_images.length > 0) id = target.fetched_images[0];
-            else if (target?.image) id = target.image;
+            const id = target?.fetched_image || target?.fetched_images?.[0] || target?.image;
+            if (id) return getAssetUrl(id, { preview: true, width: size, height: size });
         } catch (e) {}
     }
-    
-    if (!id && item.conditionNotes && typeof item.conditionNotes === 'string') {
+    if (item.conditionNotes && typeof item.conditionNotes === 'string') {
         const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
-        if (match && match[1]) id = match[1].split(',')[0].trim();
+        if (match && match[1]) {
+            const id = match[1].split(',')[0].trim();
+            return getAssetUrl(id, { preview: true, width: size, height: size });
+        }
     }
-    
-    if (!id) return null;
-    if (typeof id === 'string' && (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('data:') || id.startsWith('blob:'))) {
-        return id;
-    }
-    return getAssetUrl(id, { preview: true, width: size, height: size }) || null;
+    return null;
 };
 
 /**

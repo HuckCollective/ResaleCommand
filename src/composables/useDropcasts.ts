@@ -130,15 +130,34 @@ export function useDropcasts() {
   });
 
   function openStudio(cast: Dropcast) {
-    activeCast.value = { ...cast };
+    refresh();
+
+    // 1. Pause previously active cast if it was in draft mode
+    if (activeCast.value && activeCast.value.id !== cast.id && activeCast.value.status === 'draft') {
+      activeCast.value.status = 'paused';
+      saveDropcast(activeCast.value);
+    }
+
+    // 2. Fetch the fresh/healed version of the target cast from list
+    const fresh = dropcastsList.value.find(c => c.id === cast.id) || cast;
+
+    // 3. Make the opened cast active: if it was paused, resume to draft
+    if (fresh.status === 'paused') {
+      fresh.status = 'draft';
+      saveDropcast(fresh);
+    }
+
+    activeCast.value = { ...fresh };
     currentView.value = 'studio';
     isCastTrayOpen.value = false;
 
     if (typeof window !== 'undefined' && window.history?.replaceState) {
       const url = new URL(window.location.href);
-      url.searchParams.set('cast', cast.id);
+      url.searchParams.set('cast', fresh.id);
       window.history.replaceState({}, '', url.toString());
     }
+
+    refresh();
   }
 
   function openStudioById(idOrIndex: string | number): Dropcast | null {
@@ -177,6 +196,10 @@ export function useDropcasts() {
 
   function returnToHub() {
     if (activeCast.value) {
+      // Pause active cast upon leaving studio so inventory browsing does not bleed items into it
+      if (activeCast.value.status === 'draft') {
+        activeCast.value.status = 'paused';
+      }
       saveActiveCast();
     }
     refresh();
@@ -241,10 +264,22 @@ export function useDropcasts() {
   function setStatus(id: string, status: CastStatus) {
     const cast = dropcastsList.value.find(c => c.id === id);
     if (!cast) return;
+
+    // If making this cast active draft, pause any other cast currently in draft
+    if (status === 'draft') {
+      for (const other of dropcastsList.value) {
+        if (other.id !== id && other.status === 'draft') {
+          other.status = 'paused';
+          saveDropcast(other);
+        }
+      }
+      activeCast.value = cast;
+    }
+
     cast.status = status;
     saveDropcast(cast);
     refresh();
-    addToast({ type: 'info', message: `Updated status to ${CAST_STATUS_META[status].label}` });
+    addToast({ type: 'info', message: `Updated status to ${CAST_STATUS_META[status]?.label || status}` });
   }
 
   function setActiveCast(cast: Dropcast) {

@@ -1,11 +1,11 @@
-<template>
+﻿<template>
   <div class="bg-base-100 min-h-full relative flex flex-col">
     
     <!-- ERROR TOAST -->
     <div v-if="error" class="toast toast-top toast-center z-100">
         <div class="alert alert-error shadow-lg">
             <span>{{ error }}</span>
-            <button class="btn btn-xs btn-ghost" @click="error = null">✕</button>
+            <button class="btn btn-xs btn-ghost" @click="error = null">âœ•</button>
         </div>
     </div>
     <!-- SUCCESS TOAST -->
@@ -58,7 +58,7 @@
                                     placeholder="Paste eBay, ShopGoodwill, FB Marketplace, Poshmark or Mercari link..." 
                                     @keydown.enter.prevent="handleAnalyze"
                                 />
-                                <button v-if="scoutUrl" type="button" @click="scoutUrl = ''" class="absolute right-2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">✕</button>
+                                <button v-if="scoutUrl" type="button" @click="scoutUrl = ''" class="absolute right-2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">âœ•</button>
                             </div>
                         </div>
                         <div class="w-full sm:w-32 form-control">
@@ -100,7 +100,7 @@
             
             <div class="flex items-center gap-1.5">
                 <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-circle btn-ghost" title="Close Scouting Report">
-                    ✕
+                    âœ•
                 </button>
             </div>
         </div>
@@ -129,7 +129,7 @@
                                 <span v-if="item.seller_info?.seller_id || item.sellerId" class="opacity-80 font-mono text-[10px]">#{{ item.seller_info?.seller_id || item.sellerId }}</span>
                             </span>
                             <span v-if="item.seller_info?.shipping_weight || item.shippingWeight" class="badge badge-neutral font-mono font-bold text-xs">
-                                ⚖️ {{ item.seller_info?.shipping_weight || item.shippingWeight }} lbs
+                                âš–ï¸ {{ item.seller_info?.shipping_weight || item.shippingWeight }} lbs
                             </span>
                             <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                         </div>
@@ -174,7 +174,7 @@
                                         Weight Guard: <strong>{{ getCombinedShippingAlert(item).totalWeight }} lbs</strong> / {{ getCombinedShippingAlert(item).weightLimit }}.0 lbs limit
                                     </span>
                                     <span :class="getCombinedShippingAlert(item).isOverWeightLimit ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
-                                        {{ getCombinedShippingAlert(item).isOverWeightLimit ? '🚨 SPLIT SHIPMENT FEE TRIGGERED' : `${getCombinedShippingAlert(item).remainingWeight} lbs headroom left` }}
+                                        {{ getCombinedShippingAlert(item).isOverWeightLimit ? 'ðŸš¨ SPLIT SHIPMENT FEE TRIGGERED' : `${getCombinedShippingAlert(item).remainingWeight} lbs headroom left` }}
                                     </span>
                                 </div>
                                 <div class="w-full bg-base-300 rounded-full h-2.5 overflow-hidden">
@@ -184,7 +184,7 @@
                                 </div>
                             </div>
 
-                            <!-- Policy Warnings (7-day window, 20 items, 1¢ notice, format conflict, fragile) -->
+                            <!-- Policy Warnings (7-day window, 20 items, 1Â¢ notice, format conflict, fragile) -->
                             <div v-if="getCombinedShippingAlert(item).warnings.length > 0" class="pt-2 border-t border-base-300/60 space-y-1.5">
                                 <div v-for="(warn, wIdx) in getCombinedShippingAlert(item).warnings" :key="wIdx"
                                      class="flex items-start gap-1.5 text-xs text-base-content/85 leading-snug">
@@ -399,7 +399,7 @@
                                     <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
                                 </div>
                                 <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
-                                    ⚡ {{ item.market_report.sell_through_velocity }}
+                                    âš¡ {{ item.market_report.sell_through_velocity }}
                                 </span>
                             </div>
                             <div class="font-black text-sm sm:text-base text-base-content leading-snug">
@@ -416,7 +416,7 @@
                                         <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
                                     </div>
                                     <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
-                                        💡 {{ ch.recommendation }}
+                                        ðŸ’¡ {{ ch.recommendation }}
                                     </div>
                                     <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
                                         <span>Net Payout:</span>
@@ -780,7 +780,7 @@
                                 <div class="border border-base-300 rounded-xl p-2 bg-base-100 flex flex-wrap gap-2 items-center">
                                     <span v-for="(kw, idx) in item.keywords" :key="idx" class="badge badge-secondary gap-1 text-xs">
                                         {{ kw }}
-                                        <button type="button" @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">✕</button>
+                                        <button type="button" @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">âœ•</button>
                                     </span>
                                     <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-20" @keydown.enter.prevent="addKeyword(item, $event)" />
                                 </div>
@@ -818,7 +818,7 @@
                         <span class="text-[11px] font-mono text-warning font-black shrink-0">
                             ${{ totalCost.toFixed(2) }}
                         </span>
-                        <span class="text-xs opacity-40 hidden sm:inline">→</span>
+                        <span class="text-xs opacity-40 hidden sm:inline">â†’</span>
                         <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
                             ${{ totalBoutiqueValue.toFixed(2) }}
                         </span>
@@ -897,7 +897,7 @@
                         <template v-else-if="!canSaveReport">
                             <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
                             <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
-                                Saved ✓
+                                Saved âœ“
                             </span>
                         </template>
                         <template v-else>
@@ -959,7 +959,7 @@
                     <span class="text-[11px] font-mono text-warning font-black shrink-0">
                         ${{ totalCost.toFixed(2) }}
                     </span>
-                    <span class="text-xs opacity-40 hidden sm:inline">→</span>
+                    <span class="text-xs opacity-40 hidden sm:inline">â†’</span>
                     <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
                         ${{ totalBoutiqueValue.toFixed(2) }}
                     </span>
@@ -1056,7 +1056,7 @@
                 <template v-else-if="result && !canSaveReport">
                     <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
                     <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
-                        Saved ✓
+                        Saved âœ“
                     </span>
                 </template>
                 <template v-else>
@@ -1173,13 +1173,13 @@ const pendingSaveAll = ref(false);
 const handlePauseTracker = () => {
     const vendorName = activePurchase.value?.vendor || 'Buy Tracker';
     pauseTracker();
-    addToast({ type: 'warning', message: `⏸️ Paused ${vendorName}` });
+    addToast({ type: 'warning', message: `â¸ï¸ Paused ${vendorName}` });
 };
 
 const handleResumeTracker = async (purchase?: any) => {
     const target = await resumeTracker(purchase);
     if (target) {
-        addToast({ type: 'success', message: `▶️ Resumed ${target.vendor || 'Buy Tracker'}` });
+        addToast({ type: 'success', message: `â–¶ï¸ Resumed ${target.vendor || 'Buy Tracker'}` });
     }
 };
 
@@ -1232,7 +1232,7 @@ const handleResumeFromTray = (purchase: any) => {
 const navigateToPurchase = () => {
     if (!activePurchase.value) return;
     const pId = activePurchase.value.$id;
-    addToast({ type: 'info', message: '📋 Opening Draft Purchase Order...' });
+    addToast({ type: 'info', message: 'ðŸ“‹ Opening Draft Purchase Order...' });
     window.location.href = `/purchases/${pId}`;
 };
 
@@ -1308,7 +1308,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
             if (blob) {
                 e.preventDefault();
                 await processFile(blob);
-                addToast({ type: 'success', message: '📸 Image/Screenshot attached from clipboard!' });
+                addToast({ type: 'success', message: 'ðŸ“¸ Image/Screenshot attached from clipboard!' });
                 return;
             }
         }
@@ -1321,7 +1321,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
             if (text.startsWith('http://') || text.startsWith('https://')) {
                 e.preventDefault();
                 scoutUrl.value = text;
-                addToast({ type: 'success', message: '🔗 Web Link pasted into Scout URL!' });
+                addToast({ type: 'success', message: 'ðŸ”— Web Link pasted into Scout URL!' });
             } else if (text.length > 0) {
                 e.preventDefault();
                 if (userNotes.value && !userNotes.value.includes(text)) {
@@ -1329,7 +1329,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
                 } else {
                     userNotes.value = text;
                 }
-                addToast({ type: 'success', message: '📝 Text detected & pasted into Additional Details!' });
+                addToast({ type: 'success', message: 'ðŸ“ Text detected & pasted into Additional Details!' });
             }
         }
     }
@@ -1413,13 +1413,13 @@ function getTierBadgeInfo(item: any) {
     const raw = (item.name || item.identity || item.title || '').toLowerCase();
     
     if (t === 'showcase' || raw.includes('tier 1') || item.is_key_issue) {
-        return { label: '🌟 Showcase', class: 'badge-secondary text-secondary-content font-bold' };
+        return { label: 'ðŸŒŸ Showcase', class: 'badge-secondary text-secondary-content font-bold' };
     }
     if (t === 'quick_turn' || raw.includes('tier 3')) {
-        return { label: '⚡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
+        return { label: 'âš¡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
     }
     if (t === 'core' || raw.includes('tier 2')) {
-        return { label: '📦 Core', class: 'badge-primary text-primary-content font-bold' };
+        return { label: 'ðŸ“¦ Core', class: 'badge-primary text-primary-content font-bold' };
     }
     return null;
 }
@@ -1472,7 +1472,7 @@ async function copyMaxBid(amount: number, itemKey: string) {
     try {
         await navigator.clipboard.writeText(String(amount));
         copiedBidItemKey.value = itemKey;
-        addToast({ type: 'success', message: `📋 Copied Max Bid: $${amount}` });
+        addToast({ type: 'success', message: `ðŸ“‹ Copied Max Bid: $${amount}` });
         setTimeout(() => {
             if (copiedBidItemKey.value === itemKey) {
                 copiedBidItemKey.value = null;
@@ -1542,7 +1542,7 @@ function formatAuctionCountdown(endTimeStr: string | null | undefined): { text: 
     }
     const padM = String(minutes).padStart(2, '0');
     const padS = String(seconds).padStart(2, '0');
-    return { text: `🚨 ${padM}m ${padS}s LEFT`, urgent: true, ended: false };
+    return { text: `ðŸš¨ ${padM}m ${padS}s LEFT`, urgent: true, ended: false };
 }
 
 function getAuctionFinancials(item: any) {
@@ -2220,7 +2220,7 @@ function startNewScan() {
     if (fileInput.value) fileInput.value.value = '';
     if (receiptInput.value) receiptInput.value.value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    addToast({ type: 'info', message: 'Scout cleared — ready for next item!' });
+    addToast({ type: 'info', message: 'Scout cleared â€” ready for next item!' });
 }
 
 const savingAll = ref(false);
@@ -2263,7 +2263,7 @@ async function saveAllItems() {
             isResultsModalOpen.value = false;
             const dealName = activePurchase.value?.vendor || 'Inventory';
             successMessage.value = `Saved ${toSave.length > 1 ? `${toSave.length} items` : 'item'} to ${dealName}!`;
-            addToast({ type: 'success', message: `✅ Saved to ${dealName}!` });
+            addToast({ type: 'success', message: `âœ… Saved to ${dealName}!` });
         }
     } finally {
         savingAll.value = false;
@@ -3021,7 +3021,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         item.saved = true;
         const dealName = activePurchase.value?.vendor || 'Inventory';
         successMessage.value = `Added to ${dealName}!`;
-        addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
+        addToast({ type: 'success', message: `âœ… Added to ${dealName}!` });
 
         // Keep item on screen with saved confirmation so user never feels item was lost
         setTimeout(() => {

@@ -28,7 +28,7 @@ export const RESALE_SAFETY_SETTINGS = [
     },
 ];
 
-const SYSTEM_INSTRUCTION = "You are a master multi-category resale appraiser and inventory valuation expert. Strictly ground all item identifications and conditions in physical OCR, printed copyright dates, and visible features from provided images or verified user notes.";
+const SYSTEM_INSTRUCTION = "You are a master multi-category resale appraiser and inventory valuation expert. Strictly ground all item identifications and conditions in physical OCR, printed copyright dates, and visible features from provided images or verified user notes. Strictly ignore and exclude any auction website watermarks, platform logos, or copyright banners (such as 'Property of Goodwill', 'Goodwill NYNJ', 'ShopGoodwill.com', 'eBay', or 'HiBid') as they are website chrome and never part of the merchandise or manufacturer.";
 
 export const DEFAULT_GEMINI_MODEL = 
     (typeof process !== 'undefined' && process.env?.GEMINI_MODEL) || 
@@ -80,7 +80,9 @@ export const generateContentWithBackoff = async (
     const candidateModels = Array.from(new Set([
         DEFAULT_GEMINI_MODEL,
         "gemini-flash-latest",
-        "gemini-pro-latest"
+        "gemini-flash-lite-latest",
+        "gemini-pro-latest",
+        "gemini-2.5-flash"
     ]));
     let modelIdx = 0;
     
@@ -95,7 +97,7 @@ export const generateContentWithBackoff = async (
             const result = await activeModel.generateContent(requestPayload);
             // Verify candidate finishReason if blocked
             const candidate = result.response?.candidates?.[0];
-            if (candidate?.finishReason === 'OTHER' || candidate?.finishReason === 'SAFETY') {
+            if (candidate?.finishReason === 'OTHER' || candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'RECITATION') {
                 console.warn(`[Gemini] Candidate finishReason is ${candidate.finishReason} on ${currentModelName}. Trying fallback model...`);
                 if (modelIdx < candidateModels.length - 1) {
                     modelIdx++;
@@ -108,9 +110,9 @@ export const generateContentWithBackoff = async (
             const msg = (err.message || "").toLowerCase();
             const status = err.status || 0;
             
-            // Check if blocked by safety / OTHER / model-specific issue -> switch model immediately
-            if (msg.includes('blocked') || msg.includes('other') || msg.includes('safety') || msg.includes('finishreason')) {
-                console.warn(`[Gemini] Response blocked on ${currentModelName}: ${err.message}. Switching to fallback model...`);
+            // Check if model not found (404) or blocked by safety / OTHER / RECITATION -> switch model immediately
+            if (status === 404 || msg.includes('404') || msg.includes('not found') || msg.includes('blocked') || msg.includes('other') || msg.includes('safety') || msg.includes('recitation') || msg.includes('finishreason')) {
+                console.warn(`[Gemini] Model issue on ${currentModelName}: ${err.message}. Switching to fallback model...`);
                 if (modelIdx < candidateModels.length - 1) {
                     modelIdx++;
                     retries--;
@@ -132,7 +134,7 @@ export const generateContentWithBackoff = async (
                 
                 retries--;
                 delayMs = Math.min(delayMs * 1.5, 30000);
-            } else if (modelIdx < candidateModels.length - 1) {
+            } else if (modelIdx < uniqueCandidates.length - 1) {
                 // If non-transient error, try next candidate model before giving up
                 console.warn(`[Gemini] Error on ${currentModelName}: ${err.message}. Retrying with next model...`);
                 modelIdx++;

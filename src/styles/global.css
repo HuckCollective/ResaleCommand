@@ -1,5 +1,6 @@
 @import "./fonts.css";
 @import "tailwindcss";
+@source "../**/*.{astro,html,js,jsx,md,mdx,ts,tsx,vue}";
 @plugin "@tailwindcss/typography";
 @import "./theme.css";
 

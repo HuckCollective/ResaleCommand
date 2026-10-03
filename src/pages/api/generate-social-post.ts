@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request }) => {
             platform: body.platform || 'instagram',
             tone: body.tone || 'lestat',
             customTone: body.customTone || '',
-            includePrices: body.includePrices ?? true,
+            includePrices: body.includePrices ?? false,
             customNotes: body.customNotes || '',
             hasLocationPhotos: Boolean(body.hasLocationPhotos),
             hasMeasurements: Boolean(body.hasMeasurements)

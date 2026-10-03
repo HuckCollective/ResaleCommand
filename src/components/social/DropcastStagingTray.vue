@@ -282,6 +282,7 @@ import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useDropcasts } from '../../composables/useDropcasts';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';
+import { resolveItemImageUrls } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
 
 const {
@@ -328,10 +329,7 @@ function saveTitle() {
 
 function resolveItemPhoto(item: any): string | null {
   if (!item) return null;
-  if (item.customPhotoDataUrl) return item.customPhotoDataUrl;
-  const invUrl = getItemImageUrl(item, 120);
-  if (invUrl) return invUrl;
-  const urls = getItemImageUrls(item);
+  const urls = resolveItemImageUrls(item);
   return urls.length > 0 ? urls[0] : null;
 }
 
