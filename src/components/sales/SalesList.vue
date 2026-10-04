@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-36 sm:pb-44">
     <!-- Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
@@ -196,7 +196,7 @@
       </div>
 
       <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
-      <div v-else class="block md:hidden space-y-3">
+      <div v-else class="block md:hidden space-y-3 mb-6">
         <div 
           v-for="sale in paginatedSales" 
           :key="sale.uniqueKey"
@@ -300,7 +300,7 @@
       </div>
 
       <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
-      <div v-if="displayedSales.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+      <div v-if="displayedSales.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
         <div class="overflow-x-auto">
           <table class="table table-zebra w-full">
             <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">

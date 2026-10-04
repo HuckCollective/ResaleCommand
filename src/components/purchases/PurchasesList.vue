@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 pb-36 sm:pb-44">
     <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
     <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
@@ -98,7 +98,7 @@
     </div>
 
     <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
-    <div v-else class="block md:hidden space-y-3">
+    <div v-else class="block md:hidden space-y-3 mb-6">
       <div 
         v-for="purchase in paginatedPurchases" 
         :key="purchase.$id"
@@ -182,7 +182,7 @@
     </div>
 
     <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
-    <div class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+    <div class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
       <div class="overflow-x-auto">
         <table class="table table-zebra w-full">
           <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">

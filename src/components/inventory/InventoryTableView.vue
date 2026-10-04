@@ -1,5 +1,5 @@
 <template>
-    <div class="space-y-4 pb-24 sm:pb-28 w-full max-w-full min-w-0">
+    <div class="space-y-4 pb-36 sm:pb-44 w-full max-w-full min-w-0">
         <!-- 1. STICKY TOP OMNIBAR & STATUS PIPELINE TABS -->
         <InventoryHeader 
             title="Inventory"
@@ -42,7 +42,7 @@
         />
 
         <!-- 2. DENSE SPREADSHEET TABLE -->
-        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0">
+        <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0 mb-6">
             <div class="overflow-x-auto w-full max-w-full min-w-0 overscroll-x-contain touch-pan-x">
                 <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
                     <thead>

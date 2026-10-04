@@ -5,14 +5,18 @@ import { withRateLimitRetry } from './retry';
 
 import { isAlphaMode } from '../stores/env';
 
-export const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db'; 
-export const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+export const DB_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_DB_ID)
+    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_DB_ID) 
+    || 'resale_db'; 
 
-const _isDev = (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || '').endsWith('_dev');
-export const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || (_isDev ? 'item_images_dev' : 'item_images');
-export const REPORTS_BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_REPORTS_BUCKET_ID || (_isDev ? 'reports_dev' : 'reports');
+export const getCollectionId = () => (typeof isAlphaMode !== 'undefined' && isAlphaMode?.get?.()) 
+    ? ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || 'alpha_items') 
+    : ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || 'items');
+
+const _rawCol = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || '';
+const _isDev = _rawCol.endsWith('_dev');
+export const BUCKET_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_BUCKET_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_BUCKET_ID) || (_isDev ? 'item_images_dev' : 'item_images');
+export const REPORTS_BUCKET_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_REPORTS_BUCKET_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_REPORTS_BUCKET_ID) || (_isDev ? 'reports_dev' : 'reports');
 
 export const APPWRITE_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) 
     || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ENDPOINT) 
@@ -746,10 +750,36 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 
                 let existingItem: any = null;
                 const idRes = await databases.listDocuments(DB_ID, getCollectionId(), [...dedupQueries, Query.equal('identity', targetIdentity)]);
-                if (idRes.documents.length > 0) existingItem = idRes.documents[0];
+                if (idRes.documents.length > 0) {
+                    existingItem = idRes.documents[0];
+                }
+
+                // If not found by exact identity, check if targetIdentity is part of a Combined/Master Lot
+                if (!existingItem) {
+                    try {
+                        const lotRes = await databases.listDocuments(DB_ID, getCollectionId(), [
+                            ...dedupQueries,
+                            Query.contains('identity', targetIdentity),
+                            Query.limit(1)
+                        ]);
+                        if (lotRes.documents.length > 0) existingItem = lotRes.documents[0];
+                    } catch (lotErr) {}
+                }
+
+                // Or if sourcingLocation contains the item ID (e.g. ShopGoodwill URL)
+                if (!existingItem) {
+                    try {
+                        const srcRes = await databases.listDocuments(DB_ID, getCollectionId(), [
+                            ...dedupQueries,
+                            Query.contains('sourcingLocation', targetIdentity),
+                            Query.limit(1)
+                        ]);
+                        if (srcRes.documents.length > 0) existingItem = srcRes.documents[0];
+                    } catch (srcErr) {}
+                }
 
                 if (existingItem) {
-                    console.log(`[Inventory] Deduplication: Item with identity "${targetIdentity}" already exists (${existingItem.$id}, UPC: ${existingItem.upc}). Skipping duplicate creation.`);
+                    console.log(`[Inventory] Deduplication: Item with identity "${targetIdentity}" already exists (${existingItem.$id}, UPC: ${existingItem.upc}, Status: ${existingItem.status}). Skipping duplicate creation.`);
                     return existingItem;
                 }
             } catch (dedupErr) {

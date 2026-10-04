@@ -124,6 +124,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { storage } from '../../lib/appwrite';
+import { checkInventoryDuplicate } from '../../lib/deduplication';
 
 const getCollectionId = () => isAlphaMode.get() 
     ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
@@ -580,84 +581,17 @@ const processRows = async (rows) => {
         let mainImageLink = csvImage;
         let galleryLinks = [];
 
-        // 1. DUPLICATE CHECK & FIX EXISTING MODE (Comprehensive: identity, sku, orderId, sourcingLocation)
+        // 1. DUPLICATE CHECK & FIX EXISTING MODE (Unified 5-Stage check)
         let isDuplicate = false;
         let matchedDoc = null;
         try {
-            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-            const COL_ID = getCollectionId();
-
-            // Check 1: identity exact match
-            const idCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                Query.equal('identity', itemId),
-                Query.limit(5)
-            ]);
-            if (idCheck.total > 0) {
+            const dedup = await checkInventoryDuplicate({
+                itemId,
+                orderId: orderId || null
+            });
+            if (dedup.isDuplicate) {
                 isDuplicate = true;
-                matchedDoc = idCheck.documents[0];
-            }
-
-            // Check 2: SGW- prefix in UPC match
-            if (!isDuplicate) {
-                try {
-                    const upcCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                        Query.equal('upc', `SGW-${itemId}`),
-                        Query.limit(5)
-                    ]);
-                    if (upcCheck.total > 0) {
-                        isDuplicate = true;
-                        matchedDoc = upcCheck.documents[0];
-                    }
-                } catch(e) {}
-            }
-
-            // Check 3: Check sourcingLocation contains item ID (e.g. split / combined parent URLs)
-            if (!isDuplicate && itemId) {
-                try {
-                    const srcCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                        Query.contains('sourcingLocation', itemId),
-                        Query.limit(5)
-                    ]);
-                    if (srcCheck.total > 0) {
-                        isDuplicate = true;
-                        matchedDoc = srcCheck.documents[0];
-                    }
-                } catch(e) {}
-            }
-
-            // Check 4: For order-proxy rows ONLY (when the CSV row has NO item ID, only an order ID)
-            if (!isDuplicate && isOrderProxy && orderId) {
-                try {
-                    const existingPO = await purchasesAPI.getPurchaseByOrderId(orderId);
-                    if (existingPO) {
-                        const purchaseItemCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                            Query.equal('purchaseId', existingPO.$id),
-                            Query.limit(1)
-                        ]);
-                        if (purchaseItemCheck.total > 0) {
-                            isDuplicate = true;
-                            matchedDoc = purchaseItemCheck.documents[0];
-                        }
-                    }
-                } catch(e) {}
-            }
-
-            // Check 4b: For regular item rows, check if THIS specific item ID already exists inside this purchase order
-            if (!isDuplicate && !isOrderProxy && orderId && itemId) {
-                try {
-                    const existingPO = await purchasesAPI.getPurchaseByOrderId(orderId);
-                    if (existingPO) {
-                        const purchaseItemCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                            Query.equal('purchaseId', existingPO.$id),
-                            Query.equal('identity', itemId),
-                            Query.limit(1)
-                        ]);
-                        if (purchaseItemCheck.total > 0) {
-                            isDuplicate = true;
-                            matchedDoc = purchaseItemCheck.documents[0];
-                        }
-                    }
-                } catch(e) {}
+                matchedDoc = dedup.matchedDoc;
             }
         } catch (e) {
             console.warn("Duplicate check failed, proceeding w/ caution:", e);

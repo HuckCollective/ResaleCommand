@@ -3,12 +3,17 @@ import { Permission, Role, type Models } from 'appwrite';
 import { saveItemToInventory, BUCKET_ID, getItemsByPurchaseId } from './inventory';
 import { isAlphaMode } from '../stores/env';
 
-export const getPurchasesCollectionId = () => import.meta.env.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID || 'purchases_dev';
-const getItemsCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+export const getPurchasesCollectionId = () => (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID) 
+    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID) 
+    || 'purchases_dev';
 
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+const getItemsCollectionId = () => (typeof isAlphaMode !== 'undefined' && isAlphaMode?.get?.()) 
+    ? ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || 'alpha_items') 
+    : ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || 'items');
+
+const DB_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_DB_ID) 
+    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_DB_ID) 
+    || 'resale_db';
 
 export interface PurchaseData {
     poNumber?: string;
