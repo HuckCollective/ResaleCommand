@@ -162,46 +162,103 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <!-- Sample 1: Huck Internal Tag (Code 128) -->
-                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2">
-                    <span class="badge badge-xs badge-primary font-bold uppercase">Huck Tag (1D Barcode)</span>
-                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[100px]">
-                        <img 
-                            src="https://bwipjs-api.metafloor.com/?bcid=code128&text=HUCK-1250&scale=2&height=10&includetext" 
-                            alt="HUCK-1250 Code 128 Barcode" 
-                            class="max-w-full h-16 object-contain"
-                            loading="lazy"
-                        />
+                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2 flex flex-col justify-between">
+                    <div>
+                        <span class="badge badge-xs badge-primary font-bold uppercase">Huck Tag (1D Barcode)</span>
+                        <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[90px] my-2">
+                            <img 
+                                src="https://bwipjs-api.metafloor.com/?bcid=code128&text=HUCK-1250&scale=2&height=10&includetext" 
+                                alt="HUCK-1250 Code 128 Barcode" 
+                                class="max-w-full h-16 object-contain"
+                                loading="lazy"
+                            />
+                        </div>
+                        <p class="text-[10px] text-base-content/60 mb-2">Code 128 format</p>
                     </div>
-                    <p class="text-[10px] text-base-content/60">Genuine Code 128 (Horizontal Alignment)</p>
+                    <div class="flex flex-col gap-1.5 pt-1">
+                        <button 
+                            type="button"
+                            @click="simulateScan('HUCK-1250', 'code_128')"
+                            class="btn btn-xs btn-primary font-bold w-full gap-1 shadow-xs"
+                        >
+                            <Icon icon="solar:play-circle-bold" class="w-3.5 h-3.5" />
+                            Test Scan 'HUCK-1250'
+                        </button>
+                        <a 
+                            href="https://bwipjs-api.metafloor.com/?bcid=code128&text=HUCK-1250&scale=4&height=15&includetext" 
+                            target="_blank" 
+                            class="text-[10px] text-base-content/60 hover:text-primary underline"
+                        >
+                            Open Large in New Tab ↗
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Sample 2: Memory Den Ricochet SKU -->
-                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2">
-                    <span class="badge badge-xs badge-secondary font-bold uppercase">Memory Den POS SKU</span>
-                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[100px]">
-                        <img 
-                            src="https://bwipjs-api.metafloor.com/?bcid=code128&text=0EJ08G&scale=2&height=10&includetext" 
-                            alt="0EJ08G Code 128 Barcode" 
-                            class="max-w-full h-16 object-contain"
-                            loading="lazy"
-                        />
+                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2 flex flex-col justify-between">
+                    <div>
+                        <span class="badge badge-xs badge-secondary font-bold uppercase">Memory Den POS SKU</span>
+                        <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[90px] my-2">
+                            <img 
+                                src="https://bwipjs-api.metafloor.com/?bcid=code128&text=0EJ08G&scale=2&height=10&includetext" 
+                                alt="0EJ08G Code 128 Barcode" 
+                                class="max-w-full h-16 object-contain"
+                                loading="lazy"
+                            />
+                        </div>
+                        <p class="text-[10px] text-base-content/60 mb-2">Ricochet format</p>
                     </div>
-                    <p class="text-[10px] text-base-content/60">Genuine Code 128 (Ricochet Format)</p>
+                    <div class="flex flex-col gap-1.5 pt-1">
+                        <button 
+                            type="button"
+                            @click="simulateScan('0EJ08G', 'code_128')"
+                            class="btn btn-xs btn-secondary font-bold w-full gap-1 shadow-xs"
+                        >
+                            <Icon icon="solar:play-circle-bold" class="w-3.5 h-3.5" />
+                            Test Scan '0EJ08G'
+                        </button>
+                        <a 
+                            href="https://bwipjs-api.metafloor.com/?bcid=code128&text=0EJ08G&scale=4&height=15&includetext" 
+                            target="_blank" 
+                            class="text-[10px] text-base-content/60 hover:text-secondary underline"
+                        >
+                            Open Large in New Tab ↗
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Sample 3: Sample Mini QR Code -->
-                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2">
-                    <span class="badge badge-xs badge-accent font-bold uppercase">Internal Mini QR</span>
-                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center">
-                        <img 
-                            src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=HUCK-1262" 
-                            alt="Sample Mini QR"
-                            class="w-20 h-20 rounded-md"
-                            loading="lazy"
-                        />
-                        <div class="font-mono font-bold text-black text-[10px] mt-1">HUCK-1262</div>
+                <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2 flex flex-col justify-between">
+                    <div>
+                        <span class="badge badge-xs badge-accent font-bold uppercase">Internal Mini QR</span>
+                        <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[90px] my-2">
+                            <img 
+                                src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=HUCK-1262" 
+                                alt="Sample Mini QR"
+                                class="w-16 h-16 rounded-md"
+                                loading="lazy"
+                            />
+                            <div class="font-mono font-bold text-black text-[10px] mt-1">HUCK-1262</div>
+                        </div>
+                        <p class="text-[10px] text-base-content/60 mb-2">360° Omnidirectional QR</p>
                     </div>
-                    <p class="text-[10px] text-base-content/60">360° Omnidirectional Mini QR</p>
+                    <div class="flex flex-col gap-1.5 pt-1">
+                        <button 
+                            type="button"
+                            @click="simulateScan('HUCK-1262', 'qr_code')"
+                            class="btn btn-xs btn-accent font-bold w-full gap-1 shadow-xs"
+                        >
+                            <Icon icon="solar:play-circle-bold" class="w-3.5 h-3.5" />
+                            Test Scan 'HUCK-1262'
+                        </button>
+                        <a 
+                            href="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=HUCK-1262" 
+                            target="_blank" 
+                            class="text-[10px] text-base-content/60 hover:text-accent underline"
+                        >
+                            Open Large in New Tab ↗
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -274,6 +331,33 @@ function handleModalScanned(res: ScannedResult) {
     searchQuery.value = res.rawValue;
     scanHistory.value.unshift(res);
     addToast(`Detected: ${res.rawValue}`, 'info');
+}
+
+function playBeep() {
+    try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+        const ctx = new AudioContextClass();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+    } catch {}
+}
+
+function simulateScan(code: string, format: string) {
+    playBeep();
+    handleModalScanned({
+        rawValue: code,
+        format,
+        timestamp: Date.now()
+    });
 }
 
 function openSingleScanner() {

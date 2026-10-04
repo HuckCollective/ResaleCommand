@@ -318,12 +318,23 @@ const enumerateCameras = async () => {
     }
 };
 
-const initBarcodeDetector = () => {
+const initBarcodeDetector = async () => {
     try {
         if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
             const BarcodeDetectorClass = (window as any).BarcodeDetector;
+            let supported: string[] = [];
+            if (typeof BarcodeDetectorClass.getSupportedFormats === 'function') {
+                try {
+                    supported = await BarcodeDetectorClass.getSupportedFormats();
+                } catch {}
+            }
+            const requested = props.supportedFormats || ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
+            const activeFormats = supported.length > 0 
+                ? requested.filter(f => supported.includes(f))
+                : requested;
+
             barcodeDetector = new BarcodeDetectorClass({
-                formats: props.supportedFormats
+                formats: activeFormats.length > 0 ? activeFormats : ['qr_code']
             });
         }
     } catch (e) {
@@ -348,8 +359,8 @@ async function startCamera() {
             video: {
                 deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
                 facingMode: selectedDeviceId ? undefined : { ideal: 'environment' },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 }
             }
         };
 
