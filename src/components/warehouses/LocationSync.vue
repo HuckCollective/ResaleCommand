@@ -96,6 +96,7 @@ import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
 import { databases } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
+import { getCollectionId, DB_ID } from '../../lib/inventory';
 
 const { inventoryItems, fetchInventory, currentTeamId } = useInventory();
 const isProcessing = ref(false);
@@ -218,8 +219,7 @@ const executeSync = async () => {
   
   isExporting.value = true;
   try {
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'inventory';
+    const ITEMS_COL = getCollectionId();
 
     // 1. Two-way DB update: Save Location SKU to Appwrite
     let updatePromises = [];

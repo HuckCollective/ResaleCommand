@@ -1,3 +1,6 @@
+import { partitionSalesByOrg, type PartitionedSalesResult } from './salesBucketing';
+export * from './salesBucketing';
+
 export interface ReconciliationResult {
     unmatchedCsvItems: any[]; // In CSV, but not in Appwrite
     missingAppwriteItems: any[]; // In Appwrite, but not in CSV
@@ -233,6 +236,7 @@ export interface RicochetReconciliationResult {
     totalCsvRows: number;
     orgMatchedCsvRows: number;
     ignoredNonOrgRows: any[];
+    salesBuckets?: PartitionedSalesResult;
     syncedMatches: Array<{
         csvRow: any;
         appwriteItem: any;
@@ -274,6 +278,7 @@ export async function reconcileRicochetInventory(
                     totalCsvRows: csvItems.length,
                     orgMatchedCsvRows: 0,
                     ignoredNonOrgRows: [],
+                    salesBuckets: partitionSalesByOrg(csvItems, appwriteItems),
                     syncedMatches: [],
                     newInRicochet: [],
                     pendingExport: []

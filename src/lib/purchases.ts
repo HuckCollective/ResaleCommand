@@ -3,17 +3,11 @@ import { Permission, Role, type Models } from 'appwrite';
 import { saveItemToInventory, BUCKET_ID, getItemsByPurchaseId } from './inventory';
 import { isAlphaMode } from '../stores/env';
 
-export const getPurchasesCollectionId = () => (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID) 
-    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_PURCHASES_COLLECTION_ID) 
-    || 'purchases_dev';
+import { getDatabaseId, getPurchasesCollectionId as getPurchasesCol, getItemsCollectionId as getItemsCol } from './appwriteEnv';
 
-const getItemsCollectionId = () => (typeof isAlphaMode !== 'undefined' && isAlphaMode?.get?.()) 
-    ? ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || 'alpha_items') 
-    : ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || 'items');
-
-const DB_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_DB_ID) 
-    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_DB_ID) 
-    || 'resale_db';
+export const getPurchasesCollectionId = () => getPurchasesCol();
+const getItemsCollectionId = () => getItemsCol();
+const DB_ID = getDatabaseId();
 
 export interface PurchaseData {
     poNumber?: string;
@@ -87,7 +81,11 @@ export const purchasesAPI = {
 
         // Remove undefined keys to satisfy Appwrite strict schema
         Object.keys(data).forEach(key => (data as any)[key] === undefined && delete (data as any)[key]);
-        return await databases.createDocument(DB_ID, getPurchasesCollectionId(), ID.unique(), data, perms);
+        const created = await databases.createDocument(DB_ID, getPurchasesCollectionId(), ID.unique(), data, perms);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('purchase-created', { detail: { data: created } }));
+        }
+        return created;
     },
 
     async updatePurchase(documentId: string, data: Partial<PurchaseData>) {
@@ -99,7 +97,11 @@ export const purchasesAPI = {
             }
         }
         Object.keys(data).forEach(key => (data as any)[key] === undefined && delete (data as any)[key]);
-        return await databases.updateDocument(DB_ID, getPurchasesCollectionId(), documentId, data);
+        const updated = await databases.updateDocument(DB_ID, getPurchasesCollectionId(), documentId, data);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('purchase-updated', { detail: { purchaseId: documentId, data: updated } }));
+        }
+        return updated;
     },
 
     async getPurchaseByOrderId(orderId: string) {
@@ -189,10 +191,18 @@ export const purchasesAPI = {
                 });
             }
             const actualDocId = doc ? doc.$id : documentId;
-            return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), actualDocId);
+            const res = await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), actualDocId);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('purchase-deleted', { detail: { purchaseId: actualDocId } }));
+            }
+            return res;
         } catch (e) {
             console.warn('[Purchases] Could not inspect PO before deletion, attempting direct doc deletion:', e);
-            return await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), documentId);
+            const res = await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), documentId);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('purchase-deleted', { detail: { purchaseId: documentId } }));
+            }
+            return res;
         }
     },
 

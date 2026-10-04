@@ -54,12 +54,14 @@ if (API_KEY) {
     client.setKey(API_KEY as string);
 }
 
+import { getDatabaseId, getItemsCollectionId, getBucketId } from '../../lib/appwriteEnv';
+
 const db = new Databases(client);
 const storage = new Storage(client);
 
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
-const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items";
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || "item_images";
+const DB_ID = getDatabaseId();
+const ITEMS_COL = getItemsCollectionId();
+const BUCKET_ID = getBucketId();
 const API_KEYS_COL = "api_keys";
 
 export const ALL: APIRoute = async ({ request }) => {

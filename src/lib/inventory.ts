@@ -5,18 +5,18 @@ import { withRateLimitRetry } from './retry';
 
 import { isAlphaMode } from '../stores/env';
 
-export const DB_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_DB_ID)
-    || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_DB_ID) 
-    || 'resale_db'; 
+// Re-export modular domain systems for 100% backwards compatibility
+export * from './inventoryStatus';
+export * from './inventoryUpc';
+export * from './salesBucketing';
 
-export const getCollectionId = () => (typeof isAlphaMode !== 'undefined' && isAlphaMode?.get?.()) 
-    ? ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID) || 'alpha_items') 
-    : ((typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || 'items');
+import { getDatabaseId, getItemsCollectionId, getBucketId, isDevEnvironment, getAppwriteEnvironment } from './appwriteEnv';
+export { getAppwriteEnvironment, isDevEnvironment, getItemsCollectionId };
 
-const _rawCol = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_COLLECTION_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_COLLECTION_ID) || '';
-const _isDev = _rawCol.endsWith('_dev');
-export const BUCKET_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_BUCKET_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_BUCKET_ID) || (_isDev ? 'item_images_dev' : 'item_images');
-export const REPORTS_BUCKET_ID = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_REPORTS_BUCKET_ID) || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_REPORTS_BUCKET_ID) || (_isDev ? 'reports_dev' : 'reports');
+export const DB_ID = getDatabaseId();
+export const getCollectionId = () => getItemsCollectionId();
+export const BUCKET_ID = getBucketId();
+export const REPORTS_BUCKET_ID = isDevEnvironment() ? 'reports_dev' : 'reports';
 
 export const APPWRITE_ENDPOINT = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) 
     || (typeof process !== 'undefined' && process.env?.PUBLIC_APPWRITE_ENDPOINT) 
@@ -723,6 +723,293 @@ export function getSafeRawAnalysis(item: any): string | null {
     }
 }
 
+/**
+ * All 38 allowed attributes on Appwrite 'items' and 'items_dev' collections.
+ * Synchronized with live database schema.
+ */
+export const ALLOWED_ITEM_ATTRIBUTES = new Set([
+    'identity',
+    'title',
+    'conditionNotes',
+    'status',
+    'tenantId',
+    'upc',
+    'locationSku',
+    'storageLocation',
+    'sellingLocations',
+    'warehouseId',
+    'saleId',
+    'cost',
+    'resalePrice',
+    'soldPrice',
+    'maxBuyPrice',
+    'purchasePrice',
+    'commissionPaid',
+    'parentLotId',
+    'quantity',
+    'components',
+    'imageId',
+    'galleryImageIds',
+    'receiptImageId',
+    'keywords',
+    'marketDescription',
+    'rawAnalysis',
+    'cartId',
+    'orderId',
+    'sourcingLocation',
+    'purchaseId',
+    'locationId',
+    'redFlags',
+    'salesChannel',
+    'countryOfOrigin',
+    'condition',
+    'auctionEndsAt',
+    'maxBid',
+    'currentBid'
+]);
+
+/**
+ * Mapping of known snake_case and alternate property names to their Appwrite camelCase equivalents.
+ */
+export const ITEM_ATTRIBUTE_ALIASES: Record<string, string> = {
+    'condition_notes': 'conditionNotes',
+    'condition_note': 'conditionNotes',
+    'conditionnotes': 'conditionNotes',
+    'order_id': 'orderId',
+    'orderid': 'orderId',
+    'orderID': 'orderId',
+    'location_sku': 'locationSku',
+    'locationsku': 'locationSku',
+    'locationSKU': 'locationSku',
+    'purchase_id': 'purchaseId',
+    'purchaseid': 'purchaseId',
+    'purchaseID': 'purchaseId',
+    'sale_id': 'saleId',
+    'saleid': 'saleId',
+    'saleID': 'saleId',
+    'warehouse_id': 'warehouseId',
+    'warehouseid': 'warehouseId',
+    'location_id': 'locationId',
+    'locationid': 'locationId',
+    'parent_lot_id': 'parentLotId',
+    'parentlotid': 'parentLotId',
+    'storage_location': 'storageLocation',
+    'sourcing_location': 'sourcingLocation',
+    'selling_locations': 'sellingLocations',
+    'market_description': 'marketDescription',
+    'raw_analysis': 'rawAnalysis',
+    'gallery_image_ids': 'galleryImageIds',
+    'receipt_image_id': 'receiptImageId',
+    'image_id': 'imageId',
+    'cart_id': 'cartId',
+    'red_flags': 'redFlags',
+    'purchase_price': 'purchasePrice',
+    'sales_channel': 'salesChannel',
+    'commission_paid': 'commissionPaid',
+    'country_of_origin': 'countryOfOrigin',
+    'auction_ends_at': 'auctionEndsAt',
+    'max_bid': 'maxBid',
+    'current_bid': 'currentBid',
+    'max_buy_price': 'maxBuyPrice',
+    'resale_price': 'resalePrice',
+    'sold_price': 'soldPrice'
+};
+
+export interface SanitizeItemOptions {
+    /** If true, partial updates are permitted (title and identity not required to be present). Default: false */
+    isUpdate?: boolean;
+    /** If true, missing title or identity will throw an error instead of fallback generation. Default: false */
+    strictValidation?: boolean;
+    /** Default tenant ID to inject if missing */
+    tenantId?: string;
+}
+
+/**
+ * Validates and sanitizes item payloads before saving or updating in Appwrite.
+ * 
+ * Invariants:
+ * 1. Required tracking fields (identity, title, tenantId, status) are NEVER silently skipped.
+ * 2. Auto-maps snake_case / alternate aliases (order_id -> orderId, condition_notes -> conditionNotes).
+ * 3. Never drops unmapped external metadata: captures extra properties safely inside conditionNotes
+ *    under `--- EXTERNAL TRACKING CAPTURE ---`.
+ * 4. Ensures strict numeric types for prices/costs to prevent DB schema rejection.
+ * 5. Clamps string fields safely (e.g. conditionNotes <= 950 chars) to prevent Appwrite byte-length errors.
+ */
+export function sanitizeItemPayload(rawPayload: Record<string, any>, options: SanitizeItemOptions = {}): Record<string, any> {
+    if (!rawPayload || typeof rawPayload !== 'object') {
+        throw new Error("[sanitizeItemPayload] Invalid payload: must be an object.");
+    }
+
+    const { isUpdate = false, strictValidation = false, tenantId } = options;
+    const cleanDoc: Record<string, any> = {};
+    const unmappedEntries: [string, any][] = [];
+
+    // Step 1: Normalize keys and aliases
+    for (const [rawKey, rawVal] of Object.entries(rawPayload)) {
+        if (rawVal === undefined) continue;
+
+        // Skip internal/system or transient UI keys
+        if (rawKey.startsWith('$') || rawKey === 'galleryFiles' || rawKey === 'imageFile' || rawKey === 'receiptFile') {
+            continue;
+        }
+
+        const canonicalKey = ITEM_ATTRIBUTE_ALIASES[rawKey] || rawKey;
+
+        if (ALLOWED_ITEM_ATTRIBUTES.has(canonicalKey)) {
+            cleanDoc[canonicalKey] = rawVal;
+        } else if (canonicalKey === 'tagTitle' || canonicalKey === 'tag_title') {
+            // Special handling for tagTitle -> embedded tag in conditionNotes
+            if (rawVal && String(rawVal).trim()) {
+                const tag = String(rawVal).trim();
+                const cur = cleanDoc.conditionNotes || rawPayload.conditionNotes || rawPayload.condition_notes || '';
+                if (!cur.includes('[TAG_TITLE:')) {
+                    cleanDoc.conditionNotes = cur ? `${cur}\n[TAG_TITLE: ${tag}]` : `[TAG_TITLE: ${tag}]`;
+                }
+            }
+        } else {
+            // Capture unmapped metadata so external tracking data is NEVER discarded
+            if (rawVal !== null && rawVal !== '') {
+                unmappedEntries.push([rawKey, rawVal]);
+            }
+        }
+    }
+
+    // Step 2: Validate Required Fields (unless partial update)
+    if (!isUpdate) {
+        // Identity validation
+        let finalIdentity = cleanDoc.identity;
+        if (typeof finalIdentity === 'object') finalIdentity = JSON.stringify(finalIdentity);
+        finalIdentity = (finalIdentity ? String(finalIdentity) : '').trim();
+
+        if (!finalIdentity) {
+            if (strictValidation) {
+                throw new Error("[sanitizeItemPayload] Required item field 'identity' is missing for tracking.");
+            }
+            const ts = Date.now().toString().slice(-6);
+            const rand = Math.floor(100 + Math.random() * 900);
+            finalIdentity = cleanDoc.purchaseId ? `PO-${ts}-${rand}` : `ITEM-${ts}-${rand}`;
+        }
+        cleanDoc.identity = finalIdentity;
+
+        // Title validation
+        let finalTitle = (cleanDoc.title ? String(cleanDoc.title) : '').trim();
+        if (!finalTitle) {
+            if (strictValidation) {
+                throw new Error("[sanitizeItemPayload] Required item field 'title' is missing for tracking.");
+            }
+            finalTitle = finalIdentity ? `Item ${finalIdentity}` : 'Untitled Item';
+        }
+        cleanDoc.title = finalTitle.substring(0, 255);
+
+        // Status validation
+        if (!cleanDoc.status) {
+            cleanDoc.status = 'acquired';
+        }
+
+        // TenantId validation
+        if (!cleanDoc.tenantId && tenantId) {
+            cleanDoc.tenantId = tenantId;
+        }
+    } else {
+        // For updates: if title or identity is explicitly passed, ensure non-empty strings
+        if (cleanDoc.title !== undefined) {
+            cleanDoc.title = String(cleanDoc.title || '').trim().substring(0, 255);
+        }
+        if (cleanDoc.identity !== undefined) {
+            cleanDoc.identity = String(cleanDoc.identity || '').trim();
+        }
+    }
+
+    // Step 3: Numeric sanitization
+    const numericFields = [
+        'cost', 'resalePrice', 'soldPrice', 'maxBuyPrice', 'purchasePrice', 
+        'commissionPaid', 'maxBid', 'currentBid'
+    ];
+    for (const field of numericFields) {
+        if (cleanDoc[field] !== undefined && cleanDoc[field] !== null) {
+            const val = cleanDoc[field];
+            if (val === '') {
+                delete cleanDoc[field];
+            } else {
+                const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+                if (isNaN(num)) {
+                    delete cleanDoc[field];
+                } else {
+                    cleanDoc[field] = num;
+                }
+            }
+        }
+    }
+
+    if (cleanDoc.quantity !== undefined && cleanDoc.quantity !== null) {
+        const q = parseInt(String(cleanDoc.quantity), 10);
+        cleanDoc.quantity = isNaN(q) ? 1 : q;
+    }
+
+    // Step 4: String trimming & length guards
+    const stringLimits: Record<string, number> = {
+        title: 255,
+        identity: 1000,
+        upc: 255,
+        locationSku: 255,
+        storageLocation: 255,
+        sourcingLocation: 255,
+        warehouseId: 255,
+        saleId: 255,
+        purchaseId: 255,
+        cartId: 255,
+        orderId: 255,
+        locationId: 255,
+        parentLotId: 255,
+        status: 255,
+        condition: 255,
+        salesChannel: 255,
+        countryOfOrigin: 255,
+        auctionEndsAt: 64,
+        components: 1000,
+        redFlags: 1000,
+        marketDescription: 65000,
+        rawAnalysis: 65000
+    };
+
+    for (const [field, maxLen] of Object.entries(stringLimits)) {
+        if (cleanDoc[field] !== undefined && cleanDoc[field] !== null) {
+            cleanDoc[field] = String(cleanDoc[field]).trim().substring(0, maxLen);
+        }
+    }
+
+    // Step 5: Unmapped External Tracking Capture in conditionNotes
+    let notes = String(cleanDoc.conditionNotes || '').trim();
+    if (unmappedEntries.length > 0) {
+        const captureLines = unmappedEntries.map(([k, v]) => `[${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}]`);
+        const captureBlock = `\n--- EXTERNAL TRACKING CAPTURE ---\n${captureLines.join('\n')}`;
+        if (!notes.includes('--- EXTERNAL TRACKING CAPTURE ---')) {
+            notes = notes ? `${notes}\n${captureBlock}` : captureBlock;
+        }
+    }
+
+    if (notes) {
+        // Appwrite conditionNotes size is 1000. Clamp to 950 to be safe with multi-byte chars.
+        if (notes.length > 950) {
+            console.warn(`[sanitizeItemPayload] conditionNotes too long (${notes.length} chars). Clamping to 950.`);
+            notes = notes.substring(0, 950);
+        }
+        cleanDoc.conditionNotes = notes;
+    }
+
+    // Step 6: Arrays validation
+    const arrayFields = ['sellingLocations', 'galleryImageIds', 'keywords'];
+    for (const field of arrayFields) {
+        if (cleanDoc[field] !== undefined && cleanDoc[field] !== null) {
+            if (!Array.isArray(cleanDoc[field])) {
+                cleanDoc[field] = [String(cleanDoc[field])];
+            }
+        }
+    }
+
+    return cleanDoc;
+}
+
 export async function saveItemToInventory(itemData: any, imageFile: File | null, extraData: ExtraItemData = {}, teamId?: string, ownerType: 'team' | 'user' = 'team') {
     if (!import.meta.env.PUBLIC_APPWRITE_DB_ID) {
         throw new Error("Missing PUBLIC_APPWRITE_DB_ID in .env");
@@ -779,7 +1066,32 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 }
 
                 if (existingItem) {
-                    console.log(`[Inventory] Deduplication: Item with identity "${targetIdentity}" already exists (${existingItem.$id}, UPC: ${existingItem.upc}, Status: ${existingItem.status}). Skipping duplicate creation.`);
+                    // Pre-Buy Lifecycle Graduation: If existing item was tracked/draft and incoming data is acquired/received,
+                    // graduate the item into physical inventory down the chain!
+                    const isPreBuy = ['tracked', 'draft', 'scouted'].includes(existingItem.status);
+                    const isIncomingAcquired = extraData.status && ['acquired', 'received', 'placed'].includes(extraData.status);
+
+                    if (isPreBuy && isIncomingAcquired) {
+                        const promotionPayload: any = {
+                            status: extraData.status,
+                            storageLocation: extraData.storageLocation || existingItem.storageLocation || 'HG'
+                        };
+                        if (extraData.cost !== undefined && extraData.cost !== null) promotionPayload.cost = extraData.cost;
+                        if (extraData.orderId) promotionPayload.orderId = extraData.orderId;
+                        if (extraData.purchaseId) promotionPayload.purchaseId = extraData.purchaseId;
+                        if (extraData.imageId && !existingItem.imageId) promotionPayload.imageId = extraData.imageId;
+                        if (extraData.resalePrice && !existingItem.resalePrice) promotionPayload.resalePrice = extraData.resalePrice;
+
+                        try {
+                            await databases.updateDocument(DB_ID, getCollectionId(), existingItem.$id, promotionPayload);
+                            Object.assign(existingItem, promotionPayload);
+                            console.log(`[Inventory] Graduated pre-buy item ${existingItem.$id} (${targetIdentity}) from ${isPreBuy} to ${extraData.status}`);
+                        } catch (gradErr) {
+                            console.error('[Inventory] Failed to graduate pre-buy item:', gradErr);
+                        }
+                    } else {
+                        console.log(`[Inventory] Deduplication: Item with identity "${targetIdentity}" already exists (${existingItem.$id}, UPC: ${existingItem.upc}, Status: ${existingItem.status}). Skipping duplicate creation.`);
+                    }
                     return existingItem;
                 }
             } catch (dedupErr) {
@@ -851,7 +1163,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             }
         }
         
-        let safeNotes = itemData.condition_notes || '';
+        let safeNotes = itemData.conditionNotes || itemData.condition_notes || '';
         
         // Append extra analytics/data to notes since DB columns might be missing
         const extraInfo: string[] = [];
@@ -861,7 +1173,6 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         if (extraData.sourcingLocation) extraInfo.push(`Location: ${extraData.sourcingLocation}`);
         if (extraData.orderId) extraInfo.push(`Order #: ${extraData.orderId}`);
         if (imageId) extraInfo.push(`[MAIN IMAGE ID: ${imageId}]`);
-        if (galleryIds.length > 0) extraInfo.push(`[GALLERY IDS: ${galleryIds.join(', ')}]`);
         if (galleryIds.length > 0) extraInfo.push(`[GALLERY IDS: ${galleryIds.join(', ')}]`);
         if (receiptImageId) extraInfo.push(`[RECEIPT ID: ${receiptImageId}]`);
         // Save Estimates
@@ -1036,6 +1347,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             locationId: extraData.locationId || undefined,
             upc: finalUpc,
             locationSku: extraData.locationSku || undefined,
+            orderId: extraData.orderId || undefined,
             auctionEndsAt: extraData.auctionEndsAt || undefined,
             maxBid: extraData.maxBid !== undefined && extraData.maxBid !== null ? parseFloat(extraData.maxBid.toString()) || 0 : undefined,
             currentBid: extraData.currentBid !== undefined && extraData.currentBid !== null ? parseFloat(extraData.currentBid.toString()) || 0 : undefined,
@@ -1044,9 +1356,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 : (scoutObj ? getSafeRawAnalysis(scoutObj) : undefined)
         };
 
-        // Remove undefined keys to satisfy Appwrite's strict document validation
-        Object.keys(doc).forEach(key => doc[key] === undefined && delete doc[key]);
-
+        // Sanitize, validate tracking fields, and remove disallowed keys for Appwrite
+        const safeDoc = sanitizeItemPayload(doc, { isUpdate: false, tenantId: teamId });
 
         let permissions: string[] = [];
         if (teamId) {
@@ -1069,7 +1380,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             DB_ID,
             getCollectionId(),
             ID.unique(),
-            doc,
+            safeDoc,
             permissions
         );
 
@@ -1596,9 +1907,24 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             data.keywords = Array.isArray(updates.keywords) ? updates.keywords : [];
         }
 
-        if (updates.orderId !== undefined) {
-            // No top-level orderId column in standard flow, but save to notes
-            updateNoteValue('Order #', updates.orderId ? String(updates.orderId) : '');
+        if (updates.orderId !== undefined || updates.order_id !== undefined) {
+            const rawOrder = updates.orderId !== undefined ? updates.orderId : updates.order_id;
+            data.orderId = (rawOrder === '' || rawOrder === null) ? null : String(rawOrder).trim();
+            updateNoteValue('Order #', data.orderId ? String(data.orderId) : '');
+        }
+
+        if (updates.purchaseId !== undefined || updates.purchase_id !== undefined) {
+            const rawPurch = updates.purchaseId !== undefined ? updates.purchaseId : updates.purchase_id;
+            data.purchaseId = (rawPurch === '' || rawPurch === null) ? null : String(rawPurch).trim();
+        }
+
+        if (updates.locationSku !== undefined || updates.location_sku !== undefined) {
+            const rawSku = updates.locationSku !== undefined ? updates.locationSku : updates.location_sku;
+            data.locationSku = (rawSku === '' || rawSku === null) ? null : String(rawSku).trim();
+        }
+
+        if (updates.upc !== undefined) {
+            data.upc = (updates.upc === '' || updates.upc === null) ? null : String(updates.upc).trim();
         }
 
         if (updates.auctionEndsAt !== undefined) {

@@ -38,6 +38,40 @@
                   </div>
               </div>
 
+              <!-- EXPIRED AUCTIONS RESOLUTION BANNER -->
+              <div v-if="expiredAuctionItems.length > 0" class="mx-4 mb-4 p-4 rounded-2xl bg-warning/15 border-2 border-warning/40 shadow-sm flex flex-col gap-3">
+                  <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="flex items-center gap-2">
+                          <Icon icon="solar:clock-circle-bold" class="w-6 h-6 text-warning animate-pulse" />
+                          <div>
+                              <h3 class="font-black text-sm uppercase tracking-wide text-warning-content">
+                                  {{ expiredAuctionItems.length }} Tracked Auction{{ expiredAuctionItems.length === 1 ? '' : 's' }} Ended
+                              </h3>
+                              <p class="text-xs opacity-85">Did you win or lose? Resolve below to graduate won items to Acquired inventory or clear lost tracks.</p>
+                          </div>
+                      </div>
+                  </div>
+                  <div class="grid gap-2">
+                      <div v-for="item in expiredAuctionItems" :key="item.$id" class="flex items-center justify-between gap-3 p-2.5 bg-base-100 rounded-xl border border-base-300 text-xs shadow-2xs">
+                          <div class="min-w-0 flex-1">
+                              <div class="font-bold truncate text-base-content">{{ item.title || item.identity }}</div>
+                              <div class="text-[11px] opacity-70 font-mono">
+                                  <span>Last Bid: ${{ Number(item.currentBid || item.cost || 0).toFixed(2) }}</span>
+                                  <span v-if="item.maxBid" class="ml-2">• Max Bid: ${{ Number(item.maxBid).toFixed(2) }}</span>
+                              </div>
+                          </div>
+                          <div class="flex items-center gap-2 shrink-0">
+                              <button @click="handleItemWon(item)" class="btn btn-xs btn-success gap-1 font-bold shadow-xs">
+                                  <Icon icon="solar:cup-star-bold" class="w-3.5 h-3.5" /> Won
+                              </button>
+                              <button @click="handleItemLost(item)" class="btn btn-xs btn-ghost text-error/80 hover:bg-error/10 hover:text-error font-bold">
+                                  Lost
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
               <!-- ITEMS LIST -->
               <div class="px-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(280px,1fr))] pt-0">
                   <ItemCard 
@@ -49,6 +83,7 @@
 
                       <template #actions>
                           <!-- Docked Bottom Actions -->
+                          <div class="join join-horizontal w-full">
                               <a v-if="getItemSourceUrl(item)" :href="getItemSourceUrl(item)" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs join-item flex-1 text-primary opacity-80 hover:opacity-100" title="Open live auction listing in new tab">
                                   <Icon icon="solar:link-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Open
                               </a>
@@ -246,9 +281,37 @@ const scrollToTop = () => {
 
 const { 
   activeCart, cartItems, cartExpenses, loading, 
-  checkActiveCart, addExpense, finishCart, leaveCart,
-  deleteItem, updateItem
+  expiredAuctionItems, checkActiveCart, addExpense, finishCart, leaveCart,
+  deleteItem, updateItem, recordAuctionWin, recordAuctionLoss
 } = useCart();
+
+async function handleItemWon(item: any) {
+    const defaultBid = item.currentBid || item.cost || item.maxBid || 0;
+    const input = prompt(`Enter winning bid for "${item.title || item.identity}":`, String(Number(defaultBid).toFixed(2)));
+    if (input === null) return;
+    const finalBid = parseFloat(input);
+    if (isNaN(finalBid) || finalBid <= 0) {
+        addToast({ type: 'warning', message: 'Invalid winning bid amount.' });
+        return;
+    }
+    try {
+        await recordAuctionWin(item.$id, finalBid);
+        addToast({ type: 'success', message: `🏆 Won! "${item.title || item.identity}" graduated to Acquired inventory ($${finalBid.toFixed(2)}).` });
+    } catch (e: any) {
+        addToast({ type: 'error', message: 'Failed to record win: ' + e.message });
+    }
+}
+
+async function handleItemLost(item: any) {
+    if (await confirmDialog(`Remove "${item.title || item.identity}" from tracker? (Auction lost)`, "Confirm Auction Loss", "Remove Track", "Cancel", "btn-error")) {
+        try {
+            await recordAuctionLoss(item.$id, true);
+            addToast({ type: 'info', message: `"${item.title || item.identity}" removed from tracker.` });
+        } catch (e: any) {
+            addToast({ type: 'error', message: 'Failed to record loss: ' + e.message });
+        }
+    }
+}
 
 const newExpenseNote = ref('');
 const newExpenseAmount = ref<number | ''>(''); 

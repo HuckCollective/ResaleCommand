@@ -115,20 +115,16 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
+import { saveItemToInventory, sanitizeItemPayload, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
-import { purchasesAPI } from '../../lib/purchases';
+import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { storage } from '../../lib/appwrite';
 import { checkInventoryDuplicate } from '../../lib/deduplication';
-
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 
 const props = defineProps({
     isOpen: Boolean
@@ -174,7 +170,7 @@ const handleUndoImport = async () => {
     processingUndo.value = true;
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
     const ITEMS_COL = getCollectionId();
-    const PURCHASES_COL = import.meta.env.PUBLIC_APPWRITE_CARTS_COL || import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'carts';
+    const PURCHASES_COL = getPurchasesCollectionId();
 
     try {
         // 1. Delete Items
@@ -608,7 +604,7 @@ const processRows = async (rows) => {
                     
                     const itemUpdates = {};
                     if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price)) {
-                        itemUpdates.cost = price;
+                        itemUpdates.cost = parseFloat(price) || 0;
                     }
                     if (dbPurchaseId && (!matchedDoc.purchaseId || matchedDoc.purchaseId !== dbPurchaseId)) {
                         itemUpdates.purchaseId = dbPurchaseId;
@@ -616,11 +612,14 @@ const processRows = async (rows) => {
                     if (orderId && (!matchedDoc.orderId || matchedDoc.orderId !== orderId)) {
                         itemUpdates.orderId = orderId;
                     }
-                    if (shippingNotes && !matchedDoc.condition_notes?.includes('COST BREAKDOWN')) {
-                        itemUpdates.condition_notes = (matchedDoc.condition_notes || '') + shippingNotes;
+                    const existingNotes = matchedDoc.conditionNotes || matchedDoc.condition_notes || '';
+                    if (shippingNotes && !existingNotes.includes('COST BREAKDOWN')) {
+                        itemUpdates.conditionNotes = (existingNotes ? existingNotes + '\n' : '') + shippingNotes;
                     }
-                    if (Object.keys(itemUpdates).length > 0) {
-                        await databases.updateDocument(DB_ID, COL_ID, matchedDoc.$id, itemUpdates);
+                    
+                    const safeUpdates = sanitizeItemPayload(itemUpdates, { isUpdate: true });
+                    if (Object.keys(safeUpdates).length > 0) {
+                        await databases.updateDocument(DB_ID, COL_ID, matchedDoc.$id, safeUpdates);
                         logs.value.push(`🔄 Updated existing item: ${itemLabel} (Linked to PO ${orderId || ''})`);
                     } else {
                         logs.value.push(`✓ Item verified: ${itemLabel}`);
@@ -762,7 +761,7 @@ const processRows = async (rows) => {
             const itemToSave = {
                 title: title,
                 identity: itemId,
-                condition_notes: notes,
+                conditionNotes: notes,
             };
             const extraData = {
                 cost: price,

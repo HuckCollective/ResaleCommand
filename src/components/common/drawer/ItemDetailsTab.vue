@@ -922,6 +922,7 @@ import {
     calculateSubItemMaxBidPrice 
 } from '../../../lib/bundle-pricing';
 import { deriveLotExitPlaybook } from '../../../lib/lot-strategy';
+import { isItemAcquired } from '../../../lib/inventory';
 
 const props = defineProps({
     editForm: {
@@ -1052,8 +1053,7 @@ const linkedSaleOrderId = computed(() => {
 });
 
 const isAcquiredItem = computed(() => {
-    const s = (props.item?.status || props.editForm?.status || '').toLowerCase();
-    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) && !['tracked', 'scouting', 'draft', 'pending_bid'].includes(s);
+    return isItemAcquired(props.item?.status || props.editForm?.status || '');
 });
 
 const exitPlaybook = computed(() => {

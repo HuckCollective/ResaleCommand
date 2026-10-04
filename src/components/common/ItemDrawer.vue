@@ -266,7 +266,7 @@ import ItemLotTab from './drawer/ItemLotTab.vue';
 import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
-import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage, formatScoutReportMarkdown } from '../../lib/inventory';
+import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage, formatScoutReportMarkdown, isItemAcquired, isLiveAuctionActive } from '../../lib/inventory';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
@@ -591,8 +591,7 @@ const showOnStorefront = computed({
 });
 
 const isAcquiredItem = computed(() => {
-    const s = (props.item?.status || editForm.status || '').toLowerCase();
-    return ['acquired', 'active', 'placed', 'sold', 'received', 'staged'].includes(s) && !['tracked', 'scouting', 'draft', 'pending_bid'].includes(s);
+    return isItemAcquired(props.item?.status || editForm.status || '');
 });
 
 const scoutResult = ref(null);
@@ -671,6 +670,8 @@ const suggestedTagTitleStr = computed(() => {
 });
 
 const scoutPurchaseStrategy = computed(() => {
+    // Already won/acquired inventory does not have live bidding or outbid warnings
+    if (isAcquiredItem.value || !isLiveAuctionActive(props.item)) return null;
     if (!scoutResult.value) return null;
     let strat = null;
     if (scoutResult.value.purchase_strategy) strat = scoutResult.value.purchase_strategy;
@@ -1759,37 +1760,37 @@ const analyzeExistingItem = async () => {
                     editForm.keywords = [...item.keywords];
                 }
 
-                // LIVE AUCTION UPDATE FOR UNACQUIRED / TRACKED ITEMS:
-                const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
-                const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
-                
-                if (!isAcquiredItem.value && liveBid > 0) {
-                    editForm.cost = liveBid.toFixed(2);
-                }
-                if (item.auctionEndsAt || item.auction_meta?.end_time) {
-                    editForm.auctionEndsAt = item.auctionEndsAt || item.auction_meta?.end_time;
-                }
-                if (maxBidCeiling && Number(maxBidCeiling) > 0) {
-                    editForm.maxBid = maxBidCeiling;
-                }
-                if (liveBid > 0) {
-                    editForm.currentBid = liveBid;
-                }
-                if (item.canCombineShipping !== undefined) {
-                    editForm.canCombineShipping = item.canCombineShipping;
-                }
+                // LIVE AUCTION UPDATE FOR UNACQUIRED / TRACKED ITEMS ONLY:
+                if (!isAcquiredItem.value && isLiveAuctionActive(props.item)) {
+                    const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
+                    const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
+                    
+                    if (liveBid > 0) {
+                        editForm.cost = liveBid.toFixed(2);
+                        editForm.currentBid = liveBid;
+                    }
+                    if (item.auctionEndsAt || item.auction_meta?.end_time) {
+                        editForm.auctionEndsAt = item.auctionEndsAt || item.auction_meta?.end_time;
+                    }
+                    if (maxBidCeiling && Number(maxBidCeiling) > 0) {
+                        editForm.maxBid = maxBidCeiling;
+                    }
+                    if (item.canCombineShipping !== undefined) {
+                        editForm.canCombineShipping = item.canCombineShipping;
+                    }
 
-                if (liveBid > 0 && maxBidCeiling && Number(maxBidCeiling) > 0) {
-                    if (liveBid > maxBidCeiling) {
-                        addToast({ 
-                            type: 'error', 
-                            message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.` 
-                        });
-                    } else {
-                        addToast({ 
-                            type: 'success', 
-                            message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})` 
-                        });
+                    if (liveBid > 0 && maxBidCeiling && Number(maxBidCeiling) > 0) {
+                        if (liveBid > maxBidCeiling) {
+                            addToast({ 
+                                type: 'error', 
+                                message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.` 
+                            });
+                        } else {
+                            addToast({ 
+                                type: 'success', 
+                                message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})` 
+                            });
+                        }
                     }
                 }
                 

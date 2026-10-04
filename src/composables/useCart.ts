@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { client, databases, storage, ID, Query } from '../lib/appwrite';
 import { Permission, Role, type Models } from 'appwrite';
 import { useAuth } from './useAuth';
+import { getDefaultStorageLocation } from '../lib/warehouses';
 
 export interface CartExpense extends Models.Document {
     amount: number;
@@ -47,19 +48,15 @@ const error = ref<string | null>(null);
 // Config
 import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId } from '../lib/purchases';
+import { getCollectionId, DB_ID, BUCKET_ID } from '../lib/inventory';
 
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
 const CARTS_COL = getPurchasesCollectionId(); 
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 const EXPENSES_COL = 'expenses'; // New collection for line-item costs
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID; // 'item_images' (or use a 'receipts' bucket if preferred)
 
 let unsubscribe: (() => void) | null = null;
 
 export function useCart() {
-    const { user } = useAuth();
+    const { user, currentTeam } = useAuth();
 
     const cartTotalItems = computed(() => cartItems.value.length);
     
@@ -350,13 +347,17 @@ export function useCart() {
                 });
             }
 
-            // Update all items in this cart to 'received'
+            // Update all items in this cart to 'received' stored at default backstock
+            const defaultLoc = getDefaultStorageLocation(currentTeam.value || user.value);
             const updatePromises = cartItems.value.map(item => {
                  return databases.updateDocument(
                      DB_ID,
                      getCollectionId(),
                      item.$id,
-                     { status: 'received' }
+                     { 
+                         status: 'received',
+                         storageLocation: item.storageLocation || defaultLoc
+                     }
                  ).catch(err => {
                      console.error(`Failed to update item ${item.$id} to received:`, err);
                  });
@@ -472,6 +473,71 @@ export function useCart() {
         }
     };
 
+    const recordAuctionWin = async (itemId: string, winningBid: number) => {
+        loading.value = true;
+        try {
+            const item = cartItems.value.find(i => i.$id === itemId);
+            const defaultLoc = getDefaultStorageLocation(currentTeam.value || user.value);
+            await databases.updateDocument(DB_ID, getCollectionId(), itemId, {
+                cost: winningBid,
+                status: 'acquired',
+                storageLocation: (item as any)?.storageLocation || defaultLoc,
+                auctionStatus: 'won'
+            });
+            // Item is now acquired inventory: remove from pre-buy cart/tracker
+            cartItems.value = cartItems.value.filter(i => i.$id !== itemId);
+            if (activeCart.value) {
+                const newSubtotal = cartItems.value.reduce((sum, i) => sum + (i.cost || 0), 0);
+                await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
+                    subtotal: newSubtotal
+                });
+            }
+        } catch (e: any) {
+            console.error('[useCart] Failed to record auction win:', e);
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    const recordAuctionLoss = async (itemId: string, deleteDoc: boolean = true) => {
+        loading.value = true;
+        try {
+            if (deleteDoc) {
+                await databases.deleteDocument(DB_ID, getCollectionId(), itemId);
+            } else {
+                await databases.updateDocument(DB_ID, getCollectionId(), itemId, {
+                    auctionStatus: 'lost'
+                });
+            }
+            cartItems.value = cartItems.value.filter(i => i.$id !== itemId);
+            if (activeCart.value) {
+                const newSubtotal = cartItems.value.reduce((sum, i) => sum + (i.cost || 0), 0);
+                await databases.updateDocument(DB_ID, CARTS_COL, activeCart.value.$id, {
+                    subtotal: newSubtotal
+                });
+            }
+        } catch (e: any) {
+            console.error('[useCart] Failed to record auction loss:', e);
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    const expiredAuctionItems = computed(() => {
+        return cartItems.value.filter(item => {
+            const s = (item as any).status;
+            if (s && s !== 'tracked' && s !== 'draft') return false;
+            if (!(item as any).auctionEndsAt) return false;
+            if ((item as any).auctionStatus === 'won' || (item as any).auctionStatus === 'lost') return false;
+            const end = new Date((item as any).auctionEndsAt).getTime();
+            return !isNaN(end) && end <= Date.now();
+        });
+    });
+
     return {
         activeCart,
         cartItems,
@@ -481,6 +547,7 @@ export function useCart() {
         cartTotalItems,
         cartTotalCost,
         hasActiveCart,
+        expiredAuctionItems,
         startCart,
         setActiveCart,
         addItemToCart,
@@ -491,6 +558,8 @@ export function useCart() {
         checkActiveCart,
         leaveCart,
         deleteItem,
-        updateItem
+        updateItem,
+        recordAuctionWin,
+        recordAuctionLoss
     };
 }

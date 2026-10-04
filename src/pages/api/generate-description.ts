@@ -4,6 +4,7 @@ import { Client, Databases, Storage } from 'node-appwrite';
 import { Buffer } from 'node:buffer';
 import type { APIRoute } from 'astro';
 import { generateContentWithBackoff } from '../../lib/gemini';
+import { getDatabaseId, getItemsCollectionId, getBucketId } from '../../lib/appwriteEnv';
 
 export const POST: APIRoute = async ({ request }) => {
     try {
@@ -65,10 +66,10 @@ export const POST: APIRoute = async ({ request }) => {
             }
         };
 
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-        let COLLECTION_ID = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID as string;
+        const DB_ID = getDatabaseId();
+        let COLLECTION_ID = getItemsCollectionId();
         const ALPHA_COLLECTION_ID = import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID as string;
-        const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID as string;
+        const BUCKET_ID = getBucketId();
 
         // 1. Fetch Item Data
         console.log('[API] Fetching item document...');

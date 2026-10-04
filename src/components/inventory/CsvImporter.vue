@@ -246,7 +246,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { saveItemToInventory } from '../../lib/inventory';
+import { saveItemToInventory, getCollectionId } from '../../lib/inventory';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast, updateToast, removeToast } from '../../stores/toast';
 import Papa from 'papaparse';
@@ -257,10 +257,6 @@ import { purchasesAPI } from '../../lib/purchases';
 import { checkInventoryDuplicate, batchCheckDuplicates } from '../../lib/deduplication';
 
 const { showLoader, hideLoader } = useLoader();
-
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 
 const emit = defineEmits(['close', 'imported']);
 
@@ -773,7 +769,9 @@ async function importSelected() {
                         }
                     }
 
-                    if (match && !allowDuplicateUpdates.value) {
+                    const isPreBuyMatch = match && ['tracked', 'draft', 'scouted'].includes(match.status);
+
+                    if (match && !allowDuplicateUpdates.value && !isPreBuyMatch) {
                         console.log(`[Import] Skipping duplicate item ${item.itemId}: already exists as ${match.$id}`);
                         item.importStatus = 'updated';
                         skipped++;
@@ -809,10 +807,10 @@ async function importSelected() {
                         }
                     }
 
-                    // 3. IF MATCHED & UPDATES ALLOWED: UPDATE EXISTING ITEM
+                    // 3. IF MATCHED & UPDATES ALLOWED (OR PRE-BUY PROMOTION): UPDATE EXISTING ITEM
                     if (match) {
                         const doc = match;
-                        console.log(`[Import] Updating existing item: ${item.title}`);
+                        console.log(`[Import] Updating existing item: ${item.title} (isPreBuy: ${isPreBuyMatch})`);
                         
                         let newNotes = doc.conditionNotes || '';
                         if (item.sourceLink && !newNotes.includes(item.sourceLink)) {
@@ -826,6 +824,12 @@ async function importSelected() {
                             cost: item.totalCost, 
                             conditionNotes: newNotes
                         };
+                        if (isPreBuyMatch) {
+                            updateData.status = 'acquired';
+                            updateData.storageLocation = doc.storageLocation || 'HG';
+                            if (item.orderId) updateData.orderId = item.orderId;
+                            if (item.orderId && poMap[item.orderId]) updateData.purchaseId = poMap[item.orderId];
+                        }
                         if (finalImageId) {
                             updateData.imageId = finalImageId;
                         }

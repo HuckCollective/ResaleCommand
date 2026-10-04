@@ -5,12 +5,48 @@
       <span>You are currently in your <strong>Personal Inventory</strong>. Some settings are only available when working within a Team/Workspace.</span>
     </div>
 
-    <!-- UPC Settings -->
+    <!-- UPC & Inventory Intake Settings -->
     <div class="card bg-base-100 shadow-xl border border-base-200">
       <div class="card-body">
-        <h2 class="card-title text-xl mb-4">Inventory UID Settings</h2>
+        <h2 class="card-title text-xl mb-4">Inventory &amp; Intake Defaults</h2>
         
         <form @submit.prevent="saveSettings" class="space-y-6 max-w-lg">
+          <div class="form-control w-full">
+            <label class="label">
+              <span class="label-text font-bold">Default Receiving / Backstock Facility</span>
+              <span class="label-text-alt opacity-70">Where new purchases are placed</span>
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select 
+                v-model="form.defaultStorageLocation" 
+                class="select select-bordered w-full bg-base-200"
+                :disabled="loading"
+              >
+                <option value="HG">HG — Main Warehouse / Home Base</option>
+                <option value="MD">MD — Memory Den</option>
+                <option value="DT">DT — Dusty Tiger</option>
+                <option value="ONLINE">ONLINE — E-Commerce / Staged</option>
+                <option :value="customLocationValue" v-if="isCustomLocation">
+                  Custom: {{ form.defaultStorageLocation }}
+                </option>
+              </select>
+              <input 
+                type="text" 
+                v-model="form.defaultStorageLocation" 
+                placeholder="Or enter code (e.g. HG, BIN-A1)" 
+                class="input input-bordered w-full bg-base-200 font-mono uppercase" 
+                :disabled="loading"
+              />
+            </div>
+            <label class="label">
+              <span class="label-text-alt opacity-70">
+                New purchases, received lots, and cart checkouts will automatically assign to this storage location unless specified.
+              </span>
+            </label>
+          </div>
+
+          <div class="divider my-2"></div>
+
           <div class="form-control w-full">
             <label class="label">
               <span class="label-text font-bold">Custom UPC / SKU Prefix</span>
@@ -47,24 +83,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useAuth } from '../../composables/useAuth';
+import { getDefaultStorageLocation } from '../../lib/warehouses';
 
-const { currentTeam, user, updateTeamPrefs, updatePrefs } = useAuth();
+const { currentTeam, teams, user, updateTeamPrefs, updatePrefs } = useAuth();
 const loading = ref(false);
 const saving = ref(false);
 const message = ref('');
 const error = ref('');
 
 const form = ref({
-  upcPrefix: ''
+  upcPrefix: '',
+  defaultStorageLocation: 'HG'
 });
+
+const isCustomLocation = computed(() => {
+  const loc = form.value.defaultStorageLocation?.trim().toUpperCase();
+  return loc && !['HG', 'MD', 'DT', 'ONLINE'].includes(loc);
+});
+
+const customLocationValue = computed(() => form.value.defaultStorageLocation);
 
 const loadSettings = () => {
   if (currentTeam.value) {
-    form.value.upcPrefix = currentTeam.value.prefs?.upcPrefix || '';
+    form.value.upcPrefix = currentTeam.value.prefs?.upcPrefix || currentTeam.value.upcPrefix || '';
+    form.value.defaultStorageLocation = getDefaultStorageLocation(currentTeam.value);
   } else if (user.value) {
     form.value.upcPrefix = user.value.prefs?.upcPrefix || '';
+    form.value.defaultStorageLocation = getDefaultStorageLocation(user.value);
   }
 };
 
@@ -73,21 +120,25 @@ const saveSettings = async () => {
   message.value = '';
   error.value = '';
   try {
-    if (currentTeam.value) {
-      console.log('Saving for team:', currentTeam.value);
-      if (!currentTeam.value.$id) {
-          throw new Error("currentTeam.$id is undefined. Payload: " + JSON.stringify(currentTeam.value));
-      }
-      const currentPrefs = currentTeam.value.prefs || {};
-      await updateTeamPrefs(currentTeam.value.$id, {
-        ...currentPrefs,
-        upcPrefix: form.value.upcPrefix
+    const cleanLocation = form.value.defaultStorageLocation?.trim().toUpperCase() || 'HG';
+    const teamId = currentTeam.value?.$id || 
+                   teams.value?.find((t: any) => t?.$id)?.$id || 
+                   (typeof localStorage !== 'undefined' ? localStorage.getItem('activeTeamId') : null);
+
+    if (teamId) {
+      console.log('Saving for team ID:', teamId);
+      const currentPrefs = currentTeam.value?.prefs || currentTeam.value || {};
+      await updateTeamPrefs(teamId, {
+        ...(typeof currentPrefs === 'object' ? currentPrefs : {}),
+        upcPrefix: form.value.upcPrefix,
+        defaultStorageLocation: cleanLocation
       });
     } else {
       const currentPrefs = user.value?.prefs || {};
       await updatePrefs({
         ...currentPrefs,
-        upcPrefix: form.value.upcPrefix
+        upcPrefix: form.value.upcPrefix,
+        defaultStorageLocation: cleanLocation
       });
     }
     message.value = 'Settings saved successfully!';

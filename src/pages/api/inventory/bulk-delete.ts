@@ -1,13 +1,15 @@
 import type { APIRoute } from 'astro';
 import { Client, Databases } from 'node-appwrite';
 
+import { getItemsCollectionId, getDatabaseId } from '../../../lib/appwriteEnv';
+
 export const prerender = false;
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const API_KEY = import.meta.env.APPWRITE_API_KEY || process.env.APPWRITE_API_KEY;
-const DEFAULT_DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-const DEFAULT_COLLECTION_ID = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
+const DEFAULT_DB_ID = getDatabaseId();
+const DEFAULT_COLLECTION_ID = getItemsCollectionId();
 
 export const POST: APIRoute = async ({ request }) => {
     try {

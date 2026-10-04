@@ -394,6 +394,7 @@ import { Icon } from '@iconify/vue';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
+import { getCollectionId, DB_ID } from '../../lib/inventory';
 import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
 
 const { user } = useAuth();
@@ -411,7 +412,7 @@ const canUserEdit = computed(() => {
 const emit = defineEmits(['close', 'edit', 'deconstruct']);
 
 const previewModal = ref(null);
-import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown } from '../../lib/inventory';
+import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown, isLiveAuctionActive, isItemAcquired } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
@@ -429,10 +430,7 @@ watch(() => props.item, async (newItem) => {
         await loadScoutData(newItem);
         
         try {
-            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-            const collId = isAlphaMode.get() 
-                ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-                : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+            const collId = getCollectionId();
                 
             const childRes = await databases.listDocuments(DB_ID, collId, [
                 Query.equal('parentLotId', newItem.$id),
@@ -747,15 +745,12 @@ const gallery = computed(() => {
 });
 
 const isAuctionItem = computed(() => {
-    return !!(
-        props.item?.status === 'tracked' ||
-        props.item?.auctionEndsAt ||
-        props.item?.maxBid ||
-        (props.item?.sourcingLocation && (props.item.sourcingLocation.includes('shopgoodwill.com') || props.item.sourcingLocation.includes('auction')))
-    );
+    if (isItemAcquired(props.item?.status)) return false;
+    return isLiveAuctionActive(props.item);
 });
 
 const scoutPurchaseStrategy = computed(() => {
+    if (isItemAcquired(props.item?.status) || !isLiveAuctionActive(props.item)) return null;
     const rawStrat = parsedScoutData.value?.purchase_strategy || null;
     const currentCost = parseFloat(String(props.item?.currentBid || props.item?.cost || parsedScoutData.value?.currentBid || rawStrat?.current_asking_price || 0).replace(/[$,]/g, ''));
     const maxBid = parseFloat(String(props.item?.maxBid || parsedScoutData.value?.maxBid || rawStrat?.max_bid || 0).replace(/[$,]/g, ''));

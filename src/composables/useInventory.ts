@@ -4,12 +4,7 @@ import type { Models } from 'appwrite';
 import { useLoader } from './useLoader';
 
 import { isAlphaMode } from '../stores/env';
-import { generateAutoUpc, isValidOrgUpc } from '../lib/inventory';
-
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+import { generateAutoUpc, isValidOrgUpc, getCollectionId, DB_ID } from '../lib/inventory';
 
 // Shared state for the general inventory view
 const inventoryItems = ref<Models.Document[]>([]);

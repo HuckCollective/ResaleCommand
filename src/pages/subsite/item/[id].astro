@@ -3,13 +3,15 @@ import { databases } from '../../../lib/appwrite';
 import StoreHeaderCart from '../../../components/store/StoreHeaderCart.astro';
 import '../../../styles/global.css';
 
+import { getDatabaseId, getItemsCollectionId, getBucketId } from '../../../lib/appwriteEnv';
+
 const { id } = Astro.params;
 
 // Get tenant context from locals
 const tenantId = Astro.locals.tenantId || "default_tenant";
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
-const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items_dev";
-const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || "item_images";
+const DB_ID = getDatabaseId();
+const ITEMS_COL = getItemsCollectionId();
+const BUCKET_ID = getBucketId();
 const APPWRITE_ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const APPWRITE_PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 

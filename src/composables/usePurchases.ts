@@ -13,6 +13,39 @@ const error = ref<string | null>(null);
 let currentTenantId: string | null = null;
 let unsubscribe: (() => void) | null = null;
 
+// Synchronize in-memory reactive state instantly whenever any component creates, updates, or deletes a PO
+if (typeof window !== 'undefined' && !(window as any).__purchasesEventsInitialized) {
+    (window as any).__purchasesEventsInitialized = true;
+
+    window.addEventListener('purchase-updated', (e: any) => {
+        const doc = e?.detail?.data;
+        const purchaseId = e?.detail?.purchaseId || doc?.$id;
+        if (!purchaseId) return;
+        const idx = purchases.value.findIndex(p => p.$id === purchaseId);
+        if (idx !== -1) {
+            purchases.value[idx] = { ...purchases.value[idx], ...doc };
+        } else if (doc) {
+            purchases.value.unshift(doc);
+        }
+    });
+
+    window.addEventListener('purchase-created', (e: any) => {
+        const doc = e?.detail?.data;
+        if (!doc || !doc.$id) return;
+        if (!purchases.value.find(p => p.$id === doc.$id)) {
+            purchases.value.unshift(doc);
+            totalPurchases.value++;
+        }
+    });
+
+    window.addEventListener('purchase-deleted', (e: any) => {
+        const purchaseId = e?.detail?.purchaseId;
+        if (!purchaseId) return;
+        purchases.value = purchases.value.filter(p => p.$id !== purchaseId);
+        totalPurchases.value = Math.max(0, totalPurchases.value - 1);
+    });
+}
+
 export function usePurchases() {
     const initRealtime = () => {
         if (unsubscribe) return; // Already subscribed

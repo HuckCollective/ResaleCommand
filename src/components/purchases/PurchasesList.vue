@@ -40,6 +40,97 @@
         </div>
       </div>
 
+      <!-- STATUS FILTER PILLS & ACTION FOCUS -->
+      <div class="flex items-center justify-between gap-2 flex-wrap pt-2.5 mt-1 border-t border-base-200/60 text-xs">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+          <!-- ⚡ Needs Action Pill -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'needs-action' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'needs-action'"
+            title="Show open purchases requiring action (drafts, pending, shipped, unreceived)"
+          >
+            <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" />
+            <span>⚡ Needs Action</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'needs-action' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.needsAction }}</span>
+          </button>
+
+          <!-- 📦 Ready to Receive (Has items & not yet received) -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'ready-receive' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'ready-receive'"
+            title="Purchases with items waiting to be checked in and received"
+          >
+            <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
+            <span>📦 Ready to Receive</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'ready-receive' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.readyReceive }}</span>
+          </button>
+
+          <!-- All Purchases Pill -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'all' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'all'"
+            title="Show all purchases"
+          >
+            <span>All</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'all' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.all }}</span>
+          </button>
+
+          <!-- 🚚 In Transit -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'transit' ? 'btn-info text-info-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'transit'"
+            title="Purchases ordered or shipped"
+          >
+            <Icon icon="solar:delivery-linear" class="w-3.5 h-3.5" />
+            <span>In Transit</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'transit' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.transit }}</span>
+          </button>
+
+          <!-- ⏳ Draft / Pending -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'draft' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'draft'"
+            title="Draft or pending purchase orders"
+          >
+            <span>Draft & Pending</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'draft' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.draft }}</span>
+          </button>
+
+          <!-- ✅ Received -->
+          <button 
+            type="button" 
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
+            :class="statusFilter === 'received' ? 'btn-success text-success-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'received'"
+            title="Fully received purchases"
+          >
+            <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+            <span>Received</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'received' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.received }}</span>
+          </button>
+        </div>
+
+        <!-- Quick Toggle: Hide Empty POs (0 Items) -->
+        <label class="label cursor-pointer gap-1.5 py-0 px-1 ml-auto shrink-0 select-none" title="Filter out empty purchase order headers without items">
+          <input 
+            type="checkbox" 
+            v-model="hideEmpty" 
+            class="checkbox checkbox-xs checkbox-primary rounded" 
+          />
+          <span class="label-text text-[11px] font-bold opacity-80 whitespace-nowrap">Hide Empty (0 items)</span>
+        </label>
+      </div>
+
       <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
       <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-2 mt-1 border-t border-base-200/60 text-xs">
           <span class="font-bold opacity-60 mr-1 flex items-center gap-1">
@@ -91,10 +182,19 @@
     </div>
 
     <!-- EMPTY STATE -->
-    <div v-else-if="filteredPurchases.length === 0" class="card bg-base-100 shadow-md border border-base-200 p-8 text-center space-y-2">
+    <div v-else-if="filteredPurchases.length === 0" class="card bg-base-100 shadow-md border border-base-200 p-8 text-center space-y-3">
       <Icon icon="solar:box-minimalistic-linear" class="w-12 h-12 mx-auto text-base-content/30" />
       <h3 class="font-bold text-base">No Purchases Found</h3>
-      <p class="text-xs text-base-content/60">No purchases match your search or filter criteria.</p>
+      <p class="text-xs text-base-content/60">No purchases match your current status or search filter.</p>
+      <div v-if="statusFilter !== 'all' || hideEmpty || searchQuery" class="pt-1 flex items-center justify-center gap-2">
+        <button 
+          @click="statusFilter = 'all'; hideEmpty = false; searchQuery = ''" 
+          class="btn btn-xs btn-outline btn-primary font-bold rounded-lg gap-1.5"
+        >
+          <Icon icon="solar:refresh-linear" class="w-3.5 h-3.5" />
+          <span>Reset Filters & Show All ({{ purchases.length }})</span>
+        </button>
+      </div>
     </div>
 
     <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
@@ -378,6 +478,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
+import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
@@ -404,6 +505,9 @@ const purchaseItemCounts = computed(() => {
         if (item.cartId && item.cartId !== item.purchaseId) {
             counts[item.cartId] = (counts[item.cartId] || 0) + qty;
         }
+        if (item.poNumber) {
+            counts[item.poNumber] = (counts[item.poNumber] || 0) + qty;
+        }
     }
     return counts;
 });
@@ -412,8 +516,59 @@ const getItemCount = (purchase) => {
     if (!purchase) return 0;
     return purchaseItemCounts.value[purchase.$id] || 
            (purchase.orderId ? purchaseItemCounts.value[purchase.orderId] : 0) || 
+           (purchase.poNumber ? purchaseItemCounts.value[purchase.poNumber] : 0) ||
+           (Number(purchase.itemCount) > 0 ? Number(purchase.itemCount) : 0) ||
            0;
 };
+
+// Status Filter state
+const statusFilter = ref('all');
+const hideEmpty = ref(false);
+
+const statusCounts = computed(() => {
+    const list = purchases.value || [];
+    let needsAction = 0;
+    let readyReceive = 0;
+    let transit = 0;
+    let draft = 0;
+    let received = 0;
+    let emptyCount = 0;
+
+    for (const p of list) {
+        const s = (p.status || '').toLowerCase().trim();
+        const itemCount = getItemCount(p);
+
+        if (itemCount === 0) {
+            emptyCount++;
+        }
+
+        const isTerminal = s === 'received' || s === 'cancelled' || s === 'returned';
+        if (!isTerminal) {
+            needsAction++;
+            if (itemCount > 0) {
+                readyReceive++;
+            }
+        }
+
+        if (s === 'received') {
+            received++;
+        } else if (s === 'ordered' || s === 'shipped') {
+            transit++;
+        } else if (s === 'draft' || s === 'pending' || !s) {
+            draft++;
+        }
+    }
+
+    return {
+        all: list.length,
+        needsAction,
+        readyReceive,
+        transit,
+        draft,
+        received,
+        emptyCount
+    };
+});
 
 const showImportModal = ref(false);
 const undoBatch = ref(null);
@@ -453,7 +608,7 @@ const paginatedPurchases = computed(() => {
     return filteredPurchases.value.slice(start, start + pageSize.value);
 });
 
-watch([searchQuery, sortBy, sortDesc], () => {
+watch([searchQuery, sortBy, sortDesc, statusFilter, hideEmpty], () => {
     currentPage.value = 1;
 });
 
@@ -478,6 +633,38 @@ const getTimestamp = (p) => {
 const filteredPurchases = computed(() => {
     let list = purchases.value || [];
     
+    // 1. Status Filter Pills
+    if (statusFilter.value === 'needs-action') {
+        list = list.filter(p => {
+            const s = (p.status || '').toLowerCase().trim();
+            return s !== 'received' && s !== 'cancelled' && s !== 'returned';
+        });
+    } else if (statusFilter.value === 'ready-receive') {
+        list = list.filter(p => {
+            const s = (p.status || '').toLowerCase().trim();
+            const notTerminal = s !== 'received' && s !== 'cancelled' && s !== 'returned';
+            return notTerminal && getItemCount(p) > 0;
+        });
+    } else if (statusFilter.value === 'transit') {
+        list = list.filter(p => {
+            const s = (p.status || '').toLowerCase().trim();
+            return s === 'ordered' || s === 'shipped';
+        });
+    } else if (statusFilter.value === 'draft') {
+        list = list.filter(p => {
+            const s = (p.status || '').toLowerCase().trim();
+            return s === 'draft' || s === 'pending' || !s;
+        });
+    } else if (statusFilter.value === 'received') {
+        list = list.filter(p => (p.status || '').toLowerCase().trim() === 'received');
+    }
+
+    // 2. Hide Empty Checkbox
+    if (hideEmpty.value) {
+        list = list.filter(p => getItemCount(p) > 0);
+    }
+
+    // 3. Search query
     if (searchQuery.value && searchQuery.value.trim() !== '') {
         const q = searchQuery.value.trim().toLowerCase();
         list = list.filter(p => {
@@ -521,11 +708,11 @@ const filteredPurchases = computed(() => {
     return list;
 });
 
-const loadPurchases = async () => {
+const loadPurchases = async (forceInventory = false) => {
     showLoader("Loading Purchases...");
     try {
         const promises = [fetchPurchases()];
-        if (inventoryItems.value.length === 0) {
+        if (forceInventory || inventoryItems.value.length === 0) {
             promises.push(fetchInventory());
         }
         await Promise.all(promises);
@@ -631,10 +818,8 @@ const handleUndoImport = async () => {
     processingUndo.value = true;
     showLoader("Rolling back last import...");
     
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
-    const PURCHASES_COL = import.meta.env.PUBLIC_APPWRITE_CARTS_COL || import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'carts';
-    const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_STORAGE_BUCKET_ID || 'item-photos';
+    const ITEMS_COL = getCollectionId();
+    const PURCHASES_COL = getPurchasesCollectionId();
 
     try {
         for (const id of (undoBatch.value.items || [])) {
@@ -688,8 +873,7 @@ const cleanEmptyPurchases = async () => {
     cleaningEmpty.value = true;
     showLoader("Scanning Purchase Orders & Inventory Items...");
     
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items';
+    const ITEMS_COL = getCollectionId();
     
     try {
         // 1. Fetch all known items to gather linked purchaseIds and cartIds
@@ -756,15 +940,60 @@ const cleanEmptyPurchases = async () => {
     }
 };
 
-onMounted(() => {
+let handlePageShow = null;
+let handleVisibilityChange = null;
+let handlePurchaseEvent = null;
+
+onMounted(async () => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';
+    }
+    if (params.has('status')) {
+        statusFilter.value = params.get('status');
     }
     if (params.get('import') === 'true') {
         showImportModal.value = true;
     }
     checkUndoBatch();
-    loadPurchases();
+    await loadPurchases(true);
+    // If no action is needed across the database on first load, gracefully show 'all'
+    if (!params.has('status') && statusCounts.value.needsAction === 0 && purchases.value.length > 0) {
+        statusFilter.value = 'all';
+    }
+
+    // 1. Detect Back-Forward Cache (bfcache) navigation when user clicks browser back from PO details
+    handlePageShow = (e) => {
+        if (e && e.persisted) {
+            loadPurchases(true);
+        }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    // 2. Detect tab switching back to Purchases view
+    handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            loadPurchases(true);
+        }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Detect instant PO mutations dispatched by PurchaseEditor or other components
+    handlePurchaseEvent = () => {
+        loadPurchases(true);
+    };
+    window.addEventListener('purchase-updated', handlePurchaseEvent);
+    window.addEventListener('purchase-created', handlePurchaseEvent);
+    window.addEventListener('purchase-deleted', handlePurchaseEvent);
+});
+
+onUnmounted(() => {
+    if (handlePageShow) window.removeEventListener('pageshow', handlePageShow);
+    if (handleVisibilityChange) document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (handlePurchaseEvent) {
+        window.removeEventListener('purchase-updated', handlePurchaseEvent);
+        window.removeEventListener('purchase-created', handlePurchaseEvent);
+        window.removeEventListener('purchase-deleted', handlePurchaseEvent);
+    }
 });
 </script>

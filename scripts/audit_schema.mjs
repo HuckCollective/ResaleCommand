@@ -53,6 +53,7 @@ const ITEM_ATTRIBUTES = [
     { key: 'marketDescription', type: 'string', size: 65000, required: false },
     { key: 'rawAnalysis', type: 'string', size: 65000, required: false },
     { key: 'cartId', type: 'string', size: 255, required: false },
+    { key: 'orderId', type: 'string', size: 255, required: false },
     { key: 'sourcingLocation', type: 'string', size: 255, required: false }
 ];
 

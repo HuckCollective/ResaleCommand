@@ -5,10 +5,12 @@ import StoreHeaderCart from '../../components/store/StoreHeaderCart.astro';
 import StoreCatalog from '../../components/store/StoreCatalog.vue';
 import '../../styles/global.css';
 
+import { getDatabaseId, getItemsCollectionId } from '../../lib/appwriteEnv';
+
 // Rendered dynamically under rewritten path (e.g. domain.com/)
 const tenantId = Astro.locals.tenantId || "default_tenant";
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
-const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items_dev";
+const DB_ID = getDatabaseId();
+const ITEMS_COL = getItemsCollectionId();
 
 let items: any[] = [];
 let storeName = "Resale Store";

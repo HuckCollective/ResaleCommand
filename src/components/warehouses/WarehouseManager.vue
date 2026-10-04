@@ -102,6 +102,10 @@
                   <Icon icon="solar:arrow-right-up-linear" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-primary shrink-0" />
                 </a>
                 <span v-if="warehouse.code" class="badge badge-sm badge-primary font-mono font-black tracking-wider">{{ warehouse.code }}</span>
+                <span v-if="isWarehouseDefault(warehouse)" class="badge badge-sm badge-warning font-bold text-[10px] gap-1" title="Configured Default Intake / Backstock Location">
+                  <Icon icon="solar:star-bold" class="w-3 h-3 text-warning-content" />
+                  Default Intake
+                </span>
               </div>
               <div class="flex items-center gap-1 shrink-0">
                 <div class="badge font-bold shrink-0 text-xs" :class="warehouse.type === 'Online' ? 'badge-info' : warehouse.type === 'Warehouse' ? 'badge-neutral' : 'badge-secondary'">
@@ -165,6 +169,14 @@
               </a>
 
               <div class="flex items-center gap-1">
+                <button 
+                  v-if="!isWarehouseDefault(warehouse)"
+                  class="btn btn-xs btn-ghost gap-1 text-[11px] opacity-75 hover:opacity-100 hover:text-warning"
+                  @click="setAsDefaultBackstock(warehouse)"
+                  title="Make this the default intake &amp; backstock location for new purchases"
+                >
+                  <Icon icon="solar:star-linear" class="w-3.5 h-3.5 text-warning" /> Intake Default
+                </button>
                 <button class="btn btn-xs btn-ghost gap-1 opacity-70 hover:opacity-100" @click="openEditor(warehouse)">
                   <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> Quick Edit
                 </button>
@@ -399,8 +411,47 @@ import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
 import { getAssetUrl } from '../../lib/inventory';
 
-const { currentTeam: team } = useAuth();
+const { currentTeam: team, user, updateTeamPrefs, updatePrefs } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
+
+// Default Intake Location state & helpers
+const defaultStorageLocation = computed(() => {
+  return getDefaultStorageLocation(team.value || user.value);
+});
+
+const isWarehouseDefault = (warehouse: WarehouseDocument) => {
+  const def = defaultStorageLocation.value.toUpperCase();
+  const code = (warehouse.code || '').trim().toUpperCase();
+  const name = (warehouse.name || '').trim().toUpperCase();
+  return (code && def === code) || (name && def === name);
+};
+
+const setAsDefaultBackstock = async (warehouse: WarehouseDocument) => {
+  const targetCode = (warehouse.code || warehouse.name || '').trim().toUpperCase();
+  if (!targetCode) return;
+  try {
+    if (team.value && team.value.$id) {
+      await updateTeamPrefs(team.value.$id, {
+        ...(team.value.prefs || {}),
+        defaultStorageLocation: targetCode
+      });
+    } else if (user.value) {
+      await updatePrefs({
+        ...(user.value.prefs || {}),
+        defaultStorageLocation: targetCode
+      });
+    }
+    addToast({
+      message: `Set ${warehouse.name} (${targetCode}) as default intake backstock!`,
+      type: 'success'
+    });
+  } catch (err: any) {
+    addToast({
+      message: `Failed to set default location: ${err?.message || err}`,
+      type: 'error'
+    });
+  }
+};
 
 // Manifest composable & state
 const {

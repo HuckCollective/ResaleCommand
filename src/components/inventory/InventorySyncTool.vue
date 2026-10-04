@@ -451,6 +451,7 @@ import { useInventory } from '../../composables/useInventory';
 import { useAuth } from '../../composables/useAuth';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
+import { getCollectionId, DB_ID } from '../../lib/inventory';
 
 const { inventoryItems, fetchInventory } = useInventory();
 const { currentTeam } = useAuth();
@@ -910,8 +911,7 @@ const askAiToMatch = async () => {
 const executeSync = async () => {
   isSyncing.value = true;
   try {
-    const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-    const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'inventory';
+    const ITEMS_COL = getCollectionId();
 
     const finalCsvRows = [];
     finalCsvRows.push(rawHeaders.value);

@@ -5,13 +5,11 @@ import { useAuth } from './useAuth';
 import { useCart, type Cart, type CartItem } from './useCart';
 import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
-import { getItemsByPurchaseId, getSafeRawAnalysis, formatScoutReportMarkdown } from '../lib/inventory';
+import { getItemsByPurchaseId, getSafeRawAnalysis, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
+import { getDefaultStorageLocation } from '../lib/warehouses';
 
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const PURCHASES_COL = getPurchasesCollectionId();
-const getItemsCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+const getItemsCollectionId = () => getCollectionId();
 
 export interface ScoutPurchase extends Models.Document {
     vendor: string;
@@ -977,11 +975,13 @@ export function useScoutPurchase() {
                 grandTotal: finalSubtotal
             });
 
-            // 2. Promote all items from 'draft' to 'received'
+            // 2. Promote all items from 'draft' to 'received' stored at default backstock
             const itemColl = getItemsCollectionId();
+            const defaultLoc = getDefaultStorageLocation(currentTeam.value || user.value);
             const updatePromises = purchaseItems.value.map(item => {
                 return databases.updateDocument(DB_ID, itemColl, item.$id, {
-                    status: 'received'
+                    status: 'received',
+                    storageLocation: item.storageLocation || defaultLoc
                 }).catch(err => {
                     console.warn(`[useScoutPurchase] Item status promotion warning for ${item.$id}:`, err);
                 });

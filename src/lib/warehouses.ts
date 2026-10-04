@@ -134,6 +134,17 @@ export interface LocationOption {
     label: string;
 }
 
+/**
+ * Returns the configured default backstock storage location for a team or user, defaulting to 'HG'.
+ */
+export function getDefaultStorageLocation(teamOrUser?: any): string {
+    const prefLoc = teamOrUser?.prefs?.defaultStorageLocation || teamOrUser?.prefs?.defaultLocation;
+    if (prefLoc && typeof prefLoc === 'string' && prefLoc.trim()) {
+        return prefLoc.trim();
+    }
+    return 'HG';
+}
+
 export function getWarehouseFacilityOptions(
     items?: any[],
     extraLocations?: string[]

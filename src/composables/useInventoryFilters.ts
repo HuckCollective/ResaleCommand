@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref } from 'vue';
 import type { Models } from 'appwrite';
-import { getAssetUrl, resolveItemImageUrls } from '../lib/inventory';
+import { getAssetUrl, resolveItemImageUrls, normalizeInventoryStatus } from '../lib/inventory';
 import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 
@@ -316,15 +316,13 @@ export function useInventoryFilters(
     });
 
     const countByStatus = (status: string) => {
-        const st = (status || '').toLowerCase();
-        if (st === 'active') return countActive.value;
-        if (st === 'tracked') {
-            return sourceItems.value.filter(i => {
-                const s = ((i as any).status || '').toLowerCase();
-                return s === 'tracked' || s === 'scouted';
-            }).length;
-        }
-        return sourceItems.value.filter(i => ((i as any).status || 'acquired').toLowerCase() === st).length;
+        const target = normalizeInventoryStatus(status);
+        if (target === 'received' && status.toLowerCase() === 'active') return countActive.value;
+        if (status.toLowerCase() === 'active') return countActive.value;
+        return sourceItems.value.filter(i => {
+            const s = normalizeInventoryStatus((i as any).status);
+            return s === target;
+        }).length;
     };
 
     const countMissingPhotos = computed(() => {
@@ -515,9 +513,9 @@ export function useInventoryFilters(
                     // If user unchecks hideTracked, tracked/scouted items pass through.
                     // If user unchecks hideCombined, combined items pass through.
                 } else if (st === 'tracked') {
-                    if (itemStatus !== 'tracked' && itemStatus !== 'scouted') return false;
+                    if (normalizeInventoryStatus(itemStatus) !== 'tracked') return false;
                 } else if (st !== 'all') {
-                    if (itemStatus !== st) return false;
+                    if (normalizeInventoryStatus(itemStatus) !== normalizeInventoryStatus(st)) return false;
                 }
             }
 

@@ -266,17 +266,32 @@ const auctionStatus = computed(() => {
     const isAuctionWatch = s === 'tracked' || s === 'draft' || !!props.item?.auctionEndsAt || !!props.item?.currentBid;
     if (!isAuctionWatch) return null;
 
+    // Check if the auction has expired
+    if (props.item?.auctionEndsAt && props.item.auctionStatus !== 'won' && props.item.auctionStatus !== 'lost') {
+        const endTime = new Date(props.item.auctionEndsAt).getTime();
+        if (!isNaN(endTime) && endTime <= Date.now()) {
+            return {
+                isEnded: true,
+                isOutbid: false,
+                text: '⏰ Ended (Won or Lost?)',
+                badgeClass: 'badge-warning text-warning-content font-bold shadow-xs animate-pulse'
+            };
+        }
+    }
+
     const current = Number(props.item?.currentBid || props.item?.cost || 0);
     const max = Number(props.item?.maxBid || 0);
     if (max > 0 && current > 0) {
         if (current > max) {
             return {
+                isEnded: false,
                 isOutbid: true,
                 text: '🛑 Outbid',
                 badgeClass: 'badge-error text-error-content font-black shadow-xs'
             };
         } else {
             return {
+                isEnded: false,
                 isOutbid: false,
                 text: `🎯 In Play`,
                 badgeClass: 'badge-success text-success-content font-bold shadow-xs'
