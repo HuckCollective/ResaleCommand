@@ -164,21 +164,29 @@
                 <!-- Sample 1: Huck Internal Tag (Code 128) -->
                 <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2">
                     <span class="badge badge-xs badge-primary font-bold uppercase">Huck Tag (1D Barcode)</span>
-                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center">
-                        <div class="font-mono font-black text-black tracking-widest text-lg">HUCK-1250</div>
-                        <div class="w-32 h-8 bg-[repeating-linear-gradient(90deg,#000,#000_2px,#fff_2px,#fff_4px,#000_4px,#000_7px,#fff_7px,#fff_9px)] mt-1"></div>
+                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[100px]">
+                        <img 
+                            src="https://bwipjs-api.metafloor.com/?bcid=code128&text=HUCK-1250&scale=2&height=10&includetext" 
+                            alt="HUCK-1250 Code 128 Barcode" 
+                            class="max-w-full h-16 object-contain"
+                            loading="lazy"
+                        />
                     </div>
-                    <p class="text-[10px] text-base-content/60">Format: Code 128 / Code 39</p>
+                    <p class="text-[10px] text-base-content/60">Genuine Code 128 (Horizontal Alignment)</p>
                 </div>
 
                 <!-- Sample 2: Memory Den Ricochet SKU -->
                 <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 text-center space-y-2">
                     <span class="badge badge-xs badge-secondary font-bold uppercase">Memory Den POS SKU</span>
-                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center">
-                        <div class="font-mono font-black text-black tracking-widest text-lg">0EJ08G</div>
-                        <div class="w-32 h-8 bg-[repeating-linear-gradient(90deg,#000,#000_3px,#fff_3px,#fff_5px,#000_5px,#000_6px,#fff_6px,#fff_10px)] mt-1"></div>
+                    <div class="bg-white p-3 rounded-xl border border-black/10 flex flex-col items-center justify-center min-h-[100px]">
+                        <img 
+                            src="https://bwipjs-api.metafloor.com/?bcid=code128&text=0EJ08G&scale=2&height=10&includetext" 
+                            alt="0EJ08G Code 128 Barcode" 
+                            class="max-w-full h-16 object-contain"
+                            loading="lazy"
+                        />
                     </div>
-                    <p class="text-[10px] text-base-content/60">Format: Ricochet Thermal Sticker</p>
+                    <p class="text-[10px] text-base-content/60">Genuine Code 128 (Ricochet Format)</p>
                 </div>
 
                 <!-- Sample 3: Sample Mini QR Code -->
