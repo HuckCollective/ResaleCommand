@@ -53,6 +53,11 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                     
                     if (!csvName) return; // skip empty rows
 
+                    const rawCsvUpc = (csvRow['UPC'] || csvRow['Barcode'] || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+                    const rawCsvSku = (csvRow['SKU'] || csvRow['Location SKU'] || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+                    const csvUpc = rawCsvUpc.toLowerCase();
+                    const csvSku = rawCsvSku.toLowerCase();
+
                     const matchedForThisRow: any[] = [];
 
                     // Attempt to find up to 'matchCount' matches for this single CSV row
@@ -60,14 +65,34 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                     const matchCount = Math.max(1, qty);
 
                     for (let q = 0; q < matchCount; q++) {
-                        // 1. Primary Match: Exact Title (Case Insensitive)
-                        let matchIndex = unmatchedAppwrite.findIndex(item => 
-                            item.title?.toLowerCase().trim() === csvName.toLowerCase()
-                        );
+                        let matchIndex = -1;
 
-                        // 2. Smart Sync Fallback: Fuzzy Word Overlap
-                        // Reduced threshold to 50% for broader bundle matching (e.g. "Shadowrun 4e/5e")
-                        if (matchIndex === -1) {
+                        // 1. Primary Match: Exact Barcode / UPC (Highest authority, e.g. HUCK-1460)
+                        if (csvUpc) {
+                            matchIndex = unmatchedAppwrite.findIndex(item => 
+                                (item.upc || '').trim().toLowerCase() === csvUpc
+                            );
+                        }
+
+                        // 2. Secondary Match: Exact SKU or locationSku (e.g. 0EJ08G)
+                        if (matchIndex === -1 && csvSku) {
+                            matchIndex = unmatchedAppwrite.findIndex(item => {
+                                const iLocSku = (item.locationSku || '').trim().replace(/^['"]+/, '').toLowerCase();
+                                const iUpc = (item.upc || '').trim().toLowerCase();
+                                const iSku = (item.sku || '').trim().toLowerCase();
+                                return (iLocSku && iLocSku === csvSku) || (iUpc && iUpc === csvSku) || (iSku && iSku === csvSku);
+                            });
+                        }
+
+                        // 3. Tertiary Match: Exact Title (Case Insensitive)
+                        if (matchIndex === -1 && csvName) {
+                            matchIndex = unmatchedAppwrite.findIndex(item => 
+                                item.title?.toLowerCase().trim() === csvName.toLowerCase()
+                            );
+                        }
+
+                        // 4. Smart Sync Fallback: High-Confidence Fuzzy Word Overlap (>= 75% threshold)
+                        if (matchIndex === -1 && csvName) {
                             const csvKeywords = getKeywords(csvName);
                             let bestMatchIdx = -1;
                             let bestOverlap = 0;
@@ -81,7 +106,7 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                                 }
                             });
 
-                            if (bestOverlap >= 0.50 && bestMatchIdx > -1) {
+                            if (bestOverlap >= 0.75 && bestMatchIdx > -1) {
                                 matchIndex = bestMatchIdx;
                             }
                         }
