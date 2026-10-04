@@ -104,9 +104,26 @@
                                     type="text" 
                                     v-model="searchQuery" 
                                     placeholder="Search title, UPC, PO, vendor, location..." 
-                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-14 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                                 />
-                                <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
+                                <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                    <button 
+                                        v-if="searchQuery" 
+                                        type="button"
+                                        @click="searchQuery = ''" 
+                                        class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" 
+                                        title="Clear search"
+                                    >✕</button>
+                                    <button 
+                                        type="button"
+                                        @click="isScannerOpen = true" 
+                                        class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center" 
+                                        title="Scan Barcode or Mini QR with Camera"
+                                        aria-label="Scan Barcode or Mini QR with Camera"
+                                    >
+                                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Mobile & Desktop Filter Button (zero side-scroll!) -->
@@ -681,11 +698,21 @@
 
         <!-- DROPCAST STAGING TRAY -->
         <DropcastStagingTray />
+
+        <!-- CAMERA BARCODE & MINI QR SCANNER -->
+        <BarcodeScannerModal 
+            :is-open="isScannerOpen"
+            title="Scan Tag to Filter Inventory"
+            subtitle="Point camera at barcode or Mini QR to instantly search"
+            @close="isScannerOpen = false"
+            @scan="handleScannedCode"
+        />
     </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
@@ -722,6 +749,14 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:viewMode']);
+
+const isScannerOpen = ref(false);
+
+const handleScannedCode = (res) => {
+    if (!res?.rawValue) return;
+    searchQuery.value = res.rawValue;
+    addToast(`Scanned: ${res.rawValue} (${res.format || 'code'})`, 'success');
+};
 
 const dockRef = ref(null);
 
