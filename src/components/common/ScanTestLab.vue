@@ -200,7 +200,6 @@
 
         <!-- STANDALONE BARCODE SCANNER MODAL -->
         <BarcodeScannerModal 
-            v-if="isModalOpen"
             :is-open="isModalOpen"
             :title="modalTitle"
             :subtitle="modalSubtitle"

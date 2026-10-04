@@ -78,7 +78,7 @@
                     <!-- Live Camera Video Feed -->
                     <video 
                         ref="videoRef"
-                        class="w-full h-full object-contain"
+                        class="absolute inset-0 w-full h-full object-cover sm:object-contain"
                         autoplay 
                         playsinline 
                         muted 
@@ -93,10 +93,9 @@
 
                     <!-- STATIC TARGETING RETICLE (Aim Guide) -->
                     <div 
-                        class="absolute pointer-events-none z-15 flex flex-col items-center justify-center transition-all duration-300"
+                        class="relative pointer-events-none z-15 flex flex-col items-center justify-center transition-all duration-300 w-[75vw] max-w-xs sm:max-w-sm h-44 sm:h-52 border-2 rounded-2xl"
                         :class="[
-                            lastDetectedCode ? 'scale-102 border-success shadow-[0_0_30px_rgba(34,197,94,0.4)]' : 'shadow-[0_0_20px_rgba(0,0,0,0.6)]',
-                            'w-[75vw] max-w-xs sm:max-w-sm h-44 sm:h-52 border-2 rounded-2xl relative'
+                            lastDetectedCode ? 'scale-102 border-success shadow-[0_0_30px_rgba(34,197,94,0.4)]' : 'shadow-[0_0_20px_rgba(0,0,0,0.6)]'
                         ]"
                         :style="{
                             borderColor: lastDetectedCode ? '#22c55e' : 'rgba(255, 255, 255, 0.45)',
@@ -271,6 +270,14 @@ onMounted(async () => {
     await enumerateCameras();
     initBarcodeDetector();
     window.addEventListener('keydown', handleGlobalKeydown);
+    if (props.isOpen) {
+        lastDetectedCode.value = null;
+        lastScannedValue = null;
+        recentScans.value = [];
+        nextTick(() => {
+            startCamera();
+        });
+    }
 });
 
 onBeforeUnmount(() => {
@@ -366,10 +373,22 @@ async function startCamera() {
             } catch {}
         }
 
+        // Ensure video element is attached to DOM
+        if (!videoRef.value) {
+            await nextTick();
+        }
+
         if (videoRef.value) {
             videoRef.value.srcObject = stream;
-            await videoRef.value.play();
+            try {
+                await videoRef.value.play();
+            } catch (playErr) {
+                console.warn('[BarcodeScanner] Video play warning:', playErr);
+            }
         }
+
+        // Re-enumerate cameras now that permission has been granted
+        enumerateCameras();
 
         isStreaming.value = true;
         isLoadingCamera.value = false;
