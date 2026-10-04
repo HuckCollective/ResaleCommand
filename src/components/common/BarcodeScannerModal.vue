@@ -265,7 +265,7 @@ watch(() => props.isOpen, (newVal) => {
     } else {
         stopCamera();
     }
-}, { immediate: true });
+});
 
 onMounted(async () => {
     await enumerateCameras();
@@ -324,7 +324,7 @@ const initBarcodeDetector = () => {
     }
 };
 
-const startCamera = async () => {
+async function startCamera() {
     isLoadingCamera.value = true;
     cameraError.value = null;
     isStreaming.value = false;
@@ -391,7 +391,7 @@ const startCamera = async () => {
     }
 };
 
-const stopCamera = () => {
+function stopCamera() {
     isStreaming.value = false;
     isTorchOn.value = false;
     isZoomed.value = false;
