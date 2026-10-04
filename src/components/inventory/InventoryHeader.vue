@@ -48,7 +48,7 @@
                 </a>
             </div>
 
-            <!-- Row 2: Full-Width Omnibox Search -->
+            <!-- Row 2: Full-Width Omnibox Search with Camera Scanner -->
             <div class="relative w-full">
                 <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
                 <input 
@@ -56,14 +56,26 @@
                     :value="searchQuery" 
                     @input="$emit('update:searchQuery', $event.target.value)"
                     placeholder="Search title, UPC, PO, vendor, location..." 
-                    class="input input-bordered input-sm w-full pl-9 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                    class="input input-bordered input-sm w-full pl-9 pr-16 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                 />
-                <button 
-                    v-if="searchQuery" 
-                    @click="$emit('update:searchQuery', '')" 
-                    class="btn btn-ghost btn-circle btn-xs absolute right-1.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100"
-                    title="Clear search"
-                >✕</button>
+                <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                    <button 
+                        v-if="searchQuery" 
+                        type="button"
+                        @click="$emit('update:searchQuery', '')" 
+                        class="btn btn-ghost btn-circle btn-xs opacity-60 hover:opacity-100"
+                        title="Clear search"
+                    >✕</button>
+                    <button 
+                        type="button"
+                        @click="showBarcodeScanner = true"
+                        class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10 transition-colors"
+                        title="Scan Barcode or Mini QR with Camera"
+                        aria-label="Scan barcode or QR with camera"
+                    >
+                        <Icon icon="solar:camera-linear" class="w-4 h-4" />
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -466,13 +478,24 @@
             <button type="button">close</button>
         </form>
     </dialog>
+
+    <!-- Reusable Camera Barcode & QR Scanner Modal -->
+    <BarcodeScannerModal 
+        :is-open="showBarcodeScanner"
+        title="Scan Barcode or Mini QR"
+        subtitle="Point camera at any physical tag or sticker"
+        @close="showBarcodeScanner = false"
+        @scan="handleBarcodeScanned"
+    />
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 
 const isFiltersOpen = ref(false);
+const showBarcodeScanner = ref(false);
 
 const props = defineProps({
     title: { type: String, default: 'Inventory' },
@@ -503,7 +526,7 @@ const props = defineProps({
     viewMode: { type: String, default: '' }
 });
 
-defineEmits([
+const emit = defineEmits([
     'update:searchQuery',
     'update:filterStatus',
     'update:filterLocation',
@@ -524,5 +547,11 @@ defineEmits([
 
 const getStatusCount = (status) => {
     return props.statusCounts[status] || 0;
+};
+
+const handleBarcodeScanned = (scanResult) => {
+    if (scanResult && scanResult.rawValue) {
+        emit('update:searchQuery', scanResult.rawValue);
+    }
 };
 </script>

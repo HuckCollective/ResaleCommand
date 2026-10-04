@@ -546,13 +546,13 @@
       <div v-if="activeTab === 'catalog'" class="space-y-4">
         <!-- Catalog Search & Filter Bar -->
         <div class="flex items-center justify-between gap-3 flex-wrap bg-base-100 p-4 rounded-2xl border border-base-200 shadow-xs">
-          <div class="relative flex-1 min-w-[200px]">
-            <Icon icon="solar:magnifer-linear" class="absolute left-3 top-2.5 w-4 h-4 opacity-50" />
-            <input 
+          <div class="flex-1 min-w-[200px]">
+            <SearchInputWithScanner 
               v-model="catalogSearch" 
-              type="text" 
-              class="input input-sm input-bordered pl-9 w-full bg-base-200 focus:bg-base-100" 
               placeholder="Search items currently in this booth..."
+              scanner-title="Scan Booth Tag or Mini QR"
+              scanner-subtitle="Point camera at item tag to locate in booth"
+              size="sm"
             />
           </div>
           <div class="flex items-center gap-2 text-xs font-mono opacity-70">
@@ -1164,6 +1164,7 @@ import { warehousesApi, type WarehouseDocument, matchesLocationFilter } from '..
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
+import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
 import { databases, ID, Query } from '../../lib/appwrite';
