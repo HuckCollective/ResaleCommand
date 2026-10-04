@@ -1,8 +1,7 @@
 <template>
-    <Teleport to="body">
+    <Teleport to="body" v-if="isOpen">
         <Transition name="scanner-fade">
             <div 
-                v-if="isOpen" 
                 class="fixed inset-0 z-99999 flex flex-col bg-black text-white select-none overflow-hidden touch-none"
                 role="dialog"
                 aria-modal="true"
