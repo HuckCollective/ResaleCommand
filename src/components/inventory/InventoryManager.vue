@@ -104,20 +104,9 @@
                                     type="text" 
                                     v-model="searchQuery" 
                                     placeholder="Search title, UPC, PO, vendor, location..." 
-                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-16 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                                 />
-                                <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                                    <button v-if="searchQuery" type="button" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
-                                    <button 
-                                        type="button" 
-                                        @click="showBarcodeScanner = true" 
-                                        class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 text-primary hover:bg-primary/10 touch-manipulation active:scale-90 flex items-center justify-center" 
-                                        title="Scan Barcode or Mini QR with Camera"
-                                        aria-label="Scan barcode or QR with camera"
-                                    >
-                                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
+                                <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 absolute right-1 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" title="Clear search">✕</button>
                             </div>
 
                             <!-- Mobile & Desktop Filter Button (zero side-scroll!) -->
@@ -446,15 +435,6 @@
         <!-- Booth Reconciliation Modal -->
         <BoothReconciliation :isOpen="showReconciliation" @close="showReconciliation = false" />
 
-        <!-- Reusable Camera Barcode & QR Scanner Modal -->
-        <BarcodeScannerModal 
-            :is-open="showBarcodeScanner"
-            title="Scan Barcode or Mini QR"
-            subtitle="Point camera at any physical tag or sticker"
-            @close="showBarcodeScanner = false"
-            @scan="(res) => { if (res && res.rawValue) searchQuery = res.rawValue; }"
-        />
-
         <!-- Create Bundle Modal -->
         <!-- Moved to BundleModal.vue -->
 
@@ -716,7 +696,6 @@ import LocationManifestTray from './LocationManifestTray.vue';
 import DropcastStagingTray from '../social/DropcastStagingTray.vue';
 import BulkImport from './BulkImport.vue';
 import BoothReconciliation from './BoothReconciliation.vue';
-import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import { useAuth } from '../../composables/useAuth';
 import { account, databases, Query, storage, ID } from '../../lib/appwrite';
 import { Icon } from '@iconify/vue';
@@ -745,7 +724,6 @@ const props = defineProps({
 const emit = defineEmits(['update:viewMode']);
 
 const dockRef = ref(null);
-const showBarcodeScanner = ref(false);
 
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 640 : false);
 const updateIsMobile = () => {
