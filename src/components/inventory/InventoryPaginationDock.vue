@@ -702,6 +702,7 @@ const openSplit = (item) => {
 
 defineExpose({
     openTray,
+    openTab: openTray,
     closeTray,
     openBundle,
     openCombine,

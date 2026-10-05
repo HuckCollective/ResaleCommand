@@ -1818,7 +1818,11 @@ const onDockApplyChannel = async (targetCh) => {
 };
 
 const openFilterTray = () => {
-    dockRef.value?.openTab('filters');
+    if (typeof dockRef.value?.openTray === 'function') {
+        dockRef.value.openTray('filters');
+    } else if (typeof dockRef.value?.openTab === 'function') {
+        dockRef.value.openTab('filters');
+    }
 };
 
 const onDockApplyBulkUnified = async (payload) => {
