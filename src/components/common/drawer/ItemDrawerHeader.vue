@@ -52,6 +52,18 @@
                             <span>{{ effectiveUpc }}</span>
                         </button>
 
+                        <!-- Memory Den Booth SKU (Click to copy) -->
+                        <button 
+                            v-if="effectiveLocationSku"
+                            type="button"
+                            class="badge badge-secondary badge-xs font-mono font-bold gap-1 py-1.5 px-2 cursor-pointer hover:brightness-110 active:scale-95 transition-all shadow-2xs"
+                            @click.stop="copyLocationSku"
+                            :title="`Memory Den Booth SKU: ${effectiveLocationSku} (Click to copy)`"
+                        >
+                            <Icon icon="solar:shop-2-bold" class="w-3 h-3" />
+                            <span>DEN: {{ effectiveLocationSku }}</span>
+                        </button>
+
                         <!-- Item Identity (if different from UPC) -->
                         <span 
                             v-if="item?.identity && item.identity !== effectiveUpc" 
@@ -373,10 +385,17 @@ const copyUpc = () => {
     }
 };
 
-const effectivePrice = computed(() => {
-    const raw = props.editForm?.resalePrice || props.item?.resalePrice || props.item?.listPrice || props.item?.price || 0;
-    return Number(raw || 0).toFixed(2);
+const effectiveLocationSku = computed(() => {
+    return props.editForm?.locationSku || props.item?.locationSku || null;
 });
+
+const copyLocationSku = () => {
+    if (effectiveLocationSku.value) {
+        navigator.clipboard.writeText(effectiveLocationSku.value);
+        addToast({ type: 'success', message: `Copied booth SKU ${effectiveLocationSku.value}!` });
+    }
+};
+
 
 const effectiveSuggestedTagTitle = computed(() => {
     if (props.suggestedTagTitleStr && props.suggestedTagTitleStr.trim()) {

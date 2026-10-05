@@ -540,6 +540,7 @@ import { useItemDrawer } from '../../composables/useItemDrawer';
 import { addToast } from '../../stores/toast';
 import { databases, Query } from '../../lib/appwrite';
 import { DB_ID, getCollectionId, saveItemToInventory, duplicateItemMediaInStorage, updateInventoryItem } from '../../lib/inventory';
+import { generateNextUpc } from '../../lib/upcAuthority';
 import { ID } from 'appwrite';
 
 const props = defineProps<{
@@ -947,26 +948,8 @@ async function executeSplit() {
       }
     }
 
-    // 1. Calculate starting sequential UPC barcode
-    const prefix = (currentTeam.value as any)?.prefs?.upcPrefix || (user.value as any)?.prefs?.upcPrefix || 'HUCK-';
-    const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
-    let currentUpcNum = 0;
-    try {
-      const upcDocs = await databases.listDocuments(DB_ID, getCollectionId(), [
-        Query.startsWith('upc', cleanPrefix),
-        Query.orderDesc('$createdAt'),
-        Query.limit(50)
-      ]);
-      for (const doc of upcDocs.documents) {
-        const u = (doc as any).upc;
-        if (u && typeof u === 'string' && u.startsWith(cleanPrefix)) {
-          const num = parseInt(u.replace(cleanPrefix, ''), 10);
-          if (!isNaN(num) && num > currentUpcNum) currentUpcNum = num;
-        }
-      }
-    } catch (e) {
-      console.warn('Auto UPC lookup fallback:', e);
-    }
+    // 1. Calculate starting sequential UPC barcode prefix
+    const prefix = (currentTeam.value as any)?.prefs?.upcPrefix || (user.value as any)?.prefs?.upcPrefix || 'HUCK';
 
     // Helper to get clean brand/subject for retail booth tags
     const getCleanParentSubject = (parentTitle: string): string => {
@@ -992,8 +975,7 @@ async function executeSplit() {
       if (tier.mode === 'single') {
         // Create 1 document per item with individual custom price & unique UPC
         for (const item of tierItems) {
-          currentUpcNum++;
-          const itemUpc = `${cleanPrefix}${currentUpcNum.toString().padStart(4, '0')}`;
+          const itemUpc = await generateNextUpc(prefix);
           const mainImgId = extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
           const individualPrice = item.customPrice || tier.targetPrice;
           const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
@@ -1024,8 +1006,7 @@ async function executeSplit() {
         }
       } else if (tier.mode === 'multi_qty') {
         // Create 1 multi-quantity document (Memory Den SKU) & unique UPC
-        currentUpcNum++;
-        const itemUpc = `${cleanPrefix}${currentUpcNum.toString().padStart(4, '0')}`;
+        const itemUpc = await generateNextUpc(prefix);
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         
@@ -1063,8 +1044,7 @@ async function executeSplit() {
         }
       } else if (tier.mode === 'bundle') {
         // Create 1 bundled lot set document & unique UPC
-        currentUpcNum++;
-        const itemUpc = `${cleanPrefix}${currentUpcNum.toString().padStart(4, '0')}`;
+        const itemUpc = await generateNextUpc(prefix);
         const bundleTotal = tier.targetPrice * tierItems.length;
         const totalBundleCost = unitCost * tierItems.length;
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');

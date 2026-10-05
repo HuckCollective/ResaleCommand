@@ -100,3 +100,44 @@ Because thermal barcode label printers are located on-site at the consignment ma
    - **One-Tap Checkoff**: User taps the item row to mark it verified (turns green/struck through).
    - **Mid-Stock Adjustments**: If a flaw or chip is spotted on an item, tapping the edit icon opens the `ItemDrawer` to adjust the price or condition immediately.
    - **Commit**: Tapping **`Confirm Stocked`** marks all checked items as `status: 'placed'` at `storageLocation: 'MD'` and archives the manifest to history.
+
+---
+
+## 6. Single True UPC Authority & Anti-Desync Invariants
+
+To permanently eliminate barcode desynchronization, duplicate tag collisions, and missing UPCs:
+
+### A. The Single Source of Truth (`src/lib/upcAuthority.ts`)
+- **Strict Invariant: Zero Ghost Barcodes**:
+  - The CSV exporter, lot splitter, and haul wizards must **never** slice arbitrary characters from Appwrite document IDs or invent unpersisted barcodes.
+  - Every exported or printed barcode must exist as a persisted `upc` attribute in Appwrite `resale_db.items`.
+  - When an export is initiated in `useManifest.ts`, `ensureItemUpc()` scans all staged items and writes true canonical sequential UPCs to any unassigned items in the database before generating the CSV.
+- **Prefix Isolation & True Database Max**:
+  - Barcodes follow strict org prefixes (e.g., `HUCK-` for Memory Den booth items, `PDX-` for Portland Gaming Library co-op).
+  - New numbers are computed by querying the true maximum integer suffix across the entire collection (`getTrueMaxUpcIndex()`), completely preventing collisions caused by local 50-item query limits.
+
+### B. Ricochet Confirmation Loop (Patch B: `src/lib/manifestReconciliation.ts`)
+- When an outbound CSV is uploaded to Memory Den's Ricochet POS (`memoryden.ricoconsign.com`), Ricochet assigns internal store inventory identifiers (e.g. `0EJ993444`).
+- **Return Dropzone**: The locked/in-transit `LocationManifestTray.vue` provides a 1-click **"Ricochet Booth SKUs"** dropzone.
+- Dropping Ricochet's confirmation CSV matches records by exact UPC (`HUCK-xxxx`) or normalized Title + Price, updating `locationSku` on both the live Appwrite item and the manifest snapshot.
+- Both the drawer header and the manifest tray display high-visibility badges: `UPC: HUCK-1488` and `DEN: 0EJ993444`.
+
+### C. Direct Rollo Thermal Printing (Mac & PC At-Home Protocol)
+- **Why Direct Printing**: Ricochet's web app uses Windows-centric print handlers that often distort margins or break continuous label feeds on macOS.
+- **Resale Command Thermal Engine (`src/lib/rolloLabelPrint.ts` & `src/lib/barcode128.ts`)**:
+  - Uses zero-dependency, pure SVG vector Code 128 barcode rendering with zero DPI blur.
+  - Leverages pure CSS `@page { size: ...; margin: 0; }` continuous feed directives.
+  - Supports standard thermal media sizes:
+    - `2" x 1"` (Compact booth shelf stickers)
+    - `2.25" x 1.25"` (Standard jewelry/apparel hangtag stickers)
+    - `4" x 6"` (Large bin/shipping labels)
+  - Eliminates booth kiosk waiting by enabling full pre-stickering at home before transport.
+
+### D. Clean UI Architecture Invariant
+- **No Treatment for Unused Code**: Never render visual UI elements, buttons, badges, stubs, or placeholder controls for features that are dead, unhooked, or incomplete. 
+- Component templates must remain tight, modular, and fully functional, delegating business logic to clean reusable services (`upcAuthority.ts`, `manifestReconciliation.ts`, `rolloLabelPrint.ts`).
+
+### E. Scratch Scripts vs. Repository Tooling Invariant
+- **Never Place Temporary Scripts in `scripts/`**: The `scripts/` directory is reserved exclusively for permanent, production repository tooling (such as `validate-templates.mjs` and schema auditing).
+- **All Diagnostic / Ad-Hoc Scripts Belong in `scratch/`**: The root `scratch/` directory is permanently ignored by `.gitignore`. Any exploratory queries, one-off diagnostic scripts, or throwaway migration checks must always be created inside `scratch/`.
+

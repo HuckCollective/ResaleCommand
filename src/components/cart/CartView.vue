@@ -49,6 +49,7 @@
 
                       <template #actions>
                           <!-- Docked Bottom Actions -->
+                          <div class="join w-full flex">
                               <a v-if="getItemSourceUrl(item)" :href="getItemSourceUrl(item)" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs join-item flex-1 text-primary opacity-80 hover:opacity-100" title="Open live auction listing in new tab">
                                   <Icon icon="solar:link-linear" class="w-3.5 h-3.5 inline mr-0.5" /> Open
                               </a>

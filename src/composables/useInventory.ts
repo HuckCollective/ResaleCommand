@@ -2,9 +2,8 @@ import { ref, computed } from 'vue';
 import { databases, Query, client } from '../lib/appwrite';
 import type { Models } from 'appwrite';
 import { useLoader } from './useLoader';
-
 import { isAlphaMode } from '../stores/env';
-import { generateAutoUpc, isValidOrgUpc } from '../lib/inventory';
+import { generateNextUpc, isValidOrgUpc } from '../lib/upcAuthority';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
 const getCollectionId = () => isAlphaMode.get() 
@@ -185,10 +184,10 @@ export function useInventory() {
             
             generatingTotal.value = missingUpcItems.length;
 
-            // Assign guaranteed unique UPCs via database-verified generateAutoUpc
+            // Assign guaranteed unique UPCs via database-verified generateNextUpc
             let updatedCount = 0;
             for (const item of missingUpcItems) {
-                const newUpc = await generateAutoUpc(prefix, currentTeamId || undefined);
+                const newUpc = await generateNextUpc(prefix);
                 
                 // Add a 200ms delay to prevent Appwrite rate limits when bulk updating
                 await new Promise(resolve => setTimeout(resolve, 200));
@@ -233,38 +232,11 @@ export function useInventory() {
         }
     };
 
-    const localUpcLocks = new Map<string, number>();
-
     /**
-     * Get the next UPC for a given prefix without saving
+     * Get the next UPC for a given prefix
      */
-    const getNextUpc = (prefix: string = 'HUCK-') => {
-        const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
-        const existingUpcs = inventoryItems.value
-            .map((i: any) => i.upc)
-            .filter(u => u && u.startsWith(cleanPrefix));
-        
-        let maxIndex = 0;
-        existingUpcs.forEach((u: string) => {
-            const numPart = u.replace(cleanPrefix, '');
-            const num = parseInt(numPart, 10);
-            if (!isNaN(num) && num > maxIndex) {
-                maxIndex = num;
-            }
-        });
-
-        const currentLock = localUpcLocks.get(cleanPrefix) || 0;
-        let nextIndex = Math.max(maxIndex, currentLock) + 1;
-
-        let candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
-        const upcSet = new Set(existingUpcs);
-        while (upcSet.has(candidate)) {
-            nextIndex++;
-            candidate = `${cleanPrefix}${nextIndex.toString().padStart(4, '0')}`;
-        }
-
-        localUpcLocks.set(cleanPrefix, nextIndex);
-        return candidate;
+    const getNextUpc = async (prefix: string = 'HUCK-') => {
+        return await generateNextUpc(prefix);
     };
 
     return {

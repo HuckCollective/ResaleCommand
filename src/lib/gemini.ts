@@ -134,7 +134,7 @@ export const generateContentWithBackoff = async (
                 
                 retries--;
                 delayMs = Math.min(delayMs * 1.5, 30000);
-            } else if (modelIdx < uniqueCandidates.length - 1) {
+            } else if (modelIdx < candidateModels.length - 1) {
                 // If non-transient error, try next candidate model before giving up
                 console.warn(`[Gemini] Error on ${currentModelName}: ${err.message}. Retrying with next model...`);
                 modelIdx++;

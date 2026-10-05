@@ -6,6 +6,8 @@ import { generateRicochetCsv, generateGenericCsv, downloadCsv } from '../lib/exp
 import { databases } from '../lib/appwrite';
 import { DB_ID, getCollectionId } from '../lib/inventory';
 import { Query } from 'appwrite';
+import { ensureItemUpc, isValidOrgUpc } from '../lib/upcAuthority';
+import { reconcileManifestWithRicochetCsv, type ReconcileResult } from '../lib/manifestReconciliation';
 
 // Shared singleton state across all views
 const activeManifest = ref<ManifestDocument | null>(null);
@@ -614,6 +616,13 @@ export function useManifest() {
         }
 
         try {
+            // 1. Ensure all items have a guaranteed persisted UPC before exporting
+            for (const item of stagedItems.value) {
+                if (!isValidOrgUpc(item.upc)) {
+                    item.upc = await ensureItemUpc(item);
+                }
+            }
+
             const items = stagedItems.value;
             let csv = '';
             if (format === 'ricochet') {
@@ -643,6 +652,46 @@ export function useManifest() {
         } catch (err: any) {
             console.error('[useManifest.exportManifestCsv] Error:', err);
             addToast({ type: 'error', message: `Export failed: ${err.message}` });
+        }
+    }
+
+    // -- Reconcile Manifest with Ricochet Confirmation CSV --
+    async function reconcileRicochetConfirmation(csvText: string): Promise<ReconcileResult | null> {
+        if (!activeManifest.value || stagedItems.value.length === 0) {
+            addToast({ type: 'warning', message: 'No active drop to reconcile.' });
+            return null;
+        }
+
+        isSyncing.value = true;
+        try {
+            const result = await reconcileManifestWithRicochetCsv(
+                activeManifest.value,
+                stagedItems.value,
+                csvText
+            );
+
+            if (result.matchedCount > 0) {
+                // Refresh staged items and drafts
+                await loadStagedItems(activeManifest.value);
+                await fetchAllDrafts();
+                addToast({
+                    type: 'success',
+                    message: `Matched & bound ${result.matchedCount} Ricochet SKUs to this drop!`
+                });
+            } else {
+                addToast({
+                    type: 'warning',
+                    message: 'No matching items found in the uploaded Ricochet CSV.'
+                });
+            }
+
+            return result;
+        } catch (err: any) {
+            console.error('[useManifest.reconcileRicochetConfirmation] Error:', err);
+            addToast({ type: 'error', message: `Reconciliation error: ${err.message}` });
+            return null;
+        } finally {
+            isSyncing.value = false;
         }
     }
 
@@ -783,6 +832,7 @@ export function useManifest() {
         updateManifestTitle,
         clearActiveManifest,
         exportManifestCsv,
+        reconcileRicochetConfirmation,
         verifyPlacementItem,
         finalizeActivePlacement,
         fetchManifests,

@@ -454,14 +454,11 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
         const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '0.00';
 
-        // 5. Ensure SKU strictly uses valid org prefix (never raw Appwrite ID)
+        // 5. Ensure SKU strictly uses valid org prefix (never fabricate unpersisted ghost numbers)
         let sku = (item.upc || item.sku || '').trim().toUpperCase();
-        if (!sku || sku.length > 18 || !isOrgUpc(sku, orgPrefix)) {
+        if (!sku || !isOrgUpc(sku, orgPrefix)) {
             if (item.upc && /^[A-Z]{2,6}-\d+/i.test(item.upc)) {
                 sku = item.upc.trim().toUpperCase();
-            } else {
-                const digits = (sku || item.$id || '').replace(/[^0-9]/g, '').slice(-4);
-                sku = `${orgPrefix}-${digits || '1001'}`;
             }
         }
 

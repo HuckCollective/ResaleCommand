@@ -542,6 +542,7 @@ export const ALL: APIRoute = async ({ request }) => {
     let scrapedAuctionMeta: any = null;
     let zipCode: string | null = null;
     let parsedListingData: any = null;
+    let userNotes = "";
 
     try {
         if (!model) {
@@ -692,7 +693,7 @@ export const ALL: APIRoute = async ({ request }) => {
 
         // 2. Read Body
         let rawBody = "";
-        let userNotes = "";
+        userNotes = "";
 
         try {
             const ab = await request.arrayBuffer();
@@ -1488,6 +1489,7 @@ export const ALL: APIRoute = async ({ request }) => {
         } catch (textErr: any) {
             console.warn('[Gemini] response.text() failed, inspecting candidate parts:', textErr);
             const candidate = response.candidates?.[0];
+            const parts = (candidate?.content?.parts || []) as any[];
             taskResponse = parts.map((p: any) => p.text || '').join('').trim();
             if (!taskResponse) {
                 if (parsedListingData) {

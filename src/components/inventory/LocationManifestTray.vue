@@ -79,17 +79,8 @@
             </div>
           </div>
 
-          <!-- Header Action & Close buttons -->
+          <!-- Header Close button -->
           <div class="flex items-center gap-1.5 shrink-0">
-            <a 
-              v-if="stagedItems.length > 0 && activeManifest?.$id"
-              :href="`/social?dropId=${activeManifest.$id}`"
-              class="btn btn-xs sm:btn-sm btn-ghost hover:bg-secondary/15 text-secondary font-bold gap-1 px-2.5 rounded-btn shadow-2xs"
-              title="Create Social Post & Download Photos in Social Studio"
-            >
-              <Icon icon="solar:camera-bold" class="w-4 h-4 text-secondary" />
-              <span class="hidden sm:inline">Social Post</span>
-            </a>
             <button @click="toggleTray" type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" title="Close Tray">
               <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
             </button>
@@ -142,6 +133,39 @@
                 <Icon icon="solar:lock-unlocked-bold" class="w-3.5 h-3.5" />
                 <span>Unlock</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Ricochet Confirmation Return Loop (The Missing Bridge) -->
+          <div v-if="isRicochetFacility && isLocked" class="p-3 rounded-2xl border transition-all" :class="reconciledCount > 0 ? 'bg-success/5 border-success/30' : 'bg-primary/5 border-primary/30'">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :class="reconciledCount > 0 ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary'">
+                  <Icon :icon="reconciledCount > 0 ? 'solar:check-read-bold' : 'solar:cloud-download-bold'" class="w-4 h-4" />
+                </div>
+                <div>
+                  <div class="font-extrabold text-xs text-base-content flex items-center gap-1.5">
+                    <span>Ricochet Booth SKUs</span>
+                    <span class="badge badge-xs font-mono font-bold" :class="reconciledCount === stagedItems.length ? 'badge-success text-success-content' : 'badge-neutral'">
+                      {{ reconciledCount }}/{{ stagedItems.length }} Bound
+                    </span>
+                  </div>
+                  <div class="text-[10px] opacity-70">
+                    {{ reconciledCount === stagedItems.length ? 'All booth SKUs bound from Ricochet.' : 'Uploaded to Ricochet? Drop confirmation CSV to bind 0EJ SKUs.' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                <label class="btn btn-xs font-bold gap-1 flex-1 sm:flex-none cursor-pointer" :class="reconciledCount > 0 ? 'btn-ghost text-success hover:bg-success/10' : 'btn-primary text-primary-content shadow-xs'">
+                  <span v-if="isReconciling" class="loading loading-spinner loading-xs"></span>
+                  <template v-else>
+                    <Icon icon="solar:upload-track-bold" class="w-3.5 h-3.5" />
+                    <span>{{ reconciledCount > 0 ? 'Re-Sync CSV' : 'Drop Ricochet CSV' }}</span>
+                  </template>
+                  <input type="file" accept=".csv,text/csv" class="hidden" @change="handleReconcileFile" :disabled="isReconciling" />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -208,9 +232,12 @@
             <!-- Title & Metadata with HIGH-CONTRAST Barcode for Sticker Matching -->
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <!-- HIGH VISIBILITY UPC BARCODE BADGE -->
+                <!-- HIGH VISIBILITY BARCODE & DEN SKU BADGES -->
                 <span v-if="item.upc" class="badge badge-sm font-mono font-black bg-primary/20 text-primary border border-primary/40 text-xs px-2 shadow-2xs">
                   UPC: {{ item.upc }}
+                </span>
+                <span v-if="item.locationSku" class="badge badge-sm font-mono font-black bg-secondary/20 text-secondary border border-secondary/40 text-xs px-2 shadow-2xs" title="Memory Den Booth SKU">
+                  DEN: {{ item.locationSku }}
                 </span>
                 <span v-if="item.quantity > 1" class="badge badge-xs badge-outline badge-primary font-bold">
                   Qty: {{ item.quantity }}
@@ -826,7 +853,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'toggle-tray'): void;
   (e: 'close'): void;
-  (e: 'open-actions'): void;
   (e: 'update:isOpen', val: boolean): void;
   (e: 'drop-changed'): void;
 }>();
@@ -844,14 +870,12 @@ const {
   commissionRate,
   estimatedNet,
   estimatedProfit,
-  roiMultiple,
   fetchAllDrafts,
-  openActionTray,
-  isActionTrayOpen,
   removeFromManifest,
   updateManifestTitle,
   clearActiveManifest,
   exportManifestCsv,
+  reconcileRicochetConfirmation,
   pauseActiveManifest,
   resumeManifest,
   lockActiveManifest,
@@ -1063,6 +1087,33 @@ const handleExportCsv = async () => {
   }
 };
 
+// Ricochet Reconciliation State & Handlers
+const isReconciling = ref(false);
+
+const reconciledCount = computed(() => {
+  return stagedItems.value.filter(i => !!i.locationSku).length;
+});
+
+const handleReconcileFile = async (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  isReconciling.value = true;
+  try {
+    const text = await file.text();
+    const result = await reconcileRicochetConfirmation(text);
+    if (result && result.matchedCount > 0) {
+      emit('drop-changed');
+    }
+  } catch (err: any) {
+    addToast({ type: 'error', message: `Reconciliation error: ${err.message}` });
+  } finally {
+    isReconciling.value = false;
+    if (target) target.value = '';
+  }
+};
+
 // Lock / Unlock Handlers
 const handleLock = async () => {
   await lockActiveManifest();
@@ -1210,10 +1261,5 @@ const confirmPlacement = async () => {
   } finally {
     isDeploying.value = false;
   }
-};
-
-const getItemPhotoUrl = (imageId?: string) => {
-  if (!imageId) return '';
-  return getAssetUrl(imageId);
 };
 </script>
