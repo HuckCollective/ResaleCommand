@@ -99,6 +99,15 @@ Resale social campaigns only ever deal with two types of visual assets:
   - Retail price badge (`$xx.xx`).
   - Action buttons: `✏️ Edit Item & Photos` (opens `ItemDrawer`), `📸 Camera`, `💾 Download Single`.
 
+### D. Promotion vs. Logistics Separation & Mutual Exclusivity
+* **Promotion (Dropcasts)** vs. **Logistics (Outbound Drops)**:
+  - **Drop Manifests** (`LocationManifestTray.vue`) handle physical inventory movement: mutating status from `in-stock` $\rightarrow$ `placed`, updating warehouse bins to booth locations, exporting Ricochet CSVs, and driving Rollo label printing.
+  - **Dropcasts** (`DropcastStagingTray.vue`) handle creative storytelling: bundling photos and AI-crafted captions for Instagram, TikTok, or Threads. **A Dropcast never moves items or modifies database storage locations.**
+* **Mutual Exclusivity of Selection Trays**:
+  - Curating a Dropcast tray automatically hides/pauses any open Outbound Drop manifest. The user is strictly focused on creative media selection rather than physical box packing.
+* **The "Post-Drop" Broadcast Workflow**:
+  - Once an Outbound Drop is successfully confirmed at a booth (`status: 'placed'`), the user can launch a Dropcast seeded with all items from that completed drop in 1 click, packaging fresh shelf photos with hero inventory for an immediate social announcement.
+
 ---
 
 ## 5. The DropCast Phone Simulator & Live Preview

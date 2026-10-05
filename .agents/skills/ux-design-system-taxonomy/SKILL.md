@@ -252,3 +252,39 @@ Across the entire application, there are strictly two types of visual assets:
 />
 ```
 
+---
+
+## 8. Selection Trays Architecture & Behavioral Contract (Drops vs. Casts)
+
+When staging items for multi-item workflows (Outbound Manifests, Dropcasts, Bulk Actions), interfaces must adhere to the **Selection Tray Protocol**:
+
+### A. The Invariant of Mutual Exclusivity
+* **One Job at a Time**: The user is physically and mentally engaged in one operational job at a time (e.g. staging a box to take to Memory Den, OR packaging photos for an Instagram dropcast).
+* **Zero Competing Trays**: Resale Command **NEVER** runs competing selection trays simultaneously at the bottom of the screen.
+* **Auto-Deactivation**: Activating an **Outbound Drop Tray** (`LocationManifestTray.vue`) automatically pauses or hides any active **Dropcast Tray** (`DropcastStagingTray.vue`), and vice-versa.
+
+### B. Context-Aware Grid Auto-Filtering
+Activating a selection tray dynamically tunes the main inventory catalog grid to highlight only valid candidates and eliminate background clutter:
+
+| Active Tray Mode | Automatic Grid Filter State | Hidden From View | User Focus |
+| :--- | :--- | :--- | :--- |
+| **📦 Staging an Outbound Drop** | `storageLocation: 'HG'` (Garage backstock), `status: 'in-stock'`, unplaced. | Already placed booth items (`MD`, `DT`), sold items, draft purchases. | Selecting unplaced backstock units to pack into the physical tote. |
+| **🎬 Curating a Dropcast** | `hasPhotos: true` (`imageId != null`), prioritizing recent booth placements (`status: 'placed'`). | Unphotographed items, raw unboxed backstock, sold items. | Selecting photo-ready items to feature in social media slides. |
+| **⚡ Generic Bulk Actions** | Standard catalog filters (user controlled). | None (respects current query). | Manual maintenance (status updates, location moves). |
+
+### C. Contextual Action Suppression
+* While a selection tray is active, irrelevant or destructive bulk operations (e.g., *Bulk Delete*, *Bulk Relocate*, *Quick Export*) are **suppressed/hidden** from the bottom dock.
+* The dock morphs its primary affirmative action to match the active tray:
+  - Drop Manifest Mode: `[ + Stage (N) to Manifest ]` (with current manifest destination badge).
+  - Dropcast Mode: `[ 🎬 Add (N) to Dropcast ]` (with photo count indicator).
+* Exiting or pausing the tray cleanly restores the default Catalog Command Dock.
+
+### D. Hardware Calibration & Label Studio Pattern (`/labels/test`)
+Thermal label printing involves physical hardware tolerances, continuous feed calibration, and macOS/Windows browser driver nuances. To prevent failed labels or wasted stock:
+* **Isolated Workbench**: Hardware calibration is isolated into an independent, non-destructive test suite: [`src/components/labels/RolloLabelTestWorkbench.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue) hosted at `/labels/test`.
+* **Zero-DPI Blur Vector Barcodes**: Renders pure vector SVG Code 128 barcodes directly in the DOM.
+* **Exact Label Media Switcher**: Supports instant toggling between `2"x1"`, `2.25"x1.25"`, `3"x2"`, and `4"x6"` label sizes.
+* **Live Constraint Enforcement**: 38-character tag title limit enforced with real-time character counter and warning pills.
+* **Feed Alignment Test**: Dedicated `[ 🧪 Test 3-Label Feed Alignment ]` trigger to verify tear-bar stopping position and continuous feed indexing before committing large print batches.
+
+
