@@ -17,11 +17,16 @@ export interface RolloPrintItem {
   locationName?: string;
 }
 
+import { printLabelsViaPdf, generateLabelsPdf } from './pdfLabelGenerator';
+
 export interface RolloPrintOptions {
-  size?: '2x1' | '2.25x1.25' | '3x2' | '4x6';
+  size?: '2x1' | '2.25x1.25' | '3x2' | '4x6' | 'butterfly';
   vendorHeader?: string; // Default: 'MEMORY DEN'
   barcodeAuthority?: 'ricochet_sku' | 'upc'; // Prefer Ricochet SKU for Den registers, fallback to UPC
+  engine?: 'pdf' | 'html'; // Default: 'pdf' (immutable vector PDF, bypasses all browser rotation bugs)
 }
+
+export { printLabelsViaPdf, generateLabelsPdf };
 
 /**
  * Generates printable HTML for Rollo thermal printer.
@@ -34,10 +39,18 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
   let widthIn = 2.0;
   let heightIn = 1.0;
   let barHeight = 26;
+  let barWidth = 2;
   let titleFontSize = '9px';
   let priceFontSize = '14px';
 
-  if (size === '2.25x1.25') {
+  if (size === 'butterfly') {
+    widthIn = 2.2;
+    heightIn = 0.5;
+    barHeight = 18;
+    barWidth = 1.5;
+    titleFontSize = '6.5px';
+    priceFontSize = '11px';
+  } else if (size === '2.25x1.25') {
     widthIn = 2.25;
     heightIn = 1.25;
     barHeight = 32;
@@ -69,7 +82,7 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
     // Resolve barcode value:
-    // If locationSku is present (e.g. '0EJ0NO' or '0EJ0NO), clerks at Memory Den scan this!
+    // If locationSku is present (e.g. '0EJ0NO'), clerks at Memory Den scan this!
     const cleanLocSku = (item.locationSku || '').replace(/^['"]+/, '').trim().toUpperCase();
     const cleanUpc = (item.upc || item.sku || '').trim().toUpperCase();
     
@@ -80,31 +93,53 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     // Generate SVG barcode
     const barcodeSvg = generateCode128Svg(barcodeVal, {
       height: barHeight,
-      barWidth: 2,
+      barWidth,
       includeText: false
     });
 
-    // Human readable caption: show both SKU and UPC if available
-    let captionText = '';
-    if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
-      captionText = `${cleanLocSku} • ${cleanUpc}`;
-    } else {
-      captionText = cleanLocSku || cleanUpc;
-    }
+    let singleLabel = '';
 
-    const singleLabel = `
-      <div class="rollo-label">
-        <div class="label-header">
-          <span class="vendor-tag">${vendor}</span>
-          <span class="price-tag">${priceDisplay}</span>
+    if (size === 'butterfly') {
+      // Dual-paddle jewelry layout (Left Wing: Price/Title, Middle: Blank tail, Right Wing: Barcode/SKU)
+      singleLabel = `
+        <div class="rollo-label butterfly-label">
+          <div class="butterfly-wing butterfly-left">
+            <div class="butterfly-vendor">${escapeHtml(vendor)}</div>
+            <div class="butterfly-price">${priceDisplay}</div>
+            <div class="butterfly-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+          </div>
+          <div class="butterfly-bridge"></div>
+          <div class="butterfly-wing butterfly-right">
+            <div class="barcode-container">
+              ${barcodeSvg}
+            </div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+          </div>
         </div>
-        <div class="item-title">${escapeHtml(title)}</div>
-        <div class="barcode-container">
-          ${barcodeSvg}
+      `;
+    } else {
+      // Human readable caption: show both SKU and UPC if available
+      let captionText = '';
+      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
+        captionText = `${cleanLocSku} • ${cleanUpc}`;
+      } else {
+        captionText = cleanLocSku || cleanUpc;
+      }
+
+      singleLabel = `
+        <div class="rollo-label">
+          <div class="label-header">
+            <span class="vendor-tag">${vendor}</span>
+            <span class="price-tag">${priceDisplay}</span>
+          </div>
+          <div class="item-title">${escapeHtml(title)}</div>
+          <div class="barcode-container">
+            ${barcodeSvg}
+          </div>
+          <div class="barcode-caption">${escapeHtml(captionText)}</div>
         </div>
-        <div class="barcode-caption">${escapeHtml(captionText)}</div>
-      </div>
-    `;
+      `;
+    }
 
     for (let q = 0; q < qty; q++) {
       labelHtmls.push(singleLabel);
@@ -139,12 +174,17 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
       page-break-after: always;
       break-after: page;
       overflow: hidden;
-      padding: 0.05in 0.08in;
+      box-sizing: border-box;
+      padding: 0.04in 0.06in;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       align-items: stretch;
       background: white;
+    }
+    .rollo-label:last-child {
+      page-break-after: auto;
+      break-after: auto;
     }
     .label-header {
       display: flex;
@@ -199,6 +239,80 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
       line-height: 1;
       margin-top: 0px;
     }
+    /* Butterfly Jewelry Tag Specifics (2.2" x 0.5") */
+    .rollo-label.butterfly-label {
+      width: 2.2in;
+      height: 0.5in;
+      padding: 0;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+    }
+    .butterfly-wing {
+      width: 0.8in;
+      height: 0.5in;
+      box-sizing: border-box;
+    }
+    .butterfly-left {
+      padding: 0.03in 0.04in;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-start;
+      overflow: hidden;
+    }
+    .butterfly-vendor {
+      font-size: 6.5px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      font-family: monospace;
+      line-height: 1;
+    }
+    .butterfly-price {
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1.1;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .butterfly-title {
+      font-size: 6.5px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      line-height: 1;
+    }
+    .butterfly-bridge {
+      width: 0.6in;
+      height: 0.5in;
+      flex-shrink: 0;
+    }
+    .butterfly-right {
+      padding: 0.02in 0.03in;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    .butterfly-right .barcode-container {
+      margin: 0;
+    }
+    .butterfly-right .barcode-container svg {
+      max-width: 100%;
+      height: 18px;
+    }
+    .butterfly-right .barcode-caption {
+      font-size: 7px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 0.4px;
+      line-height: 1;
+      margin-top: 1px;
+    }
   </style>
 </head>
 <body>
@@ -211,6 +325,12 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
  * Triggers Rollo print popup in browser.
  */
 export function printRolloLabels(items: RolloPrintItem[], options: RolloPrintOptions = {}) {
+  // Use the robust Universal PDF engine by default (bypasses browser CSS @page rotation bugs)
+  if (options.engine !== 'html') {
+    printLabelsViaPdf(items, options);
+    return;
+  }
+
   const html = generateRolloPrintHtml(items, options);
   
   // Create an iframe to print cleanly without leaving the current page

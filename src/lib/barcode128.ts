@@ -14,16 +14,10 @@ const CODE128_PATTERNS = [
   "114131", "311141", "411131", "211412", "211214", "211232", "2331112" // 100-106 (104=StartB, 106=Stop)
 ];
 
-export function generateCode128Svg(text: string, options: { height?: number; barWidth?: number; includeText?: boolean } = {}): string {
-  const height = options.height || 40;
-  const barWidth = options.barWidth || 2;
-  const includeText = options.includeText !== false;
-
-  // Clean input text
+export function getCode128Modules(text: string): string {
   const clean = text.trim();
   if (!clean) return '';
 
-  // Use Code 128 Set B (ASCII 32 to 126)
   const START_B = 104;
   const STOP = 106;
 
@@ -34,7 +28,6 @@ export function generateCode128Svg(text: string, options: { height?: number; bar
     const charCode = clean.charCodeAt(i);
     const code = charCode - 32;
     if (code < 0 || code > 95) {
-      // replace unsupported with space
       codes.push(0);
       checksum += 0 * (i + 1);
     } else {
@@ -47,7 +40,6 @@ export function generateCode128Svg(text: string, options: { height?: number; bar
   codes.push(checkDigit);
   codes.push(STOP);
 
-  // Convert widths into binary bars
   let modules = '';
   for (let i = 0; i < codes.length; i++) {
     const pattern = CODE128_PATTERNS[codes[i]];
@@ -58,6 +50,18 @@ export function generateCode128Svg(text: string, options: { height?: number; bar
       isBar = !isBar;
     }
   }
+  return modules;
+}
+
+export function generateCode128Svg(text: string, options: { height?: number; barWidth?: number; includeText?: boolean } = {}): string {
+  const height = options.height || 40;
+  const barWidth = options.barWidth || 2;
+  const includeText = options.includeText !== false;
+
+  const clean = text.trim();
+  if (!clean) return '';
+
+  const modules = getCode128Modules(clean);
 
   const totalWidth = modules.length * barWidth;
   const totalHeight = includeText ? height + 16 : height;

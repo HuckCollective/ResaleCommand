@@ -469,6 +469,7 @@ import { saveItemToInventory, getItemsByPurchaseId, getCollectionId } from '../.
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from '../inventory/BulkImport.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import { printRolloLabels } from '../../lib/rolloLabelPrint';
 
 const activeDrawerDoc = ref<any>(null);
 const openingDrawer = ref(false);
@@ -965,7 +966,8 @@ const downloadRicochetCsv = () => {
 };
 
 const printRolloTags = () => {
-  window.print();
+  if (dustyTigerItems.value.length === 0) return;
+  printRolloLabels(dustyTigerItems.value, { vendorHeader: 'DUSTY TIGER', size: '2x1' });
 };
 
 const completeIngestion = async () => {

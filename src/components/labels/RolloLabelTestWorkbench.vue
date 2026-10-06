@@ -34,7 +34,7 @@
             <Icon icon="solar:bookmark-bold" class="w-4 h-4 text-primary" />
             <span>Quick Test Presets</span>
           </label>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button 
               type="button" 
               v-for="p in presets" 
@@ -56,7 +56,7 @@
             <span>Label Dimensions &amp; Store</span>
           </label>
 
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             <button 
               type="button"
               v-for="s in sizeOptions"
@@ -155,13 +155,19 @@
         </div>
 
         <!-- 4. Mac Rollo Setup Instructions Card -->
-        <div class="bg-info/10 border border-info/30 rounded-3xl p-4 text-xs text-info-content space-y-2">
-          <div class="font-black flex items-center gap-1.5 text-info">
-            <Icon icon="solar:info-circle-bold" class="w-4 h-4" />
-            <span>Mac &amp; Rollo Print Dialog Tip:</span>
+        <div class="bg-success/10 border border-success/30 rounded-3xl p-4 text-xs text-success-content space-y-2">
+          <div class="font-black flex items-center gap-1.5 text-success">
+            <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
+            <span>Mac &amp; Rollo Print Protocol (Verified):</span>
           </div>
           <p class="leading-relaxed opacity-90">
-            In Chrome's print preview on your Mac, select your <strong>Rollo Thermal Printer</strong>, set <strong>Paper Size</strong> to your label roll (e.g. <code>2.0" × 1.0"</code> or <code>50mm × 25mm</code>), and set <strong>Margins</strong> to <strong>None</strong>.
+            1. <strong>Direct Shortcut</strong>: Press <kbd class="kbd kbd-xs font-mono font-bold bg-base-100">⌥ ⌘ P</kbd> (Option + Command + P) to open the macOS System Print Dialog directly.
+          </p>
+          <p class="leading-relaxed opacity-90">
+            2. <strong>Paper Size</strong>: Select <code>2x1</code> or <code>Den Label</code>.
+          </p>
+          <p class="leading-relaxed opacity-90">
+            3. <strong>Margins</strong>: Always set to <strong>None</strong> with <strong>Portrait</strong> orientation.
           </p>
         </div>
       </div>
@@ -178,9 +184,39 @@
             <span class="badge badge-xs font-mono font-bold badge-primary">{{ selectedSizeDisplay }}</span>
           </div>
 
-          <!-- THE PHYSICAL STICKER MOCKUP (Scaled 2x for crisp screen inspection) -->
+          <!-- THE PHYSICAL STICKER MOCKUP (Scaled for crisp screen inspection) -->
           <div class="py-4 flex justify-center w-full bg-base-200/50 rounded-2xl p-4 border border-dashed border-base-300">
+            <!-- If Butterfly Tag (Dual-Paddle Jewelry layout) -->
             <div 
+              v-if="selectedSize === 'butterfly'"
+              class="bg-white text-black shadow-xl rounded-sm border border-neutral-300 p-1.5 flex flex-row justify-between items-stretch select-none transition-all duration-200"
+              :style="mockupStyle"
+            >
+              <!-- Left Paddle: Vendor, Price, Title -->
+              <div class="w-[130px] flex flex-col justify-between pr-1 border-r border-dashed border-neutral-300">
+                <span class="font-mono font-black text-[9px] tracking-wider uppercase text-neutral-800">{{ vendorHeader || 'MEMORY DEN' }}</span>
+                <span class="font-black text-xs font-sans tracking-tight">${{ formattedPrice }}</span>
+                <span class="font-bold text-[9px] leading-tight text-neutral-900 truncate" :title="displayTitle">{{ displayTitle }}</span>
+              </div>
+
+              <!-- Center Bridge (Non-Adhesive tail for ring/chain wrap) -->
+              <div class="w-[90px] flex flex-col items-center justify-center bg-neutral-100/80 border-x border-neutral-200/80 text-[8px] text-neutral-400 font-mono text-center px-1">
+                <span>Ring Wrap</span>
+                <span class="text-[7px] text-neutral-400/80">(Blank Tail)</span>
+              </div>
+
+              <!-- Right Paddle: Code128 Barcode + Ricochet SKU -->
+              <div class="w-[130px] flex flex-col justify-center items-center pl-1 border-l border-dashed border-neutral-300">
+                <div class="w-full flex justify-center scale-95" v-html="previewBarcodeSvg"></div>
+                <div class="font-mono font-black text-[9px] text-center tracking-widest text-neutral-800 mt-0.5">
+                  {{ activeForm.locationSku || activeForm.upc || '0EJ0J1' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Standard Rectangle Tag -->
+            <div 
+              v-else
               class="bg-white text-black shadow-xl rounded-sm border border-neutral-300 p-2 flex flex-col justify-between select-none transition-all duration-200"
               :style="mockupStyle"
             >
@@ -207,6 +243,7 @@
 
           <!-- Print Buttons -->
           <div class="w-full space-y-2.5">
+            <!-- 1. Universal Vector PDF Print (Default, 1-Click) -->
             <button 
               type="button" 
               @click="handlePrint(printQuantity)" 
@@ -216,14 +253,26 @@
               <span>Print {{ printQuantity }} Label{{ printQuantity > 1 ? 's' : '' }} on Rollo ➔</span>
             </button>
 
+            <!-- 2. Inspect / Download Vector PDF -->
+            <button 
+              type="button" 
+              @click="handleOpenPdf()" 
+              class="btn btn-outline border-base-300 btn-block font-bold text-xs rounded-2xl gap-1.5 h-10 hover:bg-base-200 transition-all"
+              title="Opens the exact vector PDF in a new browser tab to inspect or save"
+            >
+              <Icon icon="solar:document-bold" class="w-4 h-4 text-primary" />
+              <span>Inspect / Save Vector PDF</span>
+            </button>
+
+            <!-- 3. Continuous Feed Alignment Run -->
             <button 
               type="button" 
               @click="handlePrint(3)" 
-              class="btn btn-outline border-base-300 btn-block font-bold text-xs rounded-2xl gap-1.5 h-10 hover:bg-base-200 transition-all"
-              title="Prints 3 identical continuous labels to check label gap detection & feed alignment"
+              class="btn btn-ghost btn-sm btn-block text-base-content/60 font-mono text-[11px] gap-1 hover:text-base-content"
+              title="Prints 3 continuous labels to test roll gap calibration"
             >
-              <Icon icon="solar:layers-bold" class="w-4 h-4 text-secondary" />
-              <span>Print 3-Label Feed Alignment Run</span>
+              <Icon icon="solar:layers-linear" class="w-3.5 h-3.5" />
+              <span>Test 3-Label Feed Alignment Run</span>
             </button>
           </div>
 
@@ -238,16 +287,17 @@
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { generateCode128Svg } from '../../lib/barcode128';
-import { printRolloLabels, type RolloPrintItem, type RolloPrintOptions } from '../../lib/rolloLabelPrint';
+import { printRolloLabels, generateLabelsPdf, type RolloPrintItem, type RolloPrintOptions } from '../../lib/rolloLabelPrint';
 import { extractShortTagTitle } from '../../lib/exportUtils';
 import { addToast } from '../../stores/toast';
 
-const selectedSize = ref<'2x1' | '2.25x1.25' | '3x2' | '4x6'>('2x1');
+const selectedSize = ref<'2x1' | '2.25x1.25' | '3x2' | '4x6' | 'butterfly'>('2x1');
 const vendorHeader = ref('MEMORY DEN');
 const printQuantity = ref(1);
 
 const sizeOptions = [
   { id: '2x1' as const, label: '2" × 1"', desc: 'Booth Shelf' },
+  { id: 'butterfly' as const, label: '2.2" × 0.5"', desc: 'Butterfly Jewelry' },
   { id: '2.25x1.25' as const, label: '2.25" × 1.25"', desc: 'Hangtag Sticker' },
   { id: '3x2' as const, label: '3" × 2"', desc: 'Medium Tag' },
   { id: '4x6' as const, label: '4" × 6"', desc: 'Bin / Carton' }
@@ -260,6 +310,14 @@ const selectedSizeDisplay = computed(() => {
 
 // Presets representing real merchandise
 const presets = [
+  {
+    shortName: 'Opal Ring',
+    title: 'Vintage 14K Yellow Gold Australian Fire Opal Solitaire Ring Size 7',
+    tagTitle: '14K Opal Ring',
+    price: '48.00',
+    locationSku: '0EJ0J1',
+    upc: 'HUCK-1490'
+  },
   {
     shortName: 'Gothic Skull',
     title: 'Hamlon Gothic Skull on Pedestal Halloween Decor Figurine by Michaels Store',
@@ -296,6 +354,9 @@ const activeForm = ref({
 
 const applyPreset = (p: typeof presets[0]) => {
   activeForm.value = { ...p };
+  if (p.shortName === 'Opal Ring') {
+    selectedSize.value = 'butterfly';
+  }
   addToast({ type: 'info', message: `Loaded preset: ${p.shortName}` });
 };
 
@@ -328,15 +389,21 @@ const displayCaption = computed(() => {
 });
 
 const previewBarcodeSvg = computed(() => {
+  const isBfly = selectedSize.value === 'butterfly';
   return generateCode128Svg(displayBarcodeVal.value, {
-    height: selectedSize.value === '2x1' ? 30 : 36,
-    barWidth: 2,
+    height: isBfly ? 18 : (selectedSize.value === '2x1' ? 30 : 36),
+    barWidth: isBfly ? 1.5 : 2,
     includeText: false
   });
 });
 
 const tagLengthClass = computed(() => {
   const len = (activeForm.value.tagTitle || activeForm.value.title || '').length;
+  if (selectedSize.value === 'butterfly') {
+    if (len <= 14) return 'text-success font-bold';
+    if (len <= 18) return 'text-warning font-bold';
+    return 'text-error font-black';
+  }
   if (len <= 38) return 'text-success font-bold';
   if (len <= 42) return 'text-warning font-bold';
   return 'text-error font-black';
@@ -344,7 +411,12 @@ const tagLengthClass = computed(() => {
 
 // Scaled CSS dimensions for physical preview mockup
 const mockupStyle = computed(() => {
-  if (selectedSize.value === '2.25x1.25') {
+  if (selectedSize.value === 'butterfly') {
+    return {
+      width: '360px',
+      height: '84px'
+    };
+  } else if (selectedSize.value === '2.25x1.25') {
     return {
       width: '270px',
       height: '150px'
@@ -385,5 +457,26 @@ const handlePrint = (quantity = 1) => {
 
   printRolloLabels([itemToPrint], options);
   addToast({ type: 'success', message: `Opened print dialog for ${quantity} label(s)!` });
+};
+
+const handleOpenPdf = () => {
+  const itemToPrint: RolloPrintItem = {
+    title: displayTitle.value,
+    tagTitle: displayTitle.value,
+    price: formattedPrice.value,
+    resalePrice: formattedPrice.value,
+    locationSku: activeForm.value.locationSku,
+    upc: activeForm.value.upc,
+    quantity: printQuantity.value
+  };
+
+  const doc = generateLabelsPdf([itemToPrint], {
+    size: selectedSize.value,
+    vendorHeader: vendorHeader.value || 'MEMORY DEN'
+  });
+
+  const blobUrl = doc.output('bloburl');
+  window.open(blobUrl, '_blank');
+  addToast({ type: 'info', message: 'Opened vector PDF in new browser tab!' });
 };
 </script>
