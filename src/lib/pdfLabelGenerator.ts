@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { getCode128Modules } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
+import { getQrCodeMatrix, resolveQrPayload } from './qrCodeHelper';
 import type { RolloPrintItem, RolloPrintOptions } from './rolloLabelPrint';
 
 /**
@@ -10,6 +11,7 @@ import type { RolloPrintItem, RolloPrintOptions } from './rolloLabelPrint';
 export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOptions = {}): jsPDF {
   const size = options.size || '2x1';
   const vendor = (options.vendorHeader || 'MEMORY DEN').toUpperCase();
+  const isQr = options.barcodeType === 'qr';
 
   let widthIn = 2.0;
   let heightIn = 1.0;
@@ -50,7 +52,11 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
     const cleanLocSku = (item.locationSku || '').replace(/^['"]+/, '').trim().toUpperCase();
     const cleanUpc = (item.upc || item.sku || '').trim().toUpperCase();
     const barcodeVal = cleanLocSku || cleanUpc || 'HUCK-0000';
-    const modules = getCode128Modules(barcodeVal);
+    const modules = !isQr ? getCode128Modules(barcodeVal) : '';
+
+    // If QR code, get matrix data
+    const qrPayload = isQr ? resolveQrPayload(item, options.qrDataFormat, options.qrBaseUrl) : '';
+    const { data: qrData, size: qrSize } = isQr ? getQrCodeMatrix(qrPayload) : { data: [], size: 0 };
 
     let captionText = '';
     if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
@@ -68,7 +74,7 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
       if (size === 'butterfly') {
         // -------------------------------------------------------------
         // JEWELRY BUTTERFLY BARBELL TAG (2.2" × 0.5")
-        // Left Wing: Store, Price, Title | Center: Empty | Right Wing: Barcode, SKU
+        // Left Wing: Store, Price, Title | Center: Empty | Right Wing: Barcode/QR, SKU
         // -------------------------------------------------------------
         doc.setTextColor(0, 0, 0);
 
@@ -95,45 +101,129 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
         // Right Wing (x: 1.40 to 2.16)
         const rightStartX = 1.44;
         const rightWidth = 0.72;
-        const barWidth = 0.007; // in inches
-        const barcodeTotalWidth = modules.length * barWidth;
-        const barStartX = rightStartX + Math.max(0.02, (rightWidth - barcodeTotalWidth) / 2);
-        const barY = 0.08;
-        const barH = 0.24;
 
-        // Draw pure vector barcode rectangles
-        doc.setFillColor(0, 0, 0);
-        let inBar = false;
-        let barStart = 0;
-        for (let m = 0; m < modules.length; m++) {
-          if (modules[m] === '1') {
-            if (!inBar) {
-              inBar = true;
-              barStart = m;
+        if (isQr && qrSize > 0) {
+          // Pure Vector 2D Mini QR Code
+          const qrSide = 0.32; // inches
+          const qrX = rightStartX + (rightWidth - qrSide) / 2;
+          const qrY = 0.05;
+          const modSize = qrSide / qrSize;
+
+          doc.setFillColor(0, 0, 0);
+          for (let r = 0; r < qrSize; r++) {
+            for (let c = 0; c < qrSize; c++) {
+              if (qrData[r] && qrData[r][c]) {
+                doc.rect(qrX + c * modSize, qrY + r * modSize, modSize, modSize, 'F');
+              }
             }
-          } else {
-            if (inBar) {
-              inBar = false;
-              const w = (m - barStart) * barWidth;
-              doc.rect(barStartX + barStart * barWidth, barY, w, barH, 'F');
+          }
+
+          // Caption SKU
+          doc.setFont('courier', 'bold');
+          doc.setFontSize(6.5);
+          const skuCaption = cleanLocSku || cleanUpc;
+          const skuWidth = doc.getTextWidth(skuCaption);
+          doc.text(skuCaption, rightStartX + (rightWidth - skuWidth) / 2, qrY + qrSide + 0.08);
+
+        } else {
+          // Pure Vector 1D Code128 Barcode
+          const barWidth = 0.007; // in inches
+          const barcodeTotalWidth = modules.length * barWidth;
+          const barStartX = rightStartX + Math.max(0.02, (rightWidth - barcodeTotalWidth) / 2);
+          const barY = 0.08;
+          const barH = 0.24;
+
+          doc.setFillColor(0, 0, 0);
+          let inBar = false;
+          let barStart = 0;
+          for (let m = 0; m < modules.length; m++) {
+            if (modules[m] === '1') {
+              if (!inBar) {
+                inBar = true;
+                barStart = m;
+              }
+            } else {
+              if (inBar) {
+                inBar = false;
+                const w = (m - barStart) * barWidth;
+                doc.rect(barStartX + barStart * barWidth, barY, w, barH, 'F');
+              }
+            }
+          }
+          if (inBar) {
+            const w = (modules.length - barStart) * barWidth;
+            doc.rect(barStartX + barStart * barWidth, barY, w, barH, 'F');
+          }
+
+          // Caption SKU
+          doc.setFont('courier', 'bold');
+          doc.setFontSize(6.5);
+          const skuCaption = cleanLocSku || cleanUpc;
+          const skuWidth = doc.getTextWidth(skuCaption);
+          doc.text(skuCaption, barStartX + (barcodeTotalWidth - skuWidth) / 2, barY + barH + 0.09);
+        }
+
+      } else if (isQr && qrSize > 0) {
+        // -------------------------------------------------------------
+        // 2D MINI QR CODE RECTANGLE TAG (Split Side-by-Side Layout)
+        // Left Side: Vendor, Big Price, Title, Sub-Caption | Right Side: Mini QR Code
+        // -------------------------------------------------------------
+        doc.setTextColor(0, 0, 0);
+
+        // QR dimensions & position (right aligned)
+        const qrSide = Math.min(widthIn * 0.42, heightIn - 0.22);
+        const qrX = widthIn - 0.08 - qrSide;
+        const qrY = 0.08;
+        const modSize = qrSide / qrSize;
+
+        // Draw pure vector QR modules
+        doc.setFillColor(0, 0, 0);
+        for (let r = 0; r < qrSize; r++) {
+          for (let c = 0; c < qrSize; c++) {
+            if (qrData[r] && qrData[r][c]) {
+              doc.rect(qrX + c * modSize, qrY + r * modSize, modSize, modSize, 'F');
             }
           }
         }
-        if (inBar) {
-          const w = (modules.length - barStart) * barWidth;
-          doc.rect(barStartX + barStart * barWidth, barY, w, barH, 'F');
-        }
 
-        // Caption SKU
+        // Caption under QR
         doc.setFont('courier', 'bold');
         doc.setFontSize(6.5);
         const skuCaption = cleanLocSku || cleanUpc;
         const skuWidth = doc.getTextWidth(skuCaption);
-        doc.text(skuCaption, barStartX + (barcodeTotalWidth - skuWidth) / 2, barY + barH + 0.09);
+        doc.text(skuCaption, qrX + (qrSide - skuWidth) / 2, qrY + qrSide + 0.08);
+
+        // Left Information Column
+        const maxLeftW = qrX - 0.12;
+
+        // Store Header
+        doc.setFont('courier', 'bold');
+        doc.setFontSize(7.5);
+        doc.text(vendor, 0.08, 0.16);
+
+        // Big Prominent Retail Price
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(size === '2x1' ? 17 : 21);
+        doc.text(priceDisplay, 0.08, 0.42);
+
+        // Short Tag Title (wrapped or truncated)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        let truncTitle = title;
+        while (doc.getTextWidth(truncTitle) > maxLeftW && truncTitle.length > 4) {
+          truncTitle = truncTitle.slice(0, -1);
+        }
+        if (truncTitle !== title) truncTitle += '…';
+        doc.text(truncTitle, 0.08, 0.62);
+
+        // Sub-Caption / Secondary SKU
+        doc.setFont('courier', 'bold');
+        doc.setFontSize(6.5);
+        doc.text(captionText, 0.08, 0.84);
 
       } else {
         // -------------------------------------------------------------
-        // STANDARD RECTANGLE TAG (2" × 1", 2.25" × 1.25", etc.)
+        // STANDARD 1D CODE128 RECTANGLE TAG (Stacked Layout)
         // -------------------------------------------------------------
         doc.setTextColor(0, 0, 0);
 

@@ -126,10 +126,34 @@ The Rollo macOS CUPS driver contains `*LandscapeOrientation: Plus90`. Because a 
 
 ## 6. Software Architecture & Verification Workbench
 
-- **Print Generation Service**: [`src/lib/rolloLabelPrint.ts`](file:///Users/michaelstanley/Projects/ResaleCommand/src/lib/rolloLabelPrint.ts)
-- **Vector Code128 Engine**: [`src/lib/barcode128.ts`](file:///Users/michaelstanley/Projects/ResaleCommand/src/lib/barcode128.ts)
-- **UPC Authority Manager**: [`src/lib/upcAuthority.ts`](file:///Users/michaelstanley/Projects/ResaleCommand/src/lib/upcAuthority.ts)
-- **Isolated Hardware Test Workbench**: Hosted at `/labels/test` ([`src/components/labels/RolloLabelTestWorkbench.vue`](file:///Users/michaelstanley/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue)). Provides:
-  - Quick test presets (Jewelry Opal Ring, Gothic Skull, Velvet Bolero, Pirate Hat)
-  - Real-time physical preview mockup for both standard tags and butterfly jewelry barbell tags
-  - 1-click test printing with calibration feed runs (3 continuous labels) to confirm gap sensor tracking
+- **Print Generation Service**: [`src/lib/rolloLabelPrint.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/rolloLabelPrint.ts)
+- **Vector Code128 Engine**: [`src/lib/barcode128.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/barcode128.ts)
+- **Vector QR Code Engine**: [`src/lib/qrCodeHelper.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/qrCodeHelper.ts) (zero-dependency `uqr`)
+- **Immutable PDF Generator**: [`src/lib/pdfLabelGenerator.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/pdfLabelGenerator.ts)
+- **UPC Authority Manager**: [`src/lib/upcAuthority.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/upcAuthority.ts)
+- **Isolated Hardware Test Workbench**: Hosted at `/labels/test` ([`src/components/labels/RolloLabelTestWorkbench.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue)). Provides:
+  - **Location Test Profiles Dropdown**: Rapid profile testing across `Memory Den (MD)`, `Dusty Tiger (DT)`, `Portland Gaming Lib (PDX)`, `Garage Backstock (HG)`, `Online E-Commerce (ONLINE)`, and `Custom`.
+  - **Barcode Format Toggle**: Instant switching between 1D Linear (Code 128) and 2D Matrix (Mini QR Code).
+  - **QR Data Format Toggle**: Switch between hardware-scannable Raw SKU (`0EJ0J1`) and customer smartphone Web URL (`https://resalecommand.com/i/HUCK-1490`).
+  - **Live Physical Preview Mockup**: Supports standard rectangle tags (split side-by-side layout in QR mode) and butterfly barbell jewelry tags.
+  - **1-Click Test Printing**: Supports direct Rollo thermal printing and vector PDF export with 3-label feed alignment calibration runs.
+
+---
+
+## 7. 2D Mini QR Code Standards for Thermal Labels
+
+While 1D Code 128 barcodes remain standard for legacy POS barcode guns (like Memory Den's Ricochet register), **2D Mini QR Codes** provide major ergonomic and merchandising advantages:
+
+### A. The Split Side-by-Side Merchandising Advantage
+- In 1D barcode mode, the barcode requires nearly the full width of a `2" × 1"` sticker, forcing the retail price to be small in the corner.
+- In 2D Mini QR mode, the square matrix occupies only `0.70" × 0.70"` on the right edge.
+- This unlocks the left column for a **GIGANTIC, high-contrast retail price** (`$48.00` in 18–22pt font) easily readable by shoppers standing 6 feet away from the booth shelf.
+
+### B. High-Density Jewelry Butterfly Tags
+- On small `2.2" × 0.5"` butterfly tags, 1D barcodes can be difficult for cashiers to align.
+- A `0.32" × 0.32"` Mini QR code fits the right paddle perfectly, scanning instantly from any angle (360° omni-directional) on modern 2D scanners or smartphones.
+
+### C. Data Payload Protocols
+1. **Raw SKU Mode**: Encodes `item.locationSku || item.upc` (e.g. `0EJ0J1` or `HUCK-1490`). Recommended for handheld 2D inventory scanners.
+2. **Item Web URL Mode**: Encodes `https://resalecommand.com/i/HUCK-1490`. Enables antique mall shoppers to scan the physical tag with their iPhone/Android camera to view provenance, photos, and historical comps.
+

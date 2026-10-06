@@ -1,5 +1,6 @@
 import { generateCode128Svg } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
+import { generateQrCodeSvg, resolveQrPayload } from './qrCodeHelper';
 
 export interface RolloPrintItem {
   id?: string;
@@ -24,9 +25,12 @@ export interface RolloPrintOptions {
   vendorHeader?: string; // Default: 'MEMORY DEN'
   barcodeAuthority?: 'ricochet_sku' | 'upc'; // Prefer Ricochet SKU for Den registers, fallback to UPC
   engine?: 'pdf' | 'html'; // Default: 'pdf' (immutable vector PDF, bypasses all browser rotation bugs)
+  barcodeType?: 'code128' | 'qr'; // Default: 'code128'
+  qrDataFormat?: 'sku' | 'url'; // Default: 'sku'
+  qrBaseUrl?: string; // Default: 'https://resalecommand.com/i/'
 }
 
-export { printLabelsViaPdf, generateLabelsPdf };
+export { printLabelsViaPdf, generateLabelsPdf, generateQrCodeSvg, resolveQrPayload };
 
 /**
  * Generates printable HTML for Rollo thermal printer.
@@ -89,13 +93,16 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     // The barcode value scanned by register:
     // If cleanLocSku exists, use it so cashier scans Memory Den SKU. Otherwise use HUCK UPC.
     const barcodeVal = cleanLocSku || cleanUpc || 'HUCK-0000';
-    
+    const isQr = options.barcodeType === 'qr';
+    const qrPayload = isQr ? resolveQrPayload(item, options.qrDataFormat, options.qrBaseUrl) : '';
+    const qrSvg = isQr ? generateQrCodeSvg(qrPayload) : '';
+
     // Generate SVG barcode
-    const barcodeSvg = generateCode128Svg(barcodeVal, {
+    const barcodeSvg = !isQr ? generateCode128Svg(barcodeVal, {
       height: barHeight,
       barWidth,
       includeText: false
-    });
+    }) : '';
 
     let singleLabel = '';
 
@@ -110,8 +117,26 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
           </div>
           <div class="butterfly-bridge"></div>
           <div class="butterfly-wing butterfly-right">
-            <div class="barcode-container">
-              ${barcodeSvg}
+            <div class="${isQr ? 'qr-container-bfly' : 'barcode-container'}">
+              ${isQr ? qrSvg : barcodeSvg}
+            </div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+          </div>
+        </div>
+      `;
+    } else if (isQr) {
+      // 2D Mini QR Side-by-Side Layout (Left: Big price + Title, Right: Compact QR matrix)
+      singleLabel = `
+        <div class="rollo-label qr-label">
+          <div class="qr-left">
+            <div class="vendor-tag">${vendor}</div>
+            <div class="qr-price">${priceDisplay}</div>
+            <div class="item-title">${escapeHtml(title)}</div>
+            <div class="qr-caption-sub">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+          </div>
+          <div class="qr-right">
+            <div class="qr-container-box">
+              ${qrSvg}
             </div>
             <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
           </div>
@@ -185,6 +210,53 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     .rollo-label:last-child {
       page-break-after: auto;
       break-after: auto;
+    }
+    /* 2D Mini QR Layout */
+    .rollo-label.qr-label {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+      padding: 0.05in 0.08in;
+    }
+    .qr-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding-right: 0.06in;
+      overflow: hidden;
+    }
+    .qr-price {
+      font-size: ${size === '2x1' ? '18px' : '22px'};
+      font-weight: 900;
+      line-height: 1.05;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .qr-caption-sub {
+      font-size: 7.5px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 0.4px;
+      opacity: 0.9;
+    }
+    .qr-right {
+      width: ${size === '2x1' ? '0.85in' : '1.1in'};
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .qr-container-box svg {
+      width: ${size === '2x1' ? '0.70in' : '0.90in'};
+      height: ${size === '2x1' ? '0.70in' : '0.90in'};
+      display: block;
+    }
+    .qr-container-bfly svg {
+      width: 0.30in;
+      height: 0.30in;
+      display: block;
     }
     .label-header {
       display: flex;
