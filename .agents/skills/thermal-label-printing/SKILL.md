@@ -157,3 +157,29 @@ While 1D Code 128 barcodes remain standard for legacy POS barcode guns (like Mem
 1. **Raw SKU Mode**: Encodes `item.locationSku || item.upc` (e.g. `0EJ0J1` or `HUCK-1490`). Recommended for handheld 2D inventory scanners.
 2. **Item Web URL Mode**: Encodes `https://resalecommand.com/i/HUCK-1490`. Enables antique mall shoppers to scan the physical tag with their iPhone/Android camera to view provenance, photos, and historical comps.
 
+---
+
+## 8. Location-Bound Label Profiles Architecture (Automated Print Dispatch)
+
+### A. The Invariant of Item UPC Ground Truth
+Every physical inventory item in Resale Command is permanently assigned a canonical `upc` attribute in `resale_db.items` (managed via `src/lib/upcAuthority.ts`). This UPC remains the permanent ground truth regardless of which booth, co-op, or storage bin the item travels to.
+
+### B. Location-Bound Label Profiles
+To eliminate repetitive manual configuration at print time, each Location / Venue record (`warehouses` collection or `LocationPreset`) maintains a persistent **Label Profile**:
+
+| Location Profile Field | Purpose | Examples |
+| :--- | :--- | :--- |
+| **`vendorHeader`** | Top branding text on the printed thermal tag | `MEMORY DEN`, `DUSTY TIGER`, `PDX GAMING LIB` |
+| **`labelSize`** | Physical roll stock dimensions | `2x1` (Shelf), `butterfly` (Jewelry), `2.25x1.25` (Hangtag) |
+| **`barcodeType`** | Primary barcode symbology | `code128` (1D Laser Gun) or `qr` (2D Mini Matrix) |
+| **`identifierAuthority`** | Barcode derivation logic | `dual_id_ricochet` (MD), `pure_upc` (PDXGL, DT), `warehouse_bin` (HG) |
+| **`qrDataFormat`** | What the QR code encodes | `sku` (POS gun) or `url` (Mobile customer camera) |
+| **`customFooter`** | Optional fixed footer string | `Booth #42 • No Returns`, `Consignor Asset Tag` |
+
+### C. Zero-Friction Automated Print Dispatch
+When the curator initiates label printing from anywhere in Resale Command:
+1. **From Outbound Manifest (`LocationManifestTray.vue`)**: Resale Command inherits the manifest's target destination, applies that location's exact Label Profile, and prints the batch in 1 click.
+2. **From Ingestion Wizard (`HaulIngestionWizard.vue`)**: When routing items to a channel, the wizard applies the destination's label template automatically.
+3. **From Item Drawer (`ItemDrawer.vue`)**: Inspecting an item placed at `storageLocation: 'MD'` defaults to Memory Den's Ricochet dual-tag, while an item in `storageLocation: 'HG'` defaults to a warehouse bin tag.
+
+
