@@ -10,6 +10,9 @@ export interface RolloPrintItem {
   upc?: string;
   locationSku?: string;
   sku?: string;
+  bin?: string;
+  customCaption?: string; // Explicit caption override
+  barcodeVal?: string; // Explicit barcode override
   price?: number | string;
   resalePrice?: number | string;
   boutiquePrice?: number | string;
@@ -23,11 +26,12 @@ import { printLabelsViaPdf, generateLabelsPdf } from './pdfLabelGenerator';
 export interface RolloPrintOptions {
   size?: '2x1' | '2.25x1.25' | '3x2' | '4x6' | 'butterfly';
   vendorHeader?: string; // Default: 'MEMORY DEN'
-  barcodeAuthority?: 'ricochet_sku' | 'upc'; // Prefer Ricochet SKU for Den registers, fallback to UPC
+  barcodeAuthority?: 'ricochet_sku' | 'upc' | 'auto'; // What barcode encodes
   engine?: 'pdf' | 'html'; // Default: 'pdf' (immutable vector PDF, bypasses all browser rotation bugs)
   barcodeType?: 'code128' | 'qr'; // Default: 'code128'
   qrDataFormat?: 'sku' | 'url'; // Default: 'sku'
   qrBaseUrl?: string; // Default: 'https://resalecommand.com/i/'
+  customCaption?: string; // Explicit caption override across batch
 }
 
 export { printLabelsViaPdf, generateLabelsPdf, generateQrCodeSvg, resolveQrPayload };
@@ -85,17 +89,38 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     const numPrice = Number(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
-    // Resolve barcode value:
-    // If locationSku is present (e.g. '0EJ0NO'), clerks at Memory Den scan this!
+    // Resolve barcode value with explicit override support:
     const cleanLocSku = (item.locationSku || '').replace(/^['"]+/, '').trim().toUpperCase();
     const cleanUpc = (item.upc || item.sku || '').trim().toUpperCase();
+    const cleanBin = (item.bin || item.locationName || '').trim().toUpperCase();
     
-    // The barcode value scanned by register:
-    // If cleanLocSku exists, use it so cashier scans Memory Den SKU. Otherwise use HUCK UPC.
-    const barcodeVal = cleanLocSku || cleanUpc || 'HUCK-0000';
+    let barcodeVal = (item.barcodeVal || '').trim().toUpperCase();
+    if (!barcodeVal) {
+      if (options.barcodeAuthority === 'upc') {
+        barcodeVal = cleanUpc || cleanLocSku || 'UPC-0000';
+      } else if (options.barcodeAuthority === 'ricochet_sku') {
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      } else {
+        // Auto: Prefer store SKU if present, otherwise UPC
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
+    }
+
     const isQr = options.barcodeType === 'qr';
     const qrPayload = isQr ? resolveQrPayload(item, options.qrDataFormat, options.qrBaseUrl) : '';
     const qrSvg = isQr ? generateQrCodeSvg(qrPayload) : '';
+
+    // Caption logic with explicit override support:
+    let captionText = (item.customCaption || options.customCaption || '').trim();
+    if (!captionText) {
+      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
+        captionText = `${cleanLocSku} • ${cleanUpc}`;
+      } else if (cleanBin && cleanUpc) {
+        captionText = `BIN: ${cleanBin} • ${cleanUpc}`;
+      } else {
+        captionText = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
+    }
 
     // Generate SVG barcode
     const barcodeSvg = !isQr ? generateCode128Svg(barcodeVal, {
@@ -120,7 +145,7 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
             <div class="${isQr ? 'qr-container-bfly' : 'barcode-container'}">
               ${isQr ? qrSvg : barcodeSvg}
             </div>
-            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc || 'UPC-0000')}</div>
           </div>
         </div>
       `;
@@ -132,25 +157,17 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
             <div class="vendor-tag">${vendor}</div>
             <div class="qr-price">${priceDisplay}</div>
             <div class="item-title">${escapeHtml(title)}</div>
-            <div class="qr-caption-sub">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+            <div class="qr-caption-sub">${escapeHtml(captionText)}</div>
           </div>
           <div class="qr-right">
             <div class="qr-container-box">
               ${qrSvg}
             </div>
-            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc || 'UPC-0000')}</div>
           </div>
         </div>
       `;
     } else {
-      // Human readable caption: show both SKU and UPC if available
-      let captionText = '';
-      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
-        captionText = `${cleanLocSku} • ${cleanUpc}`;
-      } else {
-        captionText = cleanLocSku || cleanUpc;
-      }
-
       singleLabel = `
         <div class="rollo-label">
           <div class="label-header">

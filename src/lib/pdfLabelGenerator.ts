@@ -48,21 +48,38 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
     const numPrice = Number(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
-    // Resolve barcode value (Ricochet SKU priority for Memory Den)
+    // Resolve barcode value with explicit override support
     const cleanLocSku = (item.locationSku || '').replace(/^['"]+/, '').trim().toUpperCase();
     const cleanUpc = (item.upc || item.sku || '').trim().toUpperCase();
-    const barcodeVal = cleanLocSku || cleanUpc || 'HUCK-0000';
+    const cleanBin = (item.bin || item.locationName || '').trim().toUpperCase();
+
+    let barcodeVal = (item.barcodeVal || '').trim().toUpperCase();
+    if (!barcodeVal) {
+      if (options.barcodeAuthority === 'upc') {
+        barcodeVal = cleanUpc || cleanLocSku || 'UPC-0000';
+      } else if (options.barcodeAuthority === 'ricochet_sku') {
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      } else {
+        // Auto: Prefer store SKU if present, otherwise UPC
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
+    }
     const modules = !isQr ? getCode128Modules(barcodeVal) : '';
 
     // If QR code, get matrix data
     const qrPayload = isQr ? resolveQrPayload(item, options.qrDataFormat, options.qrBaseUrl) : '';
     const { data: qrData, size: qrSize } = isQr ? getQrCodeMatrix(qrPayload) : { data: [], size: 0 };
 
-    let captionText = '';
-    if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
-      captionText = `${cleanLocSku} • ${cleanUpc}`;
-    } else {
-      captionText = cleanLocSku || cleanUpc || 'HUCK-0000';
+    // Caption text with explicit override support
+    let captionText = (item.customCaption || options.customCaption || '').trim();
+    if (!captionText) {
+      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
+        captionText = `${cleanLocSku} • ${cleanUpc}`;
+      } else if (cleanBin && cleanUpc) {
+        captionText = `BIN: ${cleanBin} • ${cleanUpc}`;
+      } else {
+        captionText = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
     }
 
     for (let q = 0; q < qty; q++) {
@@ -121,7 +138,7 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
           // Caption SKU
           doc.setFont('courier', 'bold');
           doc.setFontSize(6.5);
-          const skuCaption = cleanLocSku || cleanUpc;
+          const skuCaption = cleanLocSku || cleanUpc || 'UPC-0000';
           const skuWidth = doc.getTextWidth(skuCaption);
           doc.text(skuCaption, rightStartX + (rightWidth - skuWidth) / 2, qrY + qrSide + 0.08);
 
@@ -158,7 +175,7 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
           // Caption SKU
           doc.setFont('courier', 'bold');
           doc.setFontSize(6.5);
-          const skuCaption = cleanLocSku || cleanUpc;
+          const skuCaption = cleanLocSku || cleanUpc || 'UPC-0000';
           const skuWidth = doc.getTextWidth(skuCaption);
           doc.text(skuCaption, barStartX + (barcodeTotalWidth - skuWidth) / 2, barY + barH + 0.09);
         }
@@ -189,7 +206,7 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
         // Caption under QR
         doc.setFont('courier', 'bold');
         doc.setFontSize(6.5);
-        const skuCaption = cleanLocSku || cleanUpc;
+        const skuCaption = cleanLocSku || cleanUpc || 'UPC-0000';
         const skuWidth = doc.getTextWidth(skuCaption);
         doc.text(skuCaption, qrX + (qrSide - skuWidth) / 2, qrY + qrSide + 0.08);
 
