@@ -118,6 +118,12 @@
                          Social Studio
                      </a>
                   </li>
+                  <li>
+                     <a href="/labels/studio" class="gap-2 font-semibold">
+                         <Icon icon="solar:printer-bold" class="w-4 h-4 text-primary" />
+                         Label Studio
+                     </a>
+                  </li>
                   
                   <!-- Organization Settings -->
                   <!-- Active Team -->
@@ -251,6 +257,9 @@
                     </a>
                     <a href="/social" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
                         <Icon icon="solar:camera-bold" class="w-5 h-5 text-primary" /> Social Studio
+                    </a>
+                    <a href="/labels/studio" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
+                        <Icon icon="solar:printer-bold" class="w-5 h-5 text-primary" /> Label Studio
                     </a>
                     
                     <div class="flex flex-wrap gap-2 mt-1">

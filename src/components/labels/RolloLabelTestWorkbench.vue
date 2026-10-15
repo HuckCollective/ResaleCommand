@@ -8,16 +8,20 @@
             <Icon icon="solar:printer-bold" class="w-6 h-6" />
           </div>
           <div>
-            <h1 class="text-xl sm:text-2xl font-black text-base-content tracking-tight">Rollo Thermal Print Studio</h1>
-            <p class="text-xs text-base-content/60 font-mono">Direct continuous thermal label printing • Zero DPI distortion • Mac &amp; PC</p>
+            <h1 class="text-xl sm:text-2xl font-black text-base-content tracking-tight">Thermal Label Studio &amp; Hardware Hub</h1>
+            <p class="text-xs text-base-content/60 font-mono">Universal direct thermal printing • Rollo, Zebra &amp; Dymo • Vector Code128 • Mac &amp; PC</p>
           </div>
         </div>
       </div>
 
       <div class="flex items-center gap-2">
+        <a href="/settings" class="btn btn-sm btn-ghost gap-1 font-bold">
+          <Icon icon="solar:settings-linear" class="w-4 h-4" />
+          <span>Settings</span>
+        </a>
         <a href="/inventory" class="btn btn-sm btn-ghost gap-1 font-bold">
-          <Icon icon="solar:arrow-left-linear" class="w-4 h-4" />
-          <span>Back to Inventory</span>
+          <Icon icon="solar:box-linear" class="w-4 h-4" />
+          <span>Inventory</span>
         </a>
       </div>
     </div>

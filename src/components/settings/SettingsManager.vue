@@ -43,11 +43,50 @@
         </form>
       </div>
     </div>
+
+    <!-- Thermal Label & Hardware Studio Card -->
+    <div class="card bg-base-100 shadow-xl border border-base-200">
+      <div class="card-body">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="card-title text-xl flex items-center gap-2">
+              <Icon icon="solar:printer-bold" class="w-6 h-6 text-primary" />
+              Thermal Label &amp; Hardware Studio
+            </h2>
+            <p class="text-sm text-base-content/70 mt-1 max-w-xl">
+              Calibrate direct thermal printers, preview vector Code128 barcodes, test gap sensors, and print on-the-fly replacement tags for lost booth stickers.
+            </p>
+          </div>
+          <a href="/labels/studio" class="btn btn-primary font-bold gap-2 shrink-0">
+            <Icon icon="solar:printer-bold" class="w-5 h-5" />
+            Launch Studio ➔
+          </a>
+        </div>
+
+        <div class="divider my-3"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold text-base-content/80">🏷️ Supported Media</div>
+            <div class="text-xs text-base-content/60 mt-1">2"×1" Booth, 2.2"×0.5" Butterfly Jewelry, 3"×2" Bin, 4"×6" Shipping</div>
+          </div>
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold text-base-content/80">🖨️ Hardware Profiles</div>
+            <div class="text-xs text-base-content/60 mt-1">Rollo Direct Thermal, Zebra ZD411, Dymo 550, Munbyn (Mac &amp; PC)</div>
+          </div>
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold text-base-content/80">⚡ Ricochet POS Authority</div>
+            <div class="text-xs text-base-content/60 mt-1">Memory Den 6-char location SKU encoding for instant register checkout</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 
 const { currentTeam, user, updateTeamPrefs, updatePrefs } = useAuth();
