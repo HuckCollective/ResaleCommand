@@ -79,3 +79,15 @@ flowchart TD
   * Acquired items (`status === 'acquired'`): **AI Deep Scan & Profit Playbook unlocked**.
 * **Acquisition Audit Preservation**:
   * Original pre-buy advice (`BUY_NOW`, `max_bid`) is locked into a collapsible **`🔒 Original Pre-Buy Sourcing Audit`** card within the `Playbook` tab so tax/provenance records remain intact.
+
+---
+
+## 5. Price Parsing & Range Invariants (The Anti-Concatenation Law)
+
+* **PROHIBITED**: Never use destructive regex stripping (`.replace(/[^0-9.]/g, '')`) on price, cost, or valuation strings.
+* **THE FAILURE MODE**: Price ranges like `"$50 - $65"` have hyphens and spaces stripped, producing `"5065"` $\rightarrow$ **`$5065.00`**!
+* **MANDATORY**: Always import and use `parsePriceValue(val, mode, fallback)` from `src/lib/lot-strategy.ts`:
+  * Midpoint mode (`'midpoint'`) produces accurate financial projections: `"$50 - $65"` $\rightarrow$ `$58.00`.
+  * Display values preserve the original readable range on UI chips while financial math operates on numeric midpoints.
+  * Real component sums always drive `projectedSplitYield`; never fall back to hardcoded prompt dummy values.
+

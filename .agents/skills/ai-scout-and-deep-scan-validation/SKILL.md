@@ -87,6 +87,12 @@ This skill documents the architectural invariants, prompt engineering rules, and
    $$\text{Mint Price} \ge \text{Boutique Premium Price} \ge \text{Fair Market Price} \ge \text{Poor Price}$$
 3. **Physical Thermal Tag Title Limit**:
    - `tag_title` must be strictly $\le 40$ characters for clean Rollo and Ricochet barcode label printing.
+4. **Anti-Range Concatenation Law**:
+   - Price ranges returned by vision models (e.g. `"$50 - $65"`, `"$35 - $45"`) must NEVER be stripped of non-digits using regex like `.replace(/[^0-9.]/g, '')`.
+   - Stripping hyphens and spaces turns `"$50 - $65"` into `$5,065.00`.
+   - Always use `parsePriceValue(val, 'midpoint')` from `src/lib/lot-strategy.ts` for financial metrics.
+5. **Component Sum Grounding**:
+   - Lot playbook yields must derive from the real sum of identified components ($\sum \text{heroes} + \text{combines} + \text{fillers}$) rather than prompt template defaults.
 
 ---
 

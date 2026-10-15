@@ -56,3 +56,13 @@ Universal invariants and behavioral constraints for all AI vision, item identifi
 - **Compact Condition Pill**: Condition summaries must be concise 1–2 word pills (`Mint`, `Good`, `Fair`, `Poor`) positioned in the top-right corner using semantic DaisyUI badge classes.
 - **Condition Notes Placement**: Specific condition details and flaws must sit directly below the title in an italicized subtitle (`text-[11px] text-base-content/70 italic`).
 - **Financial Metrics Integrity**: Bottom metrics bar must cleanly display Boutique, Fair, Buy Range, and split cost basis without overflowing.
+
+---
+
+## 8. Anti-Range Concatenation Law (Never Strip Price Strings)
+- **Zero Regex Stripping on Prices**: Never parse price strings with `.replace(/[^0-9.]/g, '')`.
+- **The Catastrophic Failure**: Stripping hyphens and spaces from AI-estimated price ranges like `"$50 - $65"` turns them into `"5065"` $\rightarrow$ **`$5065.00`**, inflating a $98 lot into $8,610.00 and yielding an absurd +19,835% ROI.
+- **Mandatory Parser**: Always import and use `parsePriceValue(val, mode, fallback)` from `src/lib/lot-strategy.ts`:
+  - Midpoint mode (`'midpoint'`) produces accurate financial projections: `"$50 - $65"` $\rightarrow$ `$58.00`.
+  - Display values preserve the original readable range on UI chips while financial math operates on numeric midpoints.
+

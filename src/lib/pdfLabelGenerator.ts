@@ -3,6 +3,7 @@ import { getCode128Modules } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
 import { getQrCodeMatrix, resolveQrPayload } from './qrCodeHelper';
 import type { RolloPrintItem, RolloPrintOptions } from './rolloLabelPrint';
+import { parsePriceValue } from './lot-strategy';
 
 /**
  * Generates an immutable, device-independent vector PDF for thermal label printing.
@@ -43,9 +44,9 @@ export function generateLabelsPdf(items: RolloPrintItem[], options: RolloPrintOp
     const qty = Math.max(1, Number(item.quantity || 1));
     const title = extractShortTagTitle(item);
 
-    // Resolve price
+    // Resolve price safely
     const rawPrice = item.resalePrice ?? item.boutiquePrice ?? item.price ?? 0;
-    const numPrice = Number(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
+    const numPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) ? rawPrice : parsePriceValue(rawPrice, 'midpoint', 0);
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
     // Resolve barcode value with explicit override support

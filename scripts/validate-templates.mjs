@@ -120,8 +120,35 @@ for (const diag of diagnostics) {
     }
 }
 
+// 3. VALIDATE ANTI-RANGE CONCATENATION INVARIANT (Price Parsing Security)
+const pricingCriticalFiles = [
+    'src/lib/lot-strategy.ts',
+    'src/lib/ai-inspection.ts',
+    'src/lib/rolloLabelPrint.ts',
+    'src/lib/pdfLabelGenerator.ts',
+    'src/composables/useScoutPurchase.ts',
+    'src/composables/useLotSplitter.ts',
+    'src/components/common/drawer/ItemLotTab.vue',
+    'src/components/inventory/LotSplitterWizard.vue'
+];
+
+for (const relPath of pricingCriticalFiles) {
+    const fullPath = path.resolve(relPath);
+    if (!fs.existsSync(fullPath)) continue;
+    const fileContent = fs.readFileSync(fullPath, 'utf8');
+    const dangerousRegex = /\.replace\(\/\[\^0-9\.\-\]\/g,\s*['"]['"]\)|\.replace\(\/\[\^0-9\.\]\/g,\s*['"]['"]\)/g;
+    let match;
+    while ((match = dangerousRegex.exec(fileContent)) !== null) {
+        const line = fileContent.slice(0, match.index).split('\n').length;
+        console.error(`❌ Anti-Concatenation Invariant Violation in ${relPath}:${line}:`);
+        console.error(`   Destructive regex character stripping detected. Always use parsePriceValue() from src/lib/lot-strategy.ts instead of regex stripping on prices!`);
+        hasErrors = true;
+    }
+}
+
 if (!hasErrors) {
-    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs and ${tsFiles.length} TS files passed with ZERO syntax, template, or missing identifier errors!`);
+    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, and price-parsing invariants passed with ZERO errors!`);
 } else {
     process.exit(1);
 }
+

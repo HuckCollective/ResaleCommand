@@ -7,6 +7,7 @@ import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
 import { getItemsByPurchaseId, getSafeRawAnalysis, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
 import { getDefaultStorageLocation } from '../lib/warehouses';
+import { parsePriceValue } from '../lib/lot-strategy';
 
 const PURCHASES_COL = getPurchasesCollectionId();
 const getItemsCollectionId = () => getCollectionId();
@@ -159,9 +160,8 @@ export function useScoutPurchase() {
                 }
                 const bStr = target?.pricing_potential?.boutique || target?.price_breakdown?.boutique_premium;
                 if (bStr) {
-                    const clean = String(bStr).replace(/[^0-9.]/g, '');
-                    const val = parseFloat(clean);
-                    if (!isNaN(val)) return val;
+                    const val = parsePriceValue(bStr, 'midpoint', 0);
+                    if (val > 0) return val;
                 }
             } catch (e) {}
         }

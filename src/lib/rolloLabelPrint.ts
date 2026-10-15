@@ -1,6 +1,7 @@
 import { generateCode128Svg } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
 import { generateQrCodeSvg, resolveQrPayload } from './qrCodeHelper';
+import { parsePriceValue } from './lot-strategy';
 
 export interface RolloPrintItem {
   id?: string;
@@ -84,9 +85,9 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     const qty = Math.max(1, Number(item.quantity || 1));
     const title = extractShortTagTitle(item);
     
-    // Resolve price
+    // Resolve price safely
     const rawPrice = item.resalePrice ?? item.boutiquePrice ?? item.price ?? 0;
-    const numPrice = Number(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
+    const numPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) ? rawPrice : parsePriceValue(rawPrice, 'midpoint', 0);
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
     // Resolve barcode value with explicit override support:

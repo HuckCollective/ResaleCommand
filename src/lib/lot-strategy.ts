@@ -57,13 +57,26 @@ export function parsePriceValue(val: any, mode: 'midpoint' | 'low' | 'high' | 'f
     const str = String(val).trim();
     if (!str) return fallback;
 
-    // Match all discrete numbers (including decimals), preventing "$40 - $60" -> "4060"
-    const matches = str.match(/\d+(?:\.\d+)?/g);
-    if (!matches || matches.length === 0) return fallback;
+    // Normalize comma thousands separators e.g. "$1,200.00" -> "$1200.00"
+    const normalized = str.replace(/,/g, '');
 
-    const numbers = matches.map(n => parseFloat(n)).filter(n => !isNaN(n));
+    // 1. If explicit dollar amounts exist (e.g. "$45 - $60", "D&D 3.5 ($35)"), extract dollar-anchored numbers first
+    // This prevents non-price numbers like editions ("3.5", "1st") or quantities ("3-pack") from polluting price math
+    const dollarMatches = [...normalized.matchAll(/\$\s*(\d+(?:\.\d+)?)/g)]
+        .map(m => parseFloat(m[1]))
+        .filter(n => !isNaN(n));
+
+    let numbers = dollarMatches;
+
+    // 2. If no dollar signs found, fall back to matching discrete numbers (including decimals), preventing "$40 - $60" -> "4060"
+    if (numbers.length === 0) {
+        const rawMatches = normalized.match(/\d+(?:\.\d+)?/g);
+        if (rawMatches && rawMatches.length > 0) {
+            numbers = rawMatches.map(n => parseFloat(n)).filter(n => !isNaN(n));
+        }
+    }
+
     if (numbers.length === 0) return fallback;
-
     if (numbers.length === 1) return numbers[0];
 
     // Range handling e.g. "$40 - $60"
@@ -212,29 +225,31 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
     if (components.length > 1) {
         // We have discrete parsed components
         const sorted = [...components].sort((a, b) => {
-            const pa = parseFloat(String(a.val || a.resalePrice || a.price_breakdown?.fair || '0').replace(/[^0-9.]/g, '')) || 0;
-            const pb = parseFloat(String(b.val || b.resalePrice || b.price_breakdown?.fair || '0').replace(/[^0-9.]/g, '')) || 0;
+            const pa = parsePriceValue(a.val || a.resalePrice || a.price_breakdown?.fair, 'midpoint', 0);
+            const pb = parsePriceValue(b.val || b.resalePrice || b.price_breakdown?.fair, 'midpoint', 0);
             return pb - pa;
         });
 
         // Top 1-2 are heroes
         const top1 = sorted[0];
-        const p1 = parseFloat(String(top1?.val || top1?.resalePrice || top1?.price_breakdown?.fair || '25').replace(/[^0-9.]/g, '')) || 25;
+        const rawP1 = top1?.val || top1?.resalePrice || top1?.price_breakdown?.fair;
+        const p1 = parsePriceValue(rawP1, 'midpoint', 25);
         heroes.push({
             name: top1.name || top1.title || top1.identity || 'Showcase Anchor Item',
-            estPrice: `$${p1.toFixed(2)}`,
+            estPrice: (typeof rawP1 === 'string' && rawP1.trim().startsWith('$')) ? rawP1.trim() : `$${p1.toFixed(2)}`,
             numericPrice: p1,
             targetChannel: 'Online / Showcase',
             reason: totalCost > 0 && p1 >= totalCost ? 'Recoups 100% of entire lot purchase cost' : 'High demand collector piece',
             recoupsCost: totalCost > 0 && p1 >= totalCost * 0.8
         });
 
-        if (sorted.length > 2) {
+        if (sorted.length > 1) {
             const top2 = sorted[1];
-            const p2 = parseFloat(String(top2?.val || top2?.resalePrice || top2?.price_breakdown?.fair || '20').replace(/[^0-9.]/g, '')) || 20;
+            const rawP2 = top2?.val || top2?.resalePrice || top2?.price_breakdown?.fair;
+            const p2 = parsePriceValue(rawP2, 'midpoint', 20);
             heroes.push({
                 name: top2.name || top2.title || top2.identity || 'Secondary Anchor Item',
-                estPrice: `$${p2.toFixed(2)}`,
+                estPrice: (typeof rawP2 === 'string' && rawP2.trim().startsWith('$')) ? rawP2.trim() : `$${p2.toFixed(2)}`,
                 numericPrice: p2,
                 targetChannel: 'Booth Showcase',
                 reason: 'Instant pure profit contributor',
@@ -243,28 +258,30 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
         }
 
         // Remaining middle pieces form a combine
-        if (sorted.length > 3) {
-            const midPieces = sorted.slice(2, Math.min(sorted.length - 1, 5));
-            const midTotal = midPieces.reduce((sum, p) => {
-                const val = parseFloat(String(p?.val || p?.resalePrice || p?.price_breakdown?.fair || '12').replace(/[^0-9.]/g, '')) || 12;
-                return sum + val;
-            }, 0);
-            combines.push({
-                name: 'Themed Core Combine Lot',
-                estPrice: `$${midTotal.toFixed(2)}`,
-                numericPrice: midTotal,
-                items: midPieces.map(p => p.name || p.title || 'Core Item'),
-                reason: 'Grouped companion pieces hit sweet-spot ticket price'
-            });
+        if (sorted.length > 2) {
+            const midPieces = sorted.slice(2, Math.min(sorted.length, 5));
+            if (midPieces.length > 0) {
+                const midTotal = midPieces.reduce((sum, p) => {
+                    const val = parsePriceValue(p?.val || p?.resalePrice || p?.price_breakdown?.fair, 'midpoint', 12);
+                    return sum + val;
+                }, 0);
+                combines.push({
+                    name: 'Themed Core Combine Lot',
+                    estPrice: `$${midTotal.toFixed(2)}`,
+                    numericPrice: midTotal,
+                    items: midPieces.map(p => p.name || p.title || 'Core Item'),
+                    reason: 'Grouped companion pieces hit sweet-spot ticket price'
+                });
+            }
         }
 
         // Leftovers become booth floor fillers
-        if (sorted.length > 4) {
+        if (sorted.length > 5) {
             floorFillers = {
                 name: 'Impulse Floor Grab Bag / Starter Lot',
                 estPrice: '$15.00',
                 numericPrice: 15,
-                count: sorted.length - 4,
+                count: sorted.length - 5,
                 targetChannel: 'Memory Den Booth Basket'
             };
         }
@@ -344,11 +361,16 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
         }
     }
 
-    const projectedBulk = bulkPrice > 0 ? bulkPrice : 110;
     const heroSum = heroes.reduce((s, h) => s + parseNumeric(h.numericPrice, 0), 0);
     const combineSum = combines.reduce((s, c) => s + parseNumeric(c.numericPrice, 0), 0);
     const fillerSum = floorFillers ? parseNumeric(floorFillers.numericPrice, 0) : 0;
-    const projectedSplit = Math.max(projectedBulk * 1.35, heroSum + combineSum + fillerSum);
+    const calculatedSum = heroSum + combineSum + fillerSum;
+    const projectedSplit = calculatedSum > 0 
+        ? calculatedSum 
+        : (bulkPrice > 0 ? Math.round(bulkPrice * 1.35) : Math.round(Math.max(45, totalCost * 1.8)));
+    const projectedBulk = bulkPrice > 0 
+        ? bulkPrice 
+        : Math.round(projectedSplit * 0.65);
     const pct = projectedBulk > 0 ? Math.round(((projectedSplit - projectedBulk) / projectedBulk) * 100) : 35;
 
     return {
