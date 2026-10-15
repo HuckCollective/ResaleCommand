@@ -1,5 +1,6 @@
 import { generateCode128Svg } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
+import { generateQrCodeSvg, resolveQrPayload } from './qrCodeHelper';
 
 export interface RolloPrintItem {
   id?: string;
@@ -9,6 +10,9 @@ export interface RolloPrintItem {
   upc?: string;
   locationSku?: string;
   sku?: string;
+  bin?: string;
+  customCaption?: string; // Explicit caption override
+  barcodeVal?: string; // Explicit barcode override
   price?: number | string;
   resalePrice?: number | string;
   boutiquePrice?: number | string;
@@ -22,11 +26,15 @@ import { printLabelsViaPdf, generateLabelsPdf } from './pdfLabelGenerator';
 export interface RolloPrintOptions {
   size?: '2x1' | '2.25x1.25' | '3x2' | '4x6' | 'butterfly';
   vendorHeader?: string; // Default: 'MEMORY DEN'
-  barcodeAuthority?: 'ricochet_sku' | 'upc'; // Prefer Ricochet SKU for Den registers, fallback to UPC
+  barcodeAuthority?: 'ricochet_sku' | 'upc' | 'auto'; // What barcode encodes
   engine?: 'pdf' | 'html'; // Default: 'pdf' (immutable vector PDF, bypasses all browser rotation bugs)
+  barcodeType?: 'code128' | 'qr'; // Default: 'code128'
+  qrDataFormat?: 'sku' | 'url'; // Default: 'sku'
+  qrBaseUrl?: string; // Default: 'https://resalecommand.com/i/'
+  customCaption?: string; // Explicit caption override across batch
 }
 
-export { printLabelsViaPdf, generateLabelsPdf };
+export { printLabelsViaPdf, generateLabelsPdf, generateQrCodeSvg, resolveQrPayload };
 
 /**
  * Generates printable HTML for Rollo thermal printer.
@@ -81,21 +89,45 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     const numPrice = Number(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
     const priceDisplay = `$${numPrice.toFixed(2)}`;
 
-    // Resolve barcode value:
-    // If locationSku is present (e.g. '0EJ0NO'), clerks at Memory Den scan this!
+    // Resolve barcode value with explicit override support:
     const cleanLocSku = (item.locationSku || '').replace(/^['"]+/, '').trim().toUpperCase();
     const cleanUpc = (item.upc || item.sku || '').trim().toUpperCase();
+    const cleanBin = (item.bin || item.locationName || '').trim().toUpperCase();
     
-    // The barcode value scanned by register:
-    // If cleanLocSku exists, use it so cashier scans Memory Den SKU. Otherwise use HUCK UPC.
-    const barcodeVal = cleanLocSku || cleanUpc || 'HUCK-0000';
-    
+    let barcodeVal = (item.barcodeVal || '').trim().toUpperCase();
+    if (!barcodeVal) {
+      if (options.barcodeAuthority === 'upc') {
+        barcodeVal = cleanUpc || cleanLocSku || 'UPC-0000';
+      } else if (options.barcodeAuthority === 'ricochet_sku') {
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      } else {
+        // Auto: Prefer store SKU if present, otherwise UPC
+        barcodeVal = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
+    }
+
+    const isQr = options.barcodeType === 'qr';
+    const qrPayload = isQr ? resolveQrPayload(item, options.qrDataFormat, options.qrBaseUrl) : '';
+    const qrSvg = isQr ? generateQrCodeSvg(qrPayload) : '';
+
+    // Caption logic with explicit override support:
+    let captionText = (item.customCaption || options.customCaption || '').trim();
+    if (!captionText) {
+      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
+        captionText = `${cleanLocSku} • ${cleanUpc}`;
+      } else if (cleanBin && cleanUpc) {
+        captionText = `BIN: ${cleanBin} • ${cleanUpc}`;
+      } else {
+        captionText = cleanLocSku || cleanUpc || 'UPC-0000';
+      }
+    }
+
     // Generate SVG barcode
-    const barcodeSvg = generateCode128Svg(barcodeVal, {
+    const barcodeSvg = !isQr ? generateCode128Svg(barcodeVal, {
       height: barHeight,
       barWidth,
       includeText: false
-    });
+    }) : '';
 
     let singleLabel = '';
 
@@ -110,22 +142,32 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
           </div>
           <div class="butterfly-bridge"></div>
           <div class="butterfly-wing butterfly-right">
-            <div class="barcode-container">
-              ${barcodeSvg}
+            <div class="${isQr ? 'qr-container-bfly' : 'barcode-container'}">
+              ${isQr ? qrSvg : barcodeSvg}
             </div>
-            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc)}</div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc || 'UPC-0000')}</div>
+          </div>
+        </div>
+      `;
+    } else if (isQr) {
+      // 2D Mini QR Side-by-Side Layout (Left: Big price + Title, Right: Compact QR matrix)
+      singleLabel = `
+        <div class="rollo-label qr-label">
+          <div class="qr-left">
+            <div class="vendor-tag">${vendor}</div>
+            <div class="qr-price">${priceDisplay}</div>
+            <div class="item-title">${escapeHtml(title)}</div>
+            <div class="qr-caption-sub">${escapeHtml(captionText)}</div>
+          </div>
+          <div class="qr-right">
+            <div class="qr-container-box">
+              ${qrSvg}
+            </div>
+            <div class="barcode-caption">${escapeHtml(cleanLocSku || cleanUpc || 'UPC-0000')}</div>
           </div>
         </div>
       `;
     } else {
-      // Human readable caption: show both SKU and UPC if available
-      let captionText = '';
-      if (cleanLocSku && cleanUpc && cleanLocSku !== cleanUpc) {
-        captionText = `${cleanLocSku} • ${cleanUpc}`;
-      } else {
-        captionText = cleanLocSku || cleanUpc;
-      }
-
       singleLabel = `
         <div class="rollo-label">
           <div class="label-header">
@@ -185,6 +227,53 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
     .rollo-label:last-child {
       page-break-after: auto;
       break-after: auto;
+    }
+    /* 2D Mini QR Layout */
+    .rollo-label.qr-label {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+      padding: 0.05in 0.08in;
+    }
+    .qr-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding-right: 0.06in;
+      overflow: hidden;
+    }
+    .qr-price {
+      font-size: ${size === '2x1' ? '18px' : '22px'};
+      font-weight: 900;
+      line-height: 1.05;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .qr-caption-sub {
+      font-size: 7.5px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 0.4px;
+      opacity: 0.9;
+    }
+    .qr-right {
+      width: ${size === '2x1' ? '0.85in' : '1.1in'};
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .qr-container-box svg {
+      width: ${size === '2x1' ? '0.70in' : '0.90in'};
+      height: ${size === '2x1' ? '0.70in' : '0.90in'};
+      display: block;
+    }
+    .qr-container-bfly svg {
+      width: 0.30in;
+      height: 0.30in;
+      display: block;
     }
     .label-header {
       display: flex;
