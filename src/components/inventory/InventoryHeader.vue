@@ -56,14 +56,27 @@
                     :value="searchQuery" 
                     @input="$emit('update:searchQuery', $event.target.value)"
                     placeholder="Search title, UPC, PO, vendor, location..." 
-                    class="input input-bordered input-sm w-full pl-9 pr-8 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                    class="input input-bordered input-sm w-full pl-9 pr-14 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                 />
-                <button 
-                    v-if="searchQuery" 
-                    @click="$emit('update:searchQuery', '')" 
-                    class="btn btn-ghost btn-circle btn-xs absolute right-1.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100"
-                    title="Clear search"
-                >✕</button>
+                <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                    <button 
+                        v-if="searchQuery" 
+                        type="button"
+                        @click="$emit('update:searchQuery', '')" 
+                        class="btn btn-ghost btn-circle btn-xs opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
+                        title="Clear search"
+                        aria-label="Clear search"
+                    >✕</button>
+                    <button 
+                        type="button"
+                        @click="isScannerOpen = true"
+                        class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10 transition-colors flex items-center justify-center w-6 h-6 min-h-6"
+                        title="Scan Barcode or Mini QR with Camera"
+                        aria-label="Scan Barcode or Mini QR with Camera"
+                    >
+                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -466,13 +479,31 @@
             <button type="button">close</button>
         </form>
     </dialog>
+
+    <!-- BARCODE & MINI QR CAMERA SCANNER -->
+    <BarcodeScannerModal 
+        :is-open="isScannerOpen"
+        title="Scan Tag to Filter Inventory"
+        subtitle="Point camera at barcode or Mini QR to instantly search"
+        @close="isScannerOpen = false"
+        @scan="handleScannedCode"
+    />
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
+import { addToast } from '../../stores/toast';
 
 const isFiltersOpen = ref(false);
+const isScannerOpen = ref(false);
+
+const handleScannedCode = (res) => {
+    if (!res?.rawValue) return;
+    emit('update:searchQuery', res.rawValue);
+    addToast(`Scanned: ${res.rawValue} (${res.format || 'code'})`, 'success');
+};
 
 const props = defineProps({
     title: { type: String, default: 'Inventory' },
@@ -503,7 +534,7 @@ const props = defineProps({
     viewMode: { type: String, default: '' }
 });
 
-defineEmits([
+const emit = defineEmits([
     'update:searchQuery',
     'update:filterStatus',
     'update:filterLocation',

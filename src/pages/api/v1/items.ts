@@ -20,11 +20,13 @@ if (API_KEY) {
     client.setKey(API_KEY as string);
 }
 
+import { getDatabaseId, getItemsCollectionId } from '../../../lib/appwriteEnv';
+
 const db = new Databases(client);
 
-// Ensure we respect Alpha mode if defined globally, although backend might just use default unless specified
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || "resale_db";
-const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || "items";
+// Ensure we respect environment if defined globally
+const DB_ID = getDatabaseId();
+const ITEMS_COL = getItemsCollectionId();
 const API_KEYS_COL = "api_keys";
 
 export const GET: APIRoute = async ({ request }) => {

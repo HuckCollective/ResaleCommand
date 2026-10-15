@@ -233,11 +233,24 @@
             <span class="text-[10px] opacity-60">(Ignores 3rd-party items)</span>
           </div>
 
-          <label class="btn btn-primary btn-md gap-2 font-bold shadow-lg shadow-primary/20 cursor-pointer">
-            <Icon icon="solar:file-text-bold" class="w-5 h-5" />
-            <span>Select CSV File</span>
-            <input type="file" accept=".csv" class="hidden" @change="handleFileSelect" :disabled="isParsing" />
-          </label>
+          <div class="flex items-center gap-3 justify-center flex-wrap">
+            <label class="btn btn-primary btn-md gap-2 font-bold shadow-lg shadow-primary/20 cursor-pointer">
+              <Icon icon="solar:file-text-bold" class="w-5 h-5" />
+              <span>Select CSV File</span>
+              <input type="file" accept=".csv" class="hidden" @change="handleFileSelect" :disabled="isParsing" />
+            </label>
+
+            <button 
+              type="button" 
+              class="btn btn-secondary btn-outline btn-md gap-2 font-bold shadow-sm"
+              @click="loadDemoCsv"
+              :disabled="isParsing"
+              title="Instantly test multi-org sales bucketing with mock data (zero database dependency)"
+            >
+              <Icon icon="solar:bolt-bold" class="w-5 h-5 text-warning" />
+              <span>⚡ Load Test / Demo CSV</span>
+            </button>
+          </div>
 
           <div v-if="isParsing" class="mt-4 flex items-center gap-2 text-primary text-xs font-bold">
             <span class="loading loading-spinner loading-xs"></span> Parsing CSV & Matching Inventory...
@@ -304,13 +317,16 @@
     <!-- Step 2: Full Reconciliation Workspace (once CSV loaded) -->
     <div v-else class="space-y-4">
       
-      <!-- Org Guard Alert Banner -->
-      <div v-if="skippedNonOrgCount > 0" class="alert alert-info py-2.5 px-4 rounded-xl text-xs flex justify-between items-center shadow-sm">
+      <!-- Org Sales Bucketing Banner -->
+      <div v-if="syncRows.length > 0" class="alert alert-info py-2.5 px-4 rounded-xl text-xs flex justify-between items-center shadow-sm">
         <div class="flex items-center gap-2">
-          <Icon icon="solar:shield-check-bold" class="w-5 h-5 text-info-content shrink-0" />
+          <Icon icon="solar:folder-with-files-bold" class="w-5 h-5 text-info-content shrink-0" />
           <span>
-            <strong>Org Sync Guard Active:</strong> Loaded <strong>{{ syncRows.length }}</strong> items matching org prefix <strong>{{ upcPrefix }}</strong>. 
-            Safely ignored <strong>{{ skippedNonOrgCount }}</strong> third-party/non-org items.
+            <strong>Multi-Org Sales Bucketing Active:</strong> 
+            <strong>{{ primaryBucketCount }}</strong> in {{ primaryOrgKey }} (Primary), 
+            <strong v-if="partnerBucketCount > 0">{{ partnerBucketCount }} in Partner Buckets, </strong>
+            <strong>{{ unassignedBucketCount }}</strong> in Unassigned Store SKUs. 
+            All sales rows preserved with zero data loss!
           </span>
         </div>
       </div>
@@ -389,7 +405,41 @@
       <div class="bg-base-100 p-4 rounded-xl border border-base-200 shadow-sm flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
         
         <!-- Filter Tabs & Search -->
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 flex-wrap">
+          <!-- Org Bucket Pills -->
+          <div class="flex items-center gap-1 bg-base-200/80 p-1 rounded-lg border border-base-300 shrink-0">
+            <button 
+              class="btn btn-xs rounded-md transition-all font-bold"
+              :class="selectedOrgBucket === 'all' ? 'btn-neutral text-white' : 'btn-ghost'"
+              @click="selectedOrgBucket = 'all'"
+            >
+              All ({{ syncRows.length }})
+            </button>
+            <button 
+              class="btn btn-xs rounded-md transition-all font-bold"
+              :class="selectedOrgBucket === 'primary' ? 'btn-primary text-white shadow-xs' : 'btn-ghost text-primary'"
+              @click="selectedOrgBucket = 'primary'"
+            >
+              ⭐ {{ primaryOrgKey }} ({{ primaryBucketCount }})
+            </button>
+            <button 
+              v-if="partnerBucketCount > 0"
+              class="btn btn-xs rounded-md transition-all font-bold"
+              :class="selectedOrgBucket === 'partner' ? 'btn-secondary text-white shadow-xs' : 'btn-ghost text-secondary'"
+              @click="selectedOrgBucket = 'partner'"
+            >
+              🤝 Partners ({{ partnerBucketCount }})
+            </button>
+            <button 
+              v-if="unassignedBucketCount > 0"
+              class="btn btn-xs rounded-md transition-all font-bold"
+              :class="selectedOrgBucket === 'unassigned' ? 'btn-warning text-black shadow-xs' : 'btn-ghost text-warning'"
+              @click="selectedOrgBucket = 'unassigned'"
+            >
+              🏷️ Store SKUs ({{ unassignedBucketCount }})
+            </button>
+          </div>
+
           <!-- Filter Tabs: Prioritizing Unmatched -->
           <div class="flex flex-wrap gap-1.5 items-center">
             <!-- 1. Unmatched Sold (Top Priority) -->
@@ -553,18 +603,27 @@
                       <Icon icon="solar:check-read-linear" class="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div v-else class="group flex items-center gap-1">
-                    <span class="font-mono text-xs font-black text-secondary bg-base-200/90 px-2.5 py-1 rounded-lg border border-base-300">
-                      {{ row.extractedSku || '—' }}
-                    </span>
-                    <button 
-                      v-if="!row.mappedItem" 
-                      class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-80 transition-opacity shrink-0" 
-                      @click="row.isEditingSku = true"
-                      title="Edit booth SKU"
+                  <div v-else class="group flex flex-col items-start gap-1">
+                    <div class="flex items-center gap-1">
+                      <span class="font-mono text-xs font-black text-secondary bg-base-200/90 px-2.5 py-1 rounded-lg border border-base-300">
+                        {{ row.extractedSku || '—' }}
+                      </span>
+                      <button 
+                        v-if="!row.mappedItem" 
+                        class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-80 transition-opacity shrink-0" 
+                        @click="row.isEditingSku = true"
+                        title="Edit booth SKU"
+                      >
+                        <Icon icon="solar:pen-linear" class="w-3 h-3 text-secondary" />
+                      </button>
+                    </div>
+                    <span 
+                      v-if="row.orgBucket && row.orgBucket.toUpperCase() !== primaryOrgKey"
+                      class="badge badge-xs font-mono font-bold"
+                      :class="row.orgBucket === 'UNASSIGNED' ? 'badge-ghost opacity-70 text-[9px]' : 'badge-secondary text-[9px]'"
                     >
-                      <Icon icon="solar:pen-linear" class="w-3 h-3 text-secondary" />
-                    </button>
+                      {{ row.orgBucket }}
+                    </span>
                   </div>
                 </td>
 
@@ -1161,7 +1220,7 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
 import { databases, ID } from '../../lib/appwrite';
-import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem } from '../../lib/inventory';
+import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem, extractOrgPrefix, KNOWN_ORG_PREFIXES } from '../../lib/inventory';
 import { 
   getSyncHistory, 
   recordSyncHistory, 
@@ -1185,8 +1244,31 @@ const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'ma
 const searchQuery = ref('');
 const exportUpdatedCsv = ref(true);
 const upcPrefix = ref<string>('HUCK-');
-const onlySyncOrgPrefix = ref<boolean>(true);
+const onlySyncOrgPrefix = ref<boolean>(false);
 const skippedNonOrgCount = ref<number>(0);
+const selectedOrgBucket = ref<string>('all'); // 'all' | 'primary' | 'partner' | 'unassigned'
+
+const primaryOrgKey = computed(() => {
+  return (upcPrefix.value || 'HUCK-').replace(/[-_]$/, '').toUpperCase();
+});
+
+const primaryBucketCount = computed(() => {
+  const p = primaryOrgKey.value;
+  return syncRows.value.filter(r => (r.orgBucket || '').toUpperCase() === p).length;
+});
+
+const partnerBucketCount = computed(() => {
+  const p = primaryOrgKey.value;
+  return syncRows.value.filter(r => {
+    const b = (r.orgBucket || '').toUpperCase();
+    return b !== p && b !== 'UNASSIGNED';
+  }).length;
+});
+
+const unassignedBucketCount = computed(() => {
+  return syncRows.value.filter(r => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED').length;
+});
+
 const currentFileName = ref<string>('');
 const showHistoryModal = ref<boolean>(false);
 const syncHistoryList = ref<SyncHistoryEntry[]>([]);
@@ -1402,6 +1484,20 @@ const totalSoldNet = computed(() => {
 const displayedRows = computed(() => {
   let rows = syncRows.value;
 
+  // Org Bucket Filter
+  if (selectedOrgBucket.value === 'primary') {
+    const p = primaryOrgKey.value;
+    rows = rows.filter(r => (r.orgBucket || '').toUpperCase() === p);
+  } else if (selectedOrgBucket.value === 'partner') {
+    const p = primaryOrgKey.value;
+    rows = rows.filter(r => {
+      const b = (r.orgBucket || '').toUpperCase();
+      return b !== p && b !== 'UNASSIGNED';
+    });
+  } else if (selectedOrgBucket.value === 'unassigned') {
+    rows = rows.filter(r => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED');
+  }
+
   if (filterTab.value === 'unmatched-sold') rows = rows.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null);
   else if (filterTab.value === 'unmatched-instock') rows = rows.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null);
   else if (filterTab.value === 'matched') rows = rows.filter(r => r.mappedItem !== null);
@@ -1616,32 +1712,52 @@ const handleFileSelect = (e: Event) => {
   }
 };
 
+const loadDemoCsv = () => {
+  const sample = `Product ID,SKU,UPC,Item Name,Price,Consignor %,Status,Sold Date,Sale #
+101,HUCK-1001,HUCK-1001,Vintage Pyrex Horizon Blue Butter Dish,45.00,85%,Sold,2026-10-01,T-8891
+102,HUCK-1002,HUCK-1002,Mid Century Teak Salt & Pepper Shakers,28.00,85%,In Stock,,
+103,PDXGL-2001,PDXGL-2001,Handblown Art Glass Swirl Paperweight,65.00,85%,Sold,2026-10-02,T-8892
+104,PDXGL-2002,PDXGL-2002,Cobalt Blue Blown Glass Pitcher,50.00,85%,In Stock,,
+105,0EJ08G,0EJ08G,Ceramic Retro Planter with Saucer,18.00,85%,Sold,2026-10-03,T-8893
+106,0EJ09H,,Brass Desk Lamp Gooseneck,35.00,85%,In Stock,,
+107,,,"Space Rental - Booth A2 Rent",-125.00,100%,Paid,2026-10-01,RENT-OCT`;
+
+  parseCsvData(sample, 'Demo_MemoryDen_MultiOrg_Payout.csv');
+};
+
 const processCsvFile = (file: File) => {
   isParsing.value = true;
-  currentFileName.value = file.name || 'Location_Export.csv';
-  newItemsCreatedInSession.value = 0;
   const reader = new FileReader();
-
   reader.onload = (event) => {
-    try {
-      let text = event.target?.result as string;
+    const text = event.target?.result as string;
+    parseCsvData(text, file.name || 'Location_Export.csv');
+  };
+  reader.readAsText(file);
+};
 
-      if (text.charCodeAt(0) === 0xFEFF) {
-        text = text.substring(1);
-      }
+const parseCsvData = (rawText: string, fileName: string) => {
+  isParsing.value = true;
+  currentFileName.value = fileName;
+  newItemsCreatedInSession.value = 0;
 
-      if (!text) {
-        addToast({ type: 'error', message: 'Could not read CSV file.' });
-        isParsing.value = false;
-        return;
-      }
+  try {
+    let text = rawText || '';
+    if (text.charCodeAt(0) === 0xFEFF) {
+      text = text.substring(1);
+    }
 
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length < 2) {
-        addToast({ type: 'error', message: 'CSV file is empty or invalid.' });
-        isParsing.value = false;
-        return;
-      }
+    if (!text) {
+      addToast({ type: 'error', message: 'Could not read CSV data.' });
+      isParsing.value = false;
+      return;
+    }
+
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) {
+      addToast({ type: 'error', message: 'CSV file is empty or invalid.' });
+      isParsing.value = false;
+      return;
+    }
 
       rawCsvHeader.value = lines[0];
       rawCsvLines.value = lines;
@@ -1720,7 +1836,8 @@ const processCsvFile = (file: File) => {
           }
         }
 
-        // Strict Org Prefix Filter (e.g. only HUCK-*)
+        // Multi-Org SKU & Prefix Extraction
+        const detectedPrefix = extractOrgPrefix(cleanUpc || cleanSku);
         const hasOrgPrefix = (cleanUpc && (cleanUpc.toUpperCase().startsWith(`${cleanOrg}-`) || cleanUpc.toUpperCase().startsWith(cleanOrg))) ||
                              (cleanSku && (cleanSku.toUpperCase().startsWith(`${cleanOrg}-`) || cleanSku.toUpperCase().startsWith(cleanOrg)));
         const matchesInventoryItem = activeItems.some(item => {
@@ -1732,6 +1849,15 @@ const processCsvFile = (file: File) => {
         });
 
         const isOrgItem = hasOrgPrefix || matchesInventoryItem;
+
+        let orgBucket = 'UNASSIGNED';
+        if (isOrgItem || detectedPrefix === cleanOrg) {
+          orgBucket = cleanOrg;
+        } else if (detectedPrefix && detectedPrefix !== 'NONE') {
+          orgBucket = detectedPrefix;
+        } else {
+          orgBucket = 'UNASSIGNED';
+        }
 
         if (onlySyncOrgPrefix.value && (cleanSku || cleanUpc) && !isOrgItem) {
           nonOrgSkipped++;
@@ -1801,6 +1927,7 @@ const processCsvFile = (file: File) => {
 
         rows.push({
           originalLineIndex: i,
+          orgBucket,
           productId: prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim() : '',
           extractedSku: cleanSku,
           extractedUpc: cleanUpc,
@@ -1830,7 +1957,7 @@ const processCsvFile = (file: File) => {
           message: `Parsed ${rows.length} ${cleanOrg}-* items (skipped ${nonOrgSkipped} non-org rows)` 
         });
       } else {
-        addToast({ type: 'success', message: `Parsed ${rows.length} items from ${file.name}!` });
+        addToast({ type: 'success', message: `Parsed ${rows.length} items from ${fileName}!` });
       }
     } catch (err: any) {
       console.error('CSV Parsing Error:', err);
@@ -1838,9 +1965,6 @@ const processCsvFile = (file: File) => {
     } finally {
       isParsing.value = false;
     }
-  };
-
-  reader.readAsText(file);
 };
 
 const resetSync = () => {

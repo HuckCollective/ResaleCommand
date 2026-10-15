@@ -38,6 +38,32 @@
                   </div>
               </div>
 
+              <!-- EXPIRED AUCTIONS RESOLUTION BANNER -->
+              <div v-if="expiredAuctionItems.length > 0" class="mx-4 mb-3 p-3.5 rounded-2xl bg-warning/15 border-2 border-warning/40 shadow-sm flex flex-col gap-2.5">
+                  <div class="flex items-center gap-2">
+                      <Icon icon="solar:clock-circle-bold" class="w-5 h-5 text-warning animate-pulse shrink-0" />
+                      <div>
+                          <h3 class="font-black text-xs uppercase tracking-wide text-warning-content">
+                              {{ expiredAuctionItems.length }} Auction{{ expiredAuctionItems.length === 1 ? '' : 's' }} Ended
+                          </h3>
+                          <p class="text-[10px] opacity-80">Did you win or lose? Resolve to graduate or drop.</p>
+                      </div>
+                  </div>
+                  <div class="grid gap-2">
+                      <div v-for="item in expiredAuctionItems" :key="item.$id" class="flex items-center justify-between gap-2 p-2 bg-base-100 rounded-xl border border-base-300 text-xs shadow-2xs">
+                          <span class="font-bold truncate max-w-[150px] text-base-content">{{ item.title || item.identity }}</span>
+                          <div class="flex items-center gap-1 shrink-0">
+                              <button @click="handleItemWon(item)" class="btn btn-xs btn-success gap-1 font-bold">
+                                  <Icon icon="solar:cup-star-bold" class="w-3 h-3" /> Won
+                              </button>
+                              <button @click="handleItemLost(item)" class="btn btn-xs btn-ghost text-error hover:bg-error/10 font-bold">
+                                  Lost
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
               <!-- ITEMS LIST -->
               <div class="p-4 flex flex-col gap-4 pt-0">
                   <ItemCard 
@@ -146,9 +172,37 @@ import { BUCKET_ID, getSafeRawAnalysis } from '../../lib/inventory';
 const { user } = useAuth();
 const { 
   activeCart, cartItems, cartExpenses, loading, 
-  checkActiveCart, addExpense, deleteExpense, finishCart, abortCart, leaveCart,
-  deleteItem, updateItem
+  expiredAuctionItems, checkActiveCart, addExpense, deleteExpense, finishCart, abortCart, leaveCart,
+  deleteItem, updateItem, recordAuctionWin, recordAuctionLoss
 } = useCart();
+
+async function handleItemWon(item: any) {
+    const defaultBid = item.currentBid || item.cost || item.maxBid || 0;
+    const input = prompt(`Enter winning bid for "${item.title || item.identity}":`, String(Number(defaultBid).toFixed(2)));
+    if (input === null) return;
+    const finalBid = parseFloat(input);
+    if (isNaN(finalBid) || finalBid <= 0) {
+        addToast({ type: 'warning', message: 'Invalid winning bid amount.' });
+        return;
+    }
+    try {
+        await recordAuctionWin(item.$id, finalBid);
+        addToast({ type: 'success', message: `🏆 Won! "${item.title || item.identity}" graduated to Acquired inventory ($${finalBid.toFixed(2)}).` });
+    } catch (e: any) {
+        addToast({ type: 'error', message: 'Failed to record win: ' + e.message });
+    }
+}
+
+async function handleItemLost(item: any) {
+    if (await confirmDialog(`Remove "${item.title || item.identity}" from tracker? (Auction lost)`, "Confirm Auction Loss", "Remove Track", "Cancel", "btn-error")) {
+        try {
+            await recordAuctionLoss(item.$id, true);
+            addToast({ type: 'info', message: `"${item.title || item.identity}" removed from tracker.` });
+        } catch (e: any) {
+            addToast({ type: 'error', message: 'Failed to record loss: ' + e.message });
+        }
+    }
+}
 
 const newExpenseNote = ref('');
 const newExpenseAmount = ref<number | ''>(''); 
@@ -158,6 +212,19 @@ const reEvaluatingIds = ref<Record<string, boolean>>({});
 
 function getAuctionBadge(item: any) {
     if (!item) return null;
+
+    // Check if the auction has expired
+    if (item.auctionEndsAt && item.auctionStatus !== 'won' && item.auctionStatus !== 'lost') {
+        const endTime = new Date(item.auctionEndsAt).getTime();
+        if (!isNaN(endTime) && endTime <= Date.now()) {
+            return {
+                label: 'ENDED',
+                badgeClass: 'badge-warning text-warning-content font-black animate-pulse',
+                icon: 'solar:clock-circle-bold'
+            };
+        }
+    }
+
     let currentBid = item.currentBid;
     let maxBid = item.maxBid;
 

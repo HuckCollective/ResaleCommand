@@ -211,6 +211,26 @@
                         </div>
                     </div>
 
+                    <!-- Acquired & Won Auction Banner -->
+                    <div v-else-if="item && (item.auctionStatus === 'won' || item.auctionEndsAt || (item.sourcingLocation && (item.sourcingLocation.includes('shopgoodwill') || item.sourcingLocation.includes('auction'))))" 
+                         class="rounded-2xl p-3 border border-success/30 bg-success/10 flex items-center justify-between gap-2 flex-wrap shadow-xs">
+                        <div class="flex items-center gap-2">
+                            <Icon icon="solar:cup-star-bold" class="w-5 h-5 text-success" />
+                            <div>
+                                <span class="font-black text-xs uppercase tracking-wider text-success block">Acquired & Received</span>
+                                <span class="text-[11px] opacity-75 font-mono">Won at ${{ (item.cost || 0).toFixed(2) }} <template v-if="item.maxBid && item.maxBid > 0">(Max Bid: ${{ Number(item.maxBid).toFixed(2) }})</template></span>
+                            </div>
+                        </div>
+                        <a v-if="item.sourcingLocation && item.sourcingLocation.startsWith('http')" 
+                           :href="item.sourcingLocation" 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           class="btn btn-xs btn-ghost gap-1 font-bold">
+                            <span>Original Listing</span>
+                            <Icon icon="solar:external-link-linear" class="w-3.5 h-3.5" />
+                        </a>
+                    </div>
+
                     <!-- Condition Notes -->
                     <div v-if="cleanConditionNotes" class="bg-warning/10 border-l-4 border-warning p-4 rounded-r-lg">
                         <h3 class="font-bold text-warning-content text-sm uppercase mb-1">Condition Notes</h3>
@@ -608,7 +628,7 @@ const loading = ref(true);
 const error = ref(null);
 
 import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
-import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown } from '../../lib/inventory';
+import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown, isLiveAuctionActive, isItemAcquired, normalizeInventoryStatus, getCollectionId, DB_ID } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 
@@ -643,10 +663,7 @@ const submitSellOne = async () => {
     if (submittingSellOne.value || !item.value) return;
     submittingSellOne.value = true;
     try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        const collId = getCollectionId();
         
         const qty = item.value.quantity || 1;
         const totalCost = Number(item.value.cost || 0);
@@ -756,10 +773,7 @@ const submitUnpack = async () => {
     if (submittingUnpack.value || !item.value) return;
     submittingUnpack.value = true;
     try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        const collId = getCollectionId();
         
         const parentQty = item.value.quantity || 1;
         const totalCost = Number(item.value.cost || 0);
@@ -854,10 +868,7 @@ onMounted(async () => {
     loading.value = true;
     error.value = null;
     try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        const collId = getCollectionId();
             
         item.value = await databases.getDocument(DB_ID, collId, props.itemId);
         await loadScoutData(item.value);
@@ -987,10 +998,7 @@ const updateStatus = async (newStatus) => {
     if (updatingStatus.value || !item.value) return;
     updatingStatus.value = true;
     try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        const collId = getCollectionId();
             
         await databases.updateDocument(DB_ID, collId, item.value.$id, { status: newStatus });
         item.value.status = newStatus;
@@ -1223,15 +1231,12 @@ const gallery = computed(() => {
 });
 
 const isAuctionItem = computed(() => {
-    return !!(
-        item.value?.status === 'tracked' ||
-        item.value?.auctionEndsAt ||
-        item.value?.maxBid ||
-        (item.value?.sourcingLocation && (item.value.sourcingLocation.includes('shopgoodwill.com') || item.value.sourcingLocation.includes('auction')))
-    );
+    if (isItemAcquired(item.value?.status)) return false;
+    return isLiveAuctionActive(item.value);
 });
 
 const scoutPurchaseStrategy = computed(() => {
+    if (!isLiveAuctionActive(item.value) || isItemAcquired(item.value?.status)) return null;
     const rawStrat = parsedScoutData.value?.purchase_strategy || null;
     const currentCost = parseFloat(String(item.value?.currentBid || item.value?.cost || parsedScoutData.value?.currentBid || rawStrat?.current_asking_price || 0).replace(/[$,]/g, ''));
     const maxBid = parseFloat(String(item.value?.maxBid || parsedScoutData.value?.maxBid || rawStrat?.max_bid || 0).replace(/[$,]/g, ''));

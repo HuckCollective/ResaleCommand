@@ -72,6 +72,35 @@
             </div>
         </details>
 
+        <!-- PRE-SCANNING PROGRESS -->
+        <div v-if="isPreScanning" class="p-3 mb-2 rounded-xl bg-info/10 border border-info/20 text-info">
+            <div class="flex items-center justify-between text-xs font-bold mb-1">
+                <span class="flex items-center gap-1.5">
+                    <span class="loading loading-spinner loading-xs"></span>
+                    Scanning inventory & booth locations for duplicates...
+                </span>
+                <span>{{ preScanProgress }}%</span>
+            </div>
+            <progress class="progress progress-info w-full h-1.5" :value="preScanProgress" max="100"></progress>
+        </div>
+
+        <!-- DUPLICATE SUMMARY BAR -->
+        <div v-else-if="duplicateCount > 0" class="p-3 mb-2 rounded-xl bg-base-200 border border-warning/30 flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-warning/20 text-warning flex items-center justify-center shrink-0">
+                    <Icon icon="solar:shield-check-bold" class="w-4 h-4" />
+                </div>
+                <div class="text-xs">
+                    <span class="font-bold text-base-content">{{ duplicateCount }} items</span>
+                    <span class="opacity-75"> already in inventory, lots, or on location. Auto-deselected.</span>
+                </div>
+            </div>
+            <label class="label cursor-pointer gap-2 py-0">
+                <span class="label-text text-[11px] font-semibold opacity-70">Allow updates</span>
+                <input type="checkbox" v-model="allowDuplicateUpdates" class="toggle toggle-xs toggle-warning" />
+            </label>
+        </div>
+
         <!-- MAIN PROGRESS BAR -->
         <div v-if="importing" class="px-2 mb-2">
             <progress class="progress progress-primary w-full" :value="importProgress" max="100"></progress>
@@ -129,6 +158,25 @@
                                     <div class="text-sm font-bold truncate leading-tight">{{ item.title || 'UNKNOWN IMAGE/ITEM' }}</div>
                                 </div>
 
+                                <!-- Duplicate / Location Badge -->
+                                <div v-if="item.duplicate?.isDuplicate" class="mt-1 flex flex-wrap gap-1 items-center">
+                                    <span v-if="item.duplicate.status === 'placed'" class="badge badge-success badge-xs font-bold gap-1 text-[10px] py-1.5">
+                                        <Icon icon="solar:shop-2-bold" class="w-3 h-3" /> Placed @ {{ item.duplicate.location || 'Booth' }} ({{ item.duplicate.upc }})
+                                    </span>
+                                    <span v-else-if="item.duplicate.status === 'combined' || item.duplicate.status === 'deconstructed'" class="badge badge-secondary badge-xs font-bold gap-1 text-[10px] py-1.5">
+                                        <Icon icon="solar:box-minimalistic-bold" class="w-3 h-3" /> In Master Lot ({{ item.duplicate.upc }})
+                                    </span>
+                                    <span v-else-if="item.duplicate.status === 'sold'" class="badge badge-neutral badge-xs font-bold gap-1 text-[10px] py-1.5">
+                                        <Icon icon="solar:tag-price-bold" class="w-3 h-3" /> Sold ({{ item.duplicate.upc }})
+                                    </span>
+                                    <span v-else-if="item.duplicate.status === 'in-stock'" class="badge badge-info badge-xs font-bold gap-1 text-[10px] py-1.5">
+                                        <Icon icon="solar:box-bold" class="w-3 h-3" /> In Stock: {{ item.duplicate.location || 'HG' }} ({{ item.duplicate.upc }})
+                                    </span>
+                                    <span v-else class="badge badge-warning badge-xs font-bold gap-1 text-[10px] py-1.5">
+                                        <Icon icon="solar:shield-check-bold" class="w-3 h-3" /> Exists: {{ item.duplicate.status }} ({{ item.duplicate.upc }})
+                                    </span>
+                                </div>
+
                                 <!-- Core Stats -->
                                 <div class="flex gap-3 text-[10px] mt-1 opacity-80">
                                     <span :class="{'text-error font-bold': item.price === 0}">
@@ -157,7 +205,12 @@
                             
                             <div class="text-right flex flex-col items-end gap-1 pt-1">
                                 <label class="label cursor-pointer p-0">
-                                    <input type="checkbox" v-model="item.selected" class="checkbox checkbox-sm checkbox-primary" :disabled="importing && item.importStatus" />
+                                    <input 
+                                        type="checkbox" 
+                                        v-model="item.selected" 
+                                        class="checkbox checkbox-sm checkbox-primary" 
+                                        :disabled="(importing && item.importStatus) || (item.duplicate?.isDuplicate && !allowDuplicateUpdates)" 
+                                    />
                                 </label>
                                 
                                 <!-- Status Icons -->
@@ -193,7 +246,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { saveItemToInventory } from '../../lib/inventory';
+import { saveItemToInventory, getCollectionId } from '../../lib/inventory';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast, updateToast, removeToast } from '../../stores/toast';
 import Papa from 'papaparse';
@@ -201,12 +254,9 @@ import { isAlphaMode } from '../../stores/env';
 import { Icon } from '@iconify/vue';
 import { useLoader } from '../../composables/useLoader';
 import { purchasesAPI } from '../../lib/purchases';
+import { checkInventoryDuplicate, batchCheckDuplicates } from '../../lib/deduplication';
 
 const { showLoader, hideLoader } = useLoader();
-
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
 
 const emit = defineEmits(['close', 'imported']);
 
@@ -233,6 +283,11 @@ const showDetails = ref(false);
 const error = ref<string | null>(null);
 const detectedHeaders = ref<string[]>([]);
 const debugMapping = ref<any>({});
+
+const isPreScanning = ref(false);
+const preScanProgress = ref(0);
+const allowDuplicateUpdates = ref(false);
+const duplicateCount = computed(() => parsedItems.value.filter(i => i.duplicate?.isDuplicate).length);
 
 const shippingOverrides = ref<Record<string, number>>({});
 
@@ -561,6 +616,28 @@ function parseCSV(text: string) {
             parsedItems.value = items;
             step.value = 2; // Move to Review
             error.value = null;
+
+            // Trigger background duplicate pre-scan
+            isPreScanning.value = true;
+            preScanProgress.value = 0;
+            batchCheckDuplicates(items, 5, (scanned, total) => {
+                preScanProgress.value = Math.round((scanned / total) * 100);
+            }).then(dedupMap => {
+                for (const it of items) {
+                    const match = dedupMap.get(it);
+                    if (match && match.isDuplicate) {
+                        it.duplicate = match;
+                        it.selected = false; // Auto-uncheck existing items to prevent duplicates
+                    } else {
+                        it.duplicate = null;
+                        it.selected = true;
+                    }
+                }
+            }).catch(scanErr => {
+                console.warn('[CSV Pre-scan] Error during duplicate pre-scan:', scanErr);
+            }).finally(() => {
+                isPreScanning.value = false;
+            });
         },
         error: (err: any) => {
             console.error("PapaParse Error:", err);
@@ -676,7 +753,32 @@ async function importSelected() {
                 try {
                     item.importStatus = 'processing'; // UI Update
 
-                    // 1. PREPARE DATA (Image Upload)
+                    // 1. CHECK FOR DUPLICATE FIRST (Zero-bleed check)
+                    let match: any = item.duplicate?.matchedDoc || null;
+                    if (!match) {
+                        try {
+                            const dedup = await checkInventoryDuplicate({
+                                itemId: item.itemId,
+                                orderId: item.orderId
+                            });
+                            if (dedup.isDuplicate) {
+                                match = dedup.matchedDoc;
+                            }
+                        } catch (checkErr) {
+                            console.warn('[Import] On-the-fly duplicate check error:', checkErr);
+                        }
+                    }
+
+                    const isPreBuyMatch = match && ['tracked', 'draft', 'scouted'].includes(match.status);
+
+                    if (match && !allowDuplicateUpdates.value && !isPreBuyMatch) {
+                        console.log(`[Import] Skipping duplicate item ${item.itemId}: already exists as ${match.$id}`);
+                        item.importStatus = 'updated';
+                        skipped++;
+                        return; // STOP: Never create duplicate!
+                    }
+
+                    // 2. PREPARE DATA (Image Upload)
                     let finalImageId = null;
                     let notes = `Imported from Order #${item.orderId}`;
                     if (item.sourceLink) {
@@ -705,59 +807,37 @@ async function importSelected() {
                         }
                     }
 
-                    // 2. CHECK FOR DUPLICATE & UPDATE
-                    try {
-                        let match: any = null;
-                        try {
-                            // Try direct query on identity first
-                            const existing = await retryOperation(() => databases.listDocuments(DB, getCollectionId(), [
-                                Query.equal('identity', item.itemId),
-                                Query.limit(1)
-                            ]));
-                            if (existing.documents.length > 0) {
-                                match = existing.documents[0];
-                            }
-                        } catch (e: any) {
-                            console.warn('[Import] Direct identity check failed, running title fallback:', e.message);
-                            // Fallback: Query by title and match identity in memory
-                            const existing = await retryOperation(() => databases.listDocuments(DB, getCollectionId(), [
-                                Query.equal('title', item.title),
-                                Query.limit(100)
-                            ]));
-                            match = existing.documents.find(doc => doc.identity === item.itemId);
+                    // 3. IF MATCHED & UPDATES ALLOWED (OR PRE-BUY PROMOTION): UPDATE EXISTING ITEM
+                    if (match) {
+                        const doc = match;
+                        console.log(`[Import] Updating existing item: ${item.title} (isPreBuy: ${isPreBuyMatch})`);
+                        
+                        let newNotes = doc.conditionNotes || '';
+                        if (item.sourceLink && !newNotes.includes(item.sourceLink)) {
+                            newNotes += `\nSource: ${item.sourceLink}`;
+                        }
+                        if (finalImageId && !newNotes.includes(finalImageId)) {
+                             newNotes += `\n\n[IMAGE_ID: ${finalImageId}]`;
                         }
                         
-                        if (match) {
-                            // ITEM EXISTS: Update it!
-                            const doc = match;
-                            console.log(`[Import] Updating existing item: ${item.title}`);
-                            
-                            // Merge Notes
-                            let newNotes = doc.conditionNotes || '';
-                            if (item.sourceLink && !newNotes.includes(item.sourceLink)) {
-                                newNotes += `\nSource: ${item.sourceLink}`;
-                            }
-                            // Append Image ID to notes schema hack if new
-                            if (finalImageId && !newNotes.includes(finalImageId)) {
-                                 newNotes += `\n\n[IMAGE_ID: ${finalImageId}]`;
-                            }
-                            
-                            // Only update if something changed or we are enriching
-                            const updateData: any = {
-                                cost: item.totalCost, 
-                                conditionNotes: newNotes
-                            };
-                            if (finalImageId) {
-                                updateData.imageId = finalImageId;
-                            }
-                            await retryOperation(() => databases.updateDocument(DB, getCollectionId(), doc.$id, updateData));
-                            
-                            updated++;
-                            item.importStatus = 'updated';
-                            return; // STOP HERE
+                        const updateData: any = {
+                            cost: item.totalCost, 
+                            conditionNotes: newNotes
+                        };
+                        if (isPreBuyMatch) {
+                            updateData.status = 'acquired';
+                            updateData.storageLocation = doc.storageLocation || 'HG';
+                            if (item.orderId) updateData.orderId = item.orderId;
+                            if (item.orderId && poMap[item.orderId]) updateData.purchaseId = poMap[item.orderId];
                         }
-                    } catch (dupErr) {
-                         console.warn('[Import] Check fail:', dupErr);
+                        if (finalImageId) {
+                            updateData.imageId = finalImageId;
+                        }
+                        await retryOperation(() => databases.updateDocument(DB, getCollectionId(), doc.$id, updateData));
+                        
+                        updated++;
+                        item.importStatus = 'updated';
+                        return; // STOP HERE
                     }
 
                     // 3. CREATE NEW ITEM

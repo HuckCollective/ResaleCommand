@@ -70,6 +70,7 @@ import { databases, ID, Query } from '../../lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { syncPurchaseStatusForItems } from '../../lib/purchases';
+import { getCollectionId, DB_ID } from '../../lib/inventory';
 
 const props = defineProps({
     isOpen: { type: Boolean, default: false },
@@ -111,10 +112,7 @@ const submit = async () => {
     if (submitting.value || !form.title || props.items.length === 0) return;
     submitting.value = true;
     try {
-        const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-        const collId = isAlphaMode.get() 
-            ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-            : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+        const collId = getCollectionId();
 
         const firstItem = props.items[0];
         const newBundleId = ID.unique();

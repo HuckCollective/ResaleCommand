@@ -1039,9 +1039,12 @@ import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
+import { getDefaultStorageLocation } from '../../lib/warehouses';
 
 const { currentTeam } = useAuth();
 const { showLoader, hideLoader } = useLoader();
+
+const defaultBackstock = computed(() => getDefaultStorageLocation(currentTeam.value));
 
 const props = defineProps({
     purchaseId: {
@@ -1356,11 +1359,12 @@ const checkAndSyncPoStatus = async () => {
     }
 };
 
-const receiveToStock = async (item, location = 'HG') => {
+const receiveToStock = async (item, location = defaultBackstock.value) => {
+    const loc = location || defaultBackstock.value || 'HG';
     const ok = await confirmDialog(
-        `Receive "${item.tag_title || item.title}" into active inventory stored at Huck's Garage (HG)? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
-        'Receive Item to Huck\'s Garage (HG)',
-        'Receive to HG',
+        `Receive "${item.tag_title || item.title}" into active inventory stored at ${loc}? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
+        `Receive Item to ${loc}`,
+        `Receive to ${loc}`,
         'Cancel',
         'btn-success'
     );
@@ -1370,10 +1374,10 @@ const receiveToStock = async (item, location = 'HG') => {
     const collId = getCollectionId();
     try {
         await databases.updateDocument(DB_ID, collId, item.$id, {
-            status: 'in-stock',
-            storageLocation: item.storageLocation || location
+            status: 'received',
+            storageLocation: item.storageLocation || loc
         });
-        addToast(`Received "${item.tag_title || item.title}" into Huck's Garage (HG)!`, 'success');
+        addToast(`Received "${item.tag_title || item.title}" into ${loc}!`, 'success');
         await loadLinkedItems();
         await checkAndSyncPoStatus();
     } catch (e) {
@@ -1381,18 +1385,19 @@ const receiveToStock = async (item, location = 'HG') => {
     }
 };
 
-const receiveAllToStock = async (location = 'HG') => {
+const receiveAllToStock = async (location = defaultBackstock.value) => {
     if (items.value.length === 0) return;
+    const loc = location || defaultBackstock.value || 'HG';
     const ok = await confirmDialog(
-        `This will activate all ${items.value.length} item(s) in this Purchase Order to "In-Stock" status stored at Huck's Garage (HG), and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
-        'Receive Entire Haul to Huck\'s Garage (HG)',
-        'Receive All to HG',
+        `This will activate all ${items.value.length} item(s) in this Purchase Order to "Received" status stored at ${loc}, and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
+        `Receive Entire Haul to ${loc}`,
+        `Receive All to ${loc}`,
         'Cancel',
         'btn-success'
     );
     if (!ok) return;
 
-    showLoader('Activating items into Huck\'s Garage (HG)...');
+    showLoader(`Activating items into ${loc}...`);
     try {
         const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
         const collId = getCollectionId();
@@ -1400,8 +1405,8 @@ const receiveAllToStock = async (location = 'HG') => {
             .filter(item => item.status !== 'combined')
             .map(item => 
                 databases.updateDocument(DB_ID, collId, item.$id, {
-                    status: 'in-stock',
-                    storageLocation: item.storageLocation || location
+                    status: 'received',
+                    storageLocation: item.storageLocation || loc
                 })
             )
         );
@@ -1410,7 +1415,7 @@ const receiveAllToStock = async (location = 'HG') => {
             await purchasesAPI.updatePurchase(docId, { status: 'Received' });
             form.value.status = 'Received';
         }
-        addToast(`All ${items.value.length} items are now In-Stock at Huck's Garage (HG)!`, 'success');
+        addToast(`All ${items.value.length} items are now Received at ${loc}!`, 'success');
         await loadLinkedItems();
         await checkAndSyncPoStatus();
     } catch (e) {
@@ -1420,13 +1425,14 @@ const receiveAllToStock = async (location = 'HG') => {
     }
 };
 
-const handleReceiveOrPurchase = async (location = 'HG') => {
+const handleReceiveOrPurchase = async (location = defaultBackstock.value) => {
+    const loc = location || defaultBackstock.value || 'HG';
     if (isDraft.value) {
         const label = form.value.poNumber || form.value.vendor || 'this order';
         const count = items.value.length;
         const ok = await confirmDialog(
             count > 0
-                ? `Finalize purchase for "${label}" (${count} item${count === 1 ? '' : 's'})? This will mark this Purchase Order as "Received" and activate all items into Huck's Garage (HG).`
+                ? `Finalize purchase for "${label}" (${count} item${count === 1 ? '' : 's'})? This will mark this Purchase Order as "Received" and activate all items into ${loc}.`
                 : `Finalize purchase for "${label}"? This will mark this Purchase Order as "Received".`,
             'Complete Purchase',
             'Purchase It',
@@ -1435,7 +1441,7 @@ const handleReceiveOrPurchase = async (location = 'HG') => {
         );
         if (!ok) return;
 
-        showLoader('Finalizing purchase & activating items into HG...');
+        showLoader(`Finalizing purchase & activating items into ${loc}...`);
         try {
             const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
             const collId = getCollectionId();
@@ -1444,8 +1450,8 @@ const handleReceiveOrPurchase = async (location = 'HG') => {
                     .filter(item => item.status !== 'combined')
                     .map(item => 
                         databases.updateDocument(DB_ID, collId, item.$id, {
-                            status: 'in-stock',
-                            storageLocation: item.storageLocation || location
+                            status: 'received',
+                            storageLocation: item.storageLocation || loc
                         })
                     )
                 );
@@ -1459,7 +1465,7 @@ const handleReceiveOrPurchase = async (location = 'HG') => {
                 });
                 form.value.status = 'Received';
             }
-            addToast(`Purchase completed! PO "${label}" is now Received at HG.`, 'success');
+            addToast(`Purchase completed! PO "${label}" is now Received at ${loc}.`, 'success');
             await loadLinkedItems();
             await checkAndSyncPoStatus();
         } catch (e) {
@@ -1891,7 +1897,7 @@ const scanReceiptImage = async (fileOrBlob = null, uploadedImageId = null) => {
                     quantity: Number(it.quantity) || 1,
                     status: 'acquired',
                     identity: `${poPrefix}-${String(idx + 1).padStart(2, '0')}`,
-                    storageLocation: 'HG',
+                    storageLocation: defaultBackstock.value || 'HG',
                     sourcingLocation: form.value.vendor || 'Receipt'
                 }));
                 // Auto-fill subtotal from items if parsed.total was 0
@@ -2125,7 +2131,7 @@ const quickCreateItem = async () => {
             cost: newItem.value.cost || 0,
             purchaseId: props.purchaseId,
             status: 'acquired', // Assuming it's acquired if it's on a PO
-            storageLocation: 'HG',
+            storageLocation: defaultBackstock.value || 'HG',
             sourcingLocation: form.value.vendor || undefined
         };
         

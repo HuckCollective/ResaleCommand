@@ -1,18 +1,3 @@
 ---
-return Astro.redirect('/purchases/import');
+return Astro.redirect('/purchases?import=true');
 ---
-
-<Layout title="Haul Intake & Receiving | Resale Command">
-  <div class="p-3 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-6">
-    <div class="flex items-center justify-between">
-      <a href="/purchases" class="btn btn-ghost btn-sm font-bold gap-1 text-base-content/80">
-        ← Back to Purchases
-      </a>
-      <a href="/purchases/speed-entry" class="btn btn-ghost btn-sm font-bold gap-1 text-primary">
-        + Scan New Receipt
-      </a>
-    </div>
-    
-    <HaulIngestionWizard client:load />
-  </div>
-</Layout>

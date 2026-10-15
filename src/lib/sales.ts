@@ -3,8 +3,10 @@ import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { warehousesApi } from './warehouses';
 
-const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-const SALES_COL = 'sales';
+import { getDatabaseId, resolveCollectionId } from './appwriteEnv';
+
+const DB_ID = getDatabaseId();
+const getSalesCol = () => resolveCollectionId('sales');
 
 export interface SaleData {
     soNumber: string;
@@ -28,7 +30,7 @@ export const salesApi = {
         
         const response = await databases.listDocuments(
             DB_ID,
-            SALES_COL,
+            getSalesCol(),
             [
                 Query.equal('tenantId', tenantId),
                 Query.orderDesc('saleDate'),
@@ -39,11 +41,11 @@ export const salesApi = {
     },
 
     async getSale(id: string): Promise<SaleDocument> {
-        return await databases.getDocument(DB_ID, SALES_COL, id) as SaleDocument;
+        return await databases.getDocument(DB_ID, getSalesCol(), id) as SaleDocument;
     },
 
     async generateSoNumber(tenantId: string): Promise<string> {
-        const response = await databases.listDocuments(DB_ID, SALES_COL, [
+        const response = await databases.listDocuments(DB_ID, getSalesCol(), [
             Query.equal('tenantId', tenantId),
             Query.orderDesc('soNumber'),
             Query.limit(1)
@@ -72,7 +74,7 @@ export const salesApi = {
             }
             return await databases.createDocument(
                 DB_ID,
-                SALES_COL,
+                getSalesCol(),
                 ID.unique(),
                 data,
                 permissions.length > 0 ? permissions : undefined
@@ -81,7 +83,7 @@ export const salesApi = {
             if (err?.code === 400 || err?.code === 401 || err?.code === 403) {
                 return await databases.createDocument(
                     DB_ID,
-                    SALES_COL,
+                    getSalesCol(),
                     ID.unique(),
                     data
                 ) as SaleDocument;
@@ -93,14 +95,14 @@ export const salesApi = {
     async updateSale(id: string, data: Partial<SaleData>): Promise<SaleDocument> {
         return await databases.updateDocument(
             DB_ID,
-            SALES_COL,
+            getSalesCol(),
             id,
             data
         ) as SaleDocument;
     },
 
     async deleteSale(id: string): Promise<void> {
-        await databases.deleteDocument(DB_ID, SALES_COL, id);
+        await databases.deleteDocument(DB_ID, getSalesCol(), id);
     },
 
     // Link inventory items to this sale

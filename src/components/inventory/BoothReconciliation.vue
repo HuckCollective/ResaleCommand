@@ -98,6 +98,7 @@
                         <a role="tab" class="tab" :class="{'tab-active': activeTab === 'placed'}" @click="activeTab = 'placed'">Needs Placed ({{ results.placedItemsToUpdate.length }})</a>
                         <a role="tab" class="tab" :class="{'tab-active': activeTab === 'booth_missing'}" @click="activeTab = 'booth_missing'">Missing from Booth ({{ results.missingAppwriteItems.length }})</a>
                         <a role="tab" class="tab" :class="{'tab-active': activeTab === 'db_missing'}" @click="activeTab = 'db_missing'">Missing from DB ({{ results.unmatchedCsvItems.length }})</a>
+                        <a v-if="results.orgSalesResult" role="tab" class="tab" :class="{'tab-active': activeTab === 'org_buckets'}" @click="activeTab = 'org_buckets'">Org Buckets ({{ results.orgSalesResult.allBuckets.length }})</a>
                     </div>
 
                     <!-- Sold Items List -->
@@ -229,6 +230,48 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Org Buckets Breakdown Tab -->
+                    <div v-if="activeTab === 'org_buckets' && results.orgSalesResult" class="space-y-4 mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div 
+                                v-for="bucket in results.orgSalesResult.allBuckets" 
+                                :key="bucket.orgKey"
+                                class="card bg-base-100 border border-base-300 shadow-sm p-4 space-y-3"
+                            >
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="font-bold text-sm flex items-center gap-1.5">
+                                            <Icon icon="solar:folder-with-files-bold" class="w-4 h-4 text-primary" />
+                                            <span>{{ bucket.displayName }}</span>
+                                        </h4>
+                                        <span class="badge badge-xs font-mono font-bold mt-1" :class="bucket.orgKey === 'HUCK' ? 'badge-primary' : bucket.orgKey === 'UNASSIGNED' ? 'badge-ghost' : 'badge-secondary'">
+                                            Prefix: {{ bucket.prefix }}
+                                        </span>
+                                    </div>
+                                    <span class="badge badge-neutral font-mono font-bold">{{ bucket.itemCount }} items</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-base-200 text-xs">
+                                    <div>
+                                        <div class="opacity-60 text-[10px] uppercase font-bold">Gross Sales</div>
+                                        <div class="font-mono font-bold">${{ bucket.grossSales.toFixed(2) }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="opacity-60 text-[10px] uppercase font-bold text-success">Net Payout</div>
+                                        <div class="font-mono font-bold text-success">${{ bucket.consignorPayout.toFixed(2) }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="opacity-60 text-[10px] uppercase font-bold text-error">Commission</div>
+                                        <div class="font-mono font-bold text-error">${{ bucket.storeCommission.toFixed(2) }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="opacity-60 text-[10px] uppercase font-bold">Unmatched</div>
+                                        <div class="font-mono font-bold" :class="bucket.unmatchedRows.length > 0 ? 'text-warning' : 'text-success'">{{ bucket.unmatchedRows.length }} rows</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                 </div>

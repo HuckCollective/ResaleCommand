@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ScanTestLab from '../components/common/ScanTestLab.vue';
+---
+
+<Layout title="Scanner Test Lab | Resale Command" hideFooter={true}>
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full min-w-0">
+        <ScanTestLab client:only="vue" />
+    </div>
+</Layout>

@@ -115,19 +115,16 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
-import { saveItemToInventory, BUCKET_ID } from '../../lib/inventory';
+import { saveItemToInventory, sanitizeItemPayload, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
-import { purchasesAPI } from '../../lib/purchases';
+import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { storage } from '../../lib/appwrite';
-
-const getCollectionId = () => isAlphaMode.get() 
-    ? (import.meta.env.PUBLIC_APPWRITE_ALPHA_COLLECTION_ID || 'alpha_items') 
-    : (import.meta.env.PUBLIC_APPWRITE_COLLECTION_ID || 'items');
+import { checkInventoryDuplicate } from '../../lib/deduplication';
 
 const props = defineProps({
     isOpen: Boolean
@@ -173,7 +170,7 @@ const handleUndoImport = async () => {
     processingUndo.value = true;
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
     const ITEMS_COL = getCollectionId();
-    const PURCHASES_COL = import.meta.env.PUBLIC_APPWRITE_CARTS_COL || import.meta.env.PUBLIC_APPWRITE_PURCHASES_COL || 'carts';
+    const PURCHASES_COL = getPurchasesCollectionId();
 
     try {
         // 1. Delete Items
@@ -580,84 +577,17 @@ const processRows = async (rows) => {
         let mainImageLink = csvImage;
         let galleryLinks = [];
 
-        // 1. DUPLICATE CHECK & FIX EXISTING MODE (Comprehensive: identity, sku, orderId, sourcingLocation)
+        // 1. DUPLICATE CHECK & FIX EXISTING MODE (Unified 5-Stage check)
         let isDuplicate = false;
         let matchedDoc = null;
         try {
-            const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
-            const COL_ID = getCollectionId();
-
-            // Check 1: identity exact match
-            const idCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                Query.equal('identity', itemId),
-                Query.limit(5)
-            ]);
-            if (idCheck.total > 0) {
+            const dedup = await checkInventoryDuplicate({
+                itemId,
+                orderId: orderId || null
+            });
+            if (dedup.isDuplicate) {
                 isDuplicate = true;
-                matchedDoc = idCheck.documents[0];
-            }
-
-            // Check 2: SGW- prefix in UPC match
-            if (!isDuplicate) {
-                try {
-                    const upcCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                        Query.equal('upc', `SGW-${itemId}`),
-                        Query.limit(5)
-                    ]);
-                    if (upcCheck.total > 0) {
-                        isDuplicate = true;
-                        matchedDoc = upcCheck.documents[0];
-                    }
-                } catch(e) {}
-            }
-
-            // Check 3: Check sourcingLocation contains item ID (e.g. split / combined parent URLs)
-            if (!isDuplicate && itemId) {
-                try {
-                    const srcCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                        Query.contains('sourcingLocation', itemId),
-                        Query.limit(5)
-                    ]);
-                    if (srcCheck.total > 0) {
-                        isDuplicate = true;
-                        matchedDoc = srcCheck.documents[0];
-                    }
-                } catch(e) {}
-            }
-
-            // Check 4: For order-proxy rows ONLY (when the CSV row has NO item ID, only an order ID)
-            if (!isDuplicate && isOrderProxy && orderId) {
-                try {
-                    const existingPO = await purchasesAPI.getPurchaseByOrderId(orderId);
-                    if (existingPO) {
-                        const purchaseItemCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                            Query.equal('purchaseId', existingPO.$id),
-                            Query.limit(1)
-                        ]);
-                        if (purchaseItemCheck.total > 0) {
-                            isDuplicate = true;
-                            matchedDoc = purchaseItemCheck.documents[0];
-                        }
-                    }
-                } catch(e) {}
-            }
-
-            // Check 4b: For regular item rows, check if THIS specific item ID already exists inside this purchase order
-            if (!isDuplicate && !isOrderProxy && orderId && itemId) {
-                try {
-                    const existingPO = await purchasesAPI.getPurchaseByOrderId(orderId);
-                    if (existingPO) {
-                        const purchaseItemCheck = await databases.listDocuments(DB_ID, COL_ID, [
-                            Query.equal('purchaseId', existingPO.$id),
-                            Query.equal('identity', itemId),
-                            Query.limit(1)
-                        ]);
-                        if (purchaseItemCheck.total > 0) {
-                            isDuplicate = true;
-                            matchedDoc = purchaseItemCheck.documents[0];
-                        }
-                    }
-                } catch(e) {}
+                matchedDoc = dedup.matchedDoc;
             }
         } catch (e) {
             console.warn("Duplicate check failed, proceeding w/ caution:", e);
@@ -674,7 +604,7 @@ const processRows = async (rows) => {
                     
                     const itemUpdates = {};
                     if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price)) {
-                        itemUpdates.cost = price;
+                        itemUpdates.cost = parseFloat(price) || 0;
                     }
                     if (dbPurchaseId && (!matchedDoc.purchaseId || matchedDoc.purchaseId !== dbPurchaseId)) {
                         itemUpdates.purchaseId = dbPurchaseId;
@@ -682,11 +612,14 @@ const processRows = async (rows) => {
                     if (orderId && (!matchedDoc.orderId || matchedDoc.orderId !== orderId)) {
                         itemUpdates.orderId = orderId;
                     }
-                    if (shippingNotes && !matchedDoc.condition_notes?.includes('COST BREAKDOWN')) {
-                        itemUpdates.condition_notes = (matchedDoc.condition_notes || '') + shippingNotes;
+                    const existingNotes = matchedDoc.conditionNotes || matchedDoc.condition_notes || '';
+                    if (shippingNotes && !existingNotes.includes('COST BREAKDOWN')) {
+                        itemUpdates.conditionNotes = (existingNotes ? existingNotes + '\n' : '') + shippingNotes;
                     }
-                    if (Object.keys(itemUpdates).length > 0) {
-                        await databases.updateDocument(DB_ID, COL_ID, matchedDoc.$id, itemUpdates);
+                    
+                    const safeUpdates = sanitizeItemPayload(itemUpdates, { isUpdate: true });
+                    if (Object.keys(safeUpdates).length > 0) {
+                        await databases.updateDocument(DB_ID, COL_ID, matchedDoc.$id, safeUpdates);
                         logs.value.push(`🔄 Updated existing item: ${itemLabel} (Linked to PO ${orderId || ''})`);
                     } else {
                         logs.value.push(`✓ Item verified: ${itemLabel}`);
@@ -828,7 +761,7 @@ const processRows = async (rows) => {
             const itemToSave = {
                 title: title,
                 identity: itemId,
-                condition_notes: notes,
+                conditionNotes: notes,
             };
             const extraData = {
                 cost: price,

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-36 sm:pb-44">
     <!-- Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
@@ -103,16 +103,28 @@
                 type="text" 
                 v-model="searchQuery" 
                 placeholder="Search sale by item title, UPC, SKU, SO#..." 
-                class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
+                class="input input-bordered w-full pl-10 pr-16 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
               />
-              <button 
-                v-if="searchQuery" 
-                @click="searchQuery = ''" 
-                class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
-                title="Clear search"
-              >
-                ✕
-              </button>
+              <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                <button 
+                  v-if="searchQuery" 
+                  type="button"
+                  @click="searchQuery = ''" 
+                  class="btn btn-ghost btn-circle btn-xs opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+                <button 
+                  type="button"
+                  @click="showBarcodeScanner = true"
+                  class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10 transition-colors w-7 h-7 min-h-7 flex items-center justify-center"
+                  title="Scan Barcode or Mini QR with Camera"
+                  aria-label="Scan barcode or QR with camera"
+                >
+                  <Icon icon="solar:camera-linear" class="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <!-- Location Dropdown Pill -->
@@ -196,7 +208,7 @@
       </div>
 
       <!-- 1. MOBILE CARD VIEW (VISIBLE ON MOBILE & TABLET < MD) -->
-      <div v-else class="block md:hidden space-y-3">
+      <div v-else class="block md:hidden space-y-3 mb-6">
         <div 
           v-for="sale in paginatedSales" 
           :key="sale.uniqueKey"
@@ -300,7 +312,7 @@
       </div>
 
       <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
-      <div v-if="displayedSales.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
+      <div v-if="displayedSales.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
         <div class="overflow-x-auto">
           <table class="table table-zebra w-full">
             <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">
@@ -492,6 +504,15 @@
         </template>
       </PaginationDock>
 
+      <!-- Reusable Camera Barcode & QR Scanner Modal -->
+      <BarcodeScannerModal 
+          :is-open="showBarcodeScanner"
+          title="Scan Barcode or Mini QR"
+          subtitle="Point camera at any tag or sticker to find sale"
+          @close="showBarcodeScanner = false"
+          @scan="(res) => { if (res && res.rawValue) searchQuery = res.rawValue; }"
+      />
+
     </div>
   </div>
 </template>
@@ -503,8 +524,8 @@ import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
 import { warehousesApi, matchesLocationFilter, findFacility } from '../../lib/warehouses';
-import { client } from '../../lib/appwrite';
 import PaginationDock from '../common/PaginationDock.vue';
+import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
 
@@ -517,6 +538,7 @@ const loading = ref(true);
 const error = ref('');
 const searchQuery = ref('');
 const locationFilter = ref('all');
+const showBarcodeScanner = ref(false);
 
 // Sorting state (PO treatment)
 const sortBy = ref<'date' | 'so' | 'net' | 'gross' | 'location' | 'status'>('date');

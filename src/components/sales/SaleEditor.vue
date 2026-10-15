@@ -457,15 +457,14 @@
                 </div>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div class="relative">
-                    <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40" />
-                    <input 
-                      type="text" 
-                      v-model="itemSearchQuery" 
-                      placeholder="Search by title, SKU, UPC..." 
-                      class="input input-bordered input-sm w-full pl-9 bg-base-100 rounded-xl text-xs h-10 min-h-10 border-base-300"
-                    />
-                  </div>
+                  <SearchInputWithScanner 
+                    v-model="itemSearchQuery" 
+                    placeholder="Search by title, SKU, UPC..." 
+                    scanner-title="Scan Item Barcode or Mini QR"
+                    scanner-subtitle="Point camera at item tag to auto-link sale"
+                    input-class="bg-base-100 rounded-xl text-xs h-10 min-h-10 border-base-300"
+                    @scan="onScannedItemToLink"
+                  />
                   <select 
                     v-model="selectedDropdownItemId" 
                     @change="onDropdownItemSelect"
@@ -844,6 +843,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { salesApi } from '../../lib/sales';
@@ -1132,6 +1132,25 @@ const onDropdownItemSelect = () => {
   if (!selectedDropdownItemId.value) return;
   const item = inventoryItems.value.find(i => i.$id === selectedDropdownItemId.value);
   if (item) selectItemToLink(item);
+};
+
+const onScannedItemToLink = (result: any) => {
+  const code = (result?.rawValue || '').trim().toLowerCase();
+  if (!code) return;
+
+  // Search available inventory by exact match on UPC, locationSku, sku, or ID
+  const matched = availableActiveInventory.value.find(item => 
+    (item.upc && item.upc.toLowerCase() === code) ||
+    (item.locationSku && item.locationSku.toLowerCase() === code) ||
+    (item.sku && item.sku.toLowerCase() === code) ||
+    (item.$id && item.$id.toLowerCase() === code)
+  );
+
+  if (matched) {
+    selectItemToLink(matched);
+  } else {
+    itemSearchQuery.value = result.rawValue;
+  }
 };
 
 const loadData = async () => {

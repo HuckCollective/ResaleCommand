@@ -190,6 +190,9 @@
             :key="item.$id"
             @click="openEdit(item)"
             class="bg-base-200/50 border border-base-300 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-all cursor-pointer group"
+            :class="{
+              'border-warning/70 bg-warning/10 ring-2 ring-warning/30': isAuctionItem(item) && formatItemCountdown(item.auctionEndsAt).ended && item.auctionStatus !== 'won' && item.auctionStatus !== 'lost'
+            }"
           >
             <!-- Thumbnail / Icon -->
             <div class="w-12 h-12 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
@@ -210,8 +213,8 @@
                 <!-- Auction Countdown Badge -->
                 <span v-if="isAuctionItem(item) && item.auctionStatus !== 'won'"
                       class="badge badge-xs font-mono font-bold"
-                      :class="formatItemCountdown(item.auctionEndsAt).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral'">
-                  {{ formatItemCountdown(item.auctionEndsAt).text }}
+                      :class="formatItemCountdown(item.auctionEndsAt).ended ? 'badge-warning text-warning-content font-black animate-pulse' : (formatItemCountdown(item.auctionEndsAt).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral')">
+                  {{ formatItemCountdown(item.auctionEndsAt).ended ? '⏰ ENDED — WON OR LOST?' : formatItemCountdown(item.auctionEndsAt).text }}
                 </span>
                 <!-- Won Badge -->
                 <span v-if="item.auctionStatus === 'won'" class="badge badge-xs badge-success text-success-content font-bold">
@@ -271,7 +274,8 @@
                 <button 
                   type="button"
                   @click.stop="openWinModal(item)"
-                  class="btn btn-success btn-xs btn-outline px-2 h-7 font-bold gap-1 text-[11px]"
+                  class="btn btn-xs px-2.5 h-7 font-bold gap-1 text-[11px] shadow-xs"
+                  :class="formatItemCountdown(item.auctionEndsAt).ended ? 'btn-success font-black ring-1 ring-success/40' : 'btn-success btn-outline'"
                   title="Mark as won and record winning bid"
                 >
                   <Icon icon="solar:cup-star-bold" class="w-3.5 h-3.5" />
@@ -281,6 +285,7 @@
                   type="button"
                   @click.stop="itemPendingLoss = item"
                   class="btn btn-ghost btn-xs text-error/70 hover:text-error hover:bg-error/10 px-1.5 h-7"
+                  :class="{'font-bold text-error bg-error/10': formatItemCountdown(item.auctionEndsAt).ended}"
                   title="Mark outbid / remove from tracker"
                 >
                   ✕
