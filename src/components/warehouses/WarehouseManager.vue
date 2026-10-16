@@ -402,7 +402,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, matchesLocationFilter } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, getDefaultStorageLocation } from '../../lib/warehouses';
 import { generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { addToast } from '../../stores/toast';
 import type { WarehouseDocument, WarehouseData } from '../../lib/warehouses';
@@ -752,7 +752,7 @@ const loadManifests = async () => {
   }
 };
 
-const getManifestsForWarehouse = (warehouse: WarehouseDocument) => {
+function getManifestsForWarehouse(warehouse: WarehouseDocument) {
   const code = (warehouse.code || '').toLowerCase();
   const name = (warehouse.name || '').toLowerCase();
   return allManifests.value.filter(m => {
@@ -760,15 +760,15 @@ const getManifestsForWarehouse = (warehouse: WarehouseDocument) => {
     const locName = (m.locationName || '').toLowerCase();
     return locId === code || locName === name || (code === 'md' && (locId.includes('memory') || locName.includes('memory')));
   });
-};
+}
 
-const getActiveDraftForWarehouse = (warehouse: WarehouseDocument) => {
+function getActiveDraftForWarehouse(warehouse: WarehouseDocument) {
   return getManifestsForWarehouse(warehouse).find(m => m.status === 'draft' || m.status === 'paused') || null;
-};
+}
 
-const getDraftsForWarehouse = (warehouse: WarehouseDocument) => {
+function getDraftsForWarehouse(warehouse: WarehouseDocument) {
   return getManifestsForWarehouse(warehouse).filter(m => m.status === 'draft' || m.status === 'paused' || m.status === 'in-transit');
-};
+}
 
 const openManifestTrayForManifest = async (manifest: ManifestDocument, warehouse?: WarehouseDocument) => {
   activeWarehouseForTray.value = warehouse || null;
@@ -776,13 +776,13 @@ const openManifestTrayForManifest = async (manifest: ManifestDocument, warehouse
   isManifestTrayOpen.value = true;
 };
 
-const getExportedDropsForWarehouse = (warehouse: WarehouseDocument) => {
+function getExportedDropsForWarehouse(warehouse: WarehouseDocument) {
   return getManifestsForWarehouse(warehouse).filter(m => m.status === 'exported');
-};
+}
 
-const getPlacedDropsForWarehouse = (warehouse: WarehouseDocument) => {
+function getPlacedDropsForWarehouse(warehouse: WarehouseDocument) {
   return getManifestsForWarehouse(warehouse).filter(m => m.status === 'placed');
-};
+}
 
 const openManifestTrayFor = async (warehouse: WarehouseDocument) => {
   activeWarehouseForTray.value = warehouse;
