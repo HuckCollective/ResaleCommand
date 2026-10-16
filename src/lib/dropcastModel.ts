@@ -340,43 +340,7 @@ export function getSavedDropcasts(): Dropcast[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Auto-heal seed casts if corrupted or contaminated by other casts
-      let needsResave = false;
-      const healed = parsed.map(c => {
-        const seed = SEED_DROPCASTS.find(s => s.id === c.id);
-        if (seed) {
-          // If Tim Burton cast was contaminated by Cyberpunk items, missing images, or wrong location
-          if (c.id === 'cast_grail_velvet_jacket') {
-            const hasBurton = c.items?.some((i: any) => (i.title || '').toLowerCase().includes('burton'));
-            const isSingle = Array.isArray(c.items) && c.items.length === 1;
-            const hasPhoto = Boolean(c.items?.[0]?.imageUrl || c.items?.[0]?.photo);
-            if (!hasBurton || !isSingle || !hasPhoto || c.locationName !== 'Dusty Tiger') {
-              needsResave = true;
-              return { ...seed };
-            }
-          }
-          // If Memory Den seed cast was emptied or corrupted
-          if (c.id === 'cast_md_sep27_restock') {
-            if (!Array.isArray(c.items) || c.items.length === 0 || !c.items[0]?.imageUrl) {
-              needsResave = true;
-              return { ...seed };
-            }
-          }
-          // If Dusty Tiger barware seed cast was emptied
-          if (c.id === 'cast_dusty_tiger_drop_sep20') {
-            if (!Array.isArray(c.items) || c.items.length === 0) {
-              needsResave = true;
-              return { ...seed };
-            }
-          }
-        }
-        return c;
-      });
-
-      if (needsResave) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(healed));
-      }
-      return healed;
+      return parsed;
     }
     return SEED_DROPCASTS;
   } catch (err) {

@@ -434,20 +434,25 @@ export function useDropcasts() {
   function unstageItemFromCast(itemId: string) {
     if (!activeCast.value || !activeCast.value.items) return;
     const initialLen = activeCast.value.items.length;
-    activeCast.value.items = activeCast.value.items.filter(
+    const remainingItems = activeCast.value.items.filter(
       i => String(i.$id || i.id) !== String(itemId)
     );
-    if (Array.isArray(activeCast.value.slides)) {
-      activeCast.value.slides = activeCast.value.slides.filter(
-        s => String(s.sourceItemId) !== String(itemId)
-      );
-    }
-    activeCast.value.totalRetailValue = activeCast.value.items.reduce(
+    const remainingSlides = Array.isArray(activeCast.value.slides)
+      ? activeCast.value.slides.filter(s => String(s.sourceItemId) !== String(itemId))
+      : [];
+    const totalVal = remainingItems.reduce(
       (sum, it) => sum + Number(it.boutiquePrice || it.resalePrice || it.price || 0), 
       0
     );
+
+    activeCast.value = {
+      ...activeCast.value,
+      items: remainingItems,
+      slides: remainingSlides,
+      totalRetailValue: totalVal
+    };
     saveActiveCast();
-    if (activeCast.value.items.length < initialLen) {
+    if (remainingItems.length < initialLen) {
       addToast({ type: 'info', message: 'Item removed from Dropcast staging.' });
     }
   }
@@ -457,9 +462,12 @@ export function useDropcasts() {
    */
   function clearCastStaging() {
     if (!activeCast.value) return;
-    activeCast.value.items = [];
-    activeCast.value.slides = [];
-    activeCast.value.totalRetailValue = 0;
+    activeCast.value = {
+      ...activeCast.value,
+      items: [],
+      slides: [],
+      totalRetailValue: 0
+    };
     saveActiveCast();
     addToast({ type: 'info', message: 'Cleared all staged items from Dropcast.' });
   }
