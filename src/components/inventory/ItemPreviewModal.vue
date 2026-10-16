@@ -423,9 +423,7 @@ const childItems = ref([]);
 // Watch for item changes to open modal and reset gallery
 watch(() => props.item, async (newItem) => {
     if (newItem) {
-        selectedIndex.value = 0;
         childItems.value = [];
-        if (carouselRef.value) carouselRef.value.scrollLeft = 0;
         previewModal.value?.showModal();
         await loadScoutData(newItem);
         

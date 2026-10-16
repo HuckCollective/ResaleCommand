@@ -522,6 +522,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
+import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
 import { warehousesApi, matchesLocationFilter, findFacility } from '../../lib/warehouses';
 import PaginationDock from '../common/PaginationDock.vue';

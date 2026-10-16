@@ -631,6 +631,8 @@ import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
 import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown, isLiveAuctionActive, isItemAcquired, normalizeInventoryStatus, getCollectionId, DB_ID } from '../../lib/inventory';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
+const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
+const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || 'resale-dev';
 
 const childItems = ref([]);
 const parentItem = ref(null);
@@ -928,6 +930,10 @@ onUnmounted(() => {
         realtimeUnsub = null;
     }
 });
+
+const carouselRef = ref(null);
+const selectedIndex = ref(0);
+let isProgrammaticScroll = false;
 
 const scrollToSlide = (index) => {
     if (!carouselRef.value) return;

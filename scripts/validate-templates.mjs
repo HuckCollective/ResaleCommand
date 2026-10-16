@@ -20,6 +20,8 @@ function getFiles(dir, exts, files = []) {
 const vueFiles = getFiles('src', ['.vue']);
 const tsFiles = getFiles('src', ['.ts', '.d.ts']);
 let hasErrors = false;
+const virtualVueMap = new Map();
+const virtualVueFiles = [];
 
 console.log(`🔍 [Linter] Validating ${vueFiles.length} Vue SFCs and ${tsFiles.length} TypeScript files...`);
 
@@ -61,7 +63,10 @@ for (const file of vueFiles) {
     // Validate Script & Script Setup
     if (descriptor.script || descriptor.scriptSetup) {
         try {
-            compileScript(descriptor, { id: file, inlineTemplate: false });
+            const compiled = compileScript(descriptor, { id: file, inlineTemplate: false });
+            const vName = file + '.ts';
+            virtualVueMap.set(vName, compiled.content);
+            virtualVueFiles.push(vName);
         } catch (scriptErr) {
             console.error(`❌ Script Error in ${relativePath}:`, scriptErr.message);
             hasErrors = true;
@@ -69,7 +74,7 @@ for (const file of vueFiles) {
     }
 }
 
-// 2. VALIDATE TYPESCRIPT & JAVASCRIPT FILES (Syntax, Missing Variables, Broken Imports)
+// 2. VALIDATE TYPESCRIPT, JAVASCRIPT & VUE SFC SCRIPTS (Syntax, Missing Variables, Broken Imports)
 const tsconfigPath = path.resolve('tsconfig.json');
 let compilerOptions = {
     target: ts.ScriptTarget.ESNext,
@@ -96,26 +101,47 @@ if (fs.existsSync(tsconfigPath)) {
     }
 }
 
-const program = ts.createProgram(tsFiles, compilerOptions);
+const defaultHost = ts.createCompilerHost(compilerOptions);
+const customHost = {
+    ...defaultHost,
+    getSourceFile: (fileName, languageVersion) => {
+        if (virtualVueMap.has(fileName)) {
+            return ts.createSourceFile(fileName, virtualVueMap.get(fileName), languageVersion, true);
+        }
+        return defaultHost.getSourceFile(fileName, languageVersion);
+    },
+    fileExists: (fileName) => {
+        if (virtualVueMap.has(fileName)) return true;
+        return defaultHost.fileExists(fileName);
+    }
+};
+
+const allFilesToCheck = [...tsFiles, ...virtualVueFiles];
+const program = ts.createProgram(allFilesToCheck, compilerOptions, customHost);
 const diagnostics = ts.getPreEmitDiagnostics(program);
 
 for (const diag of diagnostics) {
     if (!diag.file) continue;
-    const relFile = path.relative(process.cwd(), diag.file.fileName).replace(/\\/g, '/');
+    let relFile = path.relative(process.cwd(), diag.file.fileName).replace(/\\/g, '/');
     if (!relFile.startsWith('src/')) continue;
+    relFile = relFile.replace(/\.ts$/, '');
 
     const code = diag.code;
     // Critical errors:
-    // TS2304: Cannot find name 'x' (catches missing imports like isAlphaMode)
+    // TS2304: Cannot find name 'x' (catches missing imports)
     // TS2552: Cannot find name 'x'. Did you mean 'y'?
     // TS2307: Cannot find module 'x' (catches broken import paths)
     // TS1xxx: Any TypeScript/JavaScript syntax error
     const isCritical = (code === 2304 || code === 2552 || code === 2307 || (code >= 1000 && code < 2000));
 
     if (isCritical) {
+        // Ignore known benign imports of raw Vue SFC components without shim in virtual TS files
+        if (code === 2307 && diag.messageText && String(diag.messageText).includes('.vue')) {
+            continue;
+        }
         const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
         const { line, character } = diag.file.getLineAndCharacterOfPosition(diag.start);
-        console.error(`❌ TS Critical Error in ${relFile}:${line + 1}:${character + 1} (TS${code}): ${message}`);
+        console.error(`❌ Critical Error in ${relFile}:${line + 1}:${character + 1} (TS${code}): ${message}`);
         hasErrors = true;
     }
 }

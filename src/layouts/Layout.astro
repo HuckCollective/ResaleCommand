@@ -39,7 +39,16 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
   <body>
     <div class="flex flex-col min-h-screen w-full max-w-full min-w-0 overflow-x-clip">
       <Navbar client:load />
-      <main class="flex-1 w-full max-w-full min-w-0">
+      <main class="flex-1 w-full max-w-full min-w-0 relative">
+        <div id="runtime-error-banner" class="hidden p-6 max-w-lg mx-auto my-8 bg-error/10 border border-error/30 rounded-2xl text-center space-y-3 shadow-lg z-50">
+          <div class="text-3xl">⚠️</div>
+          <h2 class="text-lg font-bold text-error">Something went wrong loading this view</h2>
+          <p id="runtime-error-msg" class="text-xs opacity-80 font-mono break-words"></p>
+          <div class="pt-2 flex justify-center gap-2">
+            <button onclick="window.location.reload()" class="btn btn-sm btn-error text-white font-bold">Reload Page</button>
+            <a href="/" class="btn btn-sm btn-ghost font-bold">Home</a>
+          </div>
+        </div>
         <slot />
       </main>
       {!hideFooter && <Footer />}
@@ -49,6 +58,17 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     <HuckleberryLoader client:only="vue" />
     <ToastContainer client:only="vue" />
     <ConfirmContainer client:only="vue" />
+    <script is:inline>
+      window.addEventListener('error', function(e) {
+        if (!e) return;
+        const banner = document.getElementById('runtime-error-banner');
+        const msg = document.getElementById('runtime-error-msg');
+        if (banner && msg) {
+          banner.classList.remove('hidden');
+          msg.textContent = e.message || 'An unexpected client error occurred.';
+        }
+      });
+    </script>
     <script>
       import { initAuth } from "../lib/store";
 

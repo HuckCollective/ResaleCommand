@@ -712,6 +712,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { marked } from 'marked';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';

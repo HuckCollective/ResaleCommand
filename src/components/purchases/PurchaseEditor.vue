@@ -1029,7 +1029,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
-import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryItem, BUCKET_ID, getCollectionId } from '../../lib/inventory';
+import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId } from '../../lib/inventory';
 import { databases, storage, client, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';

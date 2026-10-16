@@ -1931,10 +1931,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import DropcastHubDashboard from './DropcastHubDashboard.vue';
-import ItemThumbnail from '../common/ItemThumbnail.vue';
-import BottomActionDock from '../common/BottomActionDock.vue';
 import { useDropcasts } from '../../composables/useDropcasts';
-import { type Dropcast, type CastStatus, CAST_TYPE_META, CAST_STATUS_META, SEED_DROPCASTS, getSavedDropcasts } from '../../lib/dropcastModel';
+import { type Dropcast, type CastStatus, CAST_TYPE_META, CAST_STATUS_META, SEED_DROPCASTS, getSavedDropcasts, saveDropcast } from '../../lib/dropcastModel';
 import { useManifest } from '../../composables/useManifest';
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';
@@ -1946,7 +1944,7 @@ import {
   downloadMediaSlidesAsZip,
   downloadSingleImage, 
   getItemImageUrls, 
-  type SocialStudioItem,
+  type SocialStudioItem, 
   type PostMediaSlide 
 } from '../../lib/socialMediaStudio';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
@@ -1996,6 +1994,9 @@ const {
 } = useDropcasts();
 
 const studioCastTitle = ref(activeCast.value?.title || '');
+const locationFilterMode = ref<string>('all');
+const selectedPlaybook = ref<'all' | 'drop' | 'grail' | 'recap' | 'haul'>('all');
+const activeSourcingStream = ref<'drops' | 'hauls' | 'sales' | 'catalog'>('drops');
 
 // Keep studioCastTitle in sync whenever activeCast changes or initializes
 watch(

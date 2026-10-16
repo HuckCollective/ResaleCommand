@@ -628,6 +628,42 @@ const suggestedTitleStr = computed(() => {
     return null;
 });
 
+const suggestedListPriceStr = computed(() => {
+    if (!scoutResult.value) return null;
+    const res = scoutResult.value;
+    const item = Array.isArray(res) ? res[0] : (res.items?.[0] || res);
+    const pb = item?.price_breakdown || item?.pricing_potential;
+    if (pb?.fair) return String(parsePrice(pb.fair) || '');
+    if (pb?.mint) return String(parsePrice(pb.mint) || '');
+    if (item?.resale_price || item?.resalePrice) return String(item.resale_price || item.resalePrice);
+    return null;
+});
+
+const suggestedEstLowStr = computed(() => {
+    if (!scoutResult.value) return null;
+    const res = scoutResult.value;
+    const item = Array.isArray(res) ? res[0] : (res.items?.[0] || res);
+    const pb = item?.price_breakdown || item?.pricing_potential;
+    const range = parsePriceRange(pb?.fair || pb?.mint || '');
+    return range.low > 0 ? String(range.low) : null;
+});
+
+const suggestedEstHighStr = computed(() => {
+    if (!scoutResult.value) return null;
+    const res = scoutResult.value;
+    const item = Array.isArray(res) ? res[0] : (res.items?.[0] || res);
+    const pb = item?.price_breakdown || item?.pricing_potential;
+    const range = parsePriceRange(pb?.fair || pb?.mint || '');
+    return range.high > 0 ? String(range.high) : null;
+});
+
+const suggestedDescriptionStr = computed(() => {
+    if (!scoutResult.value) return null;
+    const res = scoutResult.value;
+    const item = Array.isArray(res) ? res[0] : (res.items?.[0] || res);
+    return item?.description || item?.condition_notes || null;
+});
+
 const suggestedTagTitleStr = computed(() => {
     // 1. Check scoutResult
     if (scoutResult.value) {

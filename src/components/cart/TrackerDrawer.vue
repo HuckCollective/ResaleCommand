@@ -166,8 +166,10 @@ import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
-import { showLoader, hideLoader } from '../../stores/loader';
+import { useLoader } from '../../composables/useLoader';
 import { BUCKET_ID, getSafeRawAnalysis } from '../../lib/inventory';
+
+const { showLoader, hideLoader } = useLoader();
 
 const { user } = useAuth();
 const { 
