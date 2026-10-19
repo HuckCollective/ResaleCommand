@@ -61,6 +61,12 @@ Legacy documents in Appwrite may contain legacy status synonyms (`'in-stock'`, `
 - **Post-Acquisition (`status === 'received' | 'placed' | 'acquired'`)**:
   - Unlocks full multi-photo **AI Deep Scan** (`src/lib/ai-inspection.ts`) and **Lot Profit Playbook** (`/api/inspect-lot`).
 
+### E. The Storage File ID Invariant (`imageId` & `galleryImageIds`)
+- **Database Schema Limit**: In Appwrite, `imageId` and elements of `galleryImageIds` are constrained to String(255).
+- **Storage File IDs Only**: These fields are reserved strictly for Appwrite Storage File IDs (e.g. `660a1f...`).
+- **Prohibition of Data URIs**: Under no circumstances may in-memory Data URLs (`data:image/...`), blobs, or raw strings exceeding 255 characters be written into `items` or `purchases` collections.
+- **Pre-Save Protocol**: All inventory saving (direct, scout, batch intake, or Buy Tracker) must route images through Storage first and defensively sanitize `imageId` and `galleryImageIds` prior to database document creation.
+
 ---
 
 ## 3. Multi-Org UPC & Sales Bucketing Standards

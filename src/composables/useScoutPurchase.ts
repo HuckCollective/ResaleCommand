@@ -652,6 +652,24 @@ export function useScoutPurchase() {
             const autoMdReport = itemData.marketDescription || formatScoutReportMarkdown(rawObj);
             const notes = (itemData.conditionNotes || '') + (cleanBoutique ? `\n[Boutique: $${cleanBoutique.toFixed(2)}]` : '');
 
+            let safeImageId: string | null = null;
+            if (itemData.imageId && typeof itemData.imageId === 'string') {
+                const trimmed = itemData.imageId.trim();
+                if (!trimmed.startsWith('data:') && !trimmed.startsWith('blob:') && trimmed.length <= 255) {
+                    safeImageId = trimmed;
+                }
+            }
+            let safeGalleryIds: string[] | undefined = undefined;
+            if (Array.isArray(itemData.galleryImageIds)) {
+                const cleaned = itemData.galleryImageIds
+                    .map(id => typeof id === 'string' ? id.trim() : '')
+                    .filter(id => id.length > 0 && id.length <= 255 && !id.startsWith('data:') && !id.startsWith('blob:'));
+                if (cleaned.length > 0) safeGalleryIds = cleaned;
+            }
+            if (!safeImageId && safeGalleryIds && safeGalleryIds.length > 0) {
+                safeImageId = safeGalleryIds[0];
+            }
+
             const payload: any = {
                 title: itemData.title,
                 identity: itemData.title,
@@ -662,8 +680,8 @@ export function useScoutPurchase() {
                 currentBid: cleanCurrentBid ?? undefined,
                 auctionEndsAt: itemData.auctionEndsAt || undefined,
                 sourcingLocation: itemData.sourcingLocation || undefined,
-                imageId: itemData.imageId || null,
-                galleryImageIds: (itemData.galleryImageIds && itemData.galleryImageIds.length > 0) ? itemData.galleryImageIds : undefined,
+                imageId: safeImageId || null,
+                galleryImageIds: safeGalleryIds,
                 purchaseId: activePurchase.value.$id,
                 cartId: activePurchase.value.$id,
                 tenantId: teamId || null,
@@ -809,6 +827,24 @@ export function useScoutPurchase() {
                 (lotData.lotItems || []).map((li, idx) => `${idx + 1}. ${li.name || li.title || li.identity} ($${li.estimated_value || '0'})`).join('\n') +
                 (cleanBoutique ? `\n[Boutique: $${cleanBoutique.toFixed(2)}]` : '');
 
+            let safeLotImageId: string | null = null;
+            if (lotData.imageId && typeof lotData.imageId === 'string') {
+                const trimmed = lotData.imageId.trim();
+                if (!trimmed.startsWith('data:') && !trimmed.startsWith('blob:') && trimmed.length <= 255) {
+                    safeLotImageId = trimmed;
+                }
+            }
+            let safeLotGalleryIds: string[] | undefined = undefined;
+            if (Array.isArray(lotData.galleryImageIds)) {
+                const cleaned = lotData.galleryImageIds
+                    .map(id => typeof id === 'string' ? id.trim() : '')
+                    .filter(id => id.length > 0 && id.length <= 255 && !id.startsWith('data:') && !id.startsWith('blob:'));
+                if (cleaned.length > 0) safeLotGalleryIds = cleaned;
+            }
+            if (!safeLotImageId && safeLotGalleryIds && safeLotGalleryIds.length > 0) {
+                safeLotImageId = safeLotGalleryIds[0];
+            }
+
             const lotPayload: any = {
                 title: `📦 Lot: ${lotData.title} (${lotCount} items)`,
                 identity: lotData.title,
@@ -818,8 +854,8 @@ export function useScoutPurchase() {
                 currentBid: cleanCurrentBid ?? undefined,
                 auctionEndsAt: lotData.auctionEndsAt || undefined,
                 sourcingLocation: lotData.sourcingLocation || undefined,
-                imageId: lotData.imageId || null,
-                galleryImageIds: (lotData.galleryImageIds && lotData.galleryImageIds.length > 0) ? lotData.galleryImageIds : undefined,
+                imageId: safeLotImageId || null,
+                galleryImageIds: safeLotGalleryIds,
                 purchaseId: activePurchase.value.$id,
                 cartId: activePurchase.value.$id,
                 tenantId: teamId || null,

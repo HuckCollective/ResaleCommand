@@ -8,44 +8,59 @@ export const POST: APIRoute = async ({ request }) => {
     try {
         const body = await request.json();
         const url = body.url;
+        const base64Data = body.base64;
 
-        if (!url) {
-            return new Response(JSON.stringify({ error: "Missing url" }), { status: 400 });
+        if (!url && !base64Data) {
+            return new Response(JSON.stringify({ error: "Missing url or base64 data" }), { status: 400 });
         }
 
-        // Sanitize the URL (e.g. replace invalid backslashes from ShopGoodwill databases)
-        const cleanUrl = url.replace(/\\/g, '/').trim();
+        let buffer: Buffer;
+        let contentType = 'image/jpeg';
 
-        // ShopGoodwill block standard Node fetch user-agents and require a referer, so we spoof a standard browser
-        let referer: string | undefined = undefined;
-        try {
-            const u = new URL(cleanUrl);
-            referer = u.origin + '/';
-        } catch(e){}
-        
-        const headers: Record<string, string> = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-        };
-        if (referer) {
-            headers['Referer'] = referer;
-        }
+        if (base64Data || (url && url.startsWith('data:'))) {
+            const raw = base64Data || url;
+            const commaIndex = raw.indexOf(',');
+            if (commaIndex !== -1) {
+                const mimeMatch = raw.slice(0, commaIndex).match(/:(.*?);/);
+                if (mimeMatch) contentType = mimeMatch[1];
+                buffer = Buffer.from(raw.slice(commaIndex + 1), 'base64');
+            } else {
+                buffer = Buffer.from(raw, 'base64');
+            }
+        } else {
+            // Sanitize the URL (e.g. replace invalid backslashes from ShopGoodwill databases)
+            const cleanUrl = url.replace(/\\/g, '/').trim();
 
-        // 1. Download image from external URL
-        const imgRes = await fetch(cleanUrl, { headers });
+            // ShopGoodwill block standard Node fetch user-agents and require a referer, so we spoof a standard browser
+            let referer: string | undefined = undefined;
+            try {
+                const u = new URL(cleanUrl);
+                referer = u.origin + '/';
+            } catch(e){}
+            
+            const headers: Record<string, string> = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            };
+            if (referer) {
+                headers['Referer'] = referer;
+            }
 
-        if (!imgRes.ok) {
-            return new Response(JSON.stringify({ error: `Image fetch failed: ${imgRes.statusText}` }), { status: imgRes.status });
-        }
+            // 1. Download image from external URL
+            const imgRes = await fetch(cleanUrl, { headers });
 
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
-        let contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-        
-        // Anti-hotlink check (ShopGoodwill sometimes 200s an HTML login block page instead of the image)
-        if (contentType.includes('text/html')) {
-             return new Response(JSON.stringify({ error: "Remote server blocked direct image download (returned tracking HTML payload)" }), { status: 403 });
+            if (!imgRes.ok) {
+                return new Response(JSON.stringify({ error: `Image fetch failed: ${imgRes.statusText}` }), { status: imgRes.status });
+            }
+
+            const arrayBuffer = await imgRes.arrayBuffer();
+            buffer = Buffer.from(arrayBuffer);
+            contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+            
+            // Anti-hotlink check (ShopGoodwill sometimes 200s an HTML login block page instead of the image)
+            if (contentType.includes('text/html')) {
+                 return new Response(JSON.stringify({ error: "Remote server blocked direct image download (returned tracking HTML payload)" }), { status: 403 });
+            }
         }
 
         let ext = contentType.split('/')[1] || '';

@@ -1,11 +1,11 @@
-﻿<template>
+<template>
   <div class="bg-base-100 min-h-full relative flex flex-col">
     
     <!-- ERROR TOAST -->
     <div v-if="error" class="toast toast-top toast-center z-100">
         <div class="alert alert-error shadow-lg">
             <span>{{ error }}</span>
-            <button class="btn btn-xs btn-ghost" @click="error = null">âœ•</button>
+            <button class="btn btn-xs btn-ghost" @click="error = null">✕</button>
         </div>
     </div>
     <!-- SUCCESS TOAST -->
@@ -58,7 +58,7 @@
                                     placeholder="Paste eBay, ShopGoodwill, FB Marketplace, Poshmark or Mercari link..." 
                                     @keydown.enter.prevent="handleAnalyze"
                                 />
-                                <button v-if="scoutUrl" type="button" @click="scoutUrl = ''" class="absolute right-2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">âœ•</button>
+                                <button v-if="scoutUrl" type="button" @click="scoutUrl = ''" class="absolute right-2 btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">✕</button>
                             </div>
                         </div>
                         <div class="w-full sm:w-32 form-control">
@@ -100,7 +100,7 @@
             
             <div class="flex items-center gap-1.5">
                 <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-circle btn-ghost" title="Close Scouting Report">
-                    âœ•
+                    ✕
                 </button>
             </div>
         </div>
@@ -174,7 +174,7 @@
                                         Weight Guard: <strong>{{ getCombinedShippingAlert(item).totalWeight }} lbs</strong> / {{ getCombinedShippingAlert(item).weightLimit }}.0 lbs limit
                                     </span>
                                     <span :class="getCombinedShippingAlert(item).isOverWeightLimit ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
-                                        {{ getCombinedShippingAlert(item).isOverWeightLimit ? 'ðŸš¨ SPLIT SHIPMENT FEE TRIGGERED' : `${getCombinedShippingAlert(item).remainingWeight} lbs headroom left` }}
+                                        {{ getCombinedShippingAlert(item).isOverWeightLimit ? '🚨 SPLIT SHIPMENT FEE TRIGGERED' : `${getCombinedShippingAlert(item).remainingWeight} lbs headroom left` }}
                                     </span>
                                 </div>
                                 <div class="w-full bg-base-300 rounded-full h-2.5 overflow-hidden">
@@ -399,7 +399,7 @@
                                     <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
                                 </div>
                                 <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
-                                    âš¡ {{ item.market_report.sell_through_velocity }}
+                                    ⚡ {{ item.market_report.sell_through_velocity }}
                                 </span>
                             </div>
                             <div class="font-black text-sm sm:text-base text-base-content leading-snug">
@@ -416,7 +416,7 @@
                                         <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
                                     </div>
                                     <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
-                                        ðŸ’¡ {{ ch.recommendation }}
+                                        💡 {{ ch.recommendation }}
                                     </div>
                                     <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
                                         <span>Net Payout:</span>
@@ -780,7 +780,7 @@
                                 <div class="border border-base-300 rounded-xl p-2 bg-base-100 flex flex-wrap gap-2 items-center">
                                     <span v-for="(kw, idx) in item.keywords" :key="idx" class="badge badge-secondary gap-1 text-xs">
                                         {{ kw }}
-                                        <button type="button" @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">âœ•</button>
+                                        <button type="button" @click="item.keywords.splice(idx, 1)" class="hover:text-error hover:font-bold">✕</button>
                                     </span>
                                     <input type="text" placeholder="Add..." class="input input-xs grow border-none focus:outline-none min-w-20" @keydown.enter.prevent="addKeyword(item, $event)" />
                                 </div>
@@ -818,7 +818,7 @@
                         <span class="text-[11px] font-mono text-warning font-black shrink-0">
                             ${{ totalCost.toFixed(2) }}
                         </span>
-                        <span class="text-xs opacity-40 hidden sm:inline">â†’</span>
+                        <span class="text-xs opacity-40 hidden sm:inline">→</span>
                         <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
                             ${{ totalBoutiqueValue.toFixed(2) }}
                         </span>
@@ -897,7 +897,7 @@
                         <template v-else-if="!canSaveReport">
                             <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
                             <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
-                                Saved âœ“
+                                Saved ✓
                             </span>
                         </template>
                         <template v-else>
@@ -959,7 +959,7 @@
                     <span class="text-[11px] font-mono text-warning font-black shrink-0">
                         ${{ totalCost.toFixed(2) }}
                     </span>
-                    <span class="text-xs opacity-40 hidden sm:inline">â†’</span>
+                    <span class="text-xs opacity-40 hidden sm:inline">→</span>
                     <span class="text-[11px] font-mono text-success font-black shrink-0 hidden sm:inline">
                         ${{ totalBoutiqueValue.toFixed(2) }}
                     </span>
@@ -1056,7 +1056,7 @@
                 <template v-else-if="result && !canSaveReport">
                     <Icon icon="solar:check-circle-bold" class="w-4.5 h-4.5 text-success" />
                     <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none text-success">
-                        Saved âœ“
+                        Saved ✓
                     </span>
                 </template>
                 <template v-else>
@@ -1232,7 +1232,7 @@ const handleResumeFromTray = (purchase: any) => {
 const navigateToPurchase = () => {
     if (!activePurchase.value) return;
     const pId = activePurchase.value.$id;
-    addToast({ type: 'info', message: 'ðŸ“‹ Opening Draft Purchase Order...' });
+    addToast({ type: 'info', message: '📋 Opening Draft Purchase Order...' });
     window.location.href = `/purchases/${pId}`;
 };
 
@@ -1308,7 +1308,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
             if (blob) {
                 e.preventDefault();
                 await processFile(blob);
-                addToast({ type: 'success', message: 'ðŸ“¸ Image/Screenshot attached from clipboard!' });
+                addToast({ type: 'success', message: '📸 Image/Screenshot attached from clipboard!' });
                 return;
             }
         }
@@ -1321,7 +1321,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
             if (text.startsWith('http://') || text.startsWith('https://')) {
                 e.preventDefault();
                 scoutUrl.value = text;
-                addToast({ type: 'success', message: 'ðŸ”— Web Link pasted into Scout URL!' });
+                addToast({ type: 'success', message: '🔗 Web Link pasted into Scout URL!' });
             } else if (text.length > 0) {
                 e.preventDefault();
                 if (userNotes.value && !userNotes.value.includes(text)) {
@@ -1329,7 +1329,7 @@ const onWindowPaste = async (e: ClipboardEvent) => {
                 } else {
                     userNotes.value = text;
                 }
-                addToast({ type: 'success', message: 'ðŸ“ Text detected & pasted into Additional Details!' });
+                addToast({ type: 'success', message: '📝 Text detected & pasted into Additional Details!' });
             }
         }
     }
@@ -1413,13 +1413,13 @@ function getTierBadgeInfo(item: any) {
     const raw = (item.name || item.identity || item.title || '').toLowerCase();
     
     if (t === 'showcase' || raw.includes('tier 1') || item.is_key_issue) {
-        return { label: 'ðŸŒŸ Showcase', class: 'badge-secondary text-secondary-content font-bold' };
+        return { label: '🌟 Showcase', class: 'badge-secondary text-secondary-content font-bold' };
     }
     if (t === 'quick_turn' || raw.includes('tier 3')) {
-        return { label: 'âš¡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
+        return { label: '⚡ Quick Turn', class: 'badge-accent text-accent-content font-bold' };
     }
     if (t === 'core' || raw.includes('tier 2')) {
-        return { label: 'ðŸ“¦ Core', class: 'badge-primary text-primary-content font-bold' };
+        return { label: '📦 Core', class: 'badge-primary text-primary-content font-bold' };
     }
     return null;
 }
@@ -1472,7 +1472,7 @@ async function copyMaxBid(amount: number, itemKey: string) {
     try {
         await navigator.clipboard.writeText(String(amount));
         copiedBidItemKey.value = itemKey;
-        addToast({ type: 'success', message: `ðŸ“‹ Copied Max Bid: $${amount}` });
+        addToast({ type: 'success', message: `📋 Copied Max Bid: $${amount}` });
         setTimeout(() => {
             if (copiedBidItemKey.value === itemKey) {
                 copiedBidItemKey.value = null;
@@ -1542,7 +1542,7 @@ function formatAuctionCountdown(endTimeStr: string | null | undefined): { text: 
     }
     const padM = String(minutes).padStart(2, '0');
     const padS = String(seconds).padStart(2, '0');
-    return { text: `ðŸš¨ ${padM}m ${padS}s LEFT`, urgent: true, ended: false };
+    return { text: `🚨 ${padM}m ${padS}s LEFT`, urgent: true, ended: false };
 }
 
 function getAuctionFinancials(item: any) {
@@ -2220,7 +2220,7 @@ function startNewScan() {
     if (fileInput.value) fileInput.value.value = '';
     if (receiptInput.value) receiptInput.value.value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    addToast({ type: 'info', message: 'Scout cleared â€” ready for next item!' });
+    addToast({ type: 'info', message: 'Scout cleared — ready for next item!' });
 }
 
 const savingAll = ref(false);
@@ -2263,7 +2263,7 @@ async function saveAllItems() {
             isResultsModalOpen.value = false;
             const dealName = activePurchase.value?.vendor || 'Inventory';
             successMessage.value = `Saved ${toSave.length > 1 ? `${toSave.length} items` : 'item'} to ${dealName}!`;
-            addToast({ type: 'success', message: `âœ… Saved to ${dealName}!` });
+            addToast({ type: 'success', message: `✅ Saved to ${dealName}!` });
         }
     } finally {
         savingAll.value = false;
@@ -2388,6 +2388,37 @@ function getSliderColor(item: any) {
 
 
 
+const dataUrlToFile = (dataUrl: string, filename: string): File | null => {
+    try {
+        const arr = dataUrl.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], filename, { type: mime });
+    } catch (e) {
+        console.error('[ScoutView] dataUrlToFile error:', e);
+        return null;
+    }
+};
+
+// Helper to extract clean file ID from Appwrite view/download URLs or raw file IDs
+const getFileIdFromUrl = (url: string | null | undefined): string | null => {
+    if (!url || typeof url !== 'string') return null;
+    const trimmed = url.trim();
+    if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return null;
+    const match = trimmed.match(/\/files\/([^\/]+)\/(?:view|download)/);
+    if (match) return match[1];
+    if (!trimmed.startsWith('http') && trimmed.length <= 255) {
+        return trimmed;
+    }
+    return null;
+};
+
 const urlToFile = async (url: string, filename: string): Promise<File | null> => {
     try {
         const res = await fetch('/api/proxy-image?url=' + encodeURIComponent(url));
@@ -2489,6 +2520,30 @@ async function saveDirectToInventory(payload: any) {
         status: payload.status || 'acquired'
     };
 
+    // Defensively sanitize imageId and galleryImageIds against schema violations (Appwrite 255 char limit)
+    let safeImageId = doc.imageId;
+    if (safeImageId) {
+        if (typeof safeImageId !== 'string' || safeImageId.startsWith('data:') || safeImageId.startsWith('blob:') || safeImageId.length > 255) {
+            safeImageId = getFileIdFromUrl(safeImageId) || null;
+        }
+    }
+    doc.imageId = safeImageId || null;
+
+    if (Array.isArray(doc.galleryImageIds)) {
+        doc.galleryImageIds = doc.galleryImageIds
+            .map((id: any) => typeof id === 'string' && (id.startsWith('data:') || id.startsWith('blob:') || id.length > 255) ? getFileIdFromUrl(id) : id)
+            .filter((id: any) => typeof id === 'string' && id.length > 0 && id.length <= 255 && !id.startsWith('data:') && !id.startsWith('blob:'));
+        if (doc.galleryImageIds.length === 0) {
+            delete doc.galleryImageIds;
+        }
+    }
+
+    if (doc.receiptImageId) {
+        if (typeof doc.receiptImageId !== 'string' || doc.receiptImageId.startsWith('data:') || doc.receiptImageId.startsWith('blob:') || doc.receiptImageId.length > 255) {
+            doc.receiptImageId = getFileIdFromUrl(doc.receiptImageId) || null;
+        }
+    }
+
     // Clean undefined keys for Appwrite document validation
     Object.keys(doc).forEach(key => doc[key] === undefined && delete doc[key]);
 
@@ -2544,17 +2599,6 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
 
     item.saving = true;
     try {
-        // Helper to extract file ID from Appwrite view/download URLs
-        const getFileIdFromUrl = (url: string): string | null => {
-            if (!url) return null;
-            const match = url.match(/\/files\/([^\/]+)\/(?:view|download)/);
-            if (match) return match[1];
-            if (!url.startsWith('http') && !url.startsWith('data:') && !url.startsWith('blob:')) {
-                return url;
-            }
-            return null;
-        };
-
         // 1. Process and upload images (mixed local and existing)
         let galleryIds: string[] = [];
         if (images.value.length > 0) {
@@ -2565,15 +2609,36 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  orderedImages.unshift(chosenMain);
              }
              const uploads = await Promise.all(orderedImages.map(async (img: any) => {
-                 if (img.file) {
-                     // This is a new local image that needs to be uploaded to Appwrite storage
+                 let fileToUpload = img.file;
+                 if (!fileToUpload && img.url && img.url.startsWith('data:')) {
+                     fileToUpload = dataUrlToFile(img.url, `scout_${Date.now()}_${ID.unique()}.jpg`);
+                 }
+
+                 if (fileToUpload) {
+                     // 1. Try client-side direct upload to Appwrite storage
                      try {
-                         const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), img.file);
+                         const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), fileToUpload);
                          return up.$id;
                      } catch (e: any) {
-                         console.error('[ScoutView] Failed to upload local image:', e);
-                         return null;
+                         console.warn('[ScoutView] Client-side image upload failed, trying server-side fallback:', e);
                      }
+                     // 2. Fallback to server-side upload API if client-side upload failed
+                     if (img.url && img.url.startsWith('data:')) {
+                         try {
+                             const res = await fetch('/api/upload-remote-image', {
+                                 method: 'POST',
+                                 headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ base64: img.url, bucketId: BUCKET_ID || 'item_images' })
+                             });
+                             if (res.ok) {
+                                 const uploadRes = await res.json();
+                                 if (uploadRes.fileId) return uploadRes.fileId;
+                             }
+                         } catch (fallbackErr) {
+                             console.error('[ScoutView] Server base64 upload fallback failed:', fallbackErr);
+                         }
+                     }
+                     return null;
                  } else if (img.url && img.url.startsWith('http') && !img.url.includes(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '')) {
                      // Remote URL - upload to Appwrite storage
                      try {
@@ -2590,7 +2655,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          const res = await fetch('/api/upload-remote-image', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
-                             body: JSON.stringify({ url: img.url })
+                             body: JSON.stringify({ url: img.url, bucketId: BUCKET_ID || 'item_images' })
                          });
                          if (res.ok) {
                              const uploadRes = await res.json();
@@ -2605,7 +2670,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      return getFileIdFromUrl(img.url);
                  }
              }));
-             galleryIds = uploads.filter((id): id is string => id !== null);
+             galleryIds = uploads.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 255);
              console.log('[ScoutView] Final gallery IDs:', galleryIds);
         } else if (item.fetched_images && item.fetched_images.length > 0) {
              console.log('[ScoutView] Uploading remote images array with client-side crop...', item.fetched_images);
@@ -2617,6 +2682,28 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              
              try {
                  const uploads = await Promise.all(imagesToUpload.map(async (imgUrl) => {
+                     if (imgUrl && imgUrl.startsWith('data:')) {
+                         const f = dataUrlToFile(imgUrl, `scout_${Date.now()}_${ID.unique()}.jpg`);
+                         if (f) {
+                             try {
+                                 const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), f);
+                                 return up.$id;
+                             } catch (e) {}
+                         }
+                         try {
+                             const res = await fetch('/api/upload-remote-image', {
+                                 method: 'POST',
+                                 headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ base64: imgUrl, bucketId: BUCKET_ID || 'item_images' })
+                             });
+                             if (res.ok) {
+                                 const uploadRes = await res.json();
+                                 return uploadRes.fileId || null;
+                             }
+                         } catch (e) {}
+                         return null;
+                     }
+
                      try {
                          const filename = imgUrl.split('/').pop()?.split('?')[0] || "downloaded.jpg";
                          const file = await urlToFile(imgUrl, filename);
@@ -2633,7 +2720,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          const res = await fetch('/api/upload-remote-image', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
-                             body: JSON.stringify({ url: imgUrl })
+                             body: JSON.stringify({ url: imgUrl, bucketId: BUCKET_ID || 'item_images' })
                          });
                          if (res.ok) {
                              const uploadRes = await res.json();
@@ -2644,7 +2731,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      }
                      return null;
                  }));
-                 galleryIds = uploads.filter((id): id is string => id !== null);
+                 galleryIds = uploads.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 255);
                  console.log('[ScoutView] Remote images uploaded:', galleryIds);
              } catch (err) {
                  console.error('[ScoutView] Failed to upload remote images:', err);
@@ -2653,28 +2740,51 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              console.log('[ScoutView] Uploading remote image with client-side crop...', item.fetched_image);
              try {
                  const imgUrl = item.fetched_image;
-                 const filename = imgUrl.split('/').pop()?.split('?')[0] || "downloaded.jpg";
                  let uploadedId: string | null = null;
-                 
-                 try {
-                     const file = await urlToFile(imgUrl, filename);
-                     if (file) {
-                         const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
-                         uploadedId = up.$id;
+
+                 if (imgUrl && imgUrl.startsWith('data:')) {
+                     const f = dataUrlToFile(imgUrl, `scout_${Date.now()}_${ID.unique()}.jpg`);
+                     if (f) {
+                         try {
+                             const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), f);
+                             uploadedId = up.$id;
+                         } catch (e) {}
                      }
-                 } catch (e) {
-                     console.error('[ScoutView] Client-side image crop/upload failed, trying fallback:', e);
-                 }
-                 
-                 if (!uploadedId) {
-                     const res = await fetch('/api/upload-remote-image', {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({ url: imgUrl })
-                     });
-                     if (res.ok) {
-                         const data = await res.json();
-                         uploadedId = data.fileId || null;
+                     if (!uploadedId) {
+                         try {
+                             const res = await fetch('/api/upload-remote-image', {
+                                 method: 'POST',
+                                 headers: { 'Content-Type': 'application/json' },
+                                 body: JSON.stringify({ base64: imgUrl, bucketId: BUCKET_ID || 'item_images' })
+                             });
+                             if (res.ok) {
+                                 const data = await res.json();
+                                 uploadedId = data.fileId || null;
+                             }
+                         } catch (e) {}
+                     }
+                 } else {
+                     const filename = imgUrl.split('/').pop()?.split('?')[0] || "downloaded.jpg";
+                     try {
+                         const file = await urlToFile(imgUrl, filename);
+                         if (file) {
+                             const up = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
+                             uploadedId = up.$id;
+                         }
+                     } catch (e) {
+                         console.error('[ScoutView] Client-side image crop/upload failed, trying fallback:', e);
+                     }
+                     
+                     if (!uploadedId) {
+                         const res = await fetch('/api/upload-remote-image', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ url: imgUrl, bucketId: BUCKET_ID || 'item_images' })
+                         });
+                         if (res.ok) {
+                             const data = await res.json();
+                             uploadedId = data.fileId || null;
+                         }
                      }
                  }
                  
@@ -2875,15 +2985,18 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      rawAnalysis: getSafeRawAnalysis(item) || undefined
                  };
                  
-                 const subItemImage = itemGalleryIds[0] 
-                     || subItem.imageId 
-                     || subItem.image 
-                     || (itemGalleryIds.length > 0 ? itemGalleryIds[0] : null)
-                     || item.imageId
-                     || item.fetched_image
+                 const validSubGallery = itemGalleryIds
+                     .map((id: any) => getFileIdFromUrl(id) || (typeof id === 'string' && id.length <= 255 && !id.startsWith('data:') && !id.startsWith('blob:') ? id : null))
+                     .filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 255);
+
+                 const subItemImage = validSubGallery[0] 
+                     || getFileIdFromUrl(subItem.imageId) 
+                     || getFileIdFromUrl(subItem.image) 
+                     || getFileIdFromUrl(item.imageId) 
                      || null;
                  
                  itemPayload.imageId = subItemImage;
+                 itemPayload.galleryImageIds = validSubGallery.length > 0 ? validSubGallery : undefined;
                  
                  if (activePurchase.value) {
                      await addItemToPurchase({
@@ -2920,22 +3033,14 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                   noteDetails += `\n[RECEIPT: ${receiptId}]`;
              }
 
-             const primaryImage = galleryIds[0] 
-                 || item.imageId 
-                 || item.fetched_image 
-                 || (item.fetched_images && item.fetched_images[0]) 
-                 || item.image 
-                 || (images.value && images.value.length > 0 ? images.value[0].url : null) 
+             // Ensure galleryIds contains only confirmed, valid Storage File IDs (never data: URIs or strings > 255 chars)
+             const validGalleryIds = galleryIds
+                 .map((id: any) => getFileIdFromUrl(id) || (typeof id === 'string' && id.length <= 255 && !id.startsWith('data:') && !id.startsWith('blob:') ? id : null))
+                 .filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 255);
+
+             const primaryImage = validGalleryIds[0] 
+                 || getFileIdFromUrl(item.imageId) 
                  || null;
-             
-             if (primaryImage && galleryIds.length === 0) {
-                 galleryIds.push(primaryImage);
-             }
-             if (Array.isArray(item.fetched_images)) {
-                 for (const u of item.fetched_images) {
-                     if (u && typeof u === 'string' && !galleryIds.includes(u)) galleryIds.push(u);
-                 }
-             }
 
              const autoMdReport = formatScoutReportMarkdown(item);
 
@@ -2955,7 +3060,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  status: isAcquired.value ? 'acquired' : 'tracked',
                  keywords: item.keywords || [],
                  imageId: primaryImage,
-                 galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
+                 galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                  marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                  rawAnalysis: getSafeRawAnalysis(item) || undefined,
                  components: item.lot_items ? JSON.stringify(item.lot_items).slice(0, 65000) : undefined
@@ -2978,7 +3083,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          maxBid: calculateMaxBid(item) || undefined,
                          currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
                          imageId: primaryImage,
-                         galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
+                         galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                          conditionNotes: noteDetails,
                          marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -3002,7 +3107,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          shippingWeight: item.shippingWeight || item.seller_info?.shipping_weight || undefined,
                          canCombineShipping: item.canCombineShipping !== undefined ? item.canCombineShipping : item.seller_info?.can_combine_shipping,
                          imageId: primaryImage,
-                         galleryImageIds: galleryIds.length > 0 ? galleryIds : undefined,
+                         galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                          conditionNotes: noteDetails,
                          marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                          rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -3021,7 +3126,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         item.saved = true;
         const dealName = activePurchase.value?.vendor || 'Inventory';
         successMessage.value = `Added to ${dealName}!`;
-        addToast({ type: 'success', message: `âœ… Added to ${dealName}!` });
+        addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
 
         // Keep item on screen with saved confirmation so user never feels item was lost
         setTimeout(() => {
