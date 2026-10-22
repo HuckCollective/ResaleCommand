@@ -73,7 +73,7 @@ Legacy documents in Appwrite may contain legacy status synonyms (`'in-stock'`, `
 
 Resale Command operates across multiple vendor and partner organizations. Barcode formats strictly follow `{ORG_PREFIX}-{NUMBER}`:
 - **`HUCK-`**: Huck Collective primary inventory (e.g. `HUCK-1460`).
-- **`PDXGL-`**: PDX Glass & curated partners (e.g. `PDXGL-0024`).
+- **`PDXGL-`**: PDX Game Library & curated tabletop partners (e.g. `PDXGL-0024`).
 
 ### Payout & Reconciliation Bucketing Rules:
 When processing sales reports from Ricochet POS, Memory Den, or external retail venues:

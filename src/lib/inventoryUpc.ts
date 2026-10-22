@@ -9,10 +9,29 @@ import { getDatabaseId, getItemsCollectionId } from './appwriteEnv';
 const getDbId = () => getDatabaseId();
 const getColId = () => getItemsCollectionId();
 
+export const DEFAULT_ORG_PREFIXES = ['HUCK-', 'PDXGL-'] as const;
 export const KNOWN_ORG_PREFIXES = ['HUCK-', 'PDXGL-'] as const;
-export type OrgPrefix = typeof KNOWN_ORG_PREFIXES[number] | string;
+export type OrgPrefix = string;
 
 const upcAllocationLocks = new Map<string, number>();
+
+/**
+ * Resolves all configured prefixes dynamically from team/user preferences or defaults
+ */
+export function getKnownOrgPrefixes(teamOrPrefs?: any): string[] {
+    const set = new Set<string>(['HUCK-', 'PDXGL-']);
+    const prefs = teamOrPrefs?.prefs || teamOrPrefs;
+    if (prefs?.upcPrefix) {
+        set.add(normalizeOrgPrefix(prefs.upcPrefix));
+    }
+    if (Array.isArray(prefs?.partnerPrefixes)) {
+        prefs.partnerPrefixes.forEach((p: any) => {
+            const prefixStr = typeof p === 'string' ? p : p?.prefix;
+            if (prefixStr) set.add(normalizeOrgPrefix(prefixStr));
+        });
+    }
+    return Array.from(set);
+}
 
 /**
  * Normalizes a prefix string to end with a hyphen (e.g. 'HUCK' -> 'HUCK-')
@@ -26,18 +45,21 @@ export function normalizeOrgPrefix(prefix: string = 'HUCK-'): string {
 }
 
 /**
- * Extracts a known org prefix from a SKU or UPC string, or null if unassigned/standard barcode
+ * Extracts a known or dynamic org prefix from a SKU or UPC string, or null if unassigned/standard barcode
  */
-export function extractOrgPrefix(code: string | null | undefined): string | null {
+export function extractOrgPrefix(code: string | null | undefined, customPrefixes?: string[]): string | null {
     if (!code || typeof code !== 'string') return null;
     const clean = code.trim().toUpperCase().replace(/^['"]+/, '');
-    for (const p of KNOWN_ORG_PREFIXES) {
+    
+    // Check custom or known prefixes first
+    const prefixes = customPrefixes && customPrefixes.length > 0 ? customPrefixes : ['HUCK-', 'PDXGL-'];
+    for (const p of prefixes) {
         const root = p.replace(/[-_]$/, '');
         if (clean.startsWith(`${root}-`) || clean.startsWith(`${root}_`)) {
-            return p;
+            return normalizeOrgPrefix(p);
         }
     }
-    // Generic pattern check: 2-8 uppercase letters followed by hyphen/digit
+    // Generic dynamic pattern check: 2-8 uppercase letters followed by hyphen/digit (e.g. RETRO-001)
     const match = clean.match(/^([A-Z]{2,8})[-_]/);
     if (match) {
         return `${match[1]}-`;

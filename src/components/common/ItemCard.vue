@@ -263,7 +263,11 @@ const tags = computed(() => {
 
 const auctionStatus = computed(() => {
     const s = props.item?.status;
-    const isAuctionWatch = s === 'tracked' || s === 'draft' || !!props.item?.auctionEndsAt || !!props.item?.currentBid;
+    // Section 2.C Invariant: Acquired, received, placed, or sold items MUST NEVER display live/ended auction warnings!
+    if (['acquired', 'received', 'placed', 'sold', 'in-stock', 'in_stock'].includes(s)) {
+        return null;
+    }
+    const isAuctionWatch = s === 'tracked' || s === 'draft' || s === 'scouted' || (!s && (!!props.item?.auctionEndsAt || !!props.item?.currentBid));
     if (!isAuctionWatch) return null;
 
     // Check if the auction has expired

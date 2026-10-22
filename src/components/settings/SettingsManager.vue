@@ -49,18 +49,105 @@
 
           <div class="form-control w-full">
             <label class="label">
-              <span class="label-text font-bold">Custom UPC / SKU Prefix</span>
+              <span class="label-text font-bold">Primary Organization UPC / SKU Prefix</span>
             </label>
             <input 
               type="text" 
               v-model="form.upcPrefix" 
-              placeholder="e.g. HUCK- or ORG-" 
-              class="input input-bordered w-full bg-base-200" 
+              placeholder="e.g. HUCK-" 
+              class="input input-bordered w-full bg-base-200 font-mono uppercase font-bold" 
               :disabled="loading"
             />
             <label class="label">
-              <span class="label-text-alt opacity-70">Used to automatically generate unique readable IDs for your items (e.g. {{ form.upcPrefix || 'HUCK-' }}0001).</span>
+              <span class="label-text-alt opacity-70">Primary prefix used to generate unique readable barcodes for your organization (e.g. {{ form.upcPrefix || 'HUCK-' }}0001).</span>
             </label>
+          </div>
+
+          <!-- Partner & Vendor Consignor Prefixes -->
+          <div class="form-control w-full p-4 rounded-2xl bg-base-200/50 border border-base-300 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="label-text font-bold text-sm flex items-center gap-1.5">
+                  <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4 text-primary" />
+                  Partner &amp; Vendor SKU / Barcode Prefixes
+                </label>
+                <p class="text-xs text-base-content/70 mt-0.5">
+                  Partition partner inventory, payout ledgers, and sales reports (e.g. <code>PDXGL-</code> for PDX Game Library).
+                </p>
+              </div>
+              <button 
+                type="button" 
+                class="btn btn-xs btn-primary gap-1"
+                @click="addPartnerPrefix"
+                :disabled="loading"
+              >
+                <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                Add Partner
+              </button>
+            </div>
+
+            <div v-if="form.partnerPrefixes.length === 0" class="text-xs opacity-60 italic py-1">
+              No partner prefixes configured. Add one below to separate partner sales ledgers.
+            </div>
+
+              <div 
+                v-for="(partner, idx) in form.partnerPrefixes" 
+                :key="idx" 
+                class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-base-100 p-2.5 rounded-xl border border-base-200"
+              >
+                <!-- Prefix -->
+                <div class="w-full sm:w-32">
+                  <span class="text-[10px] uppercase font-bold opacity-60 block">Prefix</span>
+                  <input 
+                    type="text" 
+                    v-model="partner.prefix" 
+                    placeholder="e.g. PDXGL-" 
+                    class="input input-bordered input-xs w-full font-mono uppercase font-bold text-xs"
+                    :disabled="loading"
+                  />
+                </div>
+
+                <!-- Partner Name -->
+                <div class="flex-1 min-w-0">
+                  <span class="text-[10px] uppercase font-bold opacity-60 block">Partner / Consignor Name</span>
+                  <input 
+                    type="text" 
+                    v-model="partner.name" 
+                    placeholder="e.g. PDX Game Library" 
+                    class="input input-bordered input-xs w-full text-xs"
+                    :disabled="loading"
+                  />
+                </div>
+
+                <!-- Linked App Organization (If partner is another org on Resale Command) -->
+                <div class="w-full sm:w-44">
+                  <span class="text-[10px] uppercase font-bold opacity-60 block flex items-center gap-1">
+                    <Icon icon="solar:link-minimalistic-bold" class="w-3 h-3 text-secondary" />
+                    Linked App Org
+                  </span>
+                  <select 
+                    v-model="partner.linkedTeamId" 
+                    @change="onPartnerTeamSelect(partner)"
+                    class="select select-bordered select-xs w-full text-xs font-medium"
+                    :disabled="loading"
+                  >
+                    <option value="">(External Partner)</option>
+                    <option v-for="t in otherTeams" :key="t.$id" :value="t.$id">
+                      {{ t.name }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Remove Button -->
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-ghost btn-circle text-error sm:mt-4 self-end sm:self-center" 
+                  @click="removePartnerPrefix(idx)"
+                  title="Remove partner prefix"
+                >
+                  ✕
+                </button>
+              </div>
           </div>
 
           <div class="mt-4 flex gap-2">
@@ -134,7 +221,8 @@ const error = ref('');
 
 const form = ref({
   upcPrefix: '',
-  defaultStorageLocation: 'HG'
+  defaultStorageLocation: 'HG',
+  partnerPrefixes: [] as Array<{ prefix: string; name: string; linkedTeamId?: string }>
 });
 
 const isCustomLocation = computed(() => {
@@ -144,13 +232,49 @@ const isCustomLocation = computed(() => {
 
 const customLocationValue = computed(() => form.value.defaultStorageLocation);
 
+const otherTeams = computed(() => {
+  const currentId = currentTeam.value?.$id;
+  return (teams.value || []).filter(t => t && t.$id !== currentId);
+});
+
+const onPartnerTeamSelect = (partner: any) => {
+  if (!partner.linkedTeamId) return;
+  const match = teams.value?.find((t: any) => t.$id === partner.linkedTeamId);
+  if (match) {
+    if (!partner.name || partner.name.includes('Partner')) {
+      partner.name = match.name;
+    }
+    const teamPref = (match.prefs as any)?.upcPrefix;
+    if (!partner.prefix && teamPref) {
+      partner.prefix = teamPref;
+    }
+  }
+};
+
+const addPartnerPrefix = () => {
+  form.value.partnerPrefixes.push({ prefix: '', name: '', linkedTeamId: '' });
+};
+
+const removePartnerPrefix = (idx: number) => {
+  form.value.partnerPrefixes.splice(idx, 1);
+};
+
 const loadSettings = () => {
-  if (currentTeam.value) {
-    form.value.upcPrefix = currentTeam.value.prefs?.upcPrefix || currentTeam.value.upcPrefix || '';
-    form.value.defaultStorageLocation = getDefaultStorageLocation(currentTeam.value);
-  } else if (user.value) {
-    form.value.upcPrefix = user.value.prefs?.upcPrefix || '';
-    form.value.defaultStorageLocation = getDefaultStorageLocation(user.value);
+  const prefs = (currentTeam.value ? currentTeam.value.prefs : user.value?.prefs) || {};
+  form.value.upcPrefix = prefs.upcPrefix || 'HUCK-';
+  form.value.defaultStorageLocation = getDefaultStorageLocation(currentTeam.value || user.value);
+  
+  if (Array.isArray(prefs.partnerPrefixes) && prefs.partnerPrefixes.length > 0) {
+    form.value.partnerPrefixes = prefs.partnerPrefixes.map((p: any) => 
+      typeof p === 'string' 
+        ? { prefix: p, name: `${p.replace(/[-_]$/, '')} Partner`, linkedTeamId: '' } 
+        : { prefix: p.prefix || '', name: p.name || '', linkedTeamId: p.linkedTeamId || '' }
+    );
+  } else {
+    // Default initial partner configuration for PDX Game Library
+    form.value.partnerPrefixes = [
+      { prefix: 'PDXGL-', name: 'PDX Game Library', linkedTeamId: '' }
+    ];
   }
 };
 
@@ -160,6 +284,19 @@ const saveSettings = async () => {
   error.value = '';
   try {
     const cleanLocation = form.value.defaultStorageLocation?.trim().toUpperCase() || 'HG';
+    const cleanPrimaryPrefix = form.value.upcPrefix?.trim().toUpperCase() || 'HUCK-';
+    const cleanPartners = form.value.partnerPrefixes
+      .filter(p => p.prefix && p.prefix.trim())
+      .map(p => {
+        let pref = p.prefix.trim().toUpperCase();
+        if (!pref.endsWith('-') && !pref.endsWith('_')) pref += '-';
+        return {
+          prefix: pref,
+          name: p.name.trim() || `${pref.replace(/[-_]$/, '')} Partner`,
+          linkedTeamId: p.linkedTeamId || undefined
+        };
+      });
+
     const teamId = currentTeam.value?.$id || 
                    teams.value?.find((t: any) => t?.$id)?.$id || 
                    (typeof localStorage !== 'undefined' ? localStorage.getItem('activeTeamId') : null);
@@ -169,14 +306,16 @@ const saveSettings = async () => {
       const currentPrefs = currentTeam.value?.prefs || currentTeam.value || {};
       await updateTeamPrefs(teamId, {
         ...(typeof currentPrefs === 'object' ? currentPrefs : {}),
-        upcPrefix: form.value.upcPrefix,
+        upcPrefix: cleanPrimaryPrefix,
+        partnerPrefixes: cleanPartners,
         defaultStorageLocation: cleanLocation
       });
     } else {
       const currentPrefs = user.value?.prefs || {};
       await updatePrefs({
         ...currentPrefs,
-        upcPrefix: form.value.upcPrefix,
+        upcPrefix: cleanPrimaryPrefix,
+        partnerPrefixes: cleanPartners,
         defaultStorageLocation: cleanLocation
       });
     }

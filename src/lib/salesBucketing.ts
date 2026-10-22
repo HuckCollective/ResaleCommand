@@ -13,7 +13,7 @@ import { extractOrgPrefix, normalizeOrgPrefix } from './inventoryUpc';
 export interface OrgSalesBucket {
     orgKey: string;           // 'HUCK', 'PDXGL', 'UNASSIGNED'
     prefix: string;           // 'HUCK-', 'PDXGL-', 'NONE'
-    displayName: string;      // e.g. "Huck Collective", "PDX Glass", "Unassigned Store Sales"
+    displayName: string;      // e.g. "Huck Collective", "PDX Game Library", "Unassigned Store Sales"
     rows: any[];              // Raw CSV sales rows belonging to this bucket
     matchedItems: any[];      // Matched Appwrite items
     unmatchedRows: any[];     // Rows not yet matched to an Appwrite item
@@ -68,9 +68,15 @@ export function partitionSalesByOrg(
         }
     });
 
+    // Filter out unacquired pre-buy items (tracked, draft, scouted) so they are immune to sales attribution
+    const eligibleItems = appwriteItems.filter(item => {
+        const s = String(item?.status || '').toLowerCase().trim();
+        return s !== 'tracked' && s !== 'draft' && s !== 'scouted';
+    });
+
     // Index Appwrite items by UPC, locationSku, and Appwrite $id
     const appwriteByCode = new Map<string, any>();
-    appwriteItems.forEach(item => {
+    eligibleItems.forEach(item => {
         if (item.upc) appwriteByCode.set(item.upc.trim().toUpperCase(), item);
         if (item.locationSku) {
             const cleanLoc = item.locationSku.trim().replace(/^['"]+/, '').toUpperCase();
@@ -96,11 +102,13 @@ export function partitionSalesByOrg(
 
         if (!matchedItem && rawName) {
             const cleanName = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
-            matchedItem = appwriteItems.find(item => {
-                if (!item.title) return false;
-                const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return ic === cleanName || ic.includes(cleanName) || cleanName.includes(ic);
-            }) || null;
+            if (cleanName.length >= 8) {
+                matchedItem = eligibleItems.find(item => {
+                    if (!item.title) return false;
+                    const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return ic === cleanName;
+                }) || null;
+            }
         }
 
         // 2. Determine Org Attribution

@@ -1259,6 +1259,19 @@
                                 </button>
                             </template>
 
+                            <!-- Quick Action: 1-Click Mark Won for Ended Auctions -->
+                            <button 
+                                v-if="selectedAuctionItems.length > 0"
+                                type="button" 
+                                class="btn btn-xs sm:btn-sm btn-success font-black gap-1 h-9 justify-center shadow-xs"
+                                :disabled="selectedCount === 0 || isProcessing"
+                                @click="handleBulkMarkWon"
+                                :title="`Mark ${selectedAuctionItems.length} selected auction items as WON and move to in-transit intake`"
+                            >
+                                <Icon icon="solar:cup-star-bold" class="w-3.5 h-3.5" />
+                                <span class="truncate">Mark Won ({{ selectedAuctionItems.length }})</span>
+                            </button>
+
                             <!-- Stage for Dropcast -->
                             <button 
                                 type="button" 
@@ -2195,6 +2208,29 @@ const existingLotInSelection = computed(() => {
     return props.selectedItems.find(i => isLotItem(i));
 });
 
+const selectedAuctionItems = computed(() => {
+    if (!props.selectedItems || !Array.isArray(props.selectedItems)) return [];
+    return props.selectedItems.filter(i => {
+        if (!i || typeof i !== 'object') return false;
+        const s = String(i.status || '').toLowerCase().trim();
+        return Boolean(i.auctionEndsAt || i.currentBid || s === 'tracked' || s === 'draft' || s === 'scouted');
+    });
+});
+
+const handleBulkMarkWon = () => {
+    const itemIds = (props.selectedItems || []).map(i => typeof i === 'string' ? i : (i.$id || i.id)).filter(Boolean);
+    if (itemIds.length === 0) return;
+    emit('apply-bulk-unified', {
+        itemIds,
+        updates: {
+            status: 'acquired',
+            auctionStatus: 'won',
+            storageLocation: 'HG'
+        },
+        clearSelection: true
+    });
+};
+
 const combineCost = computed(() => {
     if (!props.selectedItems) return 0;
     return props.selectedItems.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
@@ -2322,8 +2358,10 @@ const executeUnifiedApply = () => {
         updates.sellingLocations = [targetChannel.value];
     }
     
+    const itemIds = (props.selectedItems || []).map(i => typeof i === 'string' ? i : (i.$id || i.id)).filter(Boolean);
+    
     emit('apply-bulk-unified', {
-        itemIds: props.selectedItems.map(i => i.$id),
+        itemIds,
         updates,
         clearSelection: clearSelectionAfterApply.value
     });

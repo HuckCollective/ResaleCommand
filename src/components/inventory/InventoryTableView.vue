@@ -345,6 +345,11 @@
             @clear-filters="clearFilters"
             @stage-manifest="handleStageManifest"
             @open-manifest="openManifestTray"
+            @restock-item="handleDockRestock"
+            @submit-bundle="handleDockBundle"
+            @submit-combine="handleDockCombine"
+            @uncombine-lot="handleDockUncombine"
+            @split-one-unit="handleDockSplit"
         />
 
         <!-- 5. SLIDE-OVER ITEM DRAWER (Async Lazy-Loaded Island) -->
@@ -480,10 +485,26 @@ const {
     applyBulkStatus,
     applyBulkUnified,
     deleteBulkItems,
-    exportBulkItems
-} = useInventoryBulkActions(async () => {
-    // Retain selection across actions - do NOT clearSelection() automatically
-    await fetchInventory();
+    exportBulkItems,
+    restockInventoryItem,
+    createBundle,
+    rollbackLot
+} = useInventoryBulkActions(async (affectedIds, updates) => {
+    if (affectedIds && updates && inventoryItems.value) {
+        if (updates._deleted) {
+            inventoryItems.value = inventoryItems.value.filter(i => !affectedIds.includes(i.$id) && !affectedIds.includes(i.id));
+            clearSelection();
+        } else {
+            affectedIds.forEach(id => {
+                const item = inventoryItems.value.find(i => i.$id === id || i.id === id);
+                if (item) {
+                    Object.assign(item, updates);
+                }
+            });
+        }
+    } else {
+        await fetchInventory();
+    }
 });
 
 // -- 4.5 OUTBOUND MANIFEST STATE --
@@ -613,7 +634,44 @@ const handleBulkUnified = async (payload) => {
 };
 
 const handleBulkDelete = async () => {
-    await deleteBulkItems(selectedItems.value);
+    const ids = [...selectedItems.value];
+    const success = await deleteBulkItems(ids);
+    if (success) {
+        clearSelection();
+    }
+};
+
+const handleDockRestock = async (payload) => {
+    if (!payload?.item) return;
+    await restockInventoryItem(payload.item, { unitsToAdd: payload.unitsToAdd, addedCostBasis: payload.addedCostBasis });
+};
+
+const handleDockBundle = async (payload) => {
+    if (!payload?.items) return;
+    await createBundle(payload);
+    clearSelection();
+};
+
+const handleDockCombine = async (payload) => {
+    if (!payload?.items) return;
+    await createBundle({
+        items: payload.items,
+        title: payload.title || 'Combined Lot',
+        storageLocation: payload.targetLot?.storageLocation || 'HG'
+    });
+    clearSelection();
+};
+
+const handleDockUncombine = async (lotItem) => {
+    if (!lotItem) return;
+    await rollbackLot(lotItem);
+    clearSelection();
+};
+
+const handleDockSplit = (payload) => {
+    if (payload?.item) {
+        handleDrawerOpenSplit(payload.item);
+    }
 };
 
 const handleExport = (format) => {

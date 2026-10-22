@@ -511,20 +511,15 @@
             </span>
             <div class="join">
               <button 
+                v-for="org in availableOrgPrefixes"
+                :key="org.prefix"
                 type="button" 
                 class="btn btn-xs join-item" 
-                :class="upcPrefix === 'HUCK-' ? 'btn-active btn-primary text-primary-content font-black shadow-xs' : 'btn-ghost'"
-                @click="upcPrefix = 'HUCK-'"
+                :class="upcPrefix === org.prefix ? 'btn-active btn-primary text-primary-content font-black shadow-xs' : 'btn-ghost'"
+                @click="upcPrefix = org.prefix"
+                :title="org.name"
               >
-                HUCK-
-              </button>
-              <button 
-                type="button" 
-                class="btn btn-xs join-item" 
-                :class="upcPrefix === 'PDXGL-' ? 'btn-active btn-secondary text-secondary-content font-black shadow-xs' : 'btn-ghost'"
-                @click="upcPrefix = 'PDXGL-'"
-              >
-                PDXGL-
+                {{ org.label }}
               </button>
             </div>
             <input 
@@ -1220,7 +1215,7 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
 import { databases, ID } from '../../lib/appwrite';
-import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem, extractOrgPrefix, KNOWN_ORG_PREFIXES } from '../../lib/inventory';
+import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem, extractOrgPrefix, KNOWN_ORG_PREFIXES, normalizeOrgPrefix } from '../../lib/inventory';
 import { 
   getSyncHistory, 
   recordSyncHistory, 
@@ -1243,7 +1238,37 @@ const bulkProgressMessage = ref('');
 const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'matched' | 'sold' | 'instock' | 'all'>('unmatched-sold');
 const searchQuery = ref('');
 const exportUpdatedCsv = ref(true);
-const upcPrefix = ref<string>('HUCK-');
+
+const availableOrgPrefixes = computed(() => {
+  const list: Array<{ prefix: string; label: string; orgKey: string; name: string }> = [];
+  const teamPref = team.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+  const primary = normalizeOrgPrefix(teamPref);
+  list.push({ prefix: primary, label: primary, orgKey: primary.replace(/[-_]$/, ''), name: 'Primary Org' });
+
+  // Partner prefixes from team prefs (e.g. PDXGL-)
+  const partners = team.value?.prefs?.partnerPrefixes || user.value?.prefs?.partnerPrefixes || [
+    { prefix: 'PDXGL-', name: 'PDX Game Library' }
+  ];
+  partners.forEach((p: any) => {
+    const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p.prefix);
+    const pName = typeof p === 'string' ? `${pStr.replace(/[-_]$/, '')} Partner` : (p.name || 'Partner');
+    if (!list.some(item => item.prefix === pStr)) {
+      list.push({
+        prefix: pStr,
+        label: pStr,
+        orgKey: pStr.replace(/[-_]$/, ''),
+        name: pName
+      });
+    }
+  });
+  return list;
+});
+
+const upcPrefix = ref<string>(team.value?.prefs?.upcPrefix || 'HUCK-');
+watch(() => team.value?.prefs?.upcPrefix, (newPref) => {
+  if (newPref) upcPrefix.value = normalizeOrgPrefix(newPref);
+}, { immediate: true });
+
 const onlySyncOrgPrefix = ref<boolean>(false);
 const skippedNonOrgCount = ref<number>(0);
 const selectedOrgBucket = ref<string>('all'); // 'all' | 'primary' | 'partner' | 'unassigned'
@@ -1533,11 +1558,18 @@ function extractKeywords(str: string): string[] {
 function findBestItemMatch(csvName: string, inventory: any[]): any {
   if (!csvName || !inventory || inventory.length === 0) return null;
 
+  // Exclude unacquired pre-buy watch items
+  const eligibleInventory = inventory.filter(i => {
+    const s = String(i?.status || '').toLowerCase().trim();
+    return s !== 'tracked' && s !== 'scouted' && s !== 'draft';
+  });
+  if (eligibleInventory.length === 0) return null;
+
   // 1. Direct exact or cleaned substring match
   const cleanCsv = csvName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  for (const item of inventory) {
+  for (const item of eligibleInventory) {
     const cleanTitle = (item?.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (cleanTitle && (cleanTitle === cleanCsv || cleanTitle.includes(cleanCsv) || cleanCsv.includes(cleanTitle))) {
+    if (cleanTitle && (cleanTitle === cleanCsv || (cleanCsv.length >= 10 && cleanTitle === cleanCsv))) {
       return item;
     }
   }
@@ -1549,7 +1581,7 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
   let bestItem = null;
   let bestScore = 0;
 
-  for (const item of inventory) {
+  for (const item of eligibleInventory) {
     const dbTokens = new Set(extractKeywords(item.title));
     if (dbTokens.size === 0) continue;
 
@@ -1578,7 +1610,10 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
 }
 
 const getFilteredMatches = (query: string, row?: any) => {
-  const all = inventoryItems.value;
+  const all = (inventoryItems.value || []).filter(i => {
+    const s = String(i?.status || '').toLowerCase().trim();
+    return s !== 'tracked' && s !== 'scouted' && s !== 'draft';
+  });
   if (!all || all.length === 0) return [];
 
   const q = query.toLowerCase().trim();
@@ -2147,12 +2182,10 @@ const quickAddRow = async (row: any) => {
 const cycleUpcPrefix = async (item: any) => {
   if (!item) return;
   const current = item.upc || '';
-  let newPrefix = 'HUCK-';
-  if (current.startsWith('HUCK-')) {
-    newPrefix = 'PDXGL-';
-  } else {
-    newPrefix = 'HUCK-';
-  }
+  const prefixList = availableOrgPrefixes.value.map(p => p.prefix);
+  const currentIdx = prefixList.findIndex(p => current.startsWith(p));
+  const nextIdx = (currentIdx + 1) % prefixList.length;
+  const newPrefix = prefixList[nextIdx] || prefixList[0] || 'HUCK-';
   const newUpc = getNextUpc ? getNextUpc(newPrefix) : `${newPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
   item.upc = newUpc;
   addToast({ type: 'info', message: `Updated "${item.title.substring(0, 25)}..." UPC to ${newUpc}` });

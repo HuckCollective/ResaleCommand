@@ -654,7 +654,11 @@ watch(() => currentTeam.value, (team) => {
 }, { immediate: true });
 
 const activeInventory = computed(() => {
-  return inventoryItems.value; // Allow mapping ALL items, even sold ones
+  // Section 2.A & Law 1 Invariant: Pre-buy unacquired watch items (tracked, scouted, draft) CAN NEVER be matched or updated by store sync!
+  return (inventoryItems.value || []).filter(i => {
+    const s = String(i.status || '').toLowerCase().trim();
+    return s !== 'tracked' && s !== 'scouted' && s !== 'draft';
+  });
 });
 
 const availableItems = computed(() => {
@@ -788,15 +792,17 @@ const parseMemoryDenProducts = (csvText) => {
   rawHeaders.value = lines[0];
   
   const headers = splitCsvLine(lines[0]).map(h => h?.trim().toLowerCase().replace(/"/g, ''));
-  const idIdx = headers.findIndex(h => h === 'product id');
+  const idIdx = headers.findIndex(h => h === 'product id' || h === 'sale');
   const skuIdx = headers.findIndex(h => h === 'sku');
   const upcIdx = headers.findIndex(h => h === 'upc');
-  const nameIdx = headers.findIndex(h => h === 'name' || h === 'title');
-  const priceIdx = headers.findIndex(h => h === 'agreed price' || h === 'price');
+  const nameIdx = headers.findIndex(h => h === 'name' || h === 'title' || h === 'item');
+  const priceIdx = headers.findIndex(h => h === 'agreed price' || h === 'price' || h === 'agreed');
   const agedPriceIdx = headers.findIndex(h => h === 'aged price');
+  const amountIdx = headers.findIndex(h => h === 'amount' || h === 'net amount');
+  const isPayoutReport = headers.includes('sold') || headers.includes('paid') || headers.includes('check#') || amountIdx !== -1;
 
-  if (nameIdx === -1 || upcIdx === -1) {
-    addToast({ type: 'error', message: 'Could not find "Name" or "UPC" column in MemoryDen CSV.' });
+  if (nameIdx === -1 && upcIdx === -1) {
+    addToast({ type: 'error', message: 'Could not find "Name" / "Item" or "UPC" column in MemoryDen CSV.' });
     isProcessing.value = false;
     return;
   }
@@ -804,13 +810,13 @@ const parseMemoryDenProducts = (csvText) => {
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]);
-    if (cols.length < nameIdx) continue; // Skip invalid lines
+    if (cols.length < (nameIdx !== -1 ? nameIdx : 0)) continue;
     
     const productId = idIdx !== -1 ? cols[idIdx]?.trim() : '';
-    const extractedSku = skuIdx !== -1 ? cols[skuIdx]?.replace(/['"]/g, '').trim() : ''; // MD puts ' in front of SKU sometimes
+    const extractedSku = skuIdx !== -1 ? cols[skuIdx]?.replace(/['"]/g, '').trim() : '';
     const extractedUpc = upcIdx !== -1 ? cols[upcIdx]?.replace(/['"]/g, '').trim() : '';
-    const originalTitle = cols[nameIdx]?.trim() || '';
-    if (!originalTitle) continue;
+    const originalTitle = nameIdx !== -1 ? (cols[nameIdx]?.trim() || '') : '';
+    if (!originalTitle && !extractedUpc && !extractedSku) continue;
 
     let csvPrice = 0;
     if (priceIdx !== -1 && cols[priceIdx]) {
@@ -820,10 +826,15 @@ const parseMemoryDenProducts = (csvText) => {
       csvPrice = parseFloat(cols[agedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
     }
 
+    let payoutAmount = 0;
+    if (amountIdx !== -1 && cols[amountIdx]) {
+      payoutAmount = parseFloat(cols[amountIdx].replace(/[^0-9.]/g, '')) || 0;
+    }
+
     // Matching Logic Priority
     let matched = null;
     
-    // 1. Exact UPC match from CSV's UPC column (e.g. HUCK-5064 uploaded from Resale Command)
+    // 1. Exact UPC match from CSV's UPC column (e.g. HUCK-5064, PDXGL-0038)
     if (extractedUpc) {
       const upcTarget = extractedUpc.toLowerCase();
       matched = activeInventory.value.find(item => (item.upc || '').toLowerCase().trim() === upcTarget);
@@ -837,15 +848,16 @@ const parseMemoryDenProducts = (csvText) => {
         return u === skuTarget || l === skuTarget;
       });
     }
-    // 3. Fuzzy Title Fallback
-    if (!matched) {
+    // 3. Exact normalized title match (alphanumeric only, length >= 8)
+    if (!matched && originalTitle) {
       const cleanTarget = originalTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-      matched = activeInventory.value.find(item => {
-          if (!item.title) return false;
-          const cleanItem = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-          // Match if they are identical after stripping punctuation, or if one is completely contained in the other
-          return cleanItem === cleanTarget || (cleanTarget.length > 5 && cleanItem.includes(cleanTarget)) || (cleanItem.length > 5 && cleanTarget.includes(cleanItem));
-      });
+      if (cleanTarget.length >= 8) {
+        matched = activeInventory.value.find(item => {
+            if (!item.title) return false;
+            const cleanItem = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return cleanItem === cleanTarget;
+        });
+      }
     }
 
     rows.push({
@@ -854,6 +866,8 @@ const parseMemoryDenProducts = (csvText) => {
       extractedSku,
       extractedUpc,
       csvPrice,
+      payoutAmount,
+      isPayoutRow: isPayoutReport,
       originalTitle,
       upcIdx,
       skuIdx,
@@ -933,7 +947,10 @@ const executeSync = async () => {
           updates.resalePrice = row.csvPrice;
         }
         
-        if (item.status !== 'placed' && item.status !== 'Sold' && item.status !== 'sold') {
+        if (row.isPayoutRow) {
+          updates.status = 'sold';
+          if (row.payoutAmount > 0) updates.soldPrice = row.payoutAmount;
+        } else if (item.status === 'received' || item.status === 'in-stock') {
           updates.status = 'placed';
         }
         

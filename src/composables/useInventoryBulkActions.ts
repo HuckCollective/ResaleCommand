@@ -15,7 +15,7 @@ export type ExportFormat = 'ricochet' | 'ebay' | 'poshmark' | 'generic';
  * Employs server-side accelerated batching with APPWRITE_API_KEY (to avoid client rate limits on 300+ items)
  * and falls back seamlessly to client-side exponential backoff pacing.
  */
-export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) {
+export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], updates?: Record<string, any>) => Promise<void> | void) {
     const isApplyingBulk = ref(false);
     const bulkLocationTarget = ref('');
     const bulkStatusTarget = ref('');
@@ -55,7 +55,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
                             message: `Successfully moved ${count} items to "${targetLocation}".` 
                         });
                         bulkLocationTarget.value = '';
-                        if (onSuccess) await onSuccess();
+                        if (onSuccess) await onSuccess(itemIds, { storageLocation: targetLocation });
                         return true;
                     }
                 }
@@ -99,7 +99,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
 
             addToast({ type: 'success', message: `Moved ${successCount} items to "${targetLocation}".` });
             bulkLocationTarget.value = '';
-            if (onSuccess) await onSuccess();
+            if (onSuccess) await onSuccess(itemIds, { storageLocation: targetLocation });
             return true;
         } catch (e: any) {
             console.error("Bulk location update failed:", e);
@@ -145,7 +145,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
                             message: `Updated status to "${targetStatus}" for ${count} items.` 
                         });
                         bulkStatusTarget.value = '';
-                        if (onSuccess) await onSuccess();
+                        if (onSuccess) await onSuccess(itemIds, { status: targetStatus });
                         return true;
                     }
                 }
@@ -187,7 +187,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
 
             addToast({ type: 'success', message: `Updated status to "${targetStatus}" for ${successCount} items.` });
             bulkStatusTarget.value = '';
-            if (onSuccess) await onSuccess();
+            if (onSuccess) await onSuccess(itemIds, { status: targetStatus });
             return true;
         } catch (e: any) {
             console.error("Bulk status update failed:", e);
@@ -228,7 +228,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
                     if (data.success) {
                         const count = data.deletedCount ?? total;
                         addToast({ type: 'success', message: `Deleted ${count} items.` });
-                        if (onSuccess) await onSuccess();
+                        if (onSuccess) await onSuccess(itemIds, { _deleted: true });
                         return true;
                     }
                 }
@@ -269,7 +269,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
             }
 
             addToast({ type: 'success', message: `Deleted ${deletedCount} items.` });
-            if (onSuccess) await onSuccess();
+            if (onSuccess) await onSuccess(itemIds, { _deleted: true });
             return true;
         } catch (e: any) {
             console.error("Bulk delete failed:", e);
@@ -312,8 +312,9 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
         
         // Build clean payload
         const safeUpdates: Record<string, any> = {};
-        if (updates.storageLocation) safeUpdates.storageLocation = updates.storageLocation;
+        if (updates.storageLocation !== undefined) safeUpdates.storageLocation = updates.storageLocation;
         if (updates.status) safeUpdates.status = updates.status;
+        if ((updates as any).auctionStatus !== undefined) (safeUpdates as any).auctionStatus = (updates as any).auctionStatus;
         if (updates.sellingLocations && Array.isArray(updates.sellingLocations)) {
             safeUpdates.sellingLocations = updates.sellingLocations;
         } else if (updates.channel) {
@@ -325,8 +326,9 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
         isApplyingBulk.value = true;
         const total = itemIds.length;
         const summaryChanges: string[] = [];
-        if (safeUpdates.storageLocation) summaryChanges.push(`Location ➔ ${safeUpdates.storageLocation}`);
+        if (safeUpdates.storageLocation !== undefined) summaryChanges.push(`Location ➔ ${safeUpdates.storageLocation || 'Unassigned'}`);
         if (safeUpdates.status) summaryChanges.push(`Status ➔ ${safeUpdates.status}`);
+        if ((safeUpdates as any).auctionStatus) summaryChanges.push(`Auction ➔ ${(safeUpdates as any).auctionStatus}`);
         if (safeUpdates.sellingLocations) summaryChanges.push(`Channel ➔ ${safeUpdates.sellingLocations.join(', ')}`);
 
         showLoader("Updating Records...", {
@@ -357,7 +359,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
                             type: 'success', 
                             message: `Updated ${count} items (${summaryChanges.join(', ')}).` 
                         });
-                        if (onSuccess) await onSuccess();
+                        if (onSuccess) await onSuccess(itemIds, safeUpdates);
                         return true;
                     }
                 }
@@ -399,7 +401,7 @@ export function useInventoryBulkActions(onSuccess?: () => Promise<void> | void) 
             }
 
             addToast({ type: 'success', message: `Updated ${successCount} items.` });
-            if (onSuccess) await onSuccess();
+            if (onSuccess) await onSuccess(itemIds, safeUpdates);
             return true;
         } catch (e: any) {
             console.error("Bulk unified update failed:", e);

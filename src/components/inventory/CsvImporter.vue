@@ -826,6 +826,7 @@ async function importSelected() {
                         };
                         if (isPreBuyMatch) {
                             updateData.status = 'acquired';
+                            updateData.auctionStatus = 'won'; // Shipped orders are won auctions!
                             updateData.storageLocation = doc.storageLocation || 'HG';
                             if (item.orderId) updateData.orderId = item.orderId;
                             if (item.orderId && poMap[item.orderId]) updateData.purchaseId = poMap[item.orderId];
@@ -852,6 +853,7 @@ async function importSelected() {
                          cost: item.totalCost,
                          resalePrice: item.estimatedResale ? item.estimatedResale.toString() : undefined,
                          status: 'acquired' as const,
+                         auctionStatus: 'won', // Shipped orders are won auctions!
                          storageLocation: 'HG',
                          orderId: item.orderId,
                          purchaseId: item.orderId ? poMap[item.orderId] : undefined,
