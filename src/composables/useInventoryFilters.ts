@@ -4,7 +4,7 @@ import { getAssetUrl, resolveItemImageUrls, normalizeInventoryStatus } from '../
 import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 
-export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
+export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
 export type { SortDirection, FilterChip };
 
 // -- 0. IMAGE RESOLUTION HELPER (Universal getAssetUrl standard) --
@@ -435,6 +435,13 @@ export function useInventoryFilters(
         title: (item: any) => item.title || '',
         cost: (item: any) => parseFloat(item.cost) || 0,
         resalePrice: (item: any) => parseFloat(item.resalePrice || item.boutiquePrice) || 0,
+        soldPrice: (item: any) => parseFloat(item.soldPrice || 0) || 0,
+        soldDate: (item: any) => {
+            const raw = item.soldDate || item.dateSold || item.saleDate;
+            if (raw) return new Date(raw).getTime();
+            if (item.status === 'sold') return new Date(item.$updatedAt || 0).getTime();
+            return 0;
+        },
         margin: (item: any) => calculateRoi(item) ?? -999,
         vendor: (item: any) => getVendorName(item),
         status: (item: any) => item.status || 'acquired',
@@ -463,6 +470,17 @@ export function useInventoryFilters(
         defaultSortKey: '$updatedAt',
         defaultSortDirection: 'desc',
         defaultPageSize: options.defaultPageSize || 50
+    });
+
+    // Auto-sort by soldDate DESC when viewing sold inventory
+    watch(filterStatus, (newStatus, oldStatus) => {
+        if (newStatus === 'sold') {
+            sortColumn.value = 'soldDate';
+            sortDirection.value = 'desc';
+        } else if (oldStatus === 'sold' && sortColumn.value === 'soldDate') {
+            sortColumn.value = '$updatedAt';
+            sortDirection.value = 'desc';
+        }
     });
 
     // Custom filtering pipeline for inventory domain rules

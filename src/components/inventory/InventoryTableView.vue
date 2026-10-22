@@ -93,6 +93,14 @@
                                 </div>
                             </th>
 
+                            <!-- Sold Date (Dynamic column for sold items) -->
+                            <th v-if="filterStatus === 'sold' || sortColumn === 'soldDate'" class="cursor-pointer hover:text-primary transition-colors w-28 text-center" @click="setSort('soldDate')">
+                                <div class="flex items-center justify-center gap-1">
+                                    <span>Sold Date</span>
+                                    <Icon :icon="getSortIcon('soldDate')" class="w-3.5 h-3.5 opacity-60" />
+                                </div>
+                            </th>
+
                             <!-- Cost -->
                             <th class="cursor-pointer hover:text-primary transition-colors w-24 text-right" @click="setSort('cost')">
                                 <div class="flex items-center justify-end gap-1">
@@ -101,18 +109,18 @@
                                 </div>
                             </th>
 
-                            <!-- Resale Price -->
-                            <th class="cursor-pointer hover:text-primary transition-colors w-24 text-right" @click="setSort('resalePrice')">
+                            <!-- Resale Price / Net Payout -->
+                            <th class="cursor-pointer hover:text-primary transition-colors w-24 text-right" @click="setSort(filterStatus === 'sold' ? 'soldPrice' : 'resalePrice')">
                                 <div class="flex items-center justify-end gap-1">
-                                    <span>Resale</span>
-                                    <Icon :icon="getSortIcon('resalePrice')" class="w-3.5 h-3.5 opacity-60" />
+                                    <span>{{ filterStatus === 'sold' ? 'Net Payout' : 'Resale' }}</span>
+                                    <Icon :icon="getSortIcon(filterStatus === 'sold' ? 'soldPrice' : 'resalePrice')" class="w-3.5 h-3.5 opacity-60" />
                                 </div>
                             </th>
 
-                            <!-- Margin % / ROI -->
+                            <!-- Margin % / ROI or Net Profit -->
                             <th class="cursor-pointer hover:text-primary transition-colors w-20 text-right" @click="setSort('margin')">
                                 <div class="flex items-center justify-end gap-1">
-                                    <span>ROI %</span>
+                                    <span>{{ filterStatus === 'sold' ? 'Net Profit' : 'ROI %' }}</span>
                                     <Icon :icon="getSortIcon('margin')" class="w-3.5 h-3.5 opacity-60" />
                                 </div>
                             </th>
@@ -133,7 +141,7 @@
                     <tbody>
                         <!-- Loading State -->
                         <tr v-if="loading && inventoryItems.length === 0">
-                            <td colspan="11" class="text-center py-12">
+                            <td :colspan="filterStatus === 'sold' || sortColumn === 'soldDate' ? 12 : 11" class="text-center py-12">
                                 <span class="loading loading-spinner loading-md text-primary"></span>
                                 <div class="text-xs opacity-60 mt-2 font-mono">Loading inventory database...</div>
                             </td>
@@ -141,7 +149,7 @@
 
                         <!-- Empty State -->
                         <tr v-else-if="filteredItems.length === 0">
-                            <td colspan="11" class="text-center py-12">
+                            <td :colspan="filterStatus === 'sold' || sortColumn === 'soldDate' ? 12 : 11" class="text-center py-12">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon icon="solar:box-minimalistic-linear" class="w-10 h-10 opacity-30" />
                                     <p class="font-bold text-sm opacity-70">No items match your active filters</p>
@@ -235,6 +243,18 @@
                                 </div>
                             </td>
 
+                            <!-- Sold Date Cell (when viewing Sold) -->
+                            <td v-if="filterStatus === 'sold' || sortColumn === 'soldDate'" class="text-center font-mono text-[11px]">
+                                <div v-if="item.soldDate" class="font-bold text-base-content/90 flex flex-col items-center" :title="item.soldDate">
+                                    <span>{{ formatSoldDate(item.soldDate) }}</span>
+                                    <span class="text-[9px] opacity-50 font-normal">{{ formatSoldTime(item.soldDate) }}</span>
+                                </div>
+                                <div v-else-if="item.status === 'sold'" class="text-[10px] opacity-40 italic">
+                                    {{ formatSoldDate(item.$updatedAt) }}
+                                </div>
+                                <div v-else class="text-[10px] opacity-30">—</div>
+                            </td>
+
                             <!-- Landed Cost -->
                             <td class="text-right font-mono font-bold text-warning text-xs">
                                 <div>${{ Number(item.cost || 0).toFixed(2) }}</div>
@@ -243,22 +263,40 @@
                                 </div>
                             </td>
 
-                            <!-- Resale Price -->
-                            <td class="text-right font-mono font-bold text-secondary text-xs">
-                                <div>
-                                    ${{ Number(item.resalePrice || item.boutiquePrice || 0).toFixed(2) }}<span v-if="Number(item.quantity) > 1" class="text-[9px] opacity-60 font-normal ml-0.5">/ea</span>
+                            <!-- Resale Price / Net Payout -->
+                            <td class="text-right font-mono font-bold text-xs" :class="filterStatus === 'sold' || item.status === 'sold' ? 'text-success' : 'text-secondary'">
+                                <div v-if="filterStatus === 'sold' || item.status === 'sold'">
+                                    <div>${{ Number(item.soldPrice || item.resalePrice || 0).toFixed(2) }}</div>
+                                    <div v-if="item.resalePrice && item.soldPrice && Number(item.resalePrice) !== Number(item.soldPrice)" class="text-[9px] opacity-50 line-through font-normal">
+                                        ${{ Number(item.resalePrice).toFixed(2) }}
+                                    </div>
                                 </div>
-                                <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
-                                    Total: ${{ (Number(item.resalePrice || item.boutiquePrice || 0) * Number(item.quantity)).toFixed(2) }}
+                                <div v-else>
+                                    <div>
+                                        ${{ Number(item.resalePrice || item.boutiquePrice || 0).toFixed(2) }}<span v-if="Number(item.quantity) > 1" class="text-[9px] opacity-60 font-normal ml-0.5">/ea</span>
+                                    </div>
+                                    <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
+                                        Total: ${{ (Number(item.resalePrice || item.boutiquePrice || 0) * Number(item.quantity)).toFixed(2) }}
+                                    </div>
                                 </div>
                             </td>
 
-                            <!-- Margin % / ROI -->
+                            <!-- Margin % / Net Profit -->
                             <td class="text-right font-mono text-[11px]">
-                                <span v-if="calculateRoi(item) !== null" class="font-bold" :class="calculateRoi(item) >= 100 ? 'text-success' : calculateRoi(item) > 0 ? 'text-info' : 'text-error'">
-                                    {{ calculateRoi(item) > 0 ? '+' : '' }}{{ calculateRoi(item) }}%
-                                </span>
-                                <span v-else class="opacity-30">—</span>
+                                <div v-if="filterStatus === 'sold' || item.status === 'sold'">
+                                    <span class="font-bold" :class="((Number(item.soldPrice || item.resalePrice || 0) - Number(item.cost || 0)) >= 0) ? 'text-success' : 'text-error'">
+                                        {{ ((Number(item.soldPrice || item.resalePrice || 0) - Number(item.cost || 0)) >= 0 ? '+' : '') }}${{ (Number(item.soldPrice || item.resalePrice || 0) - Number(item.cost || 0)).toFixed(2) }}
+                                    </span>
+                                    <div v-if="calculateRoi(item) !== null" class="text-[9px] opacity-60 font-normal">
+                                        {{ calculateRoi(item) > 0 ? '+' : '' }}{{ calculateRoi(item) }}%
+                                    </div>
+                                </div>
+                                <div v-else>
+                                    <span v-if="calculateRoi(item) !== null" class="font-bold" :class="calculateRoi(item) >= 100 ? 'text-success' : calculateRoi(item) > 0 ? 'text-info' : 'text-error'">
+                                        {{ calculateRoi(item) > 0 ? '+' : '' }}{{ calculateRoi(item) }}%
+                                    </span>
+                                    <span v-else class="opacity-30">—</span>
+                                </div>
                             </td>
 
                             <!-- Location -->
@@ -871,5 +909,28 @@ const copyUpc = (upc) => {
     if (!upc) return;
     navigator.clipboard.writeText(upc);
     addToast({ type: 'info', message: `Copied ${upc} to clipboard` });
+};
+
+const formatSoldDate = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+        return dateStr;
+    }
+};
+
+const formatSoldTime = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        if (d.getUTCHours() === 12 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) return '';
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch {
+        return '';
+    }
 };
 </script>

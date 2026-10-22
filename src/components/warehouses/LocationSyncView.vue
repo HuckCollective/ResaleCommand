@@ -2469,7 +2469,8 @@ const executeSync = async () => {
                 saleId: saleDoc?.$id || undefined,
                 sellingLocations: [locName],
                 storageLocation: item.storageLocation || locName,
-                upc: getNextUpc ? getNextUpc(prefix) : undefined
+                upc: item.upc || row.upc || (getNextUpc ? getNextUpc(prefix) : undefined),
+                soldDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString()
               },
               team.value?.$id || user.value?.$id || '',
               team.value?.$id ? 'team' : 'user'
@@ -2486,6 +2487,7 @@ const executeSync = async () => {
           updateData.status = 'sold';
           updateData.resalePrice = gross;
           updateData.soldPrice = net; // The exact amount made after fees!
+          updateData.soldDate = row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString();
 
           // Record official sale document in sales collection
           try {
