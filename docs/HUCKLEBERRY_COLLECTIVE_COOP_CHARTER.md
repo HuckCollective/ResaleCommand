@@ -57,13 +57,36 @@ Every dollar entering the collective from retail venues (Memory Den, Ricochet PO
 │  - Reimbursed approved member expenses (receipt-logged)│
 │  - Zero risk of taking a loss on sold inventory        │
 └────────────────────────────────────────────────────────┘
+### **3. The 3 Guarantees & 70/30 Net Surplus Formula**
+
+Every dollar entering the collective from retail venues (Memory Den, eBay, online stores, pop-ups) flows through the **Three Core Guarantees**:
+
+```
+[ Gross Venue Revenue ]
           │
           ▼
 ┌────────────────────────────────────────────────────────┐
-│  Tier 3: Net Operating Surplus & Patronage Dividends   │
-│  1. Collective Reserve (10% cushion for slow months)   │
-│  2. Contributed Sales Share (50% to the item curator)  │
-│  3. Labor / Sweat Equity Share (40% to hours worked)   │
+│  1. Mandatory Venue / Platform Fees                    │
+│  - Retail POS Commissions (e.g. 15% Memory Den fee)    │
+│  - Online Marketplace Fees (e.g. 13% eBay cut)         │
+└────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────────────────────┐
+│  2. 100% Capital Basis Protection (Returned First)     │
+│  - Whatever the curator paid out of pocket is returned │
+│    first, dollar-for-dollar.                           │
+│  - Zero risk of taking a loss on sold inventory.       │
+└────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────────────────────┐
+│  3. The Net Surplus Division (The 70 / 30 Standard)    │
+│  ★ 70% Curator Profit: Goes directly to the member     │
+│     who had the eye and took the sourcing risk.        │
+│  ★ 30% Shared Commons Pool: Pays monthly booth rent    │
+│     ($382.50 at Memory Den), labels, software hosting, │
+│     the $100 AI prepay recoupment, and labor dividends.│
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -78,39 +101,27 @@ Because of this, cooperative settlements are calculated **monthly**, matching th
 
 $$\text{Net Check from Venue} = \text{Gross Register Sales} - \text{15\% Venue Fee} - \text{\$382.50 Booth Rent}$$
 
-#### B. How Booth Rent is Absorbed
-1. **Option A: Proportional to Sales (Top-Line Commons Pool — Standard)**:
-   Booth rent is paid out of the Tier 1 Shared Commons Pool before profit is divided. A partner whose items accounted for 40% of the month's sales absorbs 40% of the rent from their gross sales. If a partner has a slow month, they are never hit with an out-of-pocket cash call.
-2. **Option B: Fixed Shelf Space Allocation**:
-   If a partner leases a dedicated shelving unit (e.g. 25% of the booth footprint), their fixed share ($95.63/mo) is deducted directly from their monthly gross item earnings.
-
-#### C. The 10% Reserve Safety Net (Slow Month Protection)
-In slow retail months (such as January or post-holiday lulls), sales might barely cover booth rent. The **10% Collective Reserve Fund** accumulated during peak months absorbs rent deficits so no individual member has to pay out-of-pocket.
+Under our **70 / 30 rule**, the collective's 30% take naturally covers the $382.50 booth rent without individual rent assessments:
+- When monthly booth sales reach $2,500, the 30% pool generates **$472.50**, which easily pays the $382.50 rent, software costs, and leaves a reserve buffer!
+- Slower months are cushioned by the accumulated reserve pool so no member is hit with a surprise bill.
 
 ---
 
 ### **5. The Purchaser Reward: Why Curators Take Home the Most Pay**
 
-When an item sells, **the person who purchased and curated that item receives the lion's share of the money**.
-
-They are compensated in three distinct ways:
-1. **100% Cost Recoupment (Tier 2)**: Every penny spent at thrift stores, yard sales, or auctions is returned dollar-for-dollar.
-2. **50% Sales Patronage Dividend (Tier 3)**: Half of the net profit on that item goes directly to the curator who sourced it.
-3. **Sourcing Labor Hours (Tier 3)**: Hours spent hunting, driving to sales, and inspecting goods are logged into the Labor Hours Pool.
+When an item sells, **the person who purchased and curated that item receives the vast majority of the money**.
 
 #### Real Dollar Example: $100 Sale at Memory Den
 - **Member A** bought a vintage coat for **$20.00**.
 - **Member B** tagged it, staged it at Memory Den, and posted a photo.
 - Coat sells for **$100.00**:
-  - Memory Den 15% fee: -$15.00
-  - Shared Commons (Rent/Tech): -$5.00
-  - Member A gets purchase cost back: -$20.00 (Direct to Member A)
-  - Remaining Net Profit: **$60.00**
-    - 10% Reserve: $6.00 (Stays in co-op bank)
-    - 50% Sales Dividend: **$30.00 (Direct to Member A!)**
-    - 40% Labor Pool: $24.00 (Split between A & B based on hours worked)
-- **Member A takes home $62.00+ on a $20 purchase.**
-- **Member B earns $12.00 for their labor.**
+  - Memory Den 15% fee: -$15.00 $\rightarrow$ **$85.00 net deposit**
+  - Member A gets purchase cost back 100%: -$20.00 (Direct to Member A)
+  - **Net Surplus Generated**: **$65.00**
+    - **70% Curator Profit**: **+$45.50 (Direct to Member A!)**
+    - **30% Commons Pool**: **$19.50** (Covers booth rent, labels, software, & labor)
+- **Member A takes home $65.50 on a $20 purchase (65.5% of gross sale).**
+- **The Collective earns $19.50 toward the $382.50 rent and staffing.**
 
 ---
 
