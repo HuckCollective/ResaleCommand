@@ -357,47 +357,115 @@ function createListingFallback(parsedListingData: any, scrapedShipping: any, suc
     };
     const shipTotal = effectiveShipping.total;
     
-    // Per-unit resale heuristics
+    // Universal resale baseline heuristics (Never anchor down to a low $9.99 auction starting bid)
+    const baseFairLow = 12;
+    const baseFairHigh = 22;
+    const baseBoutiqueLow = 18;
+    const baseBoutiqueHigh = 30;
+
+    // Per-unit resale heuristics: Universal floors without fragile category hardcoding
     const isMultiLot = lotCount > 1;
-    const perItemFairLow = isMultiLot ? Math.max(4, Math.round((currentPrice * 1.5) / lotCount)) : Math.max(15, Math.round(currentPrice * 1.8));
-    const perItemFairHigh = isMultiLot ? Math.max(8, Math.round((currentPrice * 2.5) / lotCount)) : Math.max(30, Math.round(currentPrice * 2.8));
-    const perItemBoutiqueLow = isMultiLot ? Math.max(7, Math.round((currentPrice * 2.2) / lotCount)) : Math.max(25, Math.round(currentPrice * 2.5));
-    const perItemBoutiqueHigh = isMultiLot ? Math.max(14, Math.round((currentPrice * 4.0) / lotCount)) : Math.max(50, Math.round(currentPrice * 4.0));
+    const perItemFairLow = isMultiLot ? baseFairLow : Math.max(baseFairLow, Math.round(currentPrice * 1.5));
+    const perItemFairHigh = isMultiLot ? baseFairHigh : Math.max(baseFairHigh, Math.round(currentPrice * 2.5));
+    const perItemBoutiqueLow = isMultiLot ? baseBoutiqueLow : Math.max(baseBoutiqueLow, Math.round(currentPrice * 2.0));
+    const perItemBoutiqueHigh = isMultiLot ? baseBoutiqueHigh : Math.max(baseBoutiqueHigh, Math.round(currentPrice * 3.2));
 
     const fairLow = perItemFairLow * lotCount;
     const fairHigh = perItemFairHigh * lotCount;
     const boutiqueLow = perItemBoutiqueLow * lotCount;
     const boutiqueHigh = perItemBoutiqueHigh * lotCount;
 
-    // True profitable max landed cost (target 40-45% of boutique retail potential)
-    const maxLandedCost = Math.max(Math.round(currentPrice + shipTotal), Math.round(boutiqueLow * 0.45), 20);
-    // Suggested max bid: Max Landed Cost minus shipping, never below current bid for BUY recommendations
-    const maxBid = Math.max(Math.floor(currentPrice), Math.floor(maxLandedCost - shipTotal));
+    // Detect if this listing is an active auction (bidCount, endTime, or platform is ShopGoodwill/CTBids/HiBid)
+    const isAuction = Boolean(
+        parsedListingData.is_auction || 
+        parsedListingData.bidCount !== undefined || 
+        parsedListingData.endTime || 
+        parsedListingData.isAuction
+    );
+
+    // Midpoint boutique & fair resale potentials
+    const boutiqueMid = Math.round((boutiqueLow + boutiqueHigh) / 2);
+    const fairMid = Math.round((fairLow + fairHigh) / 2);
+    const targetResale = boutiqueMid > 0 ? boutiqueMid : fairMid;
+    const netPayout = Math.round(targetResale * 0.85); // 15% standard consignment overhead
+
+    // Multi-Tier Reseller Profit Curve:
+    // 1. Conservative (3.0x ROI / ~33% Landed Ceiling)
+    const consTargetLanded = Math.max(10, Math.round(targetResale / 3.0));
+    const consMaxBid = Math.max(0, Math.floor(consTargetLanded - shipTotal));
+    const consProfit = Math.max(0, netPayout - (consMaxBid + shipTotal));
+
+    // 2. Balanced (2.2x ROI / ~45% Landed Ceiling)
+    const balTargetLanded = Math.max(15, Math.round(targetResale / 2.2));
+    const balMaxBid = Math.max(0, Math.floor(balTargetLanded - shipTotal));
+    const balProfit = Math.max(0, netPayout - (balMaxBid + shipTotal));
+
+    // 3. Aggressive / Fast-Turn / High-Ticket (1.7x ROI / ~59% Landed Ceiling)
+    const aggTargetLanded = Math.max(20, Math.round(targetResale / 1.7));
+    const aggMaxBid = Math.max(0, Math.floor(aggTargetLanded - shipTotal));
+    const aggProfit = Math.max(0, netPayout - (aggMaxBid + shipTotal));
+
+    const currentLanded = Math.round((currentPrice + shipTotal) * 100) / 100;
+    const currentProfit = Math.max(0, Math.round(netPayout - currentLanded));
+
+    // Standardized ceilings (Balanced target is primary)
+    const maxLandedCost = balTargetLanded;
+    const maxBid = balMaxBid;
     const currentAskingStr = `$${currentPrice.toFixed(2)}`;
+
+    let verdict = 'WATCH';
+    let advice = '';
+
+    if (isAuction) {
+        if (currentLanded > aggTargetLanded) {
+            verdict = 'PASS';
+            advice = `Live auction currently at $${currentPrice.toFixed(2)}. Landed cost ($${currentLanded.toFixed(2)}) exceeds aggressive 1.7x ceiling ($${aggTargetLanded}). Margin exhausted — recommend passing.`;
+        } else if (currentLanded > balTargetLanded) {
+            verdict = 'WATCH';
+            advice = `Live auction currently at $${currentPrice.toFixed(2)}. Current landed ($${currentLanded.toFixed(2)}) leaves ~$${currentProfit} cash profit. Room up to $${aggMaxBid} max bid for an aggressive 1.7x fast-turn flip netting ~$${aggProfit}.`;
+        } else {
+            verdict = 'CHASE_AUCTION';
+            advice = `Live auction with healthy margin. At active bid ($${currentPrice.toFixed(2)}), landed is $${currentLanded.toFixed(2)} netting ~$${currentProfit} cash profit. Balanced bid up to $${balMaxBid} (2.2x ROI / +$${balProfit} profit), or up to $${aggMaxBid} (1.7x ROI / +$${aggProfit} profit).`;
+        }
+    } else {
+        if (currentLanded <= balTargetLanded) {
+            verdict = 'BUY_NOW';
+            advice = `Acquire if landed cost stays under $${balTargetLanded} (Asking: $${currentPrice.toFixed(2)}) for healthy ~2.2x profit (netting ~$${balProfit} cash) in a boutique setting.`;
+        } else if (currentLanded <= aggTargetLanded) {
+            verdict = 'NEGOTIATE';
+            advice = `Asking price ($${currentPrice.toFixed(2)}) yields tighter 1.7x ROI netting ~$${currentProfit} cash. Negotiate or offer $${balMaxBid} to hit standard ~2.2x margin.`;
+        } else {
+            verdict = 'PASS';
+            advice = `Asking price ($${currentPrice.toFixed(2)}) plus shipping exceeds allowable ceiling ($${aggTargetLanded}). Pass unless priced lower.`;
+        }
+    }
     
     const bestChannel = "Memory Den - Huck's Adventures Outfitters";
-    
+
     // Build lot items breakdown if multi-piece lot
-    const lotItems = isMultiLot ? Array.from({ length: Math.min(lotCount, 20) }).map((_, idx) => ({
-        name: `${title} - Item #${idx + 1}`,
-        identity: `Item #${idx + 1} from ${title}`,
-        tag_title: `Lot Piece #${idx + 1} - ${title.slice(0, 24)}`.trim(),
-        condition: 'Good',
-        tier: 'core',
-        split_cost_basis: `$${(maxLandedCost / lotCount).toFixed(2)}`,
-        pricing_potential: {
-            boutique: `$${perItemBoutiqueLow} - $${perItemBoutiqueHigh}`,
-            fair: `$${perItemFairLow} - $${perItemFairHigh}`
-        },
-        price_breakdown: {
-            fair: `$${perItemFairLow} - $${perItemFairHigh}`,
-            boutique_premium: `$${perItemBoutiqueLow} - $${perItemBoutiqueHigh}`,
-            mint: `$${Math.round(perItemBoutiqueHigh * 1.25)}`,
-            poor: `$${Math.round(perItemFairLow * 0.4)}`
-        },
-        buy_range: `$${Math.max(1, Math.floor(perItemFairLow * 0.25))} - $${Math.max(2, Math.round(perItemFairHigh * 0.40))}`,
-        estimated_value: `$${perItemFairLow} - $${perItemFairHigh}`
-    })) : undefined;
+    const lotItems = isMultiLot ? Array.from({ length: Math.min(lotCount, 20) }).map((_, idx) => {
+        const itemName = `${title} - Item #${idx + 1}`;
+        return {
+            name: itemName,
+            identity: itemName,
+            tag_title: `Piece #${idx + 1} - ${title}`.slice(0, 40).trim(),
+            condition: 'Good',
+            tier: idx === 0 ? 'showcase' : 'core',
+            split_cost_basis: `$${(maxLandedCost / lotCount).toFixed(2)}`,
+            pricing_potential: {
+                boutique: `$${perItemBoutiqueLow} - $${perItemBoutiqueHigh}`,
+                fair: `$${perItemFairLow} - $${perItemFairHigh}`
+            },
+            price_breakdown: {
+                fair: `$${perItemFairLow} - $${perItemFairHigh}`,
+                boutique_premium: `$${perItemBoutiqueLow} - $${perItemBoutiqueHigh}`,
+                mint: `$${Math.round(perItemBoutiqueHigh * 1.25)}`,
+                poor: `$${Math.round(perItemFairLow * 0.4)}`
+            },
+            buy_range: `$${Math.max(1, Math.floor(perItemFairLow * 0.25))} - $${Math.max(2, Math.round(perItemFairHigh * 0.40))}`,
+            estimated_value: `$${perItemFairLow} - $${perItemFairHigh}`
+        };
+    }) : undefined;
 
     const fallbackItem = {
         identity: title,
@@ -407,11 +475,16 @@ function createListingFallback(parsedListingData: any, scrapedShipping: any, suc
         condition: 'Good',
         tier: currentPrice > 50 || isMultiLot ? 'core' : 'quick_turn',
         purchase_strategy: {
-            verdict: (currentPrice + shipTotal) <= maxLandedCost ? 'BUY_NOW' : 'WATCH',
+            verdict: verdict,
             current_asking_price: currentAskingStr,
             max_landed_cost: maxLandedCost,
             max_bid: maxBid,
-            advice: `Acquire this ${lotCount > 1 ? `${lotCount}-item lot` : 'item'} if the landed cost is under $${maxLandedCost} (Suggested max bid: $${maxBid}) to ensure a healthy profit margin in a boutique setting.`
+            advice: advice,
+            bidding_tiers: {
+                conservative: { roi: 3.0, max_bid: consMaxBid, max_landed: consTargetLanded, net_profit: consProfit },
+                balanced: { roi: 2.2, max_bid: balMaxBid, max_landed: balTargetLanded, net_profit: balProfit },
+                aggressive: { roi: 1.7, max_bid: aggMaxBid, max_landed: aggTargetLanded, net_profit: aggProfit }
+            }
         },
         why_pay_up: `Sourced directly from verified listing: ${title}. ${lotCount > 1 ? `Multi-item ${lotCount}-piece lot offers high aggregate retail yield when split into individual booth inventory ($${(maxLandedCost / lotCount).toFixed(2)}/item max cost basis).` : 'Strong demand for authentic collectibles in physical boutique booths and online channels.'}`,
         why_pass: `Inspect all listing photos carefully for condition, signatures, or wear before bidding.`,
@@ -458,58 +531,56 @@ function createListingFallback(parsedListingData: any, scrapedShipping: any, suc
 }
 
 // Resilient General Fallback Factory: Ensures an intake report is ALWAYS usable even if Gemini vision fails or blocks
-function createGenericFallback(notes: string, successfulImageUrl: string | null, scrapedImages: string[]) {
-    const rawNoteFirstLine = notes ? notes.split('\n')[0].replace(/https?:\/\/[^\s]+/g, '').replace(/\[[^\]]+\]/g, '').trim() : '';
-    const cleanTitle = (rawNoteFirstLine && rawNoteFirstLine.length > 2) ? rawNoteFirstLine.slice(0, 50) : 'Scouted Inventory Item';
+function createGenericFallback(notes: string, successfulImageUrl: string | null, scrapedImages: string[], warningReason?: string) {
+    // Strip all internal system annotations across newlines (e.g. [Organization Sales Channels...], [Deep Parse...], [Shipping...])
+    const sanitizedNotes = (notes || '')
+        .replace(/\[Organization Sales Channels:[\s\S]*?\]/gi, '')
+        .replace(/\[Deep Parse[\s\S]*?\]/gi, '')
+        .replace(/\[Shipping:[\s\S]*?\]/gi, '')
+        .trim();
+    const rawNoteFirstLine = sanitizedNotes ? sanitizedNotes.split('\n')[0].replace(/https?:\/\/[^\s]+/g, '').replace(/\[[^\]]*\]/g, '').trim() : '';
+    const cleanTitle = (rawNoteFirstLine && rawNoteFirstLine.length > 2 && !rawNoteFirstLine.startsWith('[')) 
+        ? rawNoteFirstLine.slice(0, 50) 
+        : 'Unidentified Item (Photo Draft)';
     return {
+        warning: warningReason || undefined,
         items: [{
             identity: cleanTitle,
             title: cleanTitle,
-            category: 'General Collectibles & Goods',
+            category: 'Uncategorized',
             tag_title: cleanTitle.slice(0, 40),
             condition: 'Good',
             tier: 'core',
             purchase_strategy: {
                 verdict: 'WATCH',
-                current_asking_price: '$15.00',
-                max_landed_cost: 22,
-                max_bid: 16,
-                advice: 'Review market comparables and inspect physical photos for exact maker hallmarks or condition wear.'
+                current_asking_price: '',
+                max_landed_cost: 0,
+                max_bid: 0,
+                advice: warningReason 
+                    ? `⚠️ ${warningReason} Photo preserved. Enter your title and price manually.`
+                    : 'AI vision was unable to appraise this item automatically. Photo preserved for manual pricing.'
             },
-            why_pay_up: 'Desirable category with solid baseline resale demand in retail booths and online.',
-            why_pass: 'Inspect physical wear, maker marks, or tags carefully before committing.',
+            why_pay_up: 'Inspect physical markings, tags, or hallmarks on the item to verify value.',
+            why_pass: 'Manual verification recommended before committing.',
             pricing_potential: {
-                boutique: '$28 - $48',
-                fair: '$16 - $28'
+                boutique: '',
+                fair: ''
             },
             price_breakdown: {
-                fair: '$16 - $28',
-                boutique_premium: '$28 - $48',
-                mint: '$55 - $75',
-                poor: '$8 - $14'
+                fair: '',
+                boutique_premium: '',
+                mint: '',
+                poor: ''
             },
             market_report: {
                 best_platform: "Memory Den - Huck's Adventures Outfitters",
                 sell_through_velocity: 'Moderate (2-4 weeks)',
-                platform_rationale: 'Physical consignment booth provides immediate touch-and-feel visual appeal.',
-                channels: [
-                    {
-                        name: "Memory Den - Huck's Adventures Outfitters",
-                        est_price: '$28 - $48',
-                        recommendation: 'Best Physical Channel / Boutique Premium',
-                        net_payout: '$24 - $41 (after 15% comm.)'
-                    },
-                    {
-                        name: 'eBay',
-                        est_price: '$16 - $28',
-                        recommendation: 'Wider Audience Reach / Fair Market Value',
-                        net_payout: '$13 - $22 (after fees/shipping)'
-                    }
-                ]
+                platform_rationale: 'Review item category and assign appropriate sales channel.',
+                channels: []
             },
             fetched_image: successfulImageUrl || (scrapedImages.length > 0 ? scrapedImages[0] : null),
             fetched_images: scrapedImages,
-            notes: notes ? notes.trim() : 'Draft item generated for editing'
+            notes: sanitizedNotes || ''
         }],
         summary: `Item drafted: ${cleanTitle}`
     };
@@ -1594,11 +1665,22 @@ export const ALL: APIRoute = async ({ request }) => {
                 "Access-Control-Allow-Origin": "*"
             }
         });
-
     } catch (error: any) {
         console.error("Detailed Gemini Analysis Error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        let errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
+        let errorMessage = error instanceof Error ? error.message : (error?.message || 'Unknown error');
+
+        const isBillingError = error?.status === 402 || errorMessage.includes('prepayment credits') || errorMessage.includes('Payment Required') || errorMessage.includes('402');
+        const isAuthError = error?.status === 401 || errorMessage.includes('API key') || errorMessage.includes('401');
+
+        let warningReason = '';
+        if (isBillingError) {
+            warningReason = 'Google Gemini credits depleted or billing required (402).';
+        } else if (isAuthError) {
+            warningReason = 'Gemini API key unauthorized (401).';
+        } else {
+            warningReason = `AI Vision unavailable (${errorMessage}).`;
+        }
+
         // Graceful fallback if AI fails on a parsed web link
         if (parsedListingData) {
             console.warn('[identify-item] AI call failed. Falling back to verified listing data:', errorMessage);
@@ -1609,9 +1691,9 @@ export const ALL: APIRoute = async ({ request }) => {
             });
         }
 
-        // Resilient fallback: ensure Speed Scout never presents a breaking red 500 error
+        // Resilient fallback: ensure Speed Scout never presents a breaking red 500 error for transient network/format glitches
         console.warn('[identify-item] AI call failed without listing data. Falling back to generic draft item:', errorMessage);
-        const fallbackData = createGenericFallback(userNotes, successfulImageUrl, scrapedImages);
+        const fallbackData = createGenericFallback(userNotes, successfulImageUrl, scrapedImages, warningReason);
         return new Response(JSON.stringify(fallbackData), { 
             status: 200, 
             headers: { 'Content-Type': 'application/json', "Access-Control-Allow-Origin": "*" } 

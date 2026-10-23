@@ -68,6 +68,11 @@ export const POST: APIRoute = async ({ request }) => {
         if (updates.conditionNotes !== undefined) {
             safeData.conditionNotes = updates.conditionNotes;
         }
+        if (updates.auctionStatus !== undefined) {
+            safeData.auctionStatus = updates.auctionStatus;
+        } else if (['received', 'acquired', 'placed', 'sold'].includes(updates.status)) {
+            safeData.auctionStatus = 'won';
+        }
 
         let updatedCount = 0;
         let failedCount = 0;

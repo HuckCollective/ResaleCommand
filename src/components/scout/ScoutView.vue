@@ -233,77 +233,208 @@
                                 </span>
                             </div>
 
-                            <!-- Glowing Verdict Badge -->
-                            <div v-if="item.purchase_strategy?.verdict" class="badge badge-md sm:badge-lg font-black tracking-wider uppercase shadow-xs"
+                            <!-- Auction Verdict Badge (NEVER BUY NOW ON AN AUCTION) -->
+                            <div class="badge badge-md sm:badge-lg font-black tracking-wider uppercase shadow-xs gap-1.5"
                                  :class="{
-                                     'badge-success text-success-content': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict),
-                                     'badge-error text-error-content': item.purchase_strategy.verdict === 'PASS',
-                                     'badge-warning text-warning-content': ['WATCH', 'NEGOTIATE'].includes(item.purchase_strategy.verdict),
-                                     'badge-primary text-primary-content': !['PASS', 'WATCH', 'BUY_NOW', 'NEGOTIATE', 'CHASE_AUCTION'].includes(item.purchase_strategy.verdict)
+                                     'badge-error text-error-content': getAuctionFinancials(item).tiers.aggressive.status === 'passed',
+                                     'badge-warning text-warning-content': getAuctionFinancials(item).tiers.balanced.status === 'passed' && getAuctionFinancials(item).tiers.aggressive.status === 'active',
+                                     'badge-success text-success-content': getAuctionFinancials(item).tiers.balanced.status === 'active'
                                  }">
-                                {{ item.purchase_strategy.verdict.replace('_', ' ') }}
+                                <Icon :icon="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'solar:close-circle-bold' : (getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'solar:eye-bold' : 'solar:check-circle-bold')" class="w-4 h-4" />
+                                {{ 
+                                    getAuctionFinancials(item).tiers.aggressive.status === 'passed'
+                                        ? 'OUTBID / AT CEILING'
+                                        : getAuctionFinancials(item).tiers.balanced.status === 'passed'
+                                            ? 'WATCH (AGGRESSIVE 1.7x ONLY)'
+                                            : 'IN PLAY (ROOM TO BID)'
+                                }}
                             </div>
                         </div>
 
-                        <!-- Suggested Max Bid Hero with 1-Tap Copy Action -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
-                            <!-- Suggested Max Bid Box -->
-                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-primary/30 flex items-center justify-between shadow-xs">
-                                <div class="flex flex-col text-left">
-                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider text-primary flex items-center gap-1">
-                                        <Icon icon="solar:target-bold" class="w-3.5 h-3.5" />
-                                        Suggested Max Bid
+                        <!-- Active Bid Cash Summary Strip -->
+                        <div class="bg-base-100/90 dark:bg-base-200/90 rounded-2xl p-3 sm:p-3.5 border border-base-300 shadow-xs mb-3 space-y-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] sm:text-xs uppercase font-black text-primary flex items-center gap-1">
+                                        <Icon icon="solar:hammer-bold" class="w-3.5 h-3.5" />
+                                        At Active Bid (${{ Number(getAuctionFinancials(item).currentBid).toFixed(2) }}):
                                     </span>
-                                    <span class="text-[10px] opacity-60 font-medium">Bidding ceiling before fees</span>
+                                    <span class="font-mono text-xs text-base-content/80 font-bold">
+                                        Landed: ${{ Number(getAuctionFinancials(item).currentLanded).toFixed(2) }} 
+                                        <span class="opacity-60 text-[10px]">(Bid + ${{ Number(getAuctionFinancials(item).shipping).toFixed(2) }} ship<span v-if="getAuctionFinancials(item).bpPercent > 0"> + {{ getAuctionFinancials(item).bpPercent }}% BP</span>)</span>
+                                    </span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="font-mono font-black text-2xl sm:text-3xl text-primary">
-                                        ${{ getAuctionFinancials(item).suggestedMaxBid }}
+                                    <span class="badge badge-sm badge-success font-mono font-black gap-1 shadow-2xs">
+                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
+                                        +${{ Number(getAuctionFinancials(item).currentNetProfit).toFixed(2) }} Cash Profit
                                     </span>
-                                    <button type="button" 
-                                            @click="copyMaxBid(getAuctionFinancials(item).suggestedMaxBid, 'item-' + index)"
-                                            class="btn btn-sm btn-primary gap-1 font-bold shadow-xs active:scale-95"
-                                            title="Copy Max Bid to Clipboard">
-                                        <Icon :icon="copiedBidItemKey === ('item-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-4 h-4" />
-                                        <span>{{ copiedBidItemKey === ('item-' + index) ? 'Copied!' : 'Copy' }}</span>
-                                    </button>
+                                    <span class="badge badge-sm badge-outline font-mono font-bold">
+                                        {{ getAuctionFinancials(item).roi }}x ROI
+                                    </span>
                                 </div>
                             </div>
-
-                            <!-- Max Landed Cost All-In -->
-                            <div class="bg-base-100/90 dark:bg-base-200/90 p-3.5 rounded-2xl border border-base-300 flex items-center justify-between shadow-xs">
-                                <div class="flex flex-col text-left">
-                                    <span class="text-[10px] sm:text-xs uppercase font-black tracking-wider text-success flex items-center gap-1">
-                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
-                                        Max Landed Cost
-                                    </span>
-                                    <span class="text-[10px] opacity-60 font-medium">All-in ceiling (fees + ship)</span>
-                                </div>
-                                <span class="font-mono font-black text-2xl sm:text-3xl text-success">
-                                    ${{ getAuctionFinancials(item).maxBuyTarget }}
-                                </span>
+                            <div class="text-[11px] font-mono opacity-70 flex items-center justify-between border-t border-base-200/80 pt-1.5 flex-wrap gap-2">
+                                <span>Est. Resale: <strong class="text-base-content font-bold">${{ Number(getAuctionFinancials(item).estResale).toFixed(2) }}</strong> (Net Payout after 15% comm: ${{ Number(getAuctionFinancials(item).netPayout).toFixed(2) }})</span>
+                                <span>Min legal increment: <strong>${{ Number(getAuctionFinancials(item).nextBid).toFixed(2) }}</strong> (Landed: ${{ Number(getAuctionFinancials(item).nextBidLanded).toFixed(2) }})</span>
                             </div>
                         </div>
 
-                        <!-- Live Landed Math Formula Strip -->
-                        <div class="bg-base-100/80 dark:bg-base-200/80 rounded-xl p-2.5 sm:p-3 border border-base-300 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs font-mono">
-                            <div class="flex items-center gap-1.5 flex-wrap text-base-content/80 text-[11px] sm:text-xs font-semibold">
-                                <span class="text-base-content font-bold">Current Bid: ${{ getAuctionFinancials(item).currentBid }}</span>
-                                <span class="opacity-40">+</span>
-                                <span>BP ({{ getAuctionFinancials(item).bpPercent }}%): ${{ getAuctionFinancials(item).bpAmount }}</span>
-                                <span class="opacity-40">+</span>
-                                <span>Ship: ${{ getAuctionFinancials(item).shipping.toFixed(2) }}</span>
-                                <span class="opacity-40">=</span>
-                                <span class="font-black text-base-content underline decoration-primary decoration-2">Landed: ${{ getAuctionFinancials(item).currentLanded }}</span>
+                        <!-- Set & Forget Proxy Ceiling (Auto-Bids for you, No babysitting) -->
+                        <div v-if="getAuctionFinancials(item).recommendedProxy > 0" 
+                             class="p-3.5 bg-gradient-to-r from-primary/15 via-primary/10 to-base-100 rounded-2xl border-2 border-primary/40 shadow-xs mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="p-2.5 rounded-xl bg-primary text-primary-content shrink-0 shadow-xs">
+                                    <Icon icon="solar:shield-check-bold" class="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-xs font-black uppercase text-primary tracking-wider">Set &amp; Forget Proxy Ceiling</span>
+                                        <span class="badge badge-xs font-mono font-bold badge-primary">{{ getAuctionFinancials(item).proxyRoi }} ROI</span>
+                                        <span class="badge badge-xs font-mono font-bold badge-success">+${{ getAuctionFinancials(item).proxyProfit }} Profit</span>
+                                    </div>
+                                    <p class="text-[11px] opacity-75 font-medium mt-0.5 leading-snug">
+                                        Submit this on {{ getAuctionPlatform(item)?.name || 'the auction site' }} as your <strong>Max Bid</strong>. The platform auto-bids for you up to this ceiling — zero babysitting needed.
+                                    </p>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-2 text-[11px] sm:text-xs font-bold ml-auto">
-                                <span class="text-success font-black">Est. Resale: ${{ getAuctionFinancials(item).estResale }}</span>
-                                <span class="badge badge-xs badge-success font-mono font-bold">{{ getAuctionFinancials(item).roi }}x ROI</span>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="text-right">
+                                    <span class="text-[9px] opacity-60 uppercase font-black block">Odd-Cent Proxy</span>
+                                    <span class="font-mono font-black text-2xl text-primary">${{ Number(getAuctionFinancials(item).recommendedProxy).toFixed(2) }}</span>
+                                </div>
+                                <button type="button" 
+                                        @click="copyMaxBid(getAuctionFinancials(item).recommendedProxy.toFixed(2), 'proxy-snipe-' + index); selectProxyCeiling(item)"
+                                        class="btn btn-sm btn-primary font-bold gap-1.5 shadow-sm"
+                                        title="Copy odd-cent proxy bid to clipboard">
+                                    <Icon :icon="copiedBidItemKey === ('proxy-snipe-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-4 h-4" />
+                                    <span>{{ copiedBidItemKey === ('proxy-snipe-' + index) ? 'Copied' : 'Copy Proxy' }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Multi-Tier Reseller Bidding & Profit Matrix -->
+                        <div class="mb-3">
+                            <div class="flex items-center justify-between mb-1.5 px-0.5">
+                                <span class="text-[11px] sm:text-xs font-black uppercase tracking-wider text-base-content/75 flex items-center gap-1.5">
+                                    <Icon icon="solar:chart-square-bold" class="w-3.5 h-3.5 text-primary" />
+                                    Bidding Ceilings &amp; Cash Profit Matrix
+                                </span>
+                                <span class="text-[10px] opacity-60 font-semibold">Tap to select or copy your target</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                <!-- Tier 1: Conservative (3.0x ROI) -->
+                                <div class="p-3 rounded-2xl border transition-all flex flex-col justify-between shadow-xs"
+                                     :class="getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'border-base-300 bg-base-100/50 opacity-60' : 'border-primary/40 bg-base-100/90 dark:bg-base-200/90 ring-1 ring-primary/20'">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-primary">Conservative</span>
+                                        <span class="badge badge-xs font-mono font-bold badge-primary">3.0x ROI</span>
+                                    </div>
+                                    <div class="flex items-baseline justify-between my-1">
+                                        <span class="text-[10px] opacity-60 uppercase font-bold">Max Bid:</span>
+                                        <span class="font-mono font-black text-xl text-primary">${{ getAuctionFinancials(item).tiers.conservative.maxBid }}</span>
+                                    </div>
+                                    <div class="text-[10px] font-mono text-success font-extrabold flex items-center justify-between border-t border-base-200 pt-1.5">
+                                        <span>Cash Profit:</span>
+                                        <span>+${{ getAuctionFinancials(item).tiers.conservative.netProfit }}</span>
+                                    </div>
+                                    <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
+                                        <span class="badge badge-xs font-bold"
+                                              :class="getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
+                                            {{ getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.conservative.room }}
+                                        </span>
+                                        <button type="button" 
+                                                @click="copyMaxBid(getAuctionFinancials(item).tiers.conservative.maxBid, 'tier-cons-' + index); selectBiddingTier(item, 'conservative')"
+                                                class="btn btn-2xs font-bold gap-1 shadow-2xs"
+                                                :class="getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'btn-ghost text-base-content/40' : 'btn-outline btn-primary'"
+                                                :disabled="getAuctionFinancials(item).tiers.conservative.status === 'passed' || getAuctionFinancials(item).tiers.conservative.maxBid <= 0"
+                                                title="Copy & Select Conservative Bid">
+                                            <Icon :icon="copiedBidItemKey === ('tier-cons-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-3 h-3" />
+                                            <span>{{ copiedBidItemKey === ('tier-cons-' + index) ? 'Copied' : 'Copy' }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Tier 2: Balanced (2.2x ROI - Standard Target) -->
+                                <div class="p-3 rounded-2xl border-2 transition-all flex flex-col justify-between shadow-xs relative overflow-hidden"
+                                     :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'border-base-300 bg-base-100/50 opacity-60' : 'border-success bg-success/10 ring-2 ring-success/20'">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
+                                              :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'text-base-content/60' : 'text-success'">
+                                            <Icon icon="solar:star-bold" class="w-3 h-3" />
+                                            Balanced (Standard)
+                                        </span>
+                                        <span class="badge badge-xs font-mono font-bold"
+                                              :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'badge-ghost text-base-content/60' : 'badge-success text-success-content'">
+                                            2.2x ROI
+                                        </span>
+                                    </div>
+                                    <div class="flex items-baseline justify-between my-1">
+                                        <span class="text-[10px] opacity-60 uppercase font-bold">Max Bid:</span>
+                                        <span class="font-mono font-black text-2xl"
+                                              :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'text-base-content/60' : 'text-success'">
+                                            ${{ getAuctionFinancials(item).tiers.balanced.maxBid }}
+                                        </span>
+                                    </div>
+                                    <div class="text-[10px] font-mono font-extrabold flex items-center justify-between border-t border-success/20 pt-1.5"
+                                         :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'text-base-content/50' : 'text-success'">
+                                        <span>Cash Profit:</span>
+                                        <span>+${{ getAuctionFinancials(item).tiers.balanced.netProfit }}</span>
+                                    </div>
+                                    <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
+                                        <span class="badge badge-xs font-bold"
+                                              :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
+                                            {{ getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.balanced.room }}
+                                        </span>
+                                        <button type="button" 
+                                                @click="copyMaxBid(getAuctionFinancials(item).tiers.balanced.maxBid, 'tier-bal-' + index); selectBiddingTier(item, 'balanced')"
+                                                class="btn btn-2xs font-bold gap-1 shadow-2xs"
+                                                :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'btn-ghost text-base-content/40' : 'btn-success text-success-content'"
+                                                :disabled="getAuctionFinancials(item).tiers.balanced.status === 'passed' || getAuctionFinancials(item).tiers.balanced.maxBid <= 0"
+                                                title="Copy & Select Balanced Bid">
+                                            <Icon :icon="copiedBidItemKey === ('tier-bal-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-3 h-3" />
+                                            <span>{{ copiedBidItemKey === ('tier-bal-' + index) ? 'Copied' : 'Copy' }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Tier 3: Aggressive / High-Ticket / Fast-Turn (1.7x ROI) -->
+                                <div class="p-3 rounded-2xl border transition-all flex flex-col justify-between shadow-xs"
+                                     :class="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'border-base-300 bg-base-100/50 opacity-60' : 'border-secondary/40 bg-base-100/90 dark:bg-base-200/90 ring-1 ring-secondary/20'">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-secondary">Aggressive / Fast</span>
+                                        <span class="badge badge-xs font-mono font-bold badge-secondary text-secondary-content">1.7x ROI</span>
+                                    </div>
+                                    <div class="flex items-baseline justify-between my-1">
+                                        <span class="text-[10px] opacity-60 uppercase font-bold">Max Bid:</span>
+                                        <span class="font-mono font-black text-xl text-secondary">${{ getAuctionFinancials(item).tiers.aggressive.maxBid }}</span>
+                                    </div>
+                                    <div class="text-[10px] font-mono text-secondary font-extrabold flex items-center justify-between border-t border-base-200 pt-1.5">
+                                        <span>Cash Profit:</span>
+                                        <span>+${{ getAuctionFinancials(item).tiers.aggressive.netProfit }}</span>
+                                    </div>
+                                    <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
+                                        <span class="badge badge-xs font-bold"
+                                              :class="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'badge-ghost text-error' : 'badge-secondary text-secondary-content'">
+                                            {{ getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.aggressive.room }}
+                                        </span>
+                                        <button type="button" 
+                                                @click="copyMaxBid(getAuctionFinancials(item).tiers.aggressive.maxBid, 'tier-agg-' + index); selectBiddingTier(item, 'aggressive')"
+                                                class="btn btn-2xs font-bold gap-1 shadow-2xs"
+                                                :class="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'btn-ghost text-base-content/40' : 'btn-outline btn-secondary'"
+                                                :disabled="getAuctionFinancials(item).tiers.aggressive.status === 'passed' || getAuctionFinancials(item).tiers.aggressive.maxBid <= 0"
+                                                title="Copy & Select Aggressive Bid">
+                                            <Icon :icon="copiedBidItemKey === ('tier-agg-' + index) ? 'solar:check-circle-bold' : 'solar:copy-bold'" class="w-3 h-3" />
+                                            <span>{{ copiedBidItemKey === ('tier-agg-' + index) ? 'Copied' : 'Copy' }}</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- AI Strategy Advice -->
-                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2.5 px-0.5">
+                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
                             {{ item.purchase_strategy.advice }}
                         </p>
                     </div>
@@ -376,6 +507,62 @@
 
                     <!-- ZONE 2: TACTICAL EXIT PLAY -->
                     <div class="space-y-3 mb-5">
+                        <!-- Reseller Strategic Exit Play (The Game Plan) -->
+                        <div v-if="getScoutPlay(item)" class="border-2 border-primary/30 bg-primary/5 rounded-2xl p-4 shadow-xs space-y-2.5">
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <div class="flex items-center gap-2">
+                                    <Icon icon="solar:clipboard-check-bold" class="w-5 h-5 text-primary shrink-0" />
+                                    <div>
+                                        <h4 class="font-black text-sm uppercase tracking-wider text-primary flex items-center gap-2">
+                                            <span>Strategic Play: {{ getScoutPlay(item)?.name }}</span>
+                                            <span class="badge badge-xs font-mono font-bold" :class="getScoutPlay(item)?.badgeClass || 'badge-success'">
+                                                {{ getScoutPlay(item)?.badge }}
+                                            </span>
+                                        </h4>
+                                        <p class="text-[11px] opacity-75 font-medium">{{ getScoutPlay(item)?.tagline }}</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 text-xs font-mono">
+                                    <span class="badge badge-sm font-black gap-1 shadow-2xs"
+                                          :class="Number(getScoutPlay(item)?.netProfit || 0) > 0 ? 'badge-success text-success-content' : 'badge-ghost text-base-content/60'">
+                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
+                                        {{ Number(getScoutPlay(item)?.netProfit || 0) > 0 ? '+$' + Number(getScoutPlay(item)?.netProfit).toFixed(2) : '$' + Number(getScoutPlay(item)?.netProfit || 0).toFixed(2) }} Projected Profit
+                                    </span>
+                                    <span class="badge badge-sm badge-outline font-bold">
+                                        {{ getScoutPlay(item)?.roiPct }}% ROI
+                                    </span>
+                                </div>
+                            </div>
+
+                            <p class="text-xs opacity-90 leading-relaxed font-medium">
+                                {{ getScoutPlay(item)?.summary }}
+                            </p>
+
+                            <!-- Breakdown of Tiers in the Play -->
+                            <div v-if="getScoutPlay(item)?.tiersBreakdown?.length" class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-primary/15">
+                                <div v-for="(playTier, ptIdx) in getScoutPlay(item)?.tiersBreakdown" :key="ptIdx" 
+                                     class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1 shadow-2xs">
+                                    <div class="flex justify-between items-center font-bold">
+                                        <span class="truncate">{{ playTier.title }}</span>
+                                        <span class="font-mono text-success font-black">{{ playTier.price }}</span>
+                                    </div>
+                                    <div class="text-[10px] text-base-content/75 flex items-center justify-between">
+                                        <span>{{ playTier.channel }}</span>
+                                        <span class="badge badge-2xs badge-neutral font-mono">x{{ playTier.count }}</span>
+                                    </div>
+                                    <div class="text-[9px] opacity-60 leading-tight">
+                                        {{ playTier.purpose }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-primary/15 flex items-center justify-between text-[11px] font-mono flex-wrap gap-2">
+                                <span class="opacity-70">Gross Yield: ${{ Number(getScoutPlay(item)?.projectedYield || 0).toFixed(2) }}</span>
+                                <span class="opacity-70">Est. Fees: -${{ Number(getScoutPlay(item)?.estFees || 0).toFixed(2) }}</span>
+                                <span class="text-success font-bold">Net Payout: ${{ Number(getScoutPlay(item)?.netPayout || 0).toFixed(2) }}</span>
+                            </div>
+                        </div>
+
                         <!-- Why Pay Up (Collector Catalyst / Hero Anchor) -->
                         <div v-if="item.why_pay_up" class="p-3.5 rounded-2xl bg-success/15 border border-success/30 text-xs shadow-xs">
                             <div class="font-extrabold text-success flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
@@ -568,6 +755,56 @@
                                     <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
                                     <input v-model.number="item.selected_resale_price" type="number" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Intake Mode & Physical Storage Location -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                            <!-- Acquisition Mode Toggle -->
+                            <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                                <label class="label pt-0 pb-1">
+                                    <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-info" />
+                                        Intake Mode
+                                    </span>
+                                </label>
+                                <div class="join grid grid-cols-2 w-full font-bold">
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-xs join-item text-[10px]" 
+                                        :class="!isAcquired ? 'btn-neutral text-neutral-content' : 'btn-ghost border border-base-300'"
+                                        @click="isAcquired = false"
+                                    >
+                                        <Icon icon="solar:hammer-bold" class="w-3 h-3 mr-0.5" />
+                                        Live Auction
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-xs join-item text-[10px]" 
+                                        :class="isAcquired ? 'btn-success text-success-content font-black shadow-xs' : 'btn-ghost border border-base-300'"
+                                        @click="isAcquired = true; if (!storageLocation) storageLocation = 'HG';"
+                                    >
+                                        <Icon icon="solar:check-circle-bold" class="w-3 h-3 mr-0.5" />
+                                        Direct Intake
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Storage Location Input -->
+                            <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
+                                <label class="label pt-0 pb-1 flex justify-between items-center">
+                                    <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
+                                        <Icon icon="solar:map-point-bold" class="w-4 h-4 text-primary" />
+                                        Storage Location
+                                    </span>
+                                    <span v-if="isAcquired && !storageLocation" class="text-[9px] text-warning font-semibold">Defaults to HG</span>
+                                </label>
+                                <input 
+                                    v-model="storageLocation" 
+                                    type="text" 
+                                    class="input input-xs input-bordered w-full font-mono font-bold text-xs" 
+                                    placeholder="e.g. HG, HG-BIN1, SHELF-A" 
+                                />
                             </div>
                         </div>
 
@@ -1095,6 +1332,7 @@ import {
     calculateSubItemMaxBidPrice 
 } from '../../lib/bundle-pricing';
 import { evaluateCombinedShipping } from '../../lib/shipping-rules';
+import { deriveInventoryPlays, type ResalePlay } from '../../lib/lot-strategy';
 
 interface Props {
     initialPurchaseId?: string | null;
@@ -1269,6 +1507,10 @@ const handleCreateTracker = async (vendorName: string) => {
 const handleSaveStandalone = async () => {
     isAssignModalOpen.value = false;
     allowStandaloneSave.value = true;
+    isAcquired.value = true;
+    if (!storageLocation.value) {
+        storageLocation.value = 'HG';
+    }
     try {
         await executePendingSave();
     } finally {
@@ -1554,29 +1796,188 @@ function getAuctionFinancials(item: any) {
     const bpAmount = Math.round(currentBid * (bpPercent / 100) * 100) / 100;
     const shipping = Number(item?.shipping_info?.total || item?.auction_meta?.estimated_shipping || 0);
     const currentLanded = Math.round((currentBid + bpAmount + shipping) * 100) / 100;
-    const suggestedMaxBid = calculateMaxBid(item);
-    const maxBuyTarget = calculateMaxBuy(item);
+    // Resale target: Prefer selected resale price, then boutique, then fair
     const estResale = Number(item?.selected_resale_price || parsePrice(item?.pricing_potential?.boutique || item?.price_breakdown?.boutique_premium || item?.pricing_potential?.fair || item?.price_breakdown?.fair) || 0);
-    const estNetProfit = estResale > currentLanded ? Math.round((estResale - currentLanded) * 100) / 100 : 0;
+    
+    // 15% standard consignment overhead
+    const commPct = 15;
+    const netPayout = estResale > 0 ? Math.round(estResale * (1 - commPct / 100) * 100) / 100 : 0;
+    const currentNetProfit = (netPayout > 0 && currentLanded > 0) ? Math.max(0, Math.round((netPayout - currentLanded) * 100) / 100) : 0;
     const roi = currentLanded > 0 ? (estResale / currentLanded).toFixed(1) : '0';
+
+    // Multi-Tier Reseller Profit Curve:
+    // 1. Conservative (3.0x ROI / ~33% Landed Ceiling)
+    const consTargetLanded = estResale > 0 ? Math.round(estResale / 3.0) : 0;
+    const consMaxBid = Math.max(0, Math.floor((consTargetLanded - shipping) / (1 + bpPercent / 100)));
+    const consLandedAtMax = Math.round((consMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
+    const consNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - consLandedAtMax)) : 0;
+    const consStatus = currentBid > consMaxBid ? 'passed' : 'active';
+
+    // 2. Balanced (2.2x ROI / ~45% Landed Ceiling - Standard Target)
+    const balTargetLanded = estResale > 0 ? Math.round(estResale / 2.2) : 0;
+    const balMaxBid = Math.max(0, Math.floor((balTargetLanded - shipping) / (1 + bpPercent / 100)));
+    const balLandedAtMax = Math.round((balMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
+    const balNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - balLandedAtMax)) : 0;
+    const balStatus = currentBid > balMaxBid ? 'passed' : 'active';
+
+    // 3. Aggressive / High-Ticket / Fast-Turn (1.7x ROI / ~59% Landed Ceiling)
+    const aggTargetLanded = estResale > 0 ? Math.round(estResale / 1.7) : 0;
+    const aggMaxBid = Math.max(0, Math.floor((aggTargetLanded - shipping) / (1 + bpPercent / 100)));
+    const aggLandedAtMax = Math.round((aggMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
+    const aggNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - aggLandedAtMax)) : 0;
+    const aggStatus = currentBid > aggMaxBid ? 'passed' : 'active';
+
+    // 4. Velocity / Win-It Target (1.4x ROI / Minimum $10.00 cash in pocket)
+    const minProfit = 10;
+    const velocityTargetLanded = Math.max(0, netPayout - minProfit);
+    const velocityMaxBid = Math.max(0, Math.floor((velocityTargetLanded - shipping) / (1 + bpPercent / 100)));
+    const velocityLandedAtMax = Math.round((velocityMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
+    const velocityNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - velocityLandedAtMax)) : 0;
+    const velocityStatus = currentBid > velocityMaxBid ? 'passed' : 'active';
+
+    // 5. "Set & Forget" Proxy Sniper (auto-bids for you, no babysitting):
+    // Adds odd-cents (.87) to beat amateur round-number proxy bids ($17.00, $20.00)
+    let recommendedProxy = 0;
+    let proxyStrategy = 'Balanced';
+    let proxyRoi = '2.2x';
+    let proxyProfit = balNetProfit;
+
+    if (balStatus === 'active') {
+        recommendedProxy = balMaxBid > 0 ? balMaxBid + 0.87 : 0;
+        proxyStrategy = 'Balanced (Standard)';
+        proxyRoi = '2.2x';
+        proxyProfit = balNetProfit;
+    } else if (aggStatus === 'active') {
+        recommendedProxy = aggMaxBid > 0 ? aggMaxBid + 0.87 : 0;
+        proxyStrategy = 'Aggressive / Fast';
+        proxyRoi = '1.7x';
+        proxyProfit = aggNetProfit;
+    } else if (velocityStatus === 'active') {
+        recommendedProxy = velocityMaxBid > 0 ? velocityMaxBid + 0.87 : 0;
+        proxyStrategy = 'Win-It / Velocity';
+        proxyRoi = '1.4x';
+        proxyProfit = velocityNetProfit;
+    }
+
+    // Next legal minimum bid increment (estimate standard increments)
+    const nextBidIncrement = currentBid < 25 ? 1 : currentBid < 100 ? 2 : currentBid < 500 ? 5 : 10;
+    const nextBid = currentBid + nextBidIncrement;
+    const nextBidLanded = Math.round((nextBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
+    const nextNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - nextBidLanded)) : 0;
+
     const isLocalPickup = Boolean(
         item?.auction_meta?.is_local_pickup_only ||
         item?.shipping_info?.carrier?.toLowerCase().includes('pickup') ||
         item?.condition_notes?.toLowerCase().includes('local pickup')
     );
+
     return {
         currentBid,
         bpPercent,
         bpAmount,
         shipping,
         currentLanded,
-        suggestedMaxBid,
-        maxBuyTarget,
+        suggestedMaxBid: balMaxBid, // Standard balanced ceiling
+        maxBuyTarget: balTargetLanded,
+        recommendedProxy,
+        proxyStrategy,
+        proxyRoi,
+        proxyProfit,
         estResale,
-        estNetProfit,
+        netPayout,
+        currentNetProfit,
+        estNetProfit: currentNetProfit,
         roi,
-        isLocalPickup
+        isLocalPickup,
+        nextBid,
+        nextBidIncrement,
+        nextBidLanded,
+        nextNetProfit,
+        tiers: {
+            conservative: {
+                label: 'Conservative',
+                roi: '3.0x',
+                maxBid: consMaxBid,
+                maxLanded: consTargetLanded,
+                netProfit: consNetProfit,
+                status: consStatus,
+                room: consMaxBid - currentBid
+            },
+            balanced: {
+                label: 'Balanced',
+                roi: '2.2x',
+                maxBid: balMaxBid,
+                maxLanded: balTargetLanded,
+                netProfit: balNetProfit,
+                status: balStatus,
+                room: balMaxBid - currentBid
+            },
+            aggressive: {
+                label: 'Aggressive / Fast',
+                roi: '1.7x',
+                maxBid: aggMaxBid,
+                maxLanded: aggTargetLanded,
+                netProfit: aggNetProfit,
+                status: aggStatus,
+                room: aggMaxBid - currentBid
+            },
+            velocity: {
+                label: 'Win-It / Velocity',
+                roi: '1.4x',
+                maxBid: velocityMaxBid,
+                maxLanded: velocityTargetLanded,
+                netProfit: velocityNetProfit,
+                status: velocityStatus,
+                room: velocityMaxBid - currentBid
+            }
+        }
     };
+}
+
+function selectBiddingTier(item: any, tier: 'conservative' | 'balanced' | 'aggressive' | 'velocity') {
+    const fin = getAuctionFinancials(item);
+    const chosen = (fin.tiers as any)[tier];
+    if (chosen && chosen.maxBid > 0) {
+        item.selectedBiddingTier = tier;
+        item.maxBid = chosen.maxBid;
+        if (!isAcquired.value) {
+            cost.value = String(chosen.maxBid);
+        }
+        addToast({ type: 'info', message: `🎯 Selected ${chosen.label} ceiling: $${chosen.maxBid} (${chosen.roi} ROI, +$${chosen.netProfit} profit)` });
+    }
+}
+
+function selectProxyCeiling(item: any) {
+    const fin = getAuctionFinancials(item);
+    if (fin.recommendedProxy > 0) {
+        item.maxBid = fin.recommendedProxy;
+        if (!isAcquired.value) {
+            cost.value = String(fin.recommendedProxy.toFixed(2));
+        }
+        addToast({ type: 'info', message: `🎯 Set & Forget Proxy Ceiling set to $${fin.recommendedProxy.toFixed(2)} (${fin.proxyRoi} ROI)` });
+    }
+}
+
+function getScoutPlay(item: any): ResalePlay | null {
+    if (!item) return null;
+    try {
+        const fin = getAuctionFinancials(item);
+        // Ground the cost and resale basis from active auction landed cost so plays never divide by zero
+        const enrichedItem = {
+            ...item,
+            currentBid: fin.currentBid,
+            currentLanded: fin.currentLanded,
+            cost: item.cost || (fin.currentLanded > 0 ? fin.currentLanded : undefined),
+            purchasePrice: item.purchasePrice || (fin.currentLanded > 0 ? fin.currentLanded : undefined),
+            resalePrice: item.resalePrice || fin.estResale,
+            boutiquePrice: item.boutiquePrice || fin.estResale
+        };
+        const plays = deriveInventoryPlays(enrichedItem, result.value);
+        return plays && plays.length > 0 ? plays[0] : null;
+    } catch (e) {
+        console.warn('[ScoutView] Failed to derive scout play:', e);
+        return null;
+    }
 }
 
 function getCombinedShippingAlert(item: any) {
@@ -1701,17 +2102,15 @@ const analyzeButtonText = computed(() => {
 });
 
 const handleAnalyze = () => {
-    const rawUrl = scoutUrl.value ? scoutUrl.value.trim() : '';
+    const effectiveUrl = scoutUrl.value ? scoutUrl.value.trim() : (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') ? sourcingLocation.value.trim() : '');
     const hasNotes = !!(userNotes.value && userNotes.value.trim());
-    const hasImages = images.value.length > 0 || !!result.value?.items?.[0]?.fetched_image;
+    const hasImages = images.value.length > 0 || !!result.value?.items?.[0]?.fetched_image || (result.value?.items?.[0]?.fetched_images && result.value.items[0].fetched_images.length > 0);
 
-    if (rawUrl && rawUrl.startsWith('http')) {
+    if (effectiveUrl && effectiveUrl.startsWith('http')) {
+        scoutUrl.value = effectiveUrl;
         analyzeListing();
     } else if (hasImages || hasNotes) {
         analyzeImage();
-    } else if (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http')) {
-        scoutUrl.value = sourcingLocation.value.trim();
-        analyzeListing();
     } else {
         addToast({ type: 'warning', message: 'Take a photo, paste a web link, or enter item details to scout.' });
     }
@@ -2030,13 +2429,24 @@ async function analyzeListing() {
                     cost.value = liveBid.toFixed(2);
                 }
             });
-            if (data.items.length > 0 && images.value.length > 0) {
-                const firstImg = typeof images.value[0] === 'string' ? images.value[0] : images.value[0]?.url;
-                if (firstImg && !data.items[0].fetched_image) {
-                    data.items[0].fetched_image = firstImg;
-                }
-                if (!data.items[0].fetched_images || data.items[0].fetched_images.length === 0) {
-                    data.items[0].fetched_images = images.value.map(i => typeof i === 'string' ? i : i.url).filter(Boolean);
+            if (data.items.length > 0) {
+                const prevItem = result.value?.items?.[0];
+                const prevImages = prevItem?.fetched_images || (prevItem?.fetched_image ? [prevItem.fetched_image] : []);
+                const incomingImages = data.items[0].fetched_images || (data.items[0].fetched_image ? [data.items[0].fetched_image] : []);
+                const merged = Array.from(new Set([
+                    ...incomingImages,
+                    ...prevImages,
+                    ...images.value.map(i => typeof i === 'string' ? i : i.url)
+                ])).filter(Boolean);
+
+                if (merged.length > 0) {
+                    data.items[0].fetched_images = merged;
+                    if (!data.items[0].fetched_image) {
+                        data.items[0].fetched_image = merged[0];
+                    }
+                    if (images.value.length === 0) {
+                        images.value = merged.map((u: string) => ({ url: u }));
+                    }
                 }
             }
         }
@@ -2125,17 +2535,33 @@ async function analyzeImage() {
         // On Re-Scout: If local images array is empty but we have fetched images from earlier scan, pass them to Gemini
         if (images.value.length === 0 && result.value?.items?.[0]) {
             const firstItem = result.value.items[0];
-            if (firstItem.fetched_image && firstItem.fetched_image.startsWith('http')) {
-                remoteImageUrls.push(firstItem.fetched_image);
-            } else if (firstItem.fetched_images && Array.isArray(firstItem.fetched_images)) {
-                remoteImageUrls.push(...firstItem.fetched_images.filter((u: string) => u && u.startsWith('http')).slice(0, 5));
+            const uniqueUrls = new Set<string>();
+            if (firstItem.fetched_image && typeof firstItem.fetched_image === 'string' && firstItem.fetched_image.startsWith('http')) {
+                uniqueUrls.add(firstItem.fetched_image);
             }
+            if (Array.isArray(firstItem.fetched_images)) {
+                for (const u of firstItem.fetched_images) {
+                    if (u && typeof u === 'string' && u.startsWith('http')) uniqueUrls.add(u);
+                }
+            }
+            if (Array.isArray(firstItem.galleryImageIds)) {
+                for (const u of firstItem.galleryImageIds) {
+                    if (u && typeof u === 'string' && u.startsWith('http')) uniqueUrls.add(u);
+                }
+            }
+            remoteImageUrls.push(...Array.from(uniqueUrls).slice(0, 40));
+        }
+
+        const effectiveUrl = scoutUrl.value || (sourcingLocation.value && sourcingLocation.value.startsWith('http') ? sourcingLocation.value : '');
+        let combinedNotes = userNotes.value;
+        if (effectiveUrl && !combinedNotes.includes(effectiveUrl)) {
+            combinedNotes = effectiveUrl + (combinedNotes ? '\n\n' + combinedNotes : '');
         }
 
         const payload = JSON.stringify({ 
             images: base64Images,
             remoteImageUrls,
-            notes: userNotes.value,
+            notes: combinedNotes,
             zipCode: zipCode.value,
             locations: availableWarehouses.value
         });
@@ -2164,13 +2590,22 @@ async function analyzeImage() {
                 it.selected_resale_price = Math.round(boutique || fair || 0);
             });
             // Ensure scouted images are preserved on data.items[0]
-            if (data.items.length > 0 && images.value.length > 0) {
-                const firstImg = typeof images.value[0] === 'string' ? images.value[0] : images.value[0]?.url;
-                if (firstImg && !data.items[0].fetched_image) {
-                    data.items[0].fetched_image = firstImg;
+            const prevItem = result.value?.items?.[0];
+            const prevImages = prevItem?.fetched_images || (prevItem?.fetched_image ? [prevItem.fetched_image] : []);
+            const incomingImages = data.items[0].fetched_images || (data.items[0].fetched_image ? [data.items[0].fetched_image] : []);
+            const merged = Array.from(new Set([
+                ...incomingImages,
+                ...prevImages,
+                ...images.value.map(i => typeof i === 'string' ? i : i.url)
+            ])).filter(Boolean);
+
+            if (merged.length > 0) {
+                data.items[0].fetched_images = merged;
+                if (!data.items[0].fetched_image) {
+                    data.items[0].fetched_image = merged[0];
                 }
-                if (!data.items[0].fetched_images || data.items[0].fetched_images.length === 0) {
-                    data.items[0].fetched_images = images.value.map(i => typeof i === 'string' ? i : i.url).filter(Boolean);
+                if (images.value.length === 0) {
+                    images.value = merged.map((u: string) => ({ url: u }));
                 }
             }
         }
@@ -2830,7 +3265,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
                 storageLocation: storageLocation.value || '',
-                status: isAcquired.value ? 'acquired' : 'tracked',
+                status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                 keywords: item.keywords || [],
                 rawAnalysis: getSafeRawAnalysis(item) || undefined
             };
@@ -2979,7 +3414,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      maxBuyPrice: calculateMaxBuy(subItem.estimated_value) || 0.0,
                      sourcingLocation: sourcingLocation.value || '',
                      storageLocation: storageLocation.value || '',
-                     status: isAcquired.value ? 'acquired' : 'tracked',
+                     status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                      keywords: item.keywords || [],
                      galleryImageIds: itemGalleryIds,
                      rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -3054,10 +3489,11 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  maxBuyPrice: calculateMaxBuy(item) || 0.0,
                  maxBid: calculateMaxBid(item) || undefined,
                  currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
-                 auctionEndsAt: item.auctionEndsAt || item.auction_meta?.end_time || undefined,
+                 auctionEndsAt: (isAcquired.value || allowStandaloneSave.value) ? undefined : (item.auctionEndsAt || item.auction_meta?.end_time || undefined),
+                  auctionStatus: (isAcquired.value || allowStandaloneSave.value) ? 'won' : undefined,
                  sourcingLocation: sourcingLocation.value || scoutUrl.value || '',
                  storageLocation: storageLocation.value || '',
-                 status: isAcquired.value ? 'acquired' : 'tracked',
+                 status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                  keywords: item.keywords || [],
                  imageId: primaryImage,
                  galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,

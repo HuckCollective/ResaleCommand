@@ -81,8 +81,7 @@ export const generateContentWithBackoff = async (
         DEFAULT_GEMINI_MODEL,
         "gemini-flash-latest",
         "gemini-flash-lite-latest",
-        "gemini-pro-latest",
-        "gemini-2.5-flash"
+        "gemini-pro-latest"
     ]));
     let modelIdx = 0;
     
@@ -109,7 +108,12 @@ export const generateContentWithBackoff = async (
         } catch (err: any) {
             const msg = (err.message || "").toLowerCase();
             const status = err.status || 0;
-            
+
+            // Fatal billing depleted or unauthorized -> no candidate model will work, throw immediately
+            if (status === 402 || status === 401 || msg.includes('prepayment credits') || msg.includes('payment required')) {
+                throw err;
+            }
+
             // Check if model not found (404) or blocked by safety / OTHER / RECITATION -> switch model immediately
             if (status === 404 || msg.includes('404') || msg.includes('not found') || msg.includes('blocked') || msg.includes('other') || msg.includes('safety') || msg.includes('recitation') || msg.includes('finishreason')) {
                 console.warn(`[Gemini] Model issue on ${currentModelName}: ${err.message}. Switching to fallback model...`);

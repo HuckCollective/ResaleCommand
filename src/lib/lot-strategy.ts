@@ -93,6 +93,11 @@ function parseNumeric(val: any, fallback: number = 0): number {
     return parsePriceValue(val, 'midpoint', fallback);
 }
 
+function calculateRoiPct(netProfit: number, costBasis: number): number {
+    if (costBasis <= 0) return 0;
+    return Math.round((netProfit / costBasis) * 100);
+}
+
 /**
  * Derives a comprehensive Exit Playbook from existing AI scout data,
  * lot components, or item metadata.
@@ -100,7 +105,16 @@ function parseNumeric(val: any, fallback: number = 0): number {
 export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybook | null {
     if (!item) return null;
 
-    const totalCost = parseNumeric(item.cost ?? item.purchasePrice, 0);
+    let totalCost = parseNumeric(item.cost ?? item.purchasePrice, 0);
+    if (totalCost <= 0) {
+        const currentBid = Number(item.currentBid || item.auction_meta?.current_bid || parseNumeric(item.purchase_strategy?.current_asking_price, 0));
+        const shipping = Number(item.shipping_info?.total || item.auction_meta?.estimated_shipping || item.shippingPrice || 0);
+        const bp = currentBid * (Number(item.auction_meta?.buyers_premium_percent || 0) / 100);
+        const auctionLanded = currentBid > 0 ? Math.round((currentBid + bp + shipping) * 100) / 100 : 0;
+        const asking = parseNumeric(item.purchase_strategy?.current_asking_price || item.askingPrice || item.price, 0);
+        const maxLanded = parseNumeric(item.purchase_strategy?.max_buy_price || item.maxLandedCost || item.maxBid, 0);
+        totalCost = auctionLanded > 0 ? auctionLanded : (asking > 0 ? Math.round((asking + shipping) * 100) / 100 : (maxLanded > 0 ? maxLanded : 0));
+    }
     const bulkPrice = parseNumeric(item.resalePrice ?? item.boutiquePrice, 0);
 
     // If explicit exit_strategy is already in scoutData or rawAnalysis, use it
@@ -206,18 +220,27 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
     }
 
     const title = (item.title || '').trim();
-    const qty = parseNumeric(item.quantity, 1);
+    let qty = parseNumeric(item.quantity, 0);
+    if (qty <= 0) {
+        const qtyMatch = title.match(/^(\d+)\s+/i) || 
+                         title.match(/\b(?:lot of|pack of|set of|box of)\s*(\d+)\b/i) || 
+                         title.match(/\b(\d+)\s*(?:pack|pk|pcs|pieces|books|volumes|vols|items|figures)\b/i);
+        if (qtyMatch) {
+            qty = parseInt(qtyMatch[1], 10);
+        }
+    }
+    if (qty <= 0) qty = 1;
 
     // Check if item is a lot or has keywords indicating multiple pieces
     const isLotLike = qty > 1 || 
                       components.length > 1 || 
-                      /\b(lot|collection|set|bundle|figures|books|magazines|pieces|pack|assorted|mixed)\b/i.test(title);
+                      /\b(lot of|collection of|set of|bundle of|box lot|bulk lot)\b/i.test(title);
 
     if (!isLotLike && components.length <= 1) {
         return null;
     }
 
-    // Heuristic extraction for Star Wars / Figures lot (like HUCK-0843) or books/games
+    // Heuristic extraction for lot or multi-piece sets
     const heroes: ExitStrategyHeroSingle[] = [];
     const combines: ExitStrategyCombine[] = [];
     let floorFillers: ExitStrategyFloorFillers | null = null;
@@ -286,77 +309,107 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
             };
         }
     } else {
-        // Parse from title / description tokens (e.g. Star Wars Action Figures)
-        if (/star wars/i.test(title)) {
+        // Derive proportionally from detected quantity and bulk resale value
+        const targetBulk = bulkPrice > 0 ? bulkPrice : (totalCost > 0 ? Math.round(totalCost * 1.8) : 50);
+        const targetSplit = Math.round(targetBulk * 1.15); // ~15% elevation by splitting
+        const isBookOrMedia = /book|novel|rpg|hardcover|paperback|comic|vhs|vinyl|game/i.test(title);
+
+        if (qty === 2) {
+            const heroVal = Math.round(Math.max(totalCost * 1.05, targetSplit * 0.58));
+            const companionVal = Math.max(10, targetSplit - heroVal);
+            
             heroes.push({
-                name: 'Holiday C-3PO & Yoda Showcase Singles',
-                estPrice: '$35.00',
-                numericPrice: 35,
-                targetChannel: 'eBay / Booth Showcase',
-                reason: 'Recoups 100% of entire $25 purchase cost on first sale',
-                recoupsCost: true
+                name: isBookOrMedia ? 'Key Volume 1 (Hero Anchor)' : 'Standout Anchor Piece',
+                estPrice: `$${heroVal.toFixed(2)}`,
+                numericPrice: heroVal,
+                targetChannel: 'Online / Showcase',
+                reason: totalCost > 0 && heroVal >= totalCost ? 'Recoups 100% cost basis on first sale' : 'High margin standout',
+                recoupsCost: totalCost > 0 && heroVal >= totalCost * 0.85
             });
             combines.push({
-                name: 'Clone Trooper & Shadow Trooper 2-Pack',
-                estPrice: '$30.00',
-                numericPrice: 30,
-                items: ['Clone Trooper', 'Shadow Trooper'],
-                reason: 'Troop-builder synergy commands premium pairing'
+                name: isBookOrMedia ? 'Companion Volume 2' : 'Secondary Companion Piece',
+                estPrice: `$${companionVal.toFixed(2)}`,
+                numericPrice: companionVal,
+                items: [isBookOrMedia ? 'Volume 2' : 'Piece 2'],
+                reason: 'Pure profit contributor'
             });
-            floorFillers = {
-                name: 'Loose Micro-Figures & Accessories Grab Bag',
-                estPrice: '$15.00',
-                numericPrice: 15,
-                count: 18,
-                targetChannel: 'Memory Den Booth Basket'
-            };
-        } else if (/book|paperback|novel|rpg/i.test(title)) {
+            floorFillers = null;
+        } else if (qty === 3) {
+            const heroVal = Math.round(Math.max(totalCost * 1.05, targetSplit * 0.50));
+            const pairVal = Math.max(15, targetSplit - heroVal);
+
             heroes.push({
-                name: 'Standout 1st Edition / Key Title',
-                estPrice: totalCost > 0 ? `$${Math.max(25, totalCost * 1.1).toFixed(2)}` : '$35.00',
-                numericPrice: totalCost > 0 ? Math.max(25, totalCost * 1.1) : 35,
-                targetChannel: 'Online / eBay Media Mail',
-                reason: 'Standout volume recoups 100% cost basis',
-                recoupsCost: true
+                name: isBookOrMedia ? 'Key Volume 1 (Hero Anchor)' : 'Standout Anchor Piece',
+                estPrice: `$${heroVal.toFixed(2)}`,
+                numericPrice: heroVal,
+                targetChannel: 'Online / Showcase',
+                reason: totalCost > 0 && heroVal >= totalCost ? 'Recoups 100% cost basis on first sale' : 'High margin standout',
+                recoupsCost: totalCost > 0 && heroVal >= totalCost * 0.85
             });
             combines.push({
-                name: 'Genre / Author Companion 3-Pack',
-                estPrice: '$24.00',
-                numericPrice: 24,
-                items: ['Volume 1', 'Volume 2', 'Companion Novel'],
-                reason: 'Media Mail shipping leverage nets 10x higher profit'
+                name: isBookOrMedia ? 'Companion 2-Volume Pair' : 'Companion 2-Pack',
+                estPrice: `$${pairVal.toFixed(2)}`,
+                numericPrice: pairVal,
+                items: ['Companion 1', 'Companion 2'],
+                reason: 'High AOV companion pairing'
+            });
+            floorFillers = null;
+        } else if (qty === 4) {
+            const heroVal = Math.round(Math.max(totalCost * 1.05, targetSplit * 0.45));
+            const combineVal = Math.round((targetSplit - heroVal) * 0.65);
+            const floorVal = Math.max(8, targetSplit - heroVal - combineVal);
+
+            heroes.push({
+                name: isBookOrMedia ? 'Key Volume 1 (Hero Anchor)' : 'Standout Anchor Piece',
+                estPrice: `$${heroVal.toFixed(2)}`,
+                numericPrice: heroVal,
+                targetChannel: 'Online / Showcase',
+                reason: totalCost > 0 && heroVal >= totalCost ? 'Recoups 100% cost basis on first sale' : 'High margin standout',
+                recoupsCost: totalCost > 0 && heroVal >= totalCost * 0.85
+            });
+            combines.push({
+                name: isBookOrMedia ? 'Companion 2-Pack Set' : 'Themed Companion 2-Pack',
+                estPrice: `$${combineVal.toFixed(2)}`,
+                numericPrice: combineVal,
+                items: ['Companion Piece A', 'Companion Piece B'],
+                reason: 'Elevated basket size'
             });
             floorFillers = {
-                name: 'Reader Copy Floor Grazing Pack',
-                estPrice: '$10.00',
-                numericPrice: 10,
-                count: 6,
+                name: isBookOrMedia ? 'Booth Grazing Single' : 'Floor Clearance Piece',
+                estPrice: `$${floorVal.toFixed(2)}`,
+                numericPrice: floorVal,
+                count: 1,
                 targetChannel: 'Memory Den Booth Basket'
             };
         } else {
-            // General mixed lot fallback
-            const heroPrice = Math.max(25, totalCost > 0 ? totalCost * 1.1 : 35);
+            // qty >= 5
+            const heroVal = Math.round(Math.max(totalCost * 1.05, targetSplit * 0.40));
+            const combineVal = Math.round((targetSplit - heroVal) * 0.50);
+            const floorTotal = Math.max(10, targetSplit - heroVal - combineVal);
+            const floorCount = Math.max(1, qty - 3);
+            const floorPerItem = Math.max(3, Math.round(floorTotal / floorCount));
+
             heroes.push({
-                name: 'Primary Anchor Single',
-                estPrice: `$${heroPrice.toFixed(2)}`,
-                numericPrice: heroPrice,
-                targetChannel: 'Online / Primary Showcase',
-                reason: 'Anchor piece targeted to recover initial purchase cost',
-                recoupsCost: true
+                name: isBookOrMedia ? 'Key Standout Volume' : 'Standout Anchor Piece',
+                estPrice: `$${heroVal.toFixed(2)}`,
+                numericPrice: heroVal,
+                targetChannel: 'Online / Showcase',
+                reason: totalCost > 0 && heroVal >= totalCost ? 'Recoups 100% cost basis on first sale' : 'High margin standout',
+                recoupsCost: totalCost > 0 && heroVal >= totalCost * 0.85
             });
             combines.push({
-                name: 'Core Pieces Combine Set',
-                estPrice: '$25.00',
-                numericPrice: 25,
-                items: ['Item A', 'Item B'],
-                reason: 'Themed pair commands higher basket size'
+                name: isBookOrMedia ? 'Curated Companion 2-Pack' : 'Themed Companion 2-Pack',
+                estPrice: `$${combineVal.toFixed(2)}`,
+                numericPrice: combineVal,
+                items: ['Companion Piece A', 'Companion Piece B'],
+                reason: 'High AOV companion pairing'
             });
             floorFillers = {
-                name: 'Remainder Clearance Grab Bag',
-                estPrice: '$10.00',
-                numericPrice: 10,
-                count: 4,
-                targetChannel: 'Booth Floor Basket'
+                name: isBookOrMedia ? `Reader Copy Impulse Pack (${floorCount}x)` : `Booth Floor Grab Bag (${floorCount}x)`,
+                estPrice: `$${(floorPerItem * floorCount).toFixed(2)}`,
+                numericPrice: floorPerItem * floorCount,
+                count: floorCount,
+                targetChannel: 'Memory Den Booth Basket'
             };
         }
     }
@@ -490,10 +543,34 @@ export function deriveInventoryPlays(
 ): ResalePlay[] {
     if (!item) return [];
 
-    const totalCost = parsePriceValue(item.cost ?? item.purchasePrice, 'midpoint', 0);
+    let totalCost = parsePriceValue(item.cost ?? item.purchasePrice, 'midpoint', 0);
+    // If cost basis is not recorded yet (e.g. unacquired item being scouted / evaluated),
+    // derive a realistic landed cost basis from active auction or sticker asking price
+    if (totalCost <= 0) {
+        const currentBid = Number(item.currentBid || item.auction_meta?.current_bid || parsePriceValue(item.purchase_strategy?.current_asking_price, 'midpoint', 0));
+        const shipping = Number(item.shipping_info?.total || item.auction_meta?.estimated_shipping || item.shippingPrice || 0);
+        const bp = currentBid * (Number(item.auction_meta?.buyers_premium_percent || 0) / 100);
+        const auctionLanded = currentBid > 0 ? Math.round((currentBid + bp + shipping) * 100) / 100 : 0;
+        
+        const askingPrice = parsePriceValue(item.purchase_strategy?.current_asking_price || item.askingPrice || item.price, 'midpoint', 0);
+        const maxLanded = parsePriceValue(item.purchase_strategy?.max_buy_price || item.maxLandedCost || item.maxBid, 'midpoint', 0);
+
+        totalCost = auctionLanded > 0 ? auctionLanded : (askingPrice > 0 ? Math.round((askingPrice + shipping) * 100) / 100 : (maxLanded > 0 ? maxLanded : 0));
+    }
+
     const bulkPrice = parsePriceValue(item.resalePrice ?? item.boutiquePrice, 'midpoint', 0);
-    const qty = parsePriceValue(item.quantity, 'first', 1);
     const title = (item.title || '').trim();
+    let qty = parsePriceValue(item.quantity, 'first', 0);
+    if (qty <= 0) {
+        const qtyMatch = title.match(/^(\d+)\s+/i) || 
+                         title.match(/\b(?:lot of|pack of|set of|box of)\s*(\d+)\b/i) || 
+                         title.match(/\b(\d+)\s*(?:pack|pk|pcs|pieces|books|volumes|vols|items|figures)\b/i);
+        if (qtyMatch) {
+            qty = parseInt(qtyMatch[1], 10);
+        }
+    }
+    if (qty <= 0) qty = 1;
+
     const activeInventory = Array.isArray(inventoryItems) ? inventoryItems : [];
 
     // Check if item is a lot or has components / lot characteristics
@@ -501,7 +578,7 @@ export function deriveInventoryPlays(
                   item.status === 'combined' || 
                   item.isLot || 
                   (Array.isArray(item.components) && item.components.length > 1) ||
-                  /\b(lot|collection|set|bundle|figures|books|magazines|pieces|pack|assorted|mixed)\b/i.test(title);
+                  /\b(lot of|collection of|set of|bundle of|box lot|bulk lot)\b/i.test(title);
 
     const plays: ResalePlay[] = [];
 
@@ -511,30 +588,30 @@ export function deriveInventoryPlays(
         // -------------------------------------------------------------
         const baseLotStrategy = deriveLotExitPlaybook(item, scoutData) || {
             summary: 'Decompose lot into profit tiers to recoup capital and clear remainder.',
-            projectedBulkYield: bulkPrice > 0 ? bulkPrice : 85,
-            projectedSplitYield: Math.max(120, (bulkPrice || 60) * 1.5),
-            profitIncreasePct: 45,
+            projectedBulkYield: bulkPrice > 0 ? bulkPrice : (totalCost > 0 ? Math.round(totalCost * 1.8) : 50),
+            projectedSplitYield: bulkPrice > 0 ? Math.round(bulkPrice * 1.15) : (totalCost > 0 ? Math.round(totalCost * 2.1) : 60),
+            profitIncreasePct: 35,
             totalCost,
             heroSingles: [{
                 name: 'Standout Anchor Piece',
-                estPrice: `$${Math.max(35, totalCost * 1.1).toFixed(2)}`,
-                numericPrice: Math.max(35, totalCost * 1.1),
+                estPrice: `$${Math.max(25, totalCost > 0 ? totalCost * 1.05 : 30).toFixed(2)}`,
+                numericPrice: Math.max(25, totalCost > 0 ? totalCost * 1.05 : 30),
                 targetChannel: 'Online / Showcase',
                 reason: 'Recoups 100% cost basis',
                 recoupsCost: true
             }],
             themedCombines: [{
                 name: 'Core Volume Set',
-                estPrice: '$28.00',
-                numericPrice: 28,
+                estPrice: '$24.00',
+                numericPrice: 24,
                 items: ['Piece A', 'Piece B'],
                 reason: 'High AOV companion pairing'
             }],
             floorFillers: {
                 name: 'Booth Grazing Grab Bag',
-                estPrice: '$12.00',
-                numericPrice: 12,
-                count: Math.max(2, qty - 2),
+                estPrice: '$10.00',
+                numericPrice: 10,
+                count: Math.max(1, qty - 2),
                 targetChannel: 'Memory Den Booth Basket'
             }
         };
@@ -560,10 +637,10 @@ export function deriveInventoryPlays(
             netPayout: p1Payout,
             totalCost,
             netProfit: p1Net,
-            roiPct: Math.round((p1Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p1Net, totalCost),
             velocityDays: '7 - 14 days',
             laborEffort: 'Medium',
-            summary: `Extract ${baseLotStrategy.heroSingles?.length || 1} hero item(s) to recover $${totalCost.toFixed(2)} landed cost immediately. Place remainder pieces into low-friction booth impulse packs.`,
+            summary: `Extract ${baseLotStrategy.heroSingles?.length || 1} hero item(s) to recover $${totalCost > 0 ? totalCost.toFixed(2) : 'landed'} cost basis immediately. Place remainder pieces into low-friction booth impulse packs.`,
             tiersBreakdown: [
                 ...((baseLotStrategy.heroSingles || []).map(h => ({
                     title: `🌟 Hero: ${h.name}`,
@@ -618,7 +695,7 @@ export function deriveInventoryPlays(
             netPayout: p2Payout,
             totalCost,
             netProfit: p2Net,
-            roiPct: Math.round((p2Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p2Net, totalCost),
             velocityDays: '14 - 30 days',
             laborEffort: 'Medium',
             summary: `Group like-with-like items into $25 – $45 sweet-spot bundles. Eliminates individual packing labor and leverages Media Mail / flat rate shipping.`,
@@ -669,7 +746,7 @@ export function deriveInventoryPlays(
             netPayout: p3Payout,
             totalCost,
             netProfit: p3Net,
-            roiPct: Math.round((p3Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p3Net, totalCost),
             velocityDays: '3 - 7 days',
             laborEffort: 'Low',
             summary: `Print quick Ricochet barcode tags at $${grazingPerItem}.00 each and drop into high-traffic booth baskets. Zero online photography, zero packaging, immediate cash flow.`,
@@ -711,7 +788,7 @@ export function deriveInventoryPlays(
             netPayout: p4Payout,
             totalCost,
             netProfit: p4Net,
-            roiPct: Math.round((p4Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p4Net, totalCost),
             velocityDays: '1 - 3 days',
             laborEffort: 'Low',
             summary: `List entire box as 1 bulk lot. Ideal when shop floor space is constrained or you need capital immediately for incoming hauls.`,
@@ -753,7 +830,7 @@ export function deriveInventoryPlays(
             netPayout: restockPayout,
             totalCost,
             netProfit: restockNet,
-            roiPct: Math.round((restockNet / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(restockNet, totalCost),
             velocityDays: '1 - 7 days',
             laborEffort: 'Low',
             summary: `Physical unit replenishment: Add newly acquired copies to this active SKU crate and recalculate average cost basis without writing a new price tag. (To batch with other items in your catalog, use AI Batch Catalog).`,
@@ -782,23 +859,28 @@ export function deriveInventoryPlays(
         let compHigh = 0;
         let compFloor = 0;
 
-        if (scoutData?.price_breakdown) {
-            compFair = parsePriceValue(scoutData.price_breakdown.fair, 'midpoint', 0);
-            compHigh = parsePriceValue(scoutData.price_breakdown.high, 'high', 0);
-            compFloor = parsePriceValue(scoutData.price_breakdown.floor, 'low', 0);
-        } else if (item.resalePrice || item.boutiquePrice) {
-            compFair = parsePriceValue(item.boutiquePrice || item.resalePrice, 'midpoint', 45);
+        const pb = item.price_breakdown || scoutData?.price_breakdown || item.pricing_potential || scoutData?.pricing_potential;
+        if (pb) {
+            compFair = parsePriceValue(pb.fair || pb.fair_price || pb.estimated_resale, 'midpoint', 0);
+            compHigh = parsePriceValue(pb.high || pb.boutique || pb.boutique_premium, 'high', 0);
+            compFloor = parsePriceValue(pb.floor || pb.thrift_quick || pb.low, 'low', 0);
+        }
+        if (compFair <= 0 && (item.resalePrice || item.boutiquePrice || item.selected_resale_price)) {
+            compFair = parsePriceValue(item.selected_resale_price || item.boutiquePrice || item.resalePrice, 'midpoint', 0);
+        }
+        if (compFair <= 0 && item.estimated_resale) {
+            compFair = parsePriceValue(item.estimated_resale, 'midpoint', 0);
         }
 
         // Realistic fallbacks based on landed cost
         if (compFair <= 0) {
-            compFair = totalCost > 0 ? Math.round(totalCost * 2.5) : 48;
+            compFair = totalCost > 0 ? Math.round(totalCost * 2.2) : 48;
         }
         if (compHigh <= compFair) {
-            compHigh = Math.round(compFair * 1.4);
+            compHigh = Math.round(compFair * 1.35);
         }
         if (compFloor <= 0 || compFloor >= compFair) {
-            compFloor = Math.max(Math.round(totalCost * 1.5), Math.round(compFair * 0.7));
+            compFloor = Math.max(Math.round(totalCost * 1.35), Math.round(compFair * 0.75));
         }
 
         // Clamp safeguards: prevent corrupted AI outputs or wild multipliers
@@ -811,6 +893,20 @@ export function deriveInventoryPlays(
         // Ensure floor is always above landed cost so "Fast Cash" never recommends selling at a loss!
         if (totalCost > 0 && compFloor < totalCost * 1.15) {
             compFloor = Math.round(totalCost * 1.35);
+        }
+
+        const itemCategory = detectPlaybookCategory(item);
+        let boothSummary = `Eye-catching items draw shoppers into the booth. Physical shoppers pay a premium when they can inspect authenticity, condition, and craftsmanship in person with zero shipping wait.`;
+        if (itemCategory === 'books' || itemCategory === 'comics') {
+            boothSummary = `Eye-catching items draw shoppers into the booth. In-person collectors pay a premium when they can inspect completeness, binding, and physical condition without shipping costs.`;
+        } else if (itemCategory === 'toys_collectibles') {
+            boothSummary = `High-demand collector pieces stop aisle foot traffic. In-person buyers pay a premium when they can verify physical condition, packaging, and authenticity firsthand.`;
+        } else if (itemCategory === 'apparel') {
+            boothSummary = `Eye-catching garments draw shoppers into the booth. Physical shoppers pay a premium when they can inspect fabric quality, fit, and craftsmanship in person.`;
+        } else if (itemCategory === 'media') {
+            boothSummary = `Niche media draws dedicated crate-diggers into the booth. Shoppers pay a premium to inspect disc and sleeve condition in person without shipping risk.`;
+        } else if (itemCategory === 'vintage_decor') {
+            boothSummary = `Tactile vintage decor acts as an anchor display that stops foot traffic. Shoppers pay a premium to see scale, weight, and patina in person.`;
         }
 
         // Play 1: Booth Anchor Centerpiece (Physical Foot-Traffic Magnet)
@@ -834,10 +930,10 @@ export function deriveInventoryPlays(
             netPayout: p1Payout,
             totalCost,
             netProfit: p1Net,
-            roiPct: Math.round((p1Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p1Net, totalCost),
             velocityDays: '7 - 21 days',
             laborEffort: 'Low',
-            summary: `Eye-catching items draw shoppers into the booth. Physical shoppers pay a premium when they can inspect fabric, beadwork, or craftsmanship in person.`,
+            summary: boothSummary,
             tiersBreakdown: [
                 {
                     title: `🏬 Memory Den Showcase Tag`,
@@ -877,7 +973,7 @@ export function deriveInventoryPlays(
             netPayout: p2Payout,
             totalCost,
             netProfit: p2Net,
-            roiPct: Math.round((p2Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p2Net, totalCost),
             velocityDays: '30 - 60 days',
             laborEffort: 'Medium',
             summary: `Specialty items with distinct aesthetics or niche demand command the highest dollar return online. Allow a 30-60 day tail to connect with the right buyer.`,
@@ -938,10 +1034,10 @@ export function deriveInventoryPlays(
             netPayout: p3Payout,
             totalCost,
             netProfit: p3Net,
-            roiPct: Math.round((p3Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p3Net, totalCost),
             velocityDays: '1 - 7 days',
             laborEffort: 'Low',
-            summary: `Priced at an irresistible impulse point that guarantees rapid turn. Recoups 100% of your $${totalCost.toFixed(2)} cost basis in the first weekend.`,
+            summary: totalCost > 0 ? `Priced at an irresistible impulse point that guarantees rapid turn. Recoups 100% of your $${totalCost.toFixed(2)} cost basis in the first weekend.` : `Priced at an irresistible impulse point for rapid sub-7-day turn.`,
             tiersBreakdown: [
                 {
                     title: `⚡ Flash Impulse Tag`,
@@ -980,7 +1076,7 @@ export function deriveInventoryPlays(
             netPayout: p4Payout,
             totalCost,
             netProfit: p4Net,
-            roiPct: Math.round((p4Net / Math.max(1, totalCost)) * 100),
+            roiPct: calculateRoiPct(p4Net, totalCost),
             velocityDays: '14 - 30 days',
             laborEffort: 'Medium',
             summary: `Pair this item with matching accessories (e.g. scarf, jewelry, hat, or companion media) to escape direct comp price competition.`,
@@ -1022,7 +1118,7 @@ export function deriveInventoryPlays(
             netPayout: pCombinePayout,
             totalCost: totalCost * 2,
             netProfit: pCombineNet,
-            roiPct: Math.round((pCombineNet / Math.max(1, totalCost * 2)) * 100),
+            roiPct: calculateRoiPct(pCombineNet, totalCost * 2),
             velocityDays: '3 - 10 days',
             laborEffort: 'Low',
             summary: `Batch identical format items (e.g. 4 paperbacks for $15, 2 wool hats for $25) to hit fast-turn impulse price points at the booth or escape single-item shipping traps online with USPS Media Mail.`,
@@ -1066,7 +1162,7 @@ export function deriveInventoryPlays(
                 netPayout: bPayout,
                 totalCost,
                 netProfit: bNet,
-                roiPct: Math.round((bNet / Math.max(1, totalCost)) * 100),
+                roiPct: calculateRoiPct(bNet, totalCost),
                 velocityDays: '1 - 7 days',
                 laborEffort: 'Low',
                 summary: `Found an existing active batch SKU in stock ("${matchingBatch.title}"). Instead of writing a new tag and creating a separate listing, merge these units directly into that batch to save booth shelf space and admin overhead.`,

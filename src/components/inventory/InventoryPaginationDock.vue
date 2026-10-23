@@ -355,6 +355,7 @@
             @bundle="$emit('bundle')"
             @apply-location="$emit('apply-location', $event)"
             @apply-status="$emit('apply-status', $event)"
+            @apply-channel="$emit('apply-channel', $event)"
             @apply-bulk-unified="$emit('apply-bulk-unified', $event)"
             @export="$emit('export', $event)"
             @delete="$emit('delete')"
