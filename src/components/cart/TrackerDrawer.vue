@@ -16,9 +16,15 @@
       <div v-else-if="!activeCart" class="flex flex-col flex-1 items-center justify-center p-6 text-center opacity-70 relative">
           <button class="btn btn-ghost btn-sm btn-circle absolute top-4 right-4" @click="closeTracker">✕</button>
           <Icon icon="solar:object-scan-linear" class="w-16 h-16 mb-4 opacity-50" />
-          <h2 class="text-xl font-bold">Empty Tracker</h2>
-          <p class="text-sm mt-2">Start scouting items to build your sourcing run!</p>
-          <a href="/scout" class="btn btn-primary btn-sm mt-4">Start Scouting</a>
+          <h2 class="text-xl font-bold">No Active Sourcing Cart</h2>
+          <p class="text-sm mt-2">Start a new sourcing trip or view all tracked items across inventory.</p>
+          <div class="flex flex-col gap-2 mt-4 w-full max-w-xs">
+              <a href="/scout" class="btn btn-primary btn-sm">Start Scouting</a>
+              <a href="/inventory?status=tracked" class="btn btn-outline btn-sm gap-1.5" @click="closeTracker">
+                  <Icon icon="solar:radar-2-bold" class="w-4 h-4 text-secondary" />
+                  View All Tracked Items in Inventory
+              </a>
+          </div>
       </div>
 
       <div v-else class="flex flex-col h-full"> 

@@ -762,10 +762,14 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                             <!-- Acquisition Mode Toggle -->
                             <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
-                                <label class="label pt-0 pb-1">
+                                <label class="label pt-0 pb-1 flex justify-between items-center">
                                     <span class="label-text font-black text-xs opacity-75 flex items-center gap-1.5">
                                         <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-info" />
                                         Intake Mode
+                                    </span>
+                                    <span v-if="intakeDetectionReason" class="text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" :class="isAcquired ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'">
+                                        <Icon :icon="isAcquired ? 'solar:check-circle-bold' : 'solar:radar-bold'" class="w-2.5 h-2.5" />
+                                        {{ intakeDetectionReason }}
                                     </span>
                                 </label>
                                 <div class="join grid grid-cols-2 w-full font-bold">
@@ -773,7 +777,7 @@
                                         type="button" 
                                         class="btn btn-xs join-item text-[10px]" 
                                         :class="!isAcquired ? 'btn-neutral text-neutral-content' : 'btn-ghost border border-base-300'"
-                                        @click="isAcquired = false"
+                                        @click="isAcquired = false; intakeAutoSource = 'manual'"
                                     >
                                         <Icon icon="solar:hammer-bold" class="w-3 h-3 mr-0.5" />
                                         Live Auction
@@ -782,7 +786,7 @@
                                         type="button" 
                                         class="btn btn-xs join-item text-[10px]" 
                                         :class="isAcquired ? 'btn-success text-success-content font-black shadow-xs' : 'btn-ghost border border-base-300'"
-                                        @click="isAcquired = true; if (!storageLocation) storageLocation = 'HG';"
+                                        @click="isAcquired = true; intakeAutoSource = 'manual'; if (!storageLocation) storageLocation = 'HG';"
                                     >
                                         <Icon icon="solar:check-circle-bold" class="w-3 h-3 mr-0.5" />
                                         Direct Intake
@@ -1605,7 +1609,13 @@ onMounted(async () => {
             if (itemDoc.cost !== undefined && itemDoc.cost !== null) cost.value = String(itemDoc.cost);
             if (itemDoc.sourcingLocation) sourcingLocation.value = itemDoc.sourcingLocation;
             if (itemDoc.storageLocation) storageLocation.value = itemDoc.storageLocation;
-            if (itemDoc.status === 'acquired') isAcquired.value = true;
+            if (itemDoc.status && itemDoc.status !== 'tracked') {
+                isAcquired.value = true;
+                intakeAutoSource.value = 'in_person';
+            } else {
+                isAcquired.value = false;
+                intakeAutoSource.value = 'url_auction';
+            }
 
             // Pre-fill existing images in the preview if present
             if (itemDoc.galleryImageIds && itemDoc.galleryImageIds.length > 0) {
@@ -1995,9 +2005,23 @@ function isHeroAnchor(subItem: any, lotItems: any[]): boolean {
 }
 const result = ref<any>(null);
 const cost = ref('');
-const isAcquired = ref(false);
+const isAcquired = ref(true);
+const intakeAutoSource = ref<'in_person' | 'url_auction' | 'url_direct' | 'manual'>('in_person');
 const sourcingLocation = ref('');
-const storageLocation = ref('');
+const storageLocation = ref('HG');
+
+const intakeDetectionReason = computed(() => {
+    if (intakeAutoSource.value === 'url_auction') {
+        return 'Auto: Online Auction Link';
+    }
+    if (intakeAutoSource.value === 'url_direct') {
+        return 'Auto: Fixed Price Link';
+    }
+    if (intakeAutoSource.value === 'in_person') {
+        return 'Auto: In-Person / Physical';
+    }
+    return 'Manual Selection';
+});
 const zipCode = ref('');
 const includeShippingInCost = ref(false);
 const images = ref<{ url: string; file?: File }[]>([]);
@@ -2080,7 +2104,14 @@ watch(isResultsModalOpen, (isOpen) => {
 
 watch(scoutUrl, (val) => {
     if (val && val.trim().startsWith('http')) {
-        sourcingLocation.value = val.trim();
+        const clean = val.trim();
+        sourcingLocation.value = clean;
+        const isAuctionDomain = /shopgoodwill\.com|hibid\.com|ctbids\.com|liveauctioneers\.com|proxibid\.com|govdeals\.com|propertyroom\.com/i.test(clean);
+        if (isAuctionDomain) {
+            isAcquired.value = false;
+            storageLocation.value = '';
+            intakeAutoSource.value = 'url_auction';
+        }
     }
 });
 
@@ -2216,6 +2247,9 @@ watch([includeShippingInCost, result], () => {
 
 // -- CAMERA LOGIC --
 async function handleCapturedPhotos(files: File[]) {
+    isAcquired.value = true;
+    if (!storageLocation.value) storageLocation.value = 'HG';
+    intakeAutoSource.value = 'in_person';
     for (const file of files) {
         if (images.value.length >= 5) return;
         await processFile(file);
@@ -2230,7 +2264,10 @@ function removeImage(index: number) {
 // -- FILE UPLOAD --
 async function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.files) {
+    if (input.files && input.files.length > 0) {
+        isAcquired.value = true;
+        if (!storageLocation.value) storageLocation.value = 'HG';
+        intakeAutoSource.value = 'in_person';
         for (let i = 0; i < input.files.length; i++) {
              await processFile(input.files[i]);
         }
@@ -2243,6 +2280,9 @@ async function handleDrop(e: DragEvent) {
     
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
+        isAcquired.value = true;
+        if (!storageLocation.value) storageLocation.value = 'HG';
+        intakeAutoSource.value = 'in_person';
         let processedAtLeastOne = false;
         for (let i = 0; i < files.length; i++) {
              if (files[i].type.startsWith('image/')) {
@@ -2299,6 +2339,9 @@ function handleReceiptUpload(e: Event) {
      const input = e.target as HTMLInputElement;
      if (input.files && input.files[0]) {
          receiptFile.value = input.files[0];
+         isAcquired.value = true;
+         if (!storageLocation.value) storageLocation.value = 'HG';
+         intakeAutoSource.value = 'in_person';
      }
 }
 
@@ -2418,6 +2461,18 @@ async function analyzeListing() {
         }
         
         if (data.items) {
+            const first = data.items[0];
+            const isAuction = isAuctionItem(first);
+            if (isAuction) {
+                isAcquired.value = false;
+                storageLocation.value = '';
+                intakeAutoSource.value = 'url_auction';
+            } else {
+                isAcquired.value = true;
+                if (!storageLocation.value) storageLocation.value = 'HG';
+                intakeAutoSource.value = 'url_direct';
+            }
+
             data.items.forEach((it: any) => {
                 const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
                 const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
@@ -2584,6 +2639,18 @@ async function analyzeImage() {
         }
         
         if (data.items) {
+            const first = data.items[0];
+            const isAuction = isAuctionItem(first);
+            if (isAuction) {
+                isAcquired.value = false;
+                storageLocation.value = '';
+                intakeAutoSource.value = 'url_auction';
+            } else {
+                isAcquired.value = true;
+                if (!storageLocation.value) storageLocation.value = 'HG';
+                intakeAutoSource.value = 'in_person';
+            }
+
             data.items.forEach((it: any) => {
                 const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
                 const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
@@ -2640,9 +2707,10 @@ function startNewScan() {
     scoutUrl.value = '';
     userNotes.value = '';
     cost.value = '';
-    isAcquired.value = false;
+    isAcquired.value = true;
+    intakeAutoSource.value = 'in_person';
     sourcingLocation.value = '';
-    storageLocation.value = '';
+    storageLocation.value = 'HG';
     receiptFile.value = null;
     error.value = null;
     successMessage.value = null;
@@ -3265,7 +3333,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
                 storageLocation: storageLocation.value || '',
-                status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
+                status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                 keywords: item.keywords || [],
                 rawAnalysis: getSafeRawAnalysis(item) || undefined
             };
@@ -3414,7 +3482,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      maxBuyPrice: calculateMaxBuy(subItem.estimated_value) || 0.0,
                      sourcingLocation: sourcingLocation.value || '',
                      storageLocation: storageLocation.value || '',
-                     status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
+                     status: (isAcquired.value || allowStandaloneSave.value || (individualCost > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                      keywords: item.keywords || [],
                      galleryImageIds: itemGalleryIds,
                      rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -3490,10 +3558,9 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  maxBid: calculateMaxBid(item) || undefined,
                  currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
                  auctionEndsAt: (isAcquired.value || allowStandaloneSave.value) ? undefined : (item.auctionEndsAt || item.auction_meta?.end_time || undefined),
-                  auctionStatus: (isAcquired.value || allowStandaloneSave.value) ? 'won' : undefined,
                  sourcingLocation: sourcingLocation.value || scoutUrl.value || '',
                  storageLocation: storageLocation.value || '',
-                 status: (isAcquired.value || allowStandaloneSave.value) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
+                 status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                  keywords: item.keywords || [],
                  imageId: primaryImage,
                  galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
