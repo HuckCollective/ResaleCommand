@@ -12,6 +12,10 @@
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+        <a href="/sales/import" class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Import Ricochet POS CSV">
+          <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0 text-primary" />
+          <span>Import CSV</span>
+        </a>
         <a href="/warehouse/sync" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]">
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Location Sync</span>
@@ -89,6 +93,33 @@
           </div>
         </div>
       </div>
+
+      <!-- VIEW TAB SWITCHER (SALES LEDGER VS CO-OP SETTLEMENTS) -->
+      <div class="flex items-center justify-between gap-3 border-b border-base-200 pb-2">
+        <div class="join bg-base-200/90 p-1 rounded-2xl shadow-inner w-full sm:w-auto">
+          <button 
+            type="button" 
+            class="btn btn-sm join-item gap-2 flex-1 sm:flex-initial rounded-xl text-xs font-bold transition-all"
+            :class="salesViewTab === 'ledger' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
+            @click="salesViewTab = 'ledger'"
+          >
+            <Icon icon="solar:list-check-bold" class="w-4 h-4" />
+            <span>Sales Ledger ({{ consolidatedSales.length }})</span>
+          </button>
+          <button 
+            type="button" 
+            class="btn btn-sm join-item gap-2 flex-1 sm:flex-initial rounded-xl text-xs font-bold transition-all"
+            :class="salesViewTab === 'coop' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
+            @click="salesViewTab = 'coop'"
+          >
+            <Icon icon="solar:hand-money-bold-duotone" class="w-4 h-4 text-warning" />
+            <span>Co-op Settlements (70/30)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 1. SALES LEDGER TAB -->
+      <div v-show="salesViewTab === 'ledger'" class="space-y-6">
 
       <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
       <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
@@ -503,6 +534,12 @@
           </a>
         </template>
       </PaginationDock>
+      </div>
+
+      <!-- 2. CO-OP SETTLEMENTS TAB -->
+      <div v-show="salesViewTab === 'coop'">
+        <CoopSettlementView :sales="consolidatedSales" />
+      </div>
 
       <!-- Reusable Camera Barcode & QR Scanner Modal -->
       <BarcodeScannerModal 
@@ -520,6 +557,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import CoopSettlementView from './CoopSettlementView.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { client } from '../../lib/appwrite';
@@ -540,6 +578,7 @@ const error = ref('');
 const searchQuery = ref('');
 const locationFilter = ref('all');
 const showBarcodeScanner = ref(false);
+const salesViewTab = ref<'ledger' | 'coop'>('ledger');
 
 // Sorting state (PO treatment)
 const sortBy = ref<'date' | 'so' | 'net' | 'gross' | 'location' | 'status'>('date');
@@ -716,6 +755,7 @@ const consolidatedSales = computed(() => {
       netPayout: Number(sale.netPayout !== undefined ? sale.netPayout : (sale.grossAmount - comm)),
       itemId: linkedItem?.$id || '',
       itemUrl: linkedItem ? `/item/${linkedItem.$id}` : '',
+      cost: Number(linkedItem?.cost || linkedItem?.purchasePrice || 0)
     });
   });
 
@@ -746,6 +786,7 @@ const consolidatedSales = computed(() => {
         netPayout: net,
         itemId: item.$id,
         itemUrl: `/item/${item.$id}`,
+        cost: Number(item.cost || item.purchasePrice || 0)
       });
     }
   });

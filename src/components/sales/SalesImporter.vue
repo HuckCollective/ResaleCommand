@@ -415,7 +415,7 @@ const resolveItemPrefix = (item, rowSku) => {
 const resolvePartnerName = (prefix) => {
   const clean = prefix.replace(/[-_]$/, '');
   if (clean === 'HUCK') return 'Huckleberry Collective';
-  if (clean === 'PDXGL') return 'PDX Glass & Art';
+  if (clean === 'PDXGL') return 'PDX Game Library';
 
   const partnerList = team.value?.prefs?.partnerPrefixes || [];
   for (const p of partnerList) {

@@ -27,6 +27,36 @@ export interface PartnerStatementData {
   boothLocation?: string;
 }
 
+function formatPdfDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-';
+  try {
+    const raw = String(dateStr).trim();
+    const datePart = raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
+    if (datePart && datePart.includes('-')) {
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        const [yyyy, mm, dd] = parts;
+        return `${mm}/${dd}/${yyyy.slice(2)}`; // e.g. "10/23/26"
+      }
+    }
+    return datePart.slice(0, 10);
+  } catch {
+    return String(dateStr).slice(0, 10);
+  }
+}
+
+function formatPdfSku(skuStr: string | null | undefined): string {
+  if (!skuStr) return '-';
+  const clean = String(skuStr).trim();
+  return clean.length > 13 ? clean.slice(0, 12) + '…' : clean;
+}
+
+function formatPdfTitle(titleStr: string | null | undefined): string {
+  if (!titleStr) return 'Sold Item';
+  const clean = String(titleStr).trim();
+  return clean.length > 36 ? clean.substring(0, 34) + '...' : clean;
+}
+
 export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -34,34 +64,34 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
     format: 'letter' // 612 x 792 pt
   });
 
-  const margin = 40;
+  const margin = 36;
   const pageWidth = 612;
   const pageHeight = 792;
   let y = margin;
 
-  // Header Bar
-  doc.setFillColor(16, 185, 129); // Primary emerald/green
+  // Header Bar (Emerald accent)
+  doc.setFillColor(16, 185, 129);
   doc.rect(margin, y, pageWidth - (margin * 2), 4, 'F');
   y += 24;
 
   // Title
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
+  doc.setFontSize(17);
   doc.setTextColor(30, 41, 59);
   doc.text('HUCKLEBERRY COLLECTIVE COOPERATIVE', margin, y);
   
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(100, 116, 139);
   doc.text('Worker Self-Directed Consortium • Multi-Channel Retail Commons', margin, y + 14);
 
   // Statement Meta on Right
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(16, 185, 129);
   doc.text('PARTNER SETTLEMENT', pageWidth - margin, y, { align: 'right' });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
   doc.text(`Period: ${data.periodLabel || 'Monthly Settlement'}`, pageWidth - margin, y + 14, { align: 'right' });
   doc.text(`Date: ${data.statementDate}`, pageWidth - margin, y + 26, { align: 'right' });
@@ -78,13 +108,13 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.text(`Partner: ${data.partnerName}`, margin + 14, y + 18);
   
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
   doc.text(`Barcode Prefix: [ ${data.prefix} ] • Venue: ${data.boothLocation || 'Memory Den (Booth 0EJ)'}`, margin + 14, y + 32);
 
   // Financial Highlight on Right of Info Box
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(15);
   doc.setTextColor(16, 185, 129);
   doc.text(`$${data.totalPayoutCheck.toFixed(2)}`, pageWidth - margin - 14, y + 20, { align: 'right' });
   doc.setFont('helvetica', 'normal');
@@ -92,79 +122,72 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.setTextColor(100, 116, 139);
   doc.text('Total Net Payout Check', pageWidth - margin - 14, y + 32, { align: 'right' });
 
-  y += 62;
+  y += 60;
 
-  // Table Headers
-  doc.setFillColor(241, 245, 249);
-  doc.rect(margin, y, pageWidth - (margin * 2), 20, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-
+  // Table Column Coordinates (Optimized to prevent text collisions)
   const colX = {
-    date: margin + 6,
-    sku: margin + 60,
-    title: margin + 120,
-    gross: margin + 300,
-    fee: margin + 355,
-    cost: margin + 410,
-    profit: margin + 465,
-    take: pageWidth - margin - 6
+    date: margin + 4,         // 40
+    sku: margin + 50,         // 86
+    title: margin + 116,      // 152
+    gross: margin + 344,      // 380 (right-align)
+    fee: margin + 392,        // 428 (right-align)
+    cost: margin + 438,       // 474 (right-align)
+    profit: margin + 486,     // 522 (right-align)
+    take: pageWidth - margin - 4 // 572 (right-align)
   };
 
-  doc.text('Date', colX.date, y + 13);
-  doc.text('SKU / Code', colX.sku, y + 13);
-  doc.text('Item Description', colX.title, y + 13);
-  doc.text('Gross', colX.gross, y + 13, { align: 'right' });
-  doc.text('Venue Fee', colX.fee, y + 13, { align: 'right' });
-  doc.text('Cost Back', colX.cost, y + 13, { align: 'right' });
-  doc.text('Surplus', colX.profit, y + 13, { align: 'right' });
-  doc.text('Curator (70%)', colX.take, y + 13, { align: 'right' });
+  const drawTableHeader = (currY: number) => {
+    doc.setFillColor(241, 245, 249);
+    doc.rect(margin, currY, pageWidth - (margin * 2), 20, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
 
+    doc.text('Date', colX.date, currY + 13);
+    doc.text('SKU / Code', colX.sku, currY + 13);
+    doc.text('Item Description', colX.title, currY + 13);
+    doc.text('Gross', colX.gross, currY + 13, { align: 'right' });
+    doc.text('Venue Fee', colX.fee, currY + 13, { align: 'right' });
+    doc.text('Cost Back', colX.cost, currY + 13, { align: 'right' });
+    doc.text('Surplus', colX.profit, currY + 13, { align: 'right' });
+    doc.text('Curator (70%)', colX.take, currY + 13, { align: 'right' });
+  };
+
+  drawTableHeader(y);
   y += 24;
 
   // Item Rows
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(51, 65, 85);
 
   for (let i = 0; i < data.items.length; i++) {
     const item = data.items[i];
 
-    // Check for page break
+    // Page Break Check
     if (y > pageHeight - 90) {
       doc.addPage();
       y = margin;
-      // Re-print table header on new page
-      doc.setFillColor(241, 245, 249);
-      doc.rect(margin, y, pageWidth - (margin * 2), 20, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(71, 85, 105);
-      doc.text('Date', colX.date, y + 13);
-      doc.text('SKU / Code', colX.sku, y + 13);
-      doc.text('Item Description', colX.title, y + 13);
-      doc.text('Gross', colX.gross, y + 13, { align: 'right' });
-      doc.text('Venue Fee', colX.fee, y + 13, { align: 'right' });
-      doc.text('Cost Back', colX.cost, y + 13, { align: 'right' });
-      doc.text('Surplus', colX.profit, y + 13, { align: 'right' });
-      doc.text('Curator (70%)', colX.take, y + 13, { align: 'right' });
+      drawTableHeader(y);
       y += 24;
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
     }
 
+    // Alternating Zebra Row Background
     if (i % 2 === 1) {
       doc.setFillColor(248, 250, 252);
-      doc.rect(margin, y - 9, pageWidth - (margin * 2), 16, 'F');
+      doc.rect(margin, y - 9, pageWidth - (margin * 2), 15, 'F');
     }
 
-    doc.text(item.date || '-', colX.date, y + 2);
-    doc.text(item.sku || '-', colX.sku, y + 2);
+    const cleanDate = formatPdfDate(item.date);
+    const cleanSku = formatPdfSku(item.sku);
+    const cleanTitle = formatPdfTitle(item.title);
 
-    const safeTitle = item.title.length > 34 ? item.title.substring(0, 32) + '...' : item.title;
-    doc.text(safeTitle, colX.title, y + 2);
+    doc.text(cleanDate, colX.date, y + 2);
+    doc.text(cleanSku, colX.sku, y + 2);
+    doc.text(cleanTitle, colX.title, y + 2);
 
     doc.text(`$${item.grossPrice.toFixed(2)}`, colX.gross, y + 2, { align: 'right' });
     doc.text(`-$${item.venueFee.toFixed(2)}`, colX.fee, y + 2, { align: 'right' });
@@ -179,8 +202,9 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
     doc.setTextColor(15, 23, 42);
     doc.text(`$${item.curatorTake.toFixed(2)}`, colX.take, y + 2, { align: 'right' });
     doc.setFont('helvetica', 'normal');
+    doc.setTextColor(51, 65, 85);
 
-    y += 16;
+    y += 15;
   }
 
   y += 10;
@@ -203,7 +227,7 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
 
   let sy = y + 16;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
 
   doc.text('Total Items Sold:', summaryBoxX + 14, sy);
@@ -233,7 +257,7 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
 
   // Charter Guarantee Footer on Left
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
   doc.text('Worker Self-Directed Enterprise Guarantee:', margin, y + 20);
   doc.text('• 100% of purchase capital is returned dollar-for-dollar.', margin, y + 32);
