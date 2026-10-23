@@ -269,6 +269,23 @@
                 ${{ (simCostBasis + simCuratorProfit).toFixed(2) }}
               </div>
             </div>
+
+            <!-- Settlement Importer Quick Action Banner -->
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-base-200/90 border border-base-300">
+              <div class="space-y-0.5">
+                <div class="font-bold text-xs text-base-content flex items-center gap-1.5">
+                  <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
+                  Monthly Payout History Ready?
+                </div>
+                <div class="text-[11px] text-base-content/70">
+                  Upload your Memory Den Ricochet CSV to auto-split partner shares and generate 1-click PDF statements.
+                </div>
+              </div>
+              <a href="/sales/import" class="btn btn-xs sm:btn-sm btn-primary gap-1.5 font-bold shrink-0 shadow-sm">
+                <Icon icon="solar:import-bold-duotone" class="w-4 h-4" />
+                <span>Launch Settlement Importer</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -522,6 +539,146 @@
             </p>
           </div>
 
+          <!-- Simple Labor & Engagement Logger -->
+          <div class="card bg-base-200/50 border border-base-300 p-5 rounded-2xl space-y-4">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-300 pb-3">
+              <div>
+                <h3 class="font-bold text-sm text-base-content flex items-center gap-2">
+                  <Icon icon="solar:clock-circle-bold" class="w-4 h-4 text-primary" />
+                  <span>Co-op Labor &amp; Engagement Logger</span>
+                </h3>
+                <p class="text-xs text-base-content/70">
+                  Log hours for booth restock, staging, photography, or social media drops. Recognized for Commons labor dividends.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                <span class="badge badge-primary font-mono font-bold">{{ totalLaborHours }} hrs total</span>
+                <button 
+                  v-if="laborLogs.length > 0"
+                  class="btn btn-xs btn-outline gap-1"
+                  @click="exportLaborCsv"
+                >
+                  <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Quick Add Form -->
+            <form @submit.prevent="logLabor" class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end text-xs">
+              <div class="sm:col-span-3">
+                <label class="label py-0.5"><span class="label-text-alt font-bold">Member / Partner</span></label>
+                <input 
+                  type="text" 
+                  v-model="newLabor.member" 
+                  placeholder="e.g. Tyler (Core)" 
+                  class="input input-bordered input-xs w-full"
+                  required
+                />
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="label py-0.5"><span class="label-text-alt font-bold">Date</span></label>
+                <input 
+                  type="date" 
+                  v-model="newLabor.date" 
+                  class="input input-bordered input-xs w-full font-mono"
+                  required
+                />
+              </div>
+
+              <div class="sm:col-span-3">
+                <label class="label py-0.5"><span class="label-text-alt font-bold">Activity</span></label>
+                <select v-model="newLabor.category" class="select select-bordered select-xs w-full">
+                  <option value="Booth Restock">Booth Restock &amp; Merch</option>
+                  <option value="Photography &amp; Staging">Photography &amp; Staging</option>
+                  <option value="Social &amp; Marketing">Social &amp; Marketing</option>
+                  <option value="Tech &amp; Admin">Tech &amp; Operations</option>
+                  <option value="Sourcing">Sourcing Curation</option>
+                </select>
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="label py-0.5"><span class="label-text-alt font-bold">Hours</span></label>
+                <input 
+                  type="number" 
+                  v-model.number="newLabor.hours" 
+                  step="0.5" 
+                  min="0.5" 
+                  max="12" 
+                  class="input input-bordered input-xs w-full font-mono"
+                  required
+                />
+              </div>
+
+              <div class="sm:col-span-2">
+                <button type="submit" class="btn btn-xs btn-primary w-full gap-1 font-bold">
+                  <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                  <span>Log Hours</span>
+                </button>
+              </div>
+
+              <div class="sm:col-span-12">
+                <input 
+                  type="text" 
+                  v-model="newLabor.notes" 
+                  placeholder="Accomplishments &amp; notes (e.g. Restocked 12 jackets, dusted shelving, posted 2 stories)" 
+                  class="input input-bordered input-xs w-full"
+                />
+              </div>
+            </form>
+
+            <!-- Table of Logged Contributions -->
+            <div v-if="laborLogs.length > 0" class="overflow-x-auto border border-base-300 rounded-xl bg-base-100 max-h-56">
+              <table class="table table-xs table-pin-rows">
+                <thead>
+                  <tr class="bg-base-200">
+                    <th>Date</th>
+                    <th>Member</th>
+                    <th>Category</th>
+                    <th class="text-right">Hours</th>
+                    <th>Notes</th>
+                    <th class="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="log in laborLogs" :key="log.id" class="hover:bg-base-200/40">
+                    <td class="font-mono text-[11px]">{{ log.date }}</td>
+                    <td class="font-bold">{{ log.member }}</td>
+                    <td>
+                      <span 
+                        class="badge badge-xs font-semibold"
+                        :class="{
+                          'badge-primary': log.category === 'Booth Restock',
+                          'badge-secondary': log.category === 'Photography & Staging',
+                          'badge-accent': log.category === 'Social & Marketing',
+                          'badge-info': log.category === 'Tech & Admin',
+                          'badge-warning': log.category === 'Sourcing'
+                        }"
+                      >
+                        {{ log.category }}
+                      </span>
+                    </td>
+                    <td class="text-right font-mono font-bold text-success">{{ log.hours.toFixed(1) }}h</td>
+                    <td class="max-w-xs truncate opacity-80">{{ log.notes }}</td>
+                    <td class="text-right">
+                      <button 
+                        class="btn btn-ghost btn-xs text-error p-0 h-auto min-h-0 hover:bg-transparent"
+                        @click="deleteLabor(log.id)"
+                        title="Delete entry"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="text-center py-4 text-xs opacity-60 italic">
+              No labor hours logged yet. Use the form above to record your first contribution!
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -534,7 +691,11 @@
           Equal partners. Transparent numbers. Shared prosperity.
         </p>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <a href="/sales/import" class="btn btn-sm btn-outline gap-1.5 font-bold">
+          <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary" />
+          <span>Sales &amp; Settlements</span>
+        </a>
         <a href="/settings" class="btn btn-sm btn-outline font-bold">
           Partner Settings
         </a>
@@ -548,7 +709,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 
@@ -586,6 +747,101 @@ const simCommonsTake = computed(() => {
   return Number((simNetSurplus.value * 0.30).toFixed(2));
 });
 
+// Co-op Labor & Engagement Logger State
+export interface LaborLogEntry {
+  id: string;
+  date: string;
+  member: string;
+  category: 'Booth Restock' | 'Photography & Staging' | 'Social & Marketing' | 'Tech & Admin' | 'Sourcing';
+  hours: number;
+  notes: string;
+}
+
+const defaultLaborLogs: LaborLogEntry[] = [
+  { id: '1', date: new Date().toISOString().slice(0, 10), member: 'Tyler (Core)', category: 'Booth Restock', hours: 2.0, notes: 'Restocked booth #0EJ, staged 15 outerwear pieces & updated pricing.' },
+  { id: '2', date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), member: 'PDX Partner', category: 'Photography & Staging', hours: 1.5, notes: 'Deep Scan photo enrichment on 18 tabletop games & cataloged.' },
+  { id: '3', date: new Date(Date.now() - 86400000 * 4).toISOString().slice(0, 10), member: 'Tyler (Core)', category: 'Social & Marketing', hours: 1.0, notes: 'Created Instagram Reel & stories showcasing new vintage glass haul.' }
+];
+
+const laborLogs = ref<LaborLogEntry[]>([]);
+
+const newLabor = ref({
+  member: 'Tyler (Core)',
+  date: new Date().toISOString().slice(0, 10),
+  category: 'Booth Restock' as LaborLogEntry['category'],
+  hours: 1.5,
+  notes: ''
+});
+
+onMounted(() => {
+  try {
+    const saved = localStorage.getItem('huck_coop_labor_logs');
+    if (saved) {
+      laborLogs.value = JSON.parse(saved);
+    } else {
+      laborLogs.value = defaultLaborLogs;
+      localStorage.setItem('huck_coop_labor_logs', JSON.stringify(defaultLaborLogs));
+    }
+  } catch {
+    laborLogs.value = defaultLaborLogs;
+  }
+});
+
+const totalLaborHours = computed(() => {
+  return Number(laborLogs.value.reduce((sum, l) => sum + l.hours, 0).toFixed(1));
+});
+
+const logLabor = () => {
+  if (!newLabor.value.member.trim() || newLabor.value.hours <= 0) {
+    addToast({ type: 'error', message: 'Please enter member name and valid hours' });
+    return;
+  }
+  const entry: LaborLogEntry = {
+    id: 'labor-' + Date.now(),
+    date: newLabor.value.date || new Date().toISOString().slice(0, 10),
+    member: newLabor.value.member.trim(),
+    category: newLabor.value.category,
+    hours: Number(newLabor.value.hours),
+    notes: newLabor.value.notes.trim() || 'General contribution'
+  };
+  laborLogs.value.unshift(entry);
+  try {
+    localStorage.setItem('huck_coop_labor_logs', JSON.stringify(laborLogs.value));
+  } catch {}
+  newLabor.value.notes = '';
+  addToast({ type: 'success', message: `Logged ${entry.hours}h labor for ${entry.member}!` });
+};
+
+const deleteLabor = (id: string) => {
+  laborLogs.value = laborLogs.value.filter(l => l.id !== id);
+  try {
+    localStorage.setItem('huck_coop_labor_logs', JSON.stringify(laborLogs.value));
+  } catch {}
+  addToast({ type: 'info', message: 'Removed labor entry' });
+};
+
+const exportLaborCsv = () => {
+  if (laborLogs.value.length === 0) return;
+  const header = ['Date', 'Member', 'Category', 'Hours', 'Notes'];
+  const rows = laborLogs.value.map(l => [
+    l.date,
+    `"${l.member.replace(/"/g, '""')}"`,
+    `"${l.category}"`,
+    l.hours,
+    `"${l.notes.replace(/"/g, '""')}"`
+  ]);
+  const csvContent = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Coop_Labor_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  addToast({ type: 'success', message: 'Downloaded Co-op Labor Ledger CSV!' });
+};
+
 const handlePrint = () => {
   window.print();
 };
@@ -595,12 +851,12 @@ const copyShareLink = async () => {
     const url = window.location.origin + '/coop';
     await navigator.clipboard.writeText(url);
     copiedLink.value = true;
-    addToast('Charter link copied to clipboard!', 'success');
+    addToast({ type: 'success', message: 'Charter link copied to clipboard!' });
     setTimeout(() => {
       copiedLink.value = false;
     }, 2500);
   } catch {
-    addToast('Could not copy link', 'error');
+    addToast({ type: 'error', message: 'Could not copy link' });
   }
 };
 </script>

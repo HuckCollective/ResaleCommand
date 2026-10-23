@@ -87,6 +87,16 @@ export const POST: APIRoute = async ({ request }) => {
                     await db.updateDocument(targetDbId, targetCollectionId, id, safeData);
                     return { success: true, id };
                 } catch (err: any) {
+                    // Resilient collection fallback: If not found in targetCollectionId, check alternate (items vs items_dev)
+                    if (err?.code === 404 || err?.message?.includes('not be found')) {
+                        const altCollectionId = targetCollectionId === 'items' ? 'items_dev' : 'items';
+                        try {
+                            await db.updateDocument(targetDbId, altCollectionId, id, safeData);
+                            return { success: true, id };
+                        } catch (altErr: any) {
+                            return { success: false, id, error: altErr?.message || err?.message || 'Update failed' };
+                        }
+                    }
                     return { success: false, id, error: err?.message || 'Update failed' };
                 }
             });
