@@ -1,0 +1,11 @@
+---
+import Layout from '../layouts/Layout.astro';
+import CoopCharterView from '../components/coop/CoopCharterView.vue';
+---
+
+<Layout 
+  title="Cooperative Charter & Member Rules | Huckleberry Collective"
+  description="Democratic Worker Self-Directed Enterprise charter, 3-tier financial distribution waterfall, partner prefix attribution, and transparent operations policy."
+>
+  <CoopCharterView client:only="vue" />
+</Layout>

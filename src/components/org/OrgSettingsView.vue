@@ -41,6 +41,27 @@
         </div>
     </div>
 
+    <!-- Cooperative Charter & Operating Agreement -->
+    <div class="card bg-gradient-to-r from-primary/10 via-base-200 to-base-100 border border-primary/20 shadow-md">
+      <div class="card-body p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+            <Icon icon="solar:shield-star-bold" class="w-6 h-6" />
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-base-content">Huckleberry Collective Charter &amp; Member Rules</h3>
+            <p class="text-xs text-base-content/70">
+              Democracy at Work, 3-tier financial distribution waterfall, 100% cost recoupment, and partner prefix attribution.
+            </p>
+          </div>
+        </div>
+        <a href="/coop" class="btn btn-sm btn-primary gap-1.5 font-bold shrink-0">
+          <span>Read Co-op Charter</span>
+          <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+        </a>
+      </div>
+    </div>
+
     <!-- Members Management (Owner Only) -->
     <div v-if="isOwner" class="card bg-base-100 shadow-xl">
         <div class="card-body">

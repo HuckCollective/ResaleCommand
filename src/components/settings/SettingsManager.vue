@@ -73,6 +73,7 @@
                 </label>
                 <p class="text-xs text-base-content/70 mt-0.5">
                   Partition partner inventory, payout ledgers, and sales reports (e.g. <code>PDXGL-</code> for PDX Game Library).
+                  <a href="/coop" class="link link-primary font-bold ml-1 text-xs">Learn how partner splits work &rarr;</a>
                 </p>
               </div>
               <button 

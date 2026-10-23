@@ -278,7 +278,7 @@
             </button>
           </div>
           <span class="text-[11px] text-base-content/50 font-mono hidden sm:inline shrink-0">
-            Model: Gemini 2.5 Flash
+            Model: {{ metrics?.model || 'gemini-flash-latest' }}
           </span>
         </div>
 

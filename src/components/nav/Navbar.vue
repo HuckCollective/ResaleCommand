@@ -124,6 +124,12 @@
                          Label Studio
                      </a>
                   </li>
+                  <li>
+                     <a href="/coop" class="gap-2 font-semibold text-primary">
+                         <Icon icon="solar:shield-star-bold" class="w-4 h-4 text-primary" />
+                         Co-op Charter &amp; Rules
+                     </a>
+                  </li>
                   
                   <!-- Organization Settings -->
                   <!-- Active Team -->
@@ -260,6 +266,9 @@
                     </a>
                     <a href="/labels/studio" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm" @click="openMobile = false">
                         <Icon icon="solar:printer-bold" class="w-5 h-5 text-primary" /> Label Studio
+                    </a>
+                    <a href="/coop" class="btn btn-ghost justify-start gap-3 w-full normal-case text-sm text-primary font-bold" @click="openMobile = false">
+                        <Icon icon="solar:shield-star-bold" class="w-5 h-5 text-primary" /> Co-op Charter &amp; Rules
                     </a>
                     
                     <div class="flex flex-wrap gap-2 mt-1">

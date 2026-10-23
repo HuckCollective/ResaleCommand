@@ -11,6 +11,9 @@ import Layout from "../layouts/Layout.astro";
       <div x-show="success" class="text-green-500">
         <p class="text-xl font-bold mb-2">Successfully joined <span x-text="teamName"></span>!</p>
         <p class="text-sm text-gray-600 mb-4">Managed by: <span x-text="owners"></span></p>
+        <p class="text-xs text-gray-500 pt-2 border-t border-gray-200">
+          Operates under the <a href="/coop" target="_blank" class="text-primary font-bold underline">Huckleberry Collective Charter</a>
+        </p>
         <p>Redirecting to dashboard...</p>
       </div>
     </div>

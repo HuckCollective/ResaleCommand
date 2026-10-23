@@ -5,7 +5,7 @@ description: Cooperative economics, worker-directed enterprise (WSDE) standards,
 
 # Huckleberry Collective - Democracy at Work & Cooperative Architecture
 
-This skill defines the cooperative economic engine, financial formulas, transparent ledger standards, and democratic governance rules for the **Huckleberry Collective** and partner organizations on Resale Command.
+This skill defines the cooperative economic engine, financial formulas, transparent ledger standards, monthly settlement cadences, legal structure, and democratic governance rules for the **Huckleberry Collective** and partner organizations on Resale Command.
 
 ---
 
@@ -16,8 +16,9 @@ The Huckleberry Collective operates on the principles of **Democracy at Work** (
 1. **Democratic Member Equality**: 1 member = 1 vote. Decisions affecting the collective are made democratically by the workers and creators who produce the value.
 2. **Total Financial Transparency**: No hidden markups or opaque cuts. All venue costs (e.g. Memory Den 15% commission, booth rent, storage) and gross revenues are auditable by every active member.
 3. **100% Capital Basis Protection**: Personal funds spent by members on inventory, raw materials, or supplies are recouped dollar-for-dollar before net profits are distributed.
-4. **Equitable Surplus Sharing (Patronage Dividends)**: Net profits (surplus) are distributed equitably based on transparent criteria: contributed inventory sales, sweat equity (labor hours), and equal baseline member dividends.
-5. **Autonomy of Partner Organizations**: Partner collectives and curators (e.g. **PDX Game Library**) maintain autonomous identity, separate prefixes (`PDXGL-`), and independent inventory ownership while sharing the collective commons.
+4. **Purchaser Curation Rewards**: Sourcing winners takes taste, effort, and capital risk. The member who sources an item takes home 100% of their cost basis plus 50% of the net profit on that item.
+5. **Equitable Surplus Sharing (Patronage Dividends)**: Net profits (surplus) are distributed equitably based on transparent criteria: contributed inventory sales (50%), sweat equity / labor hours (40%), and collective reserve (10%).
+6. **Autonomy of Partner Organizations**: Partner collectives and curators (e.g. **PDX Game Library**) maintain autonomous identity, separate prefixes (`PDXGL-`), and independent inventory ownership while sharing the collective commons.
 
 ---
 
@@ -32,8 +33,10 @@ Every dollar entering the collective from retail venues (Memory Den, Ricochet PO
 ┌────────────────────────────────────────────────────────┐
 │  Tier 1: Shared Commons Pool (Covered First)           │
 │  - Retail POS Commissions (e.g. 15% Memory Den fee)    │
-│  - Monthly Shared Booth Rent                           │
+│  - Monthly Shared Booth Rent ($382.50 at Memory Den)   │
 │  - Shared Operational Supplies (Labels, boxes, bins)   │
+│  - Tech Commons: Hosting, Appwrite, & 100% repayment  │
+│    for fronted AI scouting credits ($100 Google Prepay)│
 └────────────────────────────────────────────────────────┘
           │
           ▼
@@ -41,50 +44,68 @@ Every dollar entering the collective from retail venues (Memory Den, Ricochet PO
 │  Tier 2: Member Capital Basis Recoupment               │
 │  - 100% return of member out-of-pocket inventory cost  │
 │  - Reimbursed approved member expenses (receipt-logged)│
+│  - Zero risk of taking a loss on sold inventory        │
 └────────────────────────────────────────────────────────┘
           │
           ▼
 ┌────────────────────────────────────────────────────────┐
 │  Tier 3: Net Operating Surplus & Patronage Dividends   │
-│  1. Collective Reserve (e.g. 10% for future equipment) │
-│  2. Contributed Sales Share (e.g. 50% based on sales)  │
-│  3. Labor / Sweat Equity Share (e.g. 40% based on time)│
+│  1. Collective Reserve (10% cushion for slow months)   │
+│  2. Contributed Sales Share (50% to the item curator)  │
+│  3. Labor / Sweat Equity Share (40% to hours worked)   │
 └────────────────────────────────────────────────────────┘
 ```
 
 ### The Math:
 
-$$\text{Net Operating Surplus} = \text{Gross Venue Revenue} - \text{Shared Overhead} - \sum \text{Member Cost Basis}$$
+$$\text{Net Operating Surplus} = \text{Gross Venue Revenue} - \text{Tier 1 Shared Overhead} - \sum \text{Member Cost Basis}$$
 
-$$\text{Distributable Surplus} = \text{Net Operating Surplus} \times (1 - \text{Reserve Rate})$$
+$$\text{Distributable Surplus} = \text{Net Operating Surplus} \times 0.90 \quad (\text{after 10\% reserve})$$
 
-$$\text{Member Payout} = \text{Recouped Capital Basis} + \text{Sales Patronage Dividend} + \text{Labor Patronage Dividend}$$
-
----
-
-## 3. Multi-Org Co-op Ledger Standards
-
-### A. Independent Prefix Attribution
-Each member or partner organization owns a distinct barcode prefix:
-- **`HUCK-`**: Huck Collective primary curated vintage, apparel, and oddities.
-- **`PDXGL-`**: PDX Game Library curated tabletop board games, card games, and expansions.
-- **`{ORG}-`**: Configured dynamically in **Settings > Partner & Vendor Prefixes**.
-
-### B. Shared Venue Representation
-When selling at a shared venue (e.g. Memory Den Booth #0EJ):
-- The physical tag displays both the **Venue SKU** (for register checkout) and the **Co-op Prefix** (`HUCK-XXXX` or `PDXGL-XXXX`).
-- The POS payout report is parsed by the multi-org reconciliation engine, partitioning sales into distinct partner ledgers with zero cross-contamination.
-
-### C. The Expense Reimbursement Flow (Open Collective Standard)
-1. Any member who incurs an out-of-pocket operational expense (e.g. buying a roll of thermal tags, booth display hardware) logs an expense with an attached receipt.
-2. The expense is marked `pending_reimbursement`.
-3. The expense is reimbursed out of the **Shared Commons Pool** upon the next venue payout, before dividends are calculated.
+$$\text{Curator Payout} = \text{Recouped Basis} + (\text{Net Profit on Curator Items} \times 0.50) + \text{Labor Patronage Dividend}$$
 
 ---
 
-## 4. Democratic Governance & Consent Protocol (Loomio Standard)
+## 3. Monthly Settlement Cadence & Booth Rent Accounting
 
-For major operational decisions (e.g. acquiring expensive lots, renting new retail spaces, admitting new partners), the collective uses a **4-Signal Consent Protocol**:
+### A. The Monthly Check Reality
+Memory Den pays **once a month**. The venue automatically withholds their 15% commission and the **$382.50 fixed booth rent** directly off the top before delivering the net payout.
+Cooperative settlements are therefore run **monthly** matching the venue payout CSV:
+
+$$\text{Net Check from Venue} = \text{Gross Sales} - \text{15\% Venue Fee} - \text{\$382.50 Rent}$$
+
+### B. Booth Rent Allocation
+- **Option A (Standard — Top-Line Pool)**: Rent is absorbed out of Tier 1 gross sales before profit split. Members absorb rent proportional to their sales volume. Slow months never generate an out-of-pocket cash call.
+- **Option B (Footprint Model)**: Fixed monthly shelf allocation (e.g. 25% footprint = $95.63/mo deducted from partner gross earnings).
+
+### C. The 10% Reserve Cushion
+The 10% Collective Reserve accumulated during peak months covers rent deficits during slow retail periods (e.g. post-holiday lulls).
+
+---
+
+## 4. Legal Structure: The Cooperative Consortium Model
+
+### Why We Use Consortium Membership (Form 1099-NEC)
+- **Huckleberry Collective LLC** serves as the anchor entity (holds the Memory Den lease, insurance, bank account, and software).
+- Partners join as **Contractual Cooperative Associates / Consortium Curators**:
+  - **Zero Tax Hassle**: Avoids mandatory IRS Form 1065 (Partnership Return) and Schedule K-1s ($1,500+ CPA fee).
+  - **Form 1099-NEC**: Net partner earnings over $600 reported simply via 1099-NEC.
+  - **Partner Brand Autonomy**: Partners retain independent brand identity (`PDXGL-`) and complete inventory ownership.
+  - **Fluid Exits**: Partners can exit anytime with their inventory and final payout with zero legal dissolution filings.
+  - **Democratic Voting**: 1 Member = 1 Vote guaranteed contractually under the Charter.
+- **1-Year Candidacy Path**: Core members who work actively for 12 months can be voted by unanimous consent to become formal LLC equity owners.
+
+---
+
+## 5. Marketing, Photography & Social Media Labor Standards
+
+1. **Recognized Labor**: Photographing inventory, staging displays, publishing dropcasts, creating Reels/TikToks, and answering buyer inquiries earn **Tier 3 Labor Patronage Dividends**.
+2. **Deliverable-Based Gauging**: Every logged marketing hour links to a published Dropcast record, before/after booth photos, or tracked sales velocity.
+3. **Weekly Allocation**: Standard recommendation is 2 to 4 hours per week for social marketing and booth maintenance.
+
+---
+
+## 6. Democratic Governance & Consent Protocol (Loomio Standard)
 
 | Signal | Meaning | Actionable Rule |
 | :--- | :--- | :--- |
@@ -95,8 +116,8 @@ For major operational decisions (e.g. acquiring expensive lots, renting new reta
 
 ---
 
-## 5. Architectural Standards for Developers & Agents
+## 7. Architectural Standards for Developers & Agents
 
 1. **Zero Data Loss**: Never merge or delete partner inventory during syncs. Partner items belong to their respective organization.
 2. **Dynamic Over Hardcoded**: Never hardcode org prefixes to just `HUCK` and `PDXGL`. Always read from `team.prefs.upcPrefix` and `team.prefs.partnerPrefixes`.
-3. **Transparent Ledgers**: Every financial summary must report Gross Revenue, Venue Fee, Net Payout, and Member Basis separately.
+3. **Transparent Ledgers**: Every financial summary must report Gross Revenue, Venue Fee, Net Payout, Member Basis, and Surplus Dividends separately.
