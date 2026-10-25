@@ -1620,10 +1620,11 @@ const executeExpenseImport = async () => {
   // Duplicate Safeguard Confirmation Modal
   if (duplicateCountInStaging.value > 0) {
     const proceed = await confirmDialog(
-      "Duplicate Safeguards Active",
       `You are about to record ${itemsToImport.length} new expense(s) totaling $${totalImportAmount.value.toFixed(2)} to the Shared Commons Pool. ${duplicateCountInStaging.value} duplicate transaction(s) were recognized from your ledger and safely excluded. Proceed with import?`,
+      "Duplicate Safeguards Active",
       "Yes, Import Expenses",
-      "Review Candidates"
+      "Review Candidates",
+      "btn-primary"
     );
     if (!proceed) return;
   }

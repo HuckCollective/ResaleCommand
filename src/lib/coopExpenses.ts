@@ -124,19 +124,35 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
 }
 
 export const coopExpensesApi = {
-  async listExpenses(tenantId?: string): Promise<CoopExpenseItem[]> {
+  async listExpenses(tenantId?: string, maxItems: number = 5000): Promise<CoopExpenseItem[]> {
     try {
-      const queries = [
-        Query.orderDesc('date'),
-        Query.limit(100)
-      ];
-      if (tenantId && tenantId !== 'all') {
-        queries.push(Query.equal('tenantId', tenantId));
+      let allDocs: any[] = [];
+      let offset = 0;
+      const pageSize = Math.min(maxItems, 1000);
+
+      while (allDocs.length < maxItems) {
+        const queries = [
+          Query.orderDesc('date'),
+          Query.limit(Math.min(pageSize, maxItems - allDocs.length))
+        ];
+        if (tenantId && tenantId !== 'all') {
+          queries.push(Query.equal('tenantId', tenantId));
+        }
+        if (offset > 0) {
+          queries.push(Query.offset(offset));
+        }
+
+        const res = await databases.listDocuments(DB_ID(), EXPENSES_COL, queries);
+        if (res.documents.length === 0) break;
+        allDocs.push(...res.documents);
+        offset += res.documents.length;
+
+        if (allDocs.length >= res.total || res.documents.length < pageSize) {
+          break;
+        }
       }
 
-      const res = await databases.listDocuments(DB_ID(), EXPENSES_COL, queries);
-
-      return res.documents.map(doc => {
+      return allDocs.map(doc => {
         const parsed = parseExpenseNote(doc.note);
         return {
           id: doc.$id,

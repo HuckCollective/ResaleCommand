@@ -25,6 +25,8 @@ export interface PartnerStatementData {
   totalCuratorProfit: number;
   totalPayoutCheck: number;
   boothLocation?: string;
+  reimbursements?: number;
+  rentDeduction?: number;
 }
 
 function formatPdfDate(dateStr: string | null | undefined): string {
@@ -232,10 +234,15 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
 
   const summaryBoxWidth = 260;
   const summaryBoxX = pageWidth - margin - summaryBoxWidth;
+  const hasReimbursement = Boolean(data.reimbursements && data.reimbursements > 0);
+  const hasRentDeduction = Boolean(data.rentDeduction && data.rentDeduction > 0);
+  let summaryBoxHeight = 90;
+  if (hasReimbursement) summaryBoxHeight += 14;
+  if (hasRentDeduction) summaryBoxHeight += 14;
 
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(summaryBoxX, y, summaryBoxWidth, 90, 6, 6, 'FD');
+  doc.roundedRect(summaryBoxX, y, summaryBoxWidth, summaryBoxHeight, 6, 6, 'FD');
 
   let sy = y + 16;
   doc.setFont('helvetica', 'normal');
@@ -258,7 +265,25 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
 
   doc.text('70% Curator Net Profit Share:', summaryBoxX + 14, sy);
   doc.text(`+$${data.totalCuratorProfit.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
-  sy += 18;
+  sy += 14;
+
+  if (hasRentDeduction && data.rentDeduction) {
+    doc.text('Proportional Booth Rent Share:', summaryBoxX + 14, sy);
+    doc.setTextColor(220, 38, 38);
+    doc.text(`-$${data.rentDeduction.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
+  }
+
+  if (hasReimbursement && data.reimbursements) {
+    doc.text('Approved Expense Reimbursements:', summaryBoxX + 14, sy);
+    doc.setTextColor(16, 185, 129);
+    doc.text(`+$${data.reimbursements.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
+  } else if (!hasRentDeduction) {
+    sy += 4;
+  }
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);

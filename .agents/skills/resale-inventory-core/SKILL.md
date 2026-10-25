@@ -96,3 +96,28 @@ src/lib/
 ├── salesBucketing.ts    <-- Multi-org CSV sales partitioning & reconciliation engine
 └── inventory.ts         <-- Central facade re-exporting all modules with zero breaking changes
 ```
+
+---
+
+## 5. Single-Unit SKU Uniqueness & Terminal Sale Anti-Duplication Law
+
+### The Cardinal Resale Rule:
+In secondhand, antique, vintage, and booth inventory:
+**1 SKU = 1 Unique Physical Unit = AT MOST 1 Realized Sale** (Unless explicitly flagged with `isMultiQty: true` or `quantity > 1`).
+
+1. **Terminal State Immutability**:
+   - Once an inventory item transitions to `status: 'sold'`, it has reached its terminal lifecycle stage.
+   - It can **NEVER be sold again**.
+2. **Sales Ledger Deduplication**:
+   - Any sales ledger, co-op settlement calculator, or payout reconciler MUST enforce single-sale uniqueness per SKU.
+   - If multiple sale documents in the database reference the same single-quantity SKU, the system must deduplicate them and count only the single canonical sale.
+3. **Importer Idempotency**:
+   - Payout CSV importers and reconciliation tools must check existing sales and sold items by Ticket # and SKU before creating records.
+   - If a SKU or Ticket has already been committed, subsequent re-imports or batch runs must skip creating duplicate records.
+4. **Auto-Create Inventory Guard**:
+   - When auto-creating items from sales rows, the system must first check if an inventory item with that `locationSku` already exists before generating a new record. Zero duplicate inventory documents may be created.
+5. **Multi-Quantity Batch Stock & Appwrite Schema Law**:
+   - Multi-quantity items (batch stock, $10 book packs `0EJ0F9`, felt hats `0EJ0DC`, stickers) can legitimately sell across distinct tickets.
+   - **Appwrite Schema Law**: In Appwrite's `items` collection, the supported integer attribute is `quantity`, NOT `isMultiQty`. NEVER send `isMultiQty` in document payloads to Appwrite; instead, set `quantity: isMulti ? Math.max(2, repeatCount) : 1` in Appwrite, and hydrate `isMultiQty: true` in frontend reactive memory whenever `quantity > 1`.
+
+

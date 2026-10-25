@@ -1,5 +1,5 @@
 <template>
-  <dialog class="modal z-[9999]" :class="{ 'modal-open': state.isOpen }">
+  <div class="modal z-[9999]" :class="{ 'modal-open': state.isOpen }">
     <div class="modal-box shadow-2xl border border-base-200">
       <h3 class="font-bold text-xl mb-4" v-if="state.title">{{ state.title }}</h3>
       <p class="py-2 text-base">{{ state.message }}</p>
@@ -8,9 +8,9 @@
         <button class="btn" :class="state.confirmClass" @click="handleConfirm">{{ state.confirmText }}</button>
       </div>
     </div>
-    <!-- Backdrop to close on clicking outside (optional, depends on design, usually destructive confirms shouldn't auto close but standard ones can. Kept static for strictness.) -->
+    <!-- Backdrop to close on clicking outside -->
     <div class="modal-backdrop bg-black/30 backdrop-blur-sm fixed inset-0 z-[-1]" @click.self="handleCancel"></div>
-  </dialog>
+  </div>
 </template>
 
 <script setup lang="ts">

@@ -46,3 +46,25 @@
      - Strip any value longer than 255 characters.
      - Extract clean File IDs from Appwrite URLs via `getFileIdFromUrl()`.
 
+## 5. Appwrite Collection Schema Rigidity & Unindexed Attribute Protection
+- **Strict Schema Enforcement**:
+  - Appwrite enforces strict server-side validation against defined collection attributes on both `databases.createDocument()` and `databases.updateDocument()`.
+  - Sending any attribute not explicitly declared in the collection schema will throw a fatal `AppwriteException`:
+    `Invalid document structure: Attribute "[attributeName]" not found in collection`.
+- **Multi-Quantity Attributes (`quantity` vs `isMultiQty`)**:
+  - The Appwrite `items` collection defines **`quantity`** as an integer attribute (min 1, default 1).
+  - It does **NOT** contain an `isMultiQty` boolean attribute.
+  - **NEVER** include `isMultiQty` in document creation or update payloads sent to Appwrite.
+  - **Standard Pattern**:
+    ```typescript
+    // In database payload:
+    const docPayload = {
+      ...itemData,
+      quantity: isMulti ? Math.max(2, itemData.quantity || 2) : 1
+    };
+    delete (docPayload as any).isMultiQty; // Guard against schema rejection
+    
+    // In reactive frontend memory:
+    createdDoc.isMultiQty = (createdDoc.quantity > 1) || isMulti;
+    ```
+

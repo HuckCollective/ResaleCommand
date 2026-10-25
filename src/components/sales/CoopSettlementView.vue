@@ -22,6 +22,16 @@
         </div>
 
         <div class="flex items-center gap-2.5 w-full sm:w-auto flex-wrap justify-end">
+          <!-- Link to Payout CSV Importer -->
+          <a 
+            href="/sales/import" 
+            class="btn btn-sm btn-primary gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs shadow-sm"
+            title="Upload Memory Den or register payout CSV to import and reconcile sales"
+          >
+            <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
+            <span>Upload Payout CSV</span>
+          </a>
+
           <!-- Link to Shared Commons Expense Ledger -->
           <a 
             href="/expenses" 
@@ -95,23 +105,37 @@
         </div>
       </div>
 
-      <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-warning/30 shadow-sm space-y-1 bg-warning/5">
+      <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-warning/30 shadow-sm space-y-1.5 bg-warning/5">
         <div class="text-[11px] font-bold text-warning uppercase tracking-wider flex items-center justify-between gap-1">
           <span>🤝 Guarantee 3</span>
-          <a href="/expenses" class="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5">
+          <a href="/expenses" class="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5" title="View all receipts & reimbursements">
             <span>Expenses</span>
             <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
           </a>
         </div>
         <div class="text-2xl font-black text-warning font-mono">+${{ settlementSummary.totalCommonsPool.toFixed(2) }}</div>
-        <div class="text-xs font-bold" :class="settlementSummary.isRentCovered ? 'text-success' : 'text-warning'">
-          {{ settlementSummary.isRentCovered ? `✅ Rent ($382.50) Covered (+${settlementSummary.commonsSurplusAfterRent.toFixed(2)})` : `Rent Shortfall: -$${Math.abs(settlementSummary.commonsSurplusAfterRent).toFixed(2)}` }}
+        <div class="text-[11px] text-base-content/70 font-medium space-y-0.5">
+          <div class="flex justify-between">
+            <span>Rent:</span>
+            <span class="font-mono text-error font-semibold">-${{ settlementSummary.boothRent.toFixed(2) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Tech Ops:</span>
+            <span class="font-mono text-primary font-semibold">-${{ settlementSummary.techOps.toFixed(2) }}</span>
+          </div>
+          <div v-if="settlementSummary.supplies > 0" class="flex justify-between">
+            <span>Supplies:</span>
+            <span class="font-mono text-base-content/70 font-semibold">-${{ settlementSummary.supplies.toFixed(2) }}</span>
+          </div>
+        </div>
+        <div class="text-xs font-bold pt-1 border-t border-warning/20" :class="settlementSummary.isCommonsFullyCovered ? 'text-success' : 'text-warning'">
+          {{ settlementSummary.isCommonsFullyCovered ? `✅ Surplus (+${settlementSummary.commonsNetBalance.toFixed(2)}) to Reserve` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
         </div>
       </div>
     </div>
 
     <!-- Memory Den Check Reconciliation Banner -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5">
+    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-200 pb-3">
         <div>
           <span class="text-xs font-bold text-base-content/60 uppercase tracking-wider">
@@ -130,7 +154,16 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 text-xs">
+      <!-- Payout Disbursement Cadence Banner (15th of the Month) -->
+      <div class="alert alert-info/10 border border-info/30 rounded-xl py-2.5 px-3.5 text-xs flex items-center gap-2.5 text-base-content">
+        <Icon icon="solar:calendar-date-bold-duotone" class="w-5 h-5 text-info shrink-0" />
+        <div class="flex-1">
+          <strong class="font-bold text-info">Venue Payout Schedule:</strong>
+          <span class="opacity-80 ml-1">Memory Den settlement checks deposit on <strong>{{ settlementSummary.memoryDenDisbursementDate }}</strong> (the 15th of the month). Curator checks should disburse after the venue deposit clears.</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 text-xs">
         <div>
           <span class="text-base-content/60 block">1. Gross Register Sales</span>
           <span class="font-bold font-mono text-sm text-base-content">${{ settlementSummary.totalGross.toFixed(2) }}</span>
@@ -141,12 +174,123 @@
         </div>
         <div>
           <span class="text-warning block">3. Booth Space Rental</span>
-          <span class="font-bold font-mono text-sm text-warning font-black">-$382.50</span>
+          <span class="font-bold font-mono text-sm text-warning font-black">-${{ settlementSummary.boothRent.toFixed(2) }}</span>
         </div>
         <div>
           <span class="text-primary block">4. Net Mall Deposit</span>
           <span class="font-bold font-mono text-sm text-primary font-black">${{ settlementSummary.memoryDenNetCheck.toFixed(2) }}</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Tier 1 Commons Overhead & Tech Ops Ledger -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-200 pb-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-warning font-black text-xs px-2.5 py-0.5">Tier 1 Covered First</span>
+            <span class="badge badge-outline font-mono text-xs">{{ filteredExpenses.length }} Expenses Tracked</span>
+          </div>
+          <h3 class="text-base font-black text-base-content tracking-tight mt-1 flex items-center gap-2">
+            <Icon icon="solar:bolt-bold-duotone" class="w-5 h-5 text-warning shrink-0" />
+            <span>Tier 1 Shared Overhead &amp; Tech Ops</span>
+          </h3>
+          <p class="text-xs text-base-content/60">
+            Paid collectively by the 30% Commons Pool. Covers fixed mall booth space, tech hosting, AI tokens, and supplies.
+          </p>
+        </div>
+        <div class="text-left sm:text-right">
+          <span class="text-xs text-base-content/60 font-semibold block uppercase">Total Overhead &amp; Tech:</span>
+          <span class="text-xl font-black font-mono text-warning">
+            ${{ settlementSummary.totalCommonsOverhead.toFixed(2) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 3-Pillar Overhead Breakdown -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+        <div class="p-3 rounded-xl bg-base-200/50 border border-base-200 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-base-content/70">🏪 Booth Space Rent</span>
+            <span class="badge badge-xs badge-neutral font-mono font-bold">Auto-Deducted</span>
+          </div>
+          <div class="text-lg font-black font-mono text-base-content">
+            ${{ settlementSummary.boothRent.toFixed(2) }}
+          </div>
+          <p class="text-[11px] text-base-content/50">Memory Den monthly space rental</p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-base-200/50 border border-base-200 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-base-content/70">⚡ Tech Commons &amp; AI</span>
+            <span class="badge badge-xs badge-primary font-mono font-bold">{{ techOpsExpenses.length }} items</span>
+          </div>
+          <div class="text-lg font-black font-mono text-primary">
+            ${{ settlementSummary.techOps.toFixed(2) }}
+          </div>
+          <p class="text-[11px] text-base-content/50">Appwrite DB, Gemini AI credits, hosting</p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-base-200/50 border border-base-200 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-base-content/70">🏷️ Merch Supplies &amp; Ops</span>
+            <span class="badge badge-xs badge-ghost font-mono font-bold">{{ suppliesExpenses.length }} items</span>
+          </div>
+          <div class="text-lg font-black font-mono text-base-content">
+            ${{ settlementSummary.supplies.toFixed(2) }}
+          </div>
+          <p class="text-[11px] text-base-content/50">Thermal tags, barcodes, displays</p>
+        </div>
+      </div>
+
+      <!-- Itemized Tech Ops & Supplies List (if any exist) -->
+      <div v-if="filteredExpenses.length > 0" class="mt-4 pt-3 border-t border-base-200">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-base-content/60">Itemized Operating Receipts in Period</span>
+          <a href="/expenses" class="text-xs text-primary font-bold hover:underline flex items-center gap-1">
+            <span>Manage All Receipts in Expense Ledger</span>
+            <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+          </a>
+        </div>
+        <div class="overflow-x-auto max-h-48 border border-base-200 rounded-xl">
+          <table class="table table-xs">
+            <thead>
+              <tr class="bg-base-200/60 text-base-content/70">
+                <th>Date</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Fronted By</th>
+                <th class="text-right">Amount</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="exp in filteredExpenses" :key="exp.id" class="hover:bg-base-200/40">
+                <td class="font-mono text-[11px]">{{ exp.date ? String(exp.date).slice(0, 10) : 'N/A' }}</td>
+                <td>
+                  <span class="badge badge-xs font-bold truncate max-w-[140px]" :class="exp.category.includes('Tech') ? 'badge-primary' : 'badge-ghost'">
+                    {{ exp.category }}
+                  </span>
+                </td>
+                <td class="font-medium max-w-xs truncate">{{ exp.description }}</td>
+                <td class="font-semibold text-xs">{{ exp.member }} ({{ exp.partner || 'HUCK' }})</td>
+                <td class="text-right font-mono font-bold">${{ Number(exp.amount || 0).toFixed(2) }}</td>
+                <td class="text-center">
+                  <span class="badge badge-xs font-mono font-bold" :class="exp.status === 'reimbursed' ? 'badge-success' : 'badge-warning'">
+                    {{ exp.status }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div v-else class="mt-3 pt-3 border-t border-base-200 flex items-center justify-between text-xs text-base-content/60">
+        <span>No additional operational receipts logged for this period.</span>
+        <a href="/expenses" class="text-primary font-bold hover:underline flex items-center gap-1">
+          <span>+ Log Tech or Supply Receipt</span>
+          <Icon icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+        </a>
       </div>
     </div>
 
@@ -187,13 +331,14 @@
           <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
             <div class="text-right">
               <div class="text-xs text-base-content/60 font-semibold uppercase tracking-wider">
-                {{ partner.prefix === 'HUCK-' ? 'Net Bank Check (After Rent)' : 'Final Payout Check' }}
+                Final Payout Check
               </div>
               <div class="text-2xl font-black font-mono" :class="partner.totalPayoutCheck < 0 ? 'text-error' : 'text-success'">
                 ${{ partner.totalPayoutCheck.toFixed(2) }}
               </div>
-              <div v-if="partner.rentDeduction > 0" class="text-[10px] text-base-content/60 font-medium">
-                Gross ${{ partner.grossCuratorShare.toFixed(2) }} - Rent ${{ partner.rentDeduction.toFixed(2) }}
+              <div v-if="partner.reimbursements > 0" class="text-[11px] text-success font-bold flex items-center justify-end gap-1">
+                <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
+                <span>Includes +${{ partner.reimbursements.toFixed(2) }} Fronted Reimbursement</span>
               </div>
             </div>
             <button 
@@ -218,17 +363,29 @@
             <span class="opacity-60 block font-medium">15% Venue Cut:</span>
             <span class="font-mono text-sm text-error font-bold">-${{ partner.totalVenueFee.toFixed(2) }}</span>
           </div>
-          <div>
+          <div v-if="partner.isConsignor">
+            <span class="opacity-60 block font-medium">Booth Rent Share:</span>
+            <span class="font-mono text-sm text-warning font-bold">-${{ (partner.rentDeduction || 0).toFixed(2) }}</span>
+          </div>
+          <div v-else>
             <span class="opacity-60 block font-medium">100% Cost Basis Recouped:</span>
             <span class="font-mono text-sm text-success font-bold">+${{ partner.totalCostBasis.toFixed(2) }}</span>
           </div>
-          <div>
+          <div v-if="partner.isConsignor">
+            <span class="opacity-60 block font-medium">Net Consignor Payout:</span>
+            <span class="font-mono text-sm text-success font-bold">${{ partner.totalPayoutCheck.toFixed(2) }}</span>
+          </div>
+          <div v-else>
             <span class="opacity-60 block font-medium">70% Net Profit Share:</span>
             <span class="font-mono text-sm text-primary font-bold">+${{ partner.totalCuratorProfit.toFixed(2) }}</span>
           </div>
-          <div>
+          <div v-if="!partner.isConsignor">
             <span class="opacity-60 block font-medium">30% Commons Contribution:</span>
             <span class="font-mono text-sm text-warning font-bold">+${{ partner.totalCommonsTake.toFixed(2) }}</span>
+          </div>
+          <div v-else>
+            <span class="opacity-60 block font-medium">Relationship:</span>
+            <span class="badge badge-sm badge-secondary font-bold">Consignor</span>
           </div>
         </div>
 
@@ -267,12 +424,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
 import { normalizeOrgPrefix, extractOrgPrefix } from '../../lib/inventoryUpc';
 import { generatePartnerSettlementPdf, type PartnerStatementData } from '../../lib/coopSettlementPdf';
+import { coopExpensesApi, type CoopExpenseItem } from '../../lib/coopExpenses';
 
 interface SaleItem {
   id: string;
@@ -297,11 +455,46 @@ const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
 const selectedLocation = ref<'memory_den' | 'all'>('memory_den');
 
-// Dynamically extract all distinct monthly settlement cycles from real sales data
+// Shared Commons Expenses State
+const expenses = ref<CoopExpenseItem[]>([]);
+const loadingExpenses = ref(false);
+
+const loadExpenses = async () => {
+  if (!currentTeam.value) return;
+  loadingExpenses.value = true;
+  try {
+    expenses.value = await coopExpensesApi.listExpenses(currentTeam.value.$id);
+  } catch (e) {
+    console.warn('[CoopSettlementView] Failed to load expenses:', e);
+  } finally {
+    loadingExpenses.value = false;
+  }
+};
+
+onMounted(() => {
+  loadExpenses();
+});
+
+watch(currentTeam, (n) => {
+  if (n) loadExpenses();
+});
+
+// Dynamically extract all distinct monthly settlement cycles from real sales data (Zero-Dupe Invariant)
 const availableMonths = computed(() => {
   const months = new Map<string, { key: string; label: string; count: number; date: Date }>();
+  const seenMonthSku = new Set<string>();
+
   for (const s of props.sales) {
     if (!s.date || s.status === 'Cancelled') continue;
+
+    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
+    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
+    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
+    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
+      if (seenMonthSku.has(sku)) continue;
+      seenMonthSku.add(sku);
+    }
+
     const cleanDate = s.date.includes('T') ? s.date.split('T')[0] : s.date.split(' ')[0];
     const parts = cleanDate.split(/[-/]/);
     if (parts.length >= 2) {
@@ -330,24 +523,31 @@ watch(availableMonths, (months) => {
   }
 }, { immediate: true });
 
-// Filter sales by selected month and location
+// Filter sales by selected month and location (Zero-Dupe Invariant)
 const filteredSales = computed(() => {
   if (!props.sales || props.sales.length === 0) return [];
+  const seenFilteredSku = new Set<string>();
 
   return props.sales.filter(s => {
     if (s.status === 'Cancelled') return false;
 
-    // Venue isolation filter
+    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
+    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
+    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
+    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
+      if (seenFilteredSku.has(sku)) return false;
+      seenFilteredSku.add(sku);
+    }
+
+    // Venue isolation filter: Strictly verify Memory Den venue attribution (no loose partner prefix matching)
     if (selectedLocation.value === 'memory_den') {
       const loc = (s.locationName || '').toLowerCase();
-      const sku = (s.sku || '').toLowerCase();
-      const upc = (s.upc || '').toLowerCase();
-      const soNumber = (s.soNumber || '').toLowerCase();
+      const sSku = (s.sku || '').toLowerCase();
+      const sUpc = (s.upc || '').toLowerCase();
       const orderId = ((s as any).orderId || '').toLowerCase();
-      const title = (s.title || '').toLowerCase();
-      const isMd = loc.includes('memory') || loc.includes('0ej') || sku.includes('0ej') || upc.includes('0ej') || 
-                   loc.includes('huck') || title.includes('0ej') || soNumber.startsWith('bb-') || 
-                   soNumber.startsWith('pdxgl-') || orderId.startsWith('md-') || loc.includes('booth');
+      const isMd = loc.includes('memory') || loc.includes('0ej') || loc === 'md' ||
+                   sSku.includes('0ej') || sUpc.includes('0ej') ||
+                   orderId.startsWith('md-payout') || orderId.startsWith('md-');
       if (!isMd) return false;
     }
 
@@ -415,10 +615,84 @@ const resolvePartnerName = (prefix: string): string => {
   return `${clean} Partner`;
 };
 
+// Filter expenses by selected month and active tenant
+const filteredExpenses = computed(() => {
+  return expenses.value.filter(exp => {
+    if (exp.status === 'rejected') return false;
+    if (selectedPeriod.value === 'all') return true;
+    if (!exp.date) return false;
+    const cleanDate = exp.date.includes('T') ? exp.date.split('T')[0] : exp.date.split(' ')[0];
+    const parts = cleanDate.split(/[-/]/);
+    if (parts.length >= 2) {
+      const year = parts[0].length === 4 ? parts[0] : parts[2];
+      const month = parts[0].length === 4 ? parts[1] : parts[0];
+      const key = `${year}-${month.padStart(2, '0')}`;
+      return key === selectedPeriod.value;
+    }
+    return cleanDate.startsWith(selectedPeriod.value);
+  });
+});
+
+const techOpsExpenses = computed(() => {
+  return filteredExpenses.value.filter(e => {
+    const cat = (e.category || '').toLowerCase();
+    const desc = (e.description || '').toLowerCase();
+    return cat.includes('tech') || cat.includes('ai') || 
+           desc.includes('gemini') || desc.includes('appwrite') || 
+           desc.includes('vercel') || desc.includes('hosting') || 
+           desc.includes('software') || desc.includes('cloud') ||
+           desc.includes('ai credits');
+  });
+});
+
+const suppliesExpenses = computed(() => {
+  return filteredExpenses.value.filter(e => {
+    if (techOpsExpenses.value.some(t => t.id === e.id)) return false;
+    const cat = (e.category || '').toLowerCase();
+    if (cat.includes('rent') || cat.includes('mall fee')) return false;
+    return true;
+  });
+});
+
+const totalTechOpsAmount = computed(() => {
+  return Number(techOpsExpenses.value.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2));
+});
+
+const totalSuppliesAmount = computed(() => {
+  return Number(suppliesExpenses.value.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2));
+});
+
+// Member reimbursements from approved expenses
+const memberReimbursements = computed(() => {
+  const map: Record<string, number> = {};
+  for (const exp of filteredExpenses.value) {
+    if (exp.status === 'rejected') continue;
+    const cat = (exp.category || '').toLowerCase();
+    if (cat.includes('rent') || cat.includes('mall fee')) continue;
+    const partnerPrefix = normalizeOrgPrefix(exp.partner || 'HUCK-');
+    map[partnerPrefix] = Number(((map[partnerPrefix] || 0) + Number(exp.amount || 0)).toFixed(2));
+  }
+  return map;
+});
+
+// Memory Den pays out on the 15th of the month following the sales cycle
+const memoryDenDisbursementDate = computed(() => {
+  if (selectedPeriod.value === 'all') return '15th of each month';
+  const parts = selectedPeriod.value.split(/[-/]/);
+  if (parts.length >= 2) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10); // 1-12
+    const nextDate = new Date(year, month, 15);
+    return nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  }
+  return '15th of the month';
+});
+
 const partnerSettlements = computed(() => {
   if (filteredSales.value.length === 0) return [];
 
   const groups: Record<string, any> = {};
+  const FIXED_BOOTH_RENT = 382.50;
 
   for (const sale of filteredSales.value) {
     const prefix = resolveItemPrefix(sale);
@@ -428,6 +702,7 @@ const partnerSettlements = computed(() => {
       groups[prefix] = {
         prefix,
         name: partnerName,
+        isConsignor: prefix === 'BB-',
         items: [],
         totalGross: 0,
         totalVenueFee: 0,
@@ -436,18 +711,20 @@ const partnerSettlements = computed(() => {
         totalCuratorProfit: 0,
         grossCuratorShare: 0,
         rentDeduction: 0,
+        reimbursements: 0,
         totalPayoutCheck: 0,
         totalCommonsTake: 0
       };
     }
 
+    const isPureConsignor = prefix === 'BB-';
     const grossPrice = Number(sale.grossAmount || 0);
     const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice * 0.85));
     const venueFee = Math.max(0, Number(sale.fees !== undefined ? sale.fees : (grossPrice - netStoreDeposit)));
-    const costBasis = Number(sale.cost || 0);
+    const costBasis = isPureConsignor ? 0 : Number(sale.cost || 0);
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
-    const curatorTake = Number((costBasis + (netSurplus * 0.70)).toFixed(2));
-    const commonsTake = Number((netSurplus * 0.30).toFixed(2));
+    const curatorTake = isPureConsignor ? netStoreDeposit : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
+    const commonsTake = isPureConsignor ? 0 : Number((netSurplus * 0.30).toFixed(2));
 
     groups[prefix].items.push({
       date: sale.date,
@@ -464,21 +741,32 @@ const partnerSettlements = computed(() => {
     groups[prefix].totalVenueFee = Number((groups[prefix].totalVenueFee + venueFee).toFixed(2));
     groups[prefix].totalCostBasis = Number((groups[prefix].totalCostBasis + costBasis).toFixed(2));
     groups[prefix].totalNetSurplus = Number((groups[prefix].totalNetSurplus + netSurplus).toFixed(2));
-    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (netSurplus * 0.70)).toFixed(2));
+    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (isPureConsignor ? netStoreDeposit : (netSurplus * 0.70))).toFixed(2));
     groups[prefix].totalCommonsTake = Number((groups[prefix].totalCommonsTake + commonsTake).toFixed(2));
     groups[prefix].grossCuratorShare = Number((groups[prefix].totalCostBasis + groups[prefix].totalCuratorProfit).toFixed(2));
+  }
 
-    // For Huckleberry Collective (anchor leaseholder), show the net bank payout after Memory Den deducts the $382.50 rent
-    if (prefix === 'HUCK-' && selectedLocation.value === 'memory_den') {
-      groups[prefix].rentDeduction = 382.50;
-      groups[prefix].totalPayoutCheck = Number((groups[prefix].grossCuratorShare - 382.50).toFixed(2));
+  const allGroups = Object.values(groups);
+  const totalGrossAll = Number(allGroups.reduce((sum, g) => sum + g.totalGross, 0).toFixed(2));
+
+  for (const grp of allGroups) {
+    const grossRatio = totalGrossAll > 0 ? (grp.totalGross / totalGrossAll) : 0;
+    const rentShare = Number((grossRatio * FIXED_BOOTH_RENT).toFixed(2));
+    grp.rentDeduction = rentShare;
+
+    if (grp.isConsignor) {
+      // Pure Consignor: Gross - 15% Mall Fee - Proportional Booth Rent Share
+      grp.totalCuratorProfit = Math.max(0, Number((grp.totalGross - grp.totalVenueFee - rentShare).toFixed(2)));
+      grp.totalPayoutCheck = grp.totalCuratorProfit;
     } else {
-      groups[prefix].rentDeduction = 0;
-      groups[prefix].totalPayoutCheck = groups[prefix].grossCuratorShare;
+      // Co-op Member: Rent is covered by 30% Commons Pool
+      const reimbursements = memberReimbursements.value[grp.prefix] || 0;
+      grp.reimbursements = reimbursements;
+      grp.totalPayoutCheck = Number((grp.grossCuratorShare + reimbursements).toFixed(2));
     }
   }
 
-  return Object.values(groups);
+  return allGroups;
 });
 
 const settlementSummary = computed(() => {
@@ -492,8 +780,16 @@ const settlementSummary = computed(() => {
   const FIXED_BOOTH_RENT = 382.50;
   const totalStorePayout = Number((totalGross - totalVenueFee).toFixed(2));
   const memoryDenNetCheck = Number((totalStorePayout - FIXED_BOOTH_RENT).toFixed(2));
-  const isRentCovered = totalCommonsPool >= FIXED_BOOTH_RENT;
-  const commonsSurplusAfterRent = Number((totalCommonsPool - FIXED_BOOTH_RENT).toFixed(2));
+
+  // Consignor Rent Contributions collected (e.g. B&B's rent deduction) offset the booth rent
+  const consignorRentOffsets = Number(partnerSettlements.value.filter(p => p.isConsignor).reduce((acc, p) => acc + (p.rentDeduction || 0), 0).toFixed(2));
+  const netBoothRentForCoop = Math.max(0, Number((FIXED_BOOTH_RENT - consignorRentOffsets).toFixed(2)));
+
+  const techOps = totalTechOpsAmount.value;
+  const supplies = totalSuppliesAmount.value;
+  const totalCommonsOverhead = Number((netBoothRentForCoop + techOps + supplies).toFixed(2));
+  const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
+  const isCommonsFullyCovered = commonsNetBalance >= 0;
 
   return {
     totalGross,
@@ -504,9 +800,15 @@ const settlementSummary = computed(() => {
     totalCuratorPayouts,
     totalCommonsPool,
     boothRent: FIXED_BOOTH_RENT,
+    consignorRentOffsets,
+    netBoothRentForCoop,
+    techOps,
+    supplies,
+    totalCommonsOverhead,
+    commonsNetBalance,
+    isCommonsFullyCovered,
     memoryDenNetCheck,
-    isRentCovered,
-    commonsSurplusAfterRent
+    memoryDenDisbursementDate: memoryDenDisbursementDate.value
   };
 });
 
@@ -531,7 +833,9 @@ const downloadPartnerPdf = (partner: any) => {
       totalNetSurplus: partner.totalNetSurplus,
       totalCuratorProfit: partner.totalCuratorProfit,
       totalPayoutCheck: partner.totalPayoutCheck,
-      boothLocation: 'Memory Den (Booth 0EJ)'
+      boothLocation: 'Memory Den (Booth 0EJ)',
+      reimbursements: partner.reimbursements || 0,
+      rentDeduction: partner.isConsignor ? (partner.rentDeduction || 0) : undefined
     };
 
     const doc = generatePartnerSettlementPdf(data);

@@ -12,9 +12,9 @@
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
-        <a href="/sales/import" class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Import Ricochet POS CSV">
-          <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0 text-primary" />
-          <span>Import CSV</span>
+        <a href="/sales/import" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-md shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]" title="Upload & Reconcile Memory Den / POS Payout CSV">
+          <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
+          <span>Upload Payout CSV</span>
         </a>
         <a href="/warehouse/sync" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]">
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
@@ -729,13 +729,39 @@ const consolidatedSales = computed(() => {
   const list: any[] = [];
   const linkedSaleIds = new Set<string>();
   const linkedItemIds = new Set<string>();
+  const seenSingleItemKeys = new Set<string>();
 
   // 1. Process official sales collection documents
   sales.value.forEach(sale => {
     if (sale.status === 'Cancelled') return; // Skip cancelled sales so they drop from realized revenue
-    linkedSaleIds.add(sale.$id);
+
     const linkedItem = inventoryItems.value.find(i => i.saleId === sale.$id || (sale.orderId && (i.locationSku === sale.orderId || i.upc === sale.orderId)));
-    if (linkedItem) linkedItemIds.add(linkedItem.$id);
+    const isMultiQty = linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
+
+    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless explicitly multi-qty)
+    let uniqueSkuKey = '';
+    if (linkedItem?.$id) {
+      uniqueSkuKey = `item-${linkedItem.$id}`;
+    } else if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT')) {
+      uniqueSkuKey = `sku-${sale.orderId.trim().toUpperCase()}`;
+    } else if (sale.soNumber && !sale.soNumber.startsWith('SO-')) {
+      uniqueSkuKey = `so-${sale.soNumber.trim().toUpperCase()}`;
+    }
+
+    // Skip ghost duplicate sales for single-quantity goods
+    if (!isMultiQty && uniqueSkuKey) {
+      if (seenSingleItemKeys.has(uniqueSkuKey)) {
+        return; // Deduplicate ghost duplicate
+      }
+      seenSingleItemKeys.add(uniqueSkuKey);
+    }
+
+    if (linkedItem && !isMultiQty) {
+      if (linkedItemIds.has(linkedItem.$id)) return;
+      linkedItemIds.add(linkedItem.$id);
+    }
+
+    linkedSaleIds.add(sale.$id);
 
     const locName = getWarehouseName(sale.warehouseId);
     const comm = (sale.commissionFee || 0) + (sale.shippingCost || 0);
@@ -776,40 +802,9 @@ const consolidatedSales = computed(() => {
       netPayout: Number(sale.netPayout !== undefined ? sale.netPayout : (sale.grossAmount - comm)),
       itemId: linkedItem?.$id || '',
       itemUrl: linkedItem ? `/item/${linkedItem.$id}` : '',
-      cost: Number(linkedItem?.cost || linkedItem?.purchasePrice || 0)
+      cost: Number(linkedItem?.cost || linkedItem?.purchasePrice || 0),
+      isMultiQty: !!isMultiQty
     });
-  });
-
-  // 2. Process sold inventory items that do not have a dedicated sales collection document
-  inventoryItems.value.forEach(item => {
-    if (item.status === 'sold' && !linkedItemIds.has(item.$id)) {
-      const locName = (Array.isArray(item.sellingLocations) ? item.sellingLocations[0] : item.sellingLocations) || item.storageLocation || 'Location';
-      const commRate = getCommissionRate(locName);
-
-      const gross = Number(item.resalePrice || item.listPrice || item.soldPrice || 0);
-      const net = (item.soldPrice !== undefined && item.soldPrice !== null && Number(item.soldPrice) > 0)
-        ? Number(item.soldPrice)
-        : Number((gross * (1 - (commRate / 100))).toFixed(2));
-      const fees = Math.max(0, Number((gross - net).toFixed(2)));
-
-      list.push({
-        uniqueKey: `item-${item.$id}`,
-        id: item.$id, // Handled seamlessly by SaleEditor.vue fallback
-        soNumber: item.upc || item.locationSku || `SO-${item.$id.slice(-4).toUpperCase()}`,
-        title: item.title || 'Sold Item',
-        upc: item.upc || '',
-        sku: item.locationSku || item.sku || '',
-        locationName: locName,
-        date: item.$updatedAt || item.$createdAt,
-        status: 'Sold',
-        grossAmount: gross,
-        fees: fees,
-        netPayout: net,
-        itemId: item.$id,
-        itemUrl: `/item/${item.$id}`,
-        cost: Number(item.cost || item.purchasePrice || 0)
-      });
-    }
   });
 
   return list;

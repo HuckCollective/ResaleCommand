@@ -25,19 +25,39 @@ export interface SaleData {
 export type SaleDocument = SaleData & Models.Document;
 
 export const salesApi = {
-    async listSales(tenantId: string): Promise<SaleDocument[]> {
+    async listSales(tenantId: string, maxItems: number = 5000): Promise<SaleDocument[]> {
         if (!tenantId) throw new Error("tenantId is required");
         
-        const response = await databases.listDocuments(
-            DB_ID,
-            getSalesCol(),
-            [
+        let allDocs: SaleDocument[] = [];
+        let offset = 0;
+        const pageSize = Math.min(maxItems, 1000);
+
+        while (allDocs.length < maxItems) {
+            const queries = [
                 Query.equal('tenantId', tenantId),
                 Query.orderDesc('saleDate'),
-                Query.limit(100)
-            ]
-        );
-        return response.documents as SaleDocument[];
+                Query.limit(Math.min(pageSize, maxItems - allDocs.length))
+            ];
+            if (offset > 0) {
+                queries.push(Query.offset(offset));
+            }
+
+            const response = await databases.listDocuments(
+                DB_ID,
+                getSalesCol(),
+                queries
+            );
+
+            const docs = response.documents as SaleDocument[];
+            if (docs.length === 0) break;
+            allDocs.push(...docs);
+            offset += docs.length;
+
+            if (allDocs.length >= response.total || docs.length < pageSize) {
+                break;
+            }
+        }
+        return allDocs;
     },
 
     async getSale(id: string): Promise<SaleDocument> {
