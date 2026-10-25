@@ -9,8 +9,8 @@ import { getDatabaseId, getItemsCollectionId } from './appwriteEnv';
 const getDbId = () => getDatabaseId();
 const getColId = () => getItemsCollectionId();
 
-export const DEFAULT_ORG_PREFIXES = ['HUCK-', 'PDXGL-'] as const;
-export const KNOWN_ORG_PREFIXES = ['HUCK-', 'PDXGL-'] as const;
+export const DEFAULT_ORG_PREFIXES = ['HUCK-', 'PDXGL-', 'BB-'] as const;
+export const KNOWN_ORG_PREFIXES = ['HUCK-', 'PDXGL-', 'BB-'] as const;
 export type OrgPrefix = string;
 
 const upcAllocationLocks = new Map<string, number>();
@@ -19,7 +19,7 @@ const upcAllocationLocks = new Map<string, number>();
  * Resolves all configured prefixes dynamically from team/user preferences or defaults
  */
 export function getKnownOrgPrefixes(teamOrPrefs?: any): string[] {
-    const set = new Set<string>(['HUCK-', 'PDXGL-']);
+    const set = new Set<string>(['HUCK-', 'PDXGL-', 'BB-']);
     const prefs = teamOrPrefs?.prefs || teamOrPrefs;
     if (prefs?.upcPrefix) {
         set.add(normalizeOrgPrefix(prefs.upcPrefix));
@@ -52,7 +52,7 @@ export function extractOrgPrefix(code: string | null | undefined, customPrefixes
     const clean = code.trim().toUpperCase().replace(/^['"]+/, '');
     
     // Check custom or known prefixes first
-    const prefixes = customPrefixes && customPrefixes.length > 0 ? customPrefixes : ['HUCK-', 'PDXGL-'];
+    const prefixes = customPrefixes && customPrefixes.length > 0 ? customPrefixes : ['HUCK-', 'PDXGL-', 'BB-'];
     for (const p of prefixes) {
         const root = p.replace(/[-_]$/, '');
         if (clean.startsWith(`${root}-`) || clean.startsWith(`${root}_`)) {

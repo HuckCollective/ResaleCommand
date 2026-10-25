@@ -54,10 +54,12 @@ function createEmptyBucket(orgKey: string, prefix: string, displayName: string):
 export function partitionSalesByOrg(
     csvRows: any[],
     appwriteItems: any[] = [],
-    configuredPrefixes: string[] = ['HUCK-', 'PDXGL-']
+    configuredPrefixes: string[] = ['HUCK-', 'PDXGL-', 'BB-']
 ): PartitionedSalesResult {
     const buckets: Record<string, OrgSalesBucket> = {
         HUCK: createEmptyBucket('HUCK', 'HUCK-', 'Huck Collective (HUCK-)'),
+        PDXGL: createEmptyBucket('PDXGL', 'PDXGL-', 'PDX Game Library'),
+        BB: createEmptyBucket('BB', 'BB-', 'B&B Consignment (PDXGL Sub-Client)'),
         UNASSIGNED: createEmptyBucket('UNASSIGNED', 'NONE', 'Unassigned / Store SKUs')
     };
 
@@ -122,6 +124,11 @@ export function partitionSalesByOrg(
                 buckets[orgRoot] = createEmptyBucket(orgRoot, `${orgRoot}-`, `${orgRoot} Inventory`);
             }
             targetKey = orgRoot;
+        } else if (rawName) {
+            const trimmedUpper = rawName.toUpperCase();
+            if (trimmedUpper.startsWith('B&B ') || trimmedUpper.startsWith('B&B-') || trimmedUpper.startsWith('BB ') || trimmedUpper.startsWith('BB-')) {
+                targetKey = 'BB';
+            }
         }
 
         const bucket = buckets[targetKey];

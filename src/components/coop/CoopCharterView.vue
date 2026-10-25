@@ -28,6 +28,15 @@
 
         <!-- Quick Action Buttons -->
         <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          <a 
+            href="/expenses" 
+            class="btn btn-sm btn-secondary gap-2 shadow-sm font-bold"
+            title="Upload invoice PDFs and view Commons Expense Ledger"
+          >
+            <Icon icon="solar:document-bold" class="w-4 h-4" />
+            <span>Upload Invoices &amp; Receipts</span>
+          </a>
+
           <button 
             @click="handlePrint" 
             class="btn btn-sm btn-outline gap-2 shadow-sm font-bold bg-base-100/80 hover:bg-base-200"
@@ -86,7 +95,7 @@
     </div>
 
     <!-- RESPONSIVE SEGMENTED MODULE SWITCHER (NO SIDE SCROLLING) -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-base-200/90 rounded-2xl border border-base-300 shadow-sm">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-1.5 bg-base-200/90 rounded-2xl border border-base-300 shadow-sm">
       <button 
         v-for="section in sections" 
         :key="section.id"
@@ -457,7 +466,119 @@
       </div>
     </div>
 
-    <!-- MODULE 3: LEGAL STRUCTURE, PARTNER AUTONOMY & VOTING -->
+    <!-- MODULE 3: SHARED COMMONS EXPENSE REIMBURSEMENT LEDGER (OPEN COLLECTIVE) -->
+    <div v-show="activeSection === 'expenses'" class="space-y-6">
+      <div class="card bg-base-100 border border-base-300 shadow-md rounded-3xl overflow-hidden">
+        <div class="card-body p-6 sm:p-8 space-y-6">
+          <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-base-200 pb-6">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="badge badge-primary badge-sm font-bold uppercase tracking-wider">Tier 1 Overhead</span>
+                <span class="badge badge-outline badge-sm font-medium">100% Tax Deductible</span>
+              </div>
+              <h2 class="text-2xl font-black text-base-content tracking-tight flex items-center gap-2.5">
+                <Icon icon="solar:wallet-bold-duotone" class="w-7 h-7 text-primary" />
+                Shared Commons Expense Pool
+              </h2>
+              <p class="text-xs sm:text-sm text-base-content/70 max-w-2xl leading-relaxed">
+                Out-of-pocket operational costs (booth space rental, thermal tags, display hardware, AI tech credits) are covered dollar-for-dollar from the 30% Commons Pool before profits are distributed.
+              </p>
+            </div>
+
+            <!-- Single Clean Button: Push to Expenses -->
+            <a 
+              href="/expenses" 
+              class="btn btn-primary rounded-2xl font-black text-sm gap-2 h-12 px-6 shadow-md shadow-primary/25 whitespace-nowrap active:scale-95 transition-all"
+            >
+              <span>Manage Expenses &amp; Invoices</span>
+              <Icon icon="solar:arrow-right-bold" class="w-5 h-5" />
+            </a>
+          </div>
+
+          <!-- Top KPI Overview (Commons Pool Status) -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div class="p-4 rounded-2xl bg-base-200/60 border border-base-300 shadow-xs space-y-1">
+              <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Total Commons Expenses</div>
+              <div class="text-xl sm:text-2xl font-black text-base-content font-mono">$2,819.54</div>
+              <div class="text-xs text-base-content/60 font-medium">49 logged receipts</div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-success/5 border border-success/30 shadow-xs space-y-1">
+              <div class="text-[11px] font-bold text-success uppercase tracking-wider">Reimbursed to Members</div>
+              <div class="text-xl sm:text-2xl font-black text-success font-mono">$134.54</div>
+              <div class="text-xs text-base-content/60 font-medium">Repaid from Tier 1 Pool</div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-warning/5 border border-warning/30 shadow-xs space-y-1">
+              <div class="text-[11px] font-bold text-warning uppercase tracking-wider">Pending Reimbursement</div>
+              <div class="text-xl sm:text-2xl font-black text-warning font-mono">$2,685.00</div>
+              <div class="text-xs text-base-content/60 font-medium">Owed to fronting members</div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-primary/5 border border-primary/30 shadow-xs space-y-1">
+              <div class="text-[11px] font-bold text-primary uppercase tracking-wider">Active Booth Rent</div>
+              <div class="text-xl sm:text-2xl font-black text-primary font-mono">$382.50<span class="text-xs font-normal opacity-70">/mo</span></div>
+              <div class="text-xs text-base-content/60 font-medium">Memory Den (Booth 0EJ)</div>
+            </div>
+          </div>
+
+          <!-- How the Open Collective Model Works -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+              <div class="flex items-center gap-2 text-primary font-bold text-sm">
+                <Icon icon="solar:bill-check-bold" class="w-5 h-5" />
+                1. Member Incurs Cost
+              </div>
+              <p class="text-xs text-base-content/75 leading-relaxed">
+                Any member fronting cash for booth supplies, tape, or tech snaps a photo of the receipt on the Expenses page.
+              </p>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+              <div class="flex items-center gap-2 text-warning font-bold text-sm">
+                <Icon icon="solar:clock-circle-bold" class="w-5 h-5" />
+                2. Transparent Verification
+              </div>
+              <p class="text-xs text-base-content/75 leading-relaxed">
+                Expense appears as "Pending" in the Open Collective ledger where all partners can verify the receipt attachment.
+              </p>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+              <div class="flex items-center gap-2 text-success font-bold text-sm">
+                <Icon icon="solar:card-recive-bold" class="w-5 h-5" />
+                3. Reimburse from 30% Pool
+              </div>
+              <p class="text-xs text-base-content/75 leading-relaxed">
+                During monthly settlement, the 30% Commons Pool pays out reimbursements first before remaining profits distribute.
+              </p>
+            </div>
+          </div>
+
+          <!-- Bottom Action Banner -->
+          <div class="p-4 sm:p-5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="space-y-0.5 text-center sm:text-left">
+              <div class="font-bold text-sm text-base-content">Need to log a receipt or view full line-item history?</div>
+              <div class="text-xs text-base-content/70">Access multi-PDF invoice uploads, AI receipt scanning, and approval workflows in the dedicated workspace.</div>
+            </div>
+            <a 
+              href="/expenses" 
+              class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 px-5 shadow-xs whitespace-nowrap"
+            >
+              <span>Go to Expenses &amp; Invoices</span>
+              <Icon icon="solar:arrow-right-bold" class="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 4: DEMOCRATIC GOVERNANCE & LOOMIO 4-SIGNAL CONSENT VOTING -->
+    <div v-show="activeSection === 'governance'" class="space-y-6">
+      <CoopGovernanceView />
+    </div>
+
+    <!-- MODULE 5: LEGAL STRUCTURE, PARTNER AUTONOMY & LABOR -->
     <div v-show="activeSection === 'legal'" class="space-y-6">
       <div class="card bg-base-100 border border-base-300 shadow-md">
         <div class="card-body p-6 space-y-6">
@@ -467,10 +588,10 @@
             </div>
             <div>
               <h2 class="text-xl font-black text-base-content tracking-tight">
-                Legal Consortium Model &amp; Democratic Governance
+                Legal Consortium Model &amp; Labor Dividends
               </h2>
               <p class="text-xs text-base-content/70">
-                Why members join as Contractual Cooperative Associates (1099-NEC), partner barcode prefixes, and voting.
+                Why members join as Contractual Cooperative Associates (1099-NEC), independent partner barcode prefixes, and verified labor dividends.
               </p>
             </div>
           </div>
@@ -571,7 +692,7 @@
                 <input 
                   type="text" 
                   v-model="newLabor.member" 
-                  placeholder="e.g. Tyler (Core)" 
+                  placeholder="e.g. Mike (Core)" 
                   class="input input-bordered input-xs w-full"
                   required
                 />
@@ -712,14 +833,17 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
+import CoopGovernanceView from './CoopGovernanceView.vue';
 
-const activeSection = ref<'payouts' | 'monthly' | 'legal'>('payouts');
+const activeSection = ref<'payouts' | 'monthly' | 'expenses' | 'governance' | 'legal'>('payouts');
 const copiedLink = ref(false);
 
 const sections = [
-  { id: 'payouts', label: '1. 70/30 Payout Engine', icon: 'solar:calculator-bold' },
-  { id: 'monthly', label: '2. Monthly Settlements & Rent', icon: 'solar:calendar-date-bold' },
-  { id: 'legal', label: '3. Legal Model & Governance', icon: 'solar:diploma-verified-bold' }
+  { id: 'payouts', label: '1. 70/30 Profit Engine', icon: 'solar:calculator-bold' },
+  { id: 'monthly', label: '2. Monthly Settlements', icon: 'solar:calendar-date-bold' },
+  { id: 'expenses', label: '3. Commons Expense Ledger', icon: 'solar:bill-list-bold' },
+  { id: 'governance', label: '4. Democratic Governance', icon: 'solar:users-group-two-rounded-bold' },
+  { id: 'legal', label: '5. Legal Model & Labor', icon: 'solar:diploma-verified-bold' }
 ] as const;
 
 // Interactive Simulator Reactive State (Clean 70/30 Formula)
@@ -758,15 +882,15 @@ export interface LaborLogEntry {
 }
 
 const defaultLaborLogs: LaborLogEntry[] = [
-  { id: '1', date: new Date().toISOString().slice(0, 10), member: 'Tyler (Core)', category: 'Booth Restock', hours: 2.0, notes: 'Restocked booth #0EJ, staged 15 outerwear pieces & updated pricing.' },
+  { id: '1', date: new Date().toISOString().slice(0, 10), member: 'Mike (Core)', category: 'Booth Restock', hours: 2.0, notes: 'Restocked booth #0EJ, staged 15 outerwear pieces & updated pricing.' },
   { id: '2', date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), member: 'PDX Partner', category: 'Photography & Staging', hours: 1.5, notes: 'Deep Scan photo enrichment on 18 tabletop games & cataloged.' },
-  { id: '3', date: new Date(Date.now() - 86400000 * 4).toISOString().slice(0, 10), member: 'Tyler (Core)', category: 'Social & Marketing', hours: 1.0, notes: 'Created Instagram Reel & stories showcasing new vintage glass haul.' }
+  { id: '3', date: new Date(Date.now() - 86400000 * 4).toISOString().slice(0, 10), member: 'Mike (Core)', category: 'Social & Marketing', hours: 1.0, notes: 'Created Instagram Reel & stories showcasing new vintage glass haul.' }
 ];
 
 const laborLogs = ref<LaborLogEntry[]>([]);
 
 const newLabor = ref({
-  member: 'Tyler (Core)',
+  member: 'Mike (Core)',
   date: new Date().toISOString().slice(0, 10),
   category: 'Booth Restock' as LaborLogEntry['category'],
   hours: 1.5,
@@ -775,9 +899,21 @@ const newLabor = ref({
 
 onMounted(() => {
   try {
+    const params = new URLSearchParams(window.location.search);
+    const sec = params.get('section') || params.get('tab');
+    if (sec && (sec === 'payouts' || sec === 'monthly' || sec === 'expenses' || sec === 'governance' || sec === 'legal')) {
+      activeSection.value = sec;
+    }
+  } catch {}
+
+  try {
     const saved = localStorage.getItem('huck_coop_labor_logs');
     if (saved) {
-      laborLogs.value = JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      laborLogs.value = parsed.map((l: any) => ({
+        ...l,
+        member: l.member === 'Tyler (Core)' ? 'Mike (Core)' : l.member
+      }));
     } else {
       laborLogs.value = defaultLaborLogs;
       localStorage.setItem('huck_coop_labor_logs', JSON.stringify(defaultLaborLogs));

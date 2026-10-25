@@ -16,7 +16,7 @@
         
         <input 
           type="file" 
-          accept=".csv" 
+          accept=".csv,.xlsx,.xls" 
           class="file-input file-input-bordered file-input-secondary w-full max-w-xs" 
           @change="handleFileUpload" 
           :disabled="isProcessing"
@@ -761,18 +761,43 @@ const filteredSearchItems = computed(() => {
     return timesMapped(item) >= qty;
   };
 
-const handleFileUpload = (event: Event) => {
+const handleFileUpload = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (!file) return;
 
   isProcessing.value = true;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const text = e.target.result;
-    parseMemoryDenProducts(text);
-  };
-  reader.readAsText(file);
+  const fileName = (file.name || '').toLowerCase();
+
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    try {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+          parseMemoryDenProducts(csvText);
+        } catch (excelErr: any) {
+          addToast({ type: 'error', message: 'Failed to read Excel file: ' + excelErr.message });
+          isProcessing.value = false;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (importErr: any) {
+      addToast({ type: 'error', message: 'Failed to load Excel reader: ' + importErr.message });
+      isProcessing.value = false;
+    }
+  } else {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result as string;
+      parseMemoryDenProducts(text);
+    };
+    reader.readAsText(file);
+  }
 };
 
 const parseMemoryDenProducts = (csvText) => {

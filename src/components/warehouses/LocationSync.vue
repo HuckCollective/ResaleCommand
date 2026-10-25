@@ -16,7 +16,7 @@
         <h3 class="font-bold text-lg mb-2">Upload Products CSV</h3>
         <input 
           type="file" 
-          accept=".csv" 
+          accept=".csv,.xlsx,.xls" 
           class="file-input file-input-bordered file-input-primary w-full max-w-xs" 
           @change="handleFileUpload" 
           :disabled="isProcessing"
@@ -127,17 +127,42 @@ const reset = () => {
   rawCsvLines.value = [];
 };
 
-const handleFileUpload = (event) => {
+const handleFileUpload = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
 
   isProcessing.value = true;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const text = e.target.result;
-    parseCsv(text);
-  };
-  reader.readAsText(file);
+  const fileName = (file.name || '').toLowerCase();
+
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    try {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+          parseCsv(csvText);
+        } catch (excelErr) {
+          addToast({ type: 'error', message: 'Failed to read Excel file: ' + excelErr.message });
+          isProcessing.value = false;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (importErr) {
+      addToast({ type: 'error', message: 'Failed to load Excel reader: ' + importErr.message });
+      isProcessing.value = false;
+    }
+  } else {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      parseCsv(text);
+    };
+    reader.readAsText(file);
+  }
 };
 
 // Very basic CSV parser to handle quotes

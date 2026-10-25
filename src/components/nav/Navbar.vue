@@ -125,9 +125,15 @@
                      </a>
                   </li>
                   <li>
-                     <a href="/coop" class="gap-2 font-semibold text-primary">
+                     <a href="/coop" class="gap-2 font-semibold">
                          <Icon icon="solar:shield-star-bold" class="w-4 h-4 text-primary" />
                          Co-op Charter &amp; Rules
+                     </a>
+                  </li>
+                  <li>
+                     <a href="/expenses" class="gap-2 font-semibold text-primary font-bold">
+                         <Icon icon="solar:bill-list-bold" class="w-4 h-4 text-primary" />
+                         Expenses &amp; Receipts
                      </a>
                   </li>
                   

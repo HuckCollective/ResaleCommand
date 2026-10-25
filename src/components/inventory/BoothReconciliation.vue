@@ -43,7 +43,7 @@
                     </div>
 
                     <div class="w-full relative mt-4">
-                        <input type="file" @change="handleFileUpload" accept=".csv" class="file-input file-input-bordered file-input-primary w-full shadow-sm" :disabled="processing" />
+                        <input type="file" @change="handleFileUpload" accept=".csv,.xlsx,.xls" class="file-input file-input-bordered file-input-primary w-full shadow-sm" :disabled="processing" />
                     </div>
 
                     <div v-if="error" class="alert alert-error mt-4 shadow-sm text-sm">
@@ -384,12 +384,22 @@ const handleFileUpload = async (e) => {
              else cursor = res.documents[res.documents.length - 1].$id;
         }
 
-        const text = await file.text();
+        let text = '';
+        const fileName = (file.name || '').toLowerCase();
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            text = XLSX.utils.sheet_to_csv(firstSheet);
+        } else {
+            text = await file.text();
+        }
         results.value = await reconcileBoothInventory(text, allItems);
         saveSession();
         
     } catch (err) {
-        error.value = "Failed to parse CSV: " + err.message;
+        error.value = "Failed to parse file: " + err.message;
     } finally {
         processing.value = false;
     }

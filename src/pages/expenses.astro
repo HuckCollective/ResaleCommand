@@ -1,0 +1,20 @@
+---
+import Layout from '../layouts/Layout.astro';
+import CoopExpensesLedger from '../components/coop/CoopExpensesLedger.vue';
+---
+
+<Layout 
+  title="Shared Commons Expense Ledger & Invoices | Resale Command"
+  description="Audit-ready cooperative expense ledger, PDF invoice storage, and Tier 1 shared pool reimbursements."
+>
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6">
+    <div class="breadcrumbs text-xs opacity-60 mb-2">
+      <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/coop">Co-op Consortium</a></li>
+        <li class="font-bold text-primary">Expenses &amp; Invoices</li>
+      </ul>
+    </div>
+    <CoopExpensesLedger client:only="vue" />
+  </div>
+</Layout>

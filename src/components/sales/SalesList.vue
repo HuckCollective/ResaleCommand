@@ -740,13 +740,34 @@ const consolidatedSales = computed(() => {
     const locName = getWarehouseName(sale.warehouseId);
     const comm = (sale.commissionFee || 0) + (sale.shippingCost || 0);
 
+    const soUpper = (sale.soNumber || '').trim().toUpperCase();
+    const isBB = soUpper.startsWith('BB-') || soUpper.startsWith('BB') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('BB'));
+    const isPDXGL = soUpper.startsWith('PDXGL-') || soUpper.startsWith('PDXGL') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('PDXGL'));
+    const fallbackUpc = (soUpper.startsWith('HUCK-') || soUpper.startsWith('PDXGL-') || soUpper.startsWith('BB-')) ? soUpper : '';
+
+    let displayTitle = linkedItem?.title;
+    if (!displayTitle) {
+      if (isBB) {
+        displayTitle = `B&B Consignment Item (${sale.soNumber})`;
+      } else if (isPDXGL) {
+        displayTitle = `PDX Game Library Item (${sale.soNumber})`;
+      } else if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT')) {
+        displayTitle = sale.orderId;
+      } else if (sale.soNumber && sale.soNumber.startsWith('HUCK-')) {
+        displayTitle = `Huckleberry Item (${sale.soNumber})`;
+      } else {
+        displayTitle = sale.orderId || ('Order ' + sale.soNumber);
+      }
+    }
+
     list.push({
       uniqueKey: `sale-${sale.$id}`,
       id: sale.$id,
       soNumber: sale.soNumber || `SO-${sale.$id.slice(-4).toUpperCase()}`,
-      title: linkedItem?.title || sale.orderId || 'Order ' + sale.soNumber,
-      upc: linkedItem?.upc || '',
-      sku: linkedItem?.locationSku || linkedItem?.sku || '',
+      orderId: sale.orderId || '',
+      title: displayTitle,
+      upc: linkedItem?.upc || fallbackUpc,
+      sku: linkedItem?.locationSku || linkedItem?.sku || (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT') ? sale.orderId : '') || sale.soNumber || '',
       locationName: locName,
       date: sale.saleDate || sale.$createdAt,
       status: sale.status || 'Sold',

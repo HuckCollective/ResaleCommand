@@ -1344,7 +1344,7 @@ const logRentDeductionsToExpenses = async () => {
         cartId: `RENT-${locId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         tenantId: team.value?.$id || 'personal',
         amount: Number(rent.amount) || 382.50,
-        note: `${locName} Booth Rent - ${rent.title} (${rent.date || 'Monthly'})`,
+        note: `[BOOTH_RENT] ${locName} - ${rent.title} (${rent.date || 'Monthly'})`,
         date: parseFlexibleDate(rent.date),
         purchaseId: locId !== 'booth' ? locId : undefined
       });
@@ -1843,12 +1843,20 @@ const parseCsvData = (rawText: string, fileName: string) => {
         // Check for booth rent deduction rows (e.g. "(Credit) Space Rental 08/31/2026")
         if (lowerName.includes('space rental') || lowerName.includes('booth rent')) {
           const rentAmt = Math.abs(parseFloat((cols[amountIdx] || cols[agreedPriceIdx] || '382.50').replace(/[^0-9.]/g, '')) || 382.50);
-          const rentDate = (soldDateIdx !== -1 && cols[soldDateIdx]) || (paidDateIdx !== -1 && cols[paidDateIdx]) || '';
+          const dateMatch = fullItemName.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+          const rentDate = dateMatch 
+            ? `${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}` 
+            : ((soldDateIdx !== -1 && cols[soldDateIdx]) || (paidDateIdx !== -1 && cols[paidDateIdx]) || '');
           detectedRentDeductions.value.push({
             title: fullItemName,
             amount: rentAmt,
             date: rentDate
           });
+          continue;
+        }
+
+        const statusVal = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
+        if (statusVal === 'declined' || statusVal === 'failed' || statusVal === 'void' || statusVal === 'cancelled' || statusVal === 'canceled' || statusVal === 'unsuccessful') {
           continue;
         }
 

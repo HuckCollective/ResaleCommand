@@ -32,12 +32,24 @@ function formatPdfDate(dateStr: string | null | undefined): string {
   try {
     const raw = String(dateStr).trim();
     const datePart = raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
-    if (datePart && datePart.includes('-')) {
-      const parts = datePart.split('-');
-      if (parts.length === 3) {
+    const parts = datePart.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
         const [yyyy, mm, dd] = parts;
-        return `${mm}/${dd}/${yyyy.slice(2)}`; // e.g. "10/23/26"
+        return `${mm.padStart(2, '0')}/${dd.padStart(2, '0')}/${yyyy.slice(-2)}`;
+      } else if (parts[2].length === 4) {
+        // MM-DD-YYYY or MM/DD/YYYY
+        const [mm, dd, yyyy] = parts;
+        return `${mm.padStart(2, '0')}/${dd.padStart(2, '0')}/${yyyy.slice(-2)}`;
       }
+    }
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const yy = String(d.getUTCFullYear()).slice(-2);
+      return `${mm}/${dd}/${yy}`;
     }
     return datePart.slice(0, 10);
   } catch {

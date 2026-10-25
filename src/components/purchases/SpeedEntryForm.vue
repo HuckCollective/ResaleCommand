@@ -2,71 +2,203 @@
   <div class="card bg-base-100 shadow-xl border border-base-200">
     <div class="card-body p-4 sm:p-6">
       
-      <!-- 1. Top Scan / Intake Hero Card (FIRST THING) -->
-      <div class="mb-6 p-4 sm:p-5 rounded-2xl border-2 border-dashed border-primary/40 bg-gradient-to-br from-base-200/90 to-base-200/40 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center text-primary shrink-0 shadow-inner">
-              <Icon icon="solar:bill-list-bold-duotone" class="w-6 h-6" />
+      <!-- 1. Top Scan / Intake Hero Card (Canonical Image / Camera / Upload Pattern) -->
+      <div class="card bg-base-100 shadow-md border border-base-200 overflow-hidden mb-6">
+        <!-- Header -->
+        <div class="p-4 sm:p-5 border-b border-base-200 bg-base-200/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-2xl bg-primary/15 flex items-center justify-center text-primary shrink-0 shadow-inner">
+              <Icon icon="solar:bill-list-bold-duotone" class="w-5 h-5" />
             </div>
             <div>
-              <div class="font-bold text-base text-base-content flex items-center gap-2">
-                Scan Receipt or Invoice
-                <span class="badge badge-sm badge-primary text-primary-content font-extrabold whitespace-nowrap text-[10px] uppercase tracking-wider px-2 shadow-xs">AI Powered</span>
+              <div class="font-bold text-sm sm:text-base text-base-content flex items-center gap-2">
+                <span>Receipt Photo &amp; AI Scanner</span>
+                <span class="badge badge-sm badge-primary text-primary-content font-black text-[10px] uppercase tracking-wider px-2 shadow-xs">AI Powered</span>
               </div>
-              <div class="text-xs opacity-70">Snap with live camera guide or upload receipt photos.</div>
+              <div class="text-xs text-base-content/65">Snap with live camera guide, upload files, or paste screenshots from clipboard.</div>
             </div>
           </div>
-          
+
           <!-- Mode Toggle Pill -->
           <div class="join bg-base-100 p-0.5 rounded-xl border border-base-300 w-full sm:w-auto shadow-inner">
-            <button type="button" class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" :class="globalMode === 'mixed' ? 'btn-primary font-bold' : 'btn-ghost opacity-70'" @click="setGlobalMode('mixed')">
+            <button 
+              type="button" 
+              class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" 
+              :class="globalMode === 'mixed' ? 'btn-primary font-bold' : 'btn-ghost opacity-70'" 
+              @click="setGlobalMode('mixed')"
+            >
               <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" /> Product
             </button>
-            <button type="button" class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" :class="globalMode === 'all_expense' ? 'btn-warning font-bold' : 'btn-ghost opacity-70'" @click="setGlobalMode('all_expense')">
+            <button 
+              type="button" 
+              class="btn btn-xs join-item flex-1 sm:flex-none gap-1 py-1 px-3" 
+              :class="globalMode === 'all_expense' ? 'btn-warning font-bold' : 'btn-ghost opacity-70'" 
+              @click="setGlobalMode('all_expense')"
+            >
               <Icon icon="solar:wallet-bold" class="w-3.5 h-3.5" /> 100% Expense
             </button>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-          <button class="btn btn-primary text-primary-content btn-md font-bold w-full gap-2 shadow-sm rounded-xl" @click="scannerWidget?.startCamera()" :disabled="scanningReceipt">
-            <span v-if="scanningReceipt" class="loading loading-spinner loading-sm"></span>
-            <Icon v-else icon="solar:camera-bold-duotone" class="w-5 h-5" />
-            {{ scanningReceipt ? 'Analyzing Receipt...' : 'Take Photo (Camera)' }}
-          </button>
-          <button class="btn btn-outline btn-md font-bold w-full gap-2 rounded-xl bg-base-100" @click="receiptInput?.click()" :disabled="scanningReceipt">
-            <Icon icon="solar:folder-with-files-bold-duotone" class="w-5 h-5 text-secondary" />
-            Upload File(s) / Gallery
-          </button>
+        <div class="p-4 sm:p-6">
+          <!-- Hidden File Input for Receipt -->
           <input type="file" ref="receiptInput" @change="handleReceiptUpload" accept="image/*" multiple class="hidden" />
+
+          <!-- A. EMPTY STATE: Tactile Dropzone with Big Camera Button -->
+          <div 
+            v-if="!receiptPreviewUrl"
+            class="border-2 border-dashed border-base-300 rounded-2xl p-6 sm:p-8 text-center transition-all bg-base-100/60 cursor-pointer hover:border-primary/60 hover:bg-primary/5 flex flex-col items-center justify-center gap-3 relative select-none"
+            :class="{ 'border-primary bg-primary/10': isDraggingReceipt }"
+            @click="receiptInput?.click()"
+            @dragenter.prevent="isDraggingReceipt = true"
+            @dragover.prevent="isDraggingReceipt = true"
+            @dragleave.prevent="isDraggingReceipt = false"
+            @drop.prevent="handleReceiptDrop"
+          >
+            <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-1 pointer-events-none">
+              <Icon icon="solar:bill-cross-bold-duotone" class="w-8 h-8" />
+            </div>
+            <div class="pointer-events-none">
+              <div class="font-black text-sm sm:text-base text-base-content">Tap to upload or drag receipt here</div>
+              <p class="text-xs opacity-60 max-w-sm mt-1 mx-auto">
+                AI automatically extracts store name, purchase date, cost totals, and line items.
+              </p>
+            </div>
+
+            <!-- Prominent Large Action Buttons -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2 w-full max-w-md pointer-events-auto" @click.stop>
+              <button 
+                type="button" 
+                class="btn btn-secondary w-full sm:w-auto sm:flex-1 rounded-2xl font-black text-sm gap-2 h-12 shadow-md active:scale-95 transition-all"
+                @click="openCameraScanner"
+                :disabled="scanningReceipt"
+              >
+                <span v-if="scanningReceipt" class="loading loading-spinner loading-sm"></span>
+                <Icon v-else icon="solar:camera-bold" class="w-5 h-5" />
+                <span>{{ scanningReceipt ? 'Analyzing...' : 'Take Photo with Camera' }}</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-outline btn-primary w-full sm:w-auto rounded-2xl font-bold text-xs gap-1.5 h-12 shadow-xs active:scale-95"
+                @click="receiptInput?.click()"
+                :disabled="scanningReceipt"
+              >
+                <Icon icon="solar:upload-track-bold" class="w-4 h-4" />
+                <span>Upload File</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-outline btn-accent w-full sm:w-auto rounded-2xl font-bold text-xs gap-1.5 h-12 shadow-xs active:scale-95"
+                @click="pasteReceiptFromClipboard"
+                :disabled="scanningReceipt"
+                title="Paste receipt screenshot directly from clipboard (Ctrl+V)"
+              >
+                <Icon icon="solar:clipboard-text-bold" class="w-4 h-4" />
+                <span>Paste</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- B. POPULATED STATE: Hero Main Receipt Preview + Action Controls -->
+          <div v-else class="space-y-4">
+            <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-black/90 shadow-md group aspect-16/9 max-h-80 flex items-center justify-center">
+              <img 
+                :src="receiptPreviewUrl" 
+                alt="Attached Receipt" 
+                class="w-full h-full object-contain cursor-pointer transition-transform duration-300 group-hover:scale-102"
+                @click="showReceiptModal = true"
+              />
+              
+              <!-- Badges Overlay -->
+              <div class="absolute top-3 left-3 flex items-center gap-1.5 z-20">
+                <span class="badge badge-success text-success-content font-black text-xs gap-1 shadow-md py-2.5 px-3 rounded-xl">
+                  <Icon icon="solar:bill-check-bold" class="w-3.5 h-3.5" />
+                  Receipt Attached
+                </span>
+                <span class="badge badge-neutral font-mono font-bold text-xs shadow-md py-2.5 px-3 rounded-xl">
+                  IRS Record
+                </span>
+              </div>
+
+              <!-- Top Right Controls -->
+              <div class="absolute top-3 right-3 flex items-center gap-2 z-20">
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-circle bg-base-100/90 hover:bg-base-100 shadow-md text-base-content border border-base-300"
+                  @click="showReceiptModal = true"
+                  title="Zoom Full Resolution"
+                >
+                  <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4" />
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-circle btn-error text-error-content shadow-md"
+                  @click="removeScannedReceipt"
+                  title="Remove receipt photo"
+                >
+                  <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+                </button>
+              </div>
+
+              <div class="absolute bottom-2.5 inset-x-3 text-center pointer-events-none">
+                <span class="text-[11px] font-semibold text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-xs">
+                  Click photo to zoom and inspect details
+                </span>
+              </div>
+            </div>
+
+            <!-- Action Strip for Attached Receipt -->
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold"
+                @click="openCameraScanner"
+                :disabled="scanningReceipt"
+              >
+                <Icon icon="solar:camera-bold" class="w-4 h-4" />
+                <span>Retake Photo</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold"
+                @click="receiptInput?.click()"
+                :disabled="scanningReceipt"
+              >
+                <Icon icon="solar:upload-track-bold" class="w-4 h-4" />
+                <span>Replace File</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-sm btn-primary gap-1.5 rounded-xl font-bold shadow-sm"
+                @click="reScanCurrentReceipt"
+                :disabled="scanningReceipt"
+              >
+                <span v-if="scanningReceipt" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:refresh-bold" class="w-4 h-4" />
+                <span>{{ scanningReceipt ? 'Re-scanning...' : 'Re-scan with AI' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tax Compliance & Statement Guidance Alerts -->
+      <div v-if="taxWarning || statementNotice" class="space-y-2 mb-5">
+        <div v-if="taxWarning" class="alert alert-warning text-xs py-2.5 px-4 rounded-2xl flex items-center justify-between border border-warning/30 shadow-xs">
+          <div class="flex items-center gap-2.5">
+            <Icon icon="solar:shield-warning-bold" class="w-5 h-5 text-warning shrink-0" />
+            <span><strong>Tax Compliance Guard:</strong> {{ taxWarning }}</span>
+          </div>
         </div>
 
-        <!-- Attached Receipt Preview Card -->
-        <div v-if="receiptPreviewUrl" class="p-3 bg-base-100 rounded-xl border border-primary/30 flex items-center justify-between gap-3 shadow-xs">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="w-12 h-12 rounded-lg overflow-hidden border border-base-300 bg-black/80 shrink-0 cursor-pointer" @click="showReceiptModal = true">
-              <img :src="receiptPreviewUrl" alt="Receipt Preview" class="w-full h-full object-cover hover:scale-105 transition-transform" />
-            </div>
-            <div class="min-w-0">
-              <div class="flex items-center gap-1.5">
-                <span class="badge badge-success badge-xs font-bold text-success-content gap-0.5">
-                  <Icon icon="solar:bill-check-bold" class="w-3 h-3" /> Attached
-                </span>
-                <span class="text-xs font-bold text-base-content truncate">Receipt Attached</span>
-              </div>
-              <div class="text-[11px] opacity-60 truncate">Will be saved to bucket with this PO</div>
-            </div>
+        <div v-if="statementNotice" class="alert alert-info text-xs py-2.5 px-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-info/30 shadow-xs">
+          <div class="flex items-center gap-2.5">
+            <Icon icon="solar:calendar-date-bold" class="w-5 h-5 text-info shrink-0" />
+            <span><strong>Multi-Month Statement Detected:</strong> {{ statementNotice }}</span>
           </div>
-          <div class="flex items-center gap-1.5 shrink-0">
-            <button type="button" class="btn btn-ghost btn-xs text-primary font-bold" @click="showReceiptModal = true">
-              View
-            </button>
-            <button type="button" class="btn btn-ghost btn-xs text-error font-bold" @click="removeScannedReceipt" title="Remove attached receipt">
-              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-            </button>
-          </div>
+          <a href="/expenses?openImport=true" class="btn btn-xs btn-primary gap-1 font-bold shrink-0 shadow-xs">
+            <span>Open Expense Staging Tray →</span>
+          </a>
         </div>
       </div>
 
@@ -308,6 +440,8 @@ const poVendor = ref('');
 const poDate = ref(new Date().toISOString().split('T')[0]);
 const poTotal = ref('');
 const globalMode = ref('mixed'); // 'mixed' | 'all_expense'
+const taxWarning = ref('');
+const statementNotice = ref('');
 
 const items = ref([
     { title: '', cost: null, quantity: 1, type: 'resale', linkedItemId: null },
@@ -318,6 +452,7 @@ const items = ref([
 const receiptInput = ref(null);
 const scannerWidget = ref(null);
 const scanningReceipt = ref(false);
+const isDraggingReceipt = ref(false);
 
 const isLikelyExpense = (title) => {
     const t = (title || '').toLowerCase();
@@ -405,16 +540,32 @@ const processReceiptFiles = async (fileList) => {
             } catch(e){}
         }
 
-        if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+        if (parsed.hasDeclinedTransactions) {
+            taxWarning.value = parsed.warning || `${parsed.declinedCount} declined/unpaid transaction(s) were excluded because unpaid charges cannot be claimed as tax deductions.`;
+        } else {
+            taxWarning.value = '';
+        }
+
+        if (parsed.documentType === 'BILLING_STATEMENT_LEDGER') {
+            statementNotice.value = `This document appears to be a multi-month billing statement from ${parsed.vendor || 'your provider'}. For proper monthly accounting, stage and import these recurring charges using the Expense Staging Tray.`;
+        } else {
+            statementNotice.value = '';
+        }
+
+        const rawValidItems = (parsed.items && Array.isArray(parsed.items)) 
+            ? parsed.items.filter(i => !i.isDeclined) 
+            : [];
+
+        if (rawValidItems.length > 0) {
             // Number any identical items so each line is distinct and never flagged as a duplicate
             const titleCounts = new Map();
-            parsed.items.forEach(i => {
+            rawValidItems.forEach(i => {
                 const t = (i.title || 'Item').trim().toLowerCase();
                 titleCounts.set(t, (titleCounts.get(t) || 0) + 1);
             });
 
             const titleTracker = new Map();
-            let mappedItems = parsed.items.map((i, idx) => {
+            let mappedItems = rawValidItems.map((i, idx) => {
                 let cleanTitle = (i.title || `Item #${idx + 1}`).trim();
                 const norm = cleanTitle.toLowerCase();
                 if ((titleCounts.get(norm) || 0) > 1 && !/#\d+$/.test(cleanTitle)) {
@@ -463,7 +614,14 @@ const processReceiptFiles = async (fileList) => {
 
             addToast({ 
                 type: 'success', 
-                message: `Receipt parsed! Extracted ${parsed.items.length} items from ${parsed.vendor || 'receipt'}.` 
+                message: `Receipt parsed! Extracted ${mappedItems.length} items from ${parsed.vendor || 'receipt'}.` 
+            });
+        } else if (parsed.hasDeclinedTransactions) {
+            items.value = [];
+            poTotal.value = 0;
+            addToast({ 
+                type: 'warning', 
+                message: `All ${parsed.declinedCount || 0} transactions on this document were DECLINED. No paid expenses could be added.` 
             });
         } else {
             addToast({ 
@@ -496,6 +654,72 @@ const handleCapturedReceiptPhotos = async (capturedPhotos) => {
     addToast({ type: 'info', message: 'Analyzing captured receipt photo...' });
     await processReceiptFiles(capturedPhotos);
 };
+
+const openCameraScanner = () => {
+    if (scannerWidget.value) {
+        scannerWidget.value.startCamera();
+    } else {
+        receiptInput.value?.click();
+    }
+};
+
+const handleReceiptDrop = async (e) => {
+    isDraggingReceipt.value = false;
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+        await processReceiptFiles(Array.from(files));
+    }
+};
+
+const pasteReceiptFromClipboard = async () => {
+    try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+            const clipItems = await navigator.clipboard.read();
+            for (const item of clipItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        const file = new File([blob], `receipt_${Date.now()}.png`, { type });
+                        await processReceiptFiles([file]);
+                        return;
+                    }
+                }
+            }
+            addToast({ type: 'warning', message: 'No receipt image found on clipboard. Copy an image or screenshot first.' });
+        } else {
+            receiptInput.value?.click();
+        }
+    } catch (e) {
+        receiptInput.value?.click();
+    }
+};
+
+const handleGlobalPaste = async (e) => {
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        if (!e.clipboardData?.types?.includes('Files')) return;
+    }
+    const clipItems = e.clipboardData?.items;
+    if (!clipItems) return;
+    for (let i = 0; i < clipItems.length; i++) {
+        if (clipItems[i].type.startsWith('image/')) {
+            const file = clipItems[i].getAsFile();
+            if (file) {
+                e.preventDefault();
+                await processReceiptFiles([file]);
+                return;
+            }
+        }
+    }
+};
+
+const reScanCurrentReceipt = async () => {
+    if (lastScannedReceiptFile.value) {
+        await processReceiptFiles([lastScannedReceiptFile.value]);
+    }
+};
+
+
 
 const itemRefs = ref({});
 
@@ -632,10 +856,20 @@ const submit = async () => {
 };
 
 onMounted(() => {
-    // Optional autofocus logic could go here
+    if (typeof window !== 'undefined') {
+        window.addEventListener('paste', handleGlobalPaste);
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get('mode');
+        if (mode === 'all_expense' || mode === 'expense') {
+            setGlobalMode('all_expense');
+        }
+    }
 });
 
 onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('paste', handleGlobalPaste);
+    }
     if (receiptPreviewUrl.value) {
         URL.revokeObjectURL(receiptPreviewUrl.value);
     }

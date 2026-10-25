@@ -272,9 +272,10 @@ const loadSettings = () => {
         : { prefix: p.prefix || '', name: p.name || '', linkedTeamId: p.linkedTeamId || '' }
     );
   } else {
-    // Default initial partner configuration for PDX Game Library
+    // Default initial partner configuration for PDX Game Library and Sub-Clients
     form.value.partnerPrefixes = [
-      { prefix: 'PDXGL-', name: 'PDX Game Library', linkedTeamId: '' }
+      { prefix: 'PDXGL-', name: 'PDX Game Library', linkedTeamId: '' },
+      { prefix: 'BB-', name: 'B&B Consignment (PDXGL Sub-Client)', linkedTeamId: '' }
     ];
   }
 };
