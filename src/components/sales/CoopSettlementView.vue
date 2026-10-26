@@ -516,10 +516,11 @@ const availableMonths = computed(() => {
   return Array.from(months.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
 });
 
-// Default to the most recent month that has real sales instead of all-time cumulative
+// Default to the most recent month that has substantial sales (or newest)
 watch(availableMonths, (months) => {
   if (months.length > 0 && selectedPeriod.value === 'all') {
-    selectedPeriod.value = months[0].key;
+    const substantialMonth = months.find(m => m.count >= 5);
+    selectedPeriod.value = substantialMonth ? substantialMonth.key : months[0].key;
   }
 }, { immediate: true });
 
@@ -531,15 +532,24 @@ const filteredSales = computed(() => {
   return props.sales.filter(s => {
     if (s.status === 'Cancelled') return false;
 
-    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
-    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
-    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
-    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
-      if (seenFilteredSku.has(sku)) return false;
-      seenFilteredSku.add(sku);
+    // 1. Date / Month Filter First
+    if (selectedPeriod.value !== 'all') {
+      if (!s.date) return false;
+      const cleanDate = s.date.includes('T') ? s.date.split('T')[0] : s.date.split(' ')[0];
+      const parts = cleanDate.split(/[-/]/);
+      let matchesMonth = false;
+      if (parts.length >= 2) {
+        const year = parts[0].length === 4 ? parts[0] : parts[2];
+        const month = parts[0].length === 4 ? parts[1] : parts[0];
+        const key = `${year}-${month.padStart(2, '0')}`;
+        matchesMonth = (key === selectedPeriod.value);
+      } else {
+        matchesMonth = cleanDate.startsWith(selectedPeriod.value);
+      }
+      if (!matchesMonth) return false;
     }
 
-    // Venue isolation filter: Strictly verify Memory Den venue attribution (no loose partner prefix matching)
+    // 2. Venue isolation filter: Strictly verify Memory Den venue attribution
     if (selectedLocation.value === 'memory_den') {
       const loc = (s.locationName || '').toLowerCase();
       const sSku = (s.sku || '').toLowerCase();
@@ -551,19 +561,15 @@ const filteredSales = computed(() => {
       if (!isMd) return false;
     }
 
-    if (selectedPeriod.value === 'all') return true;
-
-    if (!s.date) return false;
-    const cleanDate = s.date.includes('T') ? s.date.split('T')[0] : s.date.split(' ')[0];
-    const parts = cleanDate.split(/[-/]/);
-    if (parts.length >= 2) {
-      const year = parts[0].length === 4 ? parts[0] : parts[2];
-      const month = parts[0].length === 4 ? parts[1] : parts[0];
-      const key = `${year}-${month.padStart(2, '0')}`;
-      return key === selectedPeriod.value;
+    // 3. Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
+    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
+    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
+    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
+      if (seenFilteredSku.has(sku)) return false;
+      seenFilteredSku.add(sku);
     }
 
-    return cleanDate.startsWith(selectedPeriod.value);
+    return true;
   });
 });
 

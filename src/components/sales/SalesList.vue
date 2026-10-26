@@ -735,7 +735,13 @@ const consolidatedSales = computed(() => {
   sales.value.forEach(sale => {
     if (sale.status === 'Cancelled') return; // Skip cancelled sales so they drop from realized revenue
 
-    const linkedItem = inventoryItems.value.find(i => i.saleId === sale.$id || (sale.orderId && (i.locationSku === sale.orderId || i.upc === sale.orderId)));
+    const sSo = (sale.soNumber || '').trim().toUpperCase();
+    const sOrd = (sale.orderId || '').trim().toUpperCase();
+    const linkedItem = inventoryItems.value.find(i => 
+      i.saleId === sale.$id || 
+      (sSo && (i.locationSku?.toUpperCase() === sSo || i.upc?.toUpperCase() === sSo)) ||
+      (sOrd && (i.locationSku?.toUpperCase() === sOrd || i.upc?.toUpperCase() === sOrd))
+    );
     const isMultiQty = linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
 
     // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless explicitly multi-qty)

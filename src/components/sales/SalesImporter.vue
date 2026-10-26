@@ -560,6 +560,33 @@
 
         <!-- VIEW 2: CO-OP SETTLEMENT & STATEMENTS -->
         <div v-else class="space-y-6">
+          <!-- Unmatched Warning Alert for Settlement View -->
+          <div v-if="unmatchedCount > 0" class="alert alert-warning border border-warning/40 bg-warning/10 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <Icon icon="solar:danger-triangle-bold" class="w-8 h-8 text-warning shrink-0" />
+              <div>
+                <h4 class="font-black text-sm text-base-content">Partial Settlement Notice: {{ unmatchedCount }} Items Not Yet Cataloged!</h4>
+                <p class="text-xs text-base-content/80 mt-0.5">
+                  Currently, this statement is only calculating payouts for the <strong>{{ matchedCount }} matched items</strong> while deducting the full ${{ currentCycleInfo.spaceRental.toFixed(2) }} booth rent. Auto-create or match the remaining {{ unmatchedCount }} items to reflect your true gross revenue and net check!
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button 
+                class="btn btn-sm btn-secondary font-bold gap-1.5 shadow-sm"
+                :disabled="isAutoCreatingAll"
+                @click="autoCreateAllUnmatched"
+              >
+                <span v-if="isAutoCreatingAll" class="loading loading-spinner loading-xs"></span>
+                <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                <span>Auto-Create All {{ unmatchedCount }}</span>
+              </button>
+              <button class="btn btn-sm btn-outline border-base-300" @click="activeView = 'matching'">
+                Review Matches
+              </button>
+            </div>
+          </div>
+
           <!-- Memory Den Mall Reconciliation Hero Banner -->
           <div class="card bg-gradient-to-br from-base-200/90 to-base-300/80 border border-base-300 shadow-md p-5">
             <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-base-content/10 pb-4 mb-4">
@@ -2120,13 +2147,13 @@ const resolvePartnerName = (prefix: string) => {
 };
 
 const partnerSettlements = computed(() => {
-  const matched = cycleFilteredRows.value.filter(r => r.mappedItem !== null);
-  if (matched.length === 0) return [];
+  const rows = cycleFilteredRows.value;
+  if (rows.length === 0) return [];
 
   const rawGroups: Record<string, any> = {};
   const boothRent = currentCycleInfo.value.spaceRental;
 
-  for (const row of matched) {
+  for (const row of rows) {
     const item = row.mappedItem;
     const prefix = resolveItemPrefix(item, row.extractedSku, row.itemName);
     const partnerName = resolvePartnerName(prefix);
