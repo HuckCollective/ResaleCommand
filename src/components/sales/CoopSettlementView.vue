@@ -482,17 +482,14 @@ watch(currentTeam, (n) => {
 // Dynamically extract all distinct monthly settlement cycles from real sales data (Zero-Dupe Invariant)
 const availableMonths = computed(() => {
   const months = new Map<string, { key: string; label: string; count: number; date: Date }>();
-  const seenMonthSku = new Set<string>();
+  const seenMonthSaleIds = new Set<string>();
 
   for (const s of props.sales) {
     if (!s.date || s.status === 'Cancelled') continue;
 
-    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
-    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
-    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
-    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
-      if (seenMonthSku.has(sku)) continue;
-      seenMonthSku.add(sku);
+    if (s.id) {
+      if (seenMonthSaleIds.has(s.id)) continue;
+      seenMonthSaleIds.add(s.id);
     }
 
     const cleanDate = s.date.includes('T') ? s.date.split('T')[0] : s.date.split(' ')[0];
@@ -527,7 +524,7 @@ watch(availableMonths, (months) => {
 // Filter sales by selected month and location (Zero-Dupe Invariant)
 const filteredSales = computed(() => {
   if (!props.sales || props.sales.length === 0) return [];
-  const seenFilteredSku = new Set<string>();
+  const seenFilteredIds = new Set<string>();
 
   return props.sales.filter(s => {
     if (s.status === 'Cancelled') return false;
@@ -554,19 +551,20 @@ const filteredSales = computed(() => {
       const loc = (s.locationName || '').toLowerCase();
       const sSku = (s.sku || '').toLowerCase();
       const sUpc = (s.upc || '').toLowerCase();
+      const soNumber = (s.soNumber || '').toLowerCase();
       const orderId = ((s as any).orderId || '').toLowerCase();
+      const whId = ((s as any).warehouseId || '').toLowerCase();
       const isMd = loc.includes('memory') || loc.includes('0ej') || loc === 'md' ||
-                   sSku.includes('0ej') || sUpc.includes('0ej') ||
-                   orderId.startsWith('md-payout') || orderId.startsWith('md-');
+                   sSku.includes('0ej') || sUpc.includes('0ej') || soNumber.includes('0ej') ||
+                   orderId.startsWith('md-payout') || orderId.startsWith('md-') || orderId.startsWith('t-') ||
+                   whId === '6a7e70050009db0e1857' || whId === '6ab9a37500233d76d580';
       if (!isMd) return false;
     }
 
-    // 3. Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless Multi-Qty)
-    const isMultiQty = (s as any).isMultiQty || (s as any).quantity > 1;
-    const sku = (s.sku || s.upc || (s as any).orderId || '').trim().toUpperCase();
-    if (!isMultiQty && sku && !sku.startsWith('MD-PAYOUT') && !sku.startsWith('SO-')) {
-      if (seenFilteredSku.has(sku)) return false;
-      seenFilteredSku.add(sku);
+    // 3. Resale Invariant: 1 Sale Record = 1 Unique Physical Register Transaction
+    if (s.id) {
+      if (seenFilteredIds.has(s.id)) return false;
+      seenFilteredIds.add(s.id);
     }
 
     return true;

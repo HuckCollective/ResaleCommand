@@ -745,29 +745,13 @@ const consolidatedSales = computed(() => {
     const isMultiQty = linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
 
     // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless explicitly multi-qty)
-    let uniqueSkuKey = '';
-    if (linkedItem?.$id) {
-      uniqueSkuKey = `item-${linkedItem.$id}`;
-    } else if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT')) {
-      uniqueSkuKey = `sku-${sale.orderId.trim().toUpperCase()}`;
-    } else if (sale.soNumber && !sale.soNumber.startsWith('SO-')) {
-      uniqueSkuKey = `so-${sale.soNumber.trim().toUpperCase()}`;
-    }
-
-    // Skip ghost duplicate sales for single-quantity goods
-    if (!isMultiQty && uniqueSkuKey) {
-      if (seenSingleItemKeys.has(uniqueSkuKey)) {
-        return; // Deduplicate ghost duplicate
-      }
-      seenSingleItemKeys.add(uniqueSkuKey);
-    }
+    if (linkedSaleIds.has(sale.$id)) return;
+    linkedSaleIds.add(sale.$id);
 
     if (linkedItem && !isMultiQty) {
       if (linkedItemIds.has(linkedItem.$id)) return;
       linkedItemIds.add(linkedItem.$id);
     }
-
-    linkedSaleIds.add(sale.$id);
 
     const locName = getWarehouseName(sale.warehouseId);
     const comm = (sale.commissionFee || 0) + (sale.shippingCost || 0);
@@ -779,12 +763,12 @@ const consolidatedSales = computed(() => {
 
     let displayTitle = linkedItem?.title;
     if (!displayTitle) {
-      if (isBB) {
+      if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT') && !sale.orderId.startsWith('SYNC-')) {
+        displayTitle = sale.orderId.includes('•') ? sale.orderId.split('•')[1].trim() : sale.orderId;
+      } else if (isBB) {
         displayTitle = `B&B Consignment Item (${sale.soNumber})`;
       } else if (isPDXGL) {
         displayTitle = `PDX Game Library Item (${sale.soNumber})`;
-      } else if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT')) {
-        displayTitle = sale.orderId;
       } else if (sale.soNumber && sale.soNumber.startsWith('HUCK-')) {
         displayTitle = `Huckleberry Item (${sale.soNumber})`;
       } else {
