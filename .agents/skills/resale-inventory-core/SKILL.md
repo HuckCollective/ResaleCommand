@@ -120,4 +120,24 @@ In secondhand, antique, vintage, and booth inventory:
    - Multi-quantity items (batch stock, $10 book packs `0EJ0F9`, felt hats `0EJ0DC`, stickers) can legitimately sell across distinct tickets.
    - **Appwrite Schema Law**: In Appwrite's `items` collection, the supported integer attribute is `quantity`, NOT `isMultiQty`. NEVER send `isMultiQty` in document payloads to Appwrite; instead, set `quantity: isMulti ? Math.max(2, repeatCount) : 1` in Appwrite, and hydrate `isMultiQty: true` in frontend reactive memory whenever `quantity > 1`.
 
+---
+
+## 6. Multi-Venue Configuration & Software-Agnostic Payout Architecture
+
+### The Anti-Hardcoding Invariant:
+Never hardcode venue-specific file paths, hardcoded venue names, or static booth rents into API routes or backend services. Different antique malls, flea markets, and consignment locations use different POS software, charge different commissions, and deduct different booth rents.
+
+### The Configurable Venue Entity (`warehouses` Collection):
+All venue-specific ingestion and settlement logic must be driven dynamically by the venue's record in the `warehouses` collection:
+- **`code`**: Location abbreviation (`MD`, `DT`, `HG`, `HD`, etc.)
+- **`commissionRate`**: Venue cut percentage (e.g. `0.15` for Memory Den 15%, `0.18` for 18% antique malls, `0.00` for own garage/events).
+- **`fixedMonthlyRent`**: Fixed monthly booth rent deducted by mall (e.g. `$382.50` for Memory Den, `$250.00` for Dusty Tiger).
+- **`payoutDayOfMonth`**: Day of the month checks clear/disburse (e.g. `15` for Memory Den, `1` for first of month).
+- **`posSoftware`**: The POS system format used by that venue:
+  - `'ricochet'`: Ricochet Consignment POS (`Item, Sale, Agreed, Cost/Split, Aged Price, Discounts, Paid, Sold, Amount, Check#`).
+  - `'square'`: Square / Clover retail POS (`Transaction ID, Date, Time, Gross Sales, Fees, Net Sales`).
+  - `'simpleconsign'`: Traxia SimpleConsign (`Account, Inventory #, Description, Date Sold, Price, Split, Payable`).
+  - `'generic_csv'`: Universal fallback with custom column mappings.
+
+
 

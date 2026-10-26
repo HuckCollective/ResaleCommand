@@ -139,3 +139,25 @@ flowchart TD
    - Tap `Auto-Create Unmatched` to catalog remaining sold items with official barcodes.
 5. **Verify Math**: Check the summary cards against the venue check to ensure penny-exact parity.
 6. **Commit**: Tap `Commit X Sales to Database`. All items update to `sold`, sales are recorded, and the settlement PDF is generated.
+
+---
+
+## 7. Multi-Venue Architectural Invariant: Dynamic POS Profiles vs. Ad-Hoc Scripts
+
+### The Cardinal Rule:
+**Never hardcode venue-specific file paths, hardcoded venue names, or static booth rents into API routes or backend services.**
+
+### Ad-Hoc Repair vs. Production Ingestion:
+- The `sync-memoryden-payouts.ts` script was built strictly as an **emergency, ad-hoc server-side repair utility** to purge 4,132 legacy contaminated sales records and commit already-staged Memory Den rows without forcing the operator to manually re-upload and re-verify 300+ items.
+- In production, **every venue is a dynamic entity** configured in the `warehouses` collection.
+
+### Location Configuration Profile (`warehouses` Record):
+When adding a new consignment mall, booth, or pop-up market, the location record holds all ingestion rules:
+- **`posSoftware`**: The POS format used by the venue (`ricochet`, `square`, `simpleconsign`, `traxia`, `clover`, `generic_csv`).
+- **`commissionRate`**: Payout split withheld by the venue (e.g. `0.15` for 15%, `0.18` for 18%).
+- **`fixedMonthlyRent`**: The monthly booth overhead deducted by the mall (e.g. `$382.50` for Memory Den, `$250.00` for Dusty Tiger, `$0.00` for online/consignment).
+- **`payoutDayOfMonth`**: Day of the month checks deposit (e.g. `15th` for Memory Den, `1st` for Traxia).
+- **`columnMapping`**: Flexible header mapping for venues with custom or non-standard report columns.
+
+All ongoing ingestion flows through the dynamic `/sales/import` workspace, where operators select the target venue and the parser automatically adapts to that venue's configured POS profile.
+
