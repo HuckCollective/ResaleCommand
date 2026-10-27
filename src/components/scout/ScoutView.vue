@@ -9,7 +9,7 @@
         </div>
     </div>
     <!-- SUCCESS TOAST -->
-    <div v-if="successMessage" class="toast toast-top toast-center z-100">
+    <div v-if="successMessage && !error" class="toast toast-top toast-center z-100">
         <div class="alert alert-success shadow-lg text-white">
             <span>{{ successMessage }}</span>
         </div>
@@ -121,15 +121,8 @@
                             <span v-if="getTierBadgeInfo(item)" class="badge font-bold gap-1 shadow-xs" :class="getTierBadgeInfo(item).class">
                                 {{ getTierBadgeInfo(item).label }}
                             </span>
-                            <span v-if="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) !== undefined"
-                                  class="badge font-bold gap-1 shadow-xs"
-                                  :class="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'badge-success text-success-content' : 'badge-error text-error-content'">
-                                <Icon :icon="(item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'solar:box-minimalistic-bold' : 'solar:forbidden-circle-bold'" class="w-3.5 h-3.5" />
-                                {{ (item.canCombineShipping ?? item.seller_info?.can_combine_shipping) ? 'Combine Eligible' : 'Ships Alone' }}
-                                <span v-if="item.seller_info?.seller_id || item.sellerId" class="opacity-80 font-mono text-[10px]">#{{ item.seller_info?.seller_id || item.sellerId }}</span>
-                            </span>
-                            <span v-if="item.seller_info?.shipping_weight || item.shippingWeight" class="badge badge-neutral font-mono font-bold text-xs">
-                                âš–ï¸ {{ item.seller_info?.shipping_weight || item.shippingWeight }} lbs
+                            <span v-if="item.seller_info?.shipping_weight || item.shippingWeight" class="badge badge-neutral font-mono font-bold text-xs gap-1">
+                                <Icon icon="mdi:scale-balance" class="w-3.5 h-3.5" /> {{ item.seller_info?.shipping_weight || item.shippingWeight }} lbs
                             </span>
                             <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                         </div>
@@ -342,7 +335,7 @@
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
-                                            {{ getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.conservative.room }}
+                                            {{ getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.conservative.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.conservative.maxBid, 'tier-cons-' + index); selectBiddingTier(item, 'conservative')"
@@ -385,7 +378,7 @@
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
-                                            {{ getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.balanced.room }}
+                                            {{ getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.balanced.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.balanced.maxBid, 'tier-bal-' + index); selectBiddingTier(item, 'balanced')"
@@ -417,7 +410,7 @@
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'badge-ghost text-error' : 'badge-secondary text-secondary-content'">
-                                            {{ getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + getAuctionFinancials(item).tiers.aggressive.room }}
+                                            {{ getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.aggressive.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.aggressive.maxBid, 'tier-agg-' + index); selectBiddingTier(item, 'aggressive')"
@@ -434,8 +427,8 @@
                         </div>
 
                         <!-- AI Strategy Advice -->
-                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
-                            {{ item.purchase_strategy.advice }}
+                        <p v-if="getScoutAdvice(item)" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
+                            {{ getScoutAdvice(item) }}
                         </p>
                     </div>
 
@@ -500,132 +493,125 @@
                         </div>
 
                         <!-- AI Strategy Advice -->
-                        <p v-if="item.purchase_strategy?.advice" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
-                            {{ item.purchase_strategy.advice }}
+                        <p v-if="getScoutAdvice(item)" class="text-xs sm:text-sm font-medium leading-relaxed opacity-90 mt-2 px-0.5">
+                            {{ getScoutAdvice(item) }}
                         </p>
                     </div>
 
-                    <!-- ZONE 2: TACTICAL EXIT PLAY -->
+                    <!-- ZONE 2: TACTICAL EXIT PLAY & SOURCING INTEL -->
                     <div class="space-y-3 mb-5">
-                        <!-- Reseller Strategic Exit Play (The Game Plan) -->
-                        <div v-if="getScoutPlay(item)" class="border-2 border-primary/30 bg-primary/5 rounded-2xl p-4 shadow-xs space-y-2.5">
-                            <div class="flex items-center justify-between gap-2 flex-wrap">
-                                <div class="flex items-center gap-2">
-                                    <Icon icon="solar:clipboard-check-bold" class="w-5 h-5 text-primary shrink-0" />
-                                    <div>
-                                        <h4 class="font-black text-sm uppercase tracking-wider text-primary flex items-center gap-2">
-                                            <span>Strategic Play: {{ getScoutPlay(item)?.name }}</span>
-                                            <span class="badge badge-xs font-mono font-bold" :class="getScoutPlay(item)?.badgeClass || 'badge-success'">
-                                                {{ getScoutPlay(item)?.badge }}
-                                            </span>
-                                        </h4>
-                                        <p class="text-[11px] opacity-75 font-medium">{{ getScoutPlay(item)?.tagline }}</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2 text-xs font-mono">
-                                    <span class="badge badge-sm font-black gap-1 shadow-2xs"
-                                          :class="Number(getScoutPlay(item)?.netProfit || 0) > 0 ? 'badge-success text-success-content' : 'badge-ghost text-base-content/60'">
-                                        <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
-                                        {{ Number(getScoutPlay(item)?.netProfit || 0) > 0 ? '+$' + Number(getScoutPlay(item)?.netProfit).toFixed(2) : '$' + Number(getScoutPlay(item)?.netProfit || 0).toFixed(2) }} Projected Profit
-                                    </span>
-                                    <span class="badge badge-sm badge-outline font-bold">
-                                        {{ getScoutPlay(item)?.roiPct }}% ROI
-                                    </span>
-                                </div>
-                            </div>
-
-                            <p class="text-xs opacity-90 leading-relaxed font-medium">
-                                {{ getScoutPlay(item)?.summary }}
-                            </p>
-
-                            <!-- Breakdown of Tiers in the Play -->
-                            <div v-if="getScoutPlay(item)?.tiersBreakdown?.length" class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-primary/15">
-                                <div v-for="(playTier, ptIdx) in getScoutPlay(item)?.tiersBreakdown" :key="ptIdx" 
-                                     class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1 shadow-2xs">
-                                    <div class="flex justify-between items-center font-bold">
-                                        <span class="truncate">{{ playTier.title }}</span>
-                                        <span class="font-mono text-success font-black">{{ playTier.price }}</span>
-                                    </div>
-                                    <div class="text-[10px] text-base-content/75 flex items-center justify-between">
-                                        <span>{{ playTier.channel }}</span>
-                                        <span class="badge badge-2xs badge-neutral font-mono">x{{ playTier.count }}</span>
-                                    </div>
-                                    <div class="text-[9px] opacity-60 leading-tight">
-                                        {{ playTier.purpose }}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="pt-2 border-t border-primary/15 flex items-center justify-between text-[11px] font-mono flex-wrap gap-2">
-                                <span class="opacity-70">Gross Yield: ${{ Number(getScoutPlay(item)?.projectedYield || 0).toFixed(2) }}</span>
-                                <span class="opacity-70">Est. Fees: -${{ Number(getScoutPlay(item)?.estFees || 0).toFixed(2) }}</span>
-                                <span class="text-success font-bold">Net Payout: ${{ Number(getScoutPlay(item)?.netPayout || 0).toFixed(2) }}</span>
-                            </div>
-                        </div>
-
-                        <!-- Why Pay Up (Collector Catalyst / Hero Anchor) -->
-                        <div v-if="item.why_pay_up" class="p-3.5 rounded-2xl bg-success/15 border border-success/30 text-xs shadow-xs">
-                            <div class="font-extrabold text-success flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
-                                <Icon icon="solar:fire-bold" class="w-4 h-4" /> Sourcing Catalyst (Why Pay Up):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pay_up }}</p>
-                        </div>
-
-                        <!-- Why Pass (Risk & Fee Warnings / Traps) -->
-                        <div v-if="item.why_pass" class="p-3.5 rounded-2xl bg-error/15 border border-error/30 text-xs shadow-xs">
-                            <div class="font-extrabold text-error flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
-                                <Icon icon="solar:danger-triangle-bold" class="w-4 h-4" /> Risk Rationale &amp; Traps (Why Pass):
-                            </div>
-                            <p class="text-base-content leading-relaxed font-medium">{{ item.why_pass }}</p>
-                        </div>
-
-                        <!-- Recommended Sales Channel & Velocity -->
-                        <div v-if="item.market_report?.best_platform" class="bg-primary/10 border border-primary/25 rounded-2xl p-3.5 sm:p-4 space-y-2 shadow-xs">
+                        <!-- Unified Exit Play & Channel Comparison Card -->
+                        <div v-if="getScoutChannels(item).length > 0 || getScoutPlay(item)" 
+                             class="border border-primary/25 bg-primary/5 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
+                            
+                            <!-- Card Header -->
                             <div class="flex items-center justify-between gap-2 flex-wrap">
                                 <div class="text-xs uppercase font-extrabold text-primary tracking-wider flex items-center gap-1.5">
-                                    <Icon icon="solar:shop-2-bold" class="w-4 h-4" /> Recommended Sales Channel &amp; Booth
+                                    <Icon icon="solar:shop-2-bold" class="w-4 h-4 shrink-0" /> Exit Play &amp; Channel Comparison
                                 </div>
-                                <span v-if="item.market_report.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
-                                    ⚡ {{ item.market_report.sell_through_velocity }}
-                                </span>
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span v-if="getScoutPlay(item)?.name" class="badge badge-primary badge-outline badge-xs font-bold font-mono">
+                                        {{ getScoutPlay(item)?.name }}
+                                    </span>
+                                    <span v-if="item.market_report?.sell_through_velocity" class="badge badge-info badge-xs font-bold gap-1">
+                                        ⚡ {{ item.market_report.sell_through_velocity }}
+                                    </span>
+                                </div>
                             </div>
-                            <div class="font-black text-sm sm:text-base text-base-content leading-snug">
-                                {{ item.market_report.best_platform }}
-                            </div>
-                            <p v-if="item.market_report.platform_rationale" class="text-xs opacity-90 leading-relaxed text-base-content font-medium whitespace-pre-wrap">
-                                {{ item.market_report.platform_rationale }}
-                            </p>
-                            <!-- Channel Comparisons / Trade-Offs -->
-                            <div v-if="item.market_report.channels?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                                <div v-for="(ch, cIdx) in item.market_report.channels" :key="cIdx" class="bg-base-100/90 p-2.5 rounded-xl border border-base-300 text-xs flex flex-col justify-between space-y-1">
-                                    <div class="flex justify-between items-center font-bold">
-                                        <span>{{ ch.name }}</span>
-                                        <span class="font-mono text-success">{{ ch.est_price || '-' }}</span>
+
+                            <!-- Channel Comparison Sub-Cards (Memory Den vs eBay) -->
+                            <div v-if="getScoutChannels(item).length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div v-for="(ch, cIdx) in getScoutChannels(item)" :key="cIdx" 
+                                     class="bg-base-100 p-3 rounded-xl border border-base-300 shadow-2xs flex flex-col justify-between gap-2 transition-all"
+                                     :class="isBestPlatform(ch, item) ? 'ring-1 ring-primary/40 border-primary/40 bg-primary/[0.02]' : ''">
+                                    
+                                    <!-- Channel Header -->
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-bold text-xs text-base-content truncate">{{ ch.name }}</span>
+                                        <span v-if="isBestPlatform(ch, item)" class="badge badge-primary badge-xs font-bold shrink-0">
+                                            Top Pick
+                                        </span>
                                     </div>
-                                    <div v-if="ch.recommendation" class="text-[10px] text-base-content/80 font-medium">
-                                        💡 {{ ch.recommendation }}
+
+                                    <!-- Price / Payout Grid -->
+                                    <div class="grid grid-cols-2 gap-2 py-1.5 px-2 rounded-lg bg-base-200/50 border border-base-200 text-xs font-mono">
+                                        <div>
+                                            <span class="text-[10px] uppercase font-sans text-base-content/60 block leading-tight">Gross Tag Price</span>
+                                            <span class="font-bold text-base-content text-xs sm:text-sm">{{ getChannelEconomics(ch, item).grossDisplay }}</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-[10px] uppercase font-sans text-base-content/60 block leading-tight">Net Payout</span>
+                                            <span class="font-black text-success text-xs sm:text-sm">{{ getChannelEconomics(ch, item).netDisplay }}</span>
+                                        </div>
                                     </div>
-                                    <div v-if="ch.net_payout" class="text-[10px] opacity-70 font-mono flex justify-between">
-                                        <span>Net Payout:</span>
-                                        <span class="font-bold">{{ ch.net_payout }}</span>
+
+                                    <!-- Cash Profit & ROI Badge -->
+                                    <div class="flex items-center justify-between gap-1.5 flex-wrap">
+                                        <div class="flex items-center gap-1.5 text-xs font-mono">
+                                            <span class="badge badge-sm font-black gap-1 shadow-2xs"
+                                                  :class="getChannelEconomics(ch, item).isPositive ? 'badge-success text-success-content' : 'badge-ghost text-base-content/60'">
+                                                <Icon icon="solar:wallet-money-bold" class="w-3 h-3" />
+                                                {{ getChannelEconomics(ch, item).profitDisplay }} Profit
+                                            </span>
+                                            <span class="badge badge-sm badge-outline font-bold"
+                                                  :class="getChannelEconomics(ch, item).isPositive ? 'border-success/50 text-success' : 'text-base-content/60'">
+                                                {{ getChannelEconomics(ch, item).roi }}% ROI
+                                            </span>
+                                        </div>
+                                        <span v-if="getChannelEconomics(ch, item).costBasis > 0" class="text-[10px] text-base-content/50 font-mono">
+                                            vs ${{ getChannelEconomics(ch, item).costBasis.toFixed(2) }} cost
+                                        </span>
+                                    </div>
+
+                                    <!-- 1-line Tactical Merchandising Note -->
+                                    <div v-if="ch.recommendation" class="text-[11px] text-base-content/80 font-medium leading-snug pt-1 border-t border-base-200 flex items-start gap-1">
+                                        <span class="text-primary shrink-0">💡</span>
+                                        <span class="line-clamp-2">{{ ch.recommendation }}</span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Responsive 2-Column Sourcing Catalyst & Risk Rationale Grid -->
+                        <div v-if="item.why_pay_up || item.why_pass" 
+                             class="grid grid-cols-1 gap-3" 
+                             :class="{ 'md:grid-cols-2': item.why_pay_up && item.why_pass }">
+                            
+                            <!-- Why Pay Up (Collector Catalyst / Sourcing Catalyst) -->
+                            <div v-if="item.why_pay_up" class="p-3 rounded-2xl bg-success/10 border border-success/25 text-xs shadow-xs flex flex-col justify-start">
+                                <div class="font-extrabold text-success flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
+                                    <Icon icon="solar:fire-bold" class="w-4 h-4 shrink-0" /> WHY BUY (SOURCING CATALYST)
+                                </div>
+                                <p class="text-base-content text-xs leading-relaxed font-medium">{{ item.why_pay_up }}</p>
+                            </div>
+
+                            <!-- Why Pass (Risk Rationale & Traps) -->
+                            <div v-if="item.why_pass" class="p-3 rounded-2xl bg-error/10 border border-error/25 text-xs shadow-xs flex flex-col justify-start">
+                                <div class="font-extrabold text-error flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
+                                    <Icon icon="solar:danger-triangle-bold" class="w-4 h-4 shrink-0" /> WATCH OUT (RISKS &amp; TRAPS)
+                                </div>
+                                <p class="text-base-content text-xs leading-relaxed font-medium">{{ item.why_pass }}</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- ZONE 3: ELEVATED LOT BREAKDOWN (Anchor/Hero Extraction) -->
                     <div v-if="item.lot_items && item.lot_items.length > 0" class="mb-5 bg-base-200/90 border border-base-300 rounded-2xl p-4 shadow-sm">
-                        <div class="font-extrabold text-sm mb-3 flex items-center justify-between text-primary">
-                            <div class="flex items-center gap-2">
-                                <Icon icon="solar:box-bold" class="w-5 h-5 text-primary" />
-                                <span>Bundle Components ({{ item.lot_items.length }} Items)</span>
+                        <div class="font-extrabold text-sm mb-3 flex items-center justify-between gap-2 flex-wrap text-primary">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <Icon icon="solar:box-bold" class="w-5 h-5 text-primary shrink-0" />
+                                <span class="truncate">Bundle Components ({{ item.lot_items.length }} Items)</span>
                             </div>
-                            <span class="badge badge-primary badge-outline text-[10px] font-bold">Lot Sourcing Strategy</span>
+                            <span v-if="getLotSplitRecommendation(item)" 
+                                  class="badge badge-sm font-black text-xs gap-1 shadow-2xs py-1 px-3"
+                                  :class="getLotSplitRecommendation(item)?.badgeClass || 'badge-primary text-primary-content'">
+                                {{ getLotSplitRecommendation(item)?.pillText }}
+                            </span>
+                            <span v-else class="badge badge-primary badge-outline text-[10px] font-bold">Lot Sourcing Strategy</span>
                         </div>
                         
                         <ul class="space-y-2.5 text-xs font-medium">
-                            <li v-for="(subItem, subIdx) in item.lot_items" :key="subIdx" class="bg-base-100 p-3 rounded-xl border border-base-300 flex flex-col gap-1.5 shadow-2xs transition-all"
+                            <li v-for="(subItem, subIdx) in getSortedLotItems(item.lot_items)" :key="subIdx" class="bg-base-100 p-3 rounded-xl border border-base-300 flex flex-col gap-1.5 shadow-2xs transition-all"
                                 :class="isHeroAnchor(subItem, item.lot_items) ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : ''">
                                 <div class="flex justify-between items-start gap-3 w-full">
                                     <div class="flex items-start gap-2">
@@ -655,27 +641,6 @@
                                 </div>
                             </li>
                         </ul>
-
-                        <!-- Save Mode Preference -->
-                        <div class="form-control mt-4 border-t border-base-300 pt-3">
-                            <label class="label pb-1.5"><span class="label-text text-xs font-bold opacity-75">Inventory Import Preference</span></label>
-                            <div class="join grid grid-cols-2 w-full font-bold">
-                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !item.save_individually }" @click="item.save_individually = false">
-                                    Save as Single Bundle
-                                </button>
-                                <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': item.save_individually }" @click="item.save_individually = true">
-                                    Split Individually (x{{ item.lot_items.length }})
-                                </button>
-                            </div>
-                            <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
-                                <span v-if="item.save_individually">
-                                    Creates {{ item.lot_items.length }} separate inventory items. Cost basis will be split evenly (${{ (parsePrice(cost) / item.lot_items.length).toFixed(2) }} each).
-                                </span>
-                                <span v-else>
-                                    Saves the entire lot as a single combined inventory item.
-                                </span>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- ZONE 4: 1-TAP PRICING ESTIMATES & TARGETS -->
@@ -1336,7 +1301,7 @@ import {
     calculateSubItemMaxBidPrice 
 } from '../../lib/bundle-pricing';
 import { evaluateCombinedShipping } from '../../lib/shipping-rules';
-import { deriveInventoryPlays, type ResalePlay } from '../../lib/lot-strategy';
+import { deriveInventoryPlays, parsePriceValue, getLotSplitRecommendation, type ResalePlay, type LotSplitRecommendation } from '../../lib/lot-strategy';
 
 interface Props {
     initialPurchaseId?: string | null;
@@ -1357,7 +1322,7 @@ const emit = defineEmits<{
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID; 
 const ITEMS_COL = import.meta.env.PUBLIC_APPWRITE_ITEMS_COL; 
 const PURCHASES_COL = getPurchasesCollectionId();
-import { BUCKET_ID, getCollectionId, generateAutoUpc, getSafeRawAnalysis, formatScoutReportMarkdown } from '../../lib/inventory';
+import { BUCKET_ID, getCollectionId, generateAutoUpc, getSafeRawAnalysis, getSafeComponents, stripBase64AndBlob, formatScoutReportMarkdown } from '../../lib/inventory';
 import { warehousesApi, type WarehouseDocument } from '../../lib/warehouses';
 
 // -- COMPOSABLES --
@@ -1806,8 +1771,25 @@ function getAuctionFinancials(item: any) {
     const bpAmount = Math.round(currentBid * (bpPercent / 100) * 100) / 100;
     const shipping = Number(item?.shipping_info?.total || item?.auction_meta?.estimated_shipping || 0);
     const currentLanded = Math.round((currentBid + bpAmount + shipping) * 100) / 100;
-    // Resale target: Prefer selected resale price, then boutique, then fair
-    const estResale = Number(item?.selected_resale_price || parsePrice(item?.pricing_potential?.boutique || item?.price_breakdown?.boutique_premium || item?.pricing_potential?.fair || item?.price_breakdown?.fair) || 0);
+    // Resale target: For multi-item lots, sum of component Boutique values is the Single Source of Truth
+    const hasLot = Boolean(item?.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 1);
+    const componentsSum = (item?.components || item?.lot_items || []).reduce((sum: number, c: any) => {
+        const bStr = getSubItemBoutique(c);
+        const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+        return sum + (bVal > 0 ? bVal : parsePriceValue(c.val || c.resalePrice || c.price_breakdown?.boutique_premium || c.price_breakdown?.fair || c.estimated_value, 'midpoint', 0));
+    }, 0);
+
+    const estResale = Number(
+        (hasLot && componentsSum > 0 ? componentsSum : null) ||
+        item?.selected_resale_price || 
+        (componentsSum > 0 ? componentsSum : null) || 
+        parsePriceValue(item?.pricing_potential?.boutique || item?.price_breakdown?.boutique_premium || item?.pricing_potential?.fair || item?.price_breakdown?.fair, 'midpoint', 0)
+    );
+
+    // Keep item.selected_resale_price strictly synchronized with componentsSum for multi-item lots
+    if (hasLot && componentsSum > 0 && item && item.selected_resale_price !== componentsSum) {
+        item.selected_resale_price = componentsSum;
+    }
     
     // 15% standard consignment overhead
     const commPct = 15;
@@ -1911,7 +1893,7 @@ function getAuctionFinancials(item: any) {
                 maxLanded: consTargetLanded,
                 netProfit: consNetProfit,
                 status: consStatus,
-                room: consMaxBid - currentBid
+                room: Number((consMaxBid - currentBid).toFixed(2))
             },
             balanced: {
                 label: 'Balanced',
@@ -1920,7 +1902,7 @@ function getAuctionFinancials(item: any) {
                 maxLanded: balTargetLanded,
                 netProfit: balNetProfit,
                 status: balStatus,
-                room: balMaxBid - currentBid
+                room: Number((balMaxBid - currentBid).toFixed(2))
             },
             aggressive: {
                 label: 'Aggressive / Fast',
@@ -1929,7 +1911,7 @@ function getAuctionFinancials(item: any) {
                 maxLanded: aggTargetLanded,
                 netProfit: aggNetProfit,
                 status: aggStatus,
-                room: aggMaxBid - currentBid
+                room: Number((aggMaxBid - currentBid).toFixed(2))
             },
             velocity: {
                 label: 'Win-It / Velocity',
@@ -1938,7 +1920,7 @@ function getAuctionFinancials(item: any) {
                 maxLanded: velocityTargetLanded,
                 netProfit: velocityNetProfit,
                 status: velocityStatus,
-                room: velocityMaxBid - currentBid
+                room: Number((velocityMaxBid - currentBid).toFixed(2))
             }
         }
     };
@@ -1979,8 +1961,8 @@ function getScoutPlay(item: any): ResalePlay | null {
             currentLanded: fin.currentLanded,
             cost: item.cost || (fin.currentLanded > 0 ? fin.currentLanded : undefined),
             purchasePrice: item.purchasePrice || (fin.currentLanded > 0 ? fin.currentLanded : undefined),
-            resalePrice: item.resalePrice || fin.estResale,
-            boutiquePrice: item.boutiquePrice || fin.estResale
+            resalePrice: fin.estResale || item.resalePrice,
+            boutiquePrice: fin.estResale || item.boutiquePrice
         };
         const plays = deriveInventoryPlays(enrichedItem, result.value);
         return plays && plays.length > 0 ? plays[0] : null;
@@ -1988,6 +1970,43 @@ function getScoutPlay(item: any): ResalePlay | null {
         console.warn('[ScoutView] Failed to derive scout play:', e);
         return null;
     }
+}
+
+function getScoutAdvice(item: any): string {
+    const rawAdvice = item?.purchase_strategy?.advice;
+    if (!rawAdvice) return '';
+
+    if (isAuctionItem(item)) {
+        const fin = getAuctionFinancials(item);
+        if (fin && fin.recommendedProxy > 0) {
+            const proxyCeilingStr = `$${fin.recommendedProxy.toFixed(2)}`;
+            const maxBid = fin.tiers.aggressive.status === 'active' 
+                ? fin.tiers.aggressive.maxBid 
+                : fin.tiers.balanced.status === 'active' 
+                    ? fin.tiers.balanced.maxBid 
+                    : fin.suggestedMaxBid;
+
+            // Keep item.purchase_strategy.max_bid synchronized with proxy ceiling
+            if (item.purchase_strategy && item.purchase_strategy.max_bid !== fin.recommendedProxy) {
+                item.purchase_strategy.max_bid = fin.recommendedProxy;
+            }
+
+            // Align any stale AI max bid or chase limit numbers with the calculated UI proxy ceiling / max bid
+            let aligned = rawAdvice
+                .replace(/(?:do not chase past|chase past|bid up to|max bid of|ceiling of|cap of|do not exceed)\s+\$\d+(?:\.\d+)?/gi, (match: string) => {
+                    const prefix = match.split('$')[0];
+                    return `${prefix}${proxyCeilingStr}`;
+                })
+                .replace(/(?:room up to\s+)\$\d+(?:\.\d+)?(?=\s+max bid)/gi, (match: string) => {
+                    const prefix = match.split('$')[0];
+                    return `${prefix}$${maxBid}`;
+                });
+
+            return aligned;
+        }
+    }
+
+    return rawAdvice;
 }
 
 function getCombinedShippingAlert(item: any) {
@@ -1998,10 +2017,142 @@ function getCombinedShippingAlert(item: any) {
 function isHeroAnchor(subItem: any, lotItems: any[]): boolean {
     if (!subItem || !lotItems || lotItems.length <= 1) return false;
     if (subItem.anchor || subItem.hero || subItem.is_anchor || subItem.is_hero) return true;
-    const thisVal = parsePrice(subItem.estimated_value) || parsePrice(subItem.fair) || 0;
+    const getVal = (i: any) => {
+        const bStr = getSubItemBoutique(i);
+        const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+        return bVal > 0 ? bVal : parsePriceValue(i.price_breakdown?.boutique_premium || i.estimated_value || i.fair || i.price_breakdown?.fair, 'midpoint', 0);
+    };
+    const thisVal = getVal(subItem);
     if (thisVal <= 0) return false;
-    const maxVal = Math.max(...lotItems.map(i => parsePrice(i.estimated_value) || parsePrice(i.fair) || 0));
+    const maxVal = Math.max(...lotItems.map(getVal));
     return thisVal === maxVal && maxVal > 0;
+}
+
+function getSortedLotItems(lotItems: any[]): any[] {
+    if (!Array.isArray(lotItems) || lotItems.length <= 1) return lotItems || [];
+    const getBoutiqueNum = (i: any) => {
+        const bStr = getSubItemBoutique(i);
+        const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+        return bVal > 0 ? bVal : parsePriceValue(i.price_breakdown?.boutique_premium || i.pricing_potential?.boutique || i.estimated_value, 'midpoint', 0);
+    };
+    return [...lotItems].sort((a, b) => {
+        // Hero Anchor guaranteed at slot #1
+        const aHero = isHeroAnchor(a, lotItems);
+        const bHero = isHeroAnchor(b, lotItems);
+        if (aHero && !bHero) return -1;
+        if (!aHero && bHero) return 1;
+
+        // Sort descending by Boutique value
+        const aVal = getBoutiqueNum(a);
+        const bVal = getBoutiqueNum(b);
+        if (bVal !== aVal) return bVal - aVal;
+
+        // Fallback: descending by Fair value
+        const aFair = parsePriceValue(getSubItemFair(a) || a.estimated_value, 'midpoint', 0);
+        const bFair = parsePriceValue(getSubItemFair(b) || b.estimated_value, 'midpoint', 0);
+        return bFair - aFair;
+    });
+}
+
+function getScoutChannels(item: any): any[] {
+    const fin = getAuctionFinancials(item);
+    const hasLot = Boolean(item?.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 1);
+    const splitRec = hasLot ? getLotSplitRecommendation(item) : null;
+
+    if (item?.market_report?.channels && Array.isArray(item.market_report.channels) && item.market_report.channels.length > 0) {
+        return item.market_report.channels.map((ch: any) => {
+            const isBooth = (ch.name || '').toLowerCase().includes('memory den') || (ch.name || '').toLowerCase().includes('booth');
+            const isEbay = (ch.name || '').toLowerCase().includes('ebay');
+
+            let recommendation = ch.recommendation;
+            if (splitRec) {
+                if (isBooth && splitRec.tacticalExecutionNote) {
+                    recommendation = splitRec.tacticalExecutionNote;
+                } else if (isEbay && splitRec.ebayExecutionNote) {
+                    recommendation = splitRec.ebayExecutionNote;
+                }
+            }
+
+            if (isBooth && hasLot && fin.estResale > 0) {
+                return {
+                    ...ch,
+                    est_price: `$${fin.estResale.toFixed(2)}`,
+                    net_payout: `$${(Math.round(fin.estResale * 0.85 * 100) / 100).toFixed(2)}`,
+                    recommendation
+                };
+            }
+            return {
+                ...ch,
+                recommendation
+            };
+        });
+    }
+    const est = fin.estResale || parsePriceValue(item?.estimated_value, 'midpoint') || 0;
+    if (est <= 0) return [];
+    return [
+        {
+            name: "Memory Den - Huck's Adventures",
+            est_price: `$${est.toFixed(2)}`,
+            net_payout: `$${(est * 0.85).toFixed(2)}`,
+            recommendation: splitRec?.tacticalExecutionNote || 'Curated physical showcase booth placement'
+        },
+        {
+            name: 'eBay',
+            est_price: `$${(est * 0.9).toFixed(2)}`,
+            net_payout: `$${(est * 0.9 * 0.865).toFixed(2)}`,
+            recommendation: splitRec?.ebayExecutionNote || 'Fast national clearance with buyer-paid shipping'
+        }
+    ];
+}
+
+function isBestPlatform(ch: any, item: any): boolean {
+    if (!ch?.name || !item?.market_report?.best_platform) return false;
+    const best = String(item.market_report.best_platform).toLowerCase();
+    const name = String(ch.name).toLowerCase();
+    if (best.includes('memory den') && name.includes('memory den')) return true;
+    if (best.includes('ebay') && name.includes('ebay')) return true;
+    return name.includes(best) || best.includes(name);
+}
+
+function getChannelEconomics(ch: any, item: any) {
+    const fin = getAuctionFinancials(item);
+    const costBasis = fin.currentLanded > 0 
+        ? fin.currentLanded 
+        : (Number(cost.value) || Number(item?.cost) || Number(item?.purchasePrice) || 0);
+
+    const isBooth = (ch?.name || '').toLowerCase().includes('memory den') || (ch?.name || '').toLowerCase().includes('booth');
+    const hasLot = Boolean(item?.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 1);
+
+    let gross = parsePriceValue(ch?.est_price, 'midpoint', 0);
+    // Align Booth gross with fin.estResale for multi-item lots to guarantee zero drift
+    if (isBooth && hasLot && fin.estResale > 0) {
+        gross = fin.estResale;
+    }
+
+    // Net payout: prefer parsed numeric value; fallback to standard channel commission
+    let net = parsePriceValue(ch?.net_payout, 'midpoint', 0);
+    if (isBooth && hasLot && fin.estResale > 0) {
+        net = Math.round(gross * 0.85 * 100) / 100;
+    } else if (net <= 0 && gross > 0) {
+        const isEbay = (ch?.name || '').toLowerCase().includes('ebay');
+        const feeRate = isEbay ? 0.135 : 0.15;
+        net = Math.round(gross * (1 - feeRate) * 100) / 100;
+    }
+
+    const profit = Math.round((net - costBasis) * 100) / 100;
+    const roi = costBasis > 0 ? Math.round((profit / costBasis) * 100) : 0;
+
+    return {
+        gross,
+        grossDisplay: gross > 0 ? `$${gross.toFixed(2)}` : (ch?.est_price || '-'),
+        net,
+        netDisplay: net > 0 ? `$${net.toFixed(2)}` : (ch?.net_payout || '-'),
+        costBasis,
+        profit,
+        profitDisplay: profit > 0 ? `+$${profit.toFixed(2)}` : `$${profit.toFixed(2)}`,
+        roi,
+        isPositive: profit > 0
+    };
 }
 const result = ref<any>(null);
 const cost = ref('');
@@ -2235,15 +2386,25 @@ watch([includeShippingInCost, result], () => {
     if (!result.value || !result.value.items || result.value.items.length === 0) return;
     
     const item = result.value.items[0];
-    const askingPrice = parsePrice(item.purchase_strategy?.current_asking_price) || 0;
-    const shippingTotal = item.shipping_info?.total || 0;
+    const liveBid = Number(item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price) || 0);
+    const shippingTotal = Number(item.shipping_info?.total || item.shippingPrice || 0);
     
     if (includeShippingInCost.value) {
-        cost.value = (askingPrice + shippingTotal).toFixed(2);
+        cost.value = (liveBid + shippingTotal).toFixed(2);
     } else {
-        cost.value = askingPrice > 0 ? askingPrice.toFixed(2) : '';
+        cost.value = liveBid > 0 ? liveBid.toFixed(2) : '';
     }
 });
+
+watch(result, (newVal) => {
+    if (!newVal?.items?.[0]) return;
+    const first = newVal.items[0];
+    const shippingTotal = Number(first.shipping_info?.total || first.shippingPrice || 0);
+    const isAuction = isAuctionItem(first);
+    if (shippingTotal > 0 && isAuction) {
+        includeShippingInCost.value = true;
+    }
+}, { immediate: true });
 
 // -- CAMERA LOGIC --
 async function handleCapturedPhotos(files: File[]) {
@@ -2473,15 +2634,26 @@ async function analyzeListing() {
                 intakeAutoSource.value = 'url_direct';
             }
 
+            const shippingTotal = Number(first.shipping_info?.total || first.shippingPrice || 0);
+            if (shippingTotal > 0 && isAuction) {
+                includeShippingInCost.value = true;
+            }
+
             data.items.forEach((it: any) => {
-                const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
-                const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
-                it.selected_resale_price = Math.round(boutique || fair || 0);
+                const boutique = parsePriceValue(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium, 'midpoint');
+                const fair = parsePriceValue(it.pricing_potential?.fair || it.price_breakdown?.fair, 'midpoint');
+                const componentsSum = (it.lot_items || []).reduce((sum: number, c: any) => {
+                    const bStr = getSubItemBoutique(c);
+                    const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+                    return sum + (bVal > 0 ? bVal : parsePriceValue(c.val || c.resalePrice || c.price_breakdown?.boutique_premium || c.price_breakdown?.fair || c.estimated_value, 'midpoint', 0));
+                }, 0);
+                it.selected_resale_price = Math.round(componentsSum > 0 ? componentsSum : (boutique || fair || 0));
 
                 // Auto-sync cost to live current bid / asking price for unacquired items
-                const liveBid = it.currentBid || it.auction_meta?.current_bid || parsePrice(it.purchase_strategy?.current_asking_price);
+                const liveBid = Number(it.currentBid || it.auction_meta?.current_bid || parsePrice(it.purchase_strategy?.current_asking_price) || 0);
                 if (!isAcquired.value && liveBid > 0) {
-                    cost.value = liveBid.toFixed(2);
+                    const shipTotal = Number(it.shipping_info?.total || it.shippingPrice || 0);
+                    cost.value = (includeShippingInCost.value ? liveBid + shipTotal : liveBid).toFixed(2);
                 }
             });
             if (data.items.length > 0) {
@@ -2651,10 +2823,26 @@ async function analyzeImage() {
                 intakeAutoSource.value = 'in_person';
             }
 
+            const shippingTotal = Number(first.shipping_info?.total || first.shippingPrice || 0);
+            if (shippingTotal > 0 && isAuction) {
+                includeShippingInCost.value = true;
+            }
+
             data.items.forEach((it: any) => {
-                const boutique = parsePrice(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium);
-                const fair = parsePrice(it.pricing_potential?.fair || it.price_breakdown?.fair);
-                it.selected_resale_price = Math.round(boutique || fair || 0);
+                const boutique = parsePriceValue(it.pricing_potential?.boutique || it.price_breakdown?.boutique_premium, 'midpoint');
+                const fair = parsePriceValue(it.pricing_potential?.fair || it.price_breakdown?.fair, 'midpoint');
+                const componentsSum = (it.lot_items || []).reduce((sum: number, c: any) => {
+                    const bStr = getSubItemBoutique(c);
+                    const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+                    return sum + (bVal > 0 ? bVal : parsePriceValue(c.val || c.resalePrice || c.price_breakdown?.boutique_premium || c.price_breakdown?.fair || c.estimated_value, 'midpoint', 0));
+                }, 0);
+                it.selected_resale_price = Math.round(componentsSum > 0 ? componentsSum : (boutique || fair || 0));
+
+                const liveBid = Number(it.currentBid || it.auction_meta?.current_bid || parsePrice(it.purchase_strategy?.current_asking_price) || 0);
+                if (!isAcquired.value && liveBid > 0) {
+                    const shipTotal = Number(it.shipping_info?.total || it.shippingPrice || 0);
+                    cost.value = (includeShippingInCost.value ? liveBid + shipTotal : liveBid).toFixed(2);
+                }
             });
             // Ensure scouted images are preserved on data.items[0]
             const prevItem = result.value?.items?.[0];
@@ -2750,22 +2938,36 @@ async function saveAllItems() {
         return;
     }
 
+    error.value = null;
+    successMessage.value = null;
     savingAll.value = true;
     try {
         const toSave = itemsInResult.value;
-        let savedAny = false;
+        let savedCount = 0;
+        let saveFailed = false;
+
         for (let i = 0; i < toSave.length; i++) {
             const item = toSave[i];
             if (!item.saved && !item.saving) {
-                 await handleSaveItem(item, i, true);
-                 savedAny = true;
+                 try {
+                     const ok = await handleSaveItem(item, i, true);
+                     if (ok && item.saved) {
+                         savedCount++;
+                     } else {
+                         saveFailed = true;
+                         break;
+                     }
+                 } catch (err: any) {
+                     saveFailed = true;
+                     break;
+                 }
             }
         }
 
-        if (savedAny) {
+        if (savedCount > 0 && !saveFailed && !error.value) {
             isResultsModalOpen.value = false;
             const dealName = activePurchase.value?.vendor || 'Inventory';
-            successMessage.value = `Saved ${toSave.length > 1 ? `${toSave.length} items` : 'item'} to ${dealName}!`;
+            successMessage.value = `Saved ${savedCount > 1 ? `${savedCount} items` : 'item'} to ${dealName}!`;
             addToast({ type: 'success', message: `✅ Saved to ${dealName}!` });
         }
     } finally {
@@ -3047,6 +3249,25 @@ async function saveDirectToInventory(payload: any) {
         }
     }
 
+    // Defensively sanitize rawAnalysis and components to strip base64 and cap at 64,000 characters
+    if (doc.rawAnalysis !== undefined && doc.rawAnalysis !== null) {
+        const safeRaw = getSafeRawAnalysis(doc.rawAnalysis);
+        if (safeRaw) {
+            doc.rawAnalysis = safeRaw.length > 64000 ? safeRaw.substring(0, 64000) : safeRaw;
+        } else {
+            delete doc.rawAnalysis;
+        }
+    }
+
+    if (doc.components !== undefined && doc.components !== null) {
+        const safeComp = getSafeComponents(doc.components);
+        if (safeComp) {
+            doc.components = safeComp.length > 64000 ? safeComp.substring(0, 64000) : safeComp;
+        } else {
+            delete doc.components;
+        }
+    }
+
     // Clean undefined keys for Appwrite document validation
     Object.keys(doc).forEach(key => doc[key] === undefined && delete doc[key]);
 
@@ -3068,6 +3289,11 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
     if (item.saving || item.saved) {
         console.log('[ScoutView] Item already saving/saved, ignoring save request for', item.identity);
         return;
+    }
+
+    if (!isBatch) {
+        error.value = null;
+        successMessage.value = null;
     }
     
     // If untethered and user hasn't chosen standalone bypass, prompt with tracker modal
@@ -3330,7 +3556,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 redFlags: item.red_flags || [],
                 cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : (liveBid > 0 ? liveBid : 0.0),
                 resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
-                maxBuyPrice: calculateMaxBuy(item.price_breakdown?.fair) || 0.0,
+                maxBuyPrice: calculateMaxBuy(item) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
                 storageLocation: storageLocation.value || '',
                 status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
@@ -3546,6 +3772,29 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  || null;
 
              const autoMdReport = formatScoutReportMarkdown(item);
+             const splitRec = getLotSplitRecommendation(item);
+             let rawAnalysisObj: any = getSafeRawAnalysis(item);
+             if (typeof rawAnalysisObj === 'string') {
+                 try { rawAnalysisObj = JSON.parse(rawAnalysisObj); } catch(e){}
+             }
+             if (splitRec) {
+                 if (!rawAnalysisObj || typeof rawAnalysisObj !== 'object') {
+                     rawAnalysisObj = {};
+                 }
+                 rawAnalysisObj.exit_strategy = {
+                     ...(rawAnalysisObj.exit_strategy || {}),
+                     recommended_play: splitRec.pillText,
+                     strategy_type: splitRec.type,
+                     split_yield: splitRec.splitYield,
+                     bulk_yield: splitRec.bulkYield,
+                     upside: splitRec.upside,
+                     tactical_note: splitRec.tacticalExecutionNote,
+                     ebay_note: splitRec.ebayExecutionNote
+                 };
+             }
+
+             const safeRawAnalysis = getSafeRawAnalysis(rawAnalysisObj || item);
+             const safeComponents = item.lot_items ? getSafeComponents(item.lot_items) : undefined;
 
              const itemPayload: any = {
                  identity: item.identity,
@@ -3565,8 +3814,8 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  imageId: primaryImage,
                  galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                  marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
-                 rawAnalysis: getSafeRawAnalysis(item) || undefined,
-                 components: item.lot_items ? JSON.stringify(item.lot_items).slice(0, 65000) : undefined
+                 rawAnalysis: safeRawAnalysis || undefined,
+                 components: safeComponents || undefined
              };
              
              if (activePurchase.value) {
@@ -3589,7 +3838,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                          conditionNotes: noteDetails,
                          marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
-                         rawAnalysis: getSafeRawAnalysis(item) || undefined
+                         rawAnalysis: safeRawAnalysis || undefined
                      });
                      if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
                          cartItems.value.unshift(doc as any);
@@ -3613,7 +3862,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                          galleryImageIds: validGalleryIds.length > 0 ? validGalleryIds : undefined,
                          conditionNotes: noteDetails,
                          marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
-                         rawAnalysis: getSafeRawAnalysis(item) || undefined
+                         rawAnalysis: safeRawAnalysis || undefined
                      });
                      if (doc && !cartItems.value.some(ci => ci.$id === doc.$id)) {
                          cartItems.value.unshift(doc as any);
@@ -3629,21 +3878,27 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
         item.saved = true;
         const dealName = activePurchase.value?.vendor || 'Inventory';
         successMessage.value = `Added to ${dealName}!`;
-        addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
+        if (!isBatch) {
+            addToast({ type: 'success', message: `✅ Added to ${dealName}!` });
+        }
 
         // Keep item on screen with saved confirmation so user never feels item was lost
         setTimeout(() => {
-            successMessage.value = null;
+            if (!error.value) {
+                successMessage.value = null;
+            }
         }, 4000);
 
-        // Reset inputs smoothly
-        setTimeout(() => {
-            successMessage.value = null;
-        }, 2000);
+        return true;
 
     } catch (e: any) {
         console.error('[ScoutView] Save Failed:', e);
-        error.value = "Save Failed: " + e.message;
+        error.value = "Save Failed: " + (e.message || String(e));
+        successMessage.value = null;
+        if (isBatch) {
+            throw e;
+        }
+        return false;
     } finally {
         item.saving = false;
     }

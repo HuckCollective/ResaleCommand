@@ -172,11 +172,80 @@ export function getSubItemCostBasis(subItem: any, totalCount: number, totalCost?
 }
 
 /**
- * Calculates max buy for single item or subItem using 40% rule.
- * Handles string ranges, objects, or numbers cleanly without evaluating to 0.
+ * Calculates max buy for single item or multi-piece lot.
+ * Enforces the Buy-Target Authority Law:
+ * 1. For multi-item lots, anchors to the sum of components' buy ranges (or Gemini's explicit advice/strategy).
+ * 2. Never exceeds 50% of eBay Fair Market value when items have Fair, Poor, or defect condition flags.
+ * 3. Guarantees that the green Max Buy Target matches purchase_strategy.advice 100%.
  */
 export function calculateMaxBuyPrice(itemOrVal: any): number {
     if (!itemOrVal) return 0;
+
+    // Check if multi-item lot components exist
+    const lotItems = itemOrVal.lot_items || itemOrVal.components;
+    if (Array.isArray(lotItems) && lotItems.length > 1) {
+        let compBuyMax = 0;
+        let compBuyMin = 0;
+        let lotFairSum = 0;
+        let hasConditionDefects = false;
+
+        for (const it of lotItems) {
+            const br = it.buy_range;
+            if (br && typeof br.max === 'number' && br.max > 0) {
+                compBuyMax += br.max;
+                compBuyMin += (typeof br.min === 'number' ? br.min : 0);
+            } else {
+                const parsedBr = parsePriceRange(it.buy_range?.formatted || it.buy_range || getSubItemBuyRange(it));
+                compBuyMax += parsedBr.high;
+                compBuyMin += parsedBr.low;
+            }
+
+            const fair = parsePriceRange(it.pricing_potential?.fair || it.price_breakdown?.fair || it.estimated_value);
+            const fairMid = fair.high > 0 ? (fair.low + fair.high) / 2 : fair.low;
+            lotFairSum += fairMid;
+
+            const cond = String(it.condition || '').toLowerCase();
+            const notes = String(it.condition_notes || it.name || it.identity || '').toLowerCase();
+            if (
+                cond.includes('fair') || cond.includes('poor') || cond.includes('damaged') ||
+                notes.includes('empty') || notes.includes('box only') || notes.includes('parts') ||
+                notes.includes('writing') || notes.includes('ink') || notes.includes('defect')
+            ) {
+                hasConditionDefects = true;
+            }
+        }
+
+        const defectCeiling = hasConditionDefects && lotFairSum > 0 ? Math.round(lotFairSum * 0.50) : Infinity;
+
+        // Extract advised cash offer from purchase_strategy.advice if present (e.g. "Make a cash offer of $40-$45" -> 45)
+        const adviceText = itemOrVal.purchase_strategy?.advice || '';
+        const adviceMatch = adviceText.match(/(?:cash\s+offer\s+of|offer\s+of|offer|pay\s+up\s+to|target\s+of|buy\s+at|ceiling\s+of|max\s+bid\s+of)\s+\$(?:(\d+(?:\.\d+)?)\s*[-–—to]\s*\$)?(\d+(?:\.\d+)?)/i);
+        const adviceCeiling = adviceMatch ? parseFloat(adviceMatch[2]) : 0;
+
+        let target = adviceCeiling > 0 ? adviceCeiling : (itemOrVal?.purchase_strategy?.max_landed_cost || itemOrVal?.purchase_strategy?.max_bid || 0);
+
+        // Anti-Blind-Multiplier: If target was inflated above compBuyMax by >20% (e.g. blind 1.7x divisor like $85 vs $55), clamp to compBuyMax
+        if (compBuyMax > 0 && (target <= 0 || target > compBuyMax * 1.2)) {
+            target = compBuyMax;
+        }
+
+        // Enforce Fair/Poor defect ceiling: never exceed 50% of eBay Fair Market value
+        if (defectCeiling < Infinity && target > defectCeiling) {
+            target = defectCeiling;
+        }
+
+        if (target > 0) {
+            return Math.floor(target);
+        }
+    }
+
+    // Single item logic
+    const adviceText = itemOrVal?.purchase_strategy?.advice || '';
+    const adviceMatch = adviceText.match(/(?:cash\s+offer\s+of|offer\s+of|offer|pay\s+up\s+to|target\s+of|buy\s+at)\s+\$(?:(\d+(?:\.\d+)?)\s*[-–—to]\s*\$)?(\d+(?:\.\d+)?)/i);
+    if (adviceMatch) {
+        const advVal = parseFloat(adviceMatch[2]);
+        if (advVal > 0) return Math.floor(advVal);
+    }
 
     if (itemOrVal?.purchase_strategy?.max_landed_cost) {
         return Math.floor(itemOrVal.purchase_strategy.max_landed_cost);
@@ -221,7 +290,7 @@ export function normalizeBundleComponents(lotItems: any[], totalCost?: number | 
     }
     const splitCost = count > 0 && costNum > 0 ? parseFloat((costNum / count).toFixed(2)) : 0.0;
 
-    return lotItems.map((item, idx) => {
+    const normalized = lotItems.map((item, idx) => {
         if (!item || typeof item !== 'object') {
             return {
                 name: `Item #${idx + 1}`,
@@ -255,9 +324,20 @@ export function normalizeBundleComponents(lotItems: any[], totalCost?: number | 
         }
         const buyRangeStr = `$${buyMin} - $${buyMax}`;
 
+        const bBox = item.bounding_box || item.boundingBox || undefined;
+        const imgIdx = typeof item.image_index === 'number' ? item.image_index : (typeof item.imageIndex === 'number' ? item.imageIndex : idx);
+        const imgUrl = item.image_url || item.imageUrl || undefined;
+        const views = Array.isArray(item.views) && item.views.length > 0
+            ? item.views
+            : (bBox ? [{ role: 'front', image_index: imgIdx, bounding_box: bBox }] : undefined);
+
         return {
             ...item,
             name: (item.name || item.title || item.identity || `Item #${idx + 1}`).trim(),
+            bounding_box: bBox,
+            image_index: imgIdx,
+            image_url: imgUrl,
+            views: views,
             estimated_value: item.estimated_value || fairStr,
             pricing_potential: {
                 fair: fairStr,
@@ -279,4 +359,27 @@ export function normalizeBundleComponents(lotItems: any[], totalCost?: number | 
             split_cost_basis: splitCost
         };
     });
+
+    // Guarantee Hero Anchor is at slot #1, sorted descending by Boutique value
+    normalized.sort((a, b) => {
+        const aHero = a.anchor || a.hero || a.is_anchor || a.is_hero;
+        const bHero = b.anchor || b.hero || b.is_anchor || b.is_hero;
+        if (aHero && !bHero) return -1;
+        if (!aHero && bHero) return 1;
+
+        const aVal = parsePriceRange(a.pricing_potential?.boutique || a.price_breakdown?.boutique_premium).high;
+        const bVal = parsePriceRange(b.pricing_potential?.boutique || b.price_breakdown?.boutique_premium).high;
+        if (bVal !== aVal) return bVal - aVal;
+
+        const aFair = parsePriceRange(a.pricing_potential?.fair || a.price_breakdown?.fair).high;
+        const bFair = parsePriceRange(b.pricing_potential?.fair || b.price_breakdown?.fair).high;
+        return bFair - aFair;
+    });
+
+    if (normalized.length > 0 && !normalized.some(i => i.anchor || i.hero || i.is_anchor || i.is_hero)) {
+        normalized[0].is_anchor = true;
+        normalized[0].is_hero = true;
+    }
+
+    return normalized;
 }

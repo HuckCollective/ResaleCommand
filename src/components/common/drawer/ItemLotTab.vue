@@ -46,7 +46,7 @@
                         :title="currentPlay.tagline"
                     >
                         <Icon :icon="currentPlay.icon" class="w-4 h-4" />
-                        <span v-if="currentPlay.strategyType === 'lot_split'">Launch Lot Splitter</span>
+                        <span v-if="currentPlay.strategyType === 'lot_split'">✂️ Split Lot</span>
                         <span v-else-if="currentPlay.strategyType === 'bundle_combine'">Open Companion Bundler</span>
                         <span v-else-if="currentPlay.strategyType === 'volume_combine'">Create Volume Batch</span>
                         <span v-else-if="currentPlay.strategyType === 'restock'">
@@ -62,7 +62,7 @@
                         title="Find matching items in your inventory catalog to batch together"
                     >
                         <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                        <span>AI Batch Catalog</span>
+                        <span>📦 Combine Similar</span>
                     </button>
                     <button 
                         type="button" 
@@ -71,7 +71,7 @@
                         title="Find companion items in your inventory catalog to bundle together"
                     >
                         <Icon icon="solar:gift-bold" class="w-3.5 h-3.5" />
-                        <span>AI Bundle Catalog</span>
+                        <span>🎁 Build Bundle</span>
                     </button>
                 </div>
             </div>
@@ -196,18 +196,9 @@
 
             <!-- Active Play Detail Showcase -->
             <div v-if="currentPlay" class="space-y-3 pt-1">
-                <!-- Rationale & Recommendation Banner -->
-                <div class="p-3 bg-base-100 rounded-box border border-base-300 space-y-1">
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="flex items-center gap-1.5">
-                            <Icon :icon="currentPlay.icon" class="w-4 h-4 text-secondary" />
-                            <strong class="text-xs font-black text-base-content">{{ currentPlay.name }}</strong>
-                        </div>
-                        <span v-if="currentPlay.recommendationReason" class="text-[10px] font-bold text-secondary flex items-center gap-1">
-                            {{ currentPlay.recommendationReason }}
-                        </span>
-                    </div>
-                    <p class="text-[11px] opacity-80 leading-relaxed">{{ currentPlay.summary }}</p>
+                <!-- Recommendation reason only (name & summary already shown in the selected-play card above) -->
+                <div v-if="currentPlay.recommendationReason" class="px-3 py-2 bg-base-100 rounded-box border border-base-300 text-[10px] font-bold text-secondary flex items-center gap-1">
+                    {{ currentPlay.recommendationReason }}
                 </div>
 
                 <!-- Financial Comparison Grid (Cost -> Gross -> Take-Home -> Profit) -->
@@ -262,8 +253,8 @@
                             class="p-2.5 bg-base-100 rounded-box border border-base-300 text-xs space-y-1"
                         >
                             <div class="flex items-center justify-between gap-1.5">
-                                <strong class="truncate text-base-content font-bold text-xs">{{ tier.title }}</strong>
-                                <span class="badge badge-xs badge-success font-mono font-bold">{{ tier.price }}</span>
+                                <strong class="min-w-0 flex-1 truncate text-base-content font-bold text-xs">{{ tier.title }}</strong>
+                                <span class="badge badge-xs badge-success font-mono font-bold whitespace-nowrap shrink-0 h-auto py-0.5 px-2">{{ tier.price }}</span>
                             </div>
                             <div class="flex items-center justify-between text-[10px] opacity-70">
                                 <span>{{ tier.channel }}</span>
@@ -275,55 +266,6 @@
             </div>
         </div>
 
-        <!-- ============================================================= -->
-        <!-- 1. SOURCE & PROVENANCE (Sourcing Origin)                       -->
-        <!-- ============================================================= -->
-        <div class="bg-base-200/70 rounded-box p-4 border border-base-300 space-y-3 shadow-xs text-xs">
-            <div class="flex items-center justify-between border-b border-base-300/70 pb-2">
-                <span class="font-bold text-[10px] uppercase tracking-wider opacity-70 flex items-center gap-1.5">
-                    <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary" />
-                    Source & Provenance
-                </span>
-                <span v-if="item?.purchaseOrderNumber || item?.purchaseOrderId" class="badge badge-xs font-mono font-bold bg-primary/10 text-primary border-0">
-                    PO: {{ item.purchaseOrderNumber || item.purchaseOrderId }}
-                </span>
-                <span v-else class="badge badge-xs badge-ghost opacity-60">Single Intake</span>
-            </div>
-
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <!-- Sourcing Channel / Vendor -->
-                <div class="space-y-0.5">
-                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Channel / Source</span>
-                    <strong class="text-base-content text-xs block truncate capitalize">
-                        {{ item?.source || item?.sourcingChannel || item?.vendor || 'General Intake' }}
-                    </strong>
-                </div>
-
-                <!-- Acquired Date -->
-                <div class="space-y-0.5">
-                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Acquired Date</span>
-                    <strong class="text-base-content text-xs block font-mono">
-                        {{ formattedAcquisitionDate }}
-                    </strong>
-                </div>
-
-                <!-- Unit Cost Basis -->
-                <div class="space-y-0.5">
-                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Unit Cost Basis</span>
-                    <strong class="text-base-content text-xs block font-mono text-primary">
-                        ${{ unitCost.toFixed(2) }}<span v-if="isMultiQty" class="text-[10px] opacity-60 font-normal">/ea</span>
-                    </strong>
-                </div>
-
-                <!-- Total Lot Cost -->
-                <div class="space-y-0.5">
-                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Total Cost Basis</span>
-                    <strong class="text-base-content text-xs block font-mono">
-                        ${{ totalCost.toFixed(2) }}
-                    </strong>
-                </div>
-            </div>
-        </div>
 
         <!-- ============================================================= -->
         <!-- 2. PARENT & SIBLINGS (Haul Hierarchy)                         -->
@@ -439,11 +381,18 @@
 
             <!-- Contents Child Items List -->
             <div class="bg-base-200/60 rounded-box p-4 border border-base-300 space-y-3 shadow-xs">
-                <div class="flex items-center justify-between border-b border-base-300 pb-2.5">
-                    <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
-                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
-                        <span>Contents ({{ lotChildren.length }} Items)</span>
-                    </h4>
+                <div class="flex items-center justify-between border-b border-base-300 pb-2.5 gap-2 flex-wrap">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
+                            <span>Contents ({{ lotChildren.length }} Items)</span>
+                        </h4>
+                        <span v-if="splitRecommendation" 
+                              class="badge badge-xs sm:badge-sm font-black gap-1 shadow-2xs"
+                              :class="splitRecommendation.badgeClass">
+                            {{ splitRecommendation.pillText }}
+                        </span>
+                    </div>
                     <button 
                         type="button" 
                         class="btn btn-2xs sm:btn-xs btn-outline btn-error font-bold gap-1 shrink-0" 
@@ -453,7 +402,7 @@
                     >
                         <span v-if="uncombining" class="loading loading-spinner loading-2xs"></span>
                         <Icon v-else icon="solar:restart-bold" class="w-3.5 h-3.5" />
-                        <span>Deconstruct Lot</span>
+                        <span>↩️ Undo Combine</span>
                     </button>
                 </div>
 
@@ -484,6 +433,110 @@
                             <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- 3B. CONTENTS (When viewing an intact Lot with parsed components) -->
+        <!-- ============================================================= -->
+        <div v-if="(!lotChildren || lotChildren.length === 0) && parsedComponents && parsedComponents.length > 0" class="space-y-3">
+            <div class="bg-base-200/60 rounded-box p-4 border border-base-300 space-y-3 shadow-xs">
+                <div class="flex items-center justify-between border-b border-base-300 pb-2.5 gap-2 flex-wrap">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
+                            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
+                            <span>Bundle Components ({{ parsedComponents.length }} Items)</span>
+                        </h4>
+                        <span v-if="splitRecommendation" 
+                              class="badge badge-xs sm:badge-sm font-black gap-1 shadow-2xs"
+                              :class="splitRecommendation.badgeClass">
+                            {{ splitRecommendation.pillText }}
+                        </span>
+                    </div>
+                    <button 
+                        type="button" 
+                        class="btn btn-2xs sm:btn-xs btn-warning font-black gap-1 shrink-0 shadow-xs" 
+                        @click="$emit('open-splitter')"
+                        title="Split this lot into individual inventory singles"
+                    >
+                        <Icon icon="solar:scissors-bold" class="w-3.5 h-3.5" />
+                        <span>✂️ Split Lot</span>
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <div 
+                        v-for="(comp, cIdx) in parsedComponents" 
+                        :key="cIdx" 
+                        class="bg-base-100 p-2.5 rounded-box border border-base-300 flex flex-col gap-1 shadow-xs"
+                    >
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start gap-1.5">
+                                    <span class="badge badge-xs badge-neutral font-mono font-bold mt-0.5">#{{ cIdx + 1 }}</span>
+                                    <p class="text-xs font-bold text-base-content leading-snug">{{ comp.name || comp.title || comp.identity }}</p>
+                                </div>
+                                <p v-if="comp.notes || comp.reason" class="text-[10px] opacity-60 mt-0.5">{{ comp.notes || comp.reason }}</p>
+                            </div>
+                            <div class="flex flex-col items-end gap-1 shrink-0">
+                                <span class="text-xs font-bold text-success font-mono">${{ compPrice(comp).toFixed(2) }}</span>
+                                <span v-if="comp.condition" class="badge badge-xs font-bold" :class="conditionClass(comp.condition)">{{ conditionText(comp.condition) }}</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1">
+                            <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(comp) !== '-' ? getSubItemBoutique(comp) : `$${compPrice(comp).toFixed(0)}` }}</strong></span>
+                            <span class="opacity-30">|</span>
+                            <span>Fair: <strong class="text-primary">{{ getSubItemFair(comp) }}</strong></span>
+                            <span class="opacity-30">|</span>
+                            <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(comp) }}</strong></span>
+                            <span class="opacity-30">|</span>
+                            <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(comp, parsedComponents.length, totalCost) }}</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================= --> 
+        <!-- 1. SOURCE & PROVENANCE (Sourcing Origin)                       --> 
+        <!-- ============================================================= --> 
+        <div class="bg-base-200/70 rounded-box p-4 border border-base-300 space-y-3 shadow-xs text-xs">
+            <div class="flex items-center justify-between border-b border-base-300/70 pb-2">
+                <span class="font-bold text-[10px] uppercase tracking-wider opacity-70 flex items-center gap-1.5">
+                    <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary" />
+                    Source & Provenance
+                </span>
+                <span v-if="item?.purchaseOrderNumber || item?.purchaseOrderId" class="badge badge-xs font-mono font-bold bg-primary/10 text-primary border-0">
+                    PO: {{ item.purchaseOrderNumber || item.purchaseOrderId }}
+                </span>
+                <span v-else class="badge badge-xs badge-ghost opacity-60">Single Intake</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="space-y-0.5">
+                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Channel / Source</span>
+                    <strong class="text-base-content text-xs block truncate capitalize">
+                        {{ item?.source || item?.sourcingChannel || item?.vendor || 'General Intake' }}
+                    </strong>
+                </div>
+                <div class="space-y-0.5">
+                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Acquired Date</span>
+                    <strong class="text-base-content text-xs block font-mono">
+                        {{ formattedAcquisitionDate }}
+                    </strong>
+                </div>
+                <div class="space-y-0.5">
+                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Unit Cost Basis</span>
+                    <strong class="text-base-content text-xs block font-mono text-primary">
+                        ${{ unitCost.toFixed(2) }}<span v-if="isMultiQty" class="text-[10px] opacity-60 font-normal">/ea</span>
+                    </strong>
+                </div>
+                <div class="space-y-0.5">
+                    <span class="text-[10px] opacity-60 uppercase font-semibold block">Total Cost Basis</span>
+                    <strong class="text-base-content text-xs block font-mono">
+                        ${{ totalCost.toFixed(2) }}
+                    </strong>
                 </div>
             </div>
         </div>
@@ -565,7 +618,8 @@
 import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../ItemThumbnail.vue';
-import { deriveLotExitPlaybook, deriveInventoryPlays } from '../../../lib/lot-strategy';
+import { deriveLotExitPlaybook, deriveInventoryPlays, getLotSplitRecommendation, parsePriceValue } from '../../../lib/lot-strategy';
+import { getSubItemBoutique, getSubItemFair, getSubItemBuyRange, getSubItemCostBasis } from '../../../lib/bundle-pricing';
 import { usePlaybookLearning, detectItemCategory } from '../../../composables/usePlaybookLearning';
 
 const props = defineProps({
@@ -616,6 +670,14 @@ const props = defineProps({
     scoutPurchaseStrategy: {
         type: Object,
         default: null
+    },
+    parsedRawAnalysis: {
+        type: [Object, Array],
+        default: null
+    },
+    parsedComponents: {
+        type: Array,
+        default: () => []
     }
 });
 
@@ -635,6 +697,89 @@ const showSiblingDrawer = ref(false);
 // Playbook Learning Composable
 const { getCategoryAffinities, recordPlayExecution, totalPlaysRecorded } = usePlaybookLearning();
 
+const parsedComponents = computed(() => {
+    if (props.parsedComponents && Array.isArray(props.parsedComponents) && props.parsedComponents.length > 0) {
+        return props.parsedComponents;
+    }
+    const raw = props.item?.components || props.item?.lot_items || props.scoutResult?.lot_items;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        try {
+            const p = JSON.parse(raw);
+            if (Array.isArray(p)) return p;
+        } catch (e) {}
+    }
+    return [];
+});
+
+const splitRecommendation = computed(() => {
+    let raw = props.parsedRawAnalysis || props.item?.rawAnalysis;
+    if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (e) {}
+    }
+    if (Array.isArray(raw)) raw = raw[0];
+    if (raw?.exit_strategy?.recommended_play) {
+        const pillText = raw.exit_strategy.recommended_play;
+        const type = raw.exit_strategy.strategy_type || (pillText.includes('Skim') ? 'skim_hero' : (pillText.includes('Keep') ? 'keep_set' : 'split_singles'));
+        const badgeClass = type === 'skim_hero' 
+            ? 'badge-warning text-warning-content border-warning/30 bg-warning/15'
+            : (type === 'keep_set' 
+                ? 'badge-accent text-accent-content border-accent/30 bg-accent/15' 
+                : 'badge-primary text-primary-content border-primary/30 bg-primary/15');
+        return {
+            pillText,
+            type,
+            badgeClass,
+            splitYield: raw.exit_strategy.split_yield,
+            bulkYield: raw.exit_strategy.bulk_yield,
+            upside: raw.exit_strategy.upside,
+            tacticalNote: raw.exit_strategy.tactical_note
+        };
+    }
+    return getLotSplitRecommendation(strategyItem.value, props.scoutResult);
+});
+
+// Item enriched with the shared reactive components array so Tab 1 and Tab 3 always agree on counts/yield.
+const strategyItem = computed(() => {
+    if (!props.item) return props.item;
+    return parsedComponents.value.length > 1
+        ? { ...props.item, components: parsedComponents.value }
+        : props.item;
+});
+
+// NaN-safe per-component price helpers
+const compPrice = (comp) => {
+    const boutique = getSubItemBoutique(comp);
+    if (boutique && boutique !== '-') {
+        const mid = parsePriceValue(boutique, 'midpoint', 0);
+        if (mid > 0) return mid;
+    }
+    return parsePriceValue(
+        comp?.price_breakdown?.boutique_premium || comp?.estimated_value || comp?.val,
+        'midpoint',
+        15
+    );
+};
+const conditionText = (cond) => {
+    if (!cond) return '';
+    const lower = String(cond).toLowerCase();
+    if (lower.includes('like new') || lower.includes('brand new') || lower.includes('mint')) return 'Mint';
+    if (lower.includes('very good')) return 'Very Good';
+    if (lower.includes('good')) return 'Good';
+    if (lower.includes('fair')) return 'Fair';
+    if (lower.includes('poor') || lower.includes('damaged') || lower.includes('as-is')) return 'Poor';
+    const first = String(cond).split(/[-–—:,]/)[0].trim();
+    return first.length <= 12 ? first : 'Used';
+};
+const conditionClass = (cond) => {
+    const t = conditionText(cond).toLowerCase();
+    if (t === 'mint' || t === 'new') return 'badge-success text-success-content';
+    if (t === 'very good' || t === 'good') return 'badge-info text-info-content';
+    if (t === 'fair') return 'badge-warning text-warning-content';
+    if (t === 'poor') return 'badge-error text-error-content';
+    return 'badge-outline badge-primary';
+};
+
 const isLot = computed(() => {
     const it = props.item;
     if (!it) return false;
@@ -643,6 +788,7 @@ const isLot = computed(() => {
         it.status === 'combined' || 
         Number(it.quantity || 1) > 1 || 
         (Array.isArray(it.components) && it.components.length > 1) ||
+        (parsedComponents.value && parsedComponents.value.length > 1) ||
         /\b(?:lot|bundle|crate|pack|collection)\b/i.test(it.title || '')
     );
 });
@@ -651,7 +797,7 @@ const itemCategory = computed(() => detectItemCategory(props.item));
 const categoryAffinities = computed(() => getCategoryAffinities(itemCategory.value));
 
 const availablePlays = computed(() => {
-    return deriveInventoryPlays(props.item, props.scoutResult, categoryAffinities.value, props.inventoryItems);
+    return deriveInventoryPlays(strategyItem.value, props.scoutResult, categoryAffinities.value, props.inventoryItems);
 });
 
 const selectedPlayId = ref('');
@@ -659,8 +805,11 @@ const selectedPlayId = ref('');
 watch(availablePlays, (plays) => {
     if (plays && plays.length > 0) {
         if (!selectedPlayId.value || !plays.some(p => p.id === selectedPlayId.value)) {
-            const rec = plays.find(p => p.isRecommended) || plays[0];
-            selectedPlayId.value = rec.id;
+            const multiItem = parsedComponents.value.length > 1;
+            const rec = plays.find(p => p.isRecommended);
+            const lotPlay = multiItem ? plays.find(p => p.strategyType === 'lot_split') : null;
+            const pick = (multiItem && rec?.strategyType !== 'lot_split' && lotPlay) ? lotPlay : (rec || lotPlay || plays[0]);
+            selectedPlayId.value = pick.id;
         }
     }
 }, { immediate: true });
@@ -705,7 +854,7 @@ const currentPlay = computed(() => {
 });
 
 const exitPlaybook = computed(() => {
-    return currentPlay.value?.lotExitPlaybook || deriveLotExitPlaybook(props.item, props.scoutResult);
+    return currentPlay.value?.lotExitPlaybook || deriveLotExitPlaybook(strategyItem.value, props.scoutResult);
 });
 
 function handleExecutePlay(play) {

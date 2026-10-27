@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue';
+import { ref, shallowRef, computed, type Ref } from 'vue';
 import type { Models } from 'appwrite';
 
 /**
@@ -6,7 +6,7 @@ import type { Models } from 'appwrite';
  * Supports individual toggles, toggle-all, selection counters, and bulk ID resolution.
  */
 export function useInventorySelection(itemsRef?: Ref<Models.Document[]>) {
-    const selectedItems = ref<string[]>([]);
+    const selectedItems = shallowRef<string[]>([]);
 
     const isAllSelected = (currentItems: Models.Document[]) => {
         if (!currentItems || currentItems.length === 0) return false;

@@ -250,7 +250,6 @@
                         :compact="false"
                         :horizontal="isHorizontalCard"
                         :selected="selectedItems.includes(item.$id)"
-                        @click="openEdit(item)"
                         @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
@@ -263,10 +262,10 @@
                         </template>
 
                         <template #actions>
-                            <div class="flex items-center gap-1.5 w-full mt-2 pt-2 border-t border-base-200/70 z-10" @click.stop>
+                            <div class="flex items-center gap-1.5 w-full mt-2 pt-2 border-t border-base-200/70 z-10" @click.stop.prevent>
                                 <button 
                                     type="button"
-                                    @click="openEdit(item)" 
+                                    @click.stop.prevent="openEdit(item)" 
                                     class="btn btn-sm flex-1 btn-primary font-bold rounded-xl gap-1.5 h-8 min-h-8 text-xs touch-manipulation active:scale-95 shadow-2xs" 
                                     title="Edit item in drawer"
                                 >
@@ -275,7 +274,7 @@
                                 </button>
                                 <button 
                                     type="button"
-                                    @click="confirmDelete(item.$id)" 
+                                    @click.stop.prevent="confirmDelete(item.$id)" 
                                     class="btn btn-sm btn-ghost text-error/80 hover:text-error hover:bg-error/15 h-8 min-h-8 w-8 min-w-8 p-0 rounded-xl touch-manipulation active:scale-90" 
                                     :disabled="processingId === item.$id" 
                                     title="Delete item"
@@ -334,6 +333,7 @@
                     @submit-combine="onDockSubmitCombine"
                     @uncombine-lot="onDockUncombineLot"
                     @split-one-unit="handleDockSplitOneUnit"
+                    @split-completed="onLotSplitCompleted"
                 >
                     <template #filters>
                         <InventoryFilterPanel 
@@ -856,15 +856,30 @@ const onDockUncombineLot = async (lotItem) => {
 const { isLotSplitterOpen, activeLotItem, closeLotSplitter } = useLotSplitter();
 
 watch(isLotSplitterOpen, (open) => {
-    if (open && activeLotItem.value) {
-        handleDrawerOpenSplit(activeLotItem.value);
+    if (open) {
+        closeEditDrawer();
+        if (activeLotItem.value) {
+            handleDrawerOpenSplit(activeLotItem.value);
+        }
     }
 });
 
-const onLotSplitCompleted = async () => {
+const onLotSplitCompleted = async (payload) => {
     closeLotSplitter();
+    closeEditDrawer();
     selectedItems.value = [];
-    await fetchInventory(currentTeam.value?.$id || '');
+    if (payload && Array.isArray(payload.createdDocs) && payload.createdDocs.length > 0) {
+        // Optimistically insert new split items into inventoryItems in memory
+        inventoryItems.value.unshift(...payload.createdDocs);
+        if (payload.parentId) {
+            const parent = inventoryItems.value.find(i => i.$id === payload.parentId);
+            if (parent) {
+                parent.status = 'deconstructed';
+            }
+        }
+    } else {
+        await fetchInventory(currentTeam.value?.$id || '');
+    }
 };
 
 const handleDockSplitOneUnit = async (lotItem) => {
@@ -884,10 +899,11 @@ const handleDockSplitOneUnit = async (lotItem) => {
             galleryImageIds: lotItem.galleryImageIds
         }, { copyAll: false });
 
+        const isRetail = /^(MD|DT)\b/i.test(lotItem.storageLocation || '');
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
-            status: lotItem.status === 'sold' ? 'acquired' : (lotItem.status || 'active'),
+            status: lotItem.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
             sourcingLocation: lotItem.sourcingLocation,
             orderId: lotItem.orderId,
             storageLocation: lotItem.storageLocation,
@@ -926,9 +942,15 @@ const handleDockSplitOneUnit = async (lotItem) => {
             cost: parseFloat(remainingCost)
         });
 
+        // Optimistically insert into in-memory array with zero network re-render churn
+        if (splitDoc) {
+            inventoryItems.value.unshift(splitDoc);
+        }
+        lotItem.quantity = remainingQty;
+        lotItem.cost = parseFloat(remainingCost);
+
         addToast({ type: 'success', message: `Split 1 unit into dedicated SKU! (${remainingQty} units remaining in batch)` });
         selectedItems.value = [];
-        await fetchInventory(currentTeam.value?.$id || '');
     } catch (e) {
         console.error("Failed to split unit:", e);
         addToast({ type: 'error', message: "Failed to split unit: " + (e?.message || e) });
@@ -2193,8 +2215,8 @@ function closeEditDrawer() {
 }
 
 function handleDrawerOpenBundle(item) {
-    closeEditDrawer();
     const target = item || activeItem.value;
+    closeEditDrawer();
     if (target?.$id) {
         selectedItems.value = [target.$id];
     }
@@ -2204,8 +2226,8 @@ function handleDrawerOpenBundle(item) {
 }
 
 function handleDrawerOpenCombine(item) {
-    closeEditDrawer();
     const target = item || activeItem.value;
+    closeEditDrawer();
     if (target?.$id) {
         selectedItems.value = [target.$id];
     }
@@ -2215,8 +2237,8 @@ function handleDrawerOpenCombine(item) {
 }
 
 function handleDrawerOpenRestock(item) {
-    closeEditDrawer();
     const target = item || activeItem.value;
+    closeEditDrawer();
     if (target?.$id) {
         selectedItems.value = [target.$id];
     }
@@ -2226,8 +2248,8 @@ function handleDrawerOpenRestock(item) {
 }
 
 function handleDrawerOpenSplit(item) {
-    closeEditDrawer();
     const target = item || activeItem.value;
+    closeEditDrawer();
     if (target?.$id) {
         selectedItems.value = [target.$id];
     }
@@ -2237,7 +2259,20 @@ function handleDrawerOpenSplit(item) {
 }
 
 watch(activeItem, (newItem) => {
-    syncUrlWithDrawer(newItem);
+    if (newItem) {
+        syncUrlWithDrawer(newItem);
+    } else if (!isEditDrawerOpen.value) {
+        syncUrlWithDrawer(null);
+    }
+});
+
+watch(isEditDrawerOpen, (isOpen) => {
+    if (!isOpen) {
+        if (activeItem.value !== null) {
+            activeItem.value = null;
+        }
+        syncUrlWithDrawer(null);
+    }
 });
 
 function checkUrlForDirectItemOpen() {
@@ -2261,6 +2296,28 @@ function checkUrlForDirectItemOpen() {
 watch(inventoryItems, () => {
     checkUrlForDirectItemOpen();
 }, { immediate: true });
+
+const handlePopState = () => {
+    const params = new URLSearchParams(window.location.search);
+    const hasTarget = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    if (hasTarget) {
+        checkUrlForDirectItemOpen();
+    } else if (isEditDrawerOpen.value) {
+        closeEditDrawer();
+    }
+};
+
+onMounted(() => {
+    if (typeof window !== 'undefined') {
+        window.addEventListener('popstate', handlePopState);
+    }
+});
+
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('popstate', handlePopState);
+    }
+});
 
 
 const saveEdit = async (payload) => {
@@ -2450,7 +2507,7 @@ const openDeconstructModal = async (payload) => {
     const aiItems = payload.scoutItems || null;
     
     previewItem.value = null; // Close preview
-    isEditDrawerOpen.value = false; // Close edit drawer
+    closeEditDrawer(); // Cleanly close edit drawer and reset URL + activeItem
     deconstructItemData.value = { ...item, _aiItems: aiItems };
     
     let dbQty = item.quantity && item.quantity > 1 ? parseInt(item.quantity) : 2;

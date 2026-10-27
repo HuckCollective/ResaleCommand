@@ -52,3 +52,17 @@ const highPrice = parsePriceValue(item.val, 'high', fallback);
    Standard resale inventory lots must never output ungrounded astronomical ROIs ($> +1,000\%$) unless physically confirmed by authenticated high-value single items.
 3. **Thermal Barcode Printing Integrity**:
    Thermal label generators ([`rolloLabelPrint.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/rolloLabelPrint.ts), [`pdfLabelGenerator.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/pdfLabelGenerator.ts)) must always resolve prices through `parsePriceValue()` to ensure physical printed tags match verified catalog numbers.
+
+---
+
+## 4. The Buy-Target Authority & Anti-Blind-Multiplier Law
+
+1. **Zero Blind Frontend Multipliers**:
+   Frontend components and post-processors must **NEVER** overwrite Gemini's condition-aware `purchase_strategy.max_bid` or `max_landed_cost` with blind `targetResale / 1.7` (or `/ 2.2`) formulas that ignore empty boxes, physical defects, or online Fair Market ceilings.
+
+2. **Component `buy_range` Sum Invariant**:
+   On multi-item lots, `MAX BUY TARGET` must strictly align with the sum of constituent items' `buy_range` targets (e.g., `$30–$55` $\rightarrow$ `$45`), and **NEVER** exceed 50% of the eBay Fair Market value when items have `Fair`, `Poor`, empty box, or defect flags. It must never reach a price point where any major channel (e.g. eBay) would yield negative profit.
+
+3. **Single Financial Voice**:
+   The top `MAX BUY TARGET` / `Proxy Ceiling` badge and the `purchase_strategy.advice` text must never display conflicting dollar targets (e.g., green box showing `$85` while advice recommends an offer of `$40–$45`). They must match 100% across all surfaces.
+

@@ -5,7 +5,7 @@ import { useAuth } from './useAuth';
 import { useCart, type Cart, type CartItem } from './useCart';
 import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
-import { getItemsByPurchaseId, getSafeRawAnalysis, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
+import { getItemsByPurchaseId, getSafeRawAnalysis, getSafeComponents, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
 import { getDefaultStorageLocation } from '../lib/warehouses';
 import { parsePriceValue } from '../lib/lot-strategy';
 
@@ -689,7 +689,7 @@ export function useScoutPurchase() {
                 rawAnalysis: safeRaw || undefined,
                 marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                 keywords: (itemData.keywords && itemData.keywords.length > 0) ? itemData.keywords : (rawObj.keywords && Array.isArray(rawObj.keywords) ? rawObj.keywords : undefined),
-                components: itemData.components || undefined,
+                components: itemData.components ? getSafeComponents(itemData.components) : undefined,
                 conditionNotes: notes.slice(0, 4900)
             };
 
@@ -860,7 +860,7 @@ export function useScoutPurchase() {
                 cartId: activePurchase.value.$id,
                 tenantId: teamId || null,
                 status: lotData.status || 'draft',
-                components: lotData.lotItems ? JSON.stringify(lotData.lotItems).slice(0, 65000) : undefined,
+                components: lotData.lotItems ? getSafeComponents(lotData.lotItems) : undefined,
                 marketDescription: autoMdReport ? autoMdReport.substring(0, 4900) : undefined,
                 keywords: (lotData.keywords && lotData.keywords.length > 0) ? lotData.keywords : (rawObj.keywords && Array.isArray(rawObj.keywords) ? rawObj.keywords : undefined),
                 conditionNotes: notes.slice(0, 4900),

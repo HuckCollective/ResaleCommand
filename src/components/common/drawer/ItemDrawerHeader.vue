@@ -80,14 +80,16 @@
 
                         <!-- Sticker Tag Status Pill -->
                         <span 
-                            class="badge badge-xs font-mono text-[10px] max-w-48 truncate cursor-pointer transition-all border"
+                            class="badge badge-xs font-mono text-[10px] max-w-64 gap-1 cursor-pointer transition-all border"
                             :class="editForm?.tagTitle 
                                 ? 'badge-success/15 border-success/30 text-success font-semibold hover:border-success/60' 
                                 : 'badge-ghost opacity-60 border-dashed border-base-300 hover:opacity-100'"
                             @click.stop="isNamingOpen = true"
-                            :title="editForm?.tagTitle ? `Sticker Tag: ${editForm.tagTitle}` : 'No short tag name set yet (Click to set)'"
+                            :title="editForm?.tagTitle ? `Sticker Tag: ${editForm.tagTitle} (${tagTitleCount}/38)` : 'No short tag name set yet (Click to set)'"
                         >
-                            🏷️ {{ editForm?.tagTitle ? editForm.tagTitle : 'No Tag Name Set' }}
+                            <span class="shrink-0">🏷️</span>
+                            <span class="min-w-0 truncate">{{ editForm?.tagTitle ? editForm.tagTitle : 'No Tag Name Set' }}</span>
+                            <span v-if="editForm?.tagTitle" class="shrink-0 opacity-70 whitespace-nowrap" :class="{ 'text-warning': tagTitleCount > 38 }">({{ tagTitleCount }}/38)</span>
                         </span>
                     </div>
                 </div>
@@ -377,6 +379,8 @@ const displayCatalogTitle = computed(() => {
 const effectiveUpc = computed(() => {
     return props.editForm?.upc || props.item?.upc || props.item?.sku || null;
 });
+
+const effectivePrice = computed(() => Number(props.editForm?.resalePrice || props.item?.resalePrice || 0).toFixed(2));
 
 const copyUpc = () => {
     if (effectiveUpc.value) {

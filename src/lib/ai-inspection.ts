@@ -1,4 +1,8 @@
-import { model, generateContentWithBackoff } from './gemini';
+import { model, generateContentWithBackoff, parseAiJson } from './gemini';
+import { lotInspectionResponseSchema } from './ai/schemas/lot-inspection.schema';
+import { LOT_PLAYBOOK_SYSTEM_INSTRUCTION } from './ai/instructions/system-instructions';
+import { buildLotInspectionUserPrompt } from './ai/instructions/prompt-builders';
+import { verifyAndSanitizeLotResult } from './ai/verification/verify-inspection';
 
 export interface InspectionImage {
     url?: string;
@@ -17,24 +21,78 @@ export interface InspectionContext {
     existingItems?: Array<{ id?: string; title: string; upc?: string; price?: number | string; condition?: string; description?: string }>;
 }
 
+export interface ItemView {
+    role: 'front' | 'back' | 'spine' | 'detail' | 'tag';
+    image_index: number;
+    /** [ymin, xmin, ymax, xmax] normalized 0-1000 */
+    bounding_box: [number, number, number, number];
+}
+
+/** Clamp/validate a 0-1000 [ymin,xmin,ymax,xmax] box; returns undefined if unusable. */
+export function normalizeBoundingBox(box: any): [number, number, number, number] | undefined {
+    if (!Array.isArray(box) || box.length !== 4) return undefined;
+    const n = box.map((v: any) => Math.max(0, Math.min(1000, Math.round(Number(v)))));
+    if (n.some((v: number) => Number.isNaN(v))) return undefined;
+    const [ymin, xmin, ymax, xmax] = n;
+    if (ymax <= ymin || xmax <= xmin) return undefined;
+    return [ymin, xmin, ymax, xmax];
+}
+
+/** Validate views against the gallery size; ensure a primary view exists. */
+export function normalizeItemViews(item: any, imageCount: number): ItemView[] {
+    const roles = ['front', 'back', 'spine', 'detail', 'tag'];
+    const seen = new Set<string>();
+    const out: ItemView[] = [];
+    const raw = Array.isArray(item?.views) ? item.views : [];
+    for (const v of raw) {
+        const idx = Number(v?.image_index);
+        const box = normalizeBoundingBox(v?.bounding_box);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= imageCount || !box) continue;
+        const role = roles.includes(v?.role) ? v.role : 'detail';
+        const key = `${role}:${idx}:${box.join(',')}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ role, image_index: idx, bounding_box: box });
+    }
+    if (out.length === 0) {
+        const box = normalizeBoundingBox(item?.bounding_box);
+        const idx = Number.isInteger(item?.image_index) && item.image_index >= 0 && item.image_index < imageCount ? item.image_index : 0;
+        if (box) out.push({ role: 'front', image_index: idx, bounding_box: box });
+    }
+    return out;
+}
+
 export interface ComponentItem {
     name: string;
     identity: string;
+    tag_title?: string;
+    physical_substrate?: string;
     quantity?: number;
     estimated_value: string;
     condition: string;
     image_index: number;
     image_url?: string;
     bounding_box?: [number, number, number, number];
+    views?: ItemView[];
     tier?: 'showcase' | 'core' | 'quick_turn';
     tier_label?: string;
     tier_number?: number;
     is_key_issue?: boolean;
+    pricing_potential?: {
+        boutique?: string;
+        fair?: string;
+    };
+    buy_range?: {
+        min?: number;
+        max?: number;
+        formatted?: string;
+    };
     price_breakdown?: {
         mint?: string;
         fair?: string;
         poor?: string;
         boutique_premium?: string;
+        confidence?: string;
     };
     red_flags?: string[];
     ocr_detected_text?: string;
@@ -282,6 +340,8 @@ TASK:
      * 'core': Solid staples, regular run pieces, matching set members ($16 - $32)
      * 'quick_turn': Common shelf-fillers, smaller pieces, impulse grabs ($8 - $15)
 
+4. BOUNDING BOX: for every item return "bounding_box": [ymin, xmin, ymax, xmax] as integers 0-1000 (fraction of this photo's height/width) tightly enclosing ONLY that item. In "views" return this photo's view of the item with role 'front'|'back'|'spine'|'detail'|'tag' (closeups of interior maps, inked pages, copyright pages or flaws are 'detail'; price/brand tags are 'tag').
+
 OUTPUT STRICT JSON:
 {
   "is_group_overview": false,
@@ -345,7 +405,9 @@ OUTPUT STRICT JSON:
                     },
                     red_flags: item.red_flags || [],
                     image_index: image.index,
-                    image_url: image.url
+                    image_url: image.url,
+                    bounding_box: normalizeBoundingBox(item.bounding_box),
+                    views: normalizeItemViews({ ...item, image_index: image.index }, image.index + 1)
                 };
             })
         };
@@ -426,215 +488,60 @@ you MUST honor that specification precisely in the catalog and condition notes.
         ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
         : "None provided";
 
-    // 3. Assemble Unified Multimodal Prompt
-    const unifiedPrompt = `
-You are a master multi-category resale appraiser and inventory valuation expert performing high-precision inspection, item cataloging, and booth pricing for a multi-item collection/lot.
-
-ALL ${validImageParts.length} GALLERY PHOTOS ARE ATTACHED DIRECTLY TO THIS REQUEST:
-Photo #1 through Photo #${validImageParts.length}. Inspect every image carefully. Cross-reference group/overview shots with individual item closeups and spines.
-
-${userNotesSection}
-
-LOT CONTEXT:
-- Listing Title: "${context?.title || 'Multi-Item Lot'}"
-- ${countInstruction}
-- Sourcing Location / URL: "${context?.sourcingLocation || 'N/A'}"
-- Total Landed Purchase Cost: ${context?.cost ? `$${context.cost}` : 'Not provided'}
-${verifiedExistingContext}
-
-Organization Physical Booths & Locations:
-${locationsSummary}
-
-CORE MULTI-CATEGORY APPRAISAL PRINCIPLES:
-1. STRICT PHYSICAL GROUNDING & VERBATIM OCR (ZERO HALLUCINATION):
-   - You MUST identify each item strictly by what is physically visible in the attached photos.
-   - For Books, Media, Games, RPGs: Read the exact title and subtitle printed on each physical cover or spine.
-   - Extract the visible copyright/publication year (e.g. "© 2000", "© 2004", "© 2009").
-   - DO NOT assume all items in a lot share the edition, era, or brand stated in the general listing title! Online auction titles often contain loose seller generalizations (e.g. labeling an entire mixed lot '3.5 Edition' when individual adventure modules are actually 3.0 or 4th Edition, or labeling a lot 'Vintage 1970s' when pieces are from 1990). Use each individual item's visible cover design, logos, and printed copyright/publication year to determine its true edition, era, and secondary market value.
-   - STRICT ANTI-HALLUCINATION GUARD: NEVER invent, extrapolate, or guess famous franchise staples or core rulebooks (e.g. do NOT invent "Player's Handbook", "Monster Manual", "Complete Warrior", "Levi's 501", or "Air Jordan 1") unless that exact item's cover, tag, or spine is visibly present in the photos!
-   - Every single entry in "lot_items" must correspond to a real, visible physical item on the table/shelf.
-
-2. PHYSICAL COUNT FIDELITY & CROSS-PHOTO MERGING:
-   - Carefully cross-reference group shots with individual closeups.
-   - Merge multi-photo appearances of the same item so that each physical piece appears exactly ONCE in "lot_items".
-   - ${targetQuantity && targetQuantity > 1 ? `Reconcile the catalog so there are EXACTLY ${targetQuantity} distinct items in "lot_items".` : 'Include all distinct physical items present.'}
-
-3. PHYSICAL SUBSTRATE & CATEGORY ACCURACY:
-   - Accurately distinguish physical substrate:
-     * Paper pages / bound spines / staples = Books, RPGs, Comics, or Periodicals.
-     * Fabric weave, stitched seams, brand tags = Apparel & Workwear.
-     * Wooden boards / framed panels / mounted prints = Wall Decor & Art Plaques. NEVER classify wall art as books or magazines.
-     * Cartridges / optical discs / cases = Video Games & Media.
-   - Multi-disc sets (e.g. 2-CD sets) stay 1 single inventory unit. Distinct individual books, games, or garments get split into individual lot_items.
-
-4. 3-TIER INVENTORY CLASSIFICATION (RETURN "lot_items" SORTED IN THIS EXACT ORDER):
-   - **FIRST: Showcase (Tier 1)**: Standouts, centerpieces, rare vintage, top condition, or high-value pieces ($35 - $85+ each).
-   - **SECOND: Core (Tier 2)**: Solid standard pieces, reliable staples, matching set members ($16 - $32 each).
-   - **THIRD: Quick Turn (Tier 3)**: Lower-value pieces, impulse picks, common shelf-fillers ($8 - $15 each).
-
-5. VALUATION & PRICING MATRICES:
-   - 'fair': Fair market secondary sold price (e.g. eBay sold comps).
-   - 'boutique_premium': Curated physical consignment / antique booth price (typically 25-45% higher than online comps).
-   - 'mint': Price if brand new / pristine.
-   - 'poor': Price if heavily worn, stained, or damaged.
-   - In 'purchase_strategy', calculate max_bid and max_landed_cost based on reasonable resale margins (target 3.0x markup for core items; 1.5x-2.0x for high-ticket).
-
-OUTPUT STRICT JSON:
-{
-  "identity": "Concise overarching identity of the lot (e.g. D&D 3.0 / 3.5e & 4e Adventure Modules & Sourcebooks Collection)",
-  "title": "Comprehensive SEO title incorporating key titles, era/editions, and lot count",
-  "keywords": ["Keyword1", "Keyword2", "Keyword3"],
-  "condition_notes": "Overview of physical condition across all items, itemizing any notable spine/cover wear or pristine copies",
-  "country_of_origin": "USA",
-  "red_flags": [],
-  "price_breakdown": {
-    "mint": "$280 - $360",
-    "fair": "$180 - $250",
-    "poor": "$80 - $130",
-    "boutique_premium": "$230 - $310",
-    "confidence": "High"
-  },
-  "purchase_strategy": {
-    "verdict": "BUY_NOW",
-    "current_asking_price": "${context?.cost ? `$${context.cost}` : '$58.15'}",
-    "max_bid": 110,
-    "max_landed_cost": 135,
-    "advice": "High profit potential: sell standout adventure modules individually in booth showcase or online, or bundle matching campaign arc modules."
-  },
-  "market_report": {
-    "best_platform": "Memory Den Booth & eBay",
-    "platform_rationale": "Tabletop RPG sourcebooks and vintage adventure modules have strong physical booth demand and active collector followings online.",
-    "sell_through_velocity": "Fast (1-2 weeks)",
-    "target_buyer": "Vintage tabletop gamers, RPG collectors, and DMs seeking classic adventure modules",
-    "channels": [
-       { "name": "Memory Den Booth", "est_price": "$240.00", "net_payout": "~$195.00 after booth fees", "speed": "Fast", "recommendation": "Primary Channel" },
-       { "name": "eBay / Online", "est_price": "$210.00", "net_payout": "~$170.00 after fees/shipping", "speed": "Medium", "recommendation": "Online Reach" }
-    ]
-  },
-  "exit_strategy": {
-    "summary": "Pull key standout(s) to recover 100% of purchase cost basis on day 1, combine matching series/themes into high-ticket packs, and clear remainders in booth impulse bags.",
-    "projected_bulk_yield": 180,
-    "projected_split_yield": 275,
-    "profit_increase_pct": 52,
-    "hero_singles": [
-       { "name": "Key Standout Hero Title", "est_price": "$50 - $70", "target_channel": "Online / Showcase", "reason": "High liquidity collector piece that recoups entire initial cost" }
-    ],
-    "themed_combines": [
-       { "name": "Themed Companion 3-Pack", "est_price": "$35 - $45", "items": ["Item A", "Item B", "Item C"], "reason": "Matching era/author elevates basket size and leverages shipping" }
-    ],
-    "floor_fillers": {
-       "name": "Booth Floor Grab Bag",
-       "est_price": "$12 - $15",
-       "count": 5,
-       "target_channel": "Memory Den Booth Basket"
-    }
-  },
-  "lot_items": [
-    {
-      "name": "Exact clean title and edition/year read from cover/spine",
-      "identity": "Specific title/identity",
-      "tier": "showcase",
-      "val": "$25 - $40",
-      "cond": "Good - Minor edge wear",
-      "img": 0,
-      "detected_text": "Verbatim text read from cover or spine including copyright year",
-      "price_breakdown": {
-        "mint": "$45 - $60",
-        "fair": "$25 - $40",
-        "poor": "$12 - $20",
-        "boutique_premium": "$35 - $50"
-      }
-    }
-  ]
-}
-`;
+    const promptText = buildLotInspectionUserPrompt({
+        authoritativeUserNotes: context?.notes,
+        lotTitle: context?.title,
+        targetQuantity,
+        sourcingLocation: context?.sourcingLocation,
+        landedCost: context?.cost,
+        verifiedExistingItems: context?.existingItems,
+        locationsSummary,
+        imageCount: validImageParts.length
+    });
 
     try {
         // Build multimodal payload: text prompt followed by all gallery image parts
         const contentParts: any[] = [
-            { text: unifiedPrompt },
+            { text: promptText },
             ...validImageParts.map(p => ({ inlineData: p.inlineData }))
         ];
 
         const synthResult = await generateContentWithBackoff({
+            systemInstruction: LOT_PLAYBOOK_SYSTEM_INSTRUCTION,
             contents: [{ role: 'user', parts: contentParts }],
             generationConfig: { 
-                responseMimeType: "application/json"
+                responseMimeType: "application/json",
+                responseSchema: lotInspectionResponseSchema
             }
         }, 3, 2000);
 
         const synthText = synthResult.response.text();
-        const parsedSynth = cleanAndParseJSON(synthText);
+        const parsedSynth: LotInspectionResult = cleanAndParseJSON(synthText);
 
-        // Map reconciled lot items and ensure image_url and tier sorting
-        const finalLotItems: ComponentItem[] = (parsedSynth.lot_items && Array.isArray(parsedSynth.lot_items) && parsedSynth.lot_items.length > 0)
-            ? parsedSynth.lot_items.map((item: any) => {
-                let rawTitle = item.name || item.title || item.identity || "Component Item";
-                const cleanTitle = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
-                const imgIdx = (typeof item.img === 'number' && item.img >= 0 && item.img < images.length)
-                    ? item.img
-                    : (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length ? item.image_index : 0);
-
-                const isKey = item.tier === 'showcase' || item.is_key_issue || rawTitle.includes('Tier 1') || false;
-                const isQuickTurn = !isKey && (item.tier === 'quick_turn' || rawTitle.includes('Tier 3') || false);
-                const tierVal: 'showcase' | 'core' | 'quick_turn' = isKey ? 'showcase' : (isQuickTurn ? 'quick_turn' : 'core');
-                const tierLabel = isKey ? '🌟 Showcase' : (isQuickTurn ? '⚡ Quick Turn' : '📦 Core');
-                const tierNum = isKey ? 1 : (isQuickTurn ? 3 : 2);
-
-                let valStr = item.val || item.estimated_value || (isKey ? "$35 - $65" : isQuickTurn ? "$6 - $12" : "$14 - $24");
-                const condStr = item.cond || item.condition || "Used/Good";
-
-                let pb = item.price_breakdown;
-                if (!pb) {
-                    const matches = valStr.match(/\$?(\d+)\s*-\s*\$?(\d+)/);
-                    if (matches) {
-                        const low = parseInt(matches[1], 10);
-                        const high = parseInt(matches[2], 10);
-                        pb = {
-                            fair: `$${low} - $${high}`,
-                            mint: `$${Math.round(high * 1.35)} - $${Math.round(high * 1.6)}`,
-                            poor: `$${Math.max(1, Math.round(low * 0.5))} - $${Math.round(low * 0.75)}`,
-                            boutique_premium: `$${Math.round(high * 1.15)} - $${Math.round(high * 1.35)}`
-                        };
-                    } else {
-                        pb = {
-                            fair: valStr,
-                            mint: isKey ? "$50 - $75" : isQuickTurn ? "$10 - $15" : "$20 - $30",
-                            poor: isKey ? "$15 - $25" : isQuickTurn ? "$3 - $5" : "$8 - $12",
-                            boutique_premium: isKey ? "$40 - $65" : isQuickTurn ? "$8 - $14" : "$18 - $28"
-                        };
-                    }
+        // Ensure image_url is assigned if available
+        if (Array.isArray(parsedSynth.lot_items)) {
+            parsedSynth.lot_items.forEach((item: any) => {
+                const imgIdx = (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length)
+                    ? item.image_index
+                    : (typeof item.img === 'number' && item.img >= 0 && item.img < images.length ? item.img : 0);
+                if (!item.image_url) {
+                    item.image_url = images[imgIdx]?.url || images[imgIdx]?.base64 || undefined;
                 }
+                // Preserve + sanitize multi-angle data (never strip image_index/bounding_box/views)
+                item.image_index = imgIdx;
+                const bb = normalizeBoundingBox(item.bounding_box);
+                if (bb) item.bounding_box = bb; else delete item.bounding_box;
+                const views = normalizeItemViews(item, images.length);
+                if (views.length) item.views = views; else delete item.views;
+            });
+        }
 
-                return {
-                    name: cleanTitle,
-                    identity: item.identity ? item.identity.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim() : cleanTitle,
-                    tier: tierVal,
-                    tier_label: tierLabel,
-                    tier_number: tierNum,
-                    is_key_issue: isKey,
-                    estimated_value: valStr,
-                    condition: condStr,
-                    image_index: imgIdx,
-                    image_url: images[imgIdx]?.url || images[imgIdx]?.base64 || undefined,
-                    price_breakdown: pb,
-                    ocr_detected_text: item.detected_text || item.ocr_detected_text || "",
-                    red_flags: item.red_flags || []
-                };
-            })
-            : [];
+        // Run deterministic verification & math sanity
+        const verifiedResult = verifyAndSanitizeLotResult(parsedSynth, context?.cost);
 
-        // Sort items by Tier order: Showcase (1) -> Core (2) -> Quick Turn (3)
-        finalLotItems.sort((a, b) => {
-            return (a.tier_number || 2) - (b.tier_number || 2);
-        });
+        if (onProgress) onProgress(`Cataloged ${verifiedResult.lot_items.length} items with deep valuation!`, 100);
 
-        if (onProgress) onProgress(`Cataloged ${finalLotItems.length} items with deep valuation!`, 100);
-
-        return {
-            ...parsedSynth,
-            lot_items: finalLotItems
-        };
+        return verifiedResult;
     } catch (e: any) {
         console.error("[ai-inspection] Unified multimodal inspection failed, falling back:", e.message);
         return {

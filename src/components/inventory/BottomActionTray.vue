@@ -1732,7 +1732,6 @@ const closeSplitSubView = () => {
 
 const handleSplitCompleted = (payload) => {
     currentSubView.value = 'main';
-    emit('uncombine-lot', props.selectedItems[0] || activeLotItem.value);
     emit('split-completed', payload);
     closeTray();
 };
@@ -1776,6 +1775,8 @@ watch(isLotSplitterOpen, (open) => {
     if (open && activeLotItem.value) {
         emit('update:isOpen', true);
         currentSubView.value = 'split';
+    } else if (!open && currentSubView.value === 'split') {
+        currentSubView.value = 'main';
     }
 });
 
@@ -2397,7 +2398,7 @@ const headerTitle = computed(() => {
         if (currentSubView.value === 'restock') return 'Restock Multi-Quantity Batch';
         if (currentSubView.value === 'bundle') return 'Create Companion Bundle';
         if (currentSubView.value === 'combine') return 'Combine into Main Lot';
-        if (currentSubView.value === 'split') return 'Split & Deconstruct Lot';
+        if (currentSubView.value === 'split') return '✂️ Split Lot';
         return props.selectedCount > 0 ? `Selected Items (${props.selectedCount})` : 'Bulk Actions & Selections';
     }
     if (props.activeTab === 'filters') {
@@ -2411,7 +2412,7 @@ const headerSubtitle = computed(() => {
         if (currentSubView.value === 'restock') return 'Add units to crate & recalculate average cost basis';
         if (currentSubView.value === 'bundle') return `Curate ${props.selectedCount} companion items into an elevated set`;
         if (currentSubView.value === 'combine') return `Merge ${props.selectedCount} like-with-like items into volume lot`;
-        if (currentSubView.value === 'split') return 'Decompose into profit tiers, quick-split 1 unit, or rollback lot';
+        if (currentSubView.value === 'split') return 'Decompose into profit tiers, quick-split 1 unit, or undo combine';
         return props.selectedCount > 0 ? 'Curate selection or run bulk operations' : 'Select items in catalog to move locations or set status';
     }
     if (props.activeTab === 'filters') {

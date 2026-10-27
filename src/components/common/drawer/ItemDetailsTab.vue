@@ -525,7 +525,7 @@
                             <Icon icon="solar:notes-bold" class="w-4 h-4 text-secondary" />
                             Internal Product Notes & AI Guidance
                         </label>
-                        <p class="text-[10px] opacity-60">Saved with item & used to sharpen AI Deep Research</p>
+                        <p class="text-[10px] opacity-60">Saved with item & used to sharpen 🔍 Deep Scan</p>
                     </div>
                     <span class="badge badge-xs badge-ghost font-mono">Internal Only</span>
                 </div>
@@ -567,16 +567,19 @@
                     
                     <!-- RESELLER EXIT PLAYBOOK BANNER (Acquired Inventory) -->
                     <div v-if="isAcquiredItem && exitPlaybook" class="border-2 border-secondary/40 bg-secondary/10 rounded-2xl p-3.5 shadow-xs">
-                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                             <div class="flex items-center gap-2 min-w-0">
                                 <Icon icon="solar:clipboard-check-bold" class="w-5 h-5 text-secondary shrink-0" />
-                                <div class="truncate flex items-center gap-1.5">
+                                <div class="flex items-center gap-1.5 flex-wrap">
                                     <h4 class="font-black text-sm uppercase tracking-wider text-secondary">Exit Playbook</h4>
                                     <span class="badge badge-xs badge-success font-black font-mono">+{{ Math.round(exitPlaybook.profitIncreasePct || 0) }}% Margin</span>
+                                    <span v-if="parsedComponents && parsedComponents.length > 1" class="badge badge-xs badge-neutral font-bold gap-1">
+                                        <span>📦</span>{{ parsedComponents.length }} Components
+                                    </span>
                                 </div>
                             </div>
                             <button type="button" @click="$emit('open-lot-tab')" class="btn btn-xs btn-secondary text-secondary-content gap-1 shrink-0 font-bold shadow-2xs">
-                                <span>View Playbook</span>
+                                <span>{{ parsedComponents && parsedComponents.length > 1 ? 'Open Playbook & Split Lot' : 'View Playbook' }}</span>
                                 <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
                             </button>
                         </div>
@@ -649,7 +652,7 @@
                                 <span v-if="scoutAuctionMeta?.seller_id || scoutItemsArray[0]?.sellerId" class="opacity-75 font-mono text-[10px]">(Seller #{{ scoutAuctionMeta?.seller_id || scoutItemsArray[0]?.sellerId }})</span>
                             </span>
                             <span v-if="scoutAuctionMeta?.shipping_weight || scoutItemsArray[0]?.shippingWeight" class="opacity-70">
-                                ⚖️ {{ scoutAuctionMeta?.shipping_weight || scoutItemsArray[0]?.shippingWeight }} lbs
+                                &#9878;&#65039; {{ scoutAuctionMeta?.shipping_weight || scoutItemsArray[0]?.shippingWeight }} lbs
                             </span>
                         </div>
                     </div>
@@ -663,46 +666,19 @@
                         <p class="text-xs font-medium opacity-90 leading-relaxed">{{ scoutItemsArray[0].condition_notes }}</p>
                     </div>
 
-                    <!-- BUNDLE COMPONENTS -->
-                    <div v-if="scoutItemsArray.length > 1" class="bg-base-200 border border-base-300 rounded-xl p-3">
-                        <div class="font-bold text-xs uppercase tracking-wider mb-2 flex items-center justify-between text-primary">
-                            <div class="flex items-center gap-1.5">
-                                <Icon icon="solar:box-linear" class="w-4 h-4" />
-                                <span>Bundle Components ({{ scoutItemsArray.length }} Items)</span>
-                            </div>
-                            <button v-if="item" type="button" class="btn btn-xs btn-outline btn-primary font-bold shadow-xs gap-1" @click="$emit('open-lot-tab')">
-                                <span>Lot Hub ➔</span>
-                            </button>
-                        </div>
-                        <ul class="space-y-1.5 text-xs font-medium">
-                            <li v-for="(subItem, subIdx) in scoutItemsArray" :key="subIdx" class="bg-base-100 p-2.5 rounded-lg border border-base-300 flex flex-col gap-1 shadow-xs">
-                                <div class="flex items-start gap-2 w-full">
-                                    <span class="badge badge-sm badge-neutral font-mono font-bold shrink-0 mt-0.5">{{ subIdx + 1 }}</span>
-                                    <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <span class="text-base-content font-bold leading-snug text-left text-xs sm:text-sm">
-                                                {{ getCleanSubItemTitle(subItem) }}
-                                            </span>
-                                            <span v-if="subItem.condition" class="badge badge-xs font-bold shrink-0 px-2 py-0.5 shadow-2xs" :class="getConditionPillClass(subItem.condition)">
-                                                {{ getConditionPillText(subItem.condition) }}
-                                            </span>
-                                        </div>
-                                        <p v-if="getConditionDetails(subItem)" class="text-[11px] text-base-content/70 italic leading-snug">
-                                            {{ getConditionDetails(subItem) }}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1 mt-0.5">
-                                    <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Fair: <strong class="text-primary">{{ getSubItemFair(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(subItem) }}</strong></span>
-                                    <span class="opacity-30">|</span>
-                                    <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(subItem, scoutItemsArray.length, editForm?.cost) }}</strong></span>
-                                </div>
-                            </li>
-                        </ul>
+                    <!-- Fallback lot summary (only when the merged Exit Playbook card above is not shown) -->
+                    <div v-if="parsedComponents && parsedComponents.length > 1 && !(isAcquiredItem && exitPlaybook)"
+                         @click="$emit('open-lot-tab')"
+                         class="p-2.5 bg-secondary/10 border border-secondary/30 rounded-xl flex items-center justify-between text-xs font-medium cursor-pointer hover:bg-secondary/15 transition-all">
+                        <span class="text-base-content font-bold flex items-center gap-1.5">
+                            <span>📦</span>
+                            <span>{{ parsedComponents.length }} Bundle Components</span>
+                            <span class="opacity-40">•</span>
+                            <span class="text-secondary font-mono">Sliced Yield: ${{ Number(exitPlaybook?.projectedSplitYield || 0).toFixed(2) }}</span>
+                        </span>
+                        <button type="button" class="btn btn-xs btn-secondary text-secondary-content font-bold gap-1 shadow-2xs">
+                            <span>Open Playbook &amp; Split Lot ➔</span>
+                        </button>
                     </div>
 
                     <!-- AI Found Image Thumbnail (Single Item) -->
@@ -715,142 +691,11 @@
                         <span class="font-bold"><Icon icon="solar:danger-triangle-bold" class="w-4 h-4 inline mr-1" /> Flags:</span> {{ scoutItemsArray[0].red_flags.join(', ') }}
                     </div>
 
-                    <!-- SUGGESTED VALUATION MATRIX (2x2 Grid) -->
-                    <div v-if="scoutTotalRange || scoutItemsArray[0]?.price_breakdown" class="grid grid-cols-2 gap-2 pt-1">
-                        <div 
-                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-success/60 hover:bg-success/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.mint.unitFormatted ? scoutTotalRange.mint.unitFormatted : scoutTotalRange.mint.formatted) : scoutItemsArray[0]?.price_breakdown?.mint)"
-                            title="Click to apply Mint price"
-                        >
-                            <span class="badge badge-xs font-bold whitespace-nowrap bg-success/20 text-success border-success/40 mb-1">MINT</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
-                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.mint.unitFormatted ? scoutTotalRange.mint.unitFormatted : scoutTotalRange.mint.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.mint) }}
-                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.mint?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
-                            </span>
-                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.mint.formatted }}</span>
-                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-success font-bold mt-0.5">Use Price ↵</span>
-                        </div>
-                        <div 
-                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-primary/40 shadow-xs ring-1 ring-primary/20 cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.fair.unitFormatted ? scoutTotalRange.fair.unitFormatted : scoutTotalRange.fair.formatted) : scoutItemsArray[0]?.price_breakdown?.fair)"
-                            title="Click to apply Fair market price"
-                        >
-                            <span class="badge badge-xs font-bold whitespace-nowrap bg-primary/20 text-primary border-primary/40 mb-1">FAIR</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
-                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.fair.unitFormatted ? scoutTotalRange.fair.unitFormatted : scoutTotalRange.fair.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.fair) }}
-                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.fair?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
-                            </span>
-                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.fair.formatted }}</span>
-                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-primary font-bold mt-0.5">Use Price ↵</span>
-                        </div>
-                        <div 
-                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-base-300 shadow-xs cursor-pointer hover:border-error/60 hover:bg-error/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.poor.unitFormatted ? scoutTotalRange.poor.unitFormatted : scoutTotalRange.poor.formatted) : scoutItemsArray[0]?.price_breakdown?.poor)"
-                            title="Click to apply Poor / Clearance price"
-                        >
-                            <span class="badge badge-xs font-bold whitespace-nowrap bg-error/20 text-error border-error/40 mb-1">POOR</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
-                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.poor.unitFormatted ? scoutTotalRange.poor.unitFormatted : scoutTotalRange.poor.formatted) : formatPriceRange(scoutItemsArray[0]?.price_breakdown?.poor) }}
-                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.poor?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
-                            </span>
-                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.poor.formatted }}</span>
-                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-error font-bold mt-0.5">Use Price ↵</span>
-                        </div>
-                        <div 
-                            class="flex flex-col items-center bg-base-200/60 p-2.5 rounded-xl border border-secondary/40 shadow-xs cursor-pointer hover:border-secondary hover:bg-secondary/5 transition-all group"
-                            @click="$emit('apply-price-tier', scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.boutique.unitFormatted ? scoutTotalRange.boutique.unitFormatted : scoutTotalRange.boutique.formatted) : scoutItemsArray[0]?.price_breakdown?.boutique_premium)"
-                            title="Click to apply Boutique / Antique Mall price"
-                        >
-                            <span class="badge badge-xs font-bold whitespace-nowrap bg-secondary/20 text-secondary border-secondary/40 mb-1">BOUTIQUE</span>
-                            <span class="font-mono font-black text-xs sm:text-sm text-base-content text-center">
-                                {{ scoutTotalRange ? (Number(editForm.quantity) > 1 && scoutTotalRange.boutique.unitFormatted ? scoutTotalRange.boutique.unitFormatted : scoutTotalRange.boutique.formatted) : (formatPriceRange(scoutItemsArray[0]?.price_breakdown?.boutique_premium) || '-') }}
-                                <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange?.boutique?.unitFormatted" class="text-[10px] font-normal opacity-60">/ea</span>
-                            </span>
-                            <span v-if="Number(editForm.quantity) > 1 && scoutTotalRange" class="text-[9px] opacity-60 font-mono">Lot: {{ scoutTotalRange.boutique.formatted }}</span>
-                            <span class="text-[9px] opacity-0 group-hover:opacity-80 text-secondary font-bold mt-0.5">Use Price ↵</span>
-                        </div>
-                    </div>
-
-                    <!-- LOT MARKET STRATEGY & LIQUIDATION -->
-                    <div v-if="scoutResult?.market_report || (Array.isArray(scoutResult) && scoutResult[0]?.market_report) || scoutItemsArray[0]?.market_report" class="bg-base-100 p-3 rounded-2xl border border-primary/30 shadow-xs space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-base-200 pb-2">
-                            <span class="text-xs font-bold flex items-center gap-1.5 text-primary">
-                                <Icon icon="solar:chart-square-bold" class="w-4 h-4" />
-                                {{ scoutItemsArray.length > 1 ? 'Lot Market Strategy & Liquidation' : 'Market Strategy & Sales Channels' }}
-                            </span>
-                            <span v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.sell_through_velocity" class="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-info/20 text-info border border-info/30">
-                                ⚡ {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).sell_through_velocity }}
-                            </span>
-                        </div>
-                        
-                        <!-- Recommended Channel Banner -->
-                        <div class="bg-primary/10 border border-primary/25 rounded-xl p-3 flex flex-col gap-1.5">
-                            <div class="text-[10px] uppercase font-bold text-primary tracking-wider flex items-center gap-1">
-                                <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Recommended Channel:
-                            </div>
-                            <div class="font-extrabold text-xs sm:text-sm text-base-content leading-snug break-words">
-                                {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).best_platform }}
-                            </div>
-                            <p v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale" class="text-xs opacity-85 leading-relaxed mt-0.5 whitespace-pre-wrap break-words text-base-content">
-                                {{ (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).platform_rationale }}
-                            </p>
-                        </div>
-
-                        <!-- Channel Comparisons / Trade-Offs -->
-                        <div v-if="(scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report)?.channels?.length" class="space-y-1.5 pt-1">
-                            <div class="text-[10px] font-bold uppercase opacity-60">Channel Trade-Offs</div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div v-for="(ch, cIdx) in (scoutResult?.market_report || scoutResult[0]?.market_report || scoutItemsArray[0]?.market_report).channels" :key="cIdx" class="bg-base-200/60 p-2.5 rounded-xl border border-base-300 flex flex-col justify-between space-y-1.5 text-xs">
-                                    <div class="space-y-1">
-                                        <div class="font-extrabold text-xs text-base-content leading-snug break-words">
-                                            {{ ch.name }}
-                                        </div>
-                                        <div v-if="ch.recommendation" class="text-[10px] text-base-content/85 leading-snug bg-base-100 p-1.5 rounded-lg border border-base-300 font-medium break-words">
-                                            💡 {{ ch.recommendation }}
-                                        </div>
-                                        <div class="text-xs font-mono font-black text-success pt-0.5">
-                                            {{ ch.est_price || '-' }}
-                                        </div>
-                                    </div>
-                                    <div class="text-[10px] opacity-80 flex justify-between items-center border-t border-base-300 pt-1.5 font-mono">
-                                        <span>Net Payout:</span>
-                                        <span class="font-bold text-base-content">{{ ch.net_payout || '-' }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- INVENTORY IMPORT PREFERENCE (IF MULTI-ITEM) -->
-                    <div v-if="scoutItemsArray.length > 1" class="form-control border-t border-base-300 pt-3">
-                        <label class="label pb-1.5"><span class="label-text text-[10px] uppercase font-bold opacity-75">Inventory Import Preference</span></label>
-                        <div class="join grid grid-cols-2 w-full font-bold">
-                            <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': !saveIndividually }" @click="$emit('update:saveIndividually', false)">
-                                Save as Single Bundle
-                            </button>
-                            <button type="button" class="btn btn-xs join-item btn-outline text-[10px]" :class="{ 'btn-active btn-primary': saveIndividually }" @click="$emit('update:saveIndividually', true)">
-                                Split Individually (x{{ scoutItemsArray.length }})
-                            </button>
-                        </div>
-                        <div class="text-[10px] opacity-60 mt-1.5 leading-normal font-bold">
-                            <span v-if="saveIndividually">
-                                Creates {{ scoutItemsArray.length }} separate inventory items. Cost basis split evenly (${{ editForm.cost && !isNaN(parseFloat(editForm.cost)) ? (parseFloat(editForm.cost) / scoutItemsArray.length).toFixed(2) : '0.00' }} each).
-                            </span>
-                            <span v-else>
-                                Updates this item as a single combined inventory bundle.
-                            </span>
-                        </div>
-                    </div>
-
                     <!-- CARD ACTION BUTTONS -->
                     <div class="pt-2 flex flex-col sm:flex-row gap-2">
-                        <button v-if="saveIndividually && item" type="button" class="btn btn-primary btn-sm flex-1 font-bold shadow-xs gap-1.5" @click="$emit('deconstruct-ai-lot')">
-                            <Icon icon="solar:scissors-linear" class="w-4 h-4" />
-                            <span>Split Lot ({{ scoutItemsArray.length }} Items)</span>
-                        </button>
-                        <button v-else type="button" class="btn btn-secondary btn-sm flex-1 font-bold shadow-xs gap-1.5 text-white" @click="$emit('apply-bundle-suggestions')">
+                        <button type="button" class="btn btn-secondary btn-sm flex-1 font-bold shadow-xs gap-1.5 text-white" @click="$emit('apply-bundle-suggestions')">
                             <Icon icon="solar:magic-stick-linear" class="w-4 h-4" />
-                            <span>Apply AI to Listing Description</span>
+                            <span>Apply AI Title, Price &amp; Tags</span>
                         </button>
                         <button v-if="scoutMdText" type="button" class="btn btn-outline btn-sm px-3" @click="$emit('open-md-modal')" title="View Full Report">
                             <Icon icon="solar:document-text-linear" class="w-4 h-4" />
@@ -862,8 +707,8 @@
                 <!-- Empty State Prompt -->
                 <div v-else class="text-center py-6 border-2 border-dashed rounded-xl border-base-300 text-xs space-y-1.5 bg-base-100/50">
                     <Icon icon="solar:magic-stick-3-bold-duotone" class="w-7 h-7 mx-auto text-primary/50" />
-                    <p class="font-bold text-xs text-base-content/80">Ready for AI Deep Research</p>
-                    <p class="text-[11px] opacity-60 max-w-xs mx-auto">Use the <strong>AI Deep Research</strong> button in the bottom dock to scout photos, comps, and prices.</p>
+                    <p class="font-bold text-xs text-base-content/80">Ready for 🔍 Deep Scan</p>
+                    <p class="text-[11px] opacity-60 max-w-xs mx-auto">Use the <strong>🔍 Deep Scan</strong> button in the bottom dock to scout photos, comps, and prices.</p>
                 </div>
             </div>
 
@@ -989,6 +834,14 @@ const props = defineProps({
         type: String,
         default: null
     },
+    parsedRawAnalysis: {
+        type: [Object, Array],
+        default: null
+    },
+    parsedComponents: {
+        type: Array,
+        default: () => []
+    },
     saveIndividually: {
         type: Boolean,
         default: false
@@ -1057,7 +910,11 @@ const isAcquiredItem = computed(() => {
 });
 
 const exitPlaybook = computed(() => {
-    return deriveLotExitPlaybook(props.item || props.editForm, props.scoutResult);
+    const base = props.item || props.editForm;
+    const strategyItem = (props.parsedComponents && props.parsedComponents.length > 1)
+        ? { ...base, components: props.parsedComponents }
+        : base;
+    return deriveLotExitPlaybook(strategyItem, props.scoutResult);
 });
 
 const selectedFacility = ref('HG');

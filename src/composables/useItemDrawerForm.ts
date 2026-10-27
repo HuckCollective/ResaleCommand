@@ -130,8 +130,14 @@ export function useItemDrawerForm() {
             editForm.redFlags = Array.isArray(item.redFlags) ? [...item.redFlags] : [];
 
             let desc = item.marketDescription || item.description || '';
-            if (desc && typeof desc === 'string' && desc.trim().startsWith('{') && desc.includes('"identity"')) {
-                desc = '';
+            if (desc && typeof desc === 'string') {
+                if (
+                    desc.trim().startsWith('{') && desc.includes('"identity"') ||
+                    desc.includes('Speed Scout Appraisal Report') ||
+                    desc.includes('Sourcing Catalyst (Why Pay Up)')
+                ) {
+                    desc = '';
+                }
             }
             editForm.description = desc;
 

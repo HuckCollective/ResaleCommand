@@ -596,10 +596,102 @@ export function formatScoutReportMarkdown(item: any): string {
     return report.trim();
 }
 
+/**
+ * Recursively strips any "data:image/...", "data:...", or "blob:..." base64 / blob URLs
+ * and long raw string blobs from objects or arrays before JSON serialization.
+ * Only short URLs (< 500 chars) or Appwrite image IDs are preserved.
+ */
+export function stripBase64AndBlob<T = any>(val: T): T {
+    if (val === null || val === undefined) return val;
+
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (
+            trimmed.startsWith('data:') || 
+            trimmed.startsWith('blob:') ||
+            (trimmed.length > 500 && !trimmed.startsWith('http://') && !trimmed.startsWith('https://'))
+        ) {
+            return undefined as any;
+        }
+        return val;
+    }
+
+    if (Array.isArray(val)) {
+        return val
+            .map(item => stripBase64AndBlob(item))
+            .filter(item => item !== undefined) as any;
+    }
+
+    if (typeof val === 'object') {
+        const res: Record<string, any> = {};
+        for (const [key, value] of Object.entries(val)) {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (
+                    trimmed.startsWith('data:') || 
+                    trimmed.startsWith('blob:') || 
+                    (trimmed.length > 500 && !trimmed.startsWith('http://') && !trimmed.startsWith('https://'))
+                ) {
+                    continue;
+                }
+                res[key] = value;
+            } else {
+                const cleaned = stripBase64AndBlob(value);
+                if (cleaned !== undefined) {
+                    res[key] = cleaned;
+                }
+            }
+        }
+        return res as any;
+    }
+
+    return val;
+}
+
+/**
+ * Safely prepares and compacts components JSON string for Appwrite storage.
+ * Recursively strips any base64/blob strings and caps at 64,000 characters max.
+ */
+export function getSafeComponents(components: any): string | null {
+    if (!components) return null;
+    try {
+        let parsed = typeof components === 'string' ? JSON.parse(components) : components;
+        if (!parsed) return null;
+        parsed = stripBase64AndBlob(parsed);
+        if (!parsed) return null;
+
+        let str = JSON.stringify(parsed);
+        if (str.length > 64000) {
+            console.warn(`[Inventory] components JSON length (${str.length}) exceeds 64,000 chars. Compacting...`);
+            if (Array.isArray(parsed)) {
+                parsed = parsed.map((item: any) => {
+                    if (typeof item === 'object' && item !== null) {
+                        const { image, image_url, fetched_image, description, condition_notes, price_breakdown, ...rest } = item;
+                        return rest;
+                    }
+                    return item;
+                });
+                str = JSON.stringify(parsed);
+            }
+            if (str.length > 64000) {
+                str = str.substring(0, 64000);
+            }
+        }
+        return str.length > 64000 ? str.substring(0, 64000) : str;
+    } catch {
+        const s = typeof components === 'string' ? components : JSON.stringify(components);
+        return s.length > 64000 ? s.substring(0, 64000) : s;
+    }
+}
+
 export function getSafeRawAnalysis(item: any): string | null {
     if (!item) return null;
     try {
-        const parsedObj = typeof item === 'string' ? JSON.parse(item) : item;
+        let parsedObj = typeof item === 'string' ? JSON.parse(item) : item;
+        if (!parsedObj) return null;
+
+        // Clean out any data: or blob: base64 strings right up front
+        parsedObj = stripBase64AndBlob(parsedObj);
         if (!parsedObj) return null;
 
         // Clean and compact items to ensure ALL constituent items (e.g. 32+, 50+) are preserved
@@ -607,7 +699,13 @@ export function getSafeRawAnalysis(item: any): string | null {
             if (!li) return null;
             // Never allow large base64 image strings inside rawAnalysis JSON
             const cleanImg = (li.image || li.image_url || '');
-            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:image') && cleanImg.length < 500 ? cleanImg : undefined;
+            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:') && !cleanImg.startsWith('blob:') && cleanImg.length < 500 ? cleanImg : undefined;
+
+            const bBox = li.bounding_box || li.boundingBox || undefined;
+            const imgIdx = li.image_index !== undefined ? li.image_index : (li.imageIndex !== undefined ? li.imageIndex : undefined);
+            const views = Array.isArray(li.views) && li.views.length > 0
+                ? li.views
+                : (bBox ? [{ role: 'front', image_index: imgIdx ?? 0, bounding_box: bBox }] : undefined);
 
             return {
                 name: (li.name || li.title || li.identity || '').trim(),
@@ -632,7 +730,10 @@ export function getSafeRawAnalysis(item: any): string | null {
                     poor: li.price_breakdown.poor || undefined,
                     boutique_premium: li.price_breakdown.boutique_premium || undefined
                 } : undefined,
-                image_index: li.image_index !== undefined ? li.image_index : undefined,
+                bounding_box: bBox,
+                views: views,
+                image_index: imgIdx,
+                image_url: li.image_url || safeImg,
                 image: safeImg
             };
         };
@@ -640,7 +741,7 @@ export function getSafeRawAnalysis(item: any): string | null {
         const compactData = (obj: any) => {
             if (!obj || typeof obj !== 'object') return obj;
             const cleanImg = (obj.image || obj.image_url || obj.fetched_image || '');
-            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:image') && cleanImg.length < 500 ? cleanImg : undefined;
+            const safeImg = typeof cleanImg === 'string' && !cleanImg.startsWith('data:') && !cleanImg.startsWith('blob:') && cleanImg.length < 500 ? cleanImg : undefined;
 
             const res: any = {
                 identity: obj.identity || obj.title,
@@ -668,9 +769,10 @@ export function getSafeRawAnalysis(item: any): string | null {
                 currentBid: obj.currentBid !== undefined ? obj.currentBid : undefined,
                 boutiquePrice: obj.boutiquePrice !== undefined ? obj.boutiquePrice : undefined,
                 sourcingLocation: obj.sourcingLocation || obj.source_url || obj.url || undefined,
-                fetched_image: typeof obj.fetched_image === 'string' && obj.fetched_image.length < 500 ? obj.fetched_image : undefined,
-                fetched_images: Array.isArray(obj.fetched_images) ? obj.fetched_images.filter((u: any) => typeof u === 'string' && u.length < 500).slice(0, 10) : undefined,
-                original_scout_analysis: obj.original_scout_analysis || undefined,
+                fetched_image: typeof obj.fetched_image === 'string' && !obj.fetched_image.startsWith('data:') && !obj.fetched_image.startsWith('blob:') && obj.fetched_image.length < 500 ? obj.fetched_image : undefined,
+                fetched_images: Array.isArray(obj.fetched_images) ? obj.fetched_images.filter((u: any) => typeof u === 'string' && !u.startsWith('data:') && !u.startsWith('blob:') && u.length < 500).slice(0, 10) : undefined,
+                original_scout_analysis: obj.original_scout_analysis ? stripBase64AndBlob(obj.original_scout_analysis) : undefined,
+                exit_strategy: obj.exit_strategy ? stripBase64AndBlob(obj.exit_strategy) : undefined,
                 image: safeImg,
                 market_report: obj.market_report ? {
                     best_platform: obj.market_report.best_platform,
@@ -697,29 +799,42 @@ export function getSafeRawAnalysis(item: any): string | null {
         let compacted = Array.isArray(parsedObj) ? parsedObj.map(compactData) : compactData(parsedObj);
         let resultStr = JSON.stringify(compacted);
 
-        // Ensure we NEVER exceed Appwrite 65,000 character limit
-        if (resultStr.length > 60000) {
-            console.warn(`[Inventory] rawAnalysis length (${resultStr.length}) exceeds 60,000 chars. Compacting further...`);
+        // Ensure we NEVER exceed Appwrite 65,000 character limit (Strictly cap at 64,000 chars max)
+        if (resultStr.length > 64000) {
+            console.warn(`[Inventory] rawAnalysis length (${resultStr.length}) exceeds 64,000 chars. Compacting further...`);
             if (Array.isArray(compacted)) {
                 compacted.forEach((c: any) => {
-                    if (c.lot_items) c.lot_items.forEach((li: any) => { delete li.image; });
+                    if (c.lot_items) c.lot_items.forEach((li: any) => { delete li.image; delete li.price_breakdown; });
+                    delete c.original_scout_analysis;
                 });
-            } else if (compacted && compacted.lot_items) {
-                compacted.lot_items.forEach((li: any) => { delete li.image; });
+            } else if (compacted) {
+                if (compacted.lot_items) compacted.lot_items.forEach((li: any) => { delete li.image; delete li.price_breakdown; });
+                delete compacted.original_scout_analysis;
             }
             resultStr = JSON.stringify(compacted);
-            if (resultStr.length > 60000) {
+            if (resultStr.length > 64000) {
                 // Remove comparables to stay under limit if still oversized
                 if (compacted && compacted.comparables) delete compacted.comparables;
                 resultStr = JSON.stringify(compacted);
             }
+            if (resultStr.length > 64000) {
+                if (compacted) {
+                    delete compacted.keywords;
+                    delete compacted.shipping_info;
+                    delete compacted.market_report;
+                }
+                resultStr = JSON.stringify(compacted);
+            }
+            if (resultStr.length > 64000) {
+                resultStr = resultStr.substring(0, 64000);
+            }
         }
 
-        return resultStr;
+        return resultStr.length > 64000 ? resultStr.substring(0, 64000) : resultStr;
     } catch (e) {
         // Fallback to safe substring if JSON parsing fails
         const s = typeof item === 'string' ? item : JSON.stringify(item);
-        return s.length > 60000 ? s.substring(0, 60000) : s;
+        return s.length > 64000 ? s.substring(0, 64000) : s;
     }
 }
 
@@ -966,11 +1081,18 @@ export function sanitizeItemPayload(rawPayload: Record<string, any>, options: Sa
         salesChannel: 255,
         countryOfOrigin: 255,
         auctionEndsAt: 64,
-        components: 1000,
+        components: 64000,
         redFlags: 1000,
-        marketDescription: 65000,
-        rawAnalysis: 65000
+        marketDescription: 64000,
+        rawAnalysis: 64000
     };
+
+    if (cleanDoc.rawAnalysis !== undefined && cleanDoc.rawAnalysis !== null) {
+        cleanDoc.rawAnalysis = getSafeRawAnalysis(cleanDoc.rawAnalysis);
+    }
+    if (cleanDoc.components !== undefined && cleanDoc.components !== null) {
+        cleanDoc.components = getSafeComponents(cleanDoc.components);
+    }
 
     for (const [field, maxLen] of Object.entries(stringLimits)) {
         if (cleanDoc[field] !== undefined && cleanDoc[field] !== null) {
@@ -1339,7 +1461,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             cartId: extraData.cartId || undefined,
             marketDescription: extraData.marketDescription ? String(extraData.marketDescription).substring(0, 4900) : undefined,
             keywords: Array.isArray(extraData.keywords) ? extraData.keywords : (extraData.scoutData && Array.isArray(extraData.scoutData.keywords) ? extraData.scoutData.keywords : undefined),
-            components: extraData.components ? (typeof extraData.components === 'string' ? extraData.components.substring(0, 4900) : JSON.stringify(extraData.components).substring(0, 4900)) : undefined,
+            components: extraData.components ? getSafeComponents(extraData.components) : undefined,
             quantity: extraData.quantity || 1,
             parentLotId: extraData.parentLotId || undefined,
             purchaseId: extraData.purchaseId || undefined,
@@ -1704,8 +1826,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             if (updates.components === null || updates.components === '') {
                 data.components = null;
             } else {
-                const compStr = typeof updates.components === 'string' ? updates.components : JSON.stringify(updates.components);
-                data.components = compStr && compStr.length > 4900 ? compStr.substring(0, 4900) : compStr;
+                data.components = getSafeComponents(updates.components);
             }
         }
         if (updates.quantity !== undefined) {

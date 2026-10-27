@@ -185,9 +185,13 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
         // Ground financial math: if AI returned dummy sample values (180/275), calculate dynamically from real detected pieces
         const isPromptArtifact = (aiStrategy.projected_bulk_yield === 180 && aiStrategy.projected_split_yield === 275);
         const splitYield = (calcSplit > 0) ? calcSplit : parseNumeric(aiStrategy.projected_split_yield ?? aiStrategy.projectedSplitYield, 150);
-        const bulkYield = (isPromptArtifact && bulkPrice > 0) 
+        let bulkYield = (isPromptArtifact && bulkPrice > 0) 
             ? bulkPrice 
             : parseNumeric(aiStrategy.projected_bulk_yield ?? aiStrategy.projectedBulkYield ?? bulkPrice, Math.round(splitYield * 0.65));
+        
+        if (bulkYield >= splitYield) {
+            bulkYield = Math.round(splitYield * 0.65);
+        }
         
         const pct = bulkYield > 0 ? Math.round(((splitYield - bulkYield) / bulkYield) * 100) : 35;
 
@@ -217,6 +221,8 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
         else if (typeof item.components === 'string') {
             try { components = JSON.parse(item.components); } catch (e) {}
         }
+    } else if (Array.isArray(item.lot_items)) {
+        components = item.lot_items;
     }
 
     const title = (item.title || '').trim();
@@ -414,16 +420,28 @@ export function deriveLotExitPlaybook(item: any, scoutData?: any): LotExitPlaybo
         }
     }
 
+    // When discrete components are present, ensure split yield is the true sum of all components
+    let componentSum = 0;
+    if (components && components.length > 0) {
+        componentSum = components.reduce((sum, c) => {
+            const val = parsePriceValue(c?.val || c?.resalePrice || c?.price_breakdown?.fair || c?.estimated_value || c?.price, 'midpoint', 0);
+            return sum + val;
+        }, 0);
+    }
+
     const heroSum = heroes.reduce((s, h) => s + parseNumeric(h.numericPrice, 0), 0);
     const combineSum = combines.reduce((s, c) => s + parseNumeric(c.numericPrice, 0), 0);
     const fillerSum = floorFillers ? parseNumeric(floorFillers.numericPrice, 0) : 0;
-    const calculatedSum = heroSum + combineSum + fillerSum;
+    const calculatedSum = Math.max(componentSum, heroSum + combineSum + fillerSum);
     const projectedSplit = calculatedSum > 0 
         ? calculatedSum 
         : (bulkPrice > 0 ? Math.round(bulkPrice * 1.35) : Math.round(Math.max(45, totalCost * 1.8)));
-    const projectedBulk = bulkPrice > 0 
-        ? bulkPrice 
-        : Math.round(projectedSplit * 0.65);
+    
+    // Bulk liquidation price must always be discounted relative to sliced yield (typically ~65%, never higher)
+    let projectedBulk = bulkPrice > 0 ? bulkPrice : Math.round(projectedSplit * 0.65);
+    if (projectedBulk >= projectedSplit) {
+        projectedBulk = Math.round(projectedSplit * 0.65);
+    }
     const pct = projectedBulk > 0 ? Math.round(((projectedSplit - projectedBulk) / projectedBulk) * 100) : 35;
 
     return {
@@ -620,7 +638,7 @@ export function deriveInventoryPlays(
 
         // Play 1: Anchor Skim & Floor Fill (Balanced / 100% Cost Recovery)
         const p1Gross = baseLotStrategy.projectedSplitYield;
-        const p1Fees = Math.round(p1Gross * 0.11 * 100) / 100; // ~11% blended fee
+        const p1Fees = Math.round(p1Gross * 0.15 * 100) / 100; // 15% Memory Den consignment fee
         const p1Payout = Math.round((p1Gross - p1Fees) * 100) / 100;
         const p1Net = Math.round((p1Payout - totalCost) * 100) / 100;
         plays.push({
@@ -678,7 +696,7 @@ export function deriveInventoryPlays(
 
         // Play 2: Curated Thematic Batches (High AOV / Shipping Leverage)
         const p2Gross = Math.round(p1Gross * 1.08);
-        const p2Fees = Math.round(p2Gross * 0.12 * 100) / 100;
+        const p2Fees = Math.round(p2Gross * 0.15 * 100) / 100; // 15% standard commission
         const p2Payout = Math.round((p2Gross - p2Fees) * 100) / 100;
         const p2Net = Math.round((p2Payout - totalCost) * 100) / 100;
         plays.push({
@@ -729,7 +747,7 @@ export function deriveInventoryPlays(
         // Play 3: Booth Grazing Blitz (Velocity / Zero Shipping)
         const grazingPerItem = totalPieces > 10 ? 8 : 10;
         const p3Gross = totalPieces * grazingPerItem;
-        const p3Fees = Math.round(p3Gross * 0.10 * 100) / 100;
+        const p3Fees = Math.round(p3Gross * 0.15 * 100) / 100; // 15% Memory Den booth cut
         const p3Payout = Math.round((p3Gross - p3Fees) * 100) / 100;
         const p3Net = Math.round((p3Payout - totalCost) * 100) / 100;
         plays.push({
@@ -812,7 +830,7 @@ export function deriveInventoryPlays(
 
         // Play 5: Restock / Replenish Batch Units
         const restockYield = bulkPrice > 0 ? bulkPrice : Math.round(totalCost * 2);
-        const restockFees = Math.round(restockYield * 0.10 * 100) / 100;
+        const restockFees = Math.round(restockYield * 0.15 * 100) / 100; // 15% Memory Den fee
         const restockPayout = Math.round((restockYield - restockFees) * 100) / 100;
         const restockNet = Math.round((restockPayout - totalCost) * 100) / 100;
         plays.push({
@@ -833,7 +851,7 @@ export function deriveInventoryPlays(
             roiPct: calculateRoiPct(restockNet, totalCost),
             velocityDays: '1 - 7 days',
             laborEffort: 'Low',
-            summary: `Physical unit replenishment: Add newly acquired copies to this active SKU crate and recalculate average cost basis without writing a new price tag. (To batch with other items in your catalog, use AI Batch Catalog).`,
+            summary: `Physical unit replenishment: Add newly acquired copies to this active SKU crate and recalculate average cost basis without writing a new price tag. (To batch with other items in your catalog, use 📦 Combine Similar).`,
             tiersBreakdown: [
                 {
                     title: `📦 Active Inventory Batch`,
@@ -910,9 +928,9 @@ export function deriveInventoryPlays(
         }
 
         // Play 1: Booth Anchor Centerpiece (Physical Foot-Traffic Magnet)
-        // Memory Den 10% consignment fee, zero shipping overhead
+        // Memory Den 15% consignment fee, zero shipping overhead
         const p1Gross = Math.round(compFair);
-        const p1Fees = Math.round(p1Gross * 0.10 * 100) / 100;
+        const p1Fees = Math.round(p1Gross * 0.15 * 100) / 100;
         const p1Payout = Math.round((p1Gross - p1Fees) * 100) / 100;
         const p1Net = Math.round((p1Payout - totalCost) * 100) / 100;
         plays.push({
@@ -1210,4 +1228,198 @@ export function deriveInventoryPlays(
 
     return plays;
 }
+
+// =========================================================================
+// STRATEGIC "SPLIT VS. BUNDLE" RECOMMENDATION ENGINE
+// Evaluates Split Yield vs. Bulk Lot Yield to formulate clear tactical plays
+// =========================================================================
+
+export interface LotSplitRecommendation {
+    type: 'split_singles' | 'keep_set' | 'skim_hero';
+    action: 'split' | 'bundle' | 'skim';
+    pillText: string;
+    badgeClass: string;
+    splitYield: number;
+    bulkYield: number;
+    upside: number;
+    heroItem?: {
+        name: string;
+        shortName: string;
+        value: number;
+    };
+    tacticalExecutionNote: string;
+    ebayExecutionNote: string;
+    itemsBreakdown: { name: string; shortName: string; value: number; isHero: boolean }[];
+}
+
+/**
+ * Derives a strategic "Split vs. Bundle" recommendation comparing
+ * Split Singles Yield vs. Bulk Lot Yield.
+ */
+export function getLotSplitRecommendation(item: any, scoutData?: any): LotSplitRecommendation | null {
+    if (!item) return null;
+
+    // 1. Extract lot items / components
+    let components: any[] = [];
+    if (Array.isArray(item.lot_items) && item.lot_items.length > 0) {
+        components = item.lot_items;
+    } else if (Array.isArray(item.components) && item.components.length > 0) {
+        components = item.components;
+    } else if (typeof item.components === 'string') {
+        try {
+            const p = JSON.parse(item.components);
+            if (Array.isArray(p)) components = p;
+        } catch (e) {}
+    } else if (Array.isArray(scoutData?.lot_items) && scoutData.lot_items.length > 0) {
+        components = scoutData.lot_items;
+    } else if (Array.isArray(scoutData?.items) && scoutData.items.length > 1) {
+        components = scoutData.items;
+    }
+
+    if (components.length <= 1) {
+        return null;
+    }
+
+    // Helper to extract value
+    const getItemVal = (c: any): number => {
+        const b = parsePriceValue(c.boutiquePrice || c.price_breakdown?.boutique_premium || c.pricing_potential?.boutique || c.boutique, 'midpoint', 0);
+        if (b > 0) return b;
+        const f = parsePriceValue(c.resalePrice || c.val || c.fair || c.price_breakdown?.fair || c.pricing_potential?.fair || c.estimated_value, 'midpoint', 0);
+        if (f > 0) return f;
+        return parsePriceValue(c.estimated_resale || c.price, 'midpoint', 20);
+    };
+
+    // Helper to get a clean short tag name
+    const getShortName = (rawName: string, idx: number, isHero: boolean): string => {
+        if (!rawName) return `Item #${idx + 1}`;
+        let clean = rawName.trim();
+
+        // Check for specific edition / module codes like DL9, DL8, B2, X1, etc.
+        const codeMatch = clean.match(/\b([A-Z]{1,3}\d{1,3})\b/);
+        const isHc = /\b(hardcover|hardback|hc)\b/i.test(clean);
+
+        if (isHero) {
+            if (codeMatch && isHc) return `#1 ${codeMatch[1]} HC`;
+            if (isHc) return `#1 HC`;
+            if (codeMatch) return `#1 ${codeMatch[1]}`;
+            const words = clean.replace(/^(?:the|a|an)\s+/i, '').split(/\s+/);
+            const shortTitle = words.slice(0, 2).join(' ');
+            return `#1 ${shortTitle.substring(0, 14)}`;
+        }
+
+        if (codeMatch) {
+            return isHc ? `${codeMatch[1]} HC` : codeMatch[1];
+        }
+
+        // Strip boilerplate prefixes
+        clean = clean
+            .replace(/^(?:the|a|an)\s+/i, '')
+            .replace(/\b(?:ad&d|tsr|d&d|dungeons\s*&\s*dragons|module|edition|vintage)\b/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+        const words = clean.split(/\s+/).filter(Boolean);
+        const brief = words.slice(0, 2).join(' ');
+        return (brief.length > 14 ? brief.substring(0, 12) + '...' : brief) || `Item #${idx + 1}`;
+    };
+
+    // Identify Hero Anchor
+    const maxVal = Math.max(...components.map(getItemVal));
+    const sorted = [...components].sort((a, b) => {
+        const aHero = a.anchor || a.hero || a.is_anchor || a.is_hero || (getItemVal(a) === maxVal && maxVal > 0);
+        const bHero = b.anchor || b.hero || b.is_anchor || b.is_hero || (getItemVal(b) === maxVal && maxVal > 0);
+        if (aHero && !bHero) return -1;
+        if (!aHero && bHero) return 1;
+        return getItemVal(b) - getItemVal(a);
+    });
+
+    const itemsBreakdown = sorted.map((c, idx) => {
+        const val = Math.round(getItemVal(c));
+        const isHero = idx === 0 && (c.anchor || c.hero || c.is_anchor || c.is_hero || (val === maxVal && maxVal > 0));
+        const name = c.name || c.title || c.identity || c.item || `Item #${idx + 1}`;
+        const shortName = getShortName(name, idx, isHero);
+        return {
+            name,
+            shortName,
+            value: val,
+            isHero
+        };
+    });
+
+    const splitYield = itemsBreakdown.reduce((sum, it) => sum + it.value, 0);
+    
+    // Bulk yield calculation: secondary market wholesale discount ~30% off split singles
+    let bulkYield = 0;
+    const aiExit = item.exit_strategy || scoutData?.exit_strategy;
+    if (aiExit?.projected_bulk_yield && aiExit.projected_bulk_yield > 0 && aiExit.projected_bulk_yield !== 180) {
+        bulkYield = Math.round(aiExit.projected_bulk_yield);
+    } else {
+        bulkYield = Math.round(splitYield * 0.70);
+    }
+    // Prevent bulk yield >= split yield
+    if (bulkYield >= splitYield) {
+        bulkYield = Math.round(splitYield * 0.75);
+    }
+
+    const upside = splitYield - bulkYield;
+    const itemCount = itemsBreakdown.length;
+    const hero = itemsBreakdown[0];
+    const secondItem = itemsBreakdown[1];
+
+    // Determine Strategy Play Type:
+    // 1. Skim Hero: 1 standout piece accounts for >= 48% of total value and beats #2 by at least 1.6x
+    const isHeroDominant = hero && (hero.value >= splitYield * 0.48) && (!secondItem || hero.value >= secondItem.value * 1.6);
+    
+    // 2. Keep Together as Set: upside is marginal (< $15) or average item value is under $15
+    const isLowValueFillers = (splitYield / itemCount) < 15;
+    const isMarginalUpside = upside < 15;
+
+    let type: 'split_singles' | 'keep_set' | 'skim_hero';
+    let action: 'split' | 'bundle' | 'skim';
+    let pillText: string;
+    let badgeClass: string;
+    let tacticalExecutionNote: string;
+    let ebayExecutionNote: string;
+
+    // Formatting items breakdown for bullet note: e.g. "#1 HC at $60, DL9 at $40, DL8 at $35"
+    const breakdownStr = itemsBreakdown.map(it => `${it.shortName} at $${it.value}`).join(', ');
+
+    if (isHeroDominant) {
+        type = 'skim_hero';
+        action = 'skim';
+        pillText = `👑 Recommended Play: Skim #1 Hero ($${hero.value}) + Bundle Remainder`;
+        badgeClass = 'badge-warning text-warning-content font-bold shadow-2xs';
+        tacticalExecutionNote = `Tag #1 ${hero.shortName} at $${hero.value} as showcase single; bundle remaining ${itemCount - 1} pieces as a $${splitYield - hero.value} booth combine`;
+        ebayExecutionNote = `List #1 ${hero.shortName} ($${hero.value}) on eBay / Showcase; clear remainder in booth basket`;
+    } else if (isMarginalUpside && isLowValueFillers) {
+        type = 'keep_set';
+        action = 'bundle';
+        pillText = `📦 Recommended Play: Keep Together as Set ($${bulkYield || splitYield} Bundle)`;
+        badgeClass = 'badge-accent text-accent-content font-bold shadow-2xs';
+        tacticalExecutionNote = `Keep together as ${itemCount}-piece matched set at $${bulkYield || splitYield}. Avoids individual tag fees and handling friction`;
+        ebayExecutionNote = `List entire ${itemCount}-piece set intact as 1 complete lot ($${bulkYield || splitYield}) with buyer-paid shipping`;
+    } else {
+        type = 'split_singles';
+        action = 'split';
+        pillText = `⚡ Recommended Play: Split into ${itemCount} Singles ($${splitYield} Split vs. ~$${bulkYield} Bulk = +$${upside} Upside)`;
+        badgeClass = 'badge-primary text-primary-content font-bold shadow-2xs';
+        tacticalExecutionNote = `Tag as ${itemCount} individual booth singles: ${breakdownStr}`;
+        ebayExecutionNote = `List top singles (#1 ${hero.shortName} at $${hero.value}) individually on eBay; tag rest for booth`;
+    }
+
+    return {
+        type,
+        action,
+        pillText,
+        badgeClass,
+        splitYield,
+        bulkYield,
+        upside,
+        heroItem: hero ? { name: hero.name, shortName: hero.shortName, value: hero.value } : undefined,
+        tacticalExecutionNote,
+        ebayExecutionNote,
+        itemsBreakdown
+    };
+}
+
 

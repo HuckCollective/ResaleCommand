@@ -1,8 +1,8 @@
 <template>
     <Teleport to="body">
         <div class="relative z-400">
-            <!-- Backdrop -->
-            <div class="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="closeDrawer"></div>
+            <!-- Backdrop (Solid bg-black/60 without blur to prevent severe GPU scroll lag across 50+ cards) -->
+            <div class="fixed inset-0 bg-black/60 transition-opacity" @click.stop.prevent="closeDrawer"></div>
 
             <!-- Drawer Container: Mobile full-width, Desktop expanded (860px / 980px) -->
             <div class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
@@ -58,6 +58,8 @@
                         :scoutItemsArray="scoutItemsArray"
                         :scoutTotalRange="scoutTotalRange"
                         :scoutMdText="scoutMdText"
+                        :parsedRawAnalysis="parsedRawAnalysis"
+                        :parsedComponents="lotComponents"
                         :generatingDescription="generatingDescription"
                         :fetchedImages="fetchedImages"
                         :fetchingImages="fetchingImages"
@@ -92,17 +94,19 @@
                 </div>
 
                 <!-- 4. CHECKLIST / VERIFY TAB (Extracted Subcomponent) -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'verify'">
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-if="mainTab === 'verify'">
                     <ItemVerifyTab
-                        :componentsList="componentsList"
+                        :componentsList="verifyChecklist"
                         :extracting="extracting"
+                        :hasGalleryPhotos="(editForm.existingGalleryIds?.length || 0) > 0"
                         @photos-captured="handleVerifyPhotosCaptured"
-                        @clear="componentsList = []"
+                        @extract-from-gallery="extractChecklistFromGallery"
+                        @clear="verifyChecklist = []"
                     />
                 </div>
 
                 <!-- 5. PROFIT PLAYBOOK TAB (Extracted Subcomponent) -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-show="mainTab === 'lot'">
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-if="mainTab === 'lot'">
                     <ItemLotTab
                         :item="item"
                         :parentItem="parentItem"
@@ -116,6 +120,8 @@
                         :inventoryItems="inventoryItems"
                         :scout-result="scoutResult"
                         :scout-purchase-strategy="scoutPurchaseStrategy"
+                        :parsed-raw-analysis="parsedRawAnalysis"
+                        :parsed-components="lotComponents"
                         @selectItem="$emit('selectItem', $event)"
                         @open-splitter="handleOpenSplitter"
                         @uncombine="uncombineLot"
@@ -197,7 +203,7 @@
                     <div class="flex justify-between items-center pb-3 border-b border-base-300">
                         <h3 class="font-bold text-base flex items-center gap-2">
                             <Icon icon="solar:document-text-bold" class="w-5 h-5 text-primary" />
-                            AI Deep Research Report
+                            🔍 Deep Scan Report
                         </h3>
                         <button class="btn btn-sm btn-circle btn-ghost" @click="showMdModal = false">✕</button>
                     </div>
@@ -250,7 +256,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
+import { ref, shallowRef, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
 import { marked } from 'marked';
 import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
@@ -313,7 +319,9 @@ const fetchLocations = async () => {
 
 onMounted(() => {
     document.body.style.overflow = 'hidden';
-    fetchLocations();
+    setTimeout(() => {
+        fetchLocations();
+    }, 50);
 });
 
 watch(currentTeam, (n) => { if(n) fetchLocations(); });
@@ -430,7 +438,8 @@ const openMdModal = () => {
 };
 
 const extracting = ref(false);
-const componentsList = ref([]);
+// Tab 2 (Verify) checklist is intentionally separate from lotComponents (Tab 3 Playbook bundle components)
+const verifyChecklist = ref([]);
 
 const formatSourceDisplayName = (urlOrStr) => {
     if (!urlOrStr) return '';
@@ -476,7 +485,7 @@ const performExtraction = async (imagesPayload) => {
         });
         const data = await res.json();
         if (data.components) {
-            componentsList.value = data.components;
+            verifyChecklist.value = data.components;
         } else {
             addToast({ type: 'error', message: "Failed to parse list from image. " + (data.error || "") });
         }
@@ -523,6 +532,34 @@ const handleVerifyPhotosCaptured = async (files) => {
             performExtraction(valid);
         }
     }
+};
+
+// 1-click: run checklist extraction using the item's already-uploaded gallery photos
+const extractChecklistFromGallery = async () => {
+    const ids = Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds.slice(0, 6) : [];
+    if (ids.length === 0) {
+        addToast({ type: 'info', message: 'No gallery photos uploaded yet.' });
+        return;
+    }
+    const dataUrls = await Promise.all(ids.map(async (id) => {
+        try {
+            const blob = await (await fetch(getAssetUrl(id))).blob();
+            return await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch (e) {
+            return null;
+        }
+    }));
+    const valid = dataUrls.filter(Boolean);
+    if (valid.length === 0) {
+        addToast({ type: 'error', message: 'Could not load gallery photos for extraction.' });
+        return;
+    }
+    performExtraction(valid);
 };
 
 async function copyToClipboard(text) {
@@ -594,6 +631,9 @@ const isAcquiredItem = computed(() => {
     return isItemAcquired(props.item?.status || editForm.status || '');
 });
 
+// Pre-parsed local shallowRef state to avoid expensive JSON.parse in reactive computed properties during scroll/input
+const parsedRawAnalysis = shallowRef(null);
+const parsedComponents = shallowRef([]);
 const scoutResult = ref(null);
 
 const scoutItemsArray = computed(() => {
@@ -612,6 +652,13 @@ const scoutItemsArray = computed(() => {
     }
     if (scoutResult.value.items && Array.isArray(scoutResult.value.items)) return scoutResult.value.items;
     return [scoutResult.value];
+});
+
+// Single reactive source of truth for lot components shared by Tab 1 (summary pill) and Tab 3 (Playbook).
+// Fresh Deep Research results win; otherwise fall back to the pre-parsed saved components.
+const lotComponents = computed(() => {
+    if (scoutItemsArray.value.length > 1) return scoutItemsArray.value;
+    return parsedComponents.value || [];
 });
 
 const cropPreviews = ref({});
@@ -689,12 +736,9 @@ const suggestedTagTitleStr = computed(() => {
     if (props.item?.tagTitle || props.item?.tag_title) {
         return cleanTagTitle(props.item.tagTitle || props.item.tag_title);
     }
-    if (props.item?.rawAnalysis) {
-        try {
-            const ai = typeof props.item.rawAnalysis === 'string' ? JSON.parse(props.item.rawAnalysis) : props.item.rawAnalysis;
-            const aiObj = Array.isArray(ai) ? ai[0] : ai;
-            if (aiObj?.tag_title || aiObj?.tagTitle) return cleanTagTitle(aiObj.tag_title || aiObj.tagTitle);
-        } catch (e) {}
+    if (parsedRawAnalysis.value) {
+        const aiObj = Array.isArray(parsedRawAnalysis.value) ? parsedRawAnalysis.value[0] : parsedRawAnalysis.value;
+        if (aiObj?.tag_title || aiObj?.tagTitle) return cleanTagTitle(aiObj.tag_title || aiObj.tagTitle);
     }
 
     // 3. Fallback: Auto-condense from suggestedTitleStr if available
@@ -1098,7 +1142,8 @@ const uncombineLot = async () => {
         ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined Main Lot.`
         : `Uncombine and remove this Main Lot?`;
     
-    if (!window.confirm(confirmMsg)) return;
+    const confirmed = await confirmDialog(confirmMsg);
+    if (!confirmed) return;
 
     uncombining.value = true;
     showLoader("Rolling back lot...", {
@@ -1151,10 +1196,12 @@ const initForm = () => {
         
         scoutResult.value = null;
         scoutMdText.value = null;
+        parsedRawAnalysis.value = null;
 
         if (i.rawAnalysis) {
             try {
-                const parsed = JSON.parse(i.rawAnalysis);
+                const parsed = typeof i.rawAnalysis === 'string' ? JSON.parse(i.rawAnalysis) : i.rawAnalysis;
+                parsedRawAnalysis.value = parsed;
                 scoutResult.value = parsed;
             } catch (e) {}
         }
@@ -1166,6 +1213,7 @@ const initForm = () => {
         }
     } else {
         mainPhotoSelection.value = { type: 'none', val: null };
+        parsedRawAnalysis.value = null;
         scoutResult.value = null;
         scoutMdText.value = null;
         scoutQuery.value = '';
@@ -1178,10 +1226,19 @@ const initForm = () => {
     
     let parsedComps = [];
     if (props.item && props.item.components) {
-        try { parsedComps = JSON.parse(props.item.components); } catch (e) {}
+        if (Array.isArray(props.item.components)) {
+            parsedComps = props.item.components;
+        } else if (typeof props.item.components === 'string') {
+            try { parsedComps = JSON.parse(props.item.components); } catch (e) {}
+        }
     }
-    componentsList.value = parsedComps;
-    fetchLotChildren();
+    parsedComponents.value = parsedComps;
+    verifyChecklist.value = parsedComps;
+    setTimeout(() => {
+        if (mainTab.value === 'lot') {
+            fetchLotChildren();
+        }
+    }, 50);
 };
 
 watch(() => props.item, initForm, { immediate: true });
@@ -1189,6 +1246,24 @@ watch(() => props.item, initForm, { immediate: true });
 const closeDrawer = () => {
     emit('close');
 };
+
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        closeDrawer();
+    }
+};
+
+onMounted(() => {
+    if (typeof window !== 'undefined') {
+        window.addEventListener('keydown', handleKeydown);
+    }
+});
+
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('keydown', handleKeydown);
+    }
+});
 
 let descAbortController = new AbortController();
 
@@ -1269,9 +1344,11 @@ const saveEdit = async () => {
             galleryFiles: finalGallery,
             existingGalleryIds: Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : [],
             scoutData: scoutResult.value || null,
-            components: (componentsList.value && Array.isArray(componentsList.value) && componentsList.value.length > 0) 
-                ? JSON.stringify(componentsList.value) 
-                : null
+            components: (lotComponents.value && lotComponents.value.length > 0)
+                ? JSON.stringify(lotComponents.value)
+                : ((verifyChecklist.value && Array.isArray(verifyChecklist.value) && verifyChecklist.value.length > 0)
+                    ? JSON.stringify(verifyChecklist.value)
+                    : null)
         };
         emit('save', payload);
     } catch (e) {
@@ -1633,7 +1710,7 @@ const analyzeExistingItem = async () => {
         // Sourcing Lifecycle Guardrail: unacquired items strictly use Speed Scout (/api/identify-item)
         const apiEndpoint = (isAcquiredItem.value && isLot && totalPhotos > 1) ? '/api/inspect-lot' : '/api/identify-item';
 
-        showLoader(isAcquiredItem.value ? "Analyzing with AI Deep Research & Playbook..." : "Scanning with Speed Scout AI...", {
+        showLoader(isAcquiredItem.value ? "Analyzing with 🔍 Deep Scan & Playbook..." : "Scanning with ⚡ Quick Scout...", {
             step: isLot && isAcquiredItem.value ? `Step 1 of 3: Scanning ${totalPhotos} photos for lot cataloging & exit playbook...` : `Step 1 of 3: Scanning item visual details & title...`,
             progress: progressVal,
             basket: 'solar:archive-minimalistic-bold-duotone',
@@ -1661,7 +1738,7 @@ const analyzeExistingItem = async () => {
             if (progressVal >= 80) {
                 stepMsg = isLot ? `Step 3 of 3: Consolidating lot appraisal & split strategy...` : `Step 3 of 3: Calculating fair resale pricing & condition...`;
             }
-            updateLoader(isAcquiredItem.value ? "Analyzing with AI Deep Research..." : "Scanning with Speed Scout AI...", stepMsg, progressVal);
+            updateLoader(isAcquiredItem.value ? "Analyzing with 🔍 Deep Scan..." : "Scanning with ⚡ Quick Scout...", stepMsg, progressVal);
         }, 1000);
 
         const response = await fetch(apiEndpoint, {
@@ -1692,6 +1769,7 @@ const analyzeExistingItem = async () => {
 
         if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
             scoutResult.value = data;
+            parsedComponents.value = data.lot_items;
             let desc = `--- 📦 MAIN LOT APPRAISAL & BOOTH STRATEGY (${data.lot_items.length} Cataloged Items) ---\n\n`;
             if (data.title) desc += `**Suggested Title:** ${data.title}\n\n`;
             if (data.condition_notes) desc += `**Condition Overview:** ${data.condition_notes}\n\n`;
@@ -1953,12 +2031,26 @@ const applyBundleSuggestions = () => {
     if (suggestedListPriceStr.value) editForm.resalePrice = suggestedListPriceStr.value;
     if (suggestedEstLowStr.value) editForm.estLow = suggestedEstLowStr.value;
     if (suggestedEstHighStr.value) editForm.estHigh = suggestedEstHighStr.value;
-    if (scoutMdText.value) {
-        editForm.description = scoutMdText.value;
-    } else if (suggestedDescriptionStr.value) {
-        editForm.description = suggestedDescriptionStr.value;
+    if (suggestedTagTitleStr.value) editForm.tagTitle = suggestedTagTitleStr.value;
+    // Merge AI keywords (deduped, case-insensitive). Never overwrite the public Listing Description
+    // with internal scout/reseller notes.
+    const res = scoutResult.value;
+    const aiKeywords = Array.isArray(res)
+        ? res.flatMap(i => i?.keywords || [])
+        : (res?.keywords || []);
+    if (Array.isArray(aiKeywords) && aiKeywords.length > 0) {
+        const current = Array.isArray(editForm.keywords) ? editForm.keywords : [];
+        const seen = new Set(current.map(k => String(k).toLowerCase()));
+        const merged = [...current];
+        aiKeywords.forEach(k => {
+            if (k && !seen.has(String(k).toLowerCase())) {
+                seen.add(String(k).toLowerCase());
+                merged.push(k);
+            }
+        });
+        editForm.keywords = merged;
     }
-    addToast({ type: 'success', message: 'Applied AI suggestions to listing form.' });
+    addToast({ type: 'success', message: 'Applied AI title, price & tags to listing form.' });
 };
 
 watch(mainTab, (newVal) => {
@@ -2093,10 +2185,11 @@ const splitOneActive = async () => {
             existingGalleryIds: editForm.existingGalleryIds
         }, { copyAll: false });
 
+        const isRetail = /^(MD|DT)\b/i.test(editForm.storageLocation || '');
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
-            status: editForm.status === 'sold' ? 'acquired' : editForm.status,
+            status: editForm.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
             storageLocation: editForm.storageLocation,

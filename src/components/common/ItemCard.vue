@@ -3,7 +3,7 @@
     <div v-if="horizontal"
          class="card bg-base-100 shadow-xs border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-row rounded-xl p-2.5 gap-2.5 sm:gap-3 items-center"
          :class="[containerClass, isDeconstructed ? 'opacity-65 border-dashed bg-base-200/40' : '']"
-         @click="$emit('click-card', item); $emit('click', item)">
+         @click="$emit('click-card', item)">
         
         <!-- Left Thumbnail (Tap Photo to Select) -->
         <div 
@@ -97,8 +97,17 @@
                 </div>
 
                 <!-- Actions Slot -->
-                <div class="shrink-0" @click.stop>
-                    <slot name="actions"></slot>
+                <div class="shrink-0" @click.stop.prevent>
+                    <slot name="actions">
+                        <button 
+                            type="button"
+                            @click.stop.prevent="$emit('click-card', item)" 
+                            class="btn btn-xs btn-primary font-bold rounded-lg"
+                            title="Edit item in drawer"
+                        >
+                            Edit
+                        </button>
+                    </slot>
                 </div>
             </div>
         </div>
@@ -108,10 +117,10 @@
     <div v-else
          class="card bg-base-100 shadow-sm border border-base-200 hover:border-primary/60 hover:shadow-md transition-all duration-200 group relative cursor-pointer overflow-hidden flex flex-col rounded-xl"
          :class="[containerClass, isDeconstructed ? 'opacity-65 border-dashed bg-base-200/40' : '']"
-         @click="$emit('click-card', item); $emit('click', item)">
+         @click="$emit('click-card', item)">
         
         <!-- Image Area -->
-        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full cursor-pointer" @click="$emit('click-card', item); $emit('click', item)">
+        <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full cursor-pointer">
             <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" loading="lazy" />
             <div v-else class="flex flex-col items-center justify-center w-full h-full opacity-30 bg-base-300 p-2">
                 <Icon icon="solar:box-linear" class="w-10 h-10" />
@@ -217,7 +226,18 @@
                 </div>
 
                 <!-- Footer Actions Slot -->
-                <slot name="actions"></slot>
+                <div @click.stop.prevent>
+                    <slot name="actions">
+                        <button 
+                            type="button"
+                            @click.stop.prevent="$emit('click-card', item)" 
+                            class="btn btn-xs btn-primary font-bold rounded-lg"
+                            title="Edit item in drawer"
+                        >
+                            Edit
+                        </button>
+                    </slot>
+                </div>
             </div>
         </div>
     </div>

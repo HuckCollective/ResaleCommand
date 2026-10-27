@@ -287,4 +287,26 @@ Thermal label printing involves physical hardware tolerances, continuous feed ca
 * **Live Constraint Enforcement**: 38-character tag title limit enforced with real-time character counter and warning pills.
 * **Feed Alignment Test**: Dedicated `[ 🧪 Test 3-Label Feed Alignment ]` trigger to verify tear-bar stopping position and continuous feed indexing before committing large print batches.
 
+### E. Scouting Report IA & Numerical Unity Standard (`ScoutView.vue`)
+* **Single Unified Exit Play & Channel Comparison Card**:
+  - Consolidate channel trade-offs (e.g. Memory Den vs. eBay) and strategic play recommendations into a single cohesive card (`Exit Play & Channel Comparison`).
+  - Zero duplicate `Strategic Play` boxes or orphaned sub-cards.
+  - Zero static marketing boilerplate text—every line must communicate actionable, item-specific resale intelligence.
+* **Compact Catalyst & Risk Dual Grid**:
+  - Render `Why Buy (Catalyst)` and `Watch Out (Risks)` in a clean 2-column side-by-side grid (`grid-cols-1 md:grid-cols-2`).
+  - Keep bullets concise and high-signal, allowing quick visual scanning without vertical sprawl.
+* **Enforce Single Source of Numerical Truth (Zero Pricing Drift)**:
+  - Top Bidding Bar (`Est. Resale`), Channel Comparison (`Gross Tag Price`), and `Target Resale` input MUST all lock to the exact same numerical calculation.
+  - On multi-item lots, the sum of child component Boutique values ($\sum \text{Component Boutique Value}_i$) is the inviolable Single Source of Truth.
+  - Top cards and middle channel cards must never show conflicting gross resale or net payout figures.
+* **Currency Delta Floating-Point Precision**:
+  - Wrap all calculated currency deltas, profit spreads, and headroom numbers (e.g. `Room: +$X.XX`, `+$XX.XX net profit`) in `.toFixed(2)` (or format with standard currency utilities) to prevent floating-point precision overflow (e.g. `+$46.370000000000005`).
+* **Hero Anchor First (`#1`)**:
+  - When displaying decomposed bundle components, always sort descending by Boutique value with the `👑 Hero Anchor` guaranteed at slot `#1` and sequentially re-indexed `#1..#N`.
+* **Double Icon Ban in Section Headers**:
+  - Never combine decorative text emojis with SVG icons in headers (e.g. use `<Icon icon="solar:fire-bold" /> WHY BUY`, never `<Icon icon="solar:fire-bold" /> 🔥 WHY BUY`).
+* **Badge Deduplication**:
+  - Never repeat status pills (e.g. `Combine Eligible`) across multiple adjacent telemetry zones (such as both the top header row and the active auction sniper HUD).
+
+
 

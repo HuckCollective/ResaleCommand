@@ -1,39 +1,77 @@
-# UX Invariant: Full-Page Huckleberry Loaders Over In-Place Spinners
+# UX Standard: The 3-Bucket UX Timing Standard & Full-Page Loaders
 
-## Core Rule
-**ALWAYS use the full-page branded `HuckleberryLoader` via the `useLoader` composable for all asynchronous actions, file reading, CSV parsing, data syncing, batch database mutations, and AI workflows. NEVER use in-place daisyUI spinners (`<span class="loading loading-spinner">`), static button spinners, or plain inline text.**
+## Overview & NN/g Hierarchy
+User perceived performance in Resale Command is strictly governed by the Nielsen Norman Group (NN/g) Response Time Limits. Every asynchronous operation belongs to one of three strict buckets.
 
-## Rationale
-1. **User Awareness**: In-place spinners (tiny `<span class="loading loading-spinner">` inside a button or a corner div) are easy to miss, provide no feedback on progress or current phase, and make users question whether the application is frozen or if their click registered.
-2. **Branded Visual Experience**: The `HuckleberryLoader` is Resale Command's signature brand experience. It features falling berries, a pulsing basket, dynamic message titles, step-by-step progress subtitles, and optional percentage progress bars.
-3. **Action Locking**: Full-page loaders prevent accidental double-clicks, duplicate database document creation, and race conditions during critical batch mutations.
+---
 
-## Usage Standards
+### Bucket 1: Micro-Actions (< 1s)
+- **Use Case**: Inline toggles, dropdown selections, checkbox checks, quantity increments, status tag updates.
+- **Pattern**: **Optimistic UI + Toast notifications**.
+- **Rule**: **ZERO blocking modal**. Never display a full-page loader or freeze the user's viewport for micro-actions.
+- **Anti-Strobe Debounce**: `useLoader` includes a 150ms debounce (`debounceMs: 150`) so that if a quick operation accidentally calls `showLoader`, it clears before flashing or strobing on the user's screen.
 
-```typescript
-import { useLoader } from '../../composables/useLoader';
+---
 
-const { showLoader, updateLoader, hideLoader } = useLoader();
+### Bucket 2: Scoped Asset Loads (1s – 3s)
+- **Use Case**: Loading an individual image preview, fetching one item's details card, uploading a single small photo, refreshing a table row.
+- **Pattern**: **Localized Skeleton Shimmer / Scoped Spinner**.
+- **Rule**: Do not lock the whole screen. Use `setScopedLoading(key, true)` and `isScopedLoading(key)` from `useLoader` to show a skeleton shimmer on that specific card or thumbnail while the rest of the application remains fully interactive.
+- **Example**:
+  ```typescript
+  import { useLoader } from '../../composables/useLoader';
 
-// 1. Initial invocation with context
-showLoader("Committing Sales to Inventory...", {
-  step: "Writing transaction records into Appwrite...",
-  progress: 5,
-  cancelable: false
-});
+  const { setScopedLoading, isScopedLoading } = useLoader();
 
-// 2. Real-time sub-step and percentage updates in batch loops
-for (let idx = 0; idx < items.length; idx++) {
-  const pct = Math.round(((idx + 1) / items.length) * 100);
-  updateLoader(undefined, `Saving item ${idx + 1} of ${items.length}: ${items[idx].title}...`, pct);
-  await saveItem(items[idx]);
-}
+  async function refreshRow(id: string) {
+    setScopedLoading(`row-${id}`, true);
+    try {
+      await fetchRowData(id);
+    } finally {
+      setScopedLoading(`row-${id}`, false);
+    }
+  }
+  ```
 
-// 3. Guaranteed dismissal in finally block
-hideLoader();
-```
+---
 
-## Prohibited Patterns
-- ❌ `<span class="loading loading-spinner loading-sm"></span>` in buttons, headers, or cards.
-- ❌ `<div v-if="isProcessing">Loading...</div>` in-place status placeholders.
+### Bucket 3: Heavy Operations (> 3s)
+- **Use Case**: AI Vision Analysis, Auto-Cropping gallery photos, Lot Splitting, CSV Bulk Import/Sync, Batch Database Commit.
+- **Pattern**: **Full-Page Branded HuckleberryLoader**.
+- **Rule**: **Mandatory full-page loader**. Must provide:
+  1. Branded animated huckleberries & basket.
+  2. Clear top title (e.g., `"Auto-Cropping Item Photos..."`).
+  3. Contextual sub-step description (e.g., `"Matching front, back & detail views across gallery photos..."`).
+  4. Percentage progress bar where deterministic loop counts are available.
+  5. **5-Second Safety Timer**: `useLoader` automatically enables `cancelable: true` after 5 seconds to ensure the user can always dismiss or abort any stalled network request.
+- **Example**:
+  ```typescript
+  import { useLoader } from '../../composables/useLoader';
+
+  const { showLoader, updateLoader, hideLoader } = useLoader();
+
+  async function executeHeavyWorkflow() {
+    showLoader("Auto-Cropping Item Photos...", {
+      step: "Matching front, back & detail views across gallery photos...",
+      progress: 45,
+      cancelable: true,
+      onCancel: () => {
+        abortController.abort();
+      }
+    });
+
+    try {
+      await runWorkflow();
+    } finally {
+      hideLoader();
+    }
+  }
+  ```
+
+---
+
+## Prohibited Anti-Patterns
+- ❌ In-place button spinners (`<span class="loading loading-spinner">`) on primary heavy operations (> 3s).
+- ❌ Blocking modal flash on instantaneous or sub-second actions (< 150ms).
 - ❌ Silent operations where asynchronous operations run without immediate visual feedback.
+- ❌ Non-cancelable full-page loaders that permanently hang if an external AI API times out.

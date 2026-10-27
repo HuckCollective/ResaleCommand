@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, shallowRef, computed } from 'vue';
 import { databases, Query, client } from '../lib/appwrite';
 import type { Models } from 'appwrite';
 import { useLoader } from './useLoader';
@@ -6,8 +6,8 @@ import { useLoader } from './useLoader';
 import { isAlphaMode } from '../stores/env';
 import { generateAutoUpc, isValidOrgUpc, getCollectionId, DB_ID } from '../lib/inventory';
 
-// Shared state for the general inventory view
-const inventoryItems = ref<Models.Document[]>([]);
+// Shared state for the general inventory view (shallowRef avoids deep reactive proxies on 60KB rawAnalysis across 1,494 items)
+const inventoryItems = shallowRef<Models.Document[]>([]);
 const totalItems = ref(0);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -36,16 +36,18 @@ export function useInventory() {
                 if (eventType.includes('.create')) {
                     // Check if already exists (prevent duplicates if local optimistic update happened)
                     if (!inventoryItems.value.find(i => i.$id === item.$id)) {
-                        inventoryItems.value.unshift(item);
+                        inventoryItems.value = [item, ...inventoryItems.value];
                     }
                     totalItems.value++;
                 } else if (eventType.includes('.update')) {
                     const idx = inventoryItems.value.findIndex(i => i.$id === item.$id);
                     if (idx !== -1) {
-                        inventoryItems.value[idx] = item;
+                        const updated = [...inventoryItems.value];
+                        updated[idx] = item;
+                        inventoryItems.value = updated;
                     } else {
                         // Moved into view (e.g. status change)? Add to top
-                        inventoryItems.value.unshift(item);
+                        inventoryItems.value = [item, ...inventoryItems.value];
                     }
                 } else if (eventType.includes('.delete')) {
                     inventoryItems.value = inventoryItems.value.filter(i => i.$id !== item.$id);

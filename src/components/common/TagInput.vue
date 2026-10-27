@@ -38,14 +38,13 @@
         </div>
         
         <!-- AI Recommended Badges (Quick Add) -->
-        <div v-if="recommendedTags && recommendedTags.length > 0" class="mt-2 text-xs flex flex-wrap gap-1 items-center">
+        <div v-if="visibleRecommendedTags && visibleRecommendedTags.length > 0" class="mt-2 text-xs flex flex-wrap gap-1 items-center">
             <span class="font-bold opacity-50 uppercase text-[10px] mr-1">AI Suggests:</span>
             <button 
-                v-for="rec in recommendedTags" 
+                v-for="rec in visibleRecommendedTags" 
                 :key="rec" 
                 @click.prevent="addSpecificTag(rec)"
-                class="badge badge-sm badge-outline hover:badge-primary transition-colors cursor-pointer"
-                :class="{'opacity-30 pointer-events-none': modelValue.includes(rec)}">
+                class="badge badge-sm badge-outline hover:badge-primary transition-colors cursor-pointer">
                 + {{ rec }}
             </button>
         </div>
@@ -99,6 +98,13 @@ const filteredSuggestions = computed(() => {
     return knownTags.value
         .filter(t => t.label.toLowerCase().includes(lowerQ) && !props.modelValue.includes(t.label))
         .slice(0, 10);
+});
+
+// Hide any suggested tag in "AI Suggests" that is already present in the active tags array
+const visibleRecommendedTags = computed(() => {
+    if (!props.recommendedTags || !Array.isArray(props.recommendedTags)) return [];
+    const activeLower = (props.modelValue || []).map(t => String(t).trim().toLowerCase());
+    return props.recommendedTags.filter(rec => rec && !activeLower.includes(String(rec).trim().toLowerCase()));
 });
 
 const focusInput = () => {

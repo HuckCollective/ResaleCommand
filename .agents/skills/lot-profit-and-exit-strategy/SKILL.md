@@ -69,6 +69,11 @@ flowchart TD
    $$\text{Bulk Liquidation Value} < \text{Sliced Playbook Value}$$
    *Always calculate and present the estimated upside of the sliced strategy vs. flipping as an untouched bulk box.*
 
+3. **Anti-Hero-Inflation Law**:
+   - Never artificially inflate a Hero item's price to `landedCost * 1.05` (or any arbitrary multiplier) to fake 100% cost recovery.
+   - Always use the item's true Boutique valuation.
+   - If 1 item does not cover landed cost, either group the top N Hero items or display the true recovery percentage (e.g. `Recovers 72% of lot cost`). Resale Command requires financial integrity over artificial break-evens.
+
 ---
 
 ## 4. UI Standards in Resale Command
@@ -90,4 +95,24 @@ flowchart TD
   * Midpoint mode (`'midpoint'`) produces accurate financial projections: `"$50 - $65"` $\rightarrow$ `$58.00`.
   * Display values preserve the original readable range on UI chips while financial math operates on numeric midpoints.
   * Real component sums always drive `projectedSplitYield`; never fall back to hardcoded prompt dummy values.
+
+---
+
+## 6. Multi-Item Lot Valuation & Component Display Invariants
+
+1. **Single Source of Numerical Truth (Zero Pricing Drift)**:
+   - When a multi-item collection (`lot_items.length > 1`) is cataloged, the primary lot Boutique target valuation (`Est. Resale` in top bidding bar, Memory Den channel gross tag price, and `Target Resale` input) MUST be strictly derived from the sum of component items' Boutique values:
+     $$\text{Lot Boutique Gross Resale} = \sum_{i=1}^{n} \text{Component Boutique Value}_i$$
+   - Top financial cards and middle channel comparison cards MUST use the exact same gross resale and net payout numbers. Showing two differing profit numbers (e.g. `+$57.42` vs `+$46.37`) on the same screen destroys user trust and is strictly prohibited.
+
+2. **Hero Slot #1 Sorting Invariant**:
+   - Always sort `lot_items` descending by Boutique value so the highest-value `👑 Hero Anchor` is placed at slot `#1`, and re-index `#1..#N`.
+   - Never allow lower-value remainder or damaged components to sit above the Hero Anchor.
+
+3. **Unified Exit Play & Channel Comparison**:
+   - Exit plays and channel comparisons must be consolidated into a single compact card (`Exit Play & Channel Comparison`), comparing primary channels (e.g. Memory Den vs. eBay) side-by-side with Gross Tag Price, Net Payout, Cash Profit, ROI badge, and tactical merchandising notes.
+   - Do not display orphaned single-channel showcase sub-cards underneath the channel comparison.
+
+4. **Double Icon Ban in Section Headers**:
+   - Never render decorative text emojis immediately next to matching SVG icons in section headers (e.g. `[SVG Flame] 🔥` or `[SVG Danger] ⚠️`). Use the SVG icon with clean uppercase text.
 

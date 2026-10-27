@@ -35,28 +35,35 @@ This skill documents the architectural invariants, prompt engineering rules, and
   - A rock band logo on cotton is a **T-Shirt**, never an *Audio CD*.
   - A video game character on a mug is **Drinkware**, never a *Game Cartridge*.
 
-### B. Verbatim Physical Grounding (OCR First)
+### B. Verbatim Physical Grounding & Screenshot Sidebar OCR (OCR First)
 - **Cover & Spine Reading**: Every item cataloged in `lot_items` must be visually anchored to text legibly printed on a cover, spine, tag, or hallmark.
+- **Screenshot Sidebar & Fine-Print OCR Rule**: When analyzing marketplace screenshots (Facebook Marketplace, eBay, HiBid, CTBids, estate portals), always read the sidebar, title header, and description text for critical disclosures and caveats:
+  - Critical keywords: `"EMPTY boxes"`, `"box only"`, `"no console"`, `"outer box only"`, `"writing/defacement"`, `"exposed ink"`, `"water damage"`, `"for parts / not working"`.
+  - Never evaluate an item solely on prominent hero graphics when sidebar fine print explicitly discloses missing contents or defects.
 - **Printed Copyright / Publication Year**: Always extract the printed copyright or publication year (e.g. `© 2000`, `© 2004`, `© 2009`). The vision model's general knowledge maps year to edition/era naturally without fragile hardcoded rules.
 - **Zero Extrapolation Rule**: NEVER extrapolate or guess standard core franchise titles (e.g., do NOT invent *Player's Handbook*, *Monster Manual*, *Complete Warrior*, *Levi's 501*, or *Air Jordan 1*) unless that exact item's cover, tag, or spine is visibly present in the photos.
 
-### C. The Anti-Generalization Law
+### C. Empty Box & Orphan Packaging Valuation Law
+- **Salvage / Packaging Only**: Empty boxes, loose cases, or coverless modules must be valued strictly as replacement packaging, display ephemera, or salvage parts—**never** as complete-in-box (CIB) or complete sets.
+- **Mandatory Verdict Override**: If a seller asks complete-set prices for an empty box or orphan packaging, the AI must set `verdict: 'NEGOTIATE'` or `'PASS'` (never `'BUY_NOW'`).
+
+### D. The Anti-Generalization Law
 - **Do Not Inherit Online Lot Titles**: Online auction titles often contain loose seller generalizations (e.g. labeling an entire mixed lot "3.5 Edition" when individual modules are 3.0 or 4e, or labeling a lot "Vintage 1970s" when pieces are from 1990).
 - **Rule**: Every individual component in a lot must be classified based on its own visible cover design, logos, and printed publication/copyright year—never by blindly copying the auction title onto every item.
 
-### D. Prohibition of Category-Specific Hardcoding in Prompts
+### E. Prohibition of Category-Specific Hardcoding in Prompts
 - **NO Fragile Cheat Sheets**: Never inject hardcoded lists of specific editions (e.g., D&D 3.0 vs 3.5 vs 4e tables) or artist/artwork titles (e.g., Frank Frazetta wood plaques) into general prompts.
 - **Why**: Hardcoded trivia introduces severe prompt bias, consumes unnecessary token window, and skews attention away from legitimate visual text when scanning other merchandise categories (apparel, electronics, collectibles).
 
-### E. Unified Multimodal Vision (Never Strip Images)
+### F. Unified Multimodal Vision (Never Strip Images)
 - **Zero Blind Synthesis**: When consolidating multi-photo lots, **never** perform text-only synthesis on stripped image descriptions.
 - **Unified Context**: All gallery photos (overview shots, spine angles, closeups) must be supplied directly to Gemini in the same request. This enables Gemini to cross-reference multiple views and eliminate duplicate counts.
 
-### F. User Notes as Authoritative Ground Truth
-- When a reseller enters notes or corrections (e.g., `"DMG is 3.0, Ashen Crown is 4e"` or `"Lot contains 8 books"`), the AI prompt must treat those notes as **100% authoritative ground truth**.
-- User corrections always override automated visual inferences.
+### G. User Notes Authority & Strict Context Separation
+- **Authoritative Ground Truth**: When a reseller enters notes or corrections (e.g., `"DMG is 3.0, Ashen Crown is 4e"` or `"Lot contains 8 books"`), the AI prompt must treat those notes as **100% authoritative ground truth**. User corrections always override automated visual inferences.
+- **Strict Context Separation**: Never concatenate scraped listing titles, warehouse channel lists, or system telemetry into `userNotes`. `userNotes` must remain strictly reserved for genuine human operator notes to prevent circular prompt pollution and false authority loops.
 
-### G. Sourcing Lifecycle Guardrail: Scout vs. Deep Scan
+### H. Sourcing Lifecycle Guardrail: Scout vs. Deep Scan
 - **Pre-Acquisition (`status !== 'acquired'` / scouting drafts)**:
   - Strictly use **Speed Scout AI** (`/api/identify-item.ts`).
   - Running multi-image Deep Scan or extracting constituent lots on unowned inventory is prohibited to conserve API cost and avoid cluttering catalog with unpurchased goods.
@@ -93,6 +100,13 @@ This skill documents the architectural invariants, prompt engineering rules, and
    - Always use `parsePriceValue(val, 'midpoint')` from `src/lib/lot-strategy.ts` for financial metrics.
 5. **Component Sum Grounding**:
    - Lot playbook yields must derive from the real sum of identified components ($\sum \text{heroes} + \text{combines} + \text{fillers}$) rather than prompt template defaults.
+6. **Single Source of Numerical Truth (Zero Pricing Drift)**:
+   - For multi-item lots, the parent item's primary Boutique target price (`Est. Resale` in top bidding bar, Memory Den channel gross tag price, and `Target Resale` input) MUST be strictly derived from the sum of component items' Boutique values ($\sum \text{Component Boutique Value}_i$).
+   - Never allow drift between top valuation cards and channel comparison cards.
+7. **Hero Anchor Guaranteed Slot #1**:
+   - Component items (`lot_items`) MUST always be ordered descending by Boutique value with the Hero Anchor (`👑 Hero Anchor`) guaranteed at position `#1` at the very top of the list, indexed sequentially `#1, #2, #3`.
+8. **Empty Box & Orphan Packaging Valuation Law**:
+   - Empty boxes or coverless modules must be valued strictly as replacement packaging/salvage (never as complete CIB sets) and must set `verdict: 'NEGOTIATE'` or `'PASS'` if the seller asks complete-set prices.
 
 ---
 
@@ -102,5 +116,8 @@ Before releasing changes to `identify-item.ts` or `ai-inspection.ts`, verify:
 - [ ] Multi-item lots accurately count physical items without phantom additions.
 - [ ] No hallucinated core rulebooks appear on tabletop RPG lots.
 - [ ] Visible copyright years and editions are transcribed accurately from covers/spines.
+- [ ] Marketplace screenshots have sidebar/description fine print scanned for "box only", defacement, or parts-only disclosures.
+- [ ] Empty boxes or orphan packaging are priced as salvage/packaging, with 'NEGOTIATE' or 'PASS' on complete-set asking prices.
+- [ ] User notes remain strictly separated from scraped titles or internal channel lists.
 - [ ] User notes cleanly override visual guesses.
 - [ ] The app builds cleanly with zero TypeScript errors: `npm run build`.

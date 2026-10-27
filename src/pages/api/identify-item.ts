@@ -1,6 +1,10 @@
 import type { APIRoute } from 'astro';
-import { model, generateContentWithBackoff, DEFAULT_GEMINI_MODEL } from '../../lib/gemini';
-import { normalizeBundleComponents } from '../../lib/bundle-pricing';
+import { model, generateContentWithBackoff, DEFAULT_GEMINI_MODEL, parseAiJson } from '../../lib/gemini';
+import { normalizeBundleComponents, parsePriceRange } from '../../lib/bundle-pricing';
+import { speedScoutResponseSchema } from '../../lib/ai/schemas/speed-scout.schema';
+import { SPEED_SCOUT_SYSTEM_INSTRUCTION } from '../../lib/ai/instructions/system-instructions';
+import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-builders';
+import { parsePriceValue } from '../../lib/lot-strategy';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -614,6 +618,8 @@ export const ALL: APIRoute = async ({ request }) => {
     let zipCode: string | null = null;
     let parsedListingData: any = null;
     let userNotes = "";
+    let scrapedListingContext = "";
+    let shippingSummary = "";
 
     try {
         if (!model) {
@@ -1052,7 +1058,8 @@ export const ALL: APIRoute = async ({ request }) => {
                              contextText += `Weight: ${shippingWeight} lbs | Combined Shipping: ${canCombineShipping ? 'Eligible' : 'Ineligible'}\n`;
                              contextText += `Current Bid: $${parsedData.currentPrice} | Bids: ${parsedData.bidCount} | Ends: ${parsedData.endTime}\n`;
                              if (scrapedShipping) {
-                                 contextText += `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode} (Shipping: $${scrapedShipping.shipping}, Handling: $${scrapedShipping.handling})\n`;
+                                 shippingSummary = `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode} (Shipping: $${scrapedShipping.shipping}, Handling: $${scrapedShipping.handling})`;
+                                 contextText += shippingSummary + "\n";
                              }
                              
                              if (parsedData.endTime) {
@@ -1082,8 +1089,8 @@ export const ALL: APIRoute = async ({ request }) => {
                                  contextText += `Description: ${cleanDesc}\n\n`;
                              }
                              
-                             // Prepend to user notes
-                             userNotes = contextText + userNotes;
+                             // Append to scraped listing context (preserving authoritative user notes separation)
+                             scrapedListingContext += contextText + "\n";
                              
                              // Fetch all external lot photos up to 40 images for deep multi-issue analysis
                              if (imageParts.length === 0 && imgUrls.length > 0) {
@@ -1109,7 +1116,7 @@ export const ALL: APIRoute = async ({ request }) => {
                                      if (titleMatch) contextText += `Title: ${titleMatch[1].replace('| ShopGoodwill.com', '').trim()}\n`;
                                      if (descMatch) contextText += `Description: ${descMatch[1].substring(0, 1000)}\n`;
                                      
-                                     userNotes = contextText + "\n" + userNotes;
+                                     scrapedListingContext += contextText + "\n";
                                      
                                      // Try to extract images from page
                                      if (imageParts.length === 0) {
@@ -1278,7 +1285,7 @@ export const ALL: APIRoute = async ({ request }) => {
                                     }
                                 }
                                 
-                                userNotes = contextText + "\n" + userNotes;
+                                scrapedListingContext += contextText + "\n";
 
                                 scrapedImages = Array.from(imageUrls).slice(0, 5);
                                 if (scrapedImages.length > 0 && !successfulImageUrl) {
@@ -1325,231 +1332,34 @@ export const ALL: APIRoute = async ({ request }) => {
             }
         }
 
-        // Relaxed Check: Allow if images exist OR if we have notes (now potentially enhanced)
-        if (imageParts.length === 0 && !userNotes) {
+        // Relaxed Check: Allow if images exist OR if we have notes or scraped listing context
+        if (imageParts.length === 0 && !userNotes && !scrapedListingContext) {
                  return new Response(JSON.stringify({ error: "Parsing Failed", details: "No image data AND no notes found in body." }), { 
                     status: 400,
                     headers: { "Access-Control-Allow-Origin": "*" }
                 });
         }
 
-        const prompt = `
-          Analyze this item for resale.
-          
-          CONTEXT / USER NOTES: "${userNotes}"
-          (If a URL is provided in notes, visit it or infer details from it if possible, otherwise rely on general knowledge of such items).
-          
-          TASK:
-          1. SINGLE ITEM VS BUNDLE LOT DETECTION:
-             - SINGLE ITEM (Default): If the photo/listing depicts a single individual item (e.g. 1 book, 1 jacket, 1 game cartridge/disc, 1 toy, 1 pair of shoes, 1 collectible), identify this exact single item in the 'items' array. DO NOT create 'lot_items' and DO NOT split its chapters, pages, or features into bundle components.
-             - BUNDLE LOT (Only if multiple distinct items exist): Only if the photo or notes clearly depict a lot/collection/bundle of multiple distinct products sold together under one price (e.g. a box of 10 magazines, 4 shirts, a set of 5 figures):
-               * Return a SINGLE summary item in 'items' describing the entire lot (e.g. "Heavy Metal Magazine 1980s Lot of 10").
-               * In 'price_breakdown', estimate the total value of the entire combined lot.
-               * Populate the 'lot_items' array breaking down each distinct individual product in the bundle.
+        const promptText = buildSpeedScoutUserPrompt({
+            authoritativeUserNotes: userNotes,
+            scrapedListingContext: scrapedListingContext || undefined,
+            shippingSummary: shippingSummary || (scrapedShipping ? `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode || 'Local'}` : undefined),
+            organizationChannels: "Memory Den Booth #0EJ (Vintage Apparel, RPGs, Books, Media, Collectibles); DustyTiger (Small Collectibles, Jewelry, Pins, Wands); eBay; Poshmark."
+        });
 
-          CRITICAL PRICING & IDENTIFICATION RULES:
-          - PRICING MODEL & CONDITION MODIFIERS (Align with ResaleCommand Standards):
-            1. 'mint': Price range if New/Mint. Set to 100% of fair market secondary value.
-            2. 'fair': Price range if Used/Good. Set to 70-80% of mint value.
-            3. 'poor': Price range if Poor/Damaged. Set to 20-40% of mint value.
-            4. 'boutique_premium': Curated physical retail price (usually 30-50% higher than online/eBay sold prices due to curation/vintage appeal).
-          
-           - MARKUP STRATEGY & MINIMUM THRESHOLDS:
-             If you have context about the acquisition cost (e.g., in user notes or a scraped/screenshot price that represents your cost):
-             1. Landed Cost Calculation: If shipping or handling cost is provided in context/notes/screenshot, add it to the asking price/acquisition cost to calculate the true Landed Cost (Landed Cost = acquisition_cost + shipping_cost). Otherwise, Landed Cost is simply the acquisition_cost.
-             2. Standard Markup: Target resale price should be **3.0x Landed Cost**.
-             3. High-Value Markup: Target resale price can be **1.5x - 2.0x Landed Cost** for high-ticket items (Landed Cost > $100) because dollar profit is high.
-             4. Quick Turn Markup: For small impulse items ($8.00 - $20.00 resale such as vintage paperbacks, cassettes, mugs, small toys/pins), target **3.0x - 5.0x Landed Cost** (e.g. buy for $1-$4, sell for $8-$15 in booth crate/basket). These are valuable "Quick Turn" items that provide high-velocity cash flow.
-             5. Absolute Profit & Price Thresholds:
-                - High-ticket / Showcase: Profit should be >= $35.00.
-                - Core items: Resale price >= $20.00 with >= $12.00 net profit.
-                - Quick Turn impulse items: Resale price $8.00 - $18.00, BUT acquisition cost must be <= $4.00 (ensuring at least $5.00 - $12.00 net gain). Do NOT recommend passing on low-cost items if they can flip quickly for $8 - $15!
-             
-           - SCREENSHOT & ONLINE AUCTION RECOGNITION (CTBids, HiBid, ShopGoodwill, eBay, EstateSales):
-             If the image depicts a smartphone or computer screenshot of an online marketplace or auction:
-             - Inspect the UI to read the current asking price or active auction bid and place it in 'purchase_strategy.current_asking_price'.
-             - Inspect the UI for stated shipping fees (e.g. "+$14.25 Shipping") or Buyer's Premium (e.g. "15% BP", "18% Buyer's Premium").
-             - CTBids (ctbids.com): Estate sale online auctions. Standard Buyer's Premium is 15%. Often "Local Pickup Only". Starting bids often $1.
-             - HiBid (hibid.com): Online auction aggregator. Buyer's Premium typically 10% - 18%. Look for "Shipping Available" vs "Local Pickup Only".
-             - ShopGoodwill: Watch for handling fees ($3-$6) and dimensional shipping.
-             - If "Local Pickup Only" is detected, flag it prominently in 'condition_notes' or 'why_pass' (e.g. "🚗 Local Pickup Only - verify pickup date & location before bidding").
-             - Read live countdown timers (e.g. "3m 42s", "Ends 7:00 PM EST") and populate 'auction_meta'.
-             - Extract the listing title and seller condition notes directly from the screenshot layout.
-             
-           - PURCHASE STRATEGY VERDICT DECISION FLOW:
-             Evaluate the 'purchase_strategy' based on the asking price (if found in notes/scraped data/screenshot) and the item's value:
-             1. "BUY_NOW": If acquisition price leaves healthy margin (e.g. <= 35% of fair market value OR <= 35% of boutique booth value) AND meets profit thresholds.
-             2. "PASS": If asking price or current bid is too high, margin is eaten by shipping/buyer's premium fees, or if the item is a slow shelf-warmer with low velocity.
-             3. "WATCH": If it's an auction and the current bid is reasonable, or if the profit margin is marginal.
-             4. "NEGOTIATE": If it's a fixed-price listing but allows offers, and the asking price is slightly above the BUY_NOW threshold.
-             5. "CHASE_AUCTION": If it is a live auction and current price/bid is low compared to the estimated Max Buy Price.
-             *IMPORTANT*: Many users sell in curated booth locations (antique malls, physical consignment booths like Memory Den & DustyTiger) where they can realize the higher 'boutique_premium' price. When evaluating profit margins and determining the verdict, factor in the 'boutique_premium' value as a valid resale target.
-             *AUCTION BID LIMITS WITH BUYER'S PREMIUM*:
-             If the item is an auction (or the verdict is CHASE_AUCTION or WATCH):
-             Calculate: Max Landed Cost = Max Buy Target.
-             If Buyer's Premium (BP%) applies: Net Bid Ceiling = (Max Landed Cost - Estimated Shipping - Handling) / (1 + (BP% / 100)).
-             Set 'purchase_strategy.max_bid' to this rounded number.
-             Explicitly state this Max Bid limit in the 'advice' string (e.g. "Bid up to $34.50. 15% BP + $12 shipping keeps landed cost under $52 for a $120 boutique resale.").
-             
-           - LOCATION NICHE & CATEGORY SPECIALTY MATCHING:
-             When choosing the 'best_platform' in 'market_report', you MUST check the item's category against each physical location's designated niche:
-             * If an organization physical location has a specific niche (e.g. DustyTiger = Small Collectibles, Jewelry, Pins, Wands; Memory Den = Vintage Clothing, Arcane / Punk, Jackets), ONLY recommend that physical location if the item strictly matches its niche!
-             * STRICT NEGATIVE RULES & EXCLUSIONS: If a location's niche or rules state negative exclusions (e.g. "NO clothes", "NO apparel", "NO large toys", "NO bulky items", "under 8 inches only", "small items only"), you are STRICTLY FORBIDDEN from assigning, routing, or recommending that location for those excluded categories, items, or sizes.
-             * For clothing/apparel (e.g. women's plus-size blouse, vintage jackets, streetwear, garments, sherwanis, denim): NEVER recommend a jewelry/collectibles booth (like DustyTiger). Instead, route clothing to the apparel booth (like Memory Den) or online apparel platforms (Poshmark, eBay).
-             * For large toys, vehicles, or bulky playsets: NEVER recommend a compact collectibles booth (like DustyTiger). Route them to collector online platforms (eBay) or general booths.
-             * For jewelry, wands, miniature figures, and small collectibles: Route to the collectibles/jewelry booth (like DustyTiger) or collector markets (eBay).
-
-           - ACTIVELY READ TEXT & COVERS (VERBATIM OCR): Extract the exact printed title, subtitle, publisher, and visible publication/copyright year directly from the cover, spine, or label.
-           - ERA & EDITION IDENTIFICATION: Base the edition, print run, or release era strictly on the printed copyright year, logos, and physical cover/label design. Never guess or extrapolate unprinted titles or rare variants unless verified by printed markings or authoritative user notes.
-           
-           - UNIVERSAL MULTI-ITEM & BUNDLE LOT SCANNING (ALL CATEGORIES):
-             When the images contain multiple items (a lot, collection, bundle, or table display), you must inspect EVERY image and break down ALL individual items in the 'lot_items' array across all categories:
-             
-             1. TOYS, ACTION FIGURES & DIECAST (Star Wars, Marvel, Transformers, Hot Wheels, LEGO, Pokemon, Bionicle, etc.):
-                * Identify each specific character, vehicle, or set number (e.g. "Vintage 1977 Kenner Darth Vader", "Hot Wheels 1969 Redline Custom Camaro", "LEGO Star Wars Ahsoka Minifigure").
-                * Note accessories, completeness, or wear.
-                
-             2. CLOTHING & ACCESSORIES BUNDLES (Lululemon, Dr. Martens, Vintage Leather/Denim, Band Tees, Designer Purses):
-                * Identify each individual garment/shoe by brand tag, style name, colorway, and size if visible (e.g. "Lululemon Align High-Rise Leggings Sz 6 Navy", "Dr. Martens 1460 8-Eye Black Leather Boots").
-                
-             3. VIDEO GAMES, RETRO GAMING & ACCESSORIES (Nintendo NES/SNES/N64/Switch, PlayStation, Xbox, Handhelds):
-                * Identify the exact console model, controller color, and EACH individual game cartridge/disc title and packaging status (Loose vs CIB/Boxed).
-                
-             4. MUSIC CDS, VINYL RECORDS, CASSETTES & MEDIA SETS:
-                * CRITICAL MULTI-DISC RULE: A 2-CD, multi-disc album, or 2-in-1 compilation (e.g. "Def Leppard Rock of Ages 2-CD", "Whitesnake 2-CD Set") is strictly ONE SINGLE INVENTORY ITEM / 1 sellable unit. NEVER split individual discs of a set into separate items in 'lot_items' or 'items'. Note "(2-CD Set)" in the title.
-                * Read every spine, cover title, artist, and label.
-                
-             5. BOOKS, RPGs, COMIC LOTS & BOARD GAMES (D&D, Tolkien, Warhammer, Marvel/DC Comics):
-                * Read every spine, cover title, and issue number. Specify exact edition (1st Edition, 3.5e, 5e, Omnibus vs TPB).
-                
-             6. CAMERAS, VINTAGE ELECTRONICS & AUDIO (Canon, Nikon, Sony, Walkmans, Lenses, Stereo gear):
-                * Identify camera body model (e.g. "Canon EOS Rebel T3i"), lens specifications (e.g. "EF-S 18-55mm IS II"), and accompanying batteries/chargers.
-                
-             7. JEWELRY & PRECIOUS METALS / COLLECTIBLES (Sterling Silver 925, Gold 10k/14k/18k, Coins, Pins):
-                * Identify metal type, visible hallmarks, gemstone types, and brand stamps.
-                
-              8. WANDS & PROPS (Harry Potter, Fantastic Beasts, Noble Collection, Universal Studios Interactive):
-                 * Identify character owner by signature handle/shaft carvings (Elder Wand/Dumbledore, Harry, Hermione, Voldemort, Snape, Sirius, Bellatrix, etc.) and check for Universal optical IR sensor tip.
-                 
-               9. ART PRINTS, FRAMED ART & WALL DECOR:
-                  * Form Factor: Flat printed art, lithographs, paintings, framed panels, or mounted plaques.
-                  * Substrate Rule: Identify as Wall Art, Art Print, or Wall Decor. Never classify wall art as books, comics, or magazines.
-                  * Attribution: Transcribe artist signatures, print dates, and artwork titles ONLY if legibly printed on the artwork, border, or backing label. Never guess uncredited artwork titles or invent series numbers.
-                 
-               CRITICAL UNIVERSAL OCR & VISUAL IDENTIFICATION RULES ACROSS ALL MERCHANDISE CATEGORIES:
-               - VERBATIM OCR FIRST: Transcribe exact printed text visible on tags, labels, cover mastheads, date boxes, hallmark stamps, copyright dates, and model numbers.
-               - STRICT ANTI-HALLUCINATION GUARD: If a date, issue number, or brand name is obscured or not 100% legible due to glare, DO NOT guess famous names or specific dates. State "Date Unclear" or "Unbranded" instead of inventing details.
-               - FOR VINTAGE PRINT / MAGAZINES / COMICS:
-                  * Look at the exact date box (usually top-left or spine). Read Month, Year, Volume, and Issue Number.
-                  * Only credit cover artists if their signature is clearly visible on the cover or printed in the credit line.
-               - FOR APPAREL & STREETWEAR:
-                  * Read inner neck tag / wash tag for Brand, RN#, Size, Material, Single-Stitch, and Made in USA/Country.
-               - FOR TOYS, FIGURES & TABLETOP:
-                  * Read copyright stamp on foot/back or box title (e.g. "© 1979 L.F.L. Kenner", "Games Workshop 1998").
-               - FOR GAMES & ELECTRONICS:
-                  * Read exact model/part number and condition indicators (CIB, Boxed, Loose Cartridge, Tested).
-               - FOR LOTS & MULTI-ITEM IMAGES:
-                  * For EVERY distinct item in ANY lot across ALL categories, provide a precise 'bounding_box': [ymin, xmin, ymax, xmax] (0 to 1000) and 'image_index' pointing to the exact image containing that item!
-                  * STRICT VISUAL CORRESPONDENCE (DO NOT SWAP): Double check that each item's 'name' matches the EXACT object inside its 'bounding_box'.
-               
-             OUTPUT FORMAT:
-             Return strictly a JSON object with property "items": [ ... ].
-             
-             Each item object in the array must contain:
-             - 'identity': A single string describing the item.
-             - 'tag_title': (REQUIRED string, strictly 30-42 characters max). Specially formatted for physical thermal barcode price tags in boutique/antique booths (e.g. Memory Den / DustyTiger). Must be ultra-clean, concise, and professional without ANY tier bracket prefixes like '[Tier 1]':
-                   * Art & Decor: "Framed Vintage Lithograph" or "Vintage Landscape Plaque"
-                   * Vintage Magazines: "Vintage Sci-Fi Mag - Oct 1977 #7"
-                   * Vintage Apparel: "Carhartt Detroit Jacket (L)" or "Vintage Band Tee (XL)"
-                   * Toys/Collectibles: "Vintage Action Figure 1979" or "Tabletop Miniatures Set"
-                   * Games/Media: "Retro Video Game Cartridge (CIB)" or "Vintage RPG Adventure Module"
-                   * Paperbacks/Media: "Classic Sci-Fi Novel (Paperback)" or "Rock Band Album (2-CD Set)"
-             - 'title': A full SEO-friendly title string for online marketplaces (eBay/Poshmark/Depop) without tier bracket prefixes.
-             - 'tier': (REQUIRED string, strictly one of: "showcase", "core", "quick_turn").
-                 * "showcase": High-ticket grails ($50.00 - $150.00+), locked showcase, top online listings.
-                 * "core": Steady bread-and-butter ($20.00 - $49.00), standard apparel racks & booth shelves.
-                 * "quick_turn": High-velocity impulse ($8.00 - $18.00), crate/counter picks, paperbacks, cassettes, mugs, small collectibles with 3x-5x ROI.
-            - 'tier_label': String corresponding to tier ("🌟 Showcase", "📦 Core", "⚡ Quick Turn").
-            - 'pricing_potential': An object with realistic valuation ranges:
-                 * 'fair': (REQUIRED string) Realistic online / eBay comp average (e.g. "$8 - $10" or "$85 - $110").
-                 * 'boutique': (REQUIRED string) Curated physical antique mall / retail tag (e.g. "$12 - $15" or "$165 - $185").
-            - 'why_pay_up': (REQUIRED string) 1-2 concise sentences detailing the collector catalyst, rare provenance (Made in USA, single-stitch, 1st print), or high booth velocity justifying paying a premium or bidding up.
-            - 'why_pass': (REQUIRED string) 1-2 concise sentences detailing specific risk factors (e.g. shipping/fee drag, market saturation, dead shelf hold, defects) if the item is marginal or a PASS. Return empty string if item is an obvious strong buy.
-            - 'ocr_detected_text': String transcribing verbatim text legible on the item's tag, cover, or stamp.
-            - 'keywords': An array of strings.
-            - 'condition_notes': A VERY BRIEF (1-2 sentences max) condition assessment.
-            - 'country_of_origin': Infer the manufacturing country if visible (e.g., from tags like "Made in USA"). Return "Unknown" if not visible.
-            - 'red_flags': An array of strings highlighting potential issues. Return empty if none.
-            - 'price_breakdown': An object with estimated values:
-                - 'mint': Price range if New/Mint.
-                - 'fair': Price range if Used/Good.
-                - 'poor': Price range if Poor/Damaged.
-                - 'boutique_premium': (REQUIRED string) High-end physical booth / curated antique shop retail pricing tier (e.g. "$45 - $65"). MUST always be included.
-                - 'confidence': (Low/Medium/High)
-            - 'comparables': An array of EXACTLY 1 similar item sold on eBay/etc (BE BRIEF).
-                 - 'name': Specific item name/title.
-                 - 'price': approx sold price.
-                 - 'status': "Sold" or "Listed"
-            - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the item in the primary image.
-            - 'purchase_strategy': An object containing strategic advice for sourcing this item:
-                 - 'verdict': ONE of these strict enums: "PASS", "WATCH", "BUY_NOW", "NEGOTIATE", "CHASE_AUCTION".
-                 - 'current_asking_price': State the current bid or asking price if found on screen/notes.
-                 - 'max_bid': (Number) The absolute maximum bid or offer you recommend (excluding shipping).
-                 - 'max_landed_cost': (Number) The maximum total cost (including shipping) to stay profitable.
-                 - 'advice': ONE VERY BRIEF SENTENCE detailing the sourcing strategy.
-            - 'auction_meta': (Include if this is an auction listing or has bids/timer, especially for CTBids, HiBid, ShopGoodwill, eBay):
-                 - 'is_auction': (Boolean) true if this is an auction format.
-                 - 'end_time': (ISO-8601 string or null) Estimated closing timestamp if discernible.
-                 - 'time_left_text': (String) e.g. "3m 42s", "Ends 7:00 PM EST", or "1d 4h".
-                 - 'urgency': (Enum) "CRITICAL" (< 15 mins remaining), "SOON" (< 2 hrs), "NORMAL" (> 2 hrs), or "NONE" (if Buy It Now/thrift).
-                 - 'platform': "CTBids" | "HiBid" | "ShopGoodwill" | "eBay" | "Other"
-                 - 'buyers_premium_pct': (Number) Buyer's Premium percentage (e.g. 15 for 15%). Default 15 for CTBids and HiBid if unknown.
-                 - 'is_local_pickup_only': (Boolean) true if local pickup only (no shipping).
-                 - 'current_bid': (Number or null) The active bid amount.
-            - 'market_report': An object analyzing sales channels, velocity, and profit:
-                 - 'best_platform': String naming the recommended platform/channel.
-                 - 'platform_rationale': 1-2 concise sentences comparing time-to-sale vs net profit.
-                 - 'sell_through_velocity': One of: "Fast (< 7 days)", "Moderate (2-4 weeks)", "Slow / Long-Tail (1-3 months)".
-                 - 'target_buyer': Short phrase describing the ideal customer.
-                 - 'channels': An array of channel comparisons (2-4 items) tailored to the item category:
-                     - 'name': Channel name
-                     - 'est_price': Expected listing/sale price
-                     - 'net_payout': Estimated net payout after fees/shipping
-                     - 'speed': Estimated velocity rating
-                     - 'recommendation': e.g. "Best Net Profit", "Fast Cash Flow", "Zero Shipping Hassle"
-            - 'lot_items': (Only if it is a bundle lot) An array of objects for each component item:
-                  - 'name': Specific name/description of the item without tier prefixes.
-                  - 'tag_title': Concise booth tag title (<= 40 chars) for this specific sub-item.
-                  - 'identity': The item's distinct identity.
-                  - 'tier': "showcase" | "core" | "quick_turn".
-                  - 'condition': Inferred condition of this item (e.g. "Good", "Mint", "Fair").
-                  - 'pricing_potential': An object with realistic valuation ranges (REQUIRED for every bundle component):
-                      * 'boutique': (REQUIRED string) The HIGHER boutique / antique booth curated price range (e.g. "$18 - $25").
-                      * 'fair': (REQUIRED string) Fair market / online sold comps price range (e.g. "$8 - $15").
-                  - 'buy_range': (REQUIRED object):
-                      * 'min': (Number) Conservative minimum buy target (e.g. 2 or 3).
-                      * 'max': (Number) Maximum profitable buy threshold (e.g. 5 or 6).
-                      * 'formatted': (String) Formatted min-max buy range (e.g. "$3 - $6").
-                  - 'price_breakdown': Full price breakdown object:
-                      * 'boutique_premium': The higher boutique price range string (e.g. "$18 - $25").
-                      * 'fair': The fair market price range string (e.g. "$8 - $15").
-                      * 'mint': Price range if Mint.
-                      * 'poor': Price range if Poor.
-                  - 'estimated_value': String of fair market value (e.g. "$8 - $15").
-                  - 'ocr_detected_text': Verbatim text read from this item.
-                  - 'image_index': (Integer, 0-indexed) Which image contains the clearest view of this item.
-                  - 'bounding_box': [ymin, xmin, ymax, xmax] coordinates locating the exact physical object..
-        `;
-
-        const contentParts: any[] = [{ text: prompt }];
+        const contentParts: any[] = [{ text: promptText }];
         if (imageParts.length > 0) {
             // Cap to top 5 images for Speed Scout to keep payload < 5MB and prevent API payload limits or timeouts
             contentParts.push(...imageParts.slice(0, 5));
         }
 
         const result = await generateContentWithBackoff({
+            systemInstruction: SPEED_SCOUT_SYSTEM_INSTRUCTION,
             contents: [{ role: 'user', parts: contentParts }],
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { 
+                responseMimeType: "application/json",
+                responseSchema: speedScoutResponseSchema
+            }
         }, 3, 2000); // Only retry 3 times for real-time frontend calls to prevent 2.5 minute UI hangs
         
         const response = await result.response;
@@ -1597,6 +1407,91 @@ export const ALL: APIRoute = async ({ request }) => {
                 }
                 if (target.purchase_strategy?.max_bid) {
                     target.maxBid = target.purchase_strategy.max_bid;
+                }
+                if (target.lot_items && Array.isArray(target.lot_items) && target.lot_items.length > 1) {
+                    const lotResaleSum = target.lot_items.reduce((s: number, it: any) => {
+                        return s + parsePriceValue(it.price_breakdown?.boutique_premium || it.price_breakdown?.fair || it.estimated_value, 'midpoint', 0);
+                    }, 0);
+                    if (lotResaleSum > 0) {
+                        target.total_lot_resale = lotResaleSum;
+                    }
+
+                    // The Buy-Target Authority Law: Stop overwriting AI condition-adjusted buy targets with blind Boutique divisors!
+                    let compBuyMax = 0;
+                    let compBuyMin = 0;
+                    let lotFairSum = 0;
+                    let hasConditionDefects = false;
+
+                    for (const it of target.lot_items) {
+                        const br = it.buy_range;
+                        if (br && typeof br.max === 'number' && br.max > 0) {
+                            compBuyMax += br.max;
+                            compBuyMin += (typeof br.min === 'number' ? br.min : 0);
+                        } else {
+                            const parsedBr = parsePriceRange(it.buy_range?.formatted || it.buy_range);
+                            compBuyMax += parsedBr.high;
+                            compBuyMin += parsedBr.low;
+                        }
+
+                        const fair = parsePriceRange(it.pricing_potential?.fair || it.price_breakdown?.fair || it.estimated_value);
+                        const fairMid = fair.high > 0 ? (fair.low + fair.high) / 2 : fair.low;
+                        lotFairSum += fairMid;
+
+                        const cond = String(it.condition || '').toLowerCase();
+                        const notes = String(it.condition_notes || it.name || it.identity || '').toLowerCase();
+                        if (
+                            cond.includes('fair') || cond.includes('poor') || cond.includes('damaged') ||
+                            notes.includes('empty') || notes.includes('box only') || notes.includes('parts') ||
+                            notes.includes('writing') || notes.includes('ink') || notes.includes('defect')
+                        ) {
+                            hasConditionDefects = true;
+                        }
+                    }
+
+                    // Condition defect ceiling: Never exceed 50% of eBay Fair Market value when items have defects
+                    const defectCeiling = hasConditionDefects && lotFairSum > 0 ? Math.round(lotFairSum * 0.50) : Infinity;
+
+                    // Extract explicit target from advice if present (e.g. "Make a cash offer of $40-$45" -> 45)
+                    const adviceText = target.purchase_strategy?.advice || '';
+                    const adviceMatch = adviceText.match(/(?:cash\s+offer\s+of|offer\s+of|offer|pay\s+up\s+to|target\s+of|buy\s+at|ceiling\s+of|max\s+bid\s+of)\s+\$(?:(\d+(?:\.\d+)?)\s*[-–—to]\s*\$)?(\d+(?:\.\d+)?)/i);
+                    const adviceCeiling = adviceMatch ? parseFloat(adviceMatch[2]) : 0;
+
+                    let resolvedMaxBuy = adviceCeiling > 0 ? adviceCeiling : (target.purchase_strategy?.max_landed_cost || target.purchase_strategy?.max_bid || 0);
+                    if (resolvedMaxBuy <= 0 && compBuyMax > 0) {
+                        resolvedMaxBuy = compBuyMax;
+                    }
+
+                    // Clamping: Never exceed defect ceiling if defects exist
+                    if (defectCeiling < Infinity && resolvedMaxBuy > defectCeiling) {
+                        resolvedMaxBuy = defectCeiling;
+                    }
+
+                    // Never allow ungrounded inflation above compBuyMax
+                    if (compBuyMax > 0 && resolvedMaxBuy > compBuyMax * 1.15) {
+                        resolvedMaxBuy = compBuyMax;
+                    }
+
+                    const isAuction = Boolean(target.auction_meta?.is_auction || target.auctionEndsAt || target.auction_meta?.end_time);
+                    const shipTotal = Number(target.shipping_info?.total || scrapedShipping?.total || 0);
+
+                    if (target.purchase_strategy) {
+                        target.purchase_strategy.max_landed_cost = resolvedMaxBuy;
+                        if (isAuction) {
+                            const maxBidNet = Math.max(0, Math.floor(resolvedMaxBuy - shipTotal));
+                            target.purchase_strategy.max_bid = maxBidNet;
+                            target.maxBid = maxBidNet;
+                            const proxyCeiling = maxBidNet > 0 ? maxBidNet + 0.87 : 0;
+                            if (target.purchase_strategy.advice && proxyCeiling > 0) {
+                                target.purchase_strategy.advice = target.purchase_strategy.advice.replace(
+                                    /(?:do not chase past|chase past|bid up to|max bid of|ceiling of|cap of|do not exceed)\s+\$\d+(?:\.\d+)?/gi,
+                                    `do not chase past $${proxyCeiling.toFixed(2)}`
+                                );
+                            }
+                        } else {
+                            target.purchase_strategy.max_bid = resolvedMaxBuy;
+                            target.maxBid = resolvedMaxBuy;
+                        }
+                    }
                 }
                 if (scrapedAuctionMeta?.seller_name || scrapedAuctionMeta?.seller_id || target.seller_info) {
                     target.seller_info = {

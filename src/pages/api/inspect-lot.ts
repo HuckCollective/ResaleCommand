@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { inspectPhotoGallery, type InspectionImage } from '../../lib/ai-inspection';
+import { getAssetUrl } from '../../lib/inventory';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -19,11 +20,13 @@ export const POST: APIRoute = async ({ request }) => {
                     if (img.startsWith('data:')) {
                         preparedImages.push({ base64: img, index: imgIdx++ });
                     } else {
-                        preparedImages.push({ url: img, index: imgIdx++ });
+                        const resolved = img.startsWith('http') ? img : getAssetUrl(img);
+                        preparedImages.push({ url: resolved, index: imgIdx++ });
                     }
                 } else if (img && typeof img === 'object') {
+                    const targetUrl = img.url ? (img.url.startsWith('http') || img.url.startsWith('data:') ? img.url : getAssetUrl(img.url)) : undefined;
                     preparedImages.push({
-                        url: img.url,
+                        url: targetUrl,
                         base64: img.base64,
                         mimeType: img.mimeType,
                         index: img.index !== undefined ? img.index : imgIdx++
@@ -35,8 +38,11 @@ export const POST: APIRoute = async ({ request }) => {
         // 2. Process remote gallery URLs (e.g. from Appwrite / S3)
         if (Array.isArray(remoteImageUrls) && remoteImageUrls.length > 0) {
             remoteImageUrls.forEach((url: string) => {
-                if (url && typeof url === 'string' && !preparedImages.some(p => p.url === url)) {
-                    preparedImages.push({ url, index: imgIdx++ });
+                if (url && typeof url === 'string') {
+                    const resolved = url.startsWith('http') || url.startsWith('data:') ? url : getAssetUrl(url);
+                    if (resolved && !preparedImages.some(p => p.url === resolved)) {
+                        preparedImages.push({ url: resolved, index: imgIdx++ });
+                    }
                 }
             });
         }

@@ -369,6 +369,7 @@
             @submit-combine="$emit('submit-combine', $event)"
             @uncombine-lot="$emit('uncombine-lot', $event)"
             @split-one-unit="$emit('split-one-unit', $event)"
+            @split-completed="$emit('split-completed', $event)"
         >
             <template #filters>
                 <slot name="filters" />
@@ -564,7 +565,8 @@ const emit = defineEmits([
     'submit-bundle',
     'submit-combine',
     'uncombine-lot',
-    'split-one-unit'
+    'split-one-unit',
+    'split-completed'
 ]);
 
 // Tray state

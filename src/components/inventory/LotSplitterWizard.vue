@@ -4,7 +4,7 @@
     <div class="p-3 border-b border-base-200/80 bg-base-200/40 shrink-0">
       <div 
         class="p-2.5 rounded-box border border-base-300 bg-base-100 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-base-200/60 transition-all group"
-        @click="openItemDrawer(lotItem)"
+        @click="handleEditInDrawer"
         title="Edit item specs in drawer"
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">
@@ -36,13 +36,14 @@
           type="button" 
           class="btn btn-ghost btn-xs btn-circle opacity-60 group-hover:opacity-100 group-hover:text-primary shrink-0" 
           title="Edit item in drawer"
+          @click.stop="handleEditInDrawer"
         >
           <Icon icon="solar:pen-linear" class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Quick Action Pills Strip (Split 1 Unit / Rollback) -->
-      <div v-if="Number(lotItem?.quantity || 1) > 1 || isLot" class="flex items-center gap-2 pt-2">
+      <div v-if="Number(lotItem?.quantity || 1) > 1 || canRollback" class="flex items-center gap-2 pt-2">
         <button 
           v-if="Number(lotItem?.quantity || 1) > 1"
           type="button"
@@ -55,14 +56,14 @@
         </button>
 
         <button 
-          v-if="isLot"
+          v-if="canRollback"
           type="button"
           class="btn btn-2xs btn-outline btn-warning font-bold gap-1"
           @click="$emit('uncombine')"
-          title="Rollback this combined lot into individual items"
+          title="Undo combine on this lot and restore individual items"
         >
           <Icon icon="solar:restart-bold" class="w-3 h-3" />
-          <span>Rollback Lot</span>
+          <span>↩️ Undo Combine</span>
         </button>
       </div>
     </div>
@@ -210,6 +211,25 @@
             <span class="badge badge-xs badge-neutral font-bold">{{ allItems.length }} total</span>
           </div>
 
+          <!-- Multi-angle auto-crop banner -->
+          <div v-if="hasCompletedAutoCrop || totalCroppedCount > 0" class="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-success/40 bg-success/10 text-[11px] text-success-content">
+            <div class="flex items-center gap-1.5 font-bold min-w-0">
+              <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success shrink-0" />
+              <span class="truncate">✅ Auto-Cropped Item Views (Click any photo to zoom, or ✕ to remove)</span>
+            </div>
+            <button type="button" class="btn btn-2xs btn-outline btn-success font-bold gap-1 shrink-0" :disabled="isCropping" @click="autoCropAll">
+              <Icon icon="solar:restart-bold" class="w-3 h-3" />
+              <span>↻ Re-Crop</span>
+            </button>
+          </div>
+          <div v-else class="flex items-center justify-between gap-2 p-2 rounded-xl border border-dashed border-base-300 bg-base-100 text-[11px]">
+            <span class="text-base-content/70">Crop each item out of your gallery photos (front, back &amp; detail views).</span>
+            <button type="button" class="btn btn-xs btn-primary font-bold gap-1 shrink-0" :disabled="isCropping" @click="autoCropAll">
+              <Icon icon="solar:crop-bold" class="w-3.5 h-3.5" />
+              <span>Auto-Crop Photos</span>
+            </button>
+          </div>
+
           <!-- Tier Filter Tabs -->
           <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             <button 
@@ -275,16 +295,65 @@
                   title="Check to select for bulk move"
                 />
                 
-                <div class="w-10 h-10 rounded-lg bg-base-200 overflow-hidden shrink-0 border border-base-200 relative">
-                  <img v-if="item.image_url" :src="item.image_url" class="w-full h-full object-cover" />
-                  <Icon v-else icon="solar:book-bookmark-bold-duotone" class="w-6 h-6 m-2 text-base-content/40" />
-                </div>
-
                 <div class="min-w-0 flex-1">
                   <div class="font-bold text-xs sm:text-sm truncate">{{ item.title }}</div>
                   <div class="text-[11px] text-base-content/60 flex items-center gap-2">
                     <span v-if="item.condition" class="badge badge-xs badge-ghost">{{ item.condition }}</span>
                     <span>Est: <b>{{ item.estimated_value || '$15 - $25' }}</b></span>
+                  </div>
+
+                  <!-- Matched / cropped views strip (w-14 h-14 thumbnails with zoom & remove) -->
+                  <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <div
+                      v-for="v in item.views"
+                      :key="v.key"
+                      class="w-14 h-14 rounded-lg bg-base-200 overflow-hidden border relative shrink-0 group/thumb cursor-pointer shadow-2xs hover:ring-2 hover:ring-primary/60 transition-all"
+                      :class="isViewCropped(v) ? 'border-success/60' : 'border-base-300'"
+                      :title="`${v.role} - photo ${v.image_index + 1} (Click to zoom preview)`"
+                      @click="zoomView(getViewPreviewUrl(v), `${item.title} (${viewRoleLabel(v.role)})`)"
+                    >
+                      <img :src="getViewPreviewUrl(v)" class="w-full h-full object-cover" alt="" loading="lazy" />
+                      <span 
+                        class="absolute bottom-0 inset-x-0 text-[8px] leading-3.5 font-bold uppercase text-center bg-black/75 text-white truncate px-0.5 cursor-pointer hover:bg-primary"
+                        @click.stop="cycleViewRole(v)"
+                        title="Tap to change role"
+                      >
+                        {{ viewRoleLabel(v.role) }}
+                      </span>
+                      <!-- Corner ✕ remove button -->
+                      <button 
+                        type="button" 
+                        class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 hover:bg-error text-white flex items-center justify-center text-[9px] font-bold z-10 transition-colors shadow-xs"
+                        @click.stop="removeViewFromItem(item, v)"
+                        title="Remove this photo view"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div class="dropdown dropdown-top">
+                      <label tabindex="0" class="w-14 h-14 rounded-lg border-2 border-dashed border-base-300 flex flex-col items-center justify-center cursor-pointer text-base-content/60 hover:text-primary hover:border-primary transition-all" title="Assign / toggle gallery photos">
+                        <Icon icon="solar:add-circle-linear" class="w-5 h-5" />
+                        <span class="text-[8px] font-bold mt-0.5">Add</span>
+                      </label>
+                      <div tabindex="0" class="dropdown-content z-30 p-2 shadow-2xl bg-base-100 rounded-xl border border-base-200 w-56 mb-1">
+                        <div class="text-[10px] uppercase font-bold opacity-60 pb-1">Toggle gallery photos</div>
+                        <div v-if="galleryPhotos.length === 0" class="text-[11px] opacity-60">No gallery photos on this lot.</div>
+                        <div class="grid grid-cols-4 gap-1">
+                          <button
+                            v-for="(photo, pIdx) in galleryPhotos"
+                            :key="pIdx"
+                            type="button"
+                            class="w-11 h-11 rounded-md overflow-hidden border-2 relative"
+                            :class="itemHasPhoto(item, pIdx) ? 'border-primary' : 'border-base-300 opacity-70'"
+                            @click="togglePhotoForItem(item, pIdx)"
+                          >
+                            <img :src="photoPreviewUrl(pIdx)" class="w-full h-full object-cover" alt="" loading="lazy" />
+                            <span class="absolute top-0 left-0 text-[8px] px-0.5 bg-black/65 text-white font-bold">{{ pIdx + 1 }}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -529,18 +598,37 @@
         </div>
       </div>
   </div>
+
+  <!-- Click-to-Zoom Preview Modal -->
+  <dialog v-if="zoomedImageUrl" class="modal modal-open z-999" @click="zoomedImageUrl = null">
+    <div class="modal-box p-3 max-w-2xl bg-base-100 rounded-2xl relative shadow-2xl" @click.stop>
+      <div class="flex items-center justify-between pb-2 border-b border-base-200 mb-2">
+        <span class="text-xs font-bold text-base-content truncate">{{ zoomedImageTitle || 'Photo Preview' }}</span>
+        <button type="button" class="btn btn-xs btn-circle btn-ghost" @click="zoomedImageUrl = null">✕</button>
+      </div>
+      <div class="w-full flex items-center justify-center bg-black/5 rounded-xl overflow-hidden max-h-[70vh]">
+        <img :src="zoomedImageUrl" class="max-w-full max-h-[70vh] object-contain rounded-lg" alt="Zoomed view" />
+      </div>
+    </div>
+  </dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, shallowRef } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useItemDrawer } from '../../composables/useItemDrawer';
+import { useLotSplitter } from '../../composables/useLotSplitter';
+import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { databases, Query } from '../../lib/appwrite';
-import { DB_ID, getCollectionId, saveItemToInventory, duplicateItemMediaInStorage, updateInventoryItem } from '../../lib/inventory';
+import { DB_ID, BUCKET_ID, getCollectionId, saveItemToInventory, duplicateItemMediaInStorage, updateInventoryItem, fetchAssetBlob, getProxiedAssetUrl } from '../../lib/inventory';
+import { storage } from '../../lib/appwrite';
 import { generateNextUpc } from '../../lib/upcAuthority';
+import { getSubItemBoutique } from '../../lib/bundle-pricing';
+import { parsePriceValue } from '../../lib/lot-strategy';
+import { cropPhotoToJpeg, type NormBox } from '../../lib/photoSlicing';
 import { ID } from 'appwrite';
 
 const props = defineProps<{
@@ -550,26 +638,49 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'completed', 'uncombine', 'split-one-unit']);
 
-const { currentTeam, user } = useAuth();
-const { openItemDrawer } = useItemDrawer();
+// =========================================================================
+// 1. STATE & SEQUENCE IDENTIFIERS (TOP-LEVEL BEFORE ANY CALLS/WATCHERS)
+// =========================================================================
+let viewSeq = 0;
+
+// Cropped blobs kept strictly outside Vue reactivity in a plain Map
+const viewBlobs = new Map<string, Blob>();
+
+// Cropped preview Data URLs stored in a separate shallowRef map to avoid mutating watched items
+const croppedPreviews = shallowRef<Record<string, string>>({});
+
+// Execution guards & photo preview helpers
+const isCropping = ref(false);
+const hasAutoCroppedStep2 = ref(false);
+const hasCompletedAutoCrop = ref(false);
+const zoomedImageUrl = ref<string | null>(null);
+const zoomedImageTitle = ref<string | null>(null);
+
+function zoomView(url: string, title?: string) {
+  zoomedImageUrl.value = url;
+  zoomedImageTitle.value = title || 'Photo Preview';
+}
+
+function removeViewFromItem(item: ParsedItem, v: ItemViewState) {
+  const idx = item.views.findIndex(view => view.key === v.key);
+  if (idx >= 0) {
+    viewBlobs.delete(v.key);
+    if (croppedPreviews.value[v.key]) {
+      const next = { ...croppedPreviews.value };
+      delete next[v.key];
+      croppedPreviews.value = next;
+    }
+    item.views.splice(idx, 1);
+  }
+}
+
+const totalCroppedCount = computed(() => Object.keys(croppedPreviews.value).length);
 
 const step = ref(1);
 const isSubmitting = ref(false);
 const activeFilterTab = ref('all');
 const costAllocationMode = ref<'equal' | 'weighted'>('equal');
 const selectedItemIndices = ref(new Set<number>());
-
-const isLot = computed(() => {
-  const lot = props.lotItem;
-  if (!lot) return false;
-  return !!(
-    lot.isLot || 
-    lot.status === 'combined' || 
-    (Number(lot.quantity || 1) > 1 && !lot.parentLotId) ||
-    (Array.isArray(lot.lotChildren) && lot.lotChildren.length > 0) ||
-    /\b(?:lot|bundle|crate|pack|collection)\b/i.test(lot.title || '')
-  );
-});
 
 // Custom Tier Definitions
 interface CustomTier {
@@ -585,6 +696,16 @@ const tiers = ref<CustomTier[]>([
   { id: 'tier-3', name: '⚡ Tier 3: Quick Turn', mode: 'multi_qty', targetPrice: 10 },
 ]);
 
+type ViewRole = 'front' | 'back' | 'spine' | 'detail' | 'tag';
+const VIEW_ROLES: ViewRole[] = ['front', 'back', 'spine', 'detail', 'tag'];
+
+interface ItemViewState {
+  key: string;
+  role: ViewRole;
+  image_index: number;
+  bounding_box?: NormBox;
+}
+
 interface ParsedItem {
   index: number;
   title: string;
@@ -592,11 +713,340 @@ interface ParsedItem {
   condition: string;
   estimated_value: string;
   customPrice: number;
+  isPriceOverridden?: boolean;
   image_url?: string;
+  views: ItemViewState[];
 }
 
 const allItems = ref<ParsedItem[]>([]);
 
+const { currentTeam, user } = useAuth();
+const { openItemDrawer } = useItemDrawer();
+const { closeLotSplitter, updateActiveLotItem } = useLotSplitter();
+const { showLoader, hideLoader } = useLoader();
+
+function handleEditInDrawer() {
+  closeLotSplitter();
+  emit('close');
+  openItemDrawer(props.lotItem);
+}
+
+// =========================================================================
+// 2. COMPUTED LOT PROPERTIES
+// =========================================================================
+const isLot = computed(() => {
+  const lot = props.lotItem;
+  if (!lot) return false;
+  return !!(
+    lot.isLot || 
+    lot.status === 'combined' || 
+    (Number(lot.quantity || 1) > 1 && !lot.parentLotId) ||
+    (Array.isArray(lot.lotChildren) && lot.lotChildren.length > 0) ||
+    /\b(?:lot|bundle|crate|pack|collection)\b/i.test(lot.title || '')
+  );
+});
+
+// Rollback is only meaningful for lots that were actually combined/split into child documents
+const canRollback = computed(() => {
+  const lot = props.lotItem;
+  if (!lot) return false;
+  return lot.status === 'combined' || (Array.isArray(lot.lotChildren) && lot.lotChildren.length > 0);
+});
+
+// Source gallery photos (index == AI image_index)
+const galleryPhotos = computed<string[]>(() => {
+  const l = props.lotItem;
+  if (!l) return [];
+  const imgs = Array.isArray(l.images) && l.images.length > 0
+    ? l.images
+    : [l.imageId, ...(Array.isArray(l.galleryImageIds) ? l.galleryImageIds : [])];
+  return imgs.filter((s: any) => typeof s === 'string' && s);
+});
+
+// =========================================================================
+// 3. PHOTO PREVIEWS & MULTI-ANGLE VIEW BUILDERS
+// =========================================================================
+function photoPreviewUrl(photoIdx: number): string {
+  return getProxiedAssetUrl(galleryPhotos.value[photoIdx] || galleryPhotos.value[0]);
+}
+
+function getViewPreviewUrl(v: ItemViewState): string {
+  return croppedPreviews.value[v.key] || photoPreviewUrl(v.image_index);
+}
+
+function isViewCropped(v: ItemViewState): boolean {
+  return Boolean(croppedPreviews.value[v.key]);
+}
+
+function makeView(role: ViewRole, imageIndex: number, box?: NormBox): ItemViewState {
+  return {
+    key: `v${++viewSeq}`,
+    role,
+    image_index: imageIndex,
+    bounding_box: box
+  };
+}
+
+function toNormBox(box: any): NormBox | undefined {
+  if (!Array.isArray(box) || box.length !== 4) return undefined;
+  const n = box.map((v: any) => Math.max(0, Math.min(1000, Number(v))));
+  if (n.some(v => Number.isNaN(v)) || n[2] <= n[0] || n[3] <= n[1]) return undefined;
+  return n as NormBox;
+}
+
+function buildViews(it: any, fallbackIdx: number): ItemViewState[] {
+  const max = Math.max(1, galleryPhotos.value.length);
+  const clampIdx = (v: any, d: number) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 && n < max ? n : Math.min(d, max - 1);
+  };
+  const out: ItemViewState[] = [];
+  if (Array.isArray(it?.views)) {
+    for (const v of it.views) {
+      const role: ViewRole = VIEW_ROLES.includes(v?.role) ? v.role : 'detail';
+      out.push(makeView(role, clampIdx(v?.image_index, 0), toNormBox(v?.bounding_box)));
+    }
+  }
+  if (out.length === 0) {
+    out.push(makeView('front', clampIdx(it?.image_index, fallbackIdx), toNormBox(it?.bounding_box)));
+  }
+  return out;
+}
+
+function viewRoleLabel(role: ViewRole): string {
+  return role === 'detail' ? 'Detail' : role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function cycleViewRole(v: ItemViewState) {
+  v.role = VIEW_ROLES[(VIEW_ROLES.indexOf(v.role) + 1) % VIEW_ROLES.length];
+}
+
+function itemHasPhoto(item: ParsedItem, photoIdx: number): boolean {
+  return item.views.some(v => v.image_index === photoIdx);
+}
+
+function togglePhotoForItem(item: ParsedItem, photoIdx: number) {
+  const existing = item.views.findIndex(v => v.image_index === photoIdx);
+  if (existing >= 0) {
+    const viewKey = item.views[existing].key;
+    viewBlobs.delete(viewKey);
+    if (croppedPreviews.value[viewKey]) {
+      const next = { ...croppedPreviews.value };
+      delete next[viewKey];
+      croppedPreviews.value = next;
+    }
+    item.views.splice(existing, 1);
+  } else {
+    item.views.push(makeView(item.views.length === 0 ? 'front' : 'detail', photoIdx));
+  }
+}
+
+// =========================================================================
+// 4. MEMORY-SAFE CANVAS CROPPING (MUTATES shallowRef MAP, NEVER ITEMS ARRAY)
+// =========================================================================
+/** Crops every view that has a bounding box out of its (proxied, CORS-safe) gallery photo. */
+async function cropView(v: ItemViewState): Promise<boolean> {
+  const src = galleryPhotos.value[v.image_index];
+  if (!src || !v.bounding_box) return false;
+  try {
+    const { blob, dataUrl } = await cropPhotoToJpeg(src, v.bounding_box, { padding: 0, maxSize: 1200 });
+    viewBlobs.set(v.key, blob);
+    // Store dataUrl in separate shallowRef map instead of mutating the item object directly
+    croppedPreviews.value = {
+      ...croppedPreviews.value,
+      [v.key]: dataUrl
+    };
+    return true;
+  } catch (e) {
+    console.warn('[LotSplitterWizard] Crop skipped:', e);
+    return false;
+  }
+}
+
+async function autoCropAll() {
+  if (isCropping.value) return;
+  isCropping.value = true;
+  showLoader("Auto-Cropping Item Photos...", {
+    step: "Matching front, back & detail views across gallery photos...",
+    progress: 45,
+    cancelable: true
+  });
+  let done = 0;
+  let withBox = 0;
+  try {
+    let toCrop: ItemViewState[] = [];
+    for (const it of allItems.value) {
+      for (const v of it.views) {
+        if (v.bounding_box) {
+          withBox++;
+          if (!croppedPreviews.value[v.key]) {
+            toCrop.push(v);
+          }
+        }
+      }
+    }
+
+    // If no items have bounding boxes yet, fetch them on demand via /api/inspect-lot!
+    if (withBox === 0 && galleryPhotos.value.length > 0 && allItems.value.length > 0) {
+      showLoader("Auto-Cropping Item Photos...", {
+        step: "Detecting item coordinates across gallery photos with Gemini AI...",
+        progress: 60,
+        cancelable: true
+      });
+      try {
+        const resp = await fetch('/api/inspect-lot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            remoteImageUrls: galleryPhotos.value,
+            title: props.lotItem?.title || props.lotItem?.name,
+            cost: props.lotItem?.cost,
+            quantity: allItems.value.length,
+            existingItems: allItems.value.map(it => ({
+              name: it.title,
+              identity: it.title,
+              condition: it.condition,
+              estimated_value: it.estimated_value
+            }))
+          })
+        });
+
+        if (resp.ok) {
+          const inspected = await resp.json();
+          if (Array.isArray(inspected.lot_items) && inspected.lot_items.length > 0) {
+            allItems.value.forEach((it, idx) => {
+              const match = inspected.lot_items[idx] || inspected.lot_items.find((li: any) => li.name?.toLowerCase() === it.title.toLowerCase());
+              if (match) {
+                const newViews = buildViews(match, idx);
+                if (newViews.some(v => v.bounding_box)) {
+                  it.views = newViews;
+                }
+              }
+            });
+
+            // Persist the newly found views/bounding_boxes back to the lot item in Appwrite
+            if (props.lotItem?.$id) {
+              try {
+                const updatedComponents = allItems.value.map(it => ({
+                  name: it.title,
+                  condition: it.condition,
+                  estimated_value: it.estimated_value,
+                  bounding_box: it.views.find(v => v.bounding_box)?.bounding_box,
+                  views: it.views.map(v => ({ role: v.role, image_index: v.image_index, bounding_box: v.bounding_box }))
+                }));
+                const existingRaw = typeof props.lotItem.rawAnalysis === 'string'
+                  ? JSON.parse(props.lotItem.rawAnalysis || '{}')
+                  : (props.lotItem.rawAnalysis || {});
+                existingRaw.lot_items = updatedComponents;
+                await updateInventoryItem(props.lotItem.$id, {
+                  rawAnalysis: JSON.stringify(existingRaw)
+                });
+                if (props.lotItem) {
+                  props.lotItem.rawAnalysis = JSON.stringify(existingRaw);
+                }
+                updateActiveLotItem({ rawAnalysis: JSON.stringify(existingRaw) });
+              } catch (saveErr) {
+                console.warn('[LotSplitterWizard] Failed to persist detected bounding boxes:', saveErr);
+              }
+            }
+
+            // Re-collect toCrop
+            toCrop = [];
+            for (const it of allItems.value) {
+              for (const v of it.views) {
+                if (v.bounding_box) {
+                  withBox++;
+                  if (!croppedPreviews.value[v.key]) {
+                    toCrop.push(v);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[LotSplitterWizard] On-demand inspect-lot failed:', err);
+      }
+    }
+
+    showLoader("Auto-Cropping Item Photos...", {
+      step: `Rendering high-res crops for ${toCrop.length} photo views...`,
+      progress: 80,
+      cancelable: true
+    });
+
+    for (const v of toCrop) {
+      if (await cropView(v)) done++;
+    }
+
+    const totalCropped = Object.keys(croppedPreviews.value).length;
+    if (withBox === 0 && totalCropped === 0) {
+      addToast({ type: 'info', message: 'Could not detect bounding boxes in the photos. Showing full photos.' });
+    } else if (done > 0 || totalCropped > 0) {
+      hasCompletedAutoCrop.value = true;
+      addToast({ type: 'success', message: `Cropped ${done || totalCropped} photo view${(done || totalCropped) === 1 ? '' : 's'}.` });
+    }
+  } finally {
+    isCropping.value = false;
+    hideLoader();
+  }
+}
+
+// Run canvas auto-cropping ONCE when Step 2 opens (or on user click)
+watch(step, (newStep) => {
+  if (newStep === 2 && !hasAutoCroppedStep2.value) {
+    hasAutoCroppedStep2.value = true;
+    autoCropAll();
+  }
+});
+
+// =========================================================================
+// 5. SKU MEDIA PREPARATION FOR STORAGE & INVENTORY
+// =========================================================================
+function orderedViews(item: ParsedItem): ItemViewState[] {
+  return [...item.views].sort((a, b) => (a.role === 'front' ? 0 : 1) - (b.role === 'front' ? 0 : 1));
+}
+
+async function uploadView(v: ItemViewState): Promise<string | null> {
+  try {
+    let blob = viewBlobs.get(v.key) || null;
+    if (!blob && v.bounding_box) {
+      if (await cropView(v)) blob = viewBlobs.get(v.key) || null;
+    }
+    if (!blob) blob = await fetchAssetBlob(galleryPhotos.value[v.image_index] || galleryPhotos.value[0]);
+    if (!blob) return null;
+    const file = new File([blob], `split-${v.role}-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
+    const created = await storage.createFile(BUCKET_ID || 'item_images', ID.unique(), file);
+    return created.$id;
+  } catch (e) {
+    console.warn('[LotSplitterWizard] View upload skipped:', e);
+    return null;
+  }
+}
+
+/** Uploads an item's front crop as imageId and all other views as galleryImageIds. */
+async function resolveItemMedia(item: ParsedItem, primaryOnly = false): Promise<{ imageId: string | null; galleryIds: string[] }> {
+  const views = orderedViews(item);
+  if (views.length === 0) return { imageId: null, galleryIds: [] };
+  const ids: (string | null)[] = [];
+  for (const v of primaryOnly ? views.slice(0, 1) : views) ids.push(await uploadView(v));
+  return { imageId: ids[0] || null, galleryIds: ids.slice(1).filter((x): x is string => !!x) };
+}
+
+/** Multi-qty / bundle SKUs: first item's full set + the front crop of each other item. */
+async function resolveTierMedia(tierItems: ParsedItem[]): Promise<{ imageId: string | null; galleryIds: string[] }> {
+  const first = await resolveItemMedia(tierItems[0]);
+  const extra: string[] = [];
+  for (const it of tierItems.slice(1, 8)) {
+    const m = await resolveItemMedia(it, true);
+    if (m.imageId) extra.push(m.imageId);
+  }
+  return { imageId: first.imageId, galleryIds: [...first.galleryIds, ...extra] };
+}
+
+// =========================================================================
+// 6. LOT PARSING & TIERS INITIALIZATION
+// =========================================================================
 function parsePriceFromText(val: any): number {
   if (typeof val === 'number') return val;
   if (!val) return 0;
@@ -608,18 +1058,26 @@ function closeWizard() {
   emit('close');
 }
 
-// Initialize items from lotItem
-watch(() => props.lotItem, (lot) => {
-  if (lot) {
-    step.value = 1;
-    selectedItemIndices.value.clear();
-    initItemsFromLot();
-  }
-}, { immediate: true });
+function getTierAiAverage(tierId: string): number {
+  const items = allItems.value.filter(it => it.tierId === tierId);
+  if (items.length === 0) return 0;
+  const sum = items.reduce((s, it) => s + (it.customPrice || 0), 0);
+  return Math.round((sum / items.length) * 2) / 2;
+}
 
 function initItemsFromLot() {
   const lot = props.lotItem;
   if (!lot) return;
+  viewBlobs.clear();
+  croppedPreviews.value = {};
+  hasAutoCroppedStep2.value = false;
+
+  // Reset tiers to defaults so state never leaks from a previously opened lot
+  tiers.value = [
+    { id: 'tier-1', name: '🌟 Tier 1: Showcase', mode: 'single', targetPrice: 55 },
+    { id: 'tier-2', name: '📦 Tier 2: Core', mode: 'multi_qty', targetPrice: 22 },
+    { id: 'tier-3', name: '⚡ Tier 3: Quick Turn', mode: 'multi_qty', targetPrice: 10 },
+  ];
 
   // Auto-seed custom tiers directly from exitPlaybook if present
   if (lot.exitPlaybook) {
@@ -682,17 +1140,20 @@ function initItemsFromLot() {
     sourceItems.forEach((it: any, idx: number) => {
       const rawName = it.name || it.identity || it.title || `Lot Item #${idx + 1}`;
       const nameStr = rawName.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
+      // Each item keeps its OWN Boutique midpoint (never flattened to the tier average)
+      const boutiqueMid = parsePriceValue(getSubItemBoutique(it), 'midpoint', 0);
+      const fairMid = parsePriceFromText(it.estimated_value || it.price_breakdown?.fair);
+      const ownPrice = boutiqueMid > 0 ? boutiqueMid : fairMid;
+
       let assignedTierId = 'tier-2';
       let defaultPrice = 22;
-      if (it.tier === 'showcase' || it.is_key_issue || rawName.includes('Tier 1')) {
+      if (it.tier === 'showcase' || it.is_key_issue || rawName.includes('Tier 1') || ownPrice >= 25) {
         assignedTierId = 'tier-1';
         defaultPrice = 55;
-      } else if (it.tier === 'quick_turn' || rawName.includes('Tier 3')) {
+      } else if (it.tier === 'quick_turn' || rawName.includes('Tier 3') || (ownPrice > 0 && ownPrice < 15)) {
         assignedTierId = 'tier-3';
         defaultPrice = 10;
       }
-
-      const parsedPrice = parsePriceFromText(it.estimated_value || it.price_breakdown?.fair);
 
       rawCandidates.push({
         index: idx,
@@ -700,8 +1161,10 @@ function initItemsFromLot() {
         tierId: assignedTierId,
         condition: it.condition || 'Used/Good',
         estimated_value: it.estimated_value || '$15 - $25',
-        customPrice: parsedPrice > 0 ? parsedPrice : defaultPrice,
-        image_url: it.image_url || lot.images?.[it.image_index || idx] || lot.images?.[0] || undefined
+        customPrice: ownPrice > 0 ? Math.round(ownPrice) : defaultPrice,
+        isPriceOverridden: ownPrice > 0,
+        image_url: it.image_url || lot.images?.[it.image_index || idx] || lot.images?.[0] || undefined,
+        views: buildViews(it, idx)
       });
     });
   } else {
@@ -717,7 +1180,8 @@ function initItemsFromLot() {
         condition: 'Used/Good',
         estimated_value: '$15 - $25',
         customPrice: defaultPrice,
-        image_url: lot.images?.[i] || lot.images?.[0] || undefined
+        image_url: lot.images?.[i] || lot.images?.[0] || undefined,
+        views: buildViews(null, i)
       });
     }
   }
@@ -739,15 +1203,35 @@ function initItemsFromLot() {
       it.customPrice = t.targetPrice;
     }
   });
+
+  // Distinct titles (or a "Split into N Singles" playbook) => Tier 2 defaults to Single Items
+  const t2 = tiers.value.find(t => t.id === 'tier-2');
+  const t2Items = allItems.value.filter(it => it.tierId === 'tier-2');
+  const distinct = t2Items.length > 0 && new Set(t2Items.map(it => it.title.trim().toLowerCase())).size === t2Items.length;
+  let playbookSingles = false;
+  try { playbookSingles = /split\s+into\s+\d+\s+singles?/i.test(JSON.stringify(lot.exitPlaybook || {})); } catch (e) {}
+  if (t2 && t2.mode === 'multi_qty' && (distinct || playbookSingles)) t2.mode = 'single';
 }
 
+let currentLotId: string | null = null;
+
+// Initialize items from lotItem (Runs AFTER all state and functions are initialized)
+watch(() => props.lotItem, (lot) => {
+  if (lot) {
+    const newId = lot.$id || lot.id || null;
+    if (newId && newId === currentLotId) {
+      // Same lot item updated in-place (e.g. background save or auto-crop update).
+      // DO NOT reset step, tiers, or custom prices!
+      return;
+    }
+    currentLotId = newId;
+    step.value = 1;
+    selectedItemIndices.value.clear();
+    initItemsFromLot();
+  }
+}, { immediate: true });
+
 // Computeds & Helpers
-function getTierAiAverage(tierId: string): number {
-  const items = allItems.value.filter(it => it.tierId === tierId);
-  if (items.length === 0) return 0;
-  const sum = items.reduce((s, it) => s + (it.customPrice || 0), 0);
-  return Math.round((sum / items.length) * 2) / 2;
-}
 
 const totalCost = computed(() => {
   return parseFloat(props.lotItem?.cost || props.lotItem?.purchasePrice || '0') || 0;
@@ -965,6 +1449,10 @@ async function executeSplit() {
 
     // 2. Create Documents for each tier
     let createdCount = 0;
+    const createdDocs: any[] = [];
+    const targetLocation = parent.storageLocation || 'HG';
+    const isRetailBooth = /^(MD|DT)\b/i.test(targetLocation);
+    const childStatus = isRetailBooth ? 'placed' : 'received';
 
     for (const tier of tiers.value) {
       const tierItems = allItems.value.filter(it => it.tierId === tier.id);
@@ -976,7 +1464,8 @@ async function executeSplit() {
         // Create 1 document per item with individual custom price & unique UPC
         for (const item of tierItems) {
           const itemUpc = await generateNextUpc(prefix);
-          const mainImgId = extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
+          const media = await resolveItemMedia(item);
+          const mainImgId = media.imageId || extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
           const individualPrice = item.customPrice || tier.targetPrice;
           const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
             tenantId: orgId || undefined,
@@ -989,14 +1478,17 @@ async function executeSplit() {
             quantity: 1,
             conditionNotes: `Deconstructed from: ${cleanSubject || parent.title || 'Collection'}`.slice(0, 950),
             imageId: mainImgId || undefined,
-            storageLocation: parent.storageLocation || 'HG',
+            galleryImageIds: media.galleryIds.length > 0 ? media.galleryIds : undefined,
+            storageLocation: targetLocation,
             sourcingLocation: parent.sourcingLocation || '',
             parentLotId: parentDocId || undefined,
-            status: 'placed'
+            status: childStatus
           });
           createdCount++;
+          createdDocs.push(createdDoc);
 
-          if (mainImgId && createdDoc?.$id) {
+          // Only fall back to cloning the parent photo when no crop/upload was produced
+          if (!media.imageId && mainImgId && createdDoc?.$id) {
             duplicateItemMediaInStorage({ imageId: mainImgId }, { copyAll: false }).then(async (deepMedia) => {
               if (deepMedia.imageId && deepMedia.imageId !== mainImgId) {
                 await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
@@ -1008,7 +1500,8 @@ async function executeSplit() {
         // Create 1 multi-quantity document (Memory Den SKU) & unique UPC
         const itemUpc = await generateNextUpc(prefix);
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
-        const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
+        const tierMedia = await resolveTierMedia(tierItems);
+        const firstImgId = tierMedia.imageId || extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         
         let retailTitle = `${cleanSubject} - Choice Issues`;
         if (tier.id === 'tier-3' || tier.name.toLowerCase().includes('reader') || tier.name.toLowerCase().includes('clearance')) {
@@ -1028,14 +1521,16 @@ async function executeSplit() {
           quantity: tierItems.length,
           conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
-          storageLocation: parent.storageLocation || 'HG',
+          galleryImageIds: tierMedia.galleryIds.length > 0 ? tierMedia.galleryIds : undefined,
+          storageLocation: targetLocation,
           sourcingLocation: parent.sourcingLocation || '',
           parentLotId: parentDocId || undefined,
-          status: 'placed'
+          status: childStatus
         });
         createdCount++;
+        createdDocs.push(createdDoc);
 
-        if (firstImgId && createdDoc?.$id) {
+        if (!tierMedia.imageId && firstImgId && createdDoc?.$id) {
           duplicateItemMediaInStorage({ imageId: firstImgId }, { copyAll: false }).then(async (deepMedia) => {
             if (deepMedia.imageId && deepMedia.imageId !== firstImgId) {
               await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
@@ -1048,7 +1543,8 @@ async function executeSplit() {
         const bundleTotal = tier.targetPrice * tierItems.length;
         const totalBundleCost = unitCost * tierItems.length;
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
-        const firstImgId = extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
+        const tierMedia = await resolveTierMedia(tierItems);
+        const firstImgId = tierMedia.imageId || extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         const createdDoc = await databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
           tenantId: orgId || undefined,
           purchaseId: parent.purchaseId || undefined,
@@ -1060,14 +1556,16 @@ async function executeSplit() {
           quantity: 1,
           conditionNotes: `Curated Mini-Lot Set:\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
-          storageLocation: parent.storageLocation || 'HG',
+          galleryImageIds: tierMedia.galleryIds.length > 0 ? tierMedia.galleryIds : undefined,
+          storageLocation: targetLocation,
           sourcingLocation: parent.sourcingLocation || '',
           parentLotId: parentDocId || undefined,
-          status: 'placed'
+          status: childStatus
         });
         createdCount++;
+        createdDocs.push(createdDoc);
 
-        if (firstImgId && createdDoc?.$id) {
+        if (!tierMedia.imageId && firstImgId && createdDoc?.$id) {
           duplicateItemMediaInStorage({ imageId: firstImgId }, { copyAll: false }).then(async (deepMedia) => {
             if (deepMedia.imageId && deepMedia.imageId !== firstImgId) {
               await updateInventoryItem(createdDoc.$id, { imageId: deepMedia.imageId });
@@ -1091,7 +1589,7 @@ async function executeSplit() {
       message: `🎉 Successfully generated ${createdCount} crated inventory listings ready for booth tagging!`
     });
 
-    emit('completed');
+    emit('completed', { parentId: parentDocId, createdDocs });
     closeWizard();
   } catch (err: any) {
     console.error('[LotSplitterWizard Error]:', err);

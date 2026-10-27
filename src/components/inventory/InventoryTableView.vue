@@ -778,9 +778,18 @@ const closeDrawer = () => {
     syncUrlWithDrawer(null);
 };
 
+watch(isDrawerOpen, (isOpen) => {
+    if (!isOpen) {
+        if (activeItem.value !== null) {
+            activeItem.value = null;
+        }
+        syncUrlWithDrawer(null);
+    }
+});
+
 const handleDrawerOpenSplit = (item) => {
-    closeDrawer();
     const target = item || activeItem.value;
+    closeDrawer();
     if (target?.$id) {
         selectedItems.value = [target.$id];
     }

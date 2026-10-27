@@ -67,6 +67,12 @@ Legacy documents in Appwrite may contain legacy status synonyms (`'in-stock'`, `
 - **Prohibition of Data URIs**: Under no circumstances may in-memory Data URLs (`data:image/...`), blobs, or raw strings exceeding 255 characters be written into `items` or `purchases` collections.
 - **Pre-Save Protocol**: All inventory saving (direct, scout, batch intake, or Buy Tracker) must route images through Storage first and defensively sanitize `imageId` and `galleryImageIds` prior to database document creation.
 
+### F. Zero Premature Database Splitting in `/scout` (Pre-Buy Lot Conservation)
+- `/scout` must **never** split multi-item lots into multiple database records during scouting or intake.
+- In `/scout`, the interface displays the read-only **Bundle Components** list and the **`⚡ Recommended Play`** badge (`Split vs. Bundle`).
+- The intake item is saved strictly as **1 Master Lot document** with child `components` safely persisted in metadata (`bundle_components` / `lot_items`).
+- All physical deconstruction and database splitting (`⚡ Deconstruct Lot`) is strictly delegated to [`ItemDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemDrawer.vue) once the inventory has been physically acquired, unboxed, and received.
+
 ---
 
 ## 3. Multi-Org UPC & Sales Bucketing Standards
