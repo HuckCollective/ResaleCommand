@@ -1,6 +1,6 @@
 ---
 description: Rules for instant session continuity across restarts and zero-friction resume
-globs: ["*"]
+globs: "*"
 ---
 
 # Session Continuity & Zero-Friction Resume Rules

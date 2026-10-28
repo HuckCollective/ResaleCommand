@@ -14,6 +14,40 @@ export const getNoteValue = (notes, key, isCurrency = false) => {
     return null;
 };
 
+/**
+ * Normalizes single-unit cost vs total batch cost basis for multi-quantity items
+ * using the same ROI heuristic as ItemCard.vue.
+ * Example: HUCK-1309 (qty: 10, rawCost: 4.14, unitResale: 15.00) -> totalCost: 41.40, unitCost: 4.14
+ */
+export const resolveMultiQtyCost = (rawCostVal, quantityVal, unitResaleVal = 0) => {
+    const rawCost = parseFloat(String(rawCostVal ?? 0).replace(/[$,]/g, ''));
+    const qty = Math.max(1, Number(quantityVal) || 1);
+    const unitResale = parseFloat(String(unitResaleVal ?? 0).replace(/[$,]/g, '')) || 0;
+
+    if (isNaN(rawCost) || rawCost <= 0) {
+        return { totalCost: 0, unitCost: 0, isDetectedUnitCost: false };
+    }
+    if (qty <= 1) {
+        return { totalCost: rawCost, unitCost: rawCost, isDetectedUnitCost: false };
+    }
+
+    const totalEst = unitResale * qty;
+    let isUnit = false;
+    if (totalEst > 0) {
+        const singleRoi = ((totalEst - rawCost) / rawCost) * 100;
+        const batchCost = rawCost * qty;
+        const batchRoi = ((totalEst - batchCost) / batchCost) * 100;
+        // Matches ItemCard.vue: if single unit cost produces >2000% ROI while batch cost is standard retail ROI (<1500%)
+        if (singleRoi > 2000 && batchRoi > -50 && batchRoi < 1500) {
+            isUnit = true;
+        }
+    }
+
+    const totalCost = isUnit ? Number((rawCost * qty).toFixed(2)) : rawCost;
+    const unitCost = Number((totalCost / qty).toFixed(2));
+    return { totalCost, unitCost, isDetectedUnitCost: isUnit };
+};
+
 export function useItemDrawerForm() {
     const isAcquisitionUnlocked = ref(false);
 
@@ -43,10 +77,9 @@ export function useItemDrawerForm() {
 
     // Auto-calculate ROI / Margin % (Calculated per-unit so multi-quantity batches reflect accurate margins)
     const calculatedMargin = computed(() => {
-        const totalCost = parseFloat(editForm.cost || 0);
         const qty = Math.max(1, Number(editForm.quantity) || 1);
-        const unitCost = totalCost / qty;
         const price = parseFloat(editForm.resalePrice || editForm.soldPrice || 0);
+        const { unitCost } = resolveMultiQtyCost(editForm.cost, qty, price);
         if (price > 0 && unitCost >= 0) {
             return Math.round(((price - unitCost) / price) * 100);
         }
@@ -117,8 +150,12 @@ export function useItemDrawerForm() {
             editForm.tagTitle = initialTag || '';
 
             editForm.quantity = item.quantity || 1;
-            editForm.cost = formatMoney(item.cost || item.purchasePrice || getNoteValue(item.conditionNotes, 'Paid', true));
-            editForm.resalePrice = formatMoney(item.resalePrice || item.priceFair || item.listPrice || getNoteValue(item.conditionNotes, 'Resale', true));
+            const rawCost = item.cost ?? item.purchasePrice ?? getNoteValue(item.conditionNotes, 'Paid', true);
+            const rawResale = item.resalePrice || item.priceFair || item.listPrice || getNoteValue(item.conditionNotes, 'Resale', true);
+            const rawEstHigh = item.estHigh || getNoteValue(item.conditionNotes, 'Est. High', true);
+            const { totalCost } = resolveMultiQtyCost(rawCost, editForm.quantity, rawResale || rawEstHigh);
+            editForm.cost = rawCost !== null && rawCost !== undefined && rawCost !== '' ? formatMoney(totalCost) : '';
+            editForm.resalePrice = formatMoney(rawResale);
             editForm.soldPrice = formatMoney(item.soldPrice);
             editForm.estLow = formatMoney(item.estLow || getNoteValue(item.conditionNotes, 'Est. Low', true));
             editForm.estHigh = formatMoney(item.estHigh || getNoteValue(item.conditionNotes, 'Est. High', true));

@@ -1,258 +1,361 @@
 <template>
-    <Teleport to="body">
-        <div class="relative z-400">
-            <!-- Backdrop (Solid bg-black/60 without blur to prevent severe GPU scroll lag across 50+ cards) -->
-            <div class="fixed inset-0 bg-black/60 transition-opacity" @click.stop.prevent="closeDrawer"></div>
+  <Teleport to="body">
+    <div class="relative z-400">
+      <!-- Backdrop (Solid bg-black/60 without blur to prevent severe GPU scroll lag across 50+ cards) -->
+      <div
+        class="fixed inset-0 bg-black/60 transition-opacity"
+        @click.stop.prevent="closeDrawer"></div>
 
-            <!-- Drawer Container: Mobile full-width, Desktop expanded (860px / 980px) -->
-            <div class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
-                
-                <!-- 1. STICKY HEADER (Extracted Subcomponent) -->
-                <ItemDrawerHeader 
-                    :item="item" 
-                    :editForm="editForm" 
-                    :suggestedTitleStr="suggestedTitleStr"
-                    :suggestedTagTitleStr="suggestedTagTitleStr"
-                    @close="closeDrawer" 
-                    @dismiss-shop-update="handleDismissShopUpdate"
-                    @flag-shop-update="handleFlagShopUpdate"
-                    @copy-title="copyToClipboard(editForm.title || item?.title)"
-                />
+      <!-- Drawer Container: Mobile full-width, Desktop expanded (860px / 980px) -->
+      <div
+        class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
+        <!-- 1. STICKY HEADER (Extracted Subcomponent) -->
+        <ItemDrawerHeader
+          :item="item"
+          :editForm="editForm"
+          :suggestedTitleStr="suggestedTitleStr"
+          :suggestedTagTitleStr="suggestedTagTitleStr"
+          @close="closeDrawer"
+          @dismiss-shop-update="handleDismissShopUpdate"
+          @flag-shop-update="handleFlagShopUpdate"
+          @copy-title="copyToClipboard(editForm.title || item?.title)" />
 
-                <!-- 2. TABS (Details, Verify, Lot) -->
-                <div class="px-4 sm:px-6 pt-1 pb-0 bg-base-100 border-b border-base-200 flex-none z-20">
-                    <div role="tablist" class="tabs tabs-bordered font-bold w-full">
-                        <a role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-primary': mainTab === 'details'}" @click="mainTab = 'details'">
-                            <Icon icon="solar:notes-linear" class="w-4 h-4 mr-1.5 inline" /> Listing Details
-                        </a>
-                        <a role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-primary': mainTab === 'verify'}" @click="mainTab = 'verify'">
-                            <Icon icon="solar:checklist-minimalistic-linear" class="w-4 h-4 mr-1.5 inline" /> Checklist / Verify
-                        </a>
-                        <a v-if="item" role="tab" class="tab flex-1 text-xs sm:text-sm py-2" :class="{'tab-active text-secondary font-bold': mainTab === 'lot'}" @click="mainTab = 'lot'">
-                            <Icon icon="solar:clipboard-check-bold" class="w-4 h-4 mr-1.5 inline" />
-                            <span>Playbook</span>
-                            <span v-if="lotChildren?.length > 0" class="badge badge-2xs badge-secondary font-mono ml-1">({{ lotChildren.length }})</span>
-                            <span v-else-if="Number(editForm.quantity || item?.quantity || 1) > 1" class="badge badge-2xs badge-neutral font-mono ml-1">({{ editForm.quantity || item?.quantity }})</span>
-                        </a>
-                    </div>
-                </div>
-
-                <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6" v-show="mainTab === 'details'">
-                    <ItemDetailsTab
-                        :editForm="editForm"
-                        :item="item"
-                        :parentItem="parentItem"
-                        :lotChildren="lotChildren"
-                        v-model:isAcquisitionUnlocked="isAcquisitionUnlocked"
-                        v-model:showOnStorefront="showOnStorefront"
-                        v-model:saveIndividually="saveIndividually"
-                        v-model:descTab="descTab"
-                        :allLocations="allLocations"
-                        :calculatedMargin="calculatedMargin"
-                        :suggestedTitleStr="suggestedTitleStr"
-                        :analyzing="analyzing"
-                        :analysisStatus="analysisStatus"
-                        :scoutResult="scoutResult"
-                        :scoutPurchaseStrategy="scoutPurchaseStrategy"
-                        :scoutItemsArray="scoutItemsArray"
-                        :scoutTotalRange="scoutTotalRange"
-                        :scoutMdText="scoutMdText"
-                        :parsedRawAnalysis="parsedRawAnalysis"
-                        :parsedComponents="lotComponents"
-                        :generatingDescription="generatingDescription"
-                        :fetchedImages="fetchedImages"
-                        :fetchingImages="fetchingImages"
-                        :downloadingImageUrls="downloadingImageUrls"
-                        @open-lot-tab="mainTab = 'lot'"
-                        @open-splitter="handleOpenSplitter"
-                        @copy-title="copyToClipboard(editForm.title)"
-                        @fetch-source-data="fetchSourceData"
-                        @add-all-fetched-images="addAllFetchedImages"
-                        @dismiss-fetched-images="fetchedImages = []"
-                        @select-fetched-image="selectFetchedImage"
-                        @sell-one-quantity="sellOneQuantity"
-                        @split-one-active="splitOneActive"
-                        @restock-quantity="restockQuantity"
-                        @apply-price-tier="applyPriceTier"
-                        @deconstruct-ai-lot="deconstructAiLot"
-                        @apply-bundle-suggestions="applyBundleSuggestions"
-                        @open-md-modal="openMdModal"
-                        @generate-description="generateDescription"
-                    >
-                        <template #gallery-manager>
-                            <PhotoGalleryManager 
-                                v-model:existing-images="editForm.existingGalleryIds"
-                                v-model:new-photos="editGalleryBuffer"
-                                v-model:main-selection="mainPhotoSelection"
-                                :scanner-widget="scannerWidget"
-                                @open-camera="scannerWidget?.startCamera()"
-                            />
-                        </template>
-                    </ItemDetailsTab>
-                    <div class="h-10"></div>
-                </div>
-
-                <!-- 4. CHECKLIST / VERIFY TAB (Extracted Subcomponent) -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-if="mainTab === 'verify'">
-                    <ItemVerifyTab
-                        :componentsList="verifyChecklist"
-                        :extracting="extracting"
-                        :hasGalleryPhotos="(editForm.existingGalleryIds?.length || 0) > 0"
-                        @photos-captured="handleVerifyPhotosCaptured"
-                        @extract-from-gallery="extractChecklistFromGallery"
-                        @clear="verifyChecklist = []"
-                    />
-                </div>
-
-                <!-- 5. PROFIT PLAYBOOK TAB (Extracted Subcomponent) -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5" v-if="mainTab === 'lot'">
-                    <ItemLotTab
-                        :item="item"
-                        :parentItem="parentItem"
-                        :lotChildren="lotChildren"
-                        :siblingItems="siblingItems"
-                        :uncombining="uncombining"
-                        :lotDashboardItem="lotDashboardItem"
-                        :totalSplitResaleValue="totalSplitResaleValue"
-                        :lotRealizedRevenue="lotRealizedRevenue"
-                        :lotROI="lotROI"
-                        :inventoryItems="inventoryItems"
-                        :scout-result="scoutResult"
-                        :scout-purchase-strategy="scoutPurchaseStrategy"
-                        :parsed-raw-analysis="parsedRawAnalysis"
-                        :parsed-components="lotComponents"
-                        @selectItem="$emit('selectItem', $event)"
-                        @open-splitter="handleOpenSplitter"
-                        @uncombine="uncombineLot"
-                        @refresh-lot="handleRefreshLot"
-                        @open-bundle="handleOpenBundle"
-                        @open-combine="handleOpenCombine"
-                        @open-restock="handleOpenRestock"
-                        @apply-single-play="handleApplySinglePlay"
-                    />
-                </div>
-
-                <!-- 6. STICKY ACTION TOOLBAR FOOTER (Clean 2-Button Dock) -->
-                <ItemDrawerFooter
-                    :current-tab="mainTab"
-                    :item="item"
-                    :edit-form="editForm"
-                    :analyzing="analyzing"
-                    :analysisStatus="analysisStatus"
-                    :hasScoutResult="!!scoutResult"
-                    :canAnalyze="canAnalyze"
-                    :processing="processing"
-                    :is-acquired="isAcquiredItem"
-                    @analyze="analyzeExistingItem"
-                    @cancel="closeDrawer"
-                    @save="saveEdit"
-                />
-            </div>
-
-            <!-- Visual Photo Selector Modal for Bundle Components -->
-            <dialog id="photo_picker_modal" class="modal" :class="{'modal-open': pickingPhotoForItemIndex !== null}">
-                <div class="modal-box max-w-2xl bg-base-100 p-5 rounded-2xl border border-base-200 shadow-2xl">
-                    <div class="flex justify-between items-center pb-3 border-b border-base-200">
-                        <div class="flex items-center gap-2">
-                            <Icon icon="solar:gallery-wide-bold" class="w-5 h-5 text-primary" />
-                            <h3 class="font-bold text-sm sm:text-base">
-                                Choose Photo for Item #{{ pickingPhotoForItemIndex !== null ? pickingPhotoForItemIndex + 1 : '' }}
-                            </h3>
-                        </div>
-                        <button class="btn btn-sm btn-circle btn-ghost" @click="pickingPhotoForItemIndex = null">✕</button>
-                    </div>
-
-                    <p class="text-xs opacity-60 mt-2">
-                        Select a photo from the gallery to assign as the primary image for this bundle item:
-                    </p>
-
-                    <div v-if="allAvailableGalleryUrls.length > 0" class="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4 max-h-[50vh] overflow-y-auto p-1">
-                        <div 
-                            v-for="(photoUrl, pIdx) in allAvailableGalleryUrls" 
-                            :key="pIdx"
-                            @click="assignPhotoToComponent(pickingPhotoForItemIndex, photoUrl, pIdx)"
-                            class="aspect-square rounded-xl overflow-hidden border-2 cursor-pointer relative group transition-all"
-                            :class="isPhotoAssigned(pickingPhotoForItemIndex, pIdx) ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
-                        >
-                            <img :src="photoUrl" class="w-full h-full object-cover" />
-                            <div class="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                Photo {{ pIdx + 1 }}
-                            </div>
-                            <div v-if="isPhotoAssigned(pickingPhotoForItemIndex, pIdx)" class="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                                <Icon icon="solar:check-circle-bold" class="w-6 h-6 text-primary" />
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="text-center py-8 opacity-40 text-xs italic">
-                        No gallery photos available yet. Fetch or upload photos first.
-                    </div>
-
-                    <div class="modal-action border-t border-base-200 pt-3">
-                        <button class="btn btn-sm" @click="pickingPhotoForItemIndex = null">Done</button>
-                    </div>
-                </div>
-                <form method="dialog" class="modal-backdrop" @click="pickingPhotoForItemIndex = null">
-                    <button>close</button>
-                </form>
-            </dialog>
-
-            <!-- Full Markdown Scout Report Modal -->
-            <dialog v-if="showMdModal" class="modal modal-open z-999">
-                <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-6">
-                    <div class="flex justify-between items-center pb-3 border-b border-base-300">
-                        <h3 class="font-bold text-base flex items-center gap-2">
-                            <Icon icon="solar:document-text-bold" class="w-5 h-5 text-primary" />
-                            🔍 Deep Scan Report
-                        </h3>
-                        <button class="btn btn-sm btn-circle btn-ghost" @click="showMdModal = false">✕</button>
-                    </div>
-                    <div class="flex-1 overflow-y-auto py-4 prose prose-sm max-w-none" v-html="renderMarkdown(scoutMdText)">
-                    </div>
-                    <div class="modal-action border-t border-base-300 pt-3 flex justify-between">
-                        <button class="btn btn-sm btn-outline gap-1" @click="copyToClipboard(scoutMdText)">
-                            <Icon icon="solar:copy-linear" class="w-4 h-4" /> Copy Report
-                        </button>
-                        <button class="btn btn-sm btn-primary" @click="showMdModal = false">Close</button>
-                    </div>
-                </div>
-                <form method="dialog" class="modal-backdrop" @click="showMdModal = false">
-                    <button>close</button>
-                </form>
-            </dialog>
-
-            <!-- Camera / Photo Scanner -->
-            <ScannerWidget 
-                ref="scannerWidget" 
-                :photos="editGalleryBuffer" 
-                :hide-all-triggers="true" 
-                @photos-captured="handleCapturedPhotos" 
-                @remove-photo="removeGalleryItem($event, false)" 
-            />
-
-            <!-- Full-Resolution Image Zoom Lightbox Modal -->
-            <dialog class="modal modal-middle z-50" :class="{ 'modal-open': !!previewZoomUrl }">
-                <div class="modal-box max-w-2xl p-4 bg-base-100 rounded-2xl shadow-2xl border border-base-300">
-                    <div class="flex items-center justify-between pb-2 border-b border-base-200">
-                        <span class="text-xs font-bold text-base-content flex items-center gap-1.5">
-                            <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4 text-primary" />
-                            Full-Resolution Photo Preview
-                        </span>
-                        <button type="button" @click="closeZoomPreview" class="btn btn-xs btn-circle btn-ghost">✕</button>
-                    </div>
-                    <div class="py-3 flex items-center justify-center max-h-[70vh] overflow-auto">
-                        <img v-if="previewZoomUrl" :src="previewZoomUrl" class="max-w-full max-h-[65vh] object-contain rounded-xl shadow-md" />
-                    </div>
-                    <div class="modal-action mt-2">
-                        <button type="button" class="btn btn-sm btn-primary w-full rounded-xl font-bold" @click="closeZoomPreview">Close Preview</button>
-                    </div>
-                </div>
-                <form method="dialog" class="modal-backdrop">
-                    <button type="button" @click="closeZoomPreview">close</button>
-                </form>
-            </dialog>
+        <!-- 2. TABS (Details, Verify, Lot) -->
+        <div
+          class="px-4 sm:px-6 pt-1 pb-0 bg-base-100 border-b border-base-200 flex-none z-20">
+          <div role="tablist" class="tabs tabs-bordered font-bold w-full">
+            <a
+              role="tab"
+              class="tab flex-1 text-xs sm:text-sm py-2"
+              :class="{ 'tab-active text-primary': mainTab === 'details' }"
+              @click="mainTab = 'details'">
+              <Icon icon="solar:notes-linear" class="w-4 h-4 mr-1.5 inline" />
+              Listing Details
+            </a>
+            <a
+              role="tab"
+              class="tab flex-1 text-xs sm:text-sm py-2"
+              :class="{ 'tab-active text-primary': mainTab === 'verify' }"
+              @click="mainTab = 'verify'">
+              <Icon
+                icon="solar:checklist-minimalistic-linear"
+                class="w-4 h-4 mr-1.5 inline" />
+              Checklist / Verify
+            </a>
+            <a
+              v-if="item"
+              role="tab"
+              class="tab flex-1 text-xs sm:text-sm py-2"
+              :class="{
+                'tab-active text-secondary font-bold': mainTab === 'lot',
+              }"
+              @click="mainTab = 'lot'">
+              <Icon
+                icon="solar:clipboard-check-bold"
+                class="w-4 h-4 mr-1.5 inline" />
+              <span>Playbook</span>
+              <span
+                v-if="lotChildren?.length > 0"
+                class="badge badge-2xs badge-secondary font-mono ml-1"
+                >({{ lotChildren.length }})</span
+              >
+              <span
+                v-else-if="Number(editForm.quantity || item?.quantity || 1) > 1"
+                class="badge badge-2xs badge-neutral font-mono ml-1"
+                >({{ editForm.quantity || item?.quantity }})</span
+              >
+            </a>
+          </div>
         </div>
-    </Teleport>
+
+        <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
+        <div
+          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
+          v-show="mainTab === 'details'">
+          <ItemDetailsTab
+            :editForm="editForm"
+            :item="item"
+            :parentItem="parentItem"
+            :lotChildren="lotChildren"
+            v-model:isAcquisitionUnlocked="isAcquisitionUnlocked"
+            v-model:showOnStorefront="showOnStorefront"
+            v-model:saveIndividually="saveIndividually"
+            v-model:descTab="descTab"
+            :allLocations="allLocations"
+            :calculatedMargin="calculatedMargin"
+            :suggestedTitleStr="suggestedTitleStr"
+            :analyzing="analyzing"
+            :analysisStatus="analysisStatus"
+            :scoutResult="scoutResult"
+            :scoutPurchaseStrategy="scoutPurchaseStrategy"
+            :scoutItemsArray="scoutItemsArray"
+            :scoutTotalRange="scoutTotalRange"
+            :scoutMdText="scoutMdText"
+            :parsedRawAnalysis="parsedRawAnalysis"
+            :parsedComponents="lotComponents"
+            :generatingDescription="generatingDescription"
+            :fetchedImages="fetchedImages"
+            :fetchingImages="fetchingImages"
+            :downloadingImageUrls="downloadingImageUrls"
+            :inventoryItems="mergedInventoryItems"
+            @open-lot-tab="mainTab = 'lot'"
+            @open-splitter="handleOpenSplitter"
+            @copy-title="copyToClipboard(editForm.title)"
+            @fetch-source-data="fetchSourceData"
+            @add-all-fetched-images="addAllFetchedImages"
+            @dismiss-fetched-images="fetchedImages = []"
+            @select-fetched-image="selectFetchedImage"
+            @sell-one-quantity="sellOneQuantity"
+            @split-one-active="splitOneActive"
+            @restock-quantity="restockQuantity"
+            @apply-price-tier="applyPriceTier"
+            @deconstruct-ai-lot="deconstructAiLot"
+            @apply-bundle-suggestions="applyBundleSuggestions"
+            @open-md-modal="openMdModal"
+            @generate-description="generateDescription">
+            <template #gallery-manager>
+              <PhotoGalleryManager
+                v-model:existing-images="editForm.existingGalleryIds"
+                v-model:new-photos="editGalleryBuffer"
+                v-model:main-selection="mainPhotoSelection"
+                :scanner-widget="scannerWidget"
+                @open-camera="scannerWidget?.startCamera()" />
+            </template>
+          </ItemDetailsTab>
+          <div class="h-10"></div>
+        </div>
+
+        <!-- 4. CHECKLIST / VERIFY TAB (Extracted Subcomponent) -->
+        <div
+          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5"
+          v-if="mainTab === 'verify'">
+          <ItemVerifyTab
+            :componentsList="verifyChecklist"
+            :extracting="extracting"
+            :hasGalleryPhotos="(editForm.existingGalleryIds?.length || 0) > 0"
+            @photos-captured="handleVerifyPhotosCaptured"
+            @extract-from-gallery="extractChecklistFromGallery"
+            @clear="verifyChecklist = []" />
+        </div>
+
+        <!-- 5. PROFIT PLAYBOOK TAB (Extracted Subcomponent) -->
+        <div
+          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5"
+          v-if="mainTab === 'lot'">
+          <ItemLotTab
+            :item="item"
+            :parentItem="parentItem"
+            :lotChildren="lotChildren"
+            :siblingItems="siblingItems"
+            :uncombining="uncombining"
+            :lotDashboardItem="lotDashboardItem"
+            :totalSplitResaleValue="totalSplitResaleValue"
+            :lotRealizedRevenue="lotRealizedRevenue"
+            :lotROI="lotROI"
+            :inventoryItems="inventoryItems"
+            :inventoryItems="mergedInventoryItems"
+            :scout-result="scoutResult"
+            :scout-purchase-strategy="scoutPurchaseStrategy"
+            :parsed-raw-analysis="parsedRawAnalysis"
+            :parsed-components="lotComponents"
+            @selectItem="$emit('selectItem', $event)"
+            @open-splitter="handleOpenSplitter"
+            @uncombine="uncombineLot"
+            @refresh-lot="handleRefreshLot"
+            @open-bundle="handleOpenBundle"
+            @open-combine="handleOpenCombine"
+            @open-restock="handleOpenRestock"
+            @apply-single-play="handleApplySinglePlay" />
+        </div>
+
+        <!-- 6. STICKY ACTION TOOLBAR FOOTER (Clean 2-Button Dock) -->
+        <ItemDrawerFooter
+          :current-tab="mainTab"
+          :item="item"
+          :edit-form="editForm"
+          :analyzing="analyzing"
+          :analysisStatus="analysisStatus"
+          :hasScoutResult="!!scoutResult"
+          :canAnalyze="canAnalyze"
+          :processing="processing"
+          :is-acquired="isAcquiredItem"
+          @analyze="analyzeExistingItem"
+          @cancel="closeDrawer"
+          @save="saveEdit" />
+      </div>
+
+      <!-- Visual Photo Selector Modal for Bundle Components -->
+      <dialog
+        id="photo_picker_modal"
+        class="modal"
+        :class="{ 'modal-open': pickingPhotoForItemIndex !== null }">
+        <div
+          class="modal-box max-w-2xl bg-base-100 p-5 rounded-2xl border border-base-200 shadow-2xl">
+          <div
+            class="flex justify-between items-center pb-3 border-b border-base-200">
+            <div class="flex items-center gap-2">
+              <Icon
+                icon="solar:gallery-wide-bold"
+                class="w-5 h-5 text-primary" />
+              <h3 class="font-bold text-sm sm:text-base">
+                Choose Photo for Item #{{
+                  pickingPhotoForItemIndex !== null
+                    ? pickingPhotoForItemIndex + 1
+                    : ""
+                }}
+              </h3>
+            </div>
+            <button
+              class="btn btn-sm btn-circle btn-ghost"
+              @click="pickingPhotoForItemIndex = null">
+              ✕
+            </button>
+          </div>
+
+          <p class="text-xs opacity-60 mt-2">
+            Select a photo from the gallery to assign as the primary image for
+            this bundle item:
+          </p>
+
+          <div
+            v-if="allAvailableGalleryUrls.length > 0"
+            class="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4 max-h-[50vh] overflow-y-auto p-1">
+            <div
+              v-for="(photoUrl, pIdx) in allAvailableGalleryUrls"
+              :key="pIdx"
+              @click="
+                assignPhotoToComponent(pickingPhotoForItemIndex, photoUrl, pIdx)
+              "
+              class="aspect-square rounded-xl overflow-hidden border-2 cursor-pointer relative group transition-all"
+              :class="
+                isPhotoAssigned(pickingPhotoForItemIndex, pIdx)
+                  ? 'border-primary ring-2 ring-primary/40'
+                  : 'border-base-300 hover:border-primary/50'
+              ">
+              <img :src="photoUrl" class="w-full h-full object-cover" />
+              <div
+                class="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                Photo {{ pIdx + 1 }}
+              </div>
+              <div
+                v-if="isPhotoAssigned(pickingPhotoForItemIndex, pIdx)"
+                class="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                <Icon
+                  icon="solar:check-circle-bold"
+                  class="w-6 h-6 text-primary" />
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-center py-8 opacity-40 text-xs italic">
+            No gallery photos available yet. Fetch or upload photos first.
+          </div>
+
+          <div class="modal-action border-t border-base-200 pt-3">
+            <button class="btn btn-sm" @click="pickingPhotoForItemIndex = null">
+              Done
+            </button>
+          </div>
+        </div>
+        <form
+          method="dialog"
+          class="modal-backdrop"
+          @click="pickingPhotoForItemIndex = null">
+          <button>close</button>
+        </form>
+      </dialog>
+
+      <!-- Full Markdown Scout Report Modal -->
+      <dialog v-if="showMdModal" class="modal modal-open z-999">
+        <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-6">
+          <div
+            class="flex justify-between items-center pb-3 border-b border-base-300">
+            <h3 class="font-bold text-base flex items-center gap-2">
+              <Icon
+                icon="solar:document-text-bold"
+                class="w-5 h-5 text-primary" />
+              🔍 Deep Scan Report
+            </h3>
+            <button
+              class="btn btn-sm btn-circle btn-ghost"
+              @click="showMdModal = false">
+              ✕
+            </button>
+          </div>
+          <div
+            class="flex-1 overflow-y-auto py-4 prose prose-sm max-w-none"
+            v-html="renderMarkdown(scoutMdText)"></div>
+          <div
+            class="modal-action border-t border-base-300 pt-3 flex justify-between">
+            <button
+              class="btn btn-sm btn-outline gap-1"
+              @click="copyToClipboard(scoutMdText)">
+              <Icon icon="solar:copy-linear" class="w-4 h-4" /> Copy Report
+            </button>
+            <button class="btn btn-sm btn-primary" @click="showMdModal = false">
+              Close
+            </button>
+          </div>
+        </div>
+        <form
+          method="dialog"
+          class="modal-backdrop"
+          @click="showMdModal = false">
+          <button>close</button>
+        </form>
+      </dialog>
+
+      <!-- Camera / Photo Scanner -->
+      <ScannerWidget
+        ref="scannerWidget"
+        :photos="editGalleryBuffer"
+        :hide-all-triggers="true"
+        @photos-captured="handleCapturedPhotos"
+        @remove-photo="removeGalleryItem($event, false)" />
+
+      <!-- Full-Resolution Image Zoom Lightbox Modal -->
+      <dialog
+        class="modal modal-middle z-50"
+        :class="{ 'modal-open': !!previewZoomUrl }">
+        <div
+          class="modal-box max-w-2xl p-4 bg-base-100 rounded-2xl shadow-2xl border border-base-300">
+          <div
+            class="flex items-center justify-between pb-2 border-b border-base-200">
+            <span
+              class="text-xs font-bold text-base-content flex items-center gap-1.5">
+              <Icon
+                icon="solar:magnifer-zoom-in-bold"
+                class="w-4 h-4 text-primary" />
+              Full-Resolution Photo Preview
+            </span>
+            <button
+              type="button"
+              @click="closeZoomPreview"
+              class="btn btn-xs btn-circle btn-ghost">
+              ✕
+            </button>
+          </div>
+          <div
+            class="py-3 flex items-center justify-center max-h-[70vh] overflow-auto">
+            <img
+              v-if="previewZoomUrl"
+              :src="previewZoomUrl"
+              class="max-w-full max-h-[65vh] object-contain rounded-xl shadow-md" />
+          </div>
+          <div class="modal-action mt-2">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary w-full rounded-xl font-bold"
+              @click="closeZoomPreview">
+              Close Preview
+            </button>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button type="button" @click="closeZoomPreview">close</button>
+        </form>
+      </dialog>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -270,9 +373,11 @@ import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
 import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
+import { useItemDrawerForm, resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
 import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage, formatScoutReportMarkdown, isItemAcquired, isLiveAuctionActive } from '../../lib/inventory';
+import { purchasesAPI } from '../../lib/purchases';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
@@ -282,10 +387,12 @@ import { warehousesApi } from '../../lib/warehouses';
 import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
 
 const { currentTeam } = useAuth();
+const { user, currentTeam } = useAuth();
 const { showLoader, hideLoader, updateLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
 const orgWarehouses = ref([]);
+const fetchedBackstockItems = ref([]);
 
 const allLocations = computed(() => {
     const set = new Set();
@@ -315,6 +422,18 @@ const fetchLocations = async () => {
         const wList = await warehousesApi.listWarehouses(currentTeam.value.$id);
         orgWarehouses.value = wList || [];
     } catch(e) {}
+
+    // Fallback fetch of active Backstock (HG / acquired / received) items so Restock Bin dropdown is always populated
+    if (!props.inventoryItems || props.inventoryItems.length === 0) {
+        try {
+            const bRes = await databases.listDocuments(DB_ID, getCollectionId(), [
+                Query.equal('status', ['acquired', 'received']),
+                Query.orderDesc('$createdAt'),
+                Query.limit(100)
+            ]);
+            fetchedBackstockItems.value = bRes.documents || [];
+        } catch(e) {}
+    }
 };
 
 onMounted(() => {
@@ -353,6 +472,17 @@ const emit = defineEmits([
     'close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem', 'refresh',
     'open-bundle', 'open-combine', 'open-restock', 'open-splitter'
 ]);
+
+const mergedInventoryItems = computed(() => {
+    const map = new Map();
+    if (Array.isArray(props.inventoryItems)) {
+        props.inventoryItems.forEach(it => it && it.$id && map.set(it.$id, it));
+    }
+    if (Array.isArray(fetchedBackstockItems.value)) {
+        fetchedBackstockItems.value.forEach(it => it && it.$id && !map.has(it.$id) && map.set(it.$id, it));
+    }
+    return Array.from(map.values());
+});
 
 function handleOpenBundle(targetItem) {
     closeDrawer();
@@ -411,7 +541,7 @@ const handleOpenSplitter = (payload) => {
 const handleApplySinglePlay = (payload) => {
     if (!payload?.play) return;
     const { play, channel, price } = payload;
-    
+
     if (price !== undefined && price !== null && !isNaN(Number(price))) {
         editForm.resalePrice = Number(price);
         editForm.boutiquePrice = Number(price);
@@ -424,7 +554,7 @@ const handleApplySinglePlay = (payload) => {
             editForm.sellingLocations.push(channel);
         }
     }
-    
+
     addToast({
         type: 'success',
         message: `Applied Play "${play.name}": Target set to $${Number(price || 0).toFixed(2)} (${channel})`
@@ -577,16 +707,16 @@ const mainPhotoSelection = ref({ type: 'none', val: null });
 
 const actualMainPhoto = computed(() => {
     if (mainPhotoSelection.value?.type === 'new' && editGalleryBuffer.value?.[mainPhotoSelection.value?.val]) {
-        return { 
-            file: editGalleryBuffer.value[mainPhotoSelection.value.val], 
+        return {
+            file: editGalleryBuffer.value[mainPhotoSelection.value.val],
             url: getObjectUrl(editGalleryBuffer.value[mainPhotoSelection.value.val]),
             type: 'new',
             idx: mainPhotoSelection.value.val
         };
     } else if (mainPhotoSelection.value?.type === 'existing' && Array.isArray(editForm.existingGalleryIds) && editForm.existingGalleryIds.includes(mainPhotoSelection.value?.val)) {
-        return { 
-            file: null, 
-            url: getAssetUrl(mainPhotoSelection.value.val), 
+        return {
+            file: null,
+            url: getAssetUrl(mainPhotoSelection.value.val),
             id: mainPhotoSelection.value.val,
             type: 'existing'
         };
@@ -772,7 +902,7 @@ const scoutPurchaseStrategy = computed(() => {
             currentBid: currentCost,
             maxBid,
             headroom,
-            advice: isOutbid 
+            advice: isOutbid
                 ? `🚨 STOP BIDDING — OUTBID! Current bid ($${currentCost.toFixed(2)}) exceeds your max bid ceiling ($${maxBid.toFixed(2)}). Landed cost wipes out your target resale margin. Do not chase.`
                 : (strat.advice || `🎯 IN PLAY: Current bid is $${currentCost.toFixed(2)}. You have $${headroom.toFixed(2)} in bidding headroom before reaching your $${maxBid.toFixed(2)} ceiling.`)
         };
@@ -782,7 +912,7 @@ const scoutPurchaseStrategy = computed(() => {
 
 const scoutTotalRange = computed(() => {
     if (!scoutItemsArray.value || scoutItemsArray.value.length === 0) return null;
-    
+
     const parseLowHigh = (priceVal) => {
         if (!priceVal) return { low: 0, high: 0 };
         let low = 0, high = 0;
@@ -794,7 +924,7 @@ const scoutTotalRange = computed(() => {
             low = parsed.low;
             high = parsed.high;
         } else {
-            const s = String(priceVal).replace(/[$,]/g, '').trim(); 
+            const s = String(priceVal).replace(/[$,]/g, '').trim();
             const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
             if (range) {
                 low = parseFloat(range[1]) || 0;
@@ -815,7 +945,7 @@ const scoutTotalRange = computed(() => {
     let fairLow = 0, fairHigh = 0;
     let poorLow = 0, poorHigh = 0;
     let boutiqueLow = 0, boutiqueHigh = 0;
-    
+
     scoutItemsArray.value.forEach(resItem => {
         const mint = parseLowHigh(resItem.price_breakdown?.mint);
         mintLow += mint.low;
@@ -906,7 +1036,7 @@ const parsePrice = (p) => {
         const h = parseFloat((p.high || p.max || p.fair || l).toString().replace(/,/g, ''));
         return (l + h) / 2;
     }
-    const s = String(p).replace(/[$,]/g, '').trim(); 
+    const s = String(p).replace(/[$,]/g, '').trim();
     const range = s.match(/(\d+(?:\.\d+)?)\s*(?:[-–—−]|to)\s*(\d+(?:\.\d+)?)/i);
     if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
     const single = s.match(/(\d+(?:\.\d+)?)/);
@@ -1138,10 +1268,10 @@ const uncombining = ref(false);
 const uncombineLot = async () => {
     if (!props.item || !props.item.$id) return;
     const count = lotChildren.value.length;
-    const confirmMsg = count > 0 
+    const confirmMsg = count > 0
         ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined Main Lot.`
         : `Uncombine and remove this Main Lot?`;
-    
+
     const confirmed = await confirmDialog(confirmMsg);
     if (!confirmed) return;
 
@@ -1193,7 +1323,7 @@ const initForm = () => {
         } else {
             mainPhotoSelection.value = { type: 'none', val: null };
         }
-        
+
         scoutResult.value = null;
         scoutMdText.value = null;
         parsedRawAnalysis.value = null;
@@ -1218,12 +1348,12 @@ const initForm = () => {
         scoutMdText.value = null;
         scoutQuery.value = '';
     }
-    
+
     editGalleryBuffer.value = [];
     fetchedImages.value = [];
     fetchingImages.value = false;
     mainTab.value = 'details';
-    
+
     let parsedComps = [];
     if (props.item && props.item.components) {
         if (Array.isArray(props.item.components)) {
@@ -1423,12 +1553,12 @@ const fetchSourceData = async () => {
 
     try {
         const timeoutSignal = AbortSignal.timeout(25000);
-        const combinedSignal = (typeof AbortSignal.any === 'function') 
+        const combinedSignal = (typeof AbortSignal.any === 'function')
             ? AbortSignal.any([fetchImageAbort.signal, timeoutSignal])
             : fetchImageAbort.signal;
 
         const res = await fetch('/api/extract-images', {
-            method: 'POST', 
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: finalUrl }),
             signal: combinedSignal
@@ -1684,9 +1814,9 @@ const analyzeExistingItem = async () => {
 
         const activeLocations = [];
         if (orgWarehouses.value && orgWarehouses.value.length > 0) {
-            orgWarehouses.value.forEach(w => activeLocations.push({ 
-                name: w.name, 
-                type: w.type || 'Physical Booth', 
+            orgWarehouses.value.forEach(w => activeLocations.push({
+                name: w.name,
+                type: w.type || 'Physical Booth',
                 commissionRate: w.commissionRate,
                 categories: w.categories || w.niche || ''
             }));
@@ -1704,7 +1834,7 @@ const analyzeExistingItem = async () => {
             .replace(/(?:split\s+from\s+(?:master\s+)?lot|deconstructed\s+from)[\s\S]*$/i, '')
             .replace(/\b(?:split|deconstructed)\b/gi, '');
         const isLot = !isChildItem && (
-            (lotQty > 1) || 
+            (lotQty > 1) ||
             (/\b(lot|bundle|collection|set\s+of|pack\s+of|box\s+of)\b/i.test(`${editForm.title || ''} ${cleanNotesForLotCheck}`))
         );
         // Sourcing Lifecycle Guardrail: unacquired items strictly use Speed Scout (/api/identify-item)
@@ -1848,7 +1978,7 @@ const analyzeExistingItem = async () => {
             } else {
                 scoutResult.value = data.items[0];
                 const item = scoutResult.value;
-                
+
                 if ((!editForm.title || editForm.title.trim().toLowerCase() === 'untitled item') && (item.title || item.identity)) {
                     const rawTitle = item.title || item.identity;
                     editForm.title = rawTitle.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
@@ -1878,7 +2008,7 @@ const analyzeExistingItem = async () => {
                 if (!isAcquiredItem.value && isLiveAuctionActive(props.item)) {
                     const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
                     const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
-                    
+
                     if (liveBid > 0) {
                         editForm.cost = liveBid.toFixed(2);
                         editForm.currentBid = liveBid;
@@ -1895,19 +2025,19 @@ const analyzeExistingItem = async () => {
 
                     if (liveBid > 0 && maxBidCeiling && Number(maxBidCeiling) > 0) {
                         if (liveBid > maxBidCeiling) {
-                            addToast({ 
-                                type: 'error', 
-                                message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.` 
+                            addToast({
+                                type: 'error',
+                                message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.`
                             });
                         } else {
-                            addToast({ 
-                                type: 'success', 
-                                message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})` 
+                            addToast({
+                                type: 'success',
+                                message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})`
                             });
                         }
                     }
                 }
-                
+
                 let report = `--- 🕵️ SCOUT REPORT ---\n\n`;
                 if (item.tier_label || item.tier) {
                     const tierName = item.tier_label || (item.tier === 'showcase' ? '🌟 Showcase' : item.tier === 'quick_turn' ? '⚡ Quick Turn' : '📦 Core');
@@ -1940,9 +2070,9 @@ const analyzeExistingItem = async () => {
                     if (item.market_report.sell_through_velocity) report += `- **Velocity:** ${item.market_report.sell_through_velocity}\n`;
                     if (item.market_report.platform_rationale) report += `- **Rationale:** ${item.market_report.platform_rationale}\n`;
                 }
-                if(item.comparables && item.comparables.length > 0) { 
-                    report += `\n**Comparables:**\n`; 
-                    item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status || 'Sold'}]\n`); 
+                if(item.comparables && item.comparables.length > 0) {
+                    report += `\n**Comparables:**\n`;
+                    item.comparables.forEach(c => report += `- ${c.name} (${c.price}) [${c.status || 'Sold'}]\n`);
                 }
                 scoutMdText.value = report.trim();
                 addToast({ type: 'success', message: 'AI Analysis complete!' });
@@ -2078,9 +2208,9 @@ const sellOneQuantity = async () => {
     try {
         const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
         const unitResale = parseFloat(editForm.resalePrice || 0);
-        
+
         const childTitle = `${editForm.title} (Extracted 1/${editForm.quantity})`;
-        
+
         // Inherit media from parent item/current gallery state
         const mediaPayload = cloneItemMediaPayload({
             imageId: props.item.imageId,
@@ -2102,7 +2232,7 @@ const sellOneQuantity = async () => {
             parentLotId: props.item.$id,
             purchaseId: props.item.purchaseId || null
         };
-        
+
         const extractedDoc = await saveItemToInventory(
             { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Extracted from Lot ${props.item.$id}` },
             null,
@@ -2125,7 +2255,7 @@ const sellOneQuantity = async () => {
                 }
             }).catch(e => console.warn('[sellOneQuantity] Background deep media clone skipped:', e));
         }
-        
+
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
             editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);
@@ -2139,31 +2269,151 @@ const sellOneQuantity = async () => {
 };
 
 const restockQuantity = async ({ unitsToAdd, addedCostBasis }) => {
+const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd, addedCostBasis, vendor = null }) => {
     if (!props.item || unitsToAdd < 1) return;
     try {
         const currentQty = Number(editForm.quantity || props.item.quantity || 1);
+        const currentQty = Math.max(1, Number(editForm.quantity || props.item.quantity || 1));
         const newQty = currentQty + Number(unitsToAdd);
         const currentCost = Number(editForm.cost || props.item.cost || 0);
         const newCost = Number((currentCost + Number(addedCostBasis || 0)).toFixed(2));
-        
+        const rawCurrentCost = editForm.cost !== '' && editForm.cost !== undefined ? editForm.cost : (props.item.cost ?? 0);
+        const { totalCost: currentCost } = resolveMultiQtyCost(rawCurrentCost, currentQty, editForm.resalePrice || props.item.resalePrice || 0);
+        const cleanAddedCost = Math.max(0, Number(addedCostBasis || 0));
+        const newCost = Number((currentCost + cleanAddedCost).toFixed(2));
+
         editForm.quantity = newQty;
         editForm.cost = newCost;
-        
+        editForm.cost = newCost.toFixed(2);
+
         const lotFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
         if (!lotFlags.includes('needs_shop_update')) {
             lotFlags.push('needs_shop_update');
         }
         editForm.redFlags = lotFlags;
-        
+
         const timestamp = new Date().toLocaleDateString();
         const restockLog = `[Restocked +${unitsToAdd} units (+$${Number(addedCostBasis || 0).toFixed(2)}) on ${timestamp}]`;
         const currentNotes = editForm.conditionNotes || props.item.conditionNotes || '';
         editForm.conditionNotes = currentNotes ? `${currentNotes}\n${restockLog}` : restockLog;
-        
+        let restockLog = '';
+
+        if (mode === 'backstock' && sourceItem && sourceItem.$id) {
+            // 1. Copy any photos from the source Backstock (HG) item into the Booth Bin's galleryImageIds
+            const sourcePhotoIds = [];
+            if (sourceItem.imageId && typeof sourceItem.imageId === 'string') {
+                sourcePhotoIds.push(sourceItem.imageId);
+            }
+            if (Array.isArray(sourceItem.galleryImageIds)) {
+                sourceItem.galleryImageIds.forEach(id => {
+                    if (id && typeof id === 'string' && !sourcePhotoIds.includes(id)) {
+                        sourcePhotoIds.push(id);
+                    }
+                });
+            }
+            if (sourcePhotoIds.length > 0) {
+                const currentGallery = Array.isArray(editForm.existingGalleryIds) ? [...editForm.existingGalleryIds] : [];
+                sourcePhotoIds.forEach(id => {
+                    if (!currentGallery.includes(id)) currentGallery.push(id);
+                });
+                editForm.existingGalleryIds = currentGallery;
+                if (actualMainPhoto.value?.type === 'none' && sourcePhotoIds[0]) {
+                    mainPhotoSelection.value = { type: 'existing', val: sourcePhotoIds[0] };
+                }
+            }
+
+            // 2. Do NOT delete the source HG item (preserves PO lineage): update to status: 'combined' and parentLotId: targetBin.$id
+            const sourceUpc = sourceItem.upc || sourceItem.$id;
+            const sourcePo = sourceItem.orderId || sourceItem.purchaseId || 'Direct';
+            const binLabel = `${props.item.upc ? `[${props.item.upc}] ` : ''}${editForm.title || props.item.title || props.item.$id}`;
+            const sourceExistingNotes = sourceItem.conditionNotes || '';
+            const sourceAuditNote = `[Absorbed into Booth Bin ${binLabel} on ${timestamp}]`;
+
+            await updateInventoryItem(sourceItem.$id, {
+                status: 'combined',
+                parentLotId: props.item.$id,
+                conditionNotes: sourceExistingNotes ? `${sourceExistingNotes}\n${sourceAuditNote}` : sourceAuditNote
+            });
+
+            // Sync source item's Purchase Order status (combined counts as Received)
+            try {
+                await purchasesAPI.syncPurchaseStatusForItems([sourceItem]);
+            } catch (syncErr) {
+                console.warn('[restockQuantity] PO status sync warning:', syncErr);
+            }
+
+            // Update local cache so absorbed item is marked combined immediately
+            sourceItem.status = 'combined';
+            sourceItem.parentLotId = props.item.$id;
+
+            restockLog = `[Restocked +${unitsToAdd} units (+$${cleanAddedCost.toFixed(2)}) from Backstock [${sourceUpc}] "${sourceItem.title || 'Item'}" (PO/Order: ${sourcePo}) on ${timestamp}]`;
+        } else {
+            // Mode B: Direct Cash / Walk-In Buy — automatically create an auditable Purchase Order when addedCostBasis > 0
+            const cleanVendor = (vendor || 'Walk-In / Thrift Restock').trim();
+            let createdPoNumber = '';
+
+            if (cleanAddedCost > 0) {
+                const poSuffix = Date.now().toString().slice(-6);
+                const poNumber = `PO-RST-${poSuffix}`;
+                const createdPO = await purchasesAPI.createPurchase({
+                    poNumber,
+                    orderId: poNumber,
+                    vendor: cleanVendor,
+                    purchaseDate: new Date().toISOString(),
+                    status: 'Received',
+                    subtotal: cleanAddedCost,
+                    feeTotal: 0,
+                    grandTotal: cleanAddedCost,
+                    tenantId: currentTeam.value?.$id || undefined,
+                    buyerId: user.value?.$id || undefined
+                });
+                createdPoNumber = createdPO?.poNumber || poNumber;
+
+                // Create a combined audit child record linked to both the new PO and the Booth Bin so the PO has full line-item traceability
+                try {
+                    await saveItemToInventory(
+                        {
+                            title: `Restock Batch (+${unitsToAdd}x) for ${editForm.title || props.item.title || 'Booth Bin'}`,
+                            identity: `${createdPoNumber}-01`,
+                            condition_notes: `Absorbed into Booth Bin ${props.item.upc || props.item.$id} via Direct Restock (${cleanVendor})`
+                        },
+                        null,
+                        {
+                            cost: cleanAddedCost,
+                            resalePrice: Number(editForm.resalePrice || props.item.resalePrice || 0),
+                            quantity: Number(unitsToAdd),
+                            status: 'combined',
+                            parentLotId: props.item.$id,
+                            purchaseId: createdPO?.$id || createdPoNumber,
+                            orderId: createdPoNumber,
+                            sourcingLocation: cleanVendor,
+                            storageLocation: editForm.storageLocation || props.item.storageLocation || 'MD'
+                        },
+                        currentTeam.value?.$id
+                    );
+                } catch (childErr) {
+                    console.warn('[restockQuantity] Combined audit line item creation warning:', childErr);
+                }
+
+                if (!editForm.orderId) {
+                    editForm.orderId = createdPoNumber;
+                }
+            }
+
+            restockLog = `[Restocked +${unitsToAdd} units (+$${cleanAddedCost.toFixed(2)}) via ${cleanVendor}${createdPoNumber ? ` (PO: ${createdPoNumber})` : ''} on ${timestamp}]`;
+        }
+
+        const currentNotes = editForm.condition_notes || props.item.conditionNotes || '';
+        editForm.condition_notes = currentNotes ? `${currentNotes}\n${restockLog}` : restockLog;
+
         await saveEdit();
-        addToast({ 
-            type: 'success', 
-            message: `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.` 
+        await fetchLotChildren();
+        addToast({
+            type: 'success',
+            message: `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.`
+            message: mode === 'backstock' && sourceItem
+                ? `🎉 Absorbed ${sourceItem.upc || 'Backstock item'} (+${unitsToAdd} units) into bin! Total stock is now ${newQty}.`
+                : `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.`
         });
     } catch (e) {
         addToast({ type: 'error', message: 'Failed to restock units: ' + e.message });
@@ -2175,9 +2425,9 @@ const splitOneActive = async () => {
     try {
         const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
         const unitResale = parseFloat(editForm.resalePrice || 0);
-        
+
         const childTitle = `${editForm.title} (Piece ${editForm.quantity})`;
-        
+
         // Inherit media from parent item/current gallery state
         const mediaPayload = cloneItemMediaPayload({
             imageId: props.item.imageId,
@@ -2199,7 +2449,7 @@ const splitOneActive = async () => {
             parentLotId: props.item.$id,
             purchaseId: props.item.purchaseId || null
         };
-        
+
         const splitDoc = await saveItemToInventory(
             { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Split from batch: ${props.item.$id}` },
             null,
@@ -2222,7 +2472,7 @@ const splitOneActive = async () => {
                 }
             }).catch(e => console.warn('[splitOneActive] Background deep media clone skipped:', e));
         }
-        
+
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
             editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);

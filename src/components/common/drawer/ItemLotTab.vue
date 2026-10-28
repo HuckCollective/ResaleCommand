@@ -621,6 +621,7 @@ import ItemThumbnail from '../ItemThumbnail.vue';
 import { deriveLotExitPlaybook, deriveInventoryPlays, getLotSplitRecommendation, parsePriceValue } from '../../../lib/lot-strategy';
 import { getSubItemBoutique, getSubItemFair, getSubItemBuyRange, getSubItemCostBasis } from '../../../lib/bundle-pricing';
 import { usePlaybookLearning, detectItemCategory } from '../../../composables/usePlaybookLearning';
+import { resolveMultiQtyCost } from '../../../composables/useItemDrawerForm';
 
 const props = defineProps({
     item: {
@@ -739,12 +740,14 @@ const splitRecommendation = computed(() => {
     return getLotSplitRecommendation(strategyItem.value, props.scoutResult);
 });
 
-// Item enriched with the shared reactive components array so Tab 1 and Tab 3 always agree on counts/yield.
+// Item enriched with the shared reactive components array and normalized multi-qty cost so Tab 1 and Tab 3 always agree on counts/yield.
 const strategyItem = computed(() => {
     if (!props.item) return props.item;
-    return parsedComponents.value.length > 1
-        ? { ...props.item, components: parsedComponents.value }
-        : props.item;
+    return {
+        ...props.item,
+        cost: totalCost.value,
+        ...(parsedComponents.value.length > 1 ? { components: parsedComponents.value } : {})
+    };
 });
 
 // NaN-safe per-component price helpers
@@ -895,7 +898,10 @@ const isMultiQty = computed(() => {
 });
 
 const totalCost = computed(() => {
-    return Number(props.item?.cost || props.item?.purchasePrice || 0);
+    const rawCost = props.item?.cost ?? props.item?.purchasePrice ?? 0;
+    const qty = Math.max(1, Number(props.item?.quantity || 1));
+    const unitResale = props.item?.resalePrice ?? props.item?.priceFair ?? props.item?.estHigh ?? 0;
+    return resolveMultiQtyCost(rawCost, qty, unitResale).totalCost;
 });
 
 const unitCost = computed(() => {
