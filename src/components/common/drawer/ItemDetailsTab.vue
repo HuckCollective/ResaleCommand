@@ -727,7 +727,6 @@
                   <Icon
                     icon="solar:box-plus-bold"
                     class="w-4 h-4 text-primary" />
-                  <span>Restock Units &amp; Pool Cost Basis</span>
                   <span
                     >Restock Units &amp; Pool Cost Basis (COGS Audited)</span
                   >
@@ -783,7 +782,7 @@
                       Item</span
                     >
                   </span>
-                  <span class="badge badge-2xs badge-ghost font-mono"
+                  <span class="badge badge-2xs badge-ghost font-mono whitespace-nowrap shrink-0"
                     >{{ filteredBackstockItems.length }} available</span
                   >
                 </div>
@@ -1094,9 +1093,6 @@
                   "
                   class="btn btn-xs btn-primary font-bold gap-1 shadow-xs">
                   <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
-                  <span
-                    >Confirm Restock (+{{ restockUnitsToAddVal }} units)</span
-                  >
                   <span
                     v-if="
                       restockSourceMode === 'backstock' && selectedBackstockItem
