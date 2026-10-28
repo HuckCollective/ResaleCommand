@@ -152,7 +152,6 @@
             :totalSplitResaleValue="totalSplitResaleValue"
             :lotRealizedRevenue="lotRealizedRevenue"
             :lotROI="lotROI"
-            :inventoryItems="inventoryItems"
             :inventoryItems="mergedInventoryItems"
             :scout-result="scoutResult"
             :scout-purchase-strategy="scoutPurchaseStrategy"
@@ -372,7 +371,6 @@ import ItemDrawerFooter from './drawer/ItemDrawerFooter.vue';
 import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
-import { useItemDrawerForm } from '../../composables/useItemDrawerForm';
 import { useItemDrawerForm, resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
@@ -386,7 +384,6 @@ import { useLoader } from '../../composables/useLoader';
 import { warehousesApi } from '../../lib/warehouses';
 import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
 
-const { currentTeam } = useAuth();
 const { user, currentTeam } = useAuth();
 const { showLoader, hideLoader, updateLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
@@ -2268,22 +2265,17 @@ const sellOneQuantity = async () => {
     }
 };
 
-const restockQuantity = async ({ unitsToAdd, addedCostBasis }) => {
 const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd, addedCostBasis, vendor = null }) => {
     if (!props.item || unitsToAdd < 1) return;
     try {
-        const currentQty = Number(editForm.quantity || props.item.quantity || 1);
         const currentQty = Math.max(1, Number(editForm.quantity || props.item.quantity || 1));
         const newQty = currentQty + Number(unitsToAdd);
-        const currentCost = Number(editForm.cost || props.item.cost || 0);
-        const newCost = Number((currentCost + Number(addedCostBasis || 0)).toFixed(2));
         const rawCurrentCost = editForm.cost !== '' && editForm.cost !== undefined ? editForm.cost : (props.item.cost ?? 0);
         const { totalCost: currentCost } = resolveMultiQtyCost(rawCurrentCost, currentQty, editForm.resalePrice || props.item.resalePrice || 0);
         const cleanAddedCost = Math.max(0, Number(addedCostBasis || 0));
         const newCost = Number((currentCost + cleanAddedCost).toFixed(2));
 
         editForm.quantity = newQty;
-        editForm.cost = newCost;
         editForm.cost = newCost.toFixed(2);
 
         const lotFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
@@ -2293,9 +2285,6 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
         editForm.redFlags = lotFlags;
 
         const timestamp = new Date().toLocaleDateString();
-        const restockLog = `[Restocked +${unitsToAdd} units (+$${Number(addedCostBasis || 0).toFixed(2)}) on ${timestamp}]`;
-        const currentNotes = editForm.conditionNotes || props.item.conditionNotes || '';
-        editForm.conditionNotes = currentNotes ? `${currentNotes}\n${restockLog}` : restockLog;
         let restockLog = '';
 
         if (mode === 'backstock' && sourceItem && sourceItem.$id) {
@@ -2410,7 +2399,6 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
         await fetchLotChildren();
         addToast({
             type: 'success',
-            message: `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.`
             message: mode === 'backstock' && sourceItem
                 ? `🎉 Absorbed ${sourceItem.upc || 'Backstock item'} (+${unitsToAdd} units) into bin! Total stock is now ${newQty}.`
                 : `🎉 Successfully restocked +${unitsToAdd} units! Total batch stock is now ${newQty}.`

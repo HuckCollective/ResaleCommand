@@ -1087,7 +1087,6 @@
                 <button
                   type="button"
                   @click="confirmRestock"
-                  :disabled="restockUnitsToAddVal < 1"
                   :disabled="
                     restockUnitsToAddVal < 1 ||
                     (restockSourceMode === 'backstock' &&
