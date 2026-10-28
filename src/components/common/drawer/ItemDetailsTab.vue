@@ -300,16 +300,27 @@
                             <span>Locked</span>
                         </a>
 
-                        <!-- If Active: Quick Record Sale Link -->
-                        <a 
-                            v-else-if="item"
-                            :href="`/sales/new?itemId=${item.$id}`" 
-                            class="btn btn-xs gap-1 font-bold transition-all shadow-xs btn-outline btn-success opacity-85 hover:opacity-100"
-                            title="Record a sale for this item"
-                        >
-                            <Icon icon="solar:cart-check-bold" class="w-3.5 h-3.5" />
-                            <span>Record Sale</span>
-                        </a>
+                        <!-- If Active: Quick Record Sale Link + Last Sale SO Link if partially sold -->
+                        <template v-else-if="item">
+                            <a 
+                                v-if="item.saleId" 
+                                :href="`/sales/${linkedSaleOrderId}`" 
+                                class="btn btn-xs gap-1 font-bold transition-all shadow-xs btn-outline btn-ghost opacity-75 hover:opacity-100 font-mono text-[11px]"
+                                title="View previous Sales Order for this batch"
+                            >
+                                <span>Last Sale SO</span>
+                                <Icon icon="solar:arrow-right-up-linear" class="w-3 h-3 shrink-0" />
+                            </a>
+
+                            <a 
+                                :href="`/sales/new?itemId=${item.$id}`" 
+                                class="btn btn-xs gap-1 font-bold transition-all shadow-xs btn-outline btn-success opacity-85 hover:opacity-100"
+                                title="Record a sale for this item"
+                            >
+                                <Icon icon="solar:cart-check-bold" class="w-3.5 h-3.5" />
+                                <span>Record Sale</span>
+                            </a>
+                        </template>
                     </div>
                 </div>
 
@@ -999,7 +1010,7 @@ const emit = defineEmits([
 const KNOWN_CODES = ['HG', 'HD', 'MD', 'DT'];
 
 const isSold = computed(() => {
-    return props.editForm?.status === 'sold' || !!props.item?.saleId;
+    return (props.editForm?.status || props.item?.status) === 'sold';
 });
 
 const linkedSaleOrderId = computed(() => {
