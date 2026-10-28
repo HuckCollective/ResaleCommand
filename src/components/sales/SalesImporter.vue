@@ -494,8 +494,8 @@
                   <th class="w-16">CSV Status</th>
                   <th>Sold Item (CSV)</th>
                   <th class="w-24">Price</th>
-                  <th class="min-w-64">Map to ResaleCommand Item</th>
-                  <th class="w-20 text-center">Drawer</th>
+                  <th class="min-w-64">Matched ResaleCommand Item</th>
+                  <th class="w-36 text-center">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -556,21 +556,33 @@
                     </div>
                   </td>
                   <td class="font-mono text-success font-bold">${{ row.salePrice.toFixed(2) }}</td>
-                  <td @click.stop>
+                  <td @click.stop="openMatcherDrawer(row)">
                     <div v-if="row.mappedItem" class="flex items-center gap-2">
                       <span class="badge badge-sm badge-outline font-mono font-bold">{{ row.mappedItem.upc || 'NO UPC' }}</span>
-                      <span class="truncate max-w-50 text-sm">{{ row.mappedItem.title }}</span>
-                      <button class="btn btn-xs btn-ghost text-error ml-auto" @click="row.mappedItem = null">✕</button>
+                      <span class="truncate max-w-xs text-sm font-medium">{{ row.mappedItem.title }}</span>
+                      <button class="btn btn-xs btn-ghost text-error ml-auto hover:bg-error/10" @click.stop="row.mappedItem = null" title="Unlink Item">✕</button>
                     </div>
-                    <div v-else class="flex items-center gap-1.5">
-                      <select class="select select-bordered select-xs w-full max-w-xs font-mono text-xs" v-model="row.mappedItem">
-                        <option :value="null">Search active inventory...</option>
-                        <option v-for="item in availableItems" :key="item.$id" :value="item">
-                          {{ item.upc ? `[${item.upc}] ` : '' }}{{ item.title }}
-                        </option>
-                      </select>
+                    <div v-else class="text-xs opacity-60 italic flex items-center gap-1.5">
+                      <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 text-warning" />
+                      <span>Unmatched — click Match to search</span>
+                    </div>
+                  </td>
+                  <td class="text-center" @click.stop>
+                    <div class="flex items-center justify-center gap-1.5">
                       <button 
-                        class="btn btn-xs btn-primary font-bold shrink-0 gap-1"
+                        type="button"
+                        class="btn btn-xs gap-1 font-bold rounded-lg shadow-xs"
+                        :class="row.mappedItem ? 'btn-ghost border border-base-300 hover:btn-primary' : 'btn-primary'"
+                        @click="openMatcherDrawer(row)"
+                        :title="row.mappedItem ? 'Edit item match in drawer' : 'Open search & matcher drawer'"
+                      >
+                        <Icon :icon="row.mappedItem ? 'solar:pen-new-square-bold' : 'solar:magnifer-linear'" class="w-3.5 h-3.5" />
+                        <span>{{ row.mappedItem ? 'Edit' : 'Match' }}</span>
+                      </button>
+                      <button 
+                        v-if="!row.mappedItem"
+                        type="button"
+                        class="btn btn-xs btn-ghost text-base-content/70 hover:btn-primary font-bold shrink-0 gap-1 border border-base-300 rounded-lg"
                         :disabled="row.isQuickAdding"
                         @click="quickAddRow(row)"
                         title="Create this item with next barcode and mark as sold"
@@ -580,16 +592,6 @@
                         <span>+ Add</span>
                       </button>
                     </div>
-                  </td>
-                  <td class="text-center" @click.stop>
-                    <button 
-                      class="btn btn-xs btn-outline btn-primary gap-1 font-bold rounded-lg"
-                      @click="openMatcherDrawer(row)"
-                      title="Open Item Matcher Drawer"
-                    >
-                      <Icon icon="solar:pen-new-square-bold" class="w-3.5 h-3.5" />
-                      <span>{{ row.mappedItem ? 'Edit' : 'Match' }}</span>
-                    </button>
                   </td>
                 </tr>
               </tbody>
@@ -2743,13 +2745,20 @@ const parseMemoryDenPayout = (csvText: string) => {
       if (matched) matched = dereferenceParentLot(matched);
     }
 
+    // Helper to get candidate titles for an item (both tagTitle and title)
+    const getItemTitles = (itm: any): string[] => {
+      const list: string[] = [];
+      if (itm.tagTitle) list.push(itm.tagTitle);
+      if (itm.title) list.push(itm.title);
+      return list;
+    };
+
     // 3. Exact Cleaned Title Match (Lineage Absorption Law: strictly titleEligibleInventory)
     if (!matched && itemName) {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
       const exactCandidates = titleEligibleInventory.value.filter(item => {
-        if (!item.title) return false;
-        const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return itemClean === cleanName;
+        const titles = getItemTitles(item);
+        return titles.some(t => t.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName);
       });
 
       if (exactCandidates.length > 0) {
@@ -2778,9 +2787,11 @@ const parseMemoryDenPayout = (csvText: string) => {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (cleanName.length >= 6) {
         const subCandidates = titleEligibleInventory.value.filter(item => {
-          if (!item.title) return false;
-          const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return itemClean.includes(cleanName) || cleanName.includes(itemClean);
+          const titles = getItemTitles(item);
+          return titles.some(t => {
+            const itemClean = t.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return itemClean.includes(cleanName) || cleanName.includes(itemClean);
+          });
         });
 
         if (subCandidates.length > 0) {
@@ -2812,8 +2823,9 @@ const parseMemoryDenPayout = (csvText: string) => {
         const scoredCandidates: { item: any; score: number }[] = [];
 
         for (const item of titleEligibleInventory.value) {
-          if (!item.title) continue;
-          const dbTokens = new Set(extractKeywords(item.title));
+          const combinedText = `${item.tagTitle || ''} ${item.title || ''}`;
+          if (!combinedText.trim()) continue;
+          const dbTokens = new Set(extractKeywords(combinedText));
           if (dbTokens.size === 0) continue;
 
           let matchingTokens = 0;

@@ -43,7 +43,17 @@ function saveHistory(records: PlayHistoryRecord[]) {
  */
 export function detectItemCategory(item: any): string {
     if (!item) return 'general';
-    const text = `${item.title || ''} ${item.tags || ''} ${item.channel || ''} ${item.storageLocation || ''}`.toLowerCase();
+    const text = `${item.title || ''} ${item.tags || ''} ${item.channel || ''} ${item.storageLocation || ''} ${item.conditionNotes || ''}`.toLowerCase();
+    const substrate = String(item.physical_substrate || item.substrate || '').toUpperCase();
+
+    // 1. Physical substrate indicators take strict priority over genre words like "fantasy"
+    if (
+        substrate === 'WALL_ART' || 
+        substrate === 'PLAQUE' ||
+        /\b(plaque|plaques|laminated|wood|wooden|wall art|art print|art prints|framed|frame|lithograph|canvas|poster|posters|painting|wall hanging)\b/i.test(text)
+    ) {
+        return 'art_decor';
+    }
     
     if (/\b(book|books|hardcover|paperback|novel|author|reading|guide|manual|rpg|d&d|tsr)\b/.test(text)) {
         return 'books';

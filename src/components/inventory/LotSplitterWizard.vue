@@ -358,7 +358,7 @@
                 </div>
               </div>
 
-              <!-- Individual Tag Price Input & Tier Move Badge -->
+              <!-- Individual Tag Price Input, Tier Move Badge & Row Delete -->
               <div class="flex items-center gap-2 shrink-0">
                 <div class="relative w-18" title="Retail tag price for this specific item">
                   <span class="absolute left-2 top-1 font-bold text-[11px] text-base-content/50">$</span>
@@ -391,33 +391,56 @@
                     </li>
                   </ul>
                 </div>
+
+                <!-- Single Item Remove / Delete button -->
+                <button 
+                  type="button" 
+                  class="btn btn-xs btn-ghost btn-circle text-error/60 hover:text-error hover:bg-error/10 shrink-0" 
+                  @click.stop="removeItem(item)"
+                  title="Remove this item from split"
+                >
+                  <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>
 
-          <!-- Sticky Bottom Bulk Action Bar on Mobile -->
+          <!-- Sticky Bottom Bulk Action Bar on Mobile / Desktop -->
           <div 
             v-if="selectedItemIndices.size > 0"
-            class="sticky bottom-0 z-20 p-3 bg-base-300/95 backdrop-blur-md rounded-xl border border-primary/30 flex items-center justify-between shadow-xl"
+            class="sticky bottom-0 z-20 p-2.5 sm:p-3 bg-base-300/95 backdrop-blur-md rounded-2xl border border-primary/30 flex flex-wrap items-center justify-between gap-2 shadow-xl"
           >
-            <div class="text-xs font-bold">
-              <span>{{ selectedItemIndices.size }}</span> items selected
+            <div class="text-xs font-bold flex items-center gap-1.5">
+              <span class="badge badge-sm badge-primary font-mono font-bold">{{ selectedItemIndices.size }}</span>
+              <span>items selected</span>
             </div>
-            <div class="flex items-center gap-2">
-              <div class="dropdown dropdown-top dropdown-end">
-                <label tabindex="0" class="btn btn-xs btn-primary font-bold gap-1">
-                  <span>Move Selected ▾</span>
-                </label>
-                <ul tabindex="0" class="dropdown-content z-30 menu p-2 shadow-2xl bg-base-100 rounded-xl w-52 border border-base-200 text-xs mb-1">
-                  <li v-for="(t, idx) in tiers" :key="t.id">
-                    <a @click="moveSelectedToTier(t.id)">
-                      <span class="w-2 h-2 rounded-full" :class="getTierDotClass(idx)"></span>
-                      Move to {{ t.name }}
-                    </a>
-                  </li>
-                </ul>
-              </div>
-              <button type="button" class="btn btn-xs btn-ghost" @click="selectedItemIndices.clear()">Clear</button>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <button 
+                type="button" 
+                class="btn btn-xs btn-secondary font-bold gap-1 shadow-xs" 
+                @click="groupSelectedIntoBundle"
+                title="Combine checked rows into 1 single bundle SKU row"
+              >
+                <span>🎁 Group into 1 Bundle</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-xs btn-primary font-bold gap-1 shadow-xs" 
+                @click="groupSelectedIntoMultiQty"
+                title="Group checked rows into 1 Multi-Qty Assortment SKU"
+              >
+                <span>📦 Make Multi-Qty Batch</span>
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-xs btn-error btn-outline font-bold gap-1" 
+                @click="removeSelectedItems"
+                title="Remove unwanted / bogus AI rows"
+              >
+                <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
+                <span>Remove Selected</span>
+              </button>
+              <button type="button" class="btn btn-xs btn-ghost text-xs" @click="selectedItemIndices.clear()">Clear</button>
             </div>
           </div>
         </div>
@@ -1050,7 +1073,17 @@ async function resolveTierMedia(tierItems: ParsedItem[]): Promise<{ imageId: str
 function parsePriceFromText(val: any): number {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  const match = String(val).match(/\$?\s*(\d+(?:\.\d+)?)/);
+  const str = String(val).trim();
+  // Handle range like "$4 - $6", "$4-$6", "4 - 6" -> return exact midpoint
+  const rangeMatch = str.match(/\$?\s*(\d+(?:\.\d+)?)\s*[-–—]\s*\$?\s*(\d+(?:\.\d+)?)/);
+  if (rangeMatch) {
+    const min = parseFloat(rangeMatch[1]);
+    const max = parseFloat(rangeMatch[2]);
+    if (!isNaN(min) && !isNaN(max)) {
+      return Number(((min + max) / 2).toFixed(2));
+    }
+  }
+  const match = str.match(/\$?\s*(\d+(?:\.\d+)?)/);
   return match ? parseFloat(match[1]) : 0;
 }
 
@@ -1262,7 +1295,7 @@ function getTierBadgeClass(idx: number) {
   const classes = [
     'badge-primary text-primary-content',
     'badge-secondary text-secondary-content',
-    'badge-accent text-accent-content',
+    'bg-base-200 text-base-content border border-base-300 font-bold',
     'badge-info text-info-content',
     'badge-warning text-warning-content'
   ];
@@ -1329,6 +1362,56 @@ function moveSelectedToTier(tierId: string) {
     assignItemToTier(idx, tierId);
   });
   selectedItemIndices.value.clear();
+}
+
+function removeItem(item: ParsedItem) {
+  allItems.value = allItems.value.filter(it => it.index !== item.index);
+  selectedItemIndices.value.delete(item.index);
+  addToast({ type: 'info', message: `Removed "${item.title}"` });
+}
+
+function removeSelectedItems() {
+  if (selectedItemIndices.value.size === 0) return;
+  const count = selectedItemIndices.value.size;
+  allItems.value = allItems.value.filter(it => !selectedItemIndices.value.has(it.index));
+  selectedItemIndices.value.clear();
+  addToast({ type: 'info', message: `Removed ${count} items from lot.` });
+}
+
+function groupSelectedIntoBundle() {
+  if (selectedItemIndices.value.size === 0) return;
+  let bundleTier = tiers.value.find(t => t.mode === 'bundle');
+  if (!bundleTier) {
+    bundleTier = {
+      id: `tier-bundle-${Date.now()}`,
+      name: `🎁 Curated Bundle (${selectedItemIndices.value.size} items)`,
+      mode: 'bundle',
+      targetPrice: 25
+    };
+    tiers.value.push(bundleTier);
+  }
+  selectedItemIndices.value.forEach(idx => assignItemToTier(idx, bundleTier!.id));
+  activeFilterTab.value = bundleTier.id;
+  selectedItemIndices.value.clear();
+  addToast({ type: 'success', message: 'Grouped selected items into 1 Bundle SKU!' });
+}
+
+function groupSelectedIntoMultiQty() {
+  if (selectedItemIndices.value.size === 0) return;
+  let mqTier = tiers.value.find(t => t.mode === 'multi_qty');
+  if (!mqTier) {
+    mqTier = {
+      id: `tier-multi-${Date.now()}`,
+      name: `📦 Multi-Qty Assortment (${selectedItemIndices.value.size} units)`,
+      mode: 'multi_qty',
+      targetPrice: 15
+    };
+    tiers.value.push(mqTier);
+  }
+  selectedItemIndices.value.forEach(idx => assignItemToTier(idx, mqTier!.id));
+  activeFilterTab.value = mqTier.id;
+  selectedItemIndices.value.clear();
+  addToast({ type: 'success', message: 'Grouped selected items into 1 Multi-Qty Batch SKU!' });
 }
 
 // Financial calculations & Reconciled Yields
@@ -1503,9 +1586,11 @@ async function executeSplit() {
         const tierMedia = await resolveTierMedia(tierItems);
         const firstImgId = tierMedia.imageId || extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
         
-        let retailTitle = `${cleanSubject} - Choice Issues`;
-        if (tier.id === 'tier-3' || tier.name.toLowerCase().includes('reader') || tier.name.toLowerCase().includes('clearance')) {
-          retailTitle = `${cleanSubject} - Reader / Clearance`;
+        // Use concise 30-38 character tagTitle as the primary title for booth-destined Multi-Qty SKUs
+        let retailTitle = cleanSubject || parent.title || 'Booth Assortment';
+        retailTitle = retailTitle.replace(/^\[.*?\]\s*/, '').trim();
+        if (retailTitle.length > 38) {
+          retailTitle = retailTitle.slice(0, 38).trim();
         }
 
         const totalTierCost = unitCost * tierItems.length;
@@ -1514,12 +1599,12 @@ async function executeSplit() {
           tenantId: orgId || undefined,
           purchaseId: parent.purchaseId || undefined,
           upc: itemUpc,
-          title: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 250),
+          title: retailTitle,
           identity: `${retailTitle} (Qty: ${tierItems.length})`.slice(0, 950),
           cost: Number(totalTierCost.toFixed(2)),
           resalePrice: Number(tier.targetPrice.toFixed(2)),
           quantity: tierItems.length,
-          conditionNotes: `Multi-Quantity Lot Run:\n${issueListNotes}`.slice(0, 950),
+          conditionNotes: `Multi-Quantity Lot Run (${tierItems.length} units):\n${issueListNotes}`.slice(0, 950),
           imageId: firstImgId || undefined,
           galleryImageIds: tierMedia.galleryIds.length > 0 ? tierMedia.galleryIds : undefined,
           storageLocation: targetLocation,

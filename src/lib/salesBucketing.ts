@@ -126,20 +126,28 @@ export function partitionSalesByOrg(
 
         if (!matchedItem && rawName) {
             const cleanName = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (cleanName.length >= 6) {
-                // 1. Exact cleaned match
+                // Helper to get all candidate titles for an item (tagTitle and title)
+                const getItemTitles = (itm: any): string[] => {
+                    const list: string[] = [];
+                    if (itm.tagTitle) list.push(itm.tagTitle);
+                    if (itm.title) list.push(itm.title);
+                    return list;
+                };
+
+                // 1. Exact cleaned match on tagTitle or title
                 let candidates = titleEligibleItems.filter(item => {
-                    if (!item.title) return false;
-                    const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    return ic === cleanName;
+                    const titles = getItemTitles(item);
+                    return titles.some(t => t.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName);
                 });
 
                 // 2. Substring containment match
                 if (candidates.length === 0) {
                     candidates = titleEligibleItems.filter(item => {
-                        if (!item.title) return false;
-                        const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        return ic.includes(cleanName) || cleanName.includes(ic);
+                        const titles = getItemTitles(item);
+                        return titles.some(t => {
+                            const ic = t.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            return ic.includes(cleanName) || cleanName.includes(ic);
+                        });
                     });
                 }
 
@@ -150,8 +158,9 @@ export function partitionSalesByOrg(
                     if (rawTokens.size > 0) {
                         const scored: { item: any; score: number }[] = [];
                         for (const itm of titleEligibleItems) {
-                            if (!itm.title) continue;
-                            const itmTokens = new Set(itm.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w)));
+                            const combinedText = `${itm.tagTitle || ''} ${itm.title || ''}`;
+                            if (!combinedText.trim()) continue;
+                            const itmTokens = new Set(combinedText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w)));
                             let matches = 0;
                             for (const t of rawTokens) {
                                 if (itmTokens.has(t)) matches++;
@@ -167,13 +176,18 @@ export function partitionSalesByOrg(
 
                 if (candidates.length > 0) {
                     candidates.sort((a, b) => {
+                        // Prioritize status === 'placed'
+                        const aPlaced = a.status === 'placed' ? 1 : 0;
+                        const bPlaced = b.status === 'placed' ? 1 : 0;
+                        if (bPlaced !== aPlaced) return bPlaced - aPlaced;
+
+                        // Then prioritize multi-quantity items (quantity > 1)
                         const aQty = Number(a.quantity || 1);
                         const bQty = Number(b.quantity || 1);
                         return bQty - aQty;
                     });
                     matchedItem = dereferenceParentLot(candidates[0]);
                 }
-            }
         }
 
         // 2. Determine Org Attribution

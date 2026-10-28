@@ -1797,6 +1797,16 @@ const parseCsvData = (rawText: string, fileName: string) => {
       return;
     }
 
+    // Auto-detect Target Location based on Ricochet SKU format ('0EJ...') or filename
+    const isMemoryDenCsv = text.includes('0EJ') || text.includes('0ej') || fileName.toLowerCase().includes('memory') || fileName.toLowerCase().includes('den');
+    if (isMemoryDenCsv && locations.value.length > 0) {
+      const memDen = locations.value.find(l => l.name.toLowerCase().includes('memory') || l.name.toLowerCase().includes('den'));
+      if (memDen && selectedLocationId.value !== memDen.$id) {
+        selectedLocationId.value = memDen.$id;
+        addToast({ type: 'info', message: '📍 Auto-detected Memory Den (0EJ SKU) as Target Location' });
+      }
+    }
+
       rawCsvHeader.value = lines[0];
       rawCsvLines.value = lines;
 
@@ -2717,9 +2727,10 @@ const loadData = async () => {
       }
     }
 
-    // Default to the first available location if not specified
+    // Default to Memory Den if available, otherwise first location
     if (!selectedLocationId.value && locations.value.length > 0) {
-      selectedLocationId.value = locations.value[0].$id;
+      const memDen = locations.value.find(l => l.name.toLowerCase().includes('memory') || l.name.toLowerCase().includes('den'));
+      selectedLocationId.value = memDen ? memDen.$id : locations.value[0].$id;
     }
 
     refreshSyncHistory();

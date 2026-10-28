@@ -146,5 +146,11 @@ When syncing or importing into the live production environment (`items`, `sales`
        - Set `status: 'sold'`.
        - Set `quantity: 1` (never 0, strictly respecting Appwrite's integer validation constraint `quantity >= 1`).
 
+4. **Booth Price-Point Assortment SKUs & Physical Substrate Grounding**:
+   - **Strictly ONE Document per Multi-Quantity Assortment**: When ingesting or deconstructing a lot into a Multi-Qty SKU (e.g. 9 Frank Frazetta wood plaques @ $95/ea), the system MUST create strictly ONE Appwrite document with `quantity: N` and `resalePrice: unitPrice`. **NEVER** run a loop generating $N$ separate single-unit documents in backstock.
+   - **Concise 30–38 Character Tag Titles**: The primary `title` of a booth Multi-Qty SKU must match the physical thermal barcode price tag (30–38 chars max, e.g. `"Frank Frazetta Fantasy Art"`). This guarantees 1:1 string equality with Ricochet POS register exports.
+   - **Physical Substrate Category Authority**: Items with substrate indicators ("plaque", "laminated", "wood", "wall art", "art print", "framed", "lithograph", "canvas", "poster", or `physical_substrate === "WALL_ART"`) MUST be classified as `art_decor` (Wall Art & Decor) before evaluating genre words like "fantasy" or falling back to "books".
+
+
 
 
