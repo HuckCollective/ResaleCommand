@@ -1690,9 +1690,13 @@ const filteredCandidateItems = computed(() => {
 
 const linkItemToActiveRow = (item: any) => {
   if (!activeDrawerRow.value) return;
-  activeDrawerRow.value.mappedItem = item;
+  const target = dereferenceParentLot(item);
+  activeDrawerRow.value.mappedItem = target;
+  if (target?.isMultiQty || (target?.quantity && target.quantity > 1)) {
+    activeDrawerRow.value.isMultiQty = true;
+  }
   saveStagingSession();
-  addToast({ type: 'success', message: `Linked [${item.upc || 'ITEM'}] to sale!` });
+  addToast({ type: 'success', message: `Linked [${target.upc || 'ITEM'}] to sale!` });
 };
 
 const unlinkActiveRow = () => {
@@ -1990,8 +1994,27 @@ onMounted(async () => {
   }
 });
 
+// Helper: Dereference combined/deconstructed child items to their active Parent Lot
+const dereferenceParentLot = (item: any): any => {
+  if (!item) return null;
+  const s = String(item.status || '').toLowerCase().trim();
+  if ((s === 'combined' || s === 'deconstructed') && item.parentLotId) {
+    const parent = inventoryItems.value.find(p => p.$id === item.parentLotId);
+    if (parent) return dereferenceParentLot(parent);
+  }
+  return item;
+};
+
 const activeInventory = computed(() => {
   return inventoryItems.value;
+});
+
+// Title search candidates: strictly exclude 'combined' and 'deconstructed' items (Lineage Absorption Law)
+const titleEligibleInventory = computed(() => {
+  return inventoryItems.value.filter(item => {
+    const s = String(item.status || '').toLowerCase().trim();
+    return s !== 'combined' && s !== 'deconstructed' && s !== 'tracked' && s !== 'draft' && s !== 'scouted';
+  });
 });
 
 const cycleFilteredRows = computed(() => {
@@ -2010,12 +2033,27 @@ const displayedRows = computed(() => {
 });
 
 const availableItems = computed(() => {
-  const mappedSingleUnitIds = new Set(
-    cycleFilteredRows.value
-      .filter(r => r.mappedItem && !r.isMultiQty && !r.mappedItem.isMultiQty && !(r.mappedItem.quantity > 1))
-      .map(r => r.mappedItem.$id)
-  );
-  return activeInventory.value.filter(i => !mappedSingleUnitIds.has(i.$id));
+  // Count how many times each item is mapped in cycleFilteredRows
+  const usageCountMap = new Map<string, number>();
+  cycleFilteredRows.value.forEach(r => {
+    if (r.mappedItem?.$id) {
+      usageCountMap.set(r.mappedItem.$id, (usageCountMap.get(r.mappedItem.$id) || 0) + 1);
+    }
+  });
+
+  return inventoryItems.value.filter(i => {
+    const s = String(i.status || '').toLowerCase().trim();
+    // Exclude combined/deconstructed children from candidate drawer list
+    if (s === 'combined' || s === 'deconstructed') return false;
+
+    const used = usageCountMap.get(i.$id) || 0;
+    const capacity = Math.max(1, Number(i.quantity || 1));
+    const isMulti = i.isMultiQty || capacity > 1;
+
+    // Multi-qty lots are always available to link; single-unit items only if not yet used
+    if (isMulti) return true;
+    return used === 0;
+  });
 });
 
 const matchedCount = computed(() => cycleFilteredRows.value.filter(r => r.mappedItem).length);
@@ -2180,8 +2218,13 @@ const partnerSettlements = computed(() => {
     const isPureConsignor = prefix === 'BB-';
     const grossPrice = Number(row.listedPrice || row.salePrice || 0);
     const netStoreDeposit = Number(row.salePrice || (grossPrice * 0.85));
-    const venueFee = Math.max(0, Number((grossPrice - netStoreDeposit).toFixed(2)));
-    const costBasis = isPureConsignor ? 0 : getItemCost(item);
+    let costBasis = 0;
+    if (!isPureConsignor && item) {
+      const itemCost = getItemCost(item);
+      const itemQty = Math.max(1, Number(item.quantity || 1));
+      const isMulti = item.isMultiQty || itemQty > 1 || row.isMultiQty;
+      costBasis = isMulti ? Number((itemCost / itemQty).toFixed(2)) : itemCost;
+    }
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
     const curatorTake = isPureConsignor ? netStoreDeposit : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
     const commonsTake = isPureConsignor ? 0 : Number((netSurplus * 0.30).toFixed(2));
@@ -2517,6 +2560,13 @@ const parseMemoryDenPayout = (csvText: string) => {
     }
   }
 
+  // Stateful Stock Capacity Counter initialized to each item's active quantity
+  const remainingStockMap = new Map<string, number>();
+  inventoryItems.value.forEach(item => {
+    const q = Math.max(1, Number(item.quantity || 1));
+    remainingStockMap.set(item.$id, q);
+  });
+
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]);
     if (cols.length <= itemIdx) continue;
@@ -2588,27 +2638,59 @@ const parseMemoryDenPayout = (csvText: string) => {
       itemName = fullItemName.replace(skuMatch[0], '').trim();
     }
 
-    // Matching Logic Priority against all inventory
+    // Matching Logic Priority against all inventory (Lineage Absorption Law)
     let matched: any = null;
     
-    // 1. Exact Location SKU match
+    // 1. Exact Location SKU match (auto-dereference combined/deconstructed child items)
     if (extractedSku) {
       matched = activeInventory.value.find(item => item.locationSku === extractedSku || item.locationSku === `'${extractedSku}`);
+      if (matched) matched = dereferenceParentLot(matched);
     }
     
-    // 2. Exact UPC match
+    // 2. Exact UPC match (auto-dereference combined/deconstructed child items)
     if (!matched && extractedSku) {
       matched = activeInventory.value.find(item => item.upc === extractedSku);
+      if (matched) matched = dereferenceParentLot(matched);
     }
 
-    // 3. Normalized Title Match
+    // 3. Normalized Title Match (Lineage Absorption Law: strictly titleEligibleInventory)
     if (!matched) {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      matched = activeInventory.value.find(item => {
+      const candidates = titleEligibleInventory.value.filter(item => {
         if (!item.title) return false;
         const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
         return itemClean === cleanName || itemClean.includes(cleanName) || cleanName.includes(itemClean);
       });
+
+      if (candidates.length > 0) {
+        // Prioritize:
+        // 1. Items with remaining stock capacity > 0 in remainingStockMap
+        // 2. Multi-quantity lot (quantity > 1 or isMultiQty)
+        // 3. Active status in booth ('placed' > 'in-stock')
+        candidates.sort((a, b) => {
+          const remA = remainingStockMap.get(a.$id) ?? 0;
+          const remB = remainingStockMap.get(b.$id) ?? 0;
+          if (remA > 0 && remB <= 0) return -1;
+          if (remB > 0 && remA <= 0) return 1;
+
+          const qtyA = Number(a.quantity || 1);
+          const qtyB = Number(b.quantity || 1);
+          if (qtyA > 1 && qtyB <= 1) return -1;
+          if (qtyB > 1 && qtyA <= 1) return 1;
+
+          const placedA = a.status === 'placed' ? 1 : 0;
+          const placedB = b.status === 'placed' ? 1 : 0;
+          return placedB - placedA;
+        });
+
+        matched = dereferenceParentLot(candidates[0]);
+      }
+    }
+
+    // Decrement capacity counter in remainingStockMap for the matched item
+    if (matched) {
+      const curStock = remainingStockMap.get(matched.$id) ?? Math.max(1, Number(matched.quantity || 1));
+      remainingStockMap.set(matched.$id, curStock - 1);
     }
 
     // 4. Sub-Client B&B Auto-Mapping (PDXGL Consignor)
@@ -2634,7 +2716,7 @@ const parseMemoryDenPayout = (csvText: string) => {
     const skuKey = (extractedSku || fullItemName).trim().toUpperCase();
     const repeatCount = skuCounts.get(skuKey) || 1;
     const isMultiCandidate = repeatCount > 1;
-    const isItemMulti = !!(matched?.isMultiQty || (matched?.quantity && matched.quantity > 1));
+    const isItemMulti = !!(matched?.isMultiQty || (matched?.quantity && Number(matched.quantity) > 1));
     const isMultiQty = isItemMulti || isMultiCandidate;
 
     rows.push({
@@ -2761,6 +2843,17 @@ const executeImport = async () => {
       console.warn("[SalesImporter] Could not pre-fetch sales for duplicate check:", e);
     }
 
+    // Count verified sales planned per item in this import batch
+    const salesPerItemCount = new Map<string, number>();
+    rowsToImport.forEach(r => {
+      const itm = r.mappedItem;
+      if (itm?.$id && !itm.$id.startsWith('subclient_')) {
+        salesPerItemCount.set(itm.$id, (salesPerItemCount.get(itm.$id) || 0) + 1);
+      }
+    });
+
+    const updatedItemIds = new Set<string>();
+
     for (let idx = 0; idx < rowsToImport.length; idx++) {
       const row = rowsToImport[idx];
       const pct = Math.round(((idx + 1) / rowsToImport.length) * 100);
@@ -2792,6 +2885,13 @@ const executeImport = async () => {
           }
           // If the item in inventory is already marked sold with a sale record, skip!
           if (item.status === 'sold' && item.saleId) {
+            importedCount++;
+            importedRowRefs.add(row);
+            continue;
+          }
+        } else {
+          // For multi-quantity items, skip only if THIS specific ticket was already recorded
+          if (row.ticketNumber && existingTicketSet.has(orderRef)) {
             importedCount++;
             importedRowRefs.add(row);
             continue;
@@ -2870,12 +2970,50 @@ const executeImport = async () => {
           }
         }
 
-        // Update the item in Appwrite only if it is a real stored document
-        if (item.$id && !item.$id.startsWith('subclient_')) {
-          if (isMultiQty && (!item.quantity || item.quantity <= 1)) {
-            updatePayload.quantity = Math.max(2, row.repeatCount || 2);
+        // Update the item in Appwrite (Appwrite Schema Safe)
+        // Partial vs. Full Multi-Quantity Depletion Law
+        if (item.$id && !item.$id.startsWith('subclient_') && !updatedItemIds.has(item.$id)) {
+          updatedItemIds.add(item.$id);
+          const K = salesPerItemCount.get(item.$id) || 1;
+          const N = Math.max(1, Number(item.quantity || 1));
+          const isMulti = item.isMultiQty || N > 1 || row.isMultiQty;
+
+          if (isMulti && K < N) {
+            // Partial Depletion Law (K < N):
+            // e.g. 4 sold out of 9: quantity becomes 5, status stays 'placed' (or 'in-stock')!
+            const remainingQty = N - K;
+            const totalCost = Number(item.cost || 0);
+            const unitCost = N > 0 ? (totalCost / N) : 0;
+            const remainingCost = Math.max(0, Number((totalCost - (unitCost * K)).toFixed(2)));
+
+            const lotPayload: Record<string, any> = {
+              quantity: Math.max(1, remainingQty),
+              cost: remainingCost,
+              status: item.status === 'placed' ? 'placed' : 'in-stock'
+            };
+            if (row.extractedSku || item.locationSku) {
+              lotPayload.locationSku = row.extractedSku || item.locationSku;
+            }
+            await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
+            item.quantity = remainingQty;
+            item.cost = remainingCost;
+          } else {
+            // Full Depletion Law (K >= N or single-unit item):
+            const lotPayload: Record<string, any> = {
+              status: 'sold',
+              quantity: 1, // Appwrite constraint: quantity >= 1
+              resalePrice: Number(row.listedPrice || row.salePrice || 0),
+              soldPrice: Number(row.salePrice || 0),
+              saleId: updatePayload.saleId || orderRef
+            };
+            if (row.extractedSku || item.locationSku) {
+              lotPayload.locationSku = row.extractedSku || item.locationSku;
+            }
+            await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
+            item.status = 'sold';
+            item.quantity = 1;
+            item.soldPrice = Number(row.salePrice || 0);
           }
-          await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, updatePayload);
         }
 
         importedCount++;

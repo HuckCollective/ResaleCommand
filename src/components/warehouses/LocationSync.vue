@@ -213,6 +213,16 @@ const parseCsv = (csvText) => {
     return;
   }
 
+  const dereferenceParent = (itm) => {
+    if (!itm) return null;
+    const s = String(itm.status || '').toLowerCase().trim();
+    if ((s === 'combined' || s === 'deconstructed') && itm.parentLotId) {
+      const parent = inventoryItems.value.find(p => p.$id === itm.parentLotId);
+      if (parent) return dereferenceParent(parent);
+    }
+    return itm;
+  };
+
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]);
@@ -221,11 +231,22 @@ const parseCsv = (csvText) => {
     const itemName = cols[itemIdx].trim();
     const locationSku = cols[skuIdx].trim();
 
-    // Auto-match logic (Fuzzy match by exact title for now)
-    let matched = inventoryItems.value.find(item => 
-      item.title.toLowerCase() === itemName.toLowerCase() || 
-      (item.locationSku && item.locationSku === locationSku)
-    );
+    // Auto-match logic (Lineage Absorption Law)
+    let matched = null;
+    if (locationSku) {
+      matched = inventoryItems.value.find(item => item.locationSku && item.locationSku === locationSku);
+      if (matched) matched = dereferenceParent(matched);
+    }
+    if (!matched && itemName) {
+      // Strictly exclude combined/deconstructed child items from title match
+      const candidates = inventoryItems.value.filter(item => {
+        const s = String(item.status || '').toLowerCase().trim();
+        return s !== 'combined' && s !== 'deconstructed' && item.title && item.title.toLowerCase() === itemName.toLowerCase();
+      });
+      if (candidates.length > 0) {
+        matched = dereferenceParent(candidates[0]);
+      }
+    }
 
     rows.push({
       originalLineIndex: i,

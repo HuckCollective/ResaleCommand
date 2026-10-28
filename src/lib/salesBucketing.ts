@@ -70,10 +70,27 @@ export function partitionSalesByOrg(
         }
     });
 
+    // Helper: Dereference combined/deconstructed child items to their active Parent Lot
+    const dereferenceParentLot = (item: any): any => {
+        if (!item) return null;
+        const s = String(item?.status || '').toLowerCase().trim();
+        if ((s === 'combined' || s === 'deconstructed') && item.parentLotId) {
+            const parent = appwriteItems.find(p => p.$id === item.parentLotId);
+            if (parent) return dereferenceParentLot(parent);
+        }
+        return item;
+    };
+
     // Filter out unacquired pre-buy items (tracked, draft, scouted) so they are immune to sales attribution
     const eligibleItems = appwriteItems.filter(item => {
         const s = String(item?.status || '').toLowerCase().trim();
         return s !== 'tracked' && s !== 'draft' && s !== 'scouted';
+    });
+
+    // Title search candidates: strictly exclude 'combined' and 'deconstructed' items
+    const titleEligibleItems = eligibleItems.filter(item => {
+        const s = String(item?.status || '').toLowerCase().trim();
+        return s !== 'combined' && s !== 'deconstructed';
     });
 
     // Index Appwrite items by UPC, locationSku, and Appwrite $id
@@ -102,14 +119,29 @@ export function partitionSalesByOrg(
                           appwriteByCode.get(rawSku.toUpperCase()) || 
                           null;
 
+        // If code hit a combined/deconstructed child, dereference to its active Parent Lot!
+        if (matchedItem) {
+            matchedItem = dereferenceParentLot(matchedItem);
+        }
+
         if (!matchedItem && rawName) {
             const cleanName = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
             if (cleanName.length >= 8) {
-                matchedItem = eligibleItems.find(item => {
+                // Find candidates and prioritize active multi-quantity parent lots first
+                const candidates = titleEligibleItems.filter(item => {
                     if (!item.title) return false;
                     const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
                     return ic === cleanName;
-                }) || null;
+                });
+
+                if (candidates.length > 0) {
+                    candidates.sort((a, b) => {
+                        const aQty = Number(a.quantity || 1);
+                        const bQty = Number(b.quantity || 1);
+                        return bQty - aQty;
+                    });
+                    matchedItem = dereferenceParentLot(candidates[0]);
+                }
             }
         }
 

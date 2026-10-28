@@ -47,6 +47,16 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                 // Track which appwrite items haven't been matched yet
                 let unmatchedAppwrite = [...appwriteItems];
 
+                const dereferenceParent = (itm: any): any => {
+                    if (!itm) return null;
+                    const s = String(itm.status || '').toLowerCase().trim();
+                    if ((s === 'combined' || s === 'deconstructed') && itm.parentLotId) {
+                        const parent = appwriteItems.find(p => p.$id === itm.parentLotId);
+                        if (parent) return dereferenceParent(parent);
+                    }
+                    return itm;
+                };
+
                 csvItems.forEach(csvRow => {
                     const csvName = (csvRow['Name'] || csvRow['Item Name'] || csvRow['Item'] || csvRow['Title'] || '').trim();
                     const csvStatusRaw = (csvRow['Status'] || csvRow['Inventory'] || csvRow['State'] || '').trim().toLowerCase();
@@ -87,20 +97,24 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                             });
                         }
 
-                        // 3. Tertiary Match: Exact Title (Case Insensitive)
+                        // 3. Tertiary Match: Exact Title (Lineage Absorption Law: strictly exclude combined/deconstructed)
                         if (matchIndex === -1 && csvName) {
-                            matchIndex = unmatchedAppwrite.findIndex(item => 
-                                item.title?.toLowerCase().trim() === csvName.toLowerCase()
-                            );
+                            matchIndex = unmatchedAppwrite.findIndex(item => {
+                                const s = String(item?.status || '').toLowerCase().trim();
+                                if (s === 'combined' || s === 'deconstructed') return false;
+                                return item.title?.toLowerCase().trim() === csvName.toLowerCase();
+                            });
                         }
 
-                        // 4. Smart Sync Fallback: High-Confidence Fuzzy Word Overlap (>= 75% threshold)
+                        // 4. Smart Sync Fallback: High-Confidence Fuzzy Word Overlap (>= 75% threshold, exclude combined/deconstructed)
                         if (matchIndex === -1 && csvName) {
                             const csvKeywords = getKeywords(csvName);
                             let bestMatchIdx = -1;
                             let bestOverlap = 0;
 
                             unmatchedAppwrite.forEach((item, idx) => {
+                                const s = String(item?.status || '').toLowerCase().trim();
+                                if (s === 'combined' || s === 'deconstructed') return;
                                 const itemKeywords = getKeywords(item.title || '');
                                 const overlap = calculateOverlap(csvKeywords, itemKeywords);
                                 if (overlap > bestOverlap) {
@@ -115,7 +129,17 @@ export async function reconcileBoothInventory(csvText: string, appwriteItems: an
                         }
 
                         if (matchIndex > -1) {
-                            const matchedItem = unmatchedAppwrite[matchIndex];
+                            let matchedItem = unmatchedAppwrite[matchIndex];
+                            const resolvedParent = dereferenceParent(matchedItem);
+                            if (resolvedParent && resolvedParent.$id !== matchedItem.$id) {
+                                const pIdx = unmatchedAppwrite.findIndex(p => p.$id === resolvedParent.$id);
+                                if (pIdx > -1) {
+                                    matchIndex = pIdx;
+                                    matchedItem = unmatchedAppwrite[pIdx];
+                                } else {
+                                    matchedItem = resolvedParent;
+                                }
+                            }
                             const qty = Number(matchedItem.quantity || 1);
                             
                             if (qty > 1) {

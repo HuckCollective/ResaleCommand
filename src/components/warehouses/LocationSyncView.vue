@@ -1815,6 +1815,22 @@ const parseCsvData = (rawText: string, fileName: string) => {
       const qtyIdx = headerCols.findIndex(h => h === 'quantity' || h === 'qty' || h === 'in stock' || h.includes('quantity') || h.includes('qty'));
 
       const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+      // Lineage Absorption Law: exclude combined/deconstructed child items from title/fuzzy searches
+      const titleSearchCandidates = activeItems.filter(item => {
+        const s = String(item?.status || '').toLowerCase().trim();
+        return s !== 'combined' && s !== 'deconstructed' && s !== 'tracked' && s !== 'draft' && s !== 'scouted';
+      });
+
+      const dereferenceParent = (itm: any): any => {
+        if (!itm) return null;
+        const s = String(itm.status || '').toLowerCase().trim();
+        if ((s === 'combined' || s === 'deconstructed') && itm.parentLotId) {
+          const parent = activeItems.find(p => p.$id === itm.parentLotId);
+          if (parent) return dereferenceParent(parent);
+        }
+        return itm;
+      };
+
       const defaultCommission = currentLocation.value?.commissionRate || 15;
       const defaultConsignorPct = 100 - defaultCommission; // e.g. 85%
 
@@ -1943,13 +1959,14 @@ const parseCsvData = (rawText: string, fileName: string) => {
         // Commission Fee
         let commFee = grossPrice > netSoldPrice ? Number((grossPrice - netSoldPrice).toFixed(2)) : 0;
 
-        // Match against existing inventory items
+        // Match against existing inventory items (Lineage Absorption Law)
         let matched = null;
 
         // 1. Match by exact UPC from CSV's UPC column (Highest Authority: e.g. HUCK-5064)
         if (cleanUpc && activeItems.length > 0) {
           const target = cleanUpc.toLowerCase();
           matched = activeItems.find(item => (item?.upc || '').toLowerCase().trim() === target);
+          if (matched) matched = dereferenceParent(matched);
         }
 
         // 2. Match by cleanSku against UPC or locationSku
@@ -1961,11 +1978,14 @@ const parseCsvData = (rawText: string, fileName: string) => {
             const iSku = (item?.sku || '').toLowerCase().trim();
             return iUpc === target || iLocSku === target || iSku === target;
           });
+          if (matched) matched = dereferenceParent(matched);
         }
 
         // 3. Smart Fuzzy Match by Title & Keywords (Fallback if SKU unmatched)
-        if (!matched && name && activeItems.length > 0) {
-          matched = findBestItemMatch(name, activeItems);
+        // Lineage Absorption Law: strictly search titleSearchCandidates (never match combined/deconstructed children)
+        if (!matched && name && titleSearchCandidates.length > 0) {
+          matched = findBestItemMatch(name, titleSearchCandidates);
+          if (matched) matched = dereferenceParent(matched);
         }
 
         rows.push({

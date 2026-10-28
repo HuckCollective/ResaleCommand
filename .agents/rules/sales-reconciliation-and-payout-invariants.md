@@ -118,4 +118,33 @@ When syncing or importing into the live production environment (`items`, `sales`
 2. **No Approximation or Rounding Drift**:
    - Every financial metric must use standard two-decimal cash accounting (`Number(val.toFixed(2))`). Zero mathematical drift is tolerated.
 
+---
+
+## 12. Combined Lot Dereferencing & Multi-Quantity Partial Depletion Law
+
+1. **The Lineage Absorption Law (Anti-Child Zombie Attribution)**:
+   - When items are merged into a combined lot, the original component items are set to `status: 'combined'` with their `parentLotId` pointing to the active Parent Lot.
+   - **Title Search Exclusion**: Items with `status === 'combined'` or `'deconstructed'` must NEVER be matched by title, name, or keyword searches in any reconciliation or sales import workflow.
+   - **SKU/UPC Dereferencing**: If an incoming register sale row matches the exact `upc` or `locationSku` of a `status === 'combined'` child item, the system MUST automatically dereference `parentLotId` and bind the sale to the active Parent Lot document. Child items must NEVER be directly marked `sold`.
+
+2. **Stateful Stock Capacity Counter (`remainingStockMap`)**:
+   - Reconcilers and CSV matchers MUST NOT lock or exhaust an item after a single match if `item.quantity > 1` or `item.isMultiQty`.
+   - Maintain a stateful capacity counter initialized to `remainingStock = Math.max(1, Number(item.quantity || 1))`.
+   - When multiple sales rows match the same multi-quantity lot (e.g. 4 copies of "Frank Frazetta Fantasy Art" sold across different tickets), all rows bind to that Parent Lot while decrementing its `remainingStock` counter ($9 \to 8 \to 7 \to 6 \to 5$).
+   - When resolving title matches, active Parent Lots (`quantity > 1`, `status === 'placed'`) take strict precedence over single-unit items.
+
+3. **Partial vs. Full Multi-Quantity Depletion on Commit (Appwrite Schema Safe)**:
+   - When committing $K$ sales against an item with quantity $N$:
+     * **Sales Collection**: Create all $K$ verified sale records in the `sales` collection linked to the Parent Lot's UPC/SKU.
+     * **Partial Depletion ($K < N$)**:
+       - Update the Parent Lot's `quantity` to $N - K$ (e.g. 5 remaining).
+       - Maintain active status (`status: 'placed'` or `'in-stock'`). **NEVER** mark a Parent Lot `'sold'` while units remain in stock!
+       - Adjust remaining inventory cost basis proportionally:
+         $$\text{Unit Cost} = \frac{\text{Total Cost}}{N}, \quad \text{Remaining Cost} = \text{Unit Cost} \times (N - K)$$
+       - Credit $\text{Unit Cost} \times K$ to the current monthly settlement's recouped basis.
+     * **Full Depletion ($K \ge N$)**:
+       - Set `status: 'sold'`.
+       - Set `quantity: 1` (never 0, strictly respecting Appwrite's integer validation constraint `quantity >= 1`).
+
+
 
