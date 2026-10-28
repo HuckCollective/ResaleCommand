@@ -244,38 +244,94 @@
       </div>
 
       <!-- Step 1: Upload (shown only when no receipt AND no parsed rows) -->
-      <div v-else-if="!parsedRows.length" class="flex flex-col items-center justify-center p-12 border-2 border-dashed border-base-300 rounded-xl bg-base-200/50 hover:bg-base-200 transition-colors">
-        <Icon icon="solar:upload-minimalistic-linear" class="w-12 h-12 opacity-50 mb-4" />
-        <h3 class="font-bold text-lg mb-2">Upload Sales CSV</h3>
-        
-        <div class="form-control w-full max-w-xs mb-4">
-          <label class="label"><span class="label-text">Select Platform</span></label>
-          <select class="select select-bordered" v-model="platform">
-            <option value="memoryden">MemoryDen Payout</option>
-            <option value="ebay">eBay Orders (Soon)</option>
-            <option value="generic">Generic CSV (Soon)</option>
-          </select>
+      <div v-else-if="!parsedRows.length" class="space-y-6">
+        <!-- Visual Workflow Explainer Card -->
+        <div class="card bg-base-100 border border-base-300 p-5 rounded-2xl shadow-xs text-left">
+          <div class="flex items-center gap-2 mb-3">
+            <Icon icon="solar:route-bold" class="w-5 h-5 text-primary" />
+            <h4 class="font-bold text-sm text-base-content">Consignment Mall Lifecycle &amp; Reconciliation Workflow</h4>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <!-- Step 1 -->
+            <div class="p-3.5 bg-base-200/50 rounded-xl border border-base-300/60 space-y-1.5">
+              <div class="flex items-center gap-1.5 font-bold text-primary">
+                <span class="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-black">1</span>
+                <span>Drop Export (Stocking)</span>
+              </div>
+              <p class="text-base-content/70 text-[11px] leading-relaxed">
+                Export items from a Drop Manifest to Ricochet. This tells the mall what inventory is physically stocked in your booth.
+              </p>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="p-3.5 bg-base-200/50 rounded-xl border border-base-300/60 space-y-1.5">
+              <div class="flex items-center gap-1.5 font-bold text-secondary">
+                <span class="w-5 h-5 rounded-full bg-secondary/10 text-secondary flex items-center justify-center text-[11px] font-black">2</span>
+                <span>Location Sync (Barcode Link)</span>
+              </div>
+              <p class="text-base-content/70 text-[11px] leading-relaxed">
+                Ricochet creates booth SKUs (<code class="text-xs">0EJ...</code>). Upload Ricochet's <em>Inventory Export</em> to <a href="/warehouse/sync" class="link link-primary font-bold">Location Sync</a> to permanently bind them to your <code class="text-xs">HUCK-</code> barcodes.
+              </p>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/30 space-y-1.5">
+              <div class="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                <span class="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[11px] font-black">3</span>
+                <span>Payout Import (Here)</span>
+              </div>
+              <p class="text-base-content/70 text-[11px] leading-relaxed">
+                Upload your month-end <em>Payout CSV</em> here. It records register sales, decrements multi-qty lots, deducts space rent, and calculates partner payouts.
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-3.5 pt-3 border-t border-base-200 text-[11px] text-base-content/80 flex items-start gap-2 bg-base-200/30 p-2.5 rounded-xl">
+            <Icon icon="solar:question-circle-bold" class="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <div>
+              <strong>Why isn't Drop Export enough?</strong> 
+              When you drop inventory off, Ricochet assigns new booth SKUs, but does <em>not</em> send live register sale notifications back to your system. The month-end Payout CSV is the register receipt that proves what actually sold, when it sold, and how much cash was cleared!
+            </div>
+          </div>
         </div>
 
-        <input 
-          type="file" 
-          accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
-          class="file-input file-input-bordered file-input-primary w-full max-w-xs" 
-          @change="handleFileUpload" 
-          :disabled="isProcessing || platform !== 'memoryden'"
-        />
+        <div class="flex flex-col items-center justify-center p-10 border-2 border-dashed border-base-300 rounded-2xl bg-base-200/50 hover:bg-base-200 transition-colors">
+          <Icon icon="solar:upload-minimalistic-linear" class="w-12 h-12 opacity-50 mb-3 text-primary" />
+          <h3 class="font-bold text-lg mb-1">Upload Month-End Payout CSV</h3>
+          <p class="text-xs opacity-70 mb-4 text-center max-w-sm">
+            Upload the payout summary exported from Ricochet (Consignors &rarr; Payouts) to reconcile your check.
+          </p>
+          
+          <div class="form-control w-full max-w-xs mb-4">
+            <label class="label py-1"><span class="label-text text-xs font-bold">Select Platform</span></label>
+            <select class="select select-bordered select-sm rounded-xl font-bold" v-model="platform">
+              <option value="memoryden">Memory Den Payout (Ricochet)</option>
+              <option value="ebay">eBay Orders (Soon)</option>
+              <option value="generic">Generic CSV (Soon)</option>
+            </select>
+          </div>
 
-        <div class="divider text-xs opacity-60 my-3 w-full max-w-xs">OR</div>
+          <input 
+            type="file" 
+            accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
+            class="file-input file-input-bordered file-input-primary file-input-sm w-full max-w-xs rounded-xl" 
+            @change="handleFileUpload" 
+            :disabled="isProcessing || platform !== 'memoryden'"
+          />
 
-        <button 
-          type="button"
-          class="btn btn-outline btn-sm gap-2 rounded-xl" 
-          :disabled="isProcessing"
-          @click="loadDefaultPayoutFile"
-        >
-          <Icon icon="solar:folder-with-files-bold" class="w-4 h-4 text-primary" />
-          <span>Load Memory Den Full Payout (Multi-Month)</span>
-        </button>
+          <div class="divider text-xs opacity-60 my-3 w-full max-w-xs">OR</div>
+
+          <button 
+            type="button"
+            class="btn btn-outline btn-sm gap-2 rounded-xl" 
+            :disabled="isProcessing"
+            @click="loadDefaultPayoutFile"
+          >
+            <Icon icon="solar:folder-with-files-bold" class="w-4 h-4 text-primary" />
+            <span>Load Memory Den Full Payout (Multi-Month Demo)</span>
+          </button>
+        </div>
       </div>
 
       <!-- Step 2: Reconciliation & Settlement UI -->
@@ -463,7 +519,14 @@
                     <div class="font-mono text-xs opacity-70 flex items-center gap-1.5 flex-wrap">
                       <span class="flex items-center gap-1">
                         <Icon icon="solar:tag-bold" class="w-3 h-3 text-secondary" />
-                        <span>SKU: {{ row.extractedSku || 'N/A' }}</span>
+                        <span v-if="row.extractedSku">CSV SKU: {{ row.extractedSku }}</span>
+                        <span v-else-if="row.mappedItem?.locationSku" class="text-success font-bold font-mono">
+                          SKU: {{ row.mappedItem.locationSku }}
+                        </span>
+                        <span v-else-if="row.mappedItem?.upc" class="text-success font-bold font-mono">
+                          UPC: {{ row.mappedItem.upc }}
+                        </span>
+                        <span v-else class="opacity-50">SKU: Not in CSV</span>
                       </span>
                       <span v-if="row.ticketNumber" class="badge badge-xs badge-info font-mono font-bold">
                         🎟️ Ticket #{{ row.ticketNumber }}
@@ -1678,6 +1741,23 @@ const goToNextDrawerRow = () => {
 
 const filteredCandidateItems = computed(() => {
   if (!drawerSearchQuery.value.trim()) {
+    // If no manual search query, provide smart suggestions based on the CSV row's title keywords
+    if (activeDrawerRow.value?.itemName) {
+      const rowTokens = new Set(extractKeywords(activeDrawerRow.value.itemName));
+      if (rowTokens.size > 0) {
+        const scored = availableItems.value.map(item => {
+          const dbTokens = new Set(extractKeywords(item.title || ''));
+          let matches = 0;
+          for (const t of rowTokens) {
+            if (dbTokens.has(t)) matches++;
+          }
+          return { item, matches };
+        }).filter(s => s.matches > 0).sort((a, b) => b.matches - a.matches);
+        if (scored.length > 0) {
+          return scored.slice(0, 25).map(s => s.item);
+        }
+      }
+    }
     return availableItems.value.slice(0, 20);
   }
   const q = drawerSearchQuery.value.toLowerCase().trim();
@@ -2003,6 +2083,16 @@ const dereferenceParentLot = (item: any): any => {
     if (parent) return dereferenceParentLot(parent);
   }
   return item;
+};
+
+const STOP_WORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'in', 'on', 'at', 'to', 'with', 'by', 'from', 'is', 'it', 'as', 'game', 'sc', 'aeg']);
+
+const extractKeywords = (str: string): string[] => {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
 };
 
 const activeInventory = computed(() => {
@@ -2653,21 +2743,17 @@ const parseMemoryDenPayout = (csvText: string) => {
       if (matched) matched = dereferenceParentLot(matched);
     }
 
-    // 3. Normalized Title Match (Lineage Absorption Law: strictly titleEligibleInventory)
-    if (!matched) {
+    // 3. Exact Cleaned Title Match (Lineage Absorption Law: strictly titleEligibleInventory)
+    if (!matched && itemName) {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const candidates = titleEligibleInventory.value.filter(item => {
+      const exactCandidates = titleEligibleInventory.value.filter(item => {
         if (!item.title) return false;
         const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return itemClean === cleanName || itemClean.includes(cleanName) || cleanName.includes(itemClean);
+        return itemClean === cleanName;
       });
 
-      if (candidates.length > 0) {
-        // Prioritize:
-        // 1. Items with remaining stock capacity > 0 in remainingStockMap
-        // 2. Multi-quantity lot (quantity > 1 or isMultiQty)
-        // 3. Active status in booth ('placed' > 'in-stock')
-        candidates.sort((a, b) => {
+      if (exactCandidates.length > 0) {
+        exactCandidates.sort((a, b) => {
           const remA = remainingStockMap.get(a.$id) ?? 0;
           const remB = remainingStockMap.get(b.$id) ?? 0;
           if (remA > 0 && remB <= 0) return -1;
@@ -2683,7 +2769,102 @@ const parseMemoryDenPayout = (csvText: string) => {
           return placedB - placedA;
         });
 
-        matched = dereferenceParentLot(candidates[0]);
+        matched = dereferenceParentLot(exactCandidates[0]);
+      }
+    }
+
+    // 4. Substring Containment Match (strictly titleEligibleInventory)
+    if (!matched && itemName) {
+      const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanName.length >= 6) {
+        const subCandidates = titleEligibleInventory.value.filter(item => {
+          if (!item.title) return false;
+          const itemClean = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return itemClean.includes(cleanName) || cleanName.includes(itemClean);
+        });
+
+        if (subCandidates.length > 0) {
+          subCandidates.sort((a, b) => {
+            const remA = remainingStockMap.get(a.$id) ?? 0;
+            const remB = remainingStockMap.get(b.$id) ?? 0;
+            if (remA > 0 && remB <= 0) return -1;
+            if (remB > 0 && remA <= 0) return 1;
+
+            const qtyA = Number(a.quantity || 1);
+            const qtyB = Number(b.quantity || 1);
+            if (qtyA > 1 && qtyB <= 1) return -1;
+            if (qtyB > 1 && qtyA <= 1) return 1;
+
+            const placedA = a.status === 'placed' ? 1 : 0;
+            const placedB = b.status === 'placed' ? 1 : 0;
+            return placedB - placedA;
+          });
+
+          matched = dereferenceParentLot(subCandidates[0]);
+        }
+      }
+    }
+
+    // 5. Smart Fuzzy Keyword Overlap & Jaccard Matching (Fallback for reordered, truncated, or slightly differing titles)
+    if (!matched && itemName) {
+      const csvTokens = new Set(extractKeywords(itemName));
+      if (csvTokens.size > 0) {
+        const scoredCandidates: { item: any; score: number }[] = [];
+
+        for (const item of titleEligibleInventory.value) {
+          if (!item.title) continue;
+          const dbTokens = new Set(extractKeywords(item.title));
+          if (dbTokens.size === 0) continue;
+
+          let matchingTokens = 0;
+          for (const token of csvTokens) {
+            if (dbTokens.has(token)) {
+              matchingTokens++;
+            }
+          }
+
+          if (matchingTokens === 0) continue;
+
+          const minSize = Math.min(csvTokens.size, dbTokens.size);
+          const score = matchingTokens / minSize;
+          const jaccard = matchingTokens / (csvTokens.size + dbTokens.size - matchingTokens);
+
+          // Threshold: >= 50% overlap and (>= 2 matching words OR 1 distinctive word >= 5 chars)
+          if (score >= 0.50 && (matchingTokens >= 2 || (matchingTokens === 1 && [...csvTokens].some(t => dbTokens.has(t) && t.length >= 5)))) {
+            const combinedScore = score * 0.6 + jaccard * 0.4;
+            scoredCandidates.push({ item, score: combinedScore });
+          }
+        }
+
+        if (scoredCandidates.length > 0) {
+          scoredCandidates.sort((a, b) => {
+            // First priority: large difference in fuzzy similarity score (> 0.15)
+            if (Math.abs(a.score - b.score) > 0.15) {
+              return b.score - a.score;
+            }
+
+            // Second priority: remaining stock capacity > 0
+            const remA = remainingStockMap.get(a.item.$id) ?? 0;
+            const remB = remainingStockMap.get(b.item.$id) ?? 0;
+            if (remA > 0 && remB <= 0) return -1;
+            if (remB > 0 && remA <= 0) return 1;
+
+            // Third priority: multi-quantity lot
+            const qtyA = Number(a.item.quantity || 1);
+            const qtyB = Number(b.item.quantity || 1);
+            if (qtyA > 1 && qtyB <= 1) return -1;
+            if (qtyB > 1 && qtyA <= 1) return 1;
+
+            // Fourth priority: active placed status
+            const placedA = a.item.status === 'placed' ? 1 : 0;
+            const placedB = b.item.status === 'placed' ? 1 : 0;
+            if (placedB !== placedA) return placedB - placedA;
+
+            return b.score - a.score;
+          });
+
+          matched = dereferenceParentLot(scoredCandidates[0].item);
+        }
       }
     }
 

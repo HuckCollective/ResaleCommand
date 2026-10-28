@@ -126,13 +126,44 @@ export function partitionSalesByOrg(
 
         if (!matchedItem && rawName) {
             const cleanName = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (cleanName.length >= 8) {
-                // Find candidates and prioritize active multi-quantity parent lots first
-                const candidates = titleEligibleItems.filter(item => {
+            if (cleanName.length >= 6) {
+                // 1. Exact cleaned match
+                let candidates = titleEligibleItems.filter(item => {
                     if (!item.title) return false;
                     const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
                     return ic === cleanName;
                 });
+
+                // 2. Substring containment match
+                if (candidates.length === 0) {
+                    candidates = titleEligibleItems.filter(item => {
+                        if (!item.title) return false;
+                        const ic = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return ic.includes(cleanName) || cleanName.includes(ic);
+                    });
+                }
+
+                // 3. Keyword overlap fallback
+                if (candidates.length === 0) {
+                    const STOP_WORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'in', 'on', 'at', 'to', 'with', 'by', 'from', 'is', 'it', 'as']);
+                    const rawTokens = new Set(rawName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w)));
+                    if (rawTokens.size > 0) {
+                        const scored: { item: any; score: number }[] = [];
+                        for (const itm of titleEligibleItems) {
+                            if (!itm.title) continue;
+                            const itmTokens = new Set(itm.title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w)));
+                            let matches = 0;
+                            for (const t of rawTokens) {
+                                if (itmTokens.has(t)) matches++;
+                            }
+                            if (matches === 0) continue;
+                            const score = matches / Math.min(rawTokens.size, itmTokens.size);
+                            if (score >= 0.50) scored.push({ item: itm, score });
+                        }
+                        scored.sort((a, b) => b.score - a.score);
+                        candidates = scored.map(s => s.item);
+                    }
+                }
 
                 if (candidates.length > 0) {
                     candidates.sort((a, b) => {

@@ -218,10 +218,13 @@
           <div class="p-4 bg-primary/10 text-primary rounded-3xl mb-4">
             <Icon icon="solar:upload-track-linear" class="w-12 h-12" />
           </div>
-          <h2 class="text-xl font-bold mb-1">Upload Location CSV Export</h2>
-          <p class="text-xs opacity-60 mb-4">
-            Drop your Memory Den product catalog or payout summary CSV to link SKUs, attribute sales, and generate two-way synced barcodes.
+          <h2 class="text-xl font-bold mb-1">Upload Location Inventory Export</h2>
+          <p class="text-xs opacity-70 mb-3 max-w-sm">
+            Drop Ricochet's <strong>Inventory Export</strong> (with Product ID, SKU, UPC) to permanently link your booth SKUs (<code class="text-xs">0EJ...</code>) to your <code class="text-xs">HUCK-</code> barcodes.
           </p>
+          <div class="alert alert-info py-2 px-3 text-xs mb-4 rounded-xl flex items-center justify-between text-left">
+            <span>Looking to reconcile monthly sales &amp; payout checks? Use the <a href="/sales/import" class="link font-bold underline">Sales Importer</a> with your Payout CSV!</span>
+          </div>
 
           <!-- Org Prefix Guard Selector -->
           <div class="flex items-center gap-2.5 mb-6 bg-base-200/80 px-3.5 py-2 rounded-xl border border-base-300 text-xs">
