@@ -2310,6 +2310,7 @@ const partnerSettlements = computed(() => {
     const isPureConsignor = prefix === 'BB-';
     const grossPrice = Number(row.listedPrice || row.salePrice || 0);
     const netStoreDeposit = Number(row.salePrice || (grossPrice * 0.85));
+    const venueFee = Number((row.venueFee !== undefined ? row.venueFee : (grossPrice - netStoreDeposit)).toFixed(2));
     let costBasis = 0;
     if (!isPureConsignor && item) {
       const itemCost = getItemCost(item);
