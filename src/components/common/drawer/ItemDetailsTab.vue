@@ -865,10 +865,16 @@
                   </div>
                 </div>
                 <div
-                  v-else
+                  v-else-if="restockSearchQuery.trim()"
                   class="text-center py-3 opacity-60 text-[11px] italic">
                   No matching unplaced Backstock (HG / Acquired / Received)
                   items found.
+                </div>
+                <div
+                  v-else
+                  class="text-center py-3 opacity-60 text-[11px] italic">
+                  No similar Backstock items found. Type above to search all
+                  {{ backstockTotalCount }} HG items.
                 </div>
 
                 <!-- Selected Backstock Item Lineage Pill -->
@@ -957,7 +963,13 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-2 gap-2">
+              <div
+                v-if="restockAwaitingSelection"
+                class="text-center py-3 px-2 rounded-xl border border-dashed border-base-300 bg-base-100 text-[11px] italic opacity-70">
+                Select a Backstock item above to preview pooled cost
+              </div>
+
+              <div v-if="!restockAwaitingSelection" class="grid grid-cols-2 gap-2">
                 <div class="form-control">
                   <label class="label py-0.5"
                     ><span class="label-text text-[11px] font-bold"
@@ -996,6 +1008,7 @@
 
               <!-- Live "Before ➔ After" Pooled Cost & Profit Preview -->
               <div
+                v-if="!restockAwaitingSelection"
                 class="bg-base-100 rounded-xl p-3 border border-base-300 space-y-2 text-xs">
                 <div
                   class="font-bold text-[11px] uppercase tracking-wider text-base-content/70 flex items-center gap-1.5 border-b border-base-200 pb-1.5">
@@ -1996,39 +2009,89 @@ function getBackstockItemMetrics(it) {
     };
 }
 
-const filteredBackstockItems = computed(() => {
+const BACKSTOCK_STOPWORDS = new Set([
+    'vintage', 'lot', 'lots', 'bundle', 'pack', 'with', 'from', 'assorted', 'mixed', 'used', 'item', 'items',
+    'set', 'sets', 'book', 'books', 'reader', 'readers', 'copy', 'copies', 'good', 'condition', 'paid', 'resale',
+    'location', 'order', 'this', 'that', 'have', 'very', 'some', 'unit', 'units', 'color', 'size'
+]);
+
+const extractBackstockKeywords = (...parts) => {
+    const words = new Set();
+    parts.flat().forEach(p => {
+        String(p || '')
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(w => w.length >= 4 && !BACKSTOCK_STOPWORDS.has(w) && !/^\d+$/.test(w))
+            .forEach(w => words.add(w));
+    });
+    return Array.from(words);
+};
+
+// Keywords describing the current bin: title, tag title, keywords array, and first line of condition notes
+const restockTargetKeywords = computed(() => {
+    const rawNotes = String(props.editForm?.condition_notes || props.item?.conditionNotes || '');
+    const firstNoteLine = rawNotes
+        .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '')
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .find(l => l.length > 0) || '';
+    const kw = props.editForm?.keywords?.length ? props.editForm.keywords : (props.item?.keywords || []);
+    return extractBackstockKeywords(
+        props.editForm?.title || props.item?.title,
+        props.editForm?.tagTitle || props.item?.tagTitle,
+        Array.isArray(kw) ? kw : [],
+        firstNoteLine
+    );
+});
+
+// All unplaced Backstock (HG / acquired / received) candidates, excluding the current bin
+const allBackstockCandidates = computed(() => {
     const all = Array.isArray(props.inventoryItems) ? props.inventoryItems : [];
     const currentId = props.item?.$id;
-    const targetWords = String(props.editForm?.title || props.item?.title || '')
-        .toLowerCase()
-        .split(/[\s,./\-_()[\]]+/)
-        .filter(w => w.length >= 4 && !['vintage', 'lot', 'bundle', 'pack', 'with', 'from', 'assorted', 'mixed'].includes(w));
-
-    const candidates = all.filter(it => {
+    return all.filter(it => {
         if (!it || !it.$id || it.$id === currentId) return false;
         const st = String(it.status || '').toLowerCase().trim();
         if (['sold', 'combined', 'deconstructed', 'archived', 'tracked', 'draft', 'scouted'].includes(st)) return false;
         const loc = String(it.storageLocation || '').toUpperCase().trim();
         return st === 'acquired' || st === 'received' || loc.startsWith('HG');
     });
-
-    const q = restockSearchQuery.value.trim().toLowerCase();
-    const searched = q
-        ? candidates.filter(it => {
-            const hay = `${it.title || ''} ${it.upc || ''} ${it.orderId || ''} ${it.purchaseId || ''} ${it.storageLocation || ''} ${it.sourcingLocation || ''}`.toLowerCase();
-            return hay.includes(q);
-        })
-        : candidates;
-
-    return [...searched].sort((a, b) => {
-        const aTitle = String(a.title || '').toLowerCase();
-        const bTitle = String(b.title || '').toLowerCase();
-        const aScore = targetWords.reduce((s, w) => s + (aTitle.includes(w) ? 1 : 0), 0);
-        const bScore = targetWords.reduce((s, w) => s + (bTitle.includes(w) ? 1 : 0), 0);
-        if (aScore !== bScore) return bScore - aScore;
-        return new Date(b.$createdAt || 0).getTime() - new Date(a.$createdAt || 0).getTime();
-    });
 });
+
+const backstockTotalCount = computed(() => allBackstockCandidates.value.length);
+
+const scoreBackstockCandidate = (it) => {
+    const words = restockTargetKeywords.value;
+    if (words.length === 0) return 0;
+    const firstNote = String(it.conditionNotes || '').replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '').split(/\r?\n/).find(l => l.trim()) || '';
+    const hay = `${it.title || ''} ${it.tagTitle || ''} ${(Array.isArray(it.keywords) ? it.keywords.join(' ') : '')} ${firstNote}`.toLowerCase();
+    return words.reduce((s, w) => s + (hay.includes(w) ? 1 : 0), 0);
+};
+
+const filteredBackstockItems = computed(() => {
+    const candidates = allBackstockCandidates.value;
+    const q = restockSearchQuery.value.trim().toLowerCase();
+
+    if (q) {
+        return candidates
+            .filter(it => {
+                const hay = `${it.title || ''} ${it.upc || ''} ${it.orderId || ''} ${it.purchaseId || ''} ${it.storageLocation || ''} ${it.sourcingLocation || ''}`.toLowerCase();
+                return hay.includes(q);
+            })
+            .map(it => ({ it, score: scoreBackstockCandidate(it) }))
+            .sort((a, b) => b.score - a.score || new Date(b.it.$createdAt || 0).getTime() - new Date(a.it.$createdAt || 0).getTime())
+            .map(x => x.it);
+    }
+
+    // No search text: only show items sharing at least 1 meaningful keyword with the current bin
+    return candidates
+        .map(it => ({ it, score: scoreBackstockCandidate(it) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score || new Date(b.it.$createdAt || 0).getTime() - new Date(a.it.$createdAt || 0).getTime())
+        .map(x => x.it);
+});
+
+// In Backstock mode, hide manual inputs + preview until an item is picked
+const restockAwaitingSelection = computed(() => restockSourceMode.value === 'backstock' && !selectedBackstockItem.value);
 
 const selectedBackstockItem = computed(() => {
     if (!selectedBackstockItemId.value) return null;

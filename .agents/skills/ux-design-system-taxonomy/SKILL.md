@@ -310,3 +310,15 @@ Thermal label printing involves physical hardware tolerances, continuous feed ca
 
 
 
+
+
+## Plain-English Vocabulary, Lazy Tabs & Live Financial Preview
+
+* **Plain-English Vocabulary**: Use these exact labels for non-developer users and avoid internal jargon:
+  - `✂️ Split Lot` (decompose a lot into singles)
+  - `📦 Booth Bin` (multi-quantity SKU on the booth shelf)
+  - `➕ Restock Bin` (add units and cost to a Booth Bin)
+  - `🔍 Deep Scan` (full AI appraisal for acquired items)
+  - `⚡ Quick Scout` (fast pre-buy identification)
+* **Lazy-Mounted Drawer Tabs**: Heavy `ItemDrawer` tabs (`Verify`, `Playbook` / `Lot`) mount with `v-if`, so they don't compute or fetch until opened. The light `Listing Details` tab uses `v-show` so form state is preserved. New heavy tabs MUST use `v-if`.
+* **Live "Before ➔ After" Financial Preview Pattern**: Any action that changes money or stock (restock, split, combine) shows a live preview of `Current ➔ + Adding Now ➔ New Total` (units, total cost, per-unit cost) and a profit-per-sale check before the Confirm button. When required input (e.g. a selected Backstock item) is missing, hide the preview and show a prompt instead of a misleading placeholder like `+1 unit | +$0.00`.

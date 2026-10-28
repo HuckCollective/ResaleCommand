@@ -154,3 +154,15 @@ When syncing or importing into the live production environment (`items`, `sales`
 
 
 
+
+
+---
+
+## Duplicate Sale Cleanup: Re-link `items.saleId` Before Deleting
+
+When removing duplicate sale records, always repair item links first:
+1. Choose the surviving canonical sale record (the one with correct totals / `soNumber`).
+2. Re-link every `items.saleId` that points at a duplicate to the canonical sale's `$id`.
+3. Only then delete the duplicate sales.
+
+Deleting a duplicate first leaves items with a dangling `saleId`, which breaks the item drawer's `Last Sale SO` / `View SO` links and sold-state reconciliation. Never delete a sale that any item still references.

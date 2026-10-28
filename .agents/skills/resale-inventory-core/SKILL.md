@@ -147,3 +147,25 @@ All venue-specific ingestion and settlement logic must be driven dynamically by 
 
 
 
+
+## 7. COGS-Audited Booth Bin Restocking (`➕ Restock Bin`)
+
+Every dollar added to a Booth Bin's (multi-qty SKU) cost basis MUST be backed by an auditable Purchase Order. The `➕ Restock Bin` panel (`ItemDetailsTab.vue`, handler `restockQuantity` in `ItemDrawer.vue`) has two source modes:
+
+### Mode A: `📥 Pull from Backstock (HG) Item` (Absorb Existing Purchase)
+* Candidates are active, unplaced items (`status` `acquired` / `received`, or `storageLocation` starting with `HG`), excluding the target bin itself. Sold / combined / deconstructed / archived items never appear.
+* Candidate matching uses keywords from the bin's `title`, `tagTitle`, `keywords[]`, and the first line of `conditionNotes`. With an empty search box, only items sharing at least 1 meaningful keyword are listed; otherwise show a prompt to search all HG items. Never dump the whole backstock list.
+* Until a Backstock item is selected, the manual `+ Units to Add` / `+ Added Cost Basis ($)` inputs and the pooled-cost preview are hidden. Selecting an item auto-fills units (item quantity) and cost (item total cost).
+* On confirm: pool quantity and cost into the bin, copy the source item's photos into the bin's `galleryImageIds`, and **NEVER delete the source item** (that breaks Purchase Order lineage). Instead update the source to `status: 'combined'` and `parentLotId: <bin.$id>`, re-sync its PO status, and log the absorbed UPC and `orderId` / `purchaseId` in the bin's restock note.
+
+### Mode B: `💵 Direct Cash / Walk-In Buy` (New Unlogged Purchase)
+* Optional `Vendor / Source` (default `"Walk-In / Thrift Restock"`).
+* If `addedCostBasis > 0`, automatically create a `Received` Purchase Order (`PO-RST-<timestamp>`) via `purchasesAPI.createPurchase`, plus a `status: 'combined'` audit line item linked to the bin, and log the PO number in the restock note.
+
+## 8. The `isSold` Unlock Rule
+* An item is locked as sold **only** when `status === 'sold'`.
+* **NEVER** use `|| !!item.saleId`: multi-qty bins keep a `saleId` after partial sales and must stay editable and restockable.
+
+## 9. Multi-Qty Cost Parity (`resolveMultiQtyCost`)
+* `item.cost` on multi-qty items may be saved as a per-unit or a total value. `resolveMultiQtyCost(rawCost, qty, unitResale)` (`src/composables/useItemDrawerForm.ts`) uses the same ROI heuristic as `ItemCard.vue` (`isDetectedUnitCost`) and returns `{ totalCost, unitCost }`.
+* Every surface (`ItemCard`, drawer Acquisition card, Est. Margin badge, Restock preview, Playbook `ItemLotTab`) MUST use it so one item shows the same `$X/ea` (`$Y total`) everywhere. Never divide `item.cost / quantity` directly.

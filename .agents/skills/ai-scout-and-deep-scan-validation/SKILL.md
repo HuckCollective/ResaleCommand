@@ -121,3 +121,10 @@ Before releasing changes to `identify-item.ts` or `ai-inspection.ts`, verify:
 - [ ] User notes remain strictly separated from scraped titles or internal channel lists.
 - [ ] User notes cleanly override visual guesses.
 - [ ] The app builds cleanly with zero TypeScript errors: `npm run build`.
+
+
+## Image Preview, Gallery Order & Category Detection Rules
+
+* **Appwrite `/preview` Aspect-Ratio Rule**: When an image is used for `bounding_box` detection or cropping, request `/preview` with **only one** of `width` or `height`, never both. Passing both makes Appwrite crop/resize and distorts the aspect ratio, which shifts normalized bounding-box coordinates.
+* **Deterministic Gallery Index Order**: Images sent to AI are indexed in a stable `0..N` order matching the gallery order shown in the UI. `image_index` / `views[].image_index` returned by the model must map back to that same order, so never reorder, dedupe, or re-sort the list between sending and mapping results.
+* **`detectItemCategory` Physical Substrate Priority**: Substrate indicators (`physical_substrate === "WALL_ART"`, `plaque`, `laminated`, `wood`, `wall art`, `art print`, `framed`, `lithograph`, `canvas`, `poster`) classify an item as `art_decor` **before** genre words (e.g. "fantasy") or the `books` fallback are evaluated.
