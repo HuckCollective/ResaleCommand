@@ -353,7 +353,18 @@
                     <div class="grid grid-cols-3 gap-3 items-start">
                         <!-- Quantity -->
                         <div class="form-control">
-                            <label class="label py-0 h-6 flex items-center"><span class="label-text text-xs font-bold">Quantity</span></label>
+                            <label class="label py-0 h-6 flex items-center justify-between">
+                                <span class="label-text text-xs font-bold">Quantity</span>
+                                <button 
+                                    v-if="item && Number(editForm.quantity) <= 1 && !isSold && !isRestockOpen" 
+                                    type="button" 
+                                    @click="isRestockOpen = true" 
+                                    class="text-[10px] text-primary hover:underline font-bold"
+                                    title="Restock and convert this item to a multi-quantity bin"
+                                >
+                                    + Restock Bin
+                                </button>
+                            </label>
                             <input type="number" step="1" min="1" v-model.number="editForm.quantity" class="input input-bordered input-sm w-full h-8 min-h-8 text-center font-bold font-mono bg-base-100 rounded-lg" />
                         </div>
 
@@ -388,7 +399,7 @@
                     </div>
 
                     <!-- Multi-Quantity Splitting & Restocking Actions Bar -->
-                    <div v-if="item && Number(editForm.quantity) > 1" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 mt-2 space-y-2">
+                    <div v-if="item && (Number(editForm.quantity) > 1 || isRestockOpen)" class="border border-secondary/30 bg-secondary/5 rounded-xl p-2.5 mt-2 space-y-2.5">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div class="text-[11px] font-bold text-secondary flex items-center gap-1.5 flex-wrap">
                                 <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 shrink-0" />
@@ -398,11 +409,101 @@
                                 </span>
                             </div>
                             <div class="flex items-center gap-1.5 flex-wrap">
-                                <button @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit at per-item price and subtract unit cost">
+                                <button v-if="Number(editForm.quantity) > 1" @click.prevent="$emit('sell-one-quantity')" class="btn btn-xs btn-success font-bold gap-1 shadow-xs" title="Log sale of 1 unit at per-item price and subtract unit cost">
                                     <Icon icon="solar:cart-check-linear" class="w-3.5 h-3.5" /> Sell 1 Unit
                                 </button>
-                                <button @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
+                                <button v-if="Number(editForm.quantity) > 1" @click.prevent="$emit('split-one-active')" class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs" title="Extract 1 unit as a new active inventory item">
                                     <Icon icon="solar:scissors-linear" class="w-3.5 h-3.5" /> Split 1 Active
+                                </button>
+                                <button @click.prevent="isRestockOpen = !isRestockOpen" class="btn btn-xs btn-primary font-bold gap-1 shadow-xs" :class="{ 'btn-active': isRestockOpen }" title="Add additional units and pool acquisition cost basis">
+                                    <Icon icon="solar:box-plus-bold" class="w-3.5 h-3.5" /> ➕ Restock Bin
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Expandable Restock Form with Live Before ➔ After Preview -->
+                        <div v-if="isRestockOpen" class="pt-2 border-t border-secondary/20 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-base-content flex items-center gap-1">
+                                    <Icon icon="solar:box-plus-bold" class="w-4 h-4 text-primary" />
+                                    <span>Restock Units &amp; Pool Cost Basis</span>
+                                </span>
+                                <button type="button" @click="cancelRestock" class="btn btn-ghost btn-circle btn-xs text-base-content/60 hover:text-base-content" title="Close restock">✕</button>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="form-control">
+                                    <label class="label py-0.5"><span class="label-text text-[11px] font-bold">+ Units to Add</span></label>
+                                    <input 
+                                        type="number" 
+                                        step="1" 
+                                        min="1" 
+                                        v-model.number="restockUnitsToAdd" 
+                                        class="input input-bordered input-xs font-mono font-bold w-full bg-base-100 text-center" 
+                                        placeholder="e.g. 18"
+                                    />
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-0.5"><span class="label-text text-[11px] font-bold">+ Added Cost Basis ($)</span></label>
+                                    <div class="relative">
+                                        <span class="absolute left-2 top-1/2 -translate-y-1/2 text-xs opacity-50 font-bold">$</span>
+                                        <input 
+                                            type="number" 
+                                            step="0.01" 
+                                            min="0" 
+                                            v-model.number="restockAddedCost" 
+                                            class="input input-bordered input-xs font-mono font-bold w-full bg-base-100 pl-5" 
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Live "Before ➔ After" Pooled Cost & Profit Preview -->
+                            <div class="bg-base-100 rounded-xl p-3 border border-base-300 space-y-2 text-xs">
+                                <div class="font-bold text-[11px] uppercase tracking-wider text-base-content/70 flex items-center gap-1.5 border-b border-base-200 pb-1.5">
+                                    <Icon icon="solar:calculator-minimalistic-bold" class="w-3.5 h-3.5 text-primary" />
+                                    <span>Live Pooled Cost &amp; Profit Preview</span>
+                                </div>
+
+                                <div class="space-y-1 font-mono text-[11px]">
+                                    <div class="flex items-center justify-between">
+                                        <span class="opacity-70">Current Bin:</span>
+                                        <span class="font-bold">{{ restockCurrentQty }} units | ${{ restockCurrentCost.toFixed(2) }} total <span class="opacity-60 font-normal">(${{ restockCurrentUnitCost.toFixed(2) }}/ea)</span></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-secondary">
+                                        <span class="font-bold">+ Adding Now:</span>
+                                        <span class="font-bold">+{{ restockUnitsToAddVal }} units | +${{ restockAddedCostVal.toFixed(2) }} total <span class="opacity-80 font-normal">(${{ restockAddedUnitCost.toFixed(2) }}/ea)</span></span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-success font-bold border-t border-base-200 pt-1">
+                                        <span>✅ New Pooled Bin Total:</span>
+                                        <span>{{ restockNewQty }} units | ${{ restockNewTotalCost.toFixed(2) }} total <span class="text-base-content/80 font-normal">(${{ restockNewAvgUnitCost.toFixed(2) }}/ea)</span></span>
+                                    </div>
+                                </div>
+
+                                <!-- Profit Per Sale Check -->
+                                <div class="bg-success/10 border border-success/20 rounded-lg p-2 text-[11px] flex items-start gap-1.5 text-success-content dark:text-success">
+                                    <Icon icon="solar:dollar-bold" class="w-4 h-4 shrink-0 text-success mt-0.5" />
+                                    <div class="leading-snug">
+                                        <span class="font-bold">💰 Profit Per Sale Check:</span>
+                                        At <strong class="font-mono">${{ Number(editForm.resalePrice || 0).toFixed(2) }}</strong> tag price
+                                        <span class="opacity-80">(~${{ restockNetAfterFee.toFixed(2) }} net after 15% booth fee)</span>,
+                                        each sale recoups <strong class="font-mono">${{ restockNewAvgUnitCost.toFixed(2) }}</strong> cost +
+                                        <strong class="font-mono text-success font-black">+${{ restockNetProfitPerUnit.toFixed(2) }}</strong> pure profit!
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-end gap-2 pt-1">
+                                <button type="button" @click="cancelRestock" class="btn btn-xs btn-ghost">Cancel</button>
+                                <button 
+                                    type="button" 
+                                    @click="confirmRestock" 
+                                    :disabled="restockUnitsToAddVal < 1" 
+                                    class="btn btn-xs btn-primary font-bold gap-1 shadow-xs"
+                                >
+                                    <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
+                                    <span>Confirm Restock (+{{ restockUnitsToAddVal }} units)</span>
                                 </button>
                             </div>
                         </div>
@@ -908,6 +1009,45 @@ const linkedSaleOrderId = computed(() => {
 const isAcquiredItem = computed(() => {
     return isItemAcquired(props.item?.status || props.editForm?.status || '');
 });
+
+// --- ➕ RESTOCK BIN & POOLED COST BASIS PREVIEW ---
+const isRestockOpen = ref(false);
+const restockUnitsToAdd = ref(1);
+const restockAddedCost = ref(0);
+
+const restockUnitsToAddVal = computed(() => Math.max(1, Number(restockUnitsToAdd.value) || 1));
+const restockAddedCostVal = computed(() => Math.max(0, Number(restockAddedCost.value) || 0));
+
+const restockCurrentQty = computed(() => Math.max(1, Number(props.editForm?.quantity || props.item?.quantity || 1)));
+const restockCurrentCost = computed(() => Math.max(0, Number(props.editForm?.cost || props.item?.cost || 0)));
+const restockCurrentUnitCost = computed(() => restockCurrentQty.value > 0 ? (restockCurrentCost.value / restockCurrentQty.value) : 0);
+
+const restockAddedUnitCost = computed(() => restockUnitsToAddVal.value > 0 ? (restockAddedCostVal.value / restockUnitsToAddVal.value) : 0);
+
+const restockNewQty = computed(() => restockCurrentQty.value + restockUnitsToAddVal.value);
+const restockNewTotalCost = computed(() => Number((restockCurrentCost.value + restockAddedCostVal.value).toFixed(2)));
+const restockNewAvgUnitCost = computed(() => restockNewQty.value > 0 ? (restockNewTotalCost.value / restockNewQty.value) : 0);
+
+const restockResalePrice = computed(() => Math.max(0, Number(props.editForm?.resalePrice || props.item?.resalePrice || 0)));
+const restockNetAfterFee = computed(() => Number((restockResalePrice.value * 0.85).toFixed(2)));
+const restockNetProfitPerUnit = computed(() => Math.max(0, Number((restockNetAfterFee.value - restockNewAvgUnitCost.value).toFixed(2))));
+
+function confirmRestock() {
+    if (restockUnitsToAddVal.value < 1) return;
+    emit('restock-quantity', {
+        unitsToAdd: Number(restockUnitsToAddVal.value),
+        addedCostBasis: Number(restockAddedCostVal.value)
+    });
+    isRestockOpen.value = false;
+    restockUnitsToAdd.value = 1;
+    restockAddedCost.value = 0;
+}
+
+function cancelRestock() {
+    isRestockOpen.value = false;
+    restockUnitsToAdd.value = 1;
+    restockAddedCost.value = 0;
+}
 
 const exitPlaybook = computed(() => {
     const base = props.item || props.editForm;
