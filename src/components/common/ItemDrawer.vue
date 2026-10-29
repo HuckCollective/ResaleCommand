@@ -1300,7 +1300,11 @@ const uncombineLot = async () => {
     }
 };
 
+const hasFreshScoutScan = ref(false);
+
 const initForm = () => {
+    processing.value = false;
+    hasFreshScoutScan.value = false;
     initFormState(props.item);
 
     if (props.item) {
@@ -1369,6 +1373,12 @@ const initForm = () => {
 };
 
 watch(() => props.item, initForm, { immediate: true });
+watch(() => props.isOpen, (open) => {
+    if (!open && processing.value) {
+        processing.value = false;
+        hideLoader();
+    }
+});
 
 const closeDrawer = () => {
     emit('close');
@@ -1471,19 +1481,36 @@ const saveEdit = async () => {
             imageFile: finalImageFile,
             galleryFiles: finalGallery,
             existingGalleryIds: Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : [],
-            scoutData: scoutResult.value || null,
+            scoutData: hasFreshScoutScan.value ? (scoutResult.value || null) : null,
+            ...(hasFreshScoutScan.value && scoutResult.value ? { rawAnalysis: scoutResult.value } : {}),
             components: (lotComponents.value && lotComponents.value.length > 0)
                 ? JSON.stringify(lotComponents.value)
                 : ((verifyChecklist.value && Array.isArray(verifyChecklist.value) && verifyChecklist.value.length > 0)
                     ? JSON.stringify(verifyChecklist.value)
                     : null)
         };
+        let completed = false;
+        const finishSave = () => {
+            if (completed) return;
+            completed = true;
+            processing.value = false;
+            hideLoader();
+        };
+        Object.defineProperty(payload, '__markAsync', {
+            value: () => {},
+            enumerable: false
+        });
+        Object.defineProperty(payload, '__onSaveComplete', {
+            value: finishSave,
+            enumerable: false
+        });
+        // Safety fallback in case a parent listener doesn't invoke updateInventoryItem/saveItemToInventory
+        setTimeout(finishSave, 15000);
         emit('save', payload);
     } catch (e) {
-        addToast({ type: 'error', message: 'Save failed: ' + e.message });
-    } finally {
         processing.value = false;
         hideLoader();
+        addToast({ type: 'error', message: 'Save failed: ' + e.message });
     }
 };
 
@@ -1894,6 +1921,7 @@ const analyzeExistingItem = async () => {
         }
 
         const data = await response.json();
+        hasFreshScoutScan.value = true;
 
         if (data.lot_items && Array.isArray(data.lot_items) && data.lot_items.length > 0) {
             scoutResult.value = data;

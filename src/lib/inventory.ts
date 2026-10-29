@@ -1120,7 +1120,7 @@ export function sanitizeItemPayload(rawPayload: Record<string, any>, options: Sa
     }
 
     // Step 6: Arrays validation
-    const arrayFields = ['sellingLocations', 'galleryImageIds', 'keywords'];
+    const arrayFields = ['sellingLocations', 'galleryImageIds', 'keywords', 'redFlags'];
     for (const field of arrayFields) {
         if (cleanDoc[field] !== undefined && cleanDoc[field] !== null) {
             if (!Array.isArray(cleanDoc[field])) {
@@ -1348,36 +1348,13 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                     const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                     fileId = upload.$id;
                 } catch(err1: any) {
-                    
-                    // SELF-REPAIR & RETRY
-                    if (err1.code === 400 || err1.message?.includes('extension')) {
-                        console.warn("Bucket missing .json support (CREATE), attempting auto-fix...");
-                        try {
-                            await fetch('/api/dev/fix-bucket');
-                            
-                            // Retry JSON
-                            const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                            fileId = upload.$id;
-                        } catch (retryErr) {
-                             // Fallback to TXT
-                             try {
-                                const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                                const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                                fileId = upload.$id;
-                             } catch(e3) {
-                                 throw retryErr; 
-                             }
-                        }
-                    } else {
-                        // Fallback to TXT
-                        try {
-                            const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                            fileId = upload.$id;
-                        } catch (e4) {
-                            throw err1;
-                        }
+                    // Fallback to TXT
+                    try {
+                        const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
+                        const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
+                        fileId = upload.$id;
+                    } catch (e4) {
+                        throw err1;
                     }
                 }
 
@@ -1402,7 +1379,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
                 
                 try {
                     const jsonLite = JSON.stringify(lite);
-                    const b64 = typeof btoa === 'function' ? btoa(jsonLite) : Buffer.from(jsonLite).toString('base64');
+                    const b64 = typeof btoa === 'function'
+                        ? btoa(unescape(encodeURIComponent(jsonLite)))
+                        : Buffer.from(jsonLite, 'utf-8').toString('base64');
                     extraInfo.push(`[SCOUT_DATA_LITE: ${b64}]`);
                 } catch(e2) {
                     console.warn("Lite save failed", e2);
@@ -1414,8 +1393,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             safeNotes += '\n\n--- IMPORT DETAILS ---\n' + extraInfo.join('\n');
         }
 
-        if (extraData.tagTitle || itemData?.tag_title || extraData.tag_title) {
-            const shortTag = String(extraData.tagTitle || itemData?.tag_title || extraData.tag_title).trim();
+        if (extraData.tagTitle || itemData?.tag_title || (extraData as any).tag_title) {
+            const shortTag = String((extraData as any).tagTitle || itemData?.tag_title || (extraData as any).tag_title).trim();
             if (shortTag && !safeNotes.includes('[TAG_TITLE:')) {
                 safeNotes += (safeNotes ? '\n\n' : '') + `[TAG_TITLE: ${shortTag}]`;
             }
@@ -1461,9 +1440,9 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             resalePrice: extraData.resalePrice !== undefined ? parseFloat(extraData.resalePrice.toString()) || 0 : undefined,
             soldPrice: extraData.soldPrice !== undefined && extraData.soldPrice !== '' ? parseFloat(extraData.soldPrice.toString()) || 0 : undefined,
             maxBuyPrice: extraData.maxBuyPrice !== undefined ? parseFloat(extraData.maxBuyPrice.toString()) || 0 : undefined,
-            sourcingLocation: extraData.sourcingLocation || extraData.purchaseLocation || undefined,
+            sourcingLocation: extraData.sourcingLocation || (extraData as any).purchaseLocation || undefined,
             storageLocation: (() => {
-                const raw = String(extraData.storageLocation || extraData.location || itemData?.storageLocation || '').trim();
+                const raw = String(extraData.storageLocation || (extraData as any).location || itemData?.storageLocation || '').trim();
                 return (!raw || raw.toLowerCase() === 'backstock') ? 'HG' : raw;
             })(),
             sellingLocations: Array.isArray(extraData.sellingLocations) && extraData.sellingLocations.length > 0 ? extraData.sellingLocations : undefined,
@@ -1515,11 +1494,14 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             permissions
         );
 
-// ... existing code ...
         return response;
     } catch (error) {
         console.error("Appwrite Save Error:", error);
         throw error;
+    } finally {
+        if (typeof (extraData as any)?.__onSaveComplete === 'function') {
+            try { (extraData as any).__onSaveComplete(); } catch {}
+        }
     }
 }
 
@@ -1827,8 +1809,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         // Handle Status (This exists in schema)
         if (updates.status) data.status = updates.status;
         if (updates.title) data.title = updates.title;
-        if (updates.description) {
-            const descStr = String(updates.description);
+        if (updates.description !== undefined) {
+            const descStr = String(updates.description || '');
             data.marketDescription = descStr.length > 4900 ? descStr.substring(0, 4900) : descStr;
         }
         if (updates.components !== undefined) {
@@ -1852,9 +1834,11 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.upc !== undefined) {
             if (isValidOrgUpc(updates.upc)) {
                 data.upc = updates.upc.trim().toUpperCase();
-            } else if (!isValidOrgUpc(currentDoc?.upc)) {
+            } else if (currentDoc && !isValidOrgUpc(currentDoc?.upc)) {
                 const prefix = currentDoc?.upcPrefix || 'HUCK-';
                 data.upc = await generateAutoUpc(prefix, currentDoc?.tenantId);
+            } else if (!currentDoc && updates.upc && String(updates.upc).trim()) {
+                data.upc = String(updates.upc).trim().toUpperCase();
             }
         } else if (currentDoc && !isValidOrgUpc(currentDoc.upc)) {
             const prefix = currentDoc.upcPrefix || 'HUCK-';
@@ -2041,6 +2025,23 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             data.keywords = Array.isArray(updates.keywords) ? updates.keywords : [];
         }
 
+        if (updates.redFlags !== undefined) {
+            data.redFlags = Array.isArray(updates.redFlags) ? updates.redFlags : [];
+        }
+
+        if (updates.countryOfOrigin !== undefined) {
+            data.countryOfOrigin = (updates.countryOfOrigin === '' || updates.countryOfOrigin === null) ? null : String(updates.countryOfOrigin).trim();
+        }
+
+        if (updates.salesChannel !== undefined || updates.channel !== undefined) {
+            const rawChan = updates.salesChannel !== undefined ? updates.salesChannel : updates.channel;
+            data.salesChannel = (rawChan === '' || rawChan === null) ? null : String(rawChan).trim();
+        }
+
+        if (updates.condition !== undefined) {
+            data.condition = (updates.condition === '' || updates.condition === null) ? null : String(updates.condition).trim();
+        }
+
         if (updates.orderId !== undefined || updates.order_id !== undefined) {
             const rawOrder = updates.orderId !== undefined ? updates.orderId : updates.order_id;
             data.orderId = (rawOrder === '' || rawOrder === null) ? null : String(rawOrder).trim();
@@ -2055,10 +2056,6 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.locationSku !== undefined || updates.location_sku !== undefined) {
             const rawSku = updates.locationSku !== undefined ? updates.locationSku : updates.location_sku;
             data.locationSku = (rawSku === '' || rawSku === null) ? null : String(rawSku).trim();
-        }
-
-        if (updates.upc !== undefined) {
-            data.upc = (updates.upc === '' || updates.upc === null) ? null : String(updates.upc).trim();
         }
 
         if (updates.auctionEndsAt !== undefined) {
@@ -2094,34 +2091,13 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
                     const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
                     fileId = upload.$id;
                 } catch(err1: any) {
-                    // SELF-REPAIR: If extension not allowed, try to call fix-bucket endpoint
-                    if (err1.code === 400 || err1.message.includes('extension')) {
-                        console.warn("Bucket missing .json support, attempting auto-fix...");
-                        try {
-                            await fetch('/api/dev/fix-bucket');
-                            // Retry once
-                            const file = new File([jsonStr], 'scout.json', { type: 'application/json' });
-                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                            fileId = upload.$id;
-                        } catch (retryErr) {
-                            try {
-                                const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                                const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                                fileId = upload.$id;
-                            } catch(e3) {
-                                 // Check 'fileId' to see if we succeeded in inner blocks? No, just throw to outer catch for Lite
-                                 throw retryErr; 
-                             }
-                        }
-                    } else {
-                        // Fallback to Strategy 2
-                        try {
-                            const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
-                            const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
-                            fileId = upload.$id;
-                        } catch(e4) {
-                             throw err1;
-                        }
+                    // Fallback to Strategy 2 (.txt)
+                    try {
+                        const file = new File([jsonStr], 'scout.txt', { type: 'text/plain' });
+                        const upload = await storage.createFile(REPORTS_BUCKET_ID, ID.unique(), file);
+                        fileId = upload.$id;
+                    } catch(e4) {
+                         throw err1;
                     }
                 }
 
@@ -2134,7 +2110,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
                     throw new Error("File upload failed to return ID");
                 }
 
-            } catch (e) {
+            } catch (e: any) {
                 console.warn("File upload failed (" + e.message + "), falling back to LITE data text storage");
                 
                 // Strategy 3: Lite Data - Minified to fit in Notes
@@ -2160,8 +2136,10 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
                 
                 try {
                     const jsonLite = JSON.stringify(lite);
-                    // Use a safe base64
-                    const b64 = typeof btoa === 'function' ? btoa(jsonLite) : Buffer.from(jsonLite).toString('base64');
+                    // Unicode-safe base64 encoding
+                    const b64 = typeof btoa === 'function'
+                        ? btoa(unescape(encodeURIComponent(jsonLite)))
+                        : Buffer.from(jsonLite, 'utf-8').toString('base64');
                     
                     updateTagValue('SCOUT_DATA_LITE', b64);
                     
@@ -2229,5 +2207,9 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
     } catch (error) {
          console.error("Error updating item:", error);
          throw error;
+    } finally {
+         if (typeof (updates as any)?.__onSaveComplete === 'function') {
+             try { (updates as any).__onSaveComplete(); } catch {}
+         }
     }
 }

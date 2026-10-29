@@ -440,13 +440,13 @@
         <!-- ============================================================= -->
         <!-- 3B. CONTENTS (When viewing an intact Lot with parsed components) -->
         <!-- ============================================================= -->
-        <div v-if="(!lotChildren || lotChildren.length === 0) && parsedComponents && parsedComponents.length > 0" class="space-y-3">
+        <div v-if="(!lotChildren || lotChildren.length === 0) && resolvedComponents && resolvedComponents.length > 0" class="space-y-3">
             <div class="bg-base-200/60 rounded-box p-4 border border-base-300 space-y-3 shadow-xs">
                 <div class="flex items-center justify-between border-b border-base-300 pb-2.5 gap-2 flex-wrap">
                     <div class="flex items-center gap-2 flex-wrap">
                         <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
                             <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
-                            <span>Bundle Components ({{ parsedComponents.length }} Items)</span>
+                            <span>Bundle Components ({{ resolvedComponents.length }} Items)</span>
                         </h4>
                         <span v-if="splitRecommendation" 
                               class="badge badge-xs sm:badge-sm font-black gap-1 shadow-2xs"
@@ -467,7 +467,7 @@
 
                 <div class="space-y-2">
                     <div 
-                        v-for="(comp, cIdx) in parsedComponents" 
+                        v-for="(comp, cIdx) in resolvedComponents" 
                         :key="cIdx" 
                         class="bg-base-100 p-2.5 rounded-box border border-base-300 flex flex-col gap-1 shadow-xs"
                     >
@@ -491,7 +491,7 @@
                             <span class="opacity-30">|</span>
                             <span>Buy Range: <strong class="text-success">{{ getSubItemBuyRange(comp) }}</strong></span>
                             <span class="opacity-30">|</span>
-                            <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(comp, parsedComponents.length, totalCost) }}</strong></span>
+                            <span>Split Cost Basis: <strong class="text-warning">{{ getSubItemCostBasis(comp, resolvedComponents.length, totalCost) }}</strong></span>
                         </div>
                     </div>
                 </div>
@@ -698,7 +698,7 @@ const showSiblingDrawer = ref(false);
 // Playbook Learning Composable
 const { getCategoryAffinities, recordPlayExecution, totalPlaysRecorded } = usePlaybookLearning();
 
-const parsedComponents = computed(() => {
+const resolvedComponents = computed(() => {
     if (props.parsedComponents && Array.isArray(props.parsedComponents) && props.parsedComponents.length > 0) {
         return props.parsedComponents;
     }
@@ -711,6 +711,33 @@ const parsedComponents = computed(() => {
         } catch (e) {}
     }
     return [];
+});
+
+const isMultiQty = computed(() => {
+    return Number(props.item?.quantity || 1) > 1;
+});
+
+const totalCost = computed(() => {
+    const rawCost = props.item?.cost ?? props.item?.purchasePrice ?? 0;
+    const qty = Math.max(1, Number(props.item?.quantity || 1));
+    const unitResale = props.item?.resalePrice ?? props.item?.priceFair ?? props.item?.estHigh ?? 0;
+    const res = resolveMultiQtyCost(rawCost, qty, unitResale);
+    return Number(res?.totalCost ?? 0);
+});
+
+const unitCost = computed(() => {
+    const qty = Math.max(1, Number(props.item?.quantity || 1));
+    return Number((Number(totalCost.value ?? 0) / qty) || 0);
+});
+
+// Item enriched with the shared reactive components array and normalized multi-qty cost so Tab 1 and Tab 3 always agree on counts/yield.
+const strategyItem = computed(() => {
+    if (!props.item) return props.item;
+    return {
+        ...props.item,
+        cost: totalCost.value,
+        ...(resolvedComponents.value.length > 1 ? { components: resolvedComponents.value } : {})
+    };
 });
 
 const splitRecommendation = computed(() => {
@@ -738,16 +765,6 @@ const splitRecommendation = computed(() => {
         };
     }
     return getLotSplitRecommendation(strategyItem.value, props.scoutResult);
-});
-
-// Item enriched with the shared reactive components array and normalized multi-qty cost so Tab 1 and Tab 3 always agree on counts/yield.
-const strategyItem = computed(() => {
-    if (!props.item) return props.item;
-    return {
-        ...props.item,
-        cost: totalCost.value,
-        ...(parsedComponents.value.length > 1 ? { components: parsedComponents.value } : {})
-    };
 });
 
 // NaN-safe per-component price helpers
@@ -791,7 +808,7 @@ const isLot = computed(() => {
         it.status === 'combined' || 
         Number(it.quantity || 1) > 1 || 
         (Array.isArray(it.components) && it.components.length > 1) ||
-        (parsedComponents.value && parsedComponents.value.length > 1) ||
+        (resolvedComponents.value && resolvedComponents.value.length > 1) ||
         /\b(?:lot|bundle|crate|pack|collection)\b/i.test(it.title || '')
     );
 });
@@ -808,7 +825,7 @@ const selectedPlayId = ref('');
 watch(availablePlays, (plays) => {
     if (plays && plays.length > 0) {
         if (!selectedPlayId.value || !plays.some(p => p.id === selectedPlayId.value)) {
-            const multiItem = parsedComponents.value.length > 1;
+            const multiItem = resolvedComponents.value.length > 1;
             const rec = plays.find(p => p.isRecommended);
             const lotPlay = multiItem ? plays.find(p => p.strategyType === 'lot_split') : null;
             const pick = (multiItem && rec?.strategyType !== 'lot_split' && lotPlay) ? lotPlay : (rec || lotPlay || plays[0]);
@@ -891,23 +908,6 @@ const sourcingAuditLog = computed(() => {
     if (props.scoutResult?.purchase_strategy) return props.scoutResult.purchase_strategy;
     if (Array.isArray(props.scoutResult) && props.scoutResult[0]?.purchase_strategy) return props.scoutResult[0].purchase_strategy;
     return null;
-});
-
-const isMultiQty = computed(() => {
-    return Number(props.item?.quantity || 1) > 1;
-});
-
-const totalCost = computed(() => {
-    const rawCost = props.item?.cost ?? props.item?.purchasePrice ?? 0;
-    const qty = Math.max(1, Number(props.item?.quantity || 1));
-    const unitResale = props.item?.resalePrice ?? props.item?.priceFair ?? props.item?.estHigh ?? 0;
-    const res = resolveMultiQtyCost(rawCost, qty, unitResale);
-    return Number(res?.totalCost ?? 0);
-});
-
-const unitCost = computed(() => {
-    const qty = Math.max(1, Number(props.item?.quantity || 1));
-    return Number((Number(totalCost.value ?? 0) / qty) || 0);
 });
 
 const formattedAcquisitionDate = computed(() => {

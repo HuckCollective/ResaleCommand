@@ -1104,7 +1104,11 @@ const closeEditDrawer = () => {
     activeEditItem.value = null;
 };
 const handleSavedItem = async (payload) => {
-    if (!activeEditItem.value) return;
+    if (typeof payload?.__markAsync === 'function') payload.__markAsync();
+    if (!activeEditItem.value) {
+        hideLoader();
+        return;
+    }
     const editingId = activeEditItem.value.$id;
     showLoader("Saving Item...", {
         step: "Uploading media & updating item...",
