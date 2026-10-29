@@ -166,3 +166,41 @@ When removing duplicate sale records, always repair item links first:
 3. Only then delete the duplicate sales.
 
 Deleting a duplicate first leaves items with a dangling `saleId`, which breaks the item drawer's `Last Sale SO` / `View SO` links and sold-state reconciliation. Never delete a sale that any item still references.
+
+
+
+---
+
+## 13. The 3 Memory Den (Ricochet) CSV Schemas
+
+Ricochet exports three different files. Classify by headers, never by file name. All three: item titles contain commas inside quotes (use an RFC 4180 parser); SKUs are the booth tag `0EJXXX` = `items.locationSku`.
+
+| # | File | Headers | Creates `sales`? |
+|---|------|---------|------------------|
+| 1 | `Products-*.csv` — **Catalog / Stock Sync** | `"Product ID",SKU,UPC,Name,Category,Collections,Brand,"Split / Cost","Agreed Price","Aged Price","Tax Rate","Short description","Online Description",Consignor,Department,"In stock",Quantity,Inventory,"Consignor %"` | **NEVER** |
+| 2 | `Payouts *.csv` — **Interim Sales** (current month) | `Item,Sale#,Agreed,Cost/Split,Aged Price,Discounts,Sold Date,Amount` | Yes |
+| 3 | `Payout History *.csv` — **Settled Monthly Checks** | `Item,Sale,Agreed,Cost/Split,"Aged Price",Discounts,Paid,Sold,Amount,Check#` | Yes |
+
+### 1. `Products-*.csv` (Catalog & Stock-Level Sync) — items only
+- Detected by `Product ID` + `SKU` + `Inventory` with **no** `Sale`/`Sale#` column and **no** `Sold`/`Sold Date` column (`isProductCatalogHeaders` in `src/lib/salesBucketing.ts`).
+- Has NO ticket number and NO sold date. The `In stock` column is the **date the item was added to stock, NOT a sale date and NOT a quantity**; the live count is `Quantity`.
+- `SKU` has a leading apostrophe (`'0EJ001`): always strip it (`cleanCatalogSku`) so `locationSku` is `0EJ001`.
+- `Inventory` is `In Stock`, `Paid` or `Sold`.
+- **NEVER create `sales` documents from this file** (the 2026-10-28 incident created 292 bogus sales dated "today"). It may only update `items`: `locationSku`, `upc`, `resalePrice`, `status`, `quantity`.
+  - `Inventory === 'In Stock'` and `Quantity >= 1` → `status: 'placed'`, `storageLocation: 'MD'`, `quantity: Number(Quantity)`.
+  - `Paid` / `Sold` → only normalise `locationSku`; never change status or create sales.
+- `LocationSyncView.vue` runs it as an items-only sync (green banner); `SalesImporter.vue` rejects it with a banner pointing to `Payouts-*.csv`.
+
+### 2. `Payouts *.csv` (Interim Sales)
+- Ticket column is `Sale#`; `Sold Date` is `YYYY-MM-DD HH:mm:ss` (register time, Pacific). `Amount` is the net payout; `Agreed` is gross.
+- The item title has **no** ` - 0EJXXX` suffix, so match by title / ticket history.
+
+### 3. `Payout History *.csv` (Settled Monthly Checks)
+- Ticket column is `Sale`; `Sold` is `MM-DD-YYYY` (date only → stored as noon Pacific); `Paid` is the check date; `Check#` identifies the settlement.
+- `Item` ends with ` - 0EJXXX` (the booth SKU): extract it, match `items.locationSku` FIRST, then strip it from the display title.
+
+### Rows to skip in the sales files (2 and 3)
+`(Credit) Space Rental …` (booth rent, handled as a monthly deduction), `Total for payout`, `Total Paid:`, and any row with empty `Sale`/`Agreed`/`Amount`.
+
+### Idempotent re-uploads
+Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`). Fingerprint = `canonicalTicket|titleOrSku|gross#occurrence`; two identical copies on one ticket are `#1`/`#2`. Already-recorded rows are skipped, so any file can be uploaded again with no duplicates.
