@@ -1218,14 +1218,13 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 };
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows } from '../../lib/salesBucketing';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, canonicalTicketNumber, toSaleIso } from '../../lib/salesBucketing';
 
 // Resolve the real register date for a sale: the CSV row's Sold date first, then the item's own soldDate.
 // Only falls back to "now" as a last resort so imports never silently stamp sales with today's date.
 const toValidIso = (raw: any): string | null => {
   if (!raw) return null;
-  const d = new Date(String(raw).trim());
-  return isNaN(d.getTime()) ? null : d.toISOString();
+  return toSaleIso(raw) || null;
 };
 const resolveSoldIso = (row: any, item?: any): string =>
   toValidIso(row?.soldDate) || toValidIso(item?.soldDate) || new Date().toISOString();
@@ -1893,6 +1892,12 @@ const parseCsvData = (rawText: string, fileName: string) => {
           continue;
         }
 
+        // Payout-style files: rows missing Sale / Agreed / Amount are summary lines, never sales
+        if (saleIdx !== -1 && agreedPriceIdx !== -1 && amountIdx !== -1 &&
+            (!(cols[saleIdx] || '').trim() || !(cols[agreedPriceIdx] || '').trim() || !(cols[amountIdx] || '').trim())) {
+          continue;
+        }
+
         const statusVal = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
         if (statusVal === 'declined' || statusVal === 'failed' || statusVal === 'void' || statusVal === 'cancelled' || statusVal === 'canceled' || statusVal === 'unsuccessful') {
           continue;
@@ -1903,14 +1908,16 @@ const parseCsvData = (rawText: string, fileName: string) => {
         let rawUpc = upcIdx !== -1 ? cols[upcIdx] : '';
         let cleanUpc = (rawUpc || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
         let rowQty = qtyIdx !== -1 ? parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || 1 : 1;
-        let saleTicketId = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
+        let saleTicketIdRaw = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
+        // Canonical numeric ticket id so legacy "T-217301 • Title" records dedupe against "217301"
+        let saleTicketId = canonicalTicketNumber(saleTicketIdRaw) || saleTicketIdRaw;
         let soldDate = soldDateIdx !== -1 ? (cols[soldDateIdx] || '').trim() : '';
 
         let name = fullItemName;
 
         // Fallback SKU extraction from title like "Item Title - 0EJ001"
         if (!cleanSku) {
-          const skuMatch = fullItemName.match(/ - ([A-Z0-9-]+)$/i);
+          const skuMatch = fullItemName.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
           if (skuMatch) {
             cleanSku = skuMatch[1].trim();
             name = fullItemName.replace(skuMatch[0], '').trim();
@@ -2063,7 +2070,9 @@ const parseCsvData = (rawText: string, fileName: string) => {
 const syncRowAccessors = {
   getSaleNumber: (r: any) => r.saleTicketId,
   getSoldDate: (r: any) => r.soldDate,
-  getGross: (r: any) => r.listedPrice
+  getGross: (r: any) => r.listedPrice,
+  getSku: (r: any) => r.extractedSku,
+  getTitle: (r: any) => r.itemName
 };
 const refreshRecordedFlags = async () => {
   try {

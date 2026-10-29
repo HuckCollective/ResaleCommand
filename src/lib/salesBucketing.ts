@@ -296,21 +296,64 @@ export function extractSaleNumber(raw: any): string {
     return m ? m[1] : '';
 }
 
-/** Parses a CSV/DB date into an ISO instant (CSV wall-clock strings are interpreted in the browser's local zone, matching every other importer). */
+/**
+ * Parses a CSV/DB date into an ISO instant.
+ * - `YYYY-MM-DD HH:mm:ss` (Format A, interim payouts) is wall-clock time in the browser's local zone.
+ * - `MM-DD-YYYY` / `MM/DD/YYYY` (Format B, Payout History) and bare `YYYY-MM-DD` are date-only: they become NOON local,
+ *   the register convention used by every other import (never UTC/local midnight, which can shift the day).
+ */
 export function toSaleIso(raw: any): string {
     if (!raw) return '';
-    let s = String(raw).trim();
+    const s = String(raw).trim();
     if (!s) return '';
-    if (/^\d{4}-\d{2}-\d{2} \d/.test(s)) s = s.replace(' ', 'T');
-    let d = new Date(s);
-    if (isNaN(d.getTime())) {
-        const parts = s.split(/[-/\s]/);
-        if (parts.length >= 3 && parts[2].length === 4) {
-            d = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}T12:00:00`);
-        }
+    let m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (m) {
+        const d = new Date(`${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}T12:00:00`);
+        return isNaN(d.getTime()) ? '' : d.toISOString();
     }
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+        const d = new Date(`${s}T12:00:00`);
+        return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+    const d = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(s) ? s.replace(' ', 'T') : s);
     return isNaN(d.getTime()) ? '' : d.toISOString();
 }
+
+/** True for payout summary / credit lines that must never become sales rows. */
+export function isPayoutSummaryRow(itemName: string): boolean {
+    const n = String(itemName || '').trim().toLowerCase();
+    return n.startsWith('(credit) space rental') || n.startsWith('(credit)') || n.startsWith('total for payout') ||
+        n.startsWith('total paid') || n.startsWith('total:') || n.includes('space rental');
+}
+
+/**
+ * Splits a Ricochet item cell like `Cartographers Heros  - 0EJ03C` into a clean display title and the booth SKU.
+ * Only a trailing ` - [0-9A-Z]{5,8}` token counts as a SKU.
+ */
+export function splitTrailingBoothSku(itemName: string): { title: string; sku: string } {
+    const raw = String(itemName || '').trim();
+    const m = raw.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
+    if (!m) return { title: raw.replace(/\s+/g, ' ').trim(), sku: '' };
+    return { title: raw.slice(0, m.index).replace(/\s+/g, ' ').trim(), sku: m[1] };
+}
+
+/** Canonical numeric ticket id: `T-217301 • Title`, `Ticket #217301` and `217301` all become `217301`. */
+export function canonicalTicketNumber(raw: any): string {
+    return extractSaleNumber(raw);
+}
+
+/** Display form of a stored SKU / order reference: strips any ` • Item Title` suffix. `T-217301 • X` -> `Ticket #217301`. */
+export function cleanSkuDisplay(raw: any): string {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const t = extractSaleNumber(s);
+    if (t && /^(?:ticket\s*#|sale\s*#|T-)/i.test(s)) return `Ticket #${t}`;
+    return s.split('•')[0].trim();
+}
+
+const slugKey = (v: any) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 
 const localDay = (iso: string) => {
     const d = new Date(iso);
@@ -321,67 +364,81 @@ export interface FingerprintAccessors<T = any> {
     getSaleNumber: (row: T) => any;
     getSoldDate: (row: T) => any;
     getGross: (row: T) => any;
+    /** Booth SKU (`0EJ08B`) when the row carries one. */
+    getSku?: (row: T) => any;
+    /** Clean item title (used for the fingerprint's title/SKU component). */
+    getTitle?: (row: T) => any;
 }
 
 /**
  * Assigns each row an occurrence-indexed fingerprint within the file:
- *   `${saleNumber}|${soldDateIso}|${gross.toFixed(2)}#${occurrenceIndexInTicket}`
- * Two copies of the same item on one ticket become `#1` and `#2`.
+ *   `${canonicalTicket}|${normalizedTitleOrSku}|${gross.toFixed(2)}#${occurrenceIndexInTicket}`
+ * The occurrence counter runs over rows sharing the same `canonicalTicket|gross`, so two copies of one item on a ticket are `#1`/`#2`
+ * AND the same count is reproducible from the sales ledger (which does not store titles in a stable way).
  */
 export function assignOccurrenceFingerprints<T extends Record<string, any>>(rows: T[], acc: FingerprintAccessors<T>): T[] {
     const seen = new Map<string, number>();
     rows.forEach(row => {
-        const sale = extractSaleNumber(acc.getSaleNumber(row)) || String(acc.getSaleNumber(row) ?? '').trim();
-        const iso = toSaleIso(acc.getSoldDate(row));
+        const rawSale = acc.getSaleNumber(row);
+        const ticket = canonicalTicketNumber(rawSale) || String(rawSale ?? '').trim();
         const gross = Number(acc.getGross(row) || 0).toFixed(2);
-        const base = `${sale}|${iso}|${gross}`;
-        const idx = (seen.get(base) || 0) + 1;
-        seen.set(base, idx);
-        (row as any).fingerprintBase = base;
+        const titleOrSku = slugKey(acc.getSku?.(row) || acc.getTitle?.(row) || '');
+        const groupKey = `${ticket}|${gross}`;
+        const idx = (seen.get(groupKey) || 0) + 1;
+        seen.set(groupKey, idx);
+        (row as any).canonicalTicket = ticket;
+        (row as any).fingerprintBase = `${ticket}|${titleOrSku}|${gross}`;
         (row as any).occurrenceIndex = idx;
-        (row as any).fingerprint = `${base}#${idx}`;
+        (row as any).fingerprint = `${ticket}|${titleOrSku}|${gross}#${idx}`;
     });
     return rows;
 }
 
 /**
  * Flags rows already recorded in the sales ledger (`isAlreadyRecorded = true`, shown as "✅ Already Recorded (Skipped)").
- * A row is recorded when its fingerprint base exists in `existingSales` at least `occurrenceIndex` times.
- * Matches (a) exact ticket+instant+gross, (b) ticket+same local day+gross (older date-only imports), and
- * (c) legacy ticket-less sales by exact instant+gross. Skipped rows must never create sales or touch multi-qty stock.
+ * Every ticket reference is normalised the same way on both sides (`T-217301 • Title`, `Ticket #217301`, `217301` -> `217301`),
+ * so a CSV upload never duplicates a legacy record. A row is recorded when the ledger holds at least `occurrenceIndex`
+ * sales for its `canonicalTicket|gross`. Ticket-less legacy sales (SKU / payout-batch order ids) match on SKU + local day + gross,
+ * or on exact instant + gross. Skipped rows must never create sales or touch multi-qty stock.
  */
 export function flagAlreadyRecordedRows<T extends Record<string, any>>(rows: T[], existingSales: any[], acc: FingerprintAccessors<T>): { rows: T[]; recordedCount: number; newCount: number } {
     assignOccurrenceFingerprints(rows, acc);
-    const exact = new Map<string, number>();
-    const byDay = new Map<string, number>();
-    const legacy = new Map<string, number>();
+    const byTicketGross = new Map<string, number>();
+    const bySkuDayGross = new Map<string, number>();
+    const byInstantGross = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) || 0) + 1);
 
     (existingSales || []).forEach(s => {
-        const iso = toSaleIso(s.saleDate);
-        if (!iso) return;
+        if (s.status === 'Cancelled') return;
         const gross = Number(s.grossAmount || 0).toFixed(2);
-        const ticket = extractSaleNumber(s.orderId) || extractSaleNumber(s.soNumber);
+        const iso = toSaleIso(s.saleDate);
+        const ticket = canonicalTicketNumber(s.orderId) || canonicalTicketNumber(s.soNumber);
         if (ticket) {
-            bump(exact, `${ticket}|${iso}|${gross}`);
-            bump(byDay, `${ticket}|${localDay(iso)}|${gross}`);
-        } else {
-            bump(legacy, `|${iso}|${gross}`);
+            bump(byTicketGross, `${ticket}|${gross}`);
+            return;
         }
+        if (!iso) return;
+        bump(byInstantGross, `${iso}|${gross}`);
+        [s.soNumber, s.orderId].forEach(k => {
+            const key = slugKey(k);
+            if (key) bump(bySkuDayGross, `${key}|${localDay(iso)}|${gross}`);
+        });
     });
 
     let recordedCount = 0;
     rows.forEach(row => {
-        const sale = extractSaleNumber(acc.getSaleNumber(row));
-        const iso = toSaleIso(acc.getSoldDate(row));
+        const ticket = (row as any).canonicalTicket as string;
         const gross = Number(acc.getGross(row) || 0).toFixed(2);
         const k = (row as any).occurrenceIndex || 1;
+        const iso = toSaleIso(acc.getSoldDate(row));
         let recorded = false;
-        if (sale && iso) {
-            recorded = (exact.get(`${sale}|${iso}|${gross}`) || 0) >= k || (byDay.get(`${sale}|${localDay(iso)}|${gross}`) || 0) >= k;
+        if (ticket && /^\d{4,8}$/.test(ticket)) {
+            recorded = (byTicketGross.get(`${ticket}|${gross}`) || 0) >= k;
         }
         if (!recorded && iso) {
-            recorded = (legacy.get(`|${iso}|${gross}`) || 0) >= k;
+            recorded = (byInstantGross.get(`${iso}|${gross}`) || 0) >= k;
+            const sku = slugKey(acc.getSku?.(row));
+            if (!recorded && sku) recorded = (bySkuDayGross.get(`${sku}|${localDay(iso)}|${gross}`) || 0) >= k;
         }
         (row as any).isAlreadyRecorded = recorded;
         if (recorded) recordedCount++;

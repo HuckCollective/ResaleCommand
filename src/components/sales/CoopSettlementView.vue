@@ -242,13 +242,13 @@
                 <th class="text-right">Venue Fee</th>
                 <th class="text-right">Cost Recoup</th>
                 <th class="text-right">Net Surplus</th>
-                <th class="text-right font-bold text-success">Curator Take (70%)</th>
+                <th class="text-right font-bold text-success">{{ partner.isConsignor ? 'Net After Fee (85%)' : 'Total Payout (Cost + 70%)' }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(it, iIdx) in partner.items" :key="iIdx" class="hover:bg-base-200/40">
                 <td class="font-mono text-xs">{{ it.date ? String(it.date).slice(0, 10) : 'N/A' }}</td>
-                <td class="font-mono text-xs font-semibold">{{ it.sku }}</td>
+                <td class="font-mono text-xs font-semibold">{{ cleanSkuDisplay(it.sku) }}</td>
                 <td class="max-w-xs truncate font-medium">{{ it.title }}</td>
                 <td class="text-right font-mono font-semibold">${{ it.grossPrice.toFixed(2) }}</td>
                 <td class="text-right font-mono text-error">-${{ it.venueFee.toFixed(2) }}</td>
@@ -442,6 +442,7 @@ import { useAuth } from '../../composables/useAuth';
 import { normalizeOrgPrefix, extractOrgPrefix } from '../../lib/inventoryUpc';
 import { generatePartnerSettlementPdf, type PartnerStatementData } from '../../lib/coopSettlementPdf';
 import { coopExpensesApi, type CoopExpenseItem } from '../../lib/coopExpenses';
+import { cleanSkuDisplay } from '../../lib/salesBucketing';
 
 interface SaleItem {
   id: string;
@@ -798,8 +799,12 @@ const partnerSettlements = computed(() => {
 // Partner statements visible under the /sales partner filter (All Co-op | HUCK | BB | PDXGL)
 const visiblePartnerSettlements = computed(() => {
   const f = (props.partnerFilter || 'all').toUpperCase();
-  if (f === 'ALL') return partnerSettlements.value;
-  return partnerSettlements.value.filter(p => String(p.prefix || '').replace(/[-_]$/, '').toUpperCase() === f);
+  const list = f === 'ALL'
+    ? [...partnerSettlements.value]
+    : partnerSettlements.value.filter(p => String(p.prefix || '').replace(/[-_]$/, '').toUpperCase() === f);
+  // Huckleberry Collective (HUCK-) always first
+  const rank = (p: any) => (String(p.prefix || '').toUpperCase().startsWith('HUCK') ? 0 : 1);
+  return list.sort((a, b) => rank(a) - rank(b));
 });
 
 const settlementSummary = computed(() => {

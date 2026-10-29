@@ -1448,7 +1448,7 @@ import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID, normalizeOrgPrefix } from '../../lib/inventory';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows } from '../../lib/salesBucketing';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, isPayoutSummaryRow, splitTrailingBoothSku, canonicalTicketNumber, toSaleIso } from '../../lib/salesBucketing';
 import { warehousesApi } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -2590,6 +2590,25 @@ const getCycleInfo = (paidDateStr: string, soldDateStr: string, rentDateStr: str
   return { id: 'default', label: 'General Payout' };
 };
 
+// When several inventory docs share one booth SKU (legacy syncs), prefer the one whose title matches the register row.
+const pickSkuMatch = (sku: string, name: string) => {
+  const cands = activeInventory.value.filter((i: any) => i.locationSku === sku || i.locationSku === `'${sku}`);
+  if (cands.length <= 1) return cands[0] || null;
+  const toks = (s: string) => new Set(String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 1));
+  const a = toks(name);
+  const score = (i: any) => {
+    let best = 0;
+    [i.tagTitle, i.title].forEach((t: string) => {
+      const b = toks(t || '');
+      let hit = 0;
+      a.forEach(w => { if (b.has(w)) hit++; });
+      best = Math.max(best, a.size ? hit / a.size : 0);
+    });
+    return best;
+  };
+  return [...cands].sort((x, y) => score(y) - score(x))[0];
+};
+
 const parseMemoryDenPayout = (csvText: string) => {
   const lines = stripBom(csvText).split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length < 2) {
@@ -2645,7 +2664,7 @@ const parseMemoryDenPayout = (csvText: string) => {
       continue;
     }
     let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
-    const skuMatch = fullItemName.match(/ - ([A-Z0-9-]+)$/);
+    const skuMatch = fullItemName.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
     if (!extractedSku && skuMatch) {
       extractedSku = skuMatch[1];
     }
@@ -2693,6 +2712,13 @@ const parseMemoryDenPayout = (csvText: string) => {
       continue;
     }
 
+    // Summary / empty rows (Total for payout, Total Paid, rows missing Sale / Agreed / Amount) are never sales
+    if (isPayoutSummaryRow(fullItemName)) continue;
+    if (ticketIdx !== -1 && agreedPriceIdx !== -1 && amountIdx !== -1 &&
+        (!(cols[ticketIdx] || '').trim() || !(cols[agreedPriceIdx] || '').trim() || !(cols[amountIdx] || '').trim())) {
+      continue;
+    }
+
     const statusVal = statusIdx !== -1 ? cols[statusIdx]?.trim().toLowerCase() : '';
     if (statusVal === 'declined' || statusVal === 'failed' || statusVal === 'void' || statusVal === 'cancelled' || statusVal === 'canceled' || statusVal === 'unsuccessful') {
       continue;
@@ -2722,16 +2748,19 @@ const parseMemoryDenPayout = (csvText: string) => {
     const date = soldDate || (dateIdx !== -1 ? cols[dateIdx]?.trim() : '') || '';
     const cycle = getCycleInfo(paidDate, soldDate);
 
-    const ticketNumber = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
+    const rawTicket = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
+    // Canonical numeric ticket id ("T-217301 • Title" / "Ticket #217301" / "217301" -> "217301")
+    const ticketNumber = canonicalTicketNumber(rawTicket) || rawTicket;
     const customerName = customerIdx !== -1 ? (cols[customerIdx]?.trim() || '') : '';
 
     // MemoryDen SKU either from explicit SKU column or end of title: "Item Name - 0EJ066"
+    // Ricochet booth SKU: a trailing " - 0EJ08B" is the item's locationSku. Extract it for exact matching and strip it from the display title.
     let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
     let itemName = fullItemName;
-    const skuMatch = fullItemName.match(/ - ([A-Z0-9-]+)$/);
-    if (!extractedSku && skuMatch) {
-      extractedSku = skuMatch[1];
-      itemName = fullItemName.replace(skuMatch[0], '').trim();
+    const trailing = splitTrailingBoothSku(fullItemName);
+    if (trailing.sku) {
+      if (!extractedSku) extractedSku = trailing.sku;
+      itemName = trailing.title;
     }
 
     // Matching Logic Priority against all inventory (Lineage Absorption Law)
@@ -2739,7 +2768,7 @@ const parseMemoryDenPayout = (csvText: string) => {
     
     // 1. Exact Location SKU match (auto-dereference combined/deconstructed child items)
     if (extractedSku) {
-      matched = activeInventory.value.find(item => item.locationSku === extractedSku || item.locationSku === `'${extractedSku}`);
+      matched = pickSkuMatch(extractedSku, itemName);
       if (matched) matched = dereferenceParentLot(matched);
     }
     
@@ -2922,7 +2951,7 @@ const parseMemoryDenPayout = (csvText: string) => {
       paidDate,
       cycleId: cycle.id,
       cycleLabel: cycle.label,
-      itemName: fullItemName,
+      itemName: itemName,
       extractedSku,
       ticketNumber,
       customerName,
@@ -2991,7 +3020,9 @@ const parseMemoryDenPayout = (csvText: string) => {
 const salesRowAccessors = {
   getSaleNumber: (r: any) => r.ticketNumber,
   getSoldDate: (r: any) => r.soldDate || r.date,
-  getGross: (r: any) => r.listedPrice
+  getGross: (r: any) => r.listedPrice,
+  getSku: (r: any) => r.extractedSku,
+  getTitle: (r: any) => r.itemName
 };
 const refreshAlreadyRecordedFlags = async () => {
   try {
@@ -3108,7 +3139,7 @@ const executeImport = async () => {
 
         if (!isMultiQty) {
           // If this ticket was already recorded, skip!
-          if (row.ticketNumber && existingTicketSet.has(orderRef)) {
+          if (row.isAlreadyRecorded) { // count-aware duplicate guard (canonical ticket + occurrence); see flagAlreadyRecordedRows
             importedCount++;
             importedRowRefs.add(row);
             continue;
@@ -3127,7 +3158,7 @@ const executeImport = async () => {
           }
         } else {
           // For multi-quantity items, skip only if THIS specific ticket was already recorded
-          if (row.ticketNumber && existingTicketSet.has(orderRef)) {
+          if (row.isAlreadyRecorded) { // count-aware duplicate guard (canonical ticket + occurrence); see flagAlreadyRecordedRows
             importedCount++;
             importedRowRefs.add(row);
             continue;
@@ -3188,6 +3219,10 @@ const executeImport = async () => {
                 }
               }
             }
+
+            // Date-only payouts (Format B "MM-DD-YYYY") become noon local; timestamped ones keep their time
+            const libIso = toSaleIso(rowOrItemDate);
+            if (libIso) parsedSaleDate = libIso;
 
             const newSale = await salesApi.createSale({
               tenantId: item.tenantId || activeTeamId.value,
