@@ -361,12 +361,17 @@ async function executeSyncAction(tenantIdOverride?: string, purgeAll: boolean = 
 
   for (const chunk of rowChunks) {
     await Promise.allSettled(chunk.map(async (r) => {
+      // Real register date first: CSV row's Sold date, then the matched item's soldDate; "now" only as a last resort
       let saleDateIso = new Date().toISOString();
+      let datedFromRow = false;
       if (r.soldDate) {
         const parts = r.soldDate.split(/[-/]/);
         if (parts.length === 3) {
           const d = new Date(parseInt(parts[2], 10), parseInt(parts[0], 10) - 1, parseInt(parts[1], 10), 12, 0, 0);
-          if (!isNaN(d.getTime())) saleDateIso = d.toISOString();
+          if (!isNaN(d.getTime())) {
+            saleDateIso = d.toISOString();
+            datedFromRow = true;
+          }
         }
       }
 
@@ -376,6 +381,11 @@ async function executeSyncAction(tenantIdOverride?: string, purgeAll: boolean = 
           i.locationSku?.toUpperCase() === r.extractedSku.toUpperCase() ||
           i.upc?.toUpperCase() === r.extractedSku.toUpperCase()
         );
+      }
+
+      if (!datedFromRow && matchedItem?.soldDate) {
+        const itemDate = new Date(matchedItem.soldDate);
+        if (!isNaN(itemDate.getTime())) saleDateIso = itemDate.toISOString();
       }
 
       const cleanTitle = r.itemName.replace(/\s*-\s*[A-Z0-9-]+$/, '').trim();

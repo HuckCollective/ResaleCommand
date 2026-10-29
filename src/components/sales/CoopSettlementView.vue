@@ -52,7 +52,7 @@
 
           <!-- Dynamic Time Period Selector -->
           <div class="form-control">
-            <select v-model="selectedPeriod" class="select select-bordered select-sm font-bold text-xs h-9 min-h-9 rounded-xl font-mono">
+            <select v-model="selectedPeriod" @change="emit('update:period', selectedPeriod)" class="select select-bordered select-sm font-bold text-xs h-9 min-h-9 rounded-xl font-mono">
               <option v-for="m in availableMonths" :key="m.key" :value="m.key">
                 {{ m.label }} ({{ m.count }} sales)
               </option>
@@ -134,6 +134,141 @@
       </div>
     </div>
 
+    <!-- Member / Partner Payout Statements: directly under the 4 waterfall cards -->
+    <!-- Empty State -->
+      <div v-if="visiblePartnerSettlements.length === 0" class="card bg-base-100 border border-base-200 shadow-sm p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-base-200 text-base-content/50 flex items-center justify-center mx-auto mb-3">
+        <Icon icon="solar:document-text-linear" class="w-6 h-6" />
+      </div>
+      <h3 class="text-base font-bold">No sales in selected period or location</h3>
+      <p class="text-xs text-base-content/60 mt-1 max-w-sm mx-auto">
+        Try adjusting the month selector or switching to "All Channels &amp; Locations".
+      </p>
+    </div>
+
+    <!-- Partner Settlement Cards -->
+    <div v-else class="space-y-6">
+      <div 
+        v-for="partner in visiblePartnerSettlements" 
+        :key="partner.prefix" 
+        class="card bg-base-100 border border-base-300 shadow-md overflow-hidden rounded-2xl"
+      >
+        <!-- Card Header -->
+        <div class="bg-base-200/70 p-4 sm:p-5 border-b border-base-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-black text-lg shadow-xs">
+              {{ partner.prefix.replace(/[-_]$/, '').slice(0, 2) }}
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="font-black text-lg text-base-content">{{ partner.name }}</h3>
+                <span class="badge badge-sm badge-outline font-mono font-bold">{{ partner.prefix }}</span>
+                <span class="badge badge-sm badge-ghost font-bold">{{ partner.items.length }} {{ partner.items.length === 1 ? 'item sold' : 'items sold' }}</span>
+              </div>
+              <p class="text-xs text-base-content/60">Governed under Huckleberry Collective 70/30 Net Surplus Settlement</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+            <div class="text-right">
+              <div class="text-xs text-base-content/60 font-semibold uppercase tracking-wider">
+                Final Payout Check
+              </div>
+              <div class="text-2xl font-black font-mono" :class="partner.totalPayoutCheck < 0 ? 'text-error' : 'text-success'">
+                ${{ partner.totalPayoutCheck.toFixed(2) }}
+              </div>
+              <div v-if="partner.reimbursements > 0" class="text-[11px] text-success font-bold flex items-center justify-end gap-1">
+                <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
+                <span>Includes +${{ partner.reimbursements.toFixed(2) }} Fronted Reimbursement</span>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              class="btn btn-sm btn-primary gap-1.5 shadow-sm rounded-xl font-bold"
+              @click="downloadPartnerPdf(partner)"
+              title="Download PDF settlement statement for this partner"
+            >
+              <Icon icon="solar:document-medicine-bold" class="w-4 h-4 shrink-0" />
+              <span>Download PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Financial Waterfall Bar -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-base-200/30 text-xs border-b border-base-200">
+          <div>
+            <span class="opacity-60 block font-medium">Gross Register:</span>
+            <span class="font-bold font-mono text-sm text-base-content">${{ partner.totalGross.toFixed(2) }}</span>
+          </div>
+          <div>
+            <span class="opacity-60 block font-medium">15% Venue Cut:</span>
+            <span class="font-mono text-sm text-error font-bold">-${{ partner.totalVenueFee.toFixed(2) }}</span>
+          </div>
+          <div v-if="partner.isConsignor">
+            <span class="opacity-60 block font-medium">Booth Rent Share:</span>
+            <span class="font-mono text-sm text-warning font-bold">-${{ (partner.rentDeduction || 0).toFixed(2) }}</span>
+          </div>
+          <div v-else>
+            <span class="opacity-60 block font-medium">100% Cost Basis Recouped:</span>
+            <span class="font-mono text-sm text-success font-bold">+${{ partner.totalCostBasis.toFixed(2) }}</span>
+          </div>
+          <div v-if="partner.isConsignor">
+            <span class="opacity-60 block font-medium">Net Consignor Payout:</span>
+            <span class="font-mono text-sm text-success font-bold">${{ partner.totalPayoutCheck.toFixed(2) }}</span>
+          </div>
+          <div v-else>
+            <span class="opacity-60 block font-medium">70% Net Profit Share:</span>
+            <span class="font-mono text-sm text-primary font-bold">+${{ partner.totalCuratorProfit.toFixed(2) }}</span>
+          </div>
+          <div v-if="!partner.isConsignor">
+            <span class="opacity-60 block font-medium">30% Commons Contribution:</span>
+            <span class="font-mono text-sm text-warning font-bold">+${{ partner.totalCommonsTake.toFixed(2) }}</span>
+          </div>
+          <div v-else>
+            <span class="opacity-60 block font-medium">Relationship:</span>
+            <span class="badge badge-sm badge-secondary font-bold">Consignor</span>
+          </div>
+        </div>
+
+        <!-- Itemized Table (Collapsible) -->
+        <div class="overflow-x-auto max-h-72">
+          <table class="table table-xs table-pin-rows">
+            <thead>
+              <tr class="bg-base-200/60 text-base-content/70">
+                <th>Date</th>
+                <th>SKU / UPC</th>
+                <th>Description</th>
+                <th class="text-right">Gross</th>
+                <th class="text-right">Venue Fee</th>
+                <th class="text-right">Cost Recoup</th>
+                <th class="text-right">Net Surplus</th>
+                <th class="text-right font-bold text-success">Curator Take (70%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(it, iIdx) in partner.items" :key="iIdx" class="hover:bg-base-200/40">
+                <td class="font-mono text-xs">{{ it.date ? String(it.date).slice(0, 10) : 'N/A' }}</td>
+                <td class="font-mono text-xs font-semibold">{{ it.sku }}</td>
+                <td class="max-w-xs truncate font-medium">{{ it.title }}</td>
+                <td class="text-right font-mono font-semibold">${{ it.grossPrice.toFixed(2) }}</td>
+                <td class="text-right font-mono text-error">-${{ it.venueFee.toFixed(2) }}</td>
+                <td class="text-right font-mono text-success font-semibold">${{ it.costBasis.toFixed(2) }}</td>
+                <td class="text-right font-mono">${{ it.netSurplus.toFixed(2) }}</td>
+                <td class="text-right font-mono font-bold text-success">${{ it.curatorTake.toFixed(2) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Venue check, booth rent & shared overhead (collapsed so rent / tech ops are not repeated up top) -->
+    <details class="collapse collapse-arrow bg-base-100 border border-base-200 rounded-2xl shadow-sm">
+      <summary class="collapse-title font-bold text-sm flex items-center gap-2">
+        <span>🏪 Venue check, booth rent &amp; shared overhead</span>
+        <span class="badge badge-ghost badge-sm font-mono">Memory Den reconciliation</span>
+      </summary>
+      <div class="collapse-content space-y-6">
     <!-- Memory Den Check Reconciliation Banner -->
     <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-200 pb-3">
@@ -294,132 +429,8 @@
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div v-if="partnerSettlements.length === 0" class="card bg-base-100 border border-base-200 shadow-sm p-12 text-center">
-      <div class="w-12 h-12 rounded-full bg-base-200 text-base-content/50 flex items-center justify-center mx-auto mb-3">
-        <Icon icon="solar:document-text-linear" class="w-6 h-6" />
       </div>
-      <h3 class="text-base font-bold">No sales in selected period or location</h3>
-      <p class="text-xs text-base-content/60 mt-1 max-w-sm mx-auto">
-        Try adjusting the month selector or switching to "All Channels &amp; Locations".
-      </p>
-    </div>
-
-    <!-- Partner Settlement Cards -->
-    <div v-else class="space-y-6">
-      <div 
-        v-for="partner in partnerSettlements" 
-        :key="partner.prefix" 
-        class="card bg-base-100 border border-base-300 shadow-md overflow-hidden rounded-2xl"
-      >
-        <!-- Card Header -->
-        <div class="bg-base-200/70 p-4 sm:p-5 border-b border-base-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-black text-lg shadow-xs">
-              {{ partner.prefix.replace(/[-_]$/, '').slice(0, 2) }}
-            </div>
-            <div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="font-black text-lg text-base-content">{{ partner.name }}</h3>
-                <span class="badge badge-sm badge-outline font-mono font-bold">{{ partner.prefix }}</span>
-                <span class="badge badge-sm badge-ghost font-bold">{{ partner.items.length }} {{ partner.items.length === 1 ? 'item sold' : 'items sold' }}</span>
-              </div>
-              <p class="text-xs text-base-content/60">Governed under Huckleberry Collective 70/30 Net Surplus Settlement</p>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-            <div class="text-right">
-              <div class="text-xs text-base-content/60 font-semibold uppercase tracking-wider">
-                Final Payout Check
-              </div>
-              <div class="text-2xl font-black font-mono" :class="partner.totalPayoutCheck < 0 ? 'text-error' : 'text-success'">
-                ${{ partner.totalPayoutCheck.toFixed(2) }}
-              </div>
-              <div v-if="partner.reimbursements > 0" class="text-[11px] text-success font-bold flex items-center justify-end gap-1">
-                <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
-                <span>Includes +${{ partner.reimbursements.toFixed(2) }} Fronted Reimbursement</span>
-              </div>
-            </div>
-            <button 
-              type="button" 
-              class="btn btn-sm btn-primary gap-1.5 shadow-sm rounded-xl font-bold"
-              @click="downloadPartnerPdf(partner)"
-              title="Download PDF settlement statement for this partner"
-            >
-              <Icon icon="solar:document-medicine-bold" class="w-4 h-4 shrink-0" />
-              <span>Download PDF</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Financial Waterfall Bar -->
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-base-200/30 text-xs border-b border-base-200">
-          <div>
-            <span class="opacity-60 block font-medium">Gross Register:</span>
-            <span class="font-bold font-mono text-sm text-base-content">${{ partner.totalGross.toFixed(2) }}</span>
-          </div>
-          <div>
-            <span class="opacity-60 block font-medium">15% Venue Cut:</span>
-            <span class="font-mono text-sm text-error font-bold">-${{ partner.totalVenueFee.toFixed(2) }}</span>
-          </div>
-          <div v-if="partner.isConsignor">
-            <span class="opacity-60 block font-medium">Booth Rent Share:</span>
-            <span class="font-mono text-sm text-warning font-bold">-${{ (partner.rentDeduction || 0).toFixed(2) }}</span>
-          </div>
-          <div v-else>
-            <span class="opacity-60 block font-medium">100% Cost Basis Recouped:</span>
-            <span class="font-mono text-sm text-success font-bold">+${{ partner.totalCostBasis.toFixed(2) }}</span>
-          </div>
-          <div v-if="partner.isConsignor">
-            <span class="opacity-60 block font-medium">Net Consignor Payout:</span>
-            <span class="font-mono text-sm text-success font-bold">${{ partner.totalPayoutCheck.toFixed(2) }}</span>
-          </div>
-          <div v-else>
-            <span class="opacity-60 block font-medium">70% Net Profit Share:</span>
-            <span class="font-mono text-sm text-primary font-bold">+${{ partner.totalCuratorProfit.toFixed(2) }}</span>
-          </div>
-          <div v-if="!partner.isConsignor">
-            <span class="opacity-60 block font-medium">30% Commons Contribution:</span>
-            <span class="font-mono text-sm text-warning font-bold">+${{ partner.totalCommonsTake.toFixed(2) }}</span>
-          </div>
-          <div v-else>
-            <span class="opacity-60 block font-medium">Relationship:</span>
-            <span class="badge badge-sm badge-secondary font-bold">Consignor</span>
-          </div>
-        </div>
-
-        <!-- Itemized Table (Collapsible) -->
-        <div class="overflow-x-auto max-h-72">
-          <table class="table table-xs table-pin-rows">
-            <thead>
-              <tr class="bg-base-200/60 text-base-content/70">
-                <th>Date</th>
-                <th>SKU / UPC</th>
-                <th>Description</th>
-                <th class="text-right">Gross</th>
-                <th class="text-right">Venue Fee</th>
-                <th class="text-right">Cost Recoup</th>
-                <th class="text-right">Net Surplus</th>
-                <th class="text-right font-bold text-success">Curator Take (70%)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(it, iIdx) in partner.items" :key="iIdx" class="hover:bg-base-200/40">
-                <td class="font-mono text-xs">{{ it.date ? String(it.date).slice(0, 10) : 'N/A' }}</td>
-                <td class="font-mono text-xs font-semibold">{{ it.sku }}</td>
-                <td class="max-w-xs truncate font-medium">{{ it.title }}</td>
-                <td class="text-right font-mono font-semibold">${{ it.grossPrice.toFixed(2) }}</td>
-                <td class="text-right font-mono text-error">-${{ it.venueFee.toFixed(2) }}</td>
-                <td class="text-right font-mono text-success font-semibold">${{ it.costBasis.toFixed(2) }}</td>
-                <td class="text-right font-mono">${{ it.netSurplus.toFixed(2) }}</td>
-                <td class="text-right font-mono font-bold text-success">${{ it.curatorTake.toFixed(2) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    </details>
   </div>
 </template>
 
@@ -449,11 +460,22 @@ interface SaleItem {
 
 const props = defineProps<{
   sales: SaleItem[];
+  /** Month filter shared with the /sales page ('YYYY-MM' or 'all'). */
+  period?: string;
+  /** Partner filter shared with the /sales page ('all' | 'HUCK' | 'BB' | 'PDXGL'). */
+  partnerFilter?: string;
 }>();
+
+const emit = defineEmits<{ (e: 'update:period', value: string): void }>();
 
 const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
 const selectedLocation = ref<'memory_den' | 'all'>('memory_den');
+
+// Keep this view's month in sync with the /sales page filter
+watch(() => props.period, (p) => {
+  if (p && p !== selectedPeriod.value) selectedPeriod.value = p;
+}, { immediate: true });
 
 // Shared Commons Expenses State
 const expenses = ref<CoopExpenseItem[]>([]);
@@ -515,7 +537,7 @@ const availableMonths = computed(() => {
 
 // Default to the most recent month that has substantial sales (or newest)
 watch(availableMonths, (months) => {
-  if (months.length > 0 && selectedPeriod.value === 'all') {
+  if (months.length > 0 && selectedPeriod.value === 'all' && props.period === undefined) {
     const substantialMonth = months.find(m => m.count >= 5);
     selectedPeriod.value = substantialMonth ? substantialMonth.key : months[0].key;
   }
@@ -771,6 +793,13 @@ const partnerSettlements = computed(() => {
   }
 
   return allGroups;
+});
+
+// Partner statements visible under the /sales partner filter (All Co-op | HUCK | BB | PDXGL)
+const visiblePartnerSettlements = computed(() => {
+  const f = (props.partnerFilter || 'all').toUpperCase();
+  if (f === 'ALL') return partnerSettlements.value;
+  return partnerSettlements.value.filter(p => String(p.prefix || '').replace(/[-_]$/, '').toUpperCase() === f);
 });
 
 const settlementSummary = computed(() => {

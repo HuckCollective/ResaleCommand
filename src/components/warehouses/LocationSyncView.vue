@@ -641,6 +641,7 @@
                   <div v-else class="group flex items-start justify-between gap-2 max-w-lg">
                     <div class="font-bold text-xs sm:text-sm text-base-content leading-snug break-words">
                       {{ row.itemName }}
+                      <span v-if="row.isAlreadyRecorded" class="badge badge-xs badge-success font-bold whitespace-nowrap ml-1 align-middle" title="Already in the sales ledger. Skipped; will not change stock.">✅ Already Recorded (Skipped)</span>
                     </div>
                     <button 
                       v-if="!row.mappedItem" 
@@ -1217,6 +1218,17 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 };
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows } from '../../lib/salesBucketing';
+
+// Resolve the real register date for a sale: the CSV row's Sold date first, then the item's own soldDate.
+// Only falls back to "now" as a last resort so imports never silently stamp sales with today's date.
+const toValidIso = (raw: any): string | null => {
+  if (!raw) return null;
+  const d = new Date(String(raw).trim());
+  return isNaN(d.getTime()) ? null : d.toISOString();
+};
+const resolveSoldIso = (row: any, item?: any): string =>
+  toValidIso(row?.soldDate) || toValidIso(item?.soldDate) || new Date().toISOString();
 import { databases, ID } from '../../lib/appwrite';
 import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem, extractOrgPrefix, KNOWN_ORG_PREFIXES, normalizeOrgPrefix } from '../../lib/inventory';
 import { 
@@ -1779,10 +1791,7 @@ const parseCsvData = (rawText: string, fileName: string) => {
   newItemsCreatedInSession.value = 0;
 
   try {
-    let text = rawText || '';
-    if (text.charCodeAt(0) === 0xFEFF) {
-      text = text.substring(1);
-    }
+    let text = stripBom(rawText || '');
 
     if (!text) {
       addToast({ type: 'error', message: 'Could not read CSV data.' });
@@ -1810,13 +1819,13 @@ const parseCsvData = (rawText: string, fileName: string) => {
       rawCsvHeader.value = lines[0];
       rawCsvLines.value = lines;
 
-      const headerCols = splitCsvLine(lines[0]).map(h => (h || '').trim().toLowerCase().replace(/["']/g, ''));
+      const headerCols = splitCsvLine(lines[0]).map(h => normalizeCsvHeader(h));
       const skuIdx = headerCols.findIndex(h => h === 'sku' || h.includes('sku') || h.includes('barcode') || h.includes('custom sku'));
       const upcIdx = headerCols.findIndex(h => h === 'upc' || h.includes('upc'));
       const prodIdIdx = headerCols.findIndex(h => h === 'product id' || h.includes('product id') || h.includes('item id'));
       const nameIdx = headerCols.findIndex(h => h === 'item' || h === 'name' || h.includes('name') || h.includes('title') || h.includes('item'));
-      const saleIdx = headerCols.findIndex(h => h === 'sale' || h.includes('ticket') || h.includes('receipt') || h.includes('invoice'));
-      const soldDateIdx = headerCols.findIndex(h => h === 'sold' || h === 'sale date' || h === 'date sold');
+      const saleIdx = headerCols.findIndex(h => isSaleNumberHeader(h));
+      const soldDateIdx = headerCols.findIndex(h => isSoldDateHeader(h));
       const paidDateIdx = headerCols.findIndex(h => h === 'paid' || h === 'payout date');
       
       const amountIdx = headerCols.findIndex(h => h === 'payout' || h === 'net' || h === 'net payout' || h === 'vendor payout' || h === 'consignor amount' || h === 'net amount' || h === 'sold amount' || h === 'take home' || h === 'final amount' || h === 'amount');
@@ -1966,8 +1975,11 @@ const parseCsvData = (rawText: string, fileName: string) => {
           netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
         }
 
+        // A row is only "sold" when the CSV says so explicitly: a sold/paid status, or a Sold / Paid date.
+        // A priced row with no such indicator is active in-stock inventory (never infer a sale from a price alone).
+        let hasSoldIndicatorDate = (soldDateIdx !== -1 && !!(cols[soldDateIdx] || '').trim()) || (paidDateIdx !== -1 && !!(cols[paidDateIdx] || '').trim());
         let rawStatus = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
-        let isSoldOrPaid = rawStatus.includes('sold') || rawStatus.includes('paid') || (rawStatus.length === 0 && (explicitPayout > 0 || grossPrice > 0) && !headerCols.includes('inventory'));
+        let isSoldOrPaid = rawStatus.includes('sold') || rawStatus.includes('paid') || hasSoldIndicatorDate;
 
         // Commission Fee
         let commFee = grossPrice > netSoldPrice ? Number((grossPrice - netSoldPrice).toFixed(2)) : 0;
@@ -2027,6 +2039,8 @@ const parseCsvData = (rawText: string, fileName: string) => {
       skippedNonOrgCount.value = nonOrgSkipped;
       syncRows.value = rows;
       filterTab.value = 'all';
+      // Cumulative CSV idempotency: flag rows already recorded in the sales ledger (non-blocking)
+      void refreshRecordedFlags();
       if (nonOrgSkipped > 0) {
         addToast({ 
           type: 'success', 
@@ -2041,6 +2055,28 @@ const parseCsvData = (rawText: string, fileName: string) => {
     } finally {
       isParsing.value = false;
     }
+};
+
+// Occurrence-indexed fingerprint guard (`saleNumber|soldDateIso|gross#occurrence`) against resale_db.sales.
+// Rows already recorded are flagged `isAlreadyRecorded` ("✅ Already Recorded (Skipped)") and never create sales
+// or decrement a multi-quantity bin again.
+const syncRowAccessors = {
+  getSaleNumber: (r: any) => r.saleTicketId,
+  getSoldDate: (r: any) => r.soldDate,
+  getGross: (r: any) => r.listedPrice
+};
+const refreshRecordedFlags = async () => {
+  try {
+    if (!team.value?.$id || syncRows.value.length === 0) return;
+    const existing = await salesApi.listSales(team.value.$id);
+    const { recordedCount, newCount } = flagAlreadyRecordedRows(syncRows.value, existing || [], syncRowAccessors);
+    syncRows.value = [...syncRows.value];
+    if (recordedCount > 0) {
+      addToast({ type: 'info', message: `✅ ${recordedCount} row(s) already recorded (skipped). ${newCount} new.` });
+    }
+  } catch (e) {
+    console.warn('[LocationSync] Could not flag already-recorded rows:', e);
+  }
 };
 
 const resetSync = () => {
@@ -2394,7 +2430,16 @@ const executeSync = async () => {
 
   try {
     let count = 0;
+    let skippedRecorded = 0;
     const total = mappedRows.length;
+
+    // Re-flag against the freshest sales ledger right before committing (whole file, so occurrence indices stay aligned)
+    try {
+      const existingForGuard = await salesApi.listSales(team.value.$id);
+      flagAlreadyRecordedRows(syncRows.value, existingForGuard || [], syncRowAccessors);
+    } catch (guardErr) {
+      console.warn('[LocationSync] Idempotency pre-check failed:', guardErr);
+    }
 
     // Prefetch base SO number once upfront instead of per item
     let nextSoNum = 1000;
@@ -2422,6 +2467,12 @@ const executeSync = async () => {
       });
 
       const item = row.mappedItem;
+
+      // ✅ Already Recorded (Skipped): never create a sale or decrement a multi-qty bin a second time
+      if (row.isAlreadyRecorded) {
+        skippedRecorded++;
+        continue;
+      }
       const isSold = row.status === 'sold' || row.status === 'paid';
 
       const updateData: any = {};
@@ -2475,7 +2526,7 @@ const executeSync = async () => {
               soNumber: soNum,
               warehouseId: currentLocation.value?.$id || '',
               orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
-              saleDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString(),
+              saleDate: resolveSoldIso(row, item),
               status: 'Sold',
               grossAmount: gross,
               commissionFee: commFee,
@@ -2511,7 +2562,7 @@ const executeSync = async () => {
                 sellingLocations: [locName],
                 storageLocation: item.storageLocation || locName,
                 upc: item.upc || row.upc || (getNextUpc ? getNextUpc(prefix) : undefined),
-                soldDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString()
+                soldDate: resolveSoldIso(row, item)
               },
               team.value?.$id || user.value?.$id || '',
               team.value?.$id ? 'team' : 'user'
@@ -2528,7 +2579,7 @@ const executeSync = async () => {
           updateData.status = 'sold';
           updateData.resalePrice = gross;
           updateData.soldPrice = net; // The exact amount made after fees!
-          updateData.soldDate = row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString();
+          updateData.soldDate = resolveSoldIso(row, item);
 
           // Record official sale document in sales collection
           try {
@@ -2538,7 +2589,7 @@ const executeSync = async () => {
               soNumber: soNum,
               warehouseId: currentLocation.value?.$id || '',
               orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
-              saleDate: row.soldDate ? new Date(row.soldDate).toISOString() : new Date().toISOString(),
+              saleDate: resolveSoldIso(row, item),
               status: 'Sold',
               grossAmount: gross,
               commissionFee: commFee,
@@ -2653,7 +2704,7 @@ const executeSync = async () => {
       refreshSyncHistory();
     }
 
-    addToast({ type: 'success', message: `Successfully synced ${count} items to ${locName}!` });
+    addToast({ type: 'success', message: `Successfully synced ${count} items to ${locName}!${skippedRecorded > 0 ? ` (${skippedRecorded} already recorded, skipped)` : ''}` });
     resetSync();
     if (team.value) {
       await fetchInventory();

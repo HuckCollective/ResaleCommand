@@ -258,3 +258,133 @@ export function partitionSalesByOrg(
         allBuckets
     };
 }
+
+
+// =========================================================================
+// CUMULATIVE CSV RE-IMPORT IDEMPOTENCY (Occurrence-Indexed Fingerprints)
+// Ricochet exports month-to-date CSVs: re-importing tomorrow's file repeats every row already recorded today.
+// =========================================================================
+
+/** Strip a UTF-8 BOM so the first header cell ("Item") parses correctly. */
+export function stripBom(text: string): string {
+    return String(text || '').replace(/^\uFEFF/, '');
+}
+
+/** Lowercase, unquote and collapse a CSV header cell, e.g. ` "Sold Date" ` -> `sold date`, `Sale#` -> `sale#`. */
+export function normalizeCsvHeader(h: string): string {
+    return String(h || '').replace(/^\uFEFF/, '').replace(/["']/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** True for the Memory Den / Ricochet sale-number header variants: Sale, Sale#, Sale #, Ticket, Receipt, Invoice... */
+export function isSaleNumberHeader(h: string): boolean {
+    const n = normalizeCsvHeader(h);
+    return n === 'sale' || n === 'sale#' || n === 'sale #' || n === 'sale no' || n === 'sale number' || n === 'ticket' ||
+        n.includes('ticket') || n.includes('receipt') || n.includes('invoice') || n.includes('transaction');
+}
+
+/** True for Sold Date header variants: Sold, Sold Date, Date Sold, Sale Date. */
+export function isSoldDateHeader(h: string): boolean {
+    const n = normalizeCsvHeader(h);
+    return n === 'sold' || n === 'sold date' || n === 'date sold' || n === 'sale date' || n === 'sold_date';
+}
+
+/** Extracts the numeric POS sale/ticket number from `Ticket #224185`, `T-224185 • Title`, or `224185`. */
+export function extractSaleNumber(raw: any): string {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const m = s.match(/(?:ticket\s*#|sale\s*#|T-)\s*(\d{4,8})/i) || s.match(/^(\d{4,8})$/);
+    return m ? m[1] : '';
+}
+
+/** Parses a CSV/DB date into an ISO instant (CSV wall-clock strings are interpreted in the browser's local zone, matching every other importer). */
+export function toSaleIso(raw: any): string {
+    if (!raw) return '';
+    let s = String(raw).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2} \d/.test(s)) s = s.replace(' ', 'T');
+    let d = new Date(s);
+    if (isNaN(d.getTime())) {
+        const parts = s.split(/[-/\s]/);
+        if (parts.length >= 3 && parts[2].length === 4) {
+            d = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}T12:00:00`);
+        }
+    }
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
+const localDay = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export interface FingerprintAccessors<T = any> {
+    getSaleNumber: (row: T) => any;
+    getSoldDate: (row: T) => any;
+    getGross: (row: T) => any;
+}
+
+/**
+ * Assigns each row an occurrence-indexed fingerprint within the file:
+ *   `${saleNumber}|${soldDateIso}|${gross.toFixed(2)}#${occurrenceIndexInTicket}`
+ * Two copies of the same item on one ticket become `#1` and `#2`.
+ */
+export function assignOccurrenceFingerprints<T extends Record<string, any>>(rows: T[], acc: FingerprintAccessors<T>): T[] {
+    const seen = new Map<string, number>();
+    rows.forEach(row => {
+        const sale = extractSaleNumber(acc.getSaleNumber(row)) || String(acc.getSaleNumber(row) ?? '').trim();
+        const iso = toSaleIso(acc.getSoldDate(row));
+        const gross = Number(acc.getGross(row) || 0).toFixed(2);
+        const base = `${sale}|${iso}|${gross}`;
+        const idx = (seen.get(base) || 0) + 1;
+        seen.set(base, idx);
+        (row as any).fingerprintBase = base;
+        (row as any).occurrenceIndex = idx;
+        (row as any).fingerprint = `${base}#${idx}`;
+    });
+    return rows;
+}
+
+/**
+ * Flags rows already recorded in the sales ledger (`isAlreadyRecorded = true`, shown as "✅ Already Recorded (Skipped)").
+ * A row is recorded when its fingerprint base exists in `existingSales` at least `occurrenceIndex` times.
+ * Matches (a) exact ticket+instant+gross, (b) ticket+same local day+gross (older date-only imports), and
+ * (c) legacy ticket-less sales by exact instant+gross. Skipped rows must never create sales or touch multi-qty stock.
+ */
+export function flagAlreadyRecordedRows<T extends Record<string, any>>(rows: T[], existingSales: any[], acc: FingerprintAccessors<T>): { rows: T[]; recordedCount: number; newCount: number } {
+    assignOccurrenceFingerprints(rows, acc);
+    const exact = new Map<string, number>();
+    const byDay = new Map<string, number>();
+    const legacy = new Map<string, number>();
+    const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) || 0) + 1);
+
+    (existingSales || []).forEach(s => {
+        const iso = toSaleIso(s.saleDate);
+        if (!iso) return;
+        const gross = Number(s.grossAmount || 0).toFixed(2);
+        const ticket = extractSaleNumber(s.orderId) || extractSaleNumber(s.soNumber);
+        if (ticket) {
+            bump(exact, `${ticket}|${iso}|${gross}`);
+            bump(byDay, `${ticket}|${localDay(iso)}|${gross}`);
+        } else {
+            bump(legacy, `|${iso}|${gross}`);
+        }
+    });
+
+    let recordedCount = 0;
+    rows.forEach(row => {
+        const sale = extractSaleNumber(acc.getSaleNumber(row));
+        const iso = toSaleIso(acc.getSoldDate(row));
+        const gross = Number(acc.getGross(row) || 0).toFixed(2);
+        const k = (row as any).occurrenceIndex || 1;
+        let recorded = false;
+        if (sale && iso) {
+            recorded = (exact.get(`${sale}|${iso}|${gross}`) || 0) >= k || (byDay.get(`${sale}|${localDay(iso)}|${gross}`) || 0) >= k;
+        }
+        if (!recorded && iso) {
+            recorded = (legacy.get(`|${iso}|${gross}`) || 0) >= k;
+        }
+        (row as any).isAlreadyRecorded = recorded;
+        if (recorded) recordedCount++;
+    });
+    return { rows, recordedCount, newCount: rows.length - recordedCount };
+}

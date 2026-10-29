@@ -531,6 +531,7 @@
                       <span v-if="row.ticketNumber" class="badge badge-xs badge-info font-mono font-bold">
                         🎟️ Ticket #{{ row.ticketNumber }}
                       </span>
+                      <span v-if="row.isAlreadyRecorded" class="badge badge-xs badge-success font-bold whitespace-nowrap" title="This sale is already in the sales ledger. It will be skipped and will not change stock.">✅ Already Recorded (Skipped)</span>
                       <span v-if="row.isMultiQty || row.isMultiQtyCandidate" class="badge badge-xs font-bold font-mono" :class="row.isMultiQty ? 'badge-info text-white' : 'badge-ghost opacity-70'">
                         📦 {{ row.isMultiQty ? `Multi-Qty (${row.repeatCount || 2}x in file)` : `Repeats ${row.repeatCount || 2}x (Single)` }}
                       </span>
@@ -1447,6 +1448,7 @@ import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID, normalizeOrgPrefix } from '../../lib/inventory';
 import { salesApi } from '../../lib/sales';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows } from '../../lib/salesBucketing';
 import { warehousesApi } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -2589,14 +2591,14 @@ const getCycleInfo = (paidDateStr: string, soldDateStr: string, rentDateStr: str
 };
 
 const parseMemoryDenPayout = (csvText: string) => {
-  const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+  const lines = stripBom(csvText).split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length < 2) {
     addToast({ type: 'error', message: 'CSV is empty or invalid.' });
     isProcessing.value = false;
     return;
   }
 
-  const headers = splitCsvLine(lines[0]).map(h => h?.trim().toLowerCase().replace(/"/g, ''));
+  const headers = splitCsvLine(lines[0]).map(h => normalizeCsvHeader(h));
   const itemIdx = headers.findIndex(h => h === 'name' || h === 'item' || h === 'product name');
   const skuIdx = headers.findIndex(h => h === 'sku' || h === 'location sku');
   
@@ -2605,7 +2607,7 @@ const parseMemoryDenPayout = (csvText: string) => {
   const agreedPriceIdx = headers.findIndex(h => h.includes('agreed price') || h === 'agreed' || h.includes('price') || h.includes('total'));
   
   const paidIdx = headers.findIndex(h => h === 'paid' || h === 'payout date' || h === 'check date');
-  const soldIdx = headers.findIndex(h => h === 'sold' || h === 'sold date' || h === 'date sold' || h === 'sale date');
+  const soldIdx = headers.findIndex(h => isSoldDateHeader(h));
   const dateIdx = headers.findIndex(h => 
     h === 'sold' || 
     h === 'sold date' || 
@@ -2619,7 +2621,7 @@ const parseMemoryDenPayout = (csvText: string) => {
   const statusIdx = headers.findIndex(h => h === 'inventory' || h === 'status');
   const costIdx = headers.findIndex(h => h === 'cost' || h === 'fee' || h === 'cost/split' || h === 'split / cost');
   const splitIdx = headers.findIndex(h => h.includes('consignor %') || h.includes('split') || h.includes('split / cost'));
-  const ticketIdx = headers.findIndex(h => h === 'sale' || h === 'ticket' || h.includes('ticket') || h.includes('receipt') || h.includes('transaction') || h.includes('invoice') || h.includes('sale #'));
+  const ticketIdx = headers.findIndex(h => isSaleNumberHeader(h));
   const customerIdx = headers.findIndex(h => h.includes('customer') || h.includes('client') || h.includes('buyer'));
 
   if (itemIdx === -1) {
@@ -2716,7 +2718,8 @@ const parseMemoryDenPayout = (csvText: string) => {
 
     const paidDate = paidIdx !== -1 ? (cols[paidIdx]?.trim() || '') : '';
     const soldDate = soldIdx !== -1 ? (cols[soldIdx]?.trim() || '') : '';
-    const date = soldDate || (dateIdx !== -1 ? cols[dateIdx]?.trim() : '') || new Date().toLocaleDateString();
+    // Never stamp a missing Sold Date with "now" - an empty date is resolved later from the item's soldDate
+    const date = soldDate || (dateIdx !== -1 ? cols[dateIdx]?.trim() : '') || '';
     const cycle = getCycleInfo(paidDate, soldDate);
 
     const ticketNumber = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
@@ -2915,6 +2918,7 @@ const parseMemoryDenPayout = (csvText: string) => {
 
     rows.push({
       date,
+      soldDate,
       paidDate,
       cycleId: cycle.id,
       cycleLabel: cycle.label,
@@ -2978,6 +2982,29 @@ const parseMemoryDenPayout = (csvText: string) => {
     type: 'success', 
     message: `Parsed ${rows.length} sales rows across ${payoutCycles.value.length} payout cycles!` 
   });
+  // Cumulative CSV idempotency: flag rows already recorded in the sales ledger (non-blocking)
+  void refreshAlreadyRecordedFlags();
+};
+
+// Occurrence-indexed fingerprint guard (`saleNumber|soldDateIso|gross#occurrence`) against resale_db.sales.
+// Rows already recorded are flagged `isAlreadyRecorded` and are never committed or used to decrement stock again.
+const salesRowAccessors = {
+  getSaleNumber: (r: any) => r.ticketNumber,
+  getSoldDate: (r: any) => r.soldDate || r.date,
+  getGross: (r: any) => r.listedPrice
+};
+const refreshAlreadyRecordedFlags = async () => {
+  try {
+    if (!activeTeamId.value || parsedRows.value.length === 0) return;
+    const existing = await salesApi.listSales(activeTeamId.value);
+    const { recordedCount, newCount } = flagAlreadyRecordedRows(parsedRows.value, existing || [], salesRowAccessors);
+    parsedRows.value = [...parsedRows.value];
+    if (recordedCount > 0) {
+      addToast({ type: 'info', message: `✅ ${recordedCount} row(s) already recorded (skipped). ${newCount} new.` });
+    }
+  } catch (e) {
+    console.warn('[SalesImporter] Could not flag already-recorded rows:', e);
+  }
 };
 
 const executeImport = async () => {
@@ -3024,9 +3051,11 @@ const executeImport = async () => {
     // Pre-fetch existing sales to prevent duplicate sales creation on re-import (Anti-Duplication Invariant)
     let existingTicketSet = new Set<string>();
     let existingSoldSkuSet = new Set<string>();
+    let existingSalesList: any[] = [];
     try {
       if (activeTeamId.value) {
         const existingSales = await salesApi.listSales(activeTeamId.value);
+        existingSalesList = existingSales || [];
         existingTicketSet = new Set(existingSales.map(s => s.orderId).filter(Boolean) as string[]);
         existingSales.forEach(s => {
           if (s.soNumber) existingSoldSkuSet.add(s.soNumber.trim().toUpperCase());
@@ -3037,9 +3066,15 @@ const executeImport = async () => {
       console.warn("[SalesImporter] Could not pre-fetch sales for duplicate check:", e);
     }
 
-    // Count verified sales planned per item in this import batch
+    // Occurrence-indexed idempotency: re-flag against the freshest sales ledger right before committing
+    // Occurrence indices are computed across the WHOLE file (not just the matched subset) so ticket #N copies stay aligned
+    flagAlreadyRecordedRows(parsedRows.value, existingSalesList, salesRowAccessors);
+    let skippedAlreadyRecorded = 0;
+
+    // Count verified sales planned per item in this import batch (already-recorded rows never count - they must not decrement stock)
     const salesPerItemCount = new Map<string, number>();
     rowsToImport.forEach(r => {
+      if (r.isAlreadyRecorded) return;
       const itm = r.mappedItem;
       if (itm?.$id && !itm.$id.startsWith('subclient_')) {
         salesPerItemCount.set(itm.$id, (salesPerItemCount.get(itm.$id) || 0) + 1);
@@ -3052,6 +3087,13 @@ const executeImport = async () => {
       const row = rowsToImport[idx];
       const pct = Math.round(((idx + 1) / rowsToImport.length) * 100);
       updateLoader(undefined, `Saving sale ${idx + 1} of ${rowsToImport.length}: ${(row.itemName || '').slice(0, 32)}...`, pct);
+
+      // ✅ Already Recorded (Skipped): never create a sale or touch stock/status; just clear it from staging
+      if (row.isAlreadyRecorded) {
+        skippedAlreadyRecorded++;
+        importedRowRefs.add(row);
+        continue;
+      }
 
       try {
         let item = row.mappedItem;
@@ -3130,9 +3172,11 @@ const executeImport = async () => {
             const net = Number(row.salePrice) || 0;
             const fee = Math.max(0, Number((gross - net).toFixed(2)));
 
+            // Real register date first (CSV row, then the item's own soldDate); "now" is only a last resort
             let parsedSaleDate = new Date().toISOString();
-            if (row.date) {
-              const rawDate = String(row.date).trim();
+            const rowOrItemDate = row.date || item.soldDate;
+            if (rowOrItemDate) {
+              const rawDate = String(rowOrItemDate).trim();
               const d = new Date(rawDate);
               if (!isNaN(d.getTime())) {
                 parsedSaleDate = d.toISOString();
@@ -3220,7 +3264,7 @@ const executeImport = async () => {
     if (importedCount > 0) {
       addToast({ 
         type: 'success', 
-        message: `Successfully imported ${importedCount} matched sales!` 
+        message: `Successfully imported ${importedCount} matched sales!${skippedAlreadyRecorded > 0 ? ` (${skippedAlreadyRecorded} already recorded, skipped)` : ''}` 
       });
 
       // Capture receipt for owner-operator summary before altering parsedRows
@@ -3261,6 +3305,11 @@ const executeImport = async () => {
       if (activeTeamId.value) {
         fetchInventory(activeTeamId.value);
       }
+    } else if (skippedAlreadyRecorded > 0) {
+      addToast({ type: 'info', message: `✅ All ${skippedAlreadyRecorded} selected row(s) were already recorded - nothing new to import.` });
+      parsedRows.value = parsedRows.value.filter(r => !importedRowRefs.has(r));
+      recomputePayoutCycles();
+      saveStagingSession();
     } else {
       addToast({ type: 'warning', message: 'No items could be imported. Please verify your items.' });
     }
