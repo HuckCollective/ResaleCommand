@@ -288,6 +288,21 @@ export function isSoldDateHeader(h: string): boolean {
     return n === 'sold' || n === 'sold date' || n === 'date sold' || n === 'sale date' || n === 'sold_date';
 }
 
+/**
+ * Ricochet "Product Catalog" export (`Products-*.csv`): has `Product ID` + `SKU` + `Inventory` but NO Sale/Sale# ticket column and NO Sold/Sold Date column.
+ * Its `In stock` column is the date the item was added to stock (NOT a sale date). Such files may only update items - never create sales.
+ */
+export function isProductCatalogHeaders(headers: string[]): boolean {
+    const n = (headers || []).map(normalizeCsvHeader);
+    const has = (k: string) => n.includes(k);
+    return has('product id') && has('sku') && has('inventory') && !n.some(isSaleNumberHeader) && !n.some(isSoldDateHeader);
+}
+
+/** Strips the leading apostrophe Ricochet puts on exported SKUs (`'0EJ001` -> `0EJ001`). */
+export function cleanCatalogSku(raw: any): string {
+    return String(raw ?? '').replace(/^'+/, '').trim();
+}
+
 /** Extracts the numeric POS sale/ticket number from `Ticket #224185`, `T-224185 • Title`, or `224185`. */
 export function extractSaleNumber(raw: any): string {
     const s = String(raw ?? '').trim();

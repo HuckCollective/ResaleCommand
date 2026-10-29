@@ -320,6 +320,15 @@
     <!-- Step 2: Full Reconciliation Workspace (once CSV loaded) -->
     <div v-else class="space-y-4">
       
+      <!-- Catalog & Stock-Level Sync Banner (Products-*.csv) -->
+      <div v-if="syncRows.length > 0 && isCatalogExport" class="alert alert-success py-2.5 px-4 rounded-xl text-xs shadow-sm">
+        <span>
+          <strong>📦 Catalog &amp; Stock-Level Sync (Products-*.csv):</strong>
+          this file only updates your items (booth SKU, price, status, quantity). It has no Sale # or Sold Date, so
+          <strong>no sales are ever created</strong> from it.
+        </span>
+      </div>
+
       <!-- Org Sales Bucketing Banner -->
       <div v-if="syncRows.length > 0" class="alert alert-info py-2.5 px-4 rounded-xl text-xs flex justify-between items-center shadow-sm">
         <div class="flex items-center gap-2">
@@ -1218,7 +1227,7 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 };
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, canonicalTicketNumber, toSaleIso } from '../../lib/salesBucketing';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, canonicalTicketNumber, toSaleIso, isProductCatalogHeaders, cleanCatalogSku } from '../../lib/salesBucketing';
 
 // Resolve the real register date for a sale: the CSV row's Sold date first, then the item's own soldDate.
 // Only falls back to "now" as a last resort so imports never silently stamp sales with today's date.
@@ -1325,6 +1334,8 @@ const newLocationForm = ref({
 const locations = ref<any[]>([]);
 const selectedLocationId = ref<string>('');
 const syncRows = ref<any[]>([]);
+// Ricochet Product Catalog export (Products-*.csv): items-only sync, NEVER creates sales
+const isCatalogExport = ref(false);
 const rawCsvHeader = ref<string>('');
 const rawCsvLines = ref<string[]>([]);
 
@@ -1494,7 +1505,7 @@ const inStockCount = computed(() => syncRows.value.filter(r => r.status !== 'sol
 const soldCount = computed(() => syncRows.value.filter(r => r.status === 'sold' || r.status === 'paid').length);
 const matchedCount = computed(() => syncRows.value.filter(r => r.mappedItem !== null).length);
 const unmatchedCount = computed(() => syncRows.value.filter(r => r.mappedItem === null).length);
-const unmatchedSoldCount = computed(() => syncRows.value.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length);
+const unmatchedSoldCount = computed(() => isCatalogExport.value ? 0 : syncRows.value.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length);
 const unmatchedInStockCount = computed(() => syncRows.value.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null).length);
 
 const nextPreviewUpc = computed(() => {
@@ -1833,7 +1844,10 @@ const parseCsvData = (rawText: string, fileName: string) => {
       
       const splitIdx = headerCols.findIndex(h => h === 'consignor %' || h.includes('consignor %') || h === 'split / cost' || h.includes('split') || h.includes('consignor percent'));
       const statusIdx = headerCols.findIndex(h => h === 'status' || h.includes('status') || h === 'inventory' || h.includes('state'));
-      const qtyIdx = headerCols.findIndex(h => h === 'quantity' || h === 'qty' || h === 'in stock' || h.includes('quantity') || h.includes('qty'));
+      const qtyIdxExact = headerCols.findIndex(h => h === 'quantity' || h === 'qty');
+      // NOTE: a Products-*.csv "In stock" column is the date the item was added to stock - never a quantity
+      const qtyIdx = qtyIdxExact !== -1 ? qtyIdxExact : headerCols.findIndex(h => h.includes('quantity') || h.includes('qty'));
+      isCatalogExport.value = isProductCatalogHeaders(splitCsvLine(lines[0]));
 
       const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
       // Lineage Absorption Law: exclude combined/deconstructed child items from title/fuzzy searches
@@ -1904,10 +1918,10 @@ const parseCsvData = (rawText: string, fileName: string) => {
         }
 
         let rawSku = skuIdx !== -1 ? cols[skuIdx] : (prodIdIdx !== -1 ? cols[prodIdIdx] : '');
-        let cleanSku = (rawSku || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+        let cleanSku = cleanCatalogSku(rawSku).replace(/^["]+/, '').replace(/['"]+$/, '');
         let rawUpc = upcIdx !== -1 ? cols[upcIdx] : '';
         let cleanUpc = (rawUpc || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
-        let rowQty = qtyIdx !== -1 ? parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || 1 : 1;
+        let rowQty = qtyIdx !== -1 ? (parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || (isCatalogExport.value ? 0 : 1)) : 1;
         let saleTicketIdRaw = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
         // Canonical numeric ticket id so legacy "T-217301 • Title" records dedupe against "217301"
         let saleTicketId = canonicalTicketNumber(saleTicketIdRaw) || saleTicketIdRaw;
@@ -2004,12 +2018,17 @@ const parseCsvData = (rawText: string, fileName: string) => {
         // 2. Match by cleanSku against UPC or locationSku
         if (!matched && cleanSku && activeItems.length > 0) {
           const target = cleanSku.toLowerCase();
-          matched = activeItems.find(item => {
+          const skuHits = activeItems.filter(item => {
             const iUpc = (item?.upc || '').toLowerCase().trim();
             const iLocSku = (item?.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
             const iSku = (item?.sku || '').toLowerCase().trim();
             return iUpc === target || iLocSku === target || iSku === target;
           });
+          // Prefer the real listing over "(Sold Unit)" children of a multi-qty bin, and live stock over already-sold duplicates
+          const isChildDoc = (it: any) => /\(sold unit\)/i.test(it?.title || '');
+          matched = skuHits.find(it => !isChildDoc(it) && String(it.status || '').toLowerCase() !== 'sold')
+            || skuHits.find(it => !isChildDoc(it))
+            || skuHits[0];
           if (matched) matched = dereferenceParent(matched);
         }
 
@@ -2076,7 +2095,7 @@ const syncRowAccessors = {
 };
 const refreshRecordedFlags = async () => {
   try {
-    if (!team.value?.$id || syncRows.value.length === 0) return;
+    if (!team.value?.$id || syncRows.value.length === 0 || isCatalogExport.value) return;
     const existing = await salesApi.listSales(team.value.$id);
     const { recordedCount, newCount } = flagAlreadyRecordedRows(syncRows.value, existing || [], syncRowAccessors);
     syncRows.value = [...syncRows.value];
@@ -2478,11 +2497,36 @@ const executeSync = async () => {
       const item = row.mappedItem;
 
       // ✅ Already Recorded (Skipped): never create a sale or decrement a multi-qty bin a second time
-      if (row.isAlreadyRecorded) {
+      if (!isCatalogExport.value && row.isAlreadyRecorded) {
         skippedRecorded++;
         continue;
       }
       const isSold = row.status === 'sold' || row.status === 'paid';
+
+      // Catalog & Stock-Level Sync (Products-*.csv): items only. NEVER create sales here (no Sale# / Sold Date in this file).
+      if (isCatalogExport.value) {
+        const catalogUpdate: any = {};
+        if (row.extractedSku && item.locationSku !== row.extractedSku) catalogUpdate.locationSku = row.extractedSku;
+        if (!isSold && Number(row.csvQty) >= 1) {
+          if (item.status !== 'placed') catalogUpdate.status = 'placed';
+          if (item.storageLocation !== 'MD') catalogUpdate.storageLocation = 'MD';
+          if (Number(item.quantity) !== Number(row.csvQty)) catalogUpdate.quantity = Number(row.csvQty);
+          if (row.listedPrice > 0 && Math.abs((Number(item.resalePrice) || 0) - row.listedPrice) > 0.01) catalogUpdate.resalePrice = row.listedPrice;
+        }
+        if (Object.keys(catalogUpdate).length > 0) {
+          try {
+            await withRetry(() => updateInventoryItem(item.$id, catalogUpdate));
+            Object.assign(item, catalogUpdate);
+            count++;
+          } catch (itemErr: any) {
+            console.warn(`Could not update catalog item "${row.itemName}":`, itemErr);
+          }
+          await new Promise(r => setTimeout(r, 400));
+        } else {
+          count++;
+        }
+        continue;
+      }
 
       const updateData: any = {};
       

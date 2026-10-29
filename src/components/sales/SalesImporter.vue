@@ -320,6 +320,14 @@
             :disabled="isProcessing || platform !== 'memoryden'"
           />
 
+          <div v-if="catalogFileDetected" class="alert alert-warning py-2.5 px-4 rounded-xl text-xs w-full max-w-md mt-3 shadow-sm">
+            <span>
+              <strong>📦 That's a Product Catalog export (<code>Products-*.csv</code>).</strong>
+              It has no Sale # or Sold Date, so no sales were created. To record sales upload a <strong>Payouts-*.csv</strong> here;
+              to refresh booth stock &amp; quantities use <strong>Location Sync</strong> with this catalog file.
+            </span>
+          </div>
+
           <div class="divider text-xs opacity-60 my-3 w-full max-w-xs">OR</div>
 
           <button 
@@ -1448,7 +1456,7 @@ import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID, normalizeOrgPrefix } from '../../lib/inventory';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, isPayoutSummaryRow, splitTrailingBoothSku, canonicalTicketNumber, toSaleIso } from '../../lib/salesBucketing';
+import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, isPayoutSummaryRow, splitTrailingBoothSku, canonicalTicketNumber, toSaleIso, isProductCatalogHeaders } from '../../lib/salesBucketing';
 import { warehousesApi } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -1463,6 +1471,7 @@ const platform = ref('memoryden');
 const activeView = ref('matching'); // 'matching' | 'settlement'
 const filterTab = ref('all'); // 'all' | 'matched' | 'unmatched'
 const parsedRows = ref<any[]>([]);
+const catalogFileDetected = ref(false);
 const lastCommittedReceipt = ref<any | null>(null);
 const reconciliationHistory = ref<any[]>([]);
 const isHistoryModalOpen = ref(false);
@@ -2618,6 +2627,17 @@ const parseMemoryDenPayout = (csvText: string) => {
   }
 
   const headers = splitCsvLine(lines[0]).map(h => normalizeCsvHeader(h));
+
+  // Product Catalog export (Products-*.csv): no Sale# and no Sold Date. It can never produce sales - redirect the user.
+  if (isProductCatalogHeaders(headers)) {
+    catalogFileDetected.value = true;
+    parsedRows.value = [];
+    isProcessing.value = false;
+    addToast({ type: 'warning', message: 'This is a Product Catalog export (Products-*.csv) - no sales were created. Use Payouts-*.csv here, or sync catalog stock in Location Sync.' });
+    return;
+  }
+  catalogFileDetected.value = false;
+
   const itemIdx = headers.findIndex(h => h === 'name' || h === 'item' || h === 'product name');
   const skuIdx = headers.findIndex(h => h === 'sku' || h === 'location sku');
   
