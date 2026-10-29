@@ -232,7 +232,7 @@
                 v-if="Number(editForm.quantity || 1) > 1"
                 class="text-[10px] opacity-70 font-normal ml-0.5">
                 (${{
-                  (
+                  Number(
                     Number(editForm.cost || 0) / Number(editForm.quantity || 1)
                   ).toFixed(2)
                 }}/ea)
@@ -307,7 +307,7 @@
                   v-if="Number(editForm.quantity || 1) > 1"
                   class="text-[10px] opacity-70 font-mono font-bold text-base-content/80">
                   ${{
-                    (
+                    Number(
                       Number(editForm.cost || 0) /
                       Number(editForm.quantity || 1)
                     ).toFixed(2)
@@ -340,14 +340,14 @@
                   type="button"
                   @click="
                     editForm.cost = Number(
-                      (
-                        Number(editForm.cost) * Number(editForm.quantity)
+                      Number(
+                        Number(editForm.cost || 0) * Number(editForm.quantity || 1)
                       ).toFixed(2),
                     )
                   "
                   class="btn btn-2xs btn-warning font-bold shrink-0 ml-1">
                   Set Total (${{
-                    (Number(editForm.cost) * Number(editForm.quantity)).toFixed(
+                    Number(Number(editForm.cost || 0) * Number(editForm.quantity || 1)).toFixed(
                       2,
                     )
                   }})
@@ -532,7 +532,7 @@
               v-if="Number(editForm.quantity || 1) > 1"
               class="text-[10px] opacity-50 font-mono block">
               Total: ${{
-                (
+                Number(
                   (Number(editForm.resalePrice) || 0) *
                   (Number(editForm.quantity) || 1)
                 ).toFixed(2)
@@ -606,7 +606,7 @@
                   class="text-[10px] text-secondary font-mono font-bold shrink-0 ml-1"
                   title="Calculated total lot value across all units">
                   Lot: ${{
-                    (
+                    Number(
                       (Number(editForm.resalePrice) || 0) *
                       (Number(editForm.quantity) || 1)
                     ).toFixed(2)
@@ -681,9 +681,9 @@
                 <span
                   class="badge badge-xs badge-secondary font-mono font-bold text-[10px]">
                   ${{
-                    (
+                    Number(
                       (Number(editForm.resalePrice) || 0) *
-                      Number(editForm.quantity)
+                      Number(editForm.quantity || 1)
                     ).toFixed(2)
                   }}
                   Total
@@ -857,7 +857,7 @@
                       </div>
                       <div class="text-[10px] opacity-75">
                         ${{
-                          getBackstockItemMetrics(cand).totalCost.toFixed(2)
+                          Number(getBackstockItemMetrics(cand)?.totalCost ?? 0).toFixed(2)
                         }}
                         cost
                       </div>
@@ -952,7 +952,7 @@
                   <span
                     >Will automatically create a Received Purchase Order for
                     <strong class="font-mono"
-                      >${{ restockAddedCostVal.toFixed(2) }}</strong
+                      >${{ Number(restockAddedCostVal ?? 0).toFixed(2) }}</strong
                     >
                     under
                     <strong>{{
@@ -1023,11 +1023,11 @@
                     <span class="opacity-70">Current Bin:</span>
                     <span class="font-bold"
                       >{{ restockCurrentQty }} units | ${{
-                        restockCurrentCost.toFixed(2)
+                        Number(restockCurrentCost ?? 0).toFixed(2)
                       }}
                       total
                       <span class="opacity-60 font-normal"
-                        >(${{ restockCurrentUnitCost.toFixed(2) }}/ea)</span
+                        >(${{ Number(restockCurrentUnitCost ?? 0).toFixed(2) }}/ea)</span
                       ></span
                     >
                   </div>
@@ -1035,11 +1035,11 @@
                     <span class="font-bold">+ Adding Now:</span>
                     <span class="font-bold"
                       >+{{ restockUnitsToAddVal }} units | +${{
-                        restockAddedCostVal.toFixed(2)
+                        Number(restockAddedCostVal ?? 0).toFixed(2)
                       }}
                       total
                       <span class="opacity-80 font-normal"
-                        >(${{ restockAddedUnitCost.toFixed(2) }}/ea)</span
+                        >(${{ Number(restockAddedUnitCost ?? 0).toFixed(2) }}/ea)</span
                       ></span
                     >
                   </div>
@@ -1048,11 +1048,11 @@
                     <span>✅ New Pooled Bin Total:</span>
                     <span
                       >{{ restockNewQty }} units | ${{
-                        restockNewTotalCost.toFixed(2)
+                        Number(restockNewTotalCost ?? 0).toFixed(2)
                       }}
                       total
                       <span class="text-base-content/80 font-normal"
-                        >(${{ restockNewAvgUnitCost.toFixed(2) }}/ea)</span
+                        >(${{ Number(restockNewAvgUnitCost ?? 0).toFixed(2) }}/ea)</span
                       ></span
                     >
                   </div>
@@ -1074,15 +1074,15 @@
                     >
                     tag price
                     <span class="opacity-80"
-                      >(~${{ restockNetAfterFee.toFixed(2) }} net after 15%
+                      >(~${{ Number(restockNetAfterFee ?? 0).toFixed(2) }} net after 15%
                       booth fee)</span
                     >, each sale recoups
                     <strong class="font-mono"
-                      >${{ restockNewAvgUnitCost.toFixed(2) }}</strong
+                      >${{ Number(restockNewAvgUnitCost ?? 0).toFixed(2) }}</strong
                     >
                     cost +
                     <strong class="font-mono text-success font-black"
-                      >+${{ restockNetProfitPerUnit.toFixed(2) }}</strong
+                      >+${{ Number(restockNetProfitPerUnit ?? 0).toFixed(2) }}</strong
                     >
                     pure profit!
                   </div>
@@ -1377,12 +1377,12 @@
               class="mt-2 pt-2 border-t border-secondary/20 flex items-center justify-between text-[11px] font-mono">
               <span class="opacity-70"
                 >Bulk Liquidation: ${{
-                  Number(exitPlaybook.projectedBulkYield || 0).toFixed(0)
+                  Number(exitPlaybook?.projectedBulkYield ?? 0).toFixed(0)
                 }}</span
               >
               <span class="text-success font-bold"
                 >Sliced Playbook Yield: ${{
-                  Number(exitPlaybook.projectedSplitYield || 0).toFixed(0)
+                  Number(exitPlaybook?.projectedSplitYield ?? 0).toFixed(0)
                 }}</span
               >
             </div>
@@ -1495,7 +1495,7 @@
                 Max Bid: ${{
                   Number(
                     scoutPurchaseStrategy.maxBid ||
-                      scoutPurchaseStrategy.max_bid,
+                      scoutPurchaseStrategy.max_bid || 0,
                   ).toFixed(2)
                 }}
               </div>
@@ -1521,7 +1521,7 @@
                       : 'text-base-content'
                   "
                   >${{
-                    Number(scoutPurchaseStrategy.currentBid).toFixed(2)
+                    Number(scoutPurchaseStrategy.currentBid || 0).toFixed(2)
                   }}</span
                 >
               </div>
@@ -1530,7 +1530,7 @@
                   >Max Ceiling</span
                 >
                 <span class="font-bold text-xs sm:text-sm text-primary"
-                  >${{ Number(scoutPurchaseStrategy.maxBid).toFixed(2) }}</span
+                  >${{ Number(scoutPurchaseStrategy.maxBid || 0).toFixed(2) }}</span
                 >
               </div>
               <div class="text-right">
@@ -1546,8 +1546,8 @@
                   ">
                   {{
                     scoutPurchaseStrategy.headroom >= 0
-                      ? `+$${Number(scoutPurchaseStrategy.headroom).toFixed(2)}`
-                      : `-$${Math.abs(Number(scoutPurchaseStrategy.headroom)).toFixed(2)}`
+                      ? `+$${Number(scoutPurchaseStrategy.headroom || 0).toFixed(2)}`
+                      : `-$${Math.abs(Number(scoutPurchaseStrategy.headroom || 0)).toFixed(2)}`
                   }}
                 </span>
               </div>
@@ -1996,7 +1996,8 @@ function getBackstockItemMetrics(it) {
     }
     const rawCost = it.cost ?? it.purchasePrice ?? 0;
     const unitResale = it.resalePrice ?? it.priceFair ?? it.estHigh ?? 0;
-    const { totalCost } = resolveMultiQtyCost(rawCost, Number(it.quantity) || 1, unitResale);
+    const multiCost = resolveMultiQtyCost(rawCost, Number(it.quantity) || 1, unitResale);
+    const totalCost = multiCost?.totalCost ?? 0;
 
     const photoSet = new Set();
     if (it.imageId) photoSet.add(it.imageId);
@@ -2004,7 +2005,7 @@ function getBackstockItemMetrics(it) {
 
     return {
         qty: Math.max(1, qty),
-        totalCost: Number((totalCost || 0).toFixed(2)),
+        totalCost: Number(Number(totalCost ?? 0).toFixed(2)),
         photoCount: photoSet.size
     };
 }
@@ -2128,12 +2129,12 @@ const restockCurrentUnitCost = computed(() => restockCurrentQty.value > 0 ? (res
 const restockAddedUnitCost = computed(() => restockUnitsToAddVal.value > 0 ? (restockAddedCostVal.value / restockUnitsToAddVal.value) : 0);
 
 const restockNewQty = computed(() => restockCurrentQty.value + restockUnitsToAddVal.value);
-const restockNewTotalCost = computed(() => Number((restockCurrentCost.value + restockAddedCostVal.value).toFixed(2)));
+const restockNewTotalCost = computed(() => Number(Number(Number(restockCurrentCost.value ?? 0) + Number(restockAddedCostVal.value ?? 0)).toFixed(2)));
 const restockNewAvgUnitCost = computed(() => restockNewQty.value > 0 ? (restockNewTotalCost.value / restockNewQty.value) : 0);
 
 const restockResalePrice = computed(() => Math.max(0, Number(props.editForm?.resalePrice || props.item?.resalePrice || 0)));
-const restockNetAfterFee = computed(() => Number((restockResalePrice.value * 0.85).toFixed(2)));
-const restockNetProfitPerUnit = computed(() => Math.max(0, Number((restockNetAfterFee.value - restockNewAvgUnitCost.value).toFixed(2))));
+const restockNetAfterFee = computed(() => Number(Number(Number(restockResalePrice.value ?? 0) * 0.85).toFixed(2)));
+const restockNetProfitPerUnit = computed(() => Math.max(0, Number(Number(Number(restockNetAfterFee.value ?? 0) - Number(restockNewAvgUnitCost.value ?? 0)).toFixed(2))));
 
 function confirmRestock() {
     if (restockUnitsToAddVal.value < 1) return;

@@ -900,8 +900,8 @@ const scoutPurchaseStrategy = computed(() => {
             maxBid,
             headroom,
             advice: isOutbid
-                ? `🚨 STOP BIDDING — OUTBID! Current bid ($${currentCost.toFixed(2)}) exceeds your max bid ceiling ($${maxBid.toFixed(2)}). Landed cost wipes out your target resale margin. Do not chase.`
-                : (strat.advice || `🎯 IN PLAY: Current bid is $${currentCost.toFixed(2)}. You have $${headroom.toFixed(2)} in bidding headroom before reaching your $${maxBid.toFixed(2)} ceiling.`)
+                ? `🚨 STOP BIDDING — OUTBID! Current bid ($${Number(currentCost ?? 0).toFixed(2)}) exceeds your max bid ceiling ($${Number(maxBid ?? 0).toFixed(2)}). Landed cost wipes out your target resale margin. Do not chase.`
+                : (strat.advice || `🎯 IN PLAY: Current bid is $${Number(currentCost ?? 0).toFixed(2)}. You have $${Number(headroom ?? 0).toFixed(2)} in bidding headroom before reaching your $${Number(maxBid ?? 0).toFixed(2)} ceiling.`)
         };
     }
     return strat;
@@ -970,7 +970,7 @@ const scoutTotalRange = computed(() => {
 
     const formatRange = (low, high) => {
         if (low === 0 && high === 0) return '-';
-        return low === high ? `$${low.toFixed(0)}` : `$${low.toFixed(0)} - $${high.toFixed(0)}`;
+        return low === high ? `$${Number(low ?? 0).toFixed(0)}` : `$${Number(low ?? 0).toFixed(0)} - $${Number(high ?? 0).toFixed(0)}`;
     };
 
     const formatUnitRange = (low, high) => {
@@ -1077,8 +1077,8 @@ const applyPriceTier = (priceVal) => {
                 unitPrice = p / qty;
             }
         }
-        editForm.resalePrice = unitPrice.toFixed(2);
-        addToast({ type: 'success', message: `Applied List Price: $${unitPrice.toFixed(2)}${qty > 1 ? '/ea' : ''}` });
+        editForm.resalePrice = Number(unitPrice ?? 0).toFixed(2);
+        addToast({ type: 'success', message: `Applied List Price: $${Number(unitPrice ?? 0).toFixed(2)}${qty > 1 ? '/ea' : ''}` });
     }
 };
 
@@ -1913,14 +1913,14 @@ const analyzeExistingItem = async () => {
                     const fairPrice = parsePrice(data.price_breakdown.fair || data.price_breakdown.boutique_premium || data.price_breakdown.mint);
                     if (fairPrice > 0) {
                         const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
+                        editForm.resalePrice = Number(targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
                     }
                 }
                 const priceRange = parsePriceRange(data.price_breakdown.fair || data.price_breakdown.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
                     const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
-                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
+                    if (!editForm.estLow) editForm.estLow = Number(targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = Number(targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
                 }
             }
 
@@ -1985,14 +1985,14 @@ const analyzeExistingItem = async () => {
                     const fairPrice = parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                     if (fairPrice > 0) {
                         const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
+                        editForm.resalePrice = Number(targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
                     }
                 }
                 const priceRange = parsePriceRange(item.pricing_potential?.fair || item.price_breakdown?.fair || item.price_breakdown?.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
                     const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
-                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
+                    if (!editForm.estLow) editForm.estLow = Number(targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = Number(targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
                 }
                 if (!editForm.condition_notes && item.condition_notes) {
                     editForm.condition_notes = item.condition_notes;
@@ -2007,7 +2007,7 @@ const analyzeExistingItem = async () => {
                     const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
 
                     if (liveBid > 0) {
-                        editForm.cost = liveBid.toFixed(2);
+                        editForm.cost = Number(liveBid ?? 0).toFixed(2);
                         editForm.currentBid = liveBid;
                     }
                     if (item.auctionEndsAt || item.auction_meta?.end_time) {
@@ -2024,12 +2024,12 @@ const analyzeExistingItem = async () => {
                         if (liveBid > maxBidCeiling) {
                             addToast({
                                 type: 'error',
-                                message: `🚨 OUTBID! Live bid ($${liveBid.toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.`
+                                message: `🚨 OUTBID! Live bid ($${Number(liveBid ?? 0).toFixed(2)}) exceeds Max Bid ($${Number(maxBidCeiling).toFixed(2)}). STOP BIDDING.`
                             });
                         } else {
                             addToast({
                                 type: 'success',
-                                message: `🎯 Live bid updated to $${liveBid.toFixed(2)} (Headroom: +$${(Number(maxBidCeiling) - liveBid).toFixed(2)})`
+                                message: `🎯 Live bid updated to $${Number(liveBid ?? 0).toFixed(2)} (Headroom: +$${Number(Number(maxBidCeiling) - liveBid).toFixed(2)})`
                             });
                         }
                     }
@@ -2101,14 +2101,14 @@ const analyzeExistingItem = async () => {
                     const fairPrice = parsePrice(data.pricing_potential?.fair || data.price_breakdown?.fair || data.price_breakdown?.boutique_premium || data.price_breakdown?.mint);
                     if (fairPrice > 0) {
                         const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                        editForm.resalePrice = (targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
+                        editForm.resalePrice = Number(targetQty > 1 ? fairPrice / targetQty : fairPrice).toFixed(2);
                     }
                 }
                 const priceRange = parsePriceRange(data.pricing_potential?.fair || data.price_breakdown?.fair || data.price_breakdown?.mint);
                 if (priceRange.low > 0 || priceRange.high > 0) {
                     const targetQty = Math.max(1, Number(editForm.quantity) || (lotQty > 1 ? lotQty : 1));
-                    if (!editForm.estLow) editForm.estLow = (targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
-                    if (!editForm.estHigh) editForm.estHigh = (targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
+                    if (!editForm.estLow) editForm.estLow = Number(targetQty > 1 ? priceRange.low / targetQty : priceRange.low).toFixed(2);
+                    if (!editForm.estHigh) editForm.estHigh = Number(targetQty > 1 ? priceRange.high / targetQty : priceRange.high).toFixed(2);
                 }
             }
 
@@ -2193,7 +2193,7 @@ const deconstructAiLot = () => {
 
 const sellOneQuantity = async () => {
     if (!props.item || editForm.quantity <= 1) return;
-    const defaultUnitPrice = parseFloat(editForm.resalePrice || 0).toFixed(2);
+    const defaultUnitPrice = Number(parseFloat(editForm.resalePrice || 0) || 0).toFixed(2);
     const unitSoldPriceRaw = window.prompt("How much did this 1 item sell for? (Enter a number)", defaultUnitPrice);
     if (unitSoldPriceRaw === null) return;
     const unitSoldPrice = parseFloat(unitSoldPriceRaw);
@@ -2203,7 +2203,7 @@ const sellOneQuantity = async () => {
     }
 
     try {
-        const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
+        const unitCost = Number(Number(Number(editForm.cost || 0) / Number(editForm.quantity || 1)).toFixed(2));
         const unitResale = parseFloat(editForm.resalePrice || 0);
 
         const childTitle = `${editForm.title} (Extracted 1/${editForm.quantity})`;
@@ -2255,7 +2255,7 @@ const sellOneQuantity = async () => {
 
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
-            editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);
+            editForm.cost = Number(Math.max(0, Number(editForm.cost || 0) - Number(unitCost || 0))).toFixed(2);
         }
         // editForm.resalePrice is preserved because remaining units share the same per-item price
         saveEdit();
@@ -2273,10 +2273,10 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
         const rawCurrentCost = editForm.cost !== '' && editForm.cost !== undefined ? editForm.cost : (props.item.cost ?? 0);
         const { totalCost: currentCost } = resolveMultiQtyCost(rawCurrentCost, currentQty, editForm.resalePrice || props.item.resalePrice || 0);
         const cleanAddedCost = Math.max(0, Number(addedCostBasis || 0));
-        const newCost = Number((currentCost + cleanAddedCost).toFixed(2));
+        const newCost = Number((Number(currentCost || 0) + cleanAddedCost).toFixed(2));
 
         editForm.quantity = newQty;
-        editForm.cost = newCost.toFixed(2);
+        editForm.cost = Number(newCost ?? 0).toFixed(2);
 
         const lotFlags = Array.isArray(editForm.redFlags) ? [...editForm.redFlags] : (Array.isArray(props.item.redFlags) ? [...props.item.redFlags] : []);
         if (!lotFlags.includes('needs_shop_update')) {
@@ -2335,7 +2335,7 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
             sourceItem.status = 'combined';
             sourceItem.parentLotId = props.item.$id;
 
-            restockLog = `[Restocked +${unitsToAdd} units (+$${cleanAddedCost.toFixed(2)}) from Backstock [${sourceUpc}] "${sourceItem.title || 'Item'}" (PO/Order: ${sourcePo}) on ${timestamp}]`;
+            restockLog = `[Restocked +${unitsToAdd} units (+$${Number(cleanAddedCost ?? 0).toFixed(2)}) from Backstock [${sourceUpc}] "${sourceItem.title || 'Item'}" (PO/Order: ${sourcePo}) on ${timestamp}]`;
         } else {
             // Mode B: Direct Cash / Walk-In Buy — automatically create an auditable Purchase Order when addedCostBasis > 0
             const cleanVendor = (vendor || 'Walk-In / Thrift Restock').trim();
@@ -2389,7 +2389,7 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
                 }
             }
 
-            restockLog = `[Restocked +${unitsToAdd} units (+$${cleanAddedCost.toFixed(2)}) via ${cleanVendor}${createdPoNumber ? ` (PO: ${createdPoNumber})` : ''} on ${timestamp}]`;
+            restockLog = `[Restocked +${unitsToAdd} units (+$${Number(cleanAddedCost ?? 0).toFixed(2)}) via ${cleanVendor}${createdPoNumber ? ` (PO: ${createdPoNumber})` : ''} on ${timestamp}]`;
         }
 
         const currentNotes = editForm.condition_notes || props.item.conditionNotes || '';
@@ -2411,7 +2411,7 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
 const splitOneActive = async () => {
     if (!props.item || editForm.quantity <= 1) return;
     try {
-        const unitCost = parseFloat((parseFloat(editForm.cost || 0) / editForm.quantity).toFixed(2));
+        const unitCost = Number(Number(Number(editForm.cost || 0) / Number(editForm.quantity || 1)).toFixed(2));
         const unitResale = parseFloat(editForm.resalePrice || 0);
 
         const childTitle = `${editForm.title} (Piece ${editForm.quantity})`;
@@ -2463,7 +2463,7 @@ const splitOneActive = async () => {
 
         editForm.quantity -= 1;
         if (isAcquisitionUnlocked.value) {
-            editForm.cost = Math.max(0, parseFloat(editForm.cost || 0) - unitCost).toFixed(2);
+            editForm.cost = Number(Math.max(0, Number(editForm.cost || 0) - Number(unitCost || 0))).toFixed(2);
         }
         // editForm.resalePrice is preserved because remaining units share the same per-item price
         saveEdit();

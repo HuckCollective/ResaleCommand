@@ -457,7 +457,7 @@ const paidValue = computed(() => {
 const formatCurrency = (val) => {
     if(!val || parseFloat(val) === 0) return '-';
     const num = parseFloat(val.toString().replace('$',''));
-    return isNaN(num) ? val : '$' + num.toFixed(2);
+    return isNaN(num) ? val : '$' + Number(num ?? 0).toFixed(2);
 };
 
 // --- ROI HELPERS ---

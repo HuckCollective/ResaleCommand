@@ -307,21 +307,21 @@
                 <div v-if="parentHaulCost > 0 || haulTotalValue > 0" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-base-300/70 text-center font-mono">
                     <div class="p-1.5 bg-base-100 rounded-lg border border-base-300">
                         <span class="text-[9px] uppercase font-bold opacity-60 font-sans block">Haul Cost</span>
-                        <strong class="text-xs text-base-content">${{ parentHaulCost.toFixed(2) }}</strong>
+                        <strong class="text-xs text-base-content">${{ Number(parentHaulCost ?? 0).toFixed(2) }}</strong>
                     </div>
                     <div class="p-1.5 bg-base-100 rounded-lg border border-base-300">
                         <span class="text-[9px] uppercase font-bold opacity-60 font-sans block">Total Haul Value</span>
-                        <strong class="text-xs text-primary">${{ haulTotalValue.toFixed(2) }}</strong>
+                        <strong class="text-xs text-primary">${{ Number(haulTotalValue ?? 0).toFixed(2) }}</strong>
                         <span class="text-[8px] opacity-60 font-sans block">Across {{ allHaulItems.length }} items</span>
                     </div>
                     <div class="p-1.5 bg-base-100 rounded-lg border border-base-300">
                         <span class="text-[9px] uppercase font-bold opacity-60 font-sans block">Realized Sales</span>
-                        <strong class="text-xs text-success">${{ haulRealizedSales.toFixed(2) }}</strong>
+                        <strong class="text-xs text-success">${{ Number(haulRealizedSales ?? 0).toFixed(2) }}</strong>
                     </div>
                     <div class="p-1.5 bg-base-100 rounded-lg border border-base-300">
                         <span class="text-[9px] uppercase font-bold opacity-60 font-sans block">Est. Haul Profit</span>
-                        <strong class="text-xs font-bold" :class="haulEstProfit >= 0 ? 'text-success' : 'text-error'">
-                            {{ haulEstProfit >= 0 ? '+' : '' }}${{ haulEstProfit.toFixed(2) }}
+                        <strong class="text-xs font-bold" :class="Number(haulEstProfit ?? 0) >= 0 ? 'text-success' : 'text-error'">
+                            {{ Number(haulEstProfit ?? 0) >= 0 ? '+' : '' }}${{ Number(haulEstProfit ?? 0).toFixed(2) }}
                         </strong>
                         <span class="text-[8px] opacity-60 font-sans block">{{ haulRecoupedPct }}% recouped</span>
                     </div>
@@ -347,7 +347,7 @@
                             <span v-if="sibling.$id === item?.$id" class="badge badge-xs badge-primary font-bold text-[9px]">Current</span>
                             <span class="truncate font-medium">{{ sibling.title }}</span>
                         </div>
-                        <span class="font-mono font-bold text-success shrink-0 text-xs">${{ Number(sibling.resalePrice || 0).toFixed(2) }}</span>
+                        <span class="font-mono font-bold text-success shrink-0 text-xs">${{ Number(sibling?.resalePrice ?? 0).toFixed(2) }}</span>
                     </div>
                 </div>
             </div>
@@ -361,20 +361,20 @@
             <div class="stats stats-horizontal shadow-xs w-full bg-base-200/80 border border-base-300 text-xs">
                 <div class="stat px-3 py-2.5">
                     <div class="stat-title text-[10px] font-bold uppercase opacity-60">Bundle Cost</div>
-                    <div class="stat-value text-sm sm:text-base font-mono">${{ Number(item?.cost || totalCost || 0).toFixed(2) }}</div>
+                    <div class="stat-value text-sm sm:text-base font-mono">${{ Number(item?.cost ?? totalCost ?? 0).toFixed(2) }}</div>
                 </div>
                 <div class="stat px-3 py-2.5">
                     <div class="stat-title text-[10px] font-bold uppercase opacity-60">Listed Value</div>
-                    <div class="stat-value text-sm sm:text-base text-primary font-mono">${{ (totalSplitResaleValue || 0).toFixed(2) }}</div>
+                    <div class="stat-value text-sm sm:text-base text-primary font-mono">${{ Number(totalSplitResaleValue ?? 0).toFixed(2) }}</div>
                 </div>
                 <div class="stat px-3 py-2.5">
                     <div class="stat-title text-[10px] font-bold uppercase opacity-60">Realized Sales</div>
-                    <div class="stat-value text-sm sm:text-base text-success font-mono">${{ (lotRealizedRevenue || 0).toFixed(2) }}</div>
+                    <div class="stat-value text-sm sm:text-base text-success font-mono">${{ Number(lotRealizedRevenue ?? 0).toFixed(2) }}</div>
                 </div>
                 <div class="stat px-3 py-2.5">
                     <div class="stat-title text-[10px] font-bold uppercase opacity-60">Est. Profit</div>
-                    <div class="stat-value text-sm sm:text-base font-mono font-bold" :class="(lotROI || 0) >= 0 ? 'text-success' : 'text-error'">
-                        {{ (lotROI || 0) >= 0 ? '+' : '' }}${{ (lotROI || 0).toFixed(2) }}
+                    <div class="stat-value text-sm sm:text-base font-mono font-bold" :class="Number(lotROI ?? 0) >= 0 ? 'text-success' : 'text-error'">
+                        {{ Number(lotROI ?? 0) >= 0 ? '+' : '' }}${{ Number(lotROI ?? 0).toFixed(2) }}
                     </div>
                 </div>
             </div>
@@ -427,8 +427,8 @@
                         </div>
                         <div class="text-right shrink-0 flex items-center gap-2.5">
                             <div>
-                                <span class="text-xs font-bold text-success font-mono block">${{ Number(child.resalePrice || 0).toFixed(2) }}</span>
-                                <span class="text-[10px] opacity-60 font-mono block">Cost: ${{ Number(child.cost || 0).toFixed(2) }}</span>
+                                <span class="text-xs font-bold text-success font-mono block">${{ Number(child?.resalePrice ?? 0).toFixed(2) }}</span>
+                                <span class="text-[10px] opacity-60 font-mono block">Cost: ${{ Number(child?.cost ?? 0).toFixed(2) }}</span>
                             </div>
                             <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                         </div>
@@ -480,12 +480,12 @@
                                 <p v-if="comp.notes || comp.reason" class="text-[10px] opacity-60 mt-0.5">{{ comp.notes || comp.reason }}</p>
                             </div>
                             <div class="flex flex-col items-end gap-1 shrink-0">
-                                <span class="text-xs font-bold text-success font-mono">${{ compPrice(comp).toFixed(2) }}</span>
+                                <span class="text-xs font-bold text-success font-mono">${{ Number(compPrice(comp) ?? 0).toFixed(2) }}</span>
                                 <span v-if="comp.condition" class="badge badge-xs font-bold" :class="conditionClass(comp.condition)">{{ conditionText(comp.condition) }}</span>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-75 border-t border-base-200/60 pt-1">
-                            <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(comp) !== '-' ? getSubItemBoutique(comp) : `$${compPrice(comp).toFixed(0)}` }}</strong></span>
+                            <span>Boutique: <strong class="text-secondary">{{ getSubItemBoutique(comp) !== '-' ? getSubItemBoutique(comp) : `$${Number(compPrice(comp) ?? 0).toFixed(0)}` }}</strong></span>
                             <span class="opacity-30">|</span>
                             <span>Fair: <strong class="text-primary">{{ getSubItemFair(comp) }}</strong></span>
                             <span class="opacity-30">|</span>
@@ -529,13 +529,13 @@
                 <div class="space-y-0.5">
                     <span class="text-[10px] opacity-60 uppercase font-semibold block">Unit Cost Basis</span>
                     <strong class="text-base-content text-xs block font-mono text-primary">
-                        ${{ unitCost.toFixed(2) }}<span v-if="isMultiQty" class="text-[10px] opacity-60 font-normal">/ea</span>
+                        ${{ Number(unitCost ?? 0).toFixed(2) }}<span v-if="isMultiQty" class="text-[10px] opacity-60 font-normal">/ea</span>
                     </strong>
                 </div>
                 <div class="space-y-0.5">
                     <span class="text-[10px] opacity-60 uppercase font-semibold block">Total Cost Basis</span>
                     <strong class="text-base-content text-xs block font-mono">
-                        ${{ totalCost.toFixed(2) }}
+                        ${{ Number(totalCost ?? 0).toFixed(2) }}
                     </strong>
                 </div>
             </div>
@@ -901,12 +901,13 @@ const totalCost = computed(() => {
     const rawCost = props.item?.cost ?? props.item?.purchasePrice ?? 0;
     const qty = Math.max(1, Number(props.item?.quantity || 1));
     const unitResale = props.item?.resalePrice ?? props.item?.priceFair ?? props.item?.estHigh ?? 0;
-    return resolveMultiQtyCost(rawCost, qty, unitResale).totalCost;
+    const res = resolveMultiQtyCost(rawCost, qty, unitResale);
+    return Number(res?.totalCost ?? 0);
 });
 
 const unitCost = computed(() => {
     const qty = Math.max(1, Number(props.item?.quantity || 1));
-    return totalCost.value / qty;
+    return Number((Number(totalCost.value ?? 0) / qty) || 0);
 });
 
 const formattedAcquisitionDate = computed(() => {

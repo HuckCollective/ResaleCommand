@@ -556,7 +556,7 @@
                         </div>
                         <div class="flex justify-between font-bold">
                             <span>Total Landed Cost:</span>
-                            <span class="font-mono">${{ targetLotPreview.currentCost.toFixed(2) }} ➔ ${{ targetLotPreview.newCost.toFixed(2) }}</span>
+                            <span class="font-mono">${{ Number(targetLotPreview.currentCost ?? 0).toFixed(2) }} ➔ ${{ Number(targetLotPreview.newCost ?? 0).toFixed(2) }}</span>
                         </div>
                     </div>
                 </div>
@@ -636,7 +636,7 @@
                 
                 <div class="alert alert-info py-2 shadow-sm text-xs leading-normal mb-4">
                     <Icon icon="solar:info-circle-linear" class="w-5 h-5 shrink-0" />
-                    <span>This will create {{ deconstructCount }} new items in your inventory with a cost basis of ${{ ((parseFloat(deconstructItemData?.cost || deconstructItemData?.purchasePrice) || 0) / (deconstructCount || 1)).toFixed(2) }} each. The original lot will be archived.</span>
+                    <span>This will create {{ deconstructCount }} new items in your inventory with a cost basis of ${{ Number(((parseFloat(deconstructItemData?.cost || deconstructItemData?.purchasePrice) || 0) / (deconstructCount || 1))).toFixed(2) }} each. The original lot will be archived.</span>
                 </div>
 
                 <div class="modal-action">
@@ -890,7 +890,7 @@ const handleDockSplitOneUnit = async (lotItem) => {
     try {
         const qty = Number(lotItem.quantity || 1);
         const costNum = parseFloat(lotItem.cost || 0);
-        const unitCost = parseFloat((costNum / qty).toFixed(2));
+        const unitCost = Number(Number(costNum / (qty || 1)).toFixed(2));
         const unitResale = parseFloat(lotItem.resalePrice || lotItem.price || 0);
         const childTitle = `${lotItem.title || 'Inventory Item'} (Piece ${qty})`;
 
@@ -936,7 +936,7 @@ const handleDockSplitOneUnit = async (lotItem) => {
         }
 
         const remainingQty = qty - 1;
-        const remainingCost = Math.max(0, costNum - unitCost).toFixed(2);
+        const remainingCost = Number(Math.max(0, costNum - unitCost)).toFixed(2);
         await updateInventoryItem(lotItem.$id, {
             quantity: remainingQty,
             cost: parseFloat(remainingCost)
@@ -1231,7 +1231,7 @@ const runAutoCalcSoldPrice = async () => {
         bulkProgress.value++;
         const rp = parseFloat(item.resalePrice || item.listPrice || 0);
         if (rp > 0) {
-            const calcPrice = parseFloat((rp * 0.85).toFixed(2));
+            const calcPrice = Number(Number(rp * 0.85).toFixed(2));
             try {
                 await updateInventoryItem(item.$id, { soldPrice: calcPrice });
                 item.soldPrice = calcPrice;
@@ -1267,7 +1267,7 @@ const runAutoCalcCost = async () => {
     isEstimating.value = false;
     selectedItems.value = [];
     bulkCostValue.value = '';
-    addToast({ type: 'success', message: `Marked ${successCount} items as $${targetCost.toFixed(2)} Cost.` });
+    addToast({ type: 'success', message: `Marked ${successCount} items as $${Number(targetCost ?? 0).toFixed(2)} Cost.` });
 };
 
 const runAutoFetchPhotos = async () => {
@@ -2036,7 +2036,7 @@ const getObjectUrl = (file) => URL.createObjectURL(file);
 const formatCurrency = (val) => {
     if(!val) return '-';
     const num = parseFloat(val.toString().replace('$',''));
-    return isNaN(num) ? val : '$' + num.toFixed(2);
+    return isNaN(num) ? val : '$' + Number(num ?? 0).toFixed(2);
 };
 
 const formatPriceRange = (val) => {
@@ -2552,7 +2552,7 @@ const submitDeconstruct = async () => {
         }
         
         const totalCost = parentCost || 0;
-        const costPerUnit = parseFloat((totalCost / count).toFixed(2));
+        const costPerUnit = Number(Number(totalCost / (count || 1)).toFixed(2));
         const user = await account.get();
         const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
 
@@ -2811,7 +2811,7 @@ const targetLotPreview = computed(() => {
     return {
         currentCost,
         currentQty,
-        newCost: Number((currentCost + addedCost).toFixed(2)),
+        newCost: Number(Number(currentCost + addedCost).toFixed(2)),
         newQty: currentQty + addedQty,
         itemsCount: itemsToAdd.length
     };
@@ -2924,7 +2924,7 @@ const openCombineModal = () => {
         return sum + (q > 0 ? q : 1);
     }, 0);
     
-    combineCost.value = parseFloat(totalCost.toFixed(2));
+    combineCost.value = Number(Number(totalCost ?? 0).toFixed(2));
     combineTotalUnits.value = totalQty;
 
     // Generate smart lot title and quick suggestion chips
@@ -2984,7 +2984,7 @@ const submitCombine = async () => {
             // 2. Calculate updated cost and quantity
             const addedCost = itemsToAdd.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
             const addedQty = itemsToAdd.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
-            const newCost = Number((Number(targetLot.cost || 0) + addedCost).toFixed(2));
+            const newCost = Number(Number(Number(targetLot.cost || 0) + addedCost).toFixed(2));
             const newQty = Math.max(1, Number(targetLot.quantity || 1) + addedQty);
 
             // 3. Update target Main Lot in Appwrite
@@ -3075,7 +3075,7 @@ const submitCombine = async () => {
         // 3. Create the new combined item document representing the combined lot (do not attach purchaseId to avoid double-counting on PO)
         const extraData = {
             cost: combineCost.value,
-            resalePrice: totalResale ? totalResale.toFixed(2) : undefined,
+            resalePrice: totalResale ? Number(totalResale ?? 0).toFixed(2) : undefined,
             status: primaryItem.status === 'acquired' ? 'in-stock' : (primaryItem.status || 'in-stock'),
             sourcingLocation: 'Combined Lot', // Fresh custom lot: no old auction URL
             storageLocation: primaryItem.storageLocation || 'HG',
