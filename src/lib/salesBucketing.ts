@@ -445,3 +445,17 @@ export function flagAlreadyRecordedRows<T extends Record<string, any>>(rows: T[]
     });
     return { rows, recordedCount, newCount: rows.length - recordedCount };
 }
+
+/**
+ * Month key (YYYY-MM) of a sale in the booth's Pacific time zone, so every view (ledger, KPI cards, co-op statements) buckets a sale into the same month
+ * regardless of the browser's time zone or UTC offset. Date-only strings use their own calendar month.
+ */
+export function pacificMonthKey(dateStr?: string | null): string {
+    if (!dateStr) return '';
+    const s = String(dateStr).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s.slice(0, 7);
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).formatToParts(d);
+    return `${parts.find(p => p.type === 'year')?.value}-${parts.find(p => p.type === 'month')?.value}`;
+}
