@@ -1129,6 +1129,12 @@ export function sanitizeItemPayload(rawPayload: Record<string, any>, options: Sa
         }
     }
 
+    // Golden Rule #1: storageLocation must NEVER be blank/unassigned or legacy 'Backstock'
+    if (!isUpdate || 'storageLocation' in cleanDoc) {
+        const rawLoc = String(cleanDoc.storageLocation ?? '').trim();
+        cleanDoc.storageLocation = (!rawLoc || rawLoc.toLowerCase() === 'backstock') ? 'HG' : rawLoc.substring(0, 255);
+    }
+
     return cleanDoc;
 }
 
@@ -1456,7 +1462,10 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             soldPrice: extraData.soldPrice !== undefined && extraData.soldPrice !== '' ? parseFloat(extraData.soldPrice.toString()) || 0 : undefined,
             maxBuyPrice: extraData.maxBuyPrice !== undefined ? parseFloat(extraData.maxBuyPrice.toString()) || 0 : undefined,
             sourcingLocation: extraData.sourcingLocation || extraData.purchaseLocation || undefined,
-            storageLocation: (extraData.storageLocation === 'backstock' ? 'HG' : extraData.storageLocation) || (extraData.location === 'backstock' ? 'HG' : extraData.location) || undefined,
+            storageLocation: (() => {
+                const raw = String(extraData.storageLocation || extraData.location || itemData?.storageLocation || '').trim();
+                return (!raw || raw.toLowerCase() === 'backstock') ? 'HG' : raw;
+            })(),
             sellingLocations: Array.isArray(extraData.sellingLocations) && extraData.sellingLocations.length > 0 ? extraData.sellingLocations : undefined,
             cartId: extraData.cartId || undefined,
             marketDescription: extraData.marketDescription ? String(extraData.marketDescription).substring(0, 4900) : undefined,
@@ -2016,7 +2025,11 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         }
 
         if (updates.storageLocation !== undefined) {
-            data.storageLocation = updates.storageLocation === '' ? null : updates.storageLocation;
+            const trimmedLoc = String(updates.storageLocation ?? '').trim();
+            const fallbackLoc = String(currentDoc?.storageLocation ?? '').trim();
+            data.storageLocation = (!trimmedLoc || trimmedLoc.toLowerCase() === 'backstock')
+                ? ((!fallbackLoc || fallbackLoc.toLowerCase() === 'backstock') ? 'HG' : fallbackLoc)
+                : trimmedLoc;
             // Note: We no longer update the Bin fallback in notes, as storageLocation is a dedicated field.
         }
         

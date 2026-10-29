@@ -906,7 +906,7 @@ const handleDockSplitOneUnit = async (lotItem) => {
             status: lotItem.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
             sourcingLocation: lotItem.sourcingLocation,
             orderId: lotItem.orderId,
-            storageLocation: lotItem.storageLocation,
+            storageLocation: String(lotItem.storageLocation || '').trim() || 'HG',
             imageId: mediaPayload.imageId,
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
@@ -2742,7 +2742,7 @@ const submitDeconstruct = async () => {
                 cost: costPerUnit,
                 status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
                 sourcingLocation: "", // Clear sourcing location for child
-                storageLocation: parent.storageLocation,
+                storageLocation: String(parent.storageLocation || '').trim() || 'HG',
                 imageId: childImageId || cloneItemMediaPayload(parent).imageId,
                 galleryImageIds: [], // Clear gallery images
                 keywords: parent.keywords,

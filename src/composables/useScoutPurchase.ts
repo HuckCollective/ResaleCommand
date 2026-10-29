@@ -680,6 +680,7 @@ export function useScoutPurchase() {
                 currentBid: cleanCurrentBid ?? undefined,
                 auctionEndsAt: itemData.auctionEndsAt || undefined,
                 sourcingLocation: itemData.sourcingLocation || undefined,
+                storageLocation: String((itemData as any).storageLocation || '').trim() || 'HG',
                 imageId: safeImageId || null,
                 galleryImageIds: safeGalleryIds,
                 purchaseId: activePurchase.value.$id,
@@ -854,6 +855,7 @@ export function useScoutPurchase() {
                 currentBid: cleanCurrentBid ?? undefined,
                 auctionEndsAt: lotData.auctionEndsAt || undefined,
                 sourcingLocation: lotData.sourcingLocation || undefined,
+                storageLocation: String((lotData as any).storageLocation || '').trim() || 'HG',
                 imageId: safeLotImageId || null,
                 galleryImageIds: safeLotGalleryIds,
                 purchaseId: activePurchase.value.$id,
@@ -1013,11 +1015,13 @@ export function useScoutPurchase() {
 
             // 2. Promote all items from 'draft' to 'received' stored at default backstock
             const itemColl = getItemsCollectionId();
-            const defaultLoc = getDefaultStorageLocation(currentTeam.value || user.value);
+            const defaultLoc = getDefaultStorageLocation(currentTeam.value || user.value) || 'HG';
             const updatePromises = purchaseItems.value.map(item => {
+                const rawItemLoc = String(item.storageLocation || '').trim();
+                const safeLoc = (!rawItemLoc || rawItemLoc.toLowerCase() === 'backstock') ? defaultLoc : rawItemLoc;
                 return databases.updateDocument(DB_ID, itemColl, item.$id, {
                     status: 'received',
-                    storageLocation: item.storageLocation || defaultLoc
+                    storageLocation: safeLoc
                 }).catch(err => {
                     console.warn(`[useScoutPurchase] Item status promotion warning for ${item.$id}:`, err);
                 });
@@ -1229,15 +1233,20 @@ export function useScoutPurchase() {
             rawObj.auctionStatus = 'won';
             rawObj.winningBid = winningBid;
 
+            const rawWinLoc = String(item?.storageLocation || '').trim();
+            const safeWinLoc = (!rawWinLoc || rawWinLoc.toLowerCase() === 'backstock') ? 'HG' : rawWinLoc;
+
             await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, {
                 cost: winningBid,
                 status: 'acquired',
+                storageLocation: safeWinLoc,
                 rawAnalysis: JSON.stringify(rawObj).slice(0, 4900)
             });
 
             if (item) {
                 item.cost = winningBid;
                 item.status = 'acquired';
+                item.storageLocation = safeWinLoc;
                 item.auctionStatus = 'won';
             }
             return true;

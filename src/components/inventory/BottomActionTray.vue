@@ -598,12 +598,15 @@
                                 </div>
                                 <div class="space-y-1">
                                     <label class="text-[10px] font-bold uppercase tracking-wider text-base-content/70">Storage Location</label>
-                                    <input 
+                                    <select 
                                         v-model="bundleForm.storageLocation" 
-                                        type="text" 
-                                        class="input input-sm input-bordered w-full bg-base-100" 
-                                        placeholder="e.g. MD-SHELF-1" 
-                                    />
+                                        class="select select-sm select-bordered w-full bg-base-100 font-bold text-xs"
+                                    >
+                                        <option value="HG">Huck's Garage (HG)</option>
+                                        <option value="HH">Huck's Hideout (HH)</option>
+                                        <option value="MD">Memory Den (MD)</option>
+                                        <option value="DT">Dusty Tiger (DT)</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -1107,7 +1110,7 @@
                                         <select v-model="selectedWarehouse" class="select select-xs select-bordered bg-base-100 text-xs font-bold flex-1 h-8 min-h-8">
                                             <option value="">No change</option>
                                             <option value="HG">HG (Garage)</option>
-                                            <option value="HD">HD (Hideout)</option>
+                                            <option value="HH">HH (Huck's Hideout)</option>
                                             <option value="MD">MD (Memory Den)</option>
                                             <option value="DT">DT (Dusty Tiger)</option>
                                             <option value="__custom__">Custom...</option>
@@ -2015,7 +2018,7 @@ const bundleForm = reactive({
     title: '',
     description: '',
     estHigh: '',
-    storageLocation: ''
+    storageLocation: 'HG'
 });
 
 const bundleCombinedCost = computed(() => {
@@ -2160,11 +2163,11 @@ const openBundleSubView = () => {
     bundleForm.estHigh = '';
     workbenchQuery.value = '';
     trayAiMatches.value = [];
-    const loc = props.selectedItems?.[0]?.storageLocation;
-    if (loc && props.selectedItems.every(i => i.storageLocation === loc)) {
+    const loc = String(props.selectedItems?.[0]?.storageLocation || '').trim();
+    if (loc && props.selectedItems.every(i => String(i.storageLocation || '').trim() === loc)) {
         bundleForm.storageLocation = loc;
     } else {
-        bundleForm.storageLocation = '';
+        bundleForm.storageLocation = 'HG';
     }
 
     if (props.selectedItems && props.selectedItems.length > 0) {
@@ -2192,7 +2195,7 @@ const handleConfirmBundle = () => {
         title: bundleForm.title,
         description: bundleForm.description,
         estHigh: Number(bundleForm.estHigh) || 0,
-        storageLocation: bundleForm.storageLocation
+        storageLocation: String(bundleForm.storageLocation || '').trim() || 'HG'
     });
     currentSubView.value = 'main';
 };

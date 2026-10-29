@@ -11,5 +11,5 @@
    - `/sales` upgraded with Partner Filter pills (`HUCK-`, `BB-`, `PDXGL-`), Cost/Profit columns, and Member-First Settlement statements.
 
 ## Next Up:
-1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH`, `HG`, and `HD` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
+1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
 2. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.

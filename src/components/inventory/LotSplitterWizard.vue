@@ -1533,7 +1533,7 @@ async function executeSplit() {
     // 2. Create Documents for each tier
     let createdCount = 0;
     const createdDocs: any[] = [];
-    const targetLocation = parent.storageLocation || 'HG';
+    const targetLocation = String(parent.storageLocation || '').trim() || 'HG';
     const isRetailBooth = /^(MD|DT)\b/i.test(targetLocation);
     const childStatus = isRetailBooth ? 'placed' : 'received';
 

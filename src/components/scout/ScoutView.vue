@@ -766,14 +766,26 @@
                                         <Icon icon="solar:map-point-bold" class="w-4 h-4 text-primary" />
                                         Storage Location
                                     </span>
-                                    <span v-if="isAcquired && !storageLocation" class="text-[9px] text-warning font-semibold">Defaults to HG</span>
+                                    <span class="text-[9px] text-primary font-semibold">{{ storageLocation || 'HG' }}</span>
                                 </label>
-                                <input 
-                                    v-model="storageLocation" 
-                                    type="text" 
-                                    class="input input-xs input-bordered w-full font-mono font-bold text-xs" 
-                                    placeholder="e.g. HG, HG-BIN1, SHELF-A" 
-                                />
+                                <div class="flex items-center gap-1.5">
+                                    <select
+                                        :value="['HG', 'HH', 'MD', 'DT'].includes((storageLocation || 'HG').split('-')[0].trim()) ? (storageLocation || 'HG').split('-')[0].trim() : 'HG'"
+                                        @change="(e) => { storageLocation = (e.target as HTMLSelectElement).value || 'HG'; }"
+                                        class="select select-xs select-bordered font-bold text-xs bg-base-100 shrink-0"
+                                    >
+                                        <option value="HG">Huck's Garage (HG)</option>
+                                        <option value="HH">Huck's Hideout (HH)</option>
+                                        <option value="MD">Memory Den (MD)</option>
+                                        <option value="DT">Dusty Tiger (DT)</option>
+                                    </select>
+                                    <input 
+                                        v-model="storageLocation" 
+                                        type="text" 
+                                        class="input input-xs input-bordered w-full font-mono font-bold text-xs" 
+                                        placeholder="e.g. HG, HH, HG-BIN1" 
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -2260,7 +2272,7 @@ watch(scoutUrl, (val) => {
         const isAuctionDomain = /shopgoodwill\.com|hibid\.com|ctbids\.com|liveauctioneers\.com|proxibid\.com|govdeals\.com|propertyroom\.com/i.test(clean);
         if (isAuctionDomain) {
             isAcquired.value = false;
-            storageLocation.value = '';
+            if (!storageLocation.value || !storageLocation.value.trim()) storageLocation.value = 'HG';
             intakeAutoSource.value = 'url_auction';
         }
     }
@@ -2626,11 +2638,11 @@ async function analyzeListing() {
             const isAuction = isAuctionItem(first);
             if (isAuction) {
                 isAcquired.value = false;
-                storageLocation.value = '';
+                if (!storageLocation.value || !storageLocation.value.trim()) storageLocation.value = 'HG';
                 intakeAutoSource.value = 'url_auction';
             } else {
                 isAcquired.value = true;
-                if (!storageLocation.value) storageLocation.value = 'HG';
+                if (!storageLocation.value || !storageLocation.value.trim()) storageLocation.value = 'HG';
                 intakeAutoSource.value = 'url_direct';
             }
 
@@ -2815,11 +2827,11 @@ async function analyzeImage() {
             const isAuction = isAuctionItem(first);
             if (isAuction) {
                 isAcquired.value = false;
-                storageLocation.value = '';
+                if (!storageLocation.value || !storageLocation.value.trim()) storageLocation.value = 'HG';
                 intakeAutoSource.value = 'url_auction';
             } else {
                 isAcquired.value = true;
-                if (!storageLocation.value) storageLocation.value = 'HG';
+                if (!storageLocation.value || !storageLocation.value.trim()) storageLocation.value = 'HG';
                 intakeAutoSource.value = 'in_person';
             }
 
@@ -3220,6 +3232,7 @@ async function saveDirectToInventory(payload: any) {
 
     const doc: any = {
         ...payload,
+        storageLocation: String(payload.storageLocation || '').trim() || 'HG',
         upc: finalUpc,
         tenantId: teamId || null,
         status: payload.status || 'acquired'
@@ -3558,7 +3571,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
                 maxBuyPrice: calculateMaxBuy(item) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
-                storageLocation: storageLocation.value || '',
+                storageLocation: String(storageLocation.value || '').trim() || 'HG',
                 status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                 keywords: item.keywords || [],
                 rawAnalysis: getSafeRawAnalysis(item) || undefined
@@ -3707,7 +3720,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                      resalePrice: parsePrice(subItem.estimated_value) || 0.0,
                      maxBuyPrice: calculateMaxBuy(subItem.estimated_value) || 0.0,
                      sourcingLocation: sourcingLocation.value || '',
-                     storageLocation: storageLocation.value || '',
+                     storageLocation: String(storageLocation.value || '').trim() || 'HG',
                      status: (isAcquired.value || allowStandaloneSave.value || (individualCost > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                      keywords: item.keywords || [],
                      galleryImageIds: itemGalleryIds,
@@ -3808,7 +3821,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,
                  auctionEndsAt: (isAcquired.value || allowStandaloneSave.value) ? undefined : (item.auctionEndsAt || item.auction_meta?.end_time || undefined),
                  sourcingLocation: sourcingLocation.value || scoutUrl.value || '',
-                 storageLocation: storageLocation.value || '',
+                 storageLocation: String(storageLocation.value || '').trim() || 'HG',
                  status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                  keywords: item.keywords || [],
                  imageId: primaryImage,

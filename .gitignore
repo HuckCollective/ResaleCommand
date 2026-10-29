@@ -2,6 +2,7 @@
 .vercel
 node_modules
 dist
+dist-gemini-skills
 */*.env
 # Local Netlify folder
 .netlify

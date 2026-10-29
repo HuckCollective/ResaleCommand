@@ -623,8 +623,8 @@
                   <button 
                     v-else-if="!isReceivedStatus(item.status)" 
                     class="btn btn-sm btn-success text-success-content font-black gap-1 flex-1 h-9 rounded-xl shadow-xs border border-success-content/25 active:scale-95" 
-                    @click="receiveToStock(item, 'Backstock')"
-                    title="Receive into Backstock"
+                    @click="receiveToStock(item, defaultBackstock)"
+                    title="Receive into Backstock (HG)"
                   >
                     <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
                     <span>Receive</span>
@@ -717,8 +717,8 @@
                         <button 
                           v-else-if="!isReceivedStatus(item.status)" 
                           class="btn btn-xs btn-success text-success-content font-black shadow-xs border border-success-content/25 gap-1 rounded-lg px-2.5 h-7 active:scale-95" 
-                          @click="receiveToStock(item, 'Backstock')"
-                          title="Receive into Backstock"
+                          @click="receiveToStock(item, defaultBackstock)"
+                          title="Receive into Backstock (HG)"
                         >
                           <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" />
                           <span>Receive</span>
@@ -996,9 +996,9 @@
           <button 
             v-if="isEdit && (isDraft || hasUnreceivedItems)" 
             type="button"
-            @click="handleReceiveOrPurchase('Backstock')" 
+            @click="handleReceiveOrPurchase(defaultBackstock)" 
             class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
-            :title="isDraft ? 'Complete purchase and activate items into Backstock' : 'Receive all unreceived items into Backstock'"
+            :title="isDraft ? 'Complete purchase and activate items into Backstock (HG)' : 'Receive all unreceived items into Backstock (HG)'"
           >
             <Icon :icon="isDraft ? 'solar:box-minimalistic-bold' : 'solar:check-circle-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
             <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
@@ -1359,8 +1359,17 @@ const checkAndSyncPoStatus = async () => {
     }
 };
 
+const normalizeSafeStorageLocation = (rawVal, fallback = defaultBackstock.value) => {
+    const trimmed = String(rawVal || '').trim();
+    if (!trimmed || trimmed.toLowerCase() === 'backstock') {
+        const fb = String(fallback || '').trim();
+        return (!fb || fb.toLowerCase() === 'backstock') ? 'HG' : fb;
+    }
+    return trimmed;
+};
+
 const receiveToStock = async (item, location = defaultBackstock.value) => {
-    const loc = location || defaultBackstock.value || 'HG';
+    const loc = normalizeSafeStorageLocation(location, defaultBackstock.value);
     const ok = await confirmDialog(
         `Receive "${item.tag_title || item.title}" into active inventory stored at ${loc}? This marks the item as "In-Stock" and makes it ready for pricing, tagging, and retail booth deployment.`,
         `Receive Item to ${loc}`,
@@ -1375,7 +1384,7 @@ const receiveToStock = async (item, location = defaultBackstock.value) => {
     try {
         await databases.updateDocument(DB_ID, collId, item.$id, {
             status: 'received',
-            storageLocation: item.storageLocation || loc
+            storageLocation: normalizeSafeStorageLocation(item.storageLocation, loc)
         });
         addToast(`Received "${item.tag_title || item.title}" into ${loc}!`, 'success');
         await loadLinkedItems();
@@ -1387,7 +1396,7 @@ const receiveToStock = async (item, location = defaultBackstock.value) => {
 
 const receiveAllToStock = async (location = defaultBackstock.value) => {
     if (items.value.length === 0) return;
-    const loc = location || defaultBackstock.value || 'HG';
+    const loc = normalizeSafeStorageLocation(location, defaultBackstock.value);
     const ok = await confirmDialog(
         `This will activate all ${items.value.length} item(s) in this Purchase Order to "Received" status stored at ${loc}, and mark this PO as "Received". Once in Backstock, items are ready for inventory tracking and retail booth deployment.`,
         `Receive Entire Haul to ${loc}`,
@@ -1406,7 +1415,7 @@ const receiveAllToStock = async (location = defaultBackstock.value) => {
             .map(item => 
                 databases.updateDocument(DB_ID, collId, item.$id, {
                     status: 'received',
-                    storageLocation: item.storageLocation || loc
+                    storageLocation: normalizeSafeStorageLocation(item.storageLocation, loc)
                 })
             )
         );
@@ -1426,7 +1435,7 @@ const receiveAllToStock = async (location = defaultBackstock.value) => {
 };
 
 const handleReceiveOrPurchase = async (location = defaultBackstock.value) => {
-    const loc = location || defaultBackstock.value || 'HG';
+    const loc = normalizeSafeStorageLocation(location, defaultBackstock.value);
     if (isDraft.value) {
         const label = form.value.poNumber || form.value.vendor || 'this order';
         const count = items.value.length;
@@ -1451,7 +1460,7 @@ const handleReceiveOrPurchase = async (location = defaultBackstock.value) => {
                     .map(item => 
                         databases.updateDocument(DB_ID, collId, item.$id, {
                             status: 'received',
-                            storageLocation: item.storageLocation || loc
+                            storageLocation: normalizeSafeStorageLocation(item.storageLocation, loc)
                         })
                     )
                 );

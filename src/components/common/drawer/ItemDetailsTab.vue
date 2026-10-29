@@ -1138,7 +1138,7 @@
               v-model="selectedFacility"
               class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100">
               <option value="HG">Huck's Garage (HG)</option>
-              <option value="HD">Hideout (HD)</option>
+              <option value="HH">Huck's Hideout (HH)</option>
               <option value="MD">
                 Memory Den - Huck's Adventures Outfitters (MD)
               </option>
@@ -1950,7 +1950,7 @@ const emit = defineEmits([
     'open-restock'
 ]);
 
-const KNOWN_CODES = ['HG', 'HD', 'MD', 'DT'];
+const KNOWN_CODES = ['HG', 'HH', 'MD', 'DT'];
 
 const isSold = computed(() => {
     return (props.editForm?.status || props.item?.status) === 'sold';
@@ -2054,7 +2054,7 @@ const allBackstockCandidates = computed(() => {
         const st = String(it.status || '').toLowerCase().trim();
         if (['sold', 'combined', 'deconstructed', 'archived', 'tracked', 'draft', 'scouted'].includes(st)) return false;
         const loc = String(it.storageLocation || '').toUpperCase().trim();
-        return st === 'acquired' || st === 'received' || loc.startsWith('HG');
+        return st === 'acquired' || st === 'received' || loc.startsWith('HG') || loc.startsWith('HH');
     });
 });
 
@@ -2200,13 +2200,14 @@ const syncFromStorageLocation = (loc) => {
 const updateStorageLocation = () => {
     if (isInternalSync) return;
     if (selectedFacility.value === '__custom__') {
-        props.editForm.storageLocation = customFacilityText.value.trim();
+        props.editForm.storageLocation = customFacilityText.value.trim() || 'HG';
     } else {
+        const fac = (selectedFacility.value || '').trim() || 'HG';
         const bin = facilityBin.value.trim();
         if (bin) {
-            props.editForm.storageLocation = `${selectedFacility.value}-${bin.toUpperCase()}`;
+            props.editForm.storageLocation = `${fac}-${bin.toUpperCase()}`;
         } else {
-            props.editForm.storageLocation = selectedFacility.value;
+            props.editForm.storageLocation = fac;
         }
     }
 };

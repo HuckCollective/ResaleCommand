@@ -60,7 +60,7 @@ export function useItemDrawerForm() {
         soldPrice: '',
         estLow: '',
         estHigh: '',
-        storageLocation: '',
+        storageLocation: 'HG',
         sourcingLocation: '',
         orderId: '',
         status: 'acquired',
@@ -112,7 +112,7 @@ export function useItemDrawerForm() {
         editForm.soldPrice = '';
         editForm.estLow = '';
         editForm.estHigh = '';
-        editForm.storageLocation = '';
+        editForm.storageLocation = 'HG';
         editForm.sourcingLocation = '';
         editForm.orderId = '';
         editForm.status = 'acquired';
@@ -159,7 +159,8 @@ export function useItemDrawerForm() {
             editForm.soldPrice = formatMoney(item.soldPrice);
             editForm.estLow = formatMoney(item.estLow || getNoteValue(item.conditionNotes, 'Est. Low', true));
             editForm.estHigh = formatMoney(item.estHigh || getNoteValue(item.conditionNotes, 'Est. High', true));
-            editForm.storageLocation = item.storageLocation || '';
+            const rawItemLoc = String(item.storageLocation || '').trim();
+            editForm.storageLocation = (!rawItemLoc || rawItemLoc.toLowerCase() === 'backstock') ? 'HG' : rawItemLoc;
             editForm.sourcingLocation = item.sourcingLocation || getNoteValue(item.conditionNotes, 'Location') || '';
             editForm.orderId = item.orderId || getNoteValue(item.conditionNotes, 'Order #') || getNoteValue(item.conditionNotes, 'Imported from Order #') || '';
             editForm.status = item.status || 'acquired';

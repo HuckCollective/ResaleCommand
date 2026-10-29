@@ -393,7 +393,7 @@ const fetchedBackstockItems = ref([]);
 
 const allLocations = computed(() => {
     const set = new Set();
-    ['HG', 'HD', 'MD', 'DT'].forEach(c => set.add(c));
+    ['HG', 'HH', 'MD', 'DT'].forEach(c => set.add(c));
     if (orgWarehouses.value) {
         orgWarehouses.value.forEach(w => {
             if (w?.code) set.add(String(w.code).trim().toUpperCase());
@@ -1465,6 +1465,7 @@ const saveEdit = async () => {
 
         const payload = {
             ...editForm,
+            storageLocation: String(editForm.storageLocation || '').trim() || 'HG',
             conditionNotes: editForm.condition_notes,
             imageId: actualMainPhoto.value?.id || null,
             imageFile: finalImageFile,
@@ -2222,7 +2223,7 @@ const sellOneQuantity = async () => {
             status: 'sold',
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
-            storageLocation: editForm.storageLocation,
+            storageLocation: String(editForm.storageLocation || props.item?.storageLocation || '').trim() || 'HG',
             imageId: mediaPayload.imageId,
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
@@ -2430,7 +2431,7 @@ const splitOneActive = async () => {
             status: editForm.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
-            storageLocation: editForm.storageLocation,
+            storageLocation: String(editForm.storageLocation || props.item?.storageLocation || '').trim() || 'HG',
             imageId: mediaPayload.imageId,
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,

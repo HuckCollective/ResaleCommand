@@ -48,10 +48,11 @@ export const POST: APIRoute = async ({ request }) => {
 
         const db = new Databases(client);
 
-        // Sanitize updates
+        // Sanitize updates (Golden Rule #1: storageLocation must NEVER be blank/unassigned)
         const safeData: Record<string, any> = {};
         if (updates.storageLocation !== undefined) {
-            safeData.storageLocation = updates.storageLocation === '' ? null : updates.storageLocation;
+            const trimmedLoc = String(updates.storageLocation ?? '').trim();
+            safeData.storageLocation = (!trimmedLoc || trimmedLoc.toLowerCase() === 'backstock') ? 'HG' : trimmedLoc;
         }
         if (updates.status !== undefined) {
             safeData.status = updates.status;

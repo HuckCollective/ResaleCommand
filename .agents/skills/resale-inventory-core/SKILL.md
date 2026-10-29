@@ -30,7 +30,7 @@ Every inventory item in Resale Command transitions through a strict 5-stage phys
 | `sold` | **5. Terminal Sale** | POS sale completed (Ricochet, Cash, Online) and payout recorded. | Historical | Post-sale Analytics |
 
 ### Lineage States:
-- `combined`: Absorbed into a multi-item bundle, master lot, or mystery pack. Inventory count is zeroed on the child; parent lot holds the combined cost basis and retail price.
+- `combined`: Absorbed into a multi-item bundle, master lot, or mystery pack. Child status is set to 'combined' with parentLotId pointing to the parent lot (never write quantity: 0 in Appwrite; keep quantity >= 1); parent lot holds the combined cost basis and retail price.
 - `deconstructed`: Split parent lot whose individual components have been cataloged and extracted into standalone active inventory items.
 
 ---
@@ -135,9 +135,9 @@ Never hardcode venue-specific file paths, hardcoded venue names, or static booth
 
 ### The Configurable Venue Entity (`warehouses` Collection):
 All venue-specific ingestion and settlement logic must be driven dynamically by the venue's record in the `warehouses` collection:
-- **`code`**: Location abbreviation (`MD`, `DT`, `HG`, `HD`, etc.)
-- **`commissionRate`**: Venue cut percentage (e.g. `0.15` for Memory Den 15%, `0.18` for 18% antique malls, `0.00` for own garage/events).
-- **`fixedMonthlyRent`**: Fixed monthly booth rent deducted by mall (e.g. `$382.50` for Memory Den, `$250.00` for Dusty Tiger).
+- **`code`**: Location abbreviation (`MD`, `DT`, and backstock locations `HG` (Huck's Garage) and `HH` (Huck's Hideout)).
+- **`commissionRate`**: Venue cut percentage (e.g. `0.15` for Memory Den 15%, `0.10` for Dusty Tiger 10%, `0.18` for 18% antique malls, `0.00` for own backstock/garage/events `HG`/`HH`).
+- **`fixedMonthlyRent`**: Fixed monthly booth rent deducted by mall (e.g. `$382.50/mo` for Memory Den (15% commission), `$75.00/mo` (10% commission) for Dusty Tiger, `$0.00/mo` for `HG` and `HH` backstock locations).
 - **`payoutDayOfMonth`**: Day of the month checks clear/disburse (e.g. `15` for Memory Den, `1` for first of month).
 - **`posSoftware`**: The POS system format used by that venue:
   - `'ricochet'`: Ricochet Consignment POS (`Item, Sale, Agreed, Cost/Split, Aged Price, Discounts, Paid, Sold, Amount, Check#`).

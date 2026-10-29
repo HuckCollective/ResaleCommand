@@ -94,10 +94,10 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         aliases: ['hg', 'backstock', "huck's garage", 'hucks garage', 'hucksgarage'],
     },
     {
-        code: 'HD',
-        name: 'Hideout',
-        displayName: 'Hideout (HD)',
-        aliases: ['hd', 'hideout'],
+        code: 'HH',
+        name: "Huck's Hideout",
+        displayName: "Huck's Hideout (HH)",
+        aliases: ['hh', 'hd', 'hideout', "huck's hideout", 'hucks hideout', 'huckshideout', "huck's house", 'hucks house'],
     },
     {
         code: 'MD',
@@ -139,7 +139,7 @@ export interface LocationOption {
  */
 export function getDefaultStorageLocation(teamOrUser?: any): string {
     const prefLoc = teamOrUser?.prefs?.defaultStorageLocation || teamOrUser?.prefs?.defaultLocation;
-    if (prefLoc && typeof prefLoc === 'string' && prefLoc.trim()) {
+    if (prefLoc && typeof prefLoc === 'string' && prefLoc.trim() && prefLoc.trim().toLowerCase() !== 'backstock') {
         return prefLoc.trim();
     }
     return 'HG';

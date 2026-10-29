@@ -315,18 +315,22 @@ export const purchasesAPI = {
         const itemsColId = getItemsCollectionId();
         const resalePromises = resaleLines.map(async (item, idx) => {
             if (item.linkedItemId) {
+                const rawLoc = String((item as any).storageLocation || '').trim();
                 const itemUpdatePayload: any = {
                     title: item.title,
                     cost: Number(item.cost) || 0,
                     quantity: Number(item.quantity) || 1,
                     status: 'acquired',
-                    purchaseId: finalPurchaseId
+                    purchaseId: finalPurchaseId,
+                    storageLocation: (!rawLoc || rawLoc.toLowerCase() === 'backstock') ? 'HG' : rawLoc
                 };
                 if (receiptImageId) itemUpdatePayload.receiptImageId = receiptImageId;
                 return databases.updateDocument(DB_ID, itemsColId, item.linkedItemId, itemUpdatePayload);
             } else {
                 const seq = String(idx + 1).padStart(2, '0');
                 const identity = `${poNumber}-${seq}`;
+                const rawLoc = String((item as any).storageLocation || '').trim();
+                const safeLoc = (!rawLoc || rawLoc.toLowerCase() === 'backstock') ? 'HG' : rawLoc;
                 return saveItemToInventory(
                     { title: item.title, identity },
                     null,
@@ -335,7 +339,7 @@ export const purchasesAPI = {
                         quantity: Number(item.quantity) || 1,
                         purchaseId: finalPurchaseId,
                         status: 'acquired',
-                        storageLocation: 'HG',
+                        storageLocation: safeLoc,
                         sourcingLocation: vendor,
                         receiptImageId: receiptImageId || undefined
                     },
