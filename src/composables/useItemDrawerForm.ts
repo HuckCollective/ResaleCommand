@@ -43,9 +43,9 @@ export const resolveMultiQtyCost = (rawCostVal, quantityVal, unitResaleVal = 0) 
         }
     }
 
-    const totalCost = isUnit ? Number((rawCost * qty).toFixed(2)) : rawCost;
-    const unitCost = Number((totalCost / qty).toFixed(2));
-    return { totalCost, unitCost, isDetectedUnitCost: isUnit };
+    const totalCost = isUnit ? Number((Number(rawCost * qty) || 0).toFixed(2)) : rawCost;
+    const unitCost = Number((Number(totalCost / qty) || 0).toFixed(2));
+    return { totalCost: Number(totalCost ?? 0), unitCost: Number(unitCost ?? 0), isDetectedUnitCost: isUnit };
 };
 
 export function useItemDrawerForm() {
@@ -91,7 +91,7 @@ export function useItemDrawerForm() {
         if (newStatus === 'sold' && (!editForm.soldPrice || editForm.soldPrice === '') && editForm.resalePrice) {
             const rp = parseFloat(editForm.resalePrice);
             if (!isNaN(rp) && rp > 0) {
-                editForm.soldPrice = (rp * 0.85).toFixed(2);
+                editForm.soldPrice = Number((rp * 0.85) || 0).toFixed(2);
                 addToast({ type: 'info', message: 'Auto-filled Sold Price based on default payout.' });
             }
         }
@@ -100,7 +100,7 @@ export function useItemDrawerForm() {
     const formatMoney = (val) => {
         if (val === undefined || val === null || val === '') return '';
         const num = parseFloat(val);
-        return isNaN(num) ? '' : num.toFixed(2);
+        return isNaN(num) ? '' : Number(num ?? 0).toFixed(2);
     };
 
     const resetForm = () => {

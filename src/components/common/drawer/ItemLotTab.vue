@@ -205,23 +205,23 @@
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                     <div class="p-2 bg-base-100 rounded-box border border-base-300">
                         <span class="text-[9px] uppercase font-bold opacity-60 block">Landed Cost</span>
-                        <strong class="font-mono text-warning text-xs sm:text-sm">${{ Number(totalCost || 0).toFixed(2) }}</strong>
+                        <strong class="font-mono text-warning text-xs sm:text-sm">${{ Number(totalCost ?? 0).toFixed(2) }}</strong>
                         <span class="text-[9px] opacity-50 block mt-0.5">Capital basis</span>
                     </div>
                     <div class="p-2 bg-base-100 rounded-box border border-secondary/40 bg-secondary/5">
                         <span class="text-[9px] uppercase font-bold text-secondary block">Sticker Tag</span>
-                        <strong class="font-mono text-secondary text-xs sm:text-sm">${{ Number(currentPlay.projectedYield || 0).toFixed(2) }}</strong>
+                        <strong class="font-mono text-secondary text-xs sm:text-sm">${{ Number(currentPlay?.projectedYield ?? 0).toFixed(2) }}</strong>
                         <span class="text-[9px] text-secondary/70 block mt-0.5">Gross sale price</span>
                     </div>
                     <div class="p-2 bg-base-100 rounded-box border border-info/40 bg-info/5">
                         <span class="text-[9px] uppercase font-bold text-info block">Take-Home Cash</span>
-                        <strong class="font-mono text-info text-xs sm:text-sm">~${{ Number(currentPlay.netPayout || currentPlay.projectedYield || 0).toFixed(2) }}</strong>
-                        <span class="text-[9px] text-info/70 block mt-0.5">After est. fees (-${{ Number(currentPlay.estFees || 0).toFixed(2) }})</span>
+                        <strong class="font-mono text-info text-xs sm:text-sm">~${{ Number(currentPlay?.netPayout ?? currentPlay?.projectedYield ?? 0).toFixed(2) }}</strong>
+                        <span class="text-[9px] text-info/70 block mt-0.5">After est. fees (-${{ Number(currentPlay?.estFees ?? 0).toFixed(2) }})</span>
                     </div>
                     <div class="p-2 bg-base-100 rounded-box border border-success/40 bg-success/5">
                         <span class="text-[9px] uppercase font-bold text-success block">Clean Net Profit</span>
-                        <strong class="font-mono text-success text-xs sm:text-sm">+${{ Number(currentPlay.netProfit || 0).toFixed(2) }}</strong>
-                        <span class="text-[9px] text-success/80 font-bold block mt-0.5">+{{ Math.round(currentPlay.roiPct || 0) }}% ROI</span>
+                        <strong class="font-mono text-success text-xs sm:text-sm">+${{ Number(currentPlay?.netProfit ?? 0).toFixed(2) }}</strong>
+                        <span class="text-[9px] text-success/80 font-bold block mt-0.5">+{{ Math.round(currentPlay?.roiPct || 0) }}% ROI</span>
                     </div>
                 </div>
 
