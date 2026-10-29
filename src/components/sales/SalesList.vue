@@ -760,21 +760,18 @@ const consolidatedSales = computed(() => {
 
     const sSo = (sale.soNumber || '').trim().toUpperCase();
     const sOrd = (sale.orderId || '').trim().toUpperCase();
-    const linkedItem = inventoryItems.value.find(i => 
-      i.saleId === sale.$id || 
+    // Prefer the item explicitly linked to this sale (items.saleId); only then fall back to UPC / SKU lookups
+    const linkedItem = inventoryItems.value.find(i => i.saleId === sale.$id) || inventoryItems.value.find(i => 
       (sSo && (i.locationSku?.toUpperCase() === sSo || i.upc?.toUpperCase() === sSo)) ||
       (sOrd && (i.locationSku?.toUpperCase() === sOrd || i.upc?.toUpperCase() === sOrd))
     );
     const isMultiQty = linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
 
-    // Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless explicitly multi-qty)
+    // Resale Invariant: 1 Sale Record = 1 Register Transaction. Dedupe by sale document id ONLY.
+    // Never collapse several sales that share an item: depleted multi-qty bins (e.g. HUCK-1219 Shadowrun x4,
+    // HUCK-1308 HMM Mid-Tier x2) keep quantity 1 after their last unit sells, so an item-based check would hide real sales.
     if (linkedSaleIds.has(sale.$id)) return;
     linkedSaleIds.add(sale.$id);
-
-    if (linkedItem && !isMultiQty) {
-      if (linkedItemIds.has(linkedItem.$id)) return;
-      linkedItemIds.add(linkedItem.$id);
-    }
 
     const locName = getWarehouseName(sale.warehouseId);
     const comm = (sale.commissionFee || 0) + (sale.shippingCost || 0);
