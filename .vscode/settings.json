@@ -3,10 +3,5 @@
   "files.autoSaveDelay": 1000,
   "files.readonlyInclude": {
     "dist-gemini-skills/**": true
-  },
-  "files.watcherExclude": {
-    "**/.vite/**": true,
-    "**/node_modules/.vite/**": true
-  },
-  "terminal.integrated.defaultProfile.windows": "PowerShell"
+  }
 }

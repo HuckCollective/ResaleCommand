@@ -20,9 +20,10 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 1. **IDE Prompt Standard:** Always specify the recommended Antigravity IDE model (`Claude Sonnet 5.5 Medium` for Vue/TS code, `Claude Opus 5.5 Medium` for complex audits, `Gemini 3.8 Flash Medium` for fast docs/scripts). Never use multi-line PowerShell blocks to write files—always instruct the IDE to use native file tools.
 2. **NO Local `astro build`:** Every IDE prompt MUST forbid running `astro build` or `npm run build` locally (hangs Windows PC). Only run `node scripts/validate-templates.mjs` locally; let Vercel build in the cloud.
 3. **95% / 5% Hybrid Terminal Rule:** Antigravity IDE must NEVER run terminal commands (the Windows sandbox fails with `CreateProcessSecurityEnvironment` and local `astro build` hangs the PC). Antigravity must do 100% of file inspections, code edits, and script creation using ONLY native `read_file` and `write_file` tools. For the 5% of tasks that require execution (running `node scripts/validate-templates.mjs` via `npm run lint`, running `npm run skills:sync`, or executing a one-time Appwrite `.mjs` script), Antigravity will write the script file with `write_file` and instruct the user to run the single 1-line command in their own terminal.
-4. **Plain-English Vocabulary:** Use `✂️ Split Lot`, `📦 Booth Bin (Multi-Qty)`, `➕ Restock Bin`, `↩️ Undo Combine`, `🔍 Deep Scan`, `⚡ Quick Scout`, `📦 Combine Similar`, `🎁 Build Bundle`.
-5. **Appwrite Schema Laws:** Never write `quantity: 0` (mark `status: 'sold'` with `quantity: 1`), never send `isMultiQty` to Appwrite, never store Base64 `data:` URLs in `imageId`/`rawAnalysis`/`components`, and paginate with `Query.orderDesc('$id')`.
-6. **3 Memory Den CSV Formats:**
+4. **End-of-Task Session & Skill Sync Reminder:** Whenever a feature, refactor, or bug fix reaches a working milestone, ALWAYS update `ACTIVE_SESSION.md` using `write_file` to log what was completed and what is next, and remind the user to run `npm run lint` and `npm run skills:sync` in their terminal.
+5. **Plain-English Vocabulary:** Use `✂️ Split Lot`, `📦 Booth Bin (Multi-Qty)`, `➕ Restock Bin`, `↩️ Undo Combine`, `🔍 Deep Scan`, `⚡ Quick Scout`, `📦 Combine Similar`, `🎁 Build Bundle`.
+6. **Appwrite Schema Laws:** Never write `quantity: 0` (mark `status: 'sold'` with `quantity: 1`), never send `isMultiQty` to Appwrite, never store Base64 `data:` URLs in `imageId`/`rawAnalysis`/`components`, and paginate with `Query.orderDesc('$id')`.
+7. **3 Memory Den CSV Formats:**
    - `Products-*.csv`: Catalog/Stock sync (`'0EJ...` SKU + `Quantity` + `Inventory: In Stock|Paid|Sold`). Updates `items` ONLY—NEVER creates `sales` records!
    - `Payouts *.csv`: Interim current-month sales (`Sale#` + `Sold Date`). Deduplicates by 6-digit ticket # + occurrence.
    - `Payout History *.csv`: Settled monthly checks (`Sale` + `Sold` + ` - 0EJXXX` suffix).
@@ -61,18 +62,23 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Oct 29, 2026)
+# Active Session Summary (Updated Oct 30, 2026)
 
 ## Completed & Live on Production (`resalecmd.com`)
 1. **AI Scout & Vision Pipeline**: Modular schemas, Buy-Target Authority Law, physical substrate priority (`art_decor` before `books`), and Appwrite `/preview` aspect-ratio fix for `bounding_box` auto-cropping.
-2. **ItemDrawer & Playbook Performance**: Lazy-mounted `ItemLotTab`/`ItemVerifyTab` (`v-if`), `.toFixed()` null-safety guards, unlocked `isSold` (`status === 'sold'` only) on active Multi-Qty Booth Bins, and unified `resolveMultiQtyCost`.
+2. **ItemDrawer & Playbook Performance**: Lazy-mounted `ItemLotTab`/`ItemVerifyTab` (`v-if`), `.toFixed()` null-safety guards, unlocked `isSold` (`status === 'sold'` only) on active Multi-Qty Booth Bins, unified `resolveMultiQtyCost`, and fixed Playbook tab component extraction (`getLotComponents` JSON array parsing + reactive `form.rawAnalysis` / `form.components` hydration).
 3. **COGS-Audited `➕ Restock Bin`**: Mode A (`📥 Pull from Backstock (HG/HH)` preserving PO lineage via `status: 'combined'`) and Mode B (`💵 Direct Cash` auto-creating `PO-RST-...`) with live Before ➔ After pooled cost & profit preview.
 4. **All-Months Sales Reconciliation (`Apr–Oct 2026`) & 3 Ricochet CSV Formats**:
    - All 7 months (`362` sales = `$16,100.99` Gross) reconciled to penny-exact parity with Memory Den checks.
    - `Products-*.csv` locked to Inventory/Stock Sync only (never creates fake sales).
    - `Payouts-*.csv` & `Payout History-*.csv` unified on 6-digit Ticket # + occurrence idempotency.
    - `/sales` upgraded with Partner Filter pills (`HUCK-`, `BB-`, `PDXGL-`), Cost/Profit columns, and Member-First Settlement statements.
+5. **Command Center (`/dashboard`) & Workbench (`/inventory`) Smart Queues & Triage Refactor**:
+   - Created pure domain vibe & triage engine (`src/lib/inventoryVibes.ts`) with whole-word regex matching (`matchesMdRestockVibe`, `matchesDtRestockVibe`), `0EJ` booth SKU awareness (`hasZeroEjSku`, `needsMdSync`), and 100% working-stock count parity (`isWorkingStockItem`).
+   - Built customizable `OperationsRadarGrid.vue` & `useOperationsRadar.ts` on `/dashboard` with 1-click Restock & Triage queues (`🚨 Unassigned`, `🔮 Pull for MD`, `🐯 Pull for DT`, `🔄 0EJ Not Marked MD`, `⚠️ MD Missing 0EJ`, `📦 Booth Bins`), 2x2 mobile financial bento grid, and default `Inventory Alerts` insights tab.
+   - Upgraded `/inventory` with a non-clipping 2-row `InventorySpatialBar.vue` (Row 1: 7 Spatial Locations + Partner Switcher; Row 2: 6 Smart Queues + `Select All`/`Clear`), full-width mobile Omnibox search (`locationSku`, `keywords`, `identity`, `conditionNotes`), single-checkbox card discipline, and graceful broken-image fallback.
 
 ## Next Up:
-1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
-2. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.
+1. **Inventory Stable Sort & Post-Edit Position Preservation** (Add explicit Sort selector to `/inventory` Card Grid, preserve item position when saving edits instead of jumping to Page 1 top, and harden `matchesSpatialLocation` for full facility names like `'Dusty Tiger'`).
+2. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
+3. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.
