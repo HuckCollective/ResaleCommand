@@ -51,11 +51,11 @@
             <!-- Subtle Horizontal Divider -->
             <div class="border-t border-base-200/90"></div>
 
-            <!-- ROW 2: Operational Smart Queues (Left) + Bulk Select / Clear Pills (Right) -->
-            <div class="flex items-center justify-between gap-1.5 sm:gap-2">
+            <!-- ROW 2: Operational Smart Queues (Left) + Sort Selector & Bulk Select Pills (Right) -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2">
                 <!-- Left: All 6 Operational Smart Queue Pills -->
                 <div class="flex items-center gap-1 overflow-x-auto sm:flex-wrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 hidden md:inline mr-0.5 shrink-0">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 hidden xl:inline mr-0.5 shrink-0">
                         Smart Queues:
                     </span>
                     <button
@@ -79,28 +79,56 @@
                     </button>
                 </div>
 
-                <!-- Right: Quick Bulk Select / Clear Pill -->
-                <div v-if="(filteredCount || 0) > 0" class="flex items-center gap-1 shrink-0">
-                    <button
-                        v-if="(selectedCount || 0) < (filteredCount || 0)"
-                        type="button"
-                        @click="$emit('select-all')"
-                        class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
-                        title="Select all items matching current filter"
-                    >
-                        <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
-                        <span class="text-[11px] whitespace-nowrap">Select All ({{ filteredCount }})</span>
-                    </button>
-                    <button
-                        v-if="(selectedCount || 0) > 0"
-                        type="button"
-                        @click="$emit('clear-selection')"
-                        class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
-                        title="Clear selected items"
-                    >
-                        <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
-                        <span class="text-[11px] whitespace-nowrap">Clear ({{ selectedCount }})</span>
-                    </button>
+                <!-- Right: Sort Selector + Quick Bulk Select / Clear Pill -->
+                <div class="flex items-center justify-between md:justify-end gap-1.5 shrink-0">
+                    <!-- Stable Workbench Sort Selector -->
+                    <div class="flex items-center gap-1 shrink-0">
+                        <label for="rc-inventory-sort" class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/55 hidden sm:inline">
+                            Sort:
+                        </label>
+                        <select
+                            id="rc-inventory-sort"
+                            :value="currentSortValue"
+                            @change="onSortChange"
+                            class="select select-bordered select-xs h-7 min-h-7 rounded-lg font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 focus:bg-base-100 cursor-pointer"
+                            title="Sort inventory items (Newest Added and Barcode/SKU keep items fixed in place when editing)"
+                        >
+                            <option value="$createdAt:desc">🆕 Newest Added (Stable)</option>
+                            <option value="$createdAt:asc">🌱 Oldest Added</option>
+                            <option value="upc:desc">🔢 Barcode / SKU (High → Low)</option>
+                            <option value="upc:asc">🔢 Barcode / SKU (Low → High)</option>
+                            <option value="resalePrice:desc">💰 Price: High → Low</option>
+                            <option value="resalePrice:asc">💸 Price: Low → High</option>
+                            <option value="margin:desc">📈 Highest ROI %</option>
+                            <option value="title:asc">🔤 Title (A → Z)</option>
+                            <option value="$updatedAt:desc">🕒 Recently Edited</option>
+                            <option v-if="sortColumn === 'soldDate'" value="soldDate:desc">🏷️ Sold Date (Newest)</option>
+                        </select>
+                    </div>
+
+                    <!-- Quick Bulk Select / Clear Pill -->
+                    <div v-if="(filteredCount || 0) > 0" class="flex items-center gap-1 shrink-0">
+                        <button
+                            v-if="(selectedCount || 0) < (filteredCount || 0)"
+                            type="button"
+                            @click="$emit('select-all')"
+                            class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
+                            title="Select all items matching current filter"
+                        >
+                            <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
+                            <span class="text-[11px] whitespace-nowrap">Select All ({{ filteredCount }})</span>
+                        </button>
+                        <button
+                            v-if="(selectedCount || 0) > 0"
+                            type="button"
+                            @click="$emit('clear-selection')"
+                            class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
+                            title="Clear selected items"
+                        >
+                            <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
+                            <span class="text-[11px] whitespace-nowrap">Clear ({{ selectedCount }})</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -163,6 +191,8 @@ const props = defineProps<{
     filterBarcode: string;
     filteredCount?: number;
     selectedCount?: number;
+    sortColumn?: string;
+    sortDirection?: 'asc' | 'desc';
 }>();
 
 const emit = defineEmits<{
@@ -171,7 +201,35 @@ const emit = defineEmits<{
     (e: 'update:filterBarcode', val: string): void;
     (e: 'select-all'): void;
     (e: 'clear-selection'): void;
+    (e: 'update-sort', payload: { column: string; direction: 'asc' | 'desc' }): void;
 }>();
+
+const currentSortValue = computed(() => {
+    const col = props.sortColumn || '$createdAt';
+    const dir = props.sortDirection || 'desc';
+    const candidate = `${col}:${dir}`;
+    const validOptions = new Set([
+        '$createdAt:desc',
+        '$createdAt:asc',
+        'upc:desc',
+        'upc:asc',
+        'resalePrice:desc',
+        'resalePrice:asc',
+        'margin:desc',
+        'title:asc',
+        '$updatedAt:desc',
+        'soldDate:desc'
+    ]);
+    return validOptions.has(candidate) ? candidate : '$createdAt:desc';
+});
+
+function onSortChange(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    const [column, direction] = val.split(':');
+    if (column && (direction === 'asc' || direction === 'desc')) {
+        emit('update-sort', { column, direction });
+    }
+}
 
 const activeItems = computed(() => {
     return (props.inventoryItems || []).filter(item => isWorkingStockItem(item));

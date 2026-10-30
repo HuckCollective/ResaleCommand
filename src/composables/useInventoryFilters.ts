@@ -504,7 +504,7 @@ export function useInventoryFilters(
     } = useDataFilter<any>(sourceItems, {
         searchPredicate: inventorySearchPredicate,
         sortAccessors: inventorySortAccessors,
-        defaultSortKey: '$updatedAt',
+        defaultSortKey: '$createdAt',
         defaultSortDirection: 'desc',
         defaultPageSize: options.defaultPageSize || 50
     });
@@ -515,7 +515,7 @@ export function useInventoryFilters(
             sortColumn.value = 'soldDate';
             sortDirection.value = 'desc';
         } else if (oldStatus === 'sold' && sortColumn.value === 'soldDate') {
-            sortColumn.value = '$updatedAt';
+            sortColumn.value = '$createdAt';
             sortDirection.value = 'desc';
         }
     });

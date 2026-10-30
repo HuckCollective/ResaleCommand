@@ -73,12 +73,11 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
    - `Products-*.csv` locked to Inventory/Stock Sync only (never creates fake sales).
    - `Payouts-*.csv` & `Payout History-*.csv` unified on 6-digit Ticket # + occurrence idempotency.
    - `/sales` upgraded with Partner Filter pills (`HUCK-`, `BB-`, `PDXGL-`), Cost/Profit columns, and Member-First Settlement statements.
-5. **Command Center (`/dashboard`) & Workbench (`/inventory`) Smart Queues & Triage Refactor**:
-   - Created pure domain vibe & triage engine (`src/lib/inventoryVibes.ts`) with whole-word regex matching (`matchesMdRestockVibe`, `matchesDtRestockVibe`), `0EJ` booth SKU awareness (`hasZeroEjSku`, `needsMdSync`), and 100% working-stock count parity (`isWorkingStockItem`).
+5. **Command Center (`/dashboard`) & Workbench (`/inventory`) Smart Queues, Triage & Stable Sort**:
+   - Created pure domain vibe & triage engine (`src/lib/inventoryVibes.ts`) with whole-word regex matching (`matchesMdRestockVibe`, `matchesDtRestockVibe`), `0EJ` booth SKU awareness (`hasZeroEjSku`, `needsMdSync`), strict physical `storageLocation` matching (`matchesPhysicalStorageCode`, never matching `purchaseLocation`), and 100% working-stock count parity (`isWorkingStockItem`).
    - Built customizable `OperationsRadarGrid.vue` & `useOperationsRadar.ts` on `/dashboard` with 1-click Restock & Triage queues (`🚨 Unassigned`, `🔮 Pull for MD`, `🐯 Pull for DT`, `🔄 0EJ Not Marked MD`, `⚠️ MD Missing 0EJ`, `📦 Booth Bins`), 2x2 mobile financial bento grid, and default `Inventory Alerts` insights tab.
-   - Upgraded `/inventory` with a non-clipping 2-row `InventorySpatialBar.vue` (Row 1: 7 Spatial Locations + Partner Switcher; Row 2: 6 Smart Queues + `Select All`/`Clear`), full-width mobile Omnibox search (`locationSku`, `keywords`, `identity`, `conditionNotes`), single-checkbox card discipline, and graceful broken-image fallback.
+   - Upgraded `/inventory` with a non-clipping 2-row `InventorySpatialBar.vue`, 1-click **Sort Selector** (defaulting to stable `🆕 Newest Added ($createdAt DESC)`), in-place `shallowRef` updates with a `2.5s` emerald `"✓ Saved"` highlight ring (`recentlySavedId` — zero jumping cards on edit), single-checkbox card discipline, and graceful broken-image fallback.
 
 ## Next Up:
-1. **Inventory Stable Sort & Post-Edit Position Preservation** (Add explicit Sort selector to `/inventory` Card Grid, preserve item position when saving edits instead of jumping to Page 1 top, and harden `matchesSpatialLocation` for full facility names like `'Dusty Tiger'`).
-2. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
-3. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.
+1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
+2. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.

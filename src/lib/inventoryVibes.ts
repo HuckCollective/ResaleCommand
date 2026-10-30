@@ -184,6 +184,95 @@ export function hasZeroEjSku(item: any): boolean {
 }
 
 /**
+ * Strictly evaluates whether a raw storageLocation string belongs to a canonical facility code (MD, DT, HG, HH, HD).
+ * Handles short codes ('DT', 'DT-1'), full names ('Dusty Tiger', 'Memory Den', "Huck's Garage"), and parentheticals ('Dusty Tiger (DT)').
+ */
+export function matchesPhysicalStorageCode(
+    rawStorageLocation: string | null | undefined,
+    code: 'MD' | 'DT' | 'HG' | 'HH' | 'HD'
+): boolean {
+    const sl = String(rawStorageLocation || '').trim().toUpperCase();
+    if (!sl) return false;
+
+    switch (code) {
+        case 'MD':
+            return (
+                sl === 'MD' ||
+                sl.startsWith('MD-') ||
+                sl.startsWith('MD:') ||
+                sl.startsWith('MD ') ||
+                sl.includes('(MD)') ||
+                sl.includes('MEMORY DEN') ||
+                sl.includes('MEMORYDEN') ||
+                sl.includes('ADVENTURES OUTFITTERS') ||
+                sl === '0EJ' ||
+                sl.startsWith('0EJ-')
+            );
+        case 'DT':
+            return (
+                sl === 'DT' ||
+                sl.startsWith('DT-') ||
+                sl.startsWith('DT:') ||
+                sl.startsWith('DT ') ||
+                sl.includes('(DT)') ||
+                sl.includes('DUSTY TIGER') ||
+                sl.includes('DUSTYTIGER') ||
+                sl.includes('DUSTY_TIGER')
+            );
+        case 'HG':
+            return (
+                sl === 'HG' ||
+                sl.startsWith('HG-') ||
+                sl.startsWith('HG:') ||
+                sl.startsWith('HG ') ||
+                sl.includes('(HG)') ||
+                sl.includes("HUCK'S GARAGE") ||
+                sl.includes('HUCKS GARAGE') ||
+                sl.includes('HUCKSGARAGE') ||
+                sl === 'GARAGE' ||
+                sl === 'BACKSTOCK'
+            );
+        case 'HH':
+            return (
+                sl === 'HH' ||
+                sl.startsWith('HH-') ||
+                sl.startsWith('HH:') ||
+                sl.startsWith('HH ') ||
+                sl.includes('(HH)') ||
+                sl.includes("HUCK'S HIDEOUT") ||
+                sl.includes('HUCKS HIDEOUT') ||
+                sl.includes('HUCKSHIDEOUT') ||
+                sl.includes("HUCK'S HOUSE") ||
+                sl.includes('HUCKS HOUSE') ||
+                sl === 'HIDEOUT'
+            );
+        case 'HD':
+            return (
+                sl === 'HD' ||
+                sl.startsWith('HD-') ||
+                sl.startsWith('HD:') ||
+                sl.startsWith('HD ') ||
+                sl.includes('(HD)')
+            );
+    }
+}
+
+/**
+ * Helper to check sellingLocations only when physical storageLocation is empty.
+ */
+function hasSellingLocationMatch(item: any, code: 'MD' | 'DT'): boolean {
+    if (!item?.sellingLocations) return false;
+    const arr = Array.isArray(item.sellingLocations) ? item.sellingLocations : [item.sellingLocations];
+    return arr.some((loc: any) => {
+        const clean = String(loc || '').trim().toLowerCase();
+        if (code === 'MD') {
+            return clean === 'md' || clean.includes('memory den');
+        }
+        return clean === 'dt' || clean.includes('dusty tiger') || clean.includes('dustytiger');
+    });
+}
+
+/**
  * True if item is already placed/assigned in MD or DT retail booths,
  * OR already has a 0EJ Ricochet booth SKU assigned.
  */
@@ -191,36 +280,12 @@ export function isAlreadyInBooth(item: any): boolean {
     if (!item) return false;
     if (hasZeroEjSku(item)) return true;
 
-    const sl = typeof item.storageLocation === 'string' ? item.storageLocation.trim().toUpperCase() : '';
-    if (
-        sl === 'MD' ||
-        sl.startsWith('MD-') ||
-        sl.startsWith('MD:') ||
-        sl.includes('MEMORY DEN') ||
-        sl === 'DT' ||
-        sl.startsWith('DT-') ||
-        sl.startsWith('DT:') ||
-        sl.includes('DUSTY TIGER')
-    ) {
-        return true;
+    const sl = typeof item.storageLocation === 'string' ? item.storageLocation.trim() : '';
+    if (sl && !isUnassignedLocation(item)) {
+        return matchesPhysicalStorageCode(sl, 'MD') || matchesPhysicalStorageCode(sl, 'DT');
     }
 
-    if (item.sellingLocations) {
-        const arr = Array.isArray(item.sellingLocations) ? item.sellingLocations : [item.sellingLocations];
-        for (const loc of arr) {
-            const clean = String(loc || '').trim().toLowerCase();
-            if (
-                clean === 'md' ||
-                clean === 'dt' ||
-                clean.includes('memory den') ||
-                clean.includes('dusty tiger')
-            ) {
-                return true;
-            }
-        }
-    }
-
-    return false;
+    return hasSellingLocationMatch(item, 'MD') || hasSellingLocationMatch(item, 'DT');
 }
 
 /**
@@ -243,24 +308,15 @@ export function matchesDtRestockVibe(item: any): boolean {
 }
 
 /**
- * True if item is assigned to Memory Den (MD) either via storageLocation or sellingLocations.
+ * True if item is assigned to Memory Den (MD) via physical storageLocation (or sellingLocations if storageLocation is unassigned).
  */
 export function isAssignedToMd(item: any): boolean {
     if (!item) return false;
-    const sl = String(item.storageLocation || '').trim().toUpperCase();
-    if (sl === 'MD' || sl.startsWith('MD-') || sl.startsWith('MD:') || sl.includes('MEMORY DEN')) {
-        return true;
+    const sl = typeof item.storageLocation === 'string' ? item.storageLocation.trim() : '';
+    if (sl && !isUnassignedLocation(item)) {
+        return matchesPhysicalStorageCode(sl, 'MD');
     }
-    if (item.sellingLocations) {
-        const arr = Array.isArray(item.sellingLocations) ? item.sellingLocations : [item.sellingLocations];
-        if (arr.some((c: any) => {
-            const s = String(c || '').trim().toLowerCase();
-            return s === 'md' || s.includes('memory den');
-        })) {
-            return true;
-        }
-    }
-    return false;
+    return hasSellingLocationMatch(item, 'MD');
 }
 
 /**
@@ -311,7 +367,9 @@ export function matchesPartnerPrefix(item: any, prefix: string | null | undefine
 }
 
 /**
- * Evaluates spatial location filter including '__unassigned__', 'HD', 'HH', 'HG', 'MD', 'DT', or custom bins.
+ * Strictly evaluates spatial location filter against physical item.storageLocation
+ * (including '__unassigned__', 'MD', 'DT', 'HG', 'HH', 'HD', full facility names like 'Dusty Tiger', or custom bins).
+ * Never matches item.purchaseLocation. Only falls back to sellingLocations for MD/DT when storageLocation is empty.
  */
 export function matchesSpatialLocation(item: any, locationFilter: string | null | undefined): boolean {
     if (!locationFilter || locationFilter === 'all' || !locationFilter.trim()) {
@@ -322,22 +380,26 @@ export function matchesSpatialLocation(item: any, locationFilter: string | null 
         return isUnassignedLocation(item);
     }
     const upper = target.toUpperCase();
-    const sl = String(item?.storageLocation || '').trim().toUpperCase();
+    const sl = typeof item?.storageLocation === 'string' ? item.storageLocation.trim() : '';
 
-    // Explicitly distinguish HD vs HH so both tabs show their exact records
-    if (upper === 'HD') {
-        return sl === 'HD' || sl.startsWith('HD-') || sl.startsWith('HD:');
-    }
-    if (upper === 'HH') {
-        return (
-            sl === 'HH' ||
-            sl.startsWith('HH-') ||
-            sl.startsWith('HH:') ||
-            sl.includes("HUCK'S HIDEOUT") ||
-            sl.includes('HUCKS HIDEOUT') ||
-            sl.includes("HUCK'S HOUSE")
-        );
+    if (upper === 'MD' || upper === 'DT') {
+        if (sl && !isUnassignedLocation(item)) {
+            return matchesPhysicalStorageCode(sl, upper);
+        }
+        return hasSellingLocationMatch(item, upper);
     }
 
-    return matchesLocationFilter(item, target);
+    if (upper === 'HG' || upper === 'HH' || upper === 'HD') {
+        return matchesPhysicalStorageCode(sl, upper);
+    }
+
+    // Custom bin or specific shelf filter (evaluate against storageLocation only, never purchaseLocation)
+    if (!sl) return false;
+    const slLower = sl.toLowerCase();
+    const targetLower = target.toLowerCase();
+    if (slLower === targetLower || slLower.startsWith(`${targetLower}-`) || slLower.startsWith(`${targetLower}:`)) {
+        return true;
+    }
+
+    return matchesLocationFilter({ storageLocation: item?.storageLocation }, target);
 }

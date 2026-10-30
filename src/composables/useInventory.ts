@@ -42,9 +42,9 @@ export function useInventory() {
                 } else if (eventType.includes('.update')) {
                     const idx = inventoryItems.value.findIndex(i => i.$id === item.$id);
                     if (idx !== -1) {
-                        const updated = [...inventoryItems.value];
-                        updated[idx] = item;
-                        inventoryItems.value = updated;
+                        const next = [...inventoryItems.value];
+                        next[idx] = { ...next[idx], ...item };
+                        inventoryItems.value = next;
                     } else {
                         // Moved into view (e.g. status change)? Add to top
                         inventoryItems.value = [item, ...inventoryItems.value];
@@ -126,10 +126,10 @@ export function useInventory() {
                     }
                 }
 
-                // Deterministic sort by latest updated first ($updatedAt DESC)
+                // Deterministic stable sort by intake creation date ($createdAt DESC) so editing an item never jumps its position
                 allDocs.sort((a: any, b: any) => {
-                    const aTime = new Date(a.$updatedAt || a.updatedAt || a.$createdAt || 0).getTime();
-                    const bTime = new Date(b.$updatedAt || b.updatedAt || b.$createdAt || 0).getTime();
+                    const aTime = new Date(a.$createdAt || a.createdAt || 0).getTime();
+                    const bTime = new Date(b.$createdAt || b.createdAt || 0).getTime();
                     return bTime - aTime;
                 });
 
@@ -160,7 +160,7 @@ export function useInventory() {
     const addLocalItem = (item: Models.Document) => {
         // Prevent dupes
         if (!inventoryItems.value.find(i => i.$id === item.$id)) {
-             inventoryItems.value.unshift(item);
+             inventoryItems.value = [item, ...inventoryItems.value];
         }
     };
 

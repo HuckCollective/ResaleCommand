@@ -148,6 +148,9 @@
                             v-model:filterBarcode="filterUpcPrefix"
                             :filteredCount="filteredInventory.length"
                             :selectedCount="selectedItems.length"
+                            :sortColumn="sortColumn"
+                            :sortDirection="sortDirection"
+                            @update-sort="handleUpdateSort"
                             @select-all="toggleAll"
                             @clear-selection="handleClearSelection"
                         />
@@ -266,7 +269,10 @@
                         @image-error="onCardImageError(item.$id)"
                         @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
-                        :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
+                        :class="{
+                            'ring-2 ring-emerald-500 bg-emerald-500/10 transition-all duration-500': recentlySavedId === item.$id,
+                            'ring-2 ring-primary': selectedItems.includes(item.$id) && recentlySavedId !== item.$id
+                        }">
                         
                         <template #absolute-top-left>
                             <!-- Expanded hit area for reliable one-tap selection -->
@@ -277,6 +283,9 @@
 
                         <template #actions>
                             <div class="flex items-center gap-1.5 w-full z-10" :class="{ 'mt-2 pt-2 border-t border-base-200/70': !isHorizontalCard }" @click.stop.prevent>
+                                <span v-if="recentlySavedId === item.$id" class="badge badge-xs badge-success text-success-content font-extrabold px-2 py-2 shrink-0 animate-fade-in">
+                                    ✓ Saved
+                                </span>
                                 <label v-if="isHorizontalCard" class="btn btn-sm btn-ghost border border-base-300 h-8 min-h-8 w-8 min-w-8 p-0 rounded-xl flex items-center justify-center cursor-pointer touch-manipulation active:scale-90" :class="selectedItems.includes(item.$id) ? 'bg-primary/15 border-primary text-primary' : 'bg-base-200/60'" @click.stop title="Select item for bulk actions">
                                     <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-xs checkbox-primary cursor-pointer" @click.stop />
                                 </label>
@@ -1170,7 +1179,10 @@ const {
     gridTotalPages,
     clearAllFilters,
     clearLineageFilters,
-    initFromUrl
+    initFromUrl,
+    sortColumn,
+    sortDirection,
+    setSort
 } = useInventoryFilters(inventoryItems, {
     purchases: allPurchases,
     orgPlacedLocations,
@@ -1185,6 +1197,20 @@ watch(currentTeam, (n) => {
     } 
 }, { immediate: true });
 const isEstimating = ref(false);
+const recentlySavedId = ref(null);
+let recentlySavedTimer = null;
+const markRecentlySaved = (id) => {
+    if (!id) return;
+    recentlySavedId.value = id;
+    if (recentlySavedTimer) clearTimeout(recentlySavedTimer);
+    recentlySavedTimer = setTimeout(() => {
+        if (recentlySavedId.value === id) recentlySavedId.value = null;
+    }, 2500);
+};
+const handleUpdateSort = ({ column, direction }) => {
+    if (column) sortColumn.value = column;
+    if (direction === 'asc' || direction === 'desc') sortDirection.value = direction;
+};
 const bulkProgress = ref(0);
 const bulkTotal = ref(0);
 const bulkCostValue = ref('');
@@ -2362,7 +2388,10 @@ const saveEdit = async (payload) => {
             // Optimistic update to immediately reflect in UI before Appwrite query cache clears
             const idx = inventoryItems.value.findIndex(i => i && (i.$id === targetId || i.id === targetId));
             if (idx !== -1) {
-                inventoryItems.value[idx] = updatedDoc;
+                const next = [...inventoryItems.value];
+                next[idx] = { ...next[idx], ...updatedDoc };
+                inventoryItems.value = next;
+                markRecentlySaved(targetId);
             }
         } else {
             // CREATE NEW
@@ -2378,13 +2407,14 @@ const saveEdit = async (payload) => {
                 effectiveTeamId
             );
             if (newDoc) {
-                inventoryItems.value.unshift(newDoc);
+                inventoryItems.value = [newDoc, ...inventoryItems.value];
+                markRecentlySaved(newDoc.$id);
             }
         }
 
         closeEditDrawer();
         // Fire async refresh in background just in case
-        fetchInventory('').catch(() => {});
+        // In-place optimistic update + Appwrite Realtime handle state without reshuffling list order
         addToast({ type: 'success', message: 'Item saved successfully.' });
 
         // Background PO Status Synchronization if item is linked to a PO
@@ -3182,7 +3212,7 @@ const submitCombine = async () => {
         addToast({ type: 'success', message: `Successfully combined into new lot "${combineTitle.value}"!` });
         
         // Async refresh in background
-        fetchInventory('').catch(() => {});
+        // In-place optimistic update + Appwrite Realtime handle state without reshuffling list order
     } catch (e) {
         addToast({ type: 'error', message: 'Failed to combine items: ' + e.message });
         console.error(e);
