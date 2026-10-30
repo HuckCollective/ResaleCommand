@@ -133,6 +133,35 @@
             </div>
         </div>
 
+        <!-- 1-Click Location Triage Bar (Shown when viewing Unassigned or when items are selected) -->
+        <div
+            v-if="(filterLocation === '__unassigned__' && (filteredCount || 0) > 0) || (selectedCount || 0) > 0"
+            class="px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/35 flex flex-wrap items-center justify-between gap-2 text-xs animate-fade-in"
+        >
+            <div class="flex items-center gap-1.5 min-w-0">
+                <span class="badge badge-2xs sm:badge-xs badge-warning text-warning-content font-extrabold uppercase tracking-wider shrink-0">
+                    Triage
+                </span>
+                <span class="font-extrabold text-base-content truncate">
+                    {{ (selectedCount || 0) > 0
+                        ? `1-Click Assign ${selectedCount} Selected Item${selectedCount === 1 ? '' : 's'} to:`
+                        : `Triage ${filteredCount} Unassigned Item${filteredCount === 1 ? '' : 's'} — Select items or 1-click assign all:` }}
+                </span>
+            </div>
+            <div class="flex items-center gap-1 flex-wrap shrink-0">
+                <button
+                    v-for="target in TRIAGE_TARGETS"
+                    :key="target.code"
+                    type="button"
+                    @click="$emit('quick-assign-location', target.code)"
+                    class="btn btn-2xs sm:btn-xs h-6 min-h-6 px-2 rounded-lg font-bold gap-1 btn-outline border-base-300 bg-base-100 hover:btn-primary hover:text-primary-content transition-all cursor-pointer shadow-2xs"
+                    :title="`Assign ${(selectedCount || 0) > 0 ? selectedCount + ' selected' : 'all ' + filteredCount + ' filtered'} item(s) to ${target.name} (${target.code})`"
+                >
+                    <span>{{ target.icon }} {{ target.code }}</span>
+                </button>
+            </div>
+        </div>
+
         <!-- Contextual Active Smart Queue Banner -->
         <div
             v-if="activeQueueMeta"
@@ -202,7 +231,16 @@ const emit = defineEmits<{
     (e: 'select-all'): void;
     (e: 'clear-selection'): void;
     (e: 'update-sort', payload: { column: string; direction: 'asc' | 'desc' }): void;
+    (e: 'quick-assign-location', code: string): void;
 }>();
+
+const TRIAGE_TARGETS = [
+    { code: 'HG', icon: '🏠', name: "Huck's Garage" },
+    { code: 'HH', icon: '🏡', name: "Huck's Hideout" },
+    { code: 'HD', icon: '🛋️', name: "Huck's Den" },
+    { code: 'MD', icon: '🔮', name: 'Memory Den Booth #0EJ' },
+    { code: 'DT', icon: '🐯', name: 'Dusty Tiger' }
+] as const;
 
 const currentSortValue = computed(() => {
     const col = props.sortColumn || '$createdAt';

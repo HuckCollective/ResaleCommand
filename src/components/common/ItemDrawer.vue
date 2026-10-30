@@ -371,7 +371,7 @@ import ItemDrawerFooter from './drawer/ItemDrawerFooter.vue';
 import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
-import { useItemDrawerForm, resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
+import { useItemDrawerForm, resolveMultiQtyCost, getDefaultStorageLocation, rememberStorageLocation } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
 import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, fetchAssetBlob, convertAssetToBase64, cloneItemMediaPayload, duplicateItemMediaInStorage, formatScoutReportMarkdown, isItemAcquired, isLiveAuctionActive } from '../../lib/inventory';
@@ -393,7 +393,7 @@ const fetchedBackstockItems = ref([]);
 
 const allLocations = computed(() => {
     const set = new Set();
-    ['HG', 'HH', 'MD', 'DT'].forEach(c => set.add(c));
+    ['HG', 'HH', 'HD', 'MD', 'DT'].forEach(c => set.add(c));
     if (orgWarehouses.value) {
         orgWarehouses.value.forEach(w => {
             if (w?.code) set.add(String(w.code).trim().toUpperCase());
@@ -1473,9 +1473,12 @@ const saveEdit = async () => {
              finalGallery.splice(actualMainPhoto.value.idx, 1);
         }
 
+        const finalStorageLoc = String(editForm.storageLocation || '').trim() || getDefaultStorageLocation();
+        rememberStorageLocation(finalStorageLoc);
+
         const payload = {
             ...editForm,
-            storageLocation: String(editForm.storageLocation || '').trim() || 'HG',
+            storageLocation: finalStorageLoc,
             conditionNotes: editForm.condition_notes,
             imageId: actualMainPhoto.value?.id || null,
             imageFile: finalImageFile,

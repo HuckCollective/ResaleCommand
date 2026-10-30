@@ -48,6 +48,28 @@ export const resolveMultiQtyCost = (rawCostVal, quantityVal, unitResaleVal = 0) 
     return { totalCost: Number(totalCost ?? 0), unitCost: Number(unitCost ?? 0), isDetectedUnitCost: isUnit };
 };
 
+const LAST_WAREHOUSE_STORAGE_KEY = 'resale_command_last_storage_location';
+
+export const getDefaultStorageLocation = (): string => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem(LAST_WAREHOUSE_STORAGE_KEY);
+        if (saved && saved.trim() && saved.trim().toLowerCase() !== 'backstock') {
+            return saved.trim();
+        }
+    }
+    return 'HG';
+};
+
+export const rememberStorageLocation = (loc: string | null | undefined) => {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const raw = String(loc || '').trim();
+    if (!raw || raw.toLowerCase() === 'backstock') return;
+    // Extract base warehouse code if formatted like HG-BIN1
+    const baseCode = raw.split('-')[0].trim().toUpperCase();
+    const toSave = ['HG', 'HH', 'HD', 'MD', 'DT'].includes(baseCode) ? baseCode : raw;
+    window.localStorage.setItem(LAST_WAREHOUSE_STORAGE_KEY, toSave);
+};
+
 export function useItemDrawerForm() {
     const isAcquisitionUnlocked = ref(false);
 
@@ -60,7 +82,7 @@ export function useItemDrawerForm() {
         soldPrice: '',
         estLow: '',
         estHigh: '',
-        storageLocation: 'HG',
+        storageLocation: getDefaultStorageLocation(),
         sourcingLocation: '',
         orderId: '',
         status: 'acquired',
@@ -112,7 +134,7 @@ export function useItemDrawerForm() {
         editForm.soldPrice = '';
         editForm.estLow = '';
         editForm.estHigh = '';
-        editForm.storageLocation = 'HG';
+        editForm.storageLocation = getDefaultStorageLocation();
         editForm.sourcingLocation = '';
         editForm.orderId = '';
         editForm.status = 'acquired';
@@ -160,7 +182,7 @@ export function useItemDrawerForm() {
             editForm.estLow = formatMoney(item.estLow || getNoteValue(item.conditionNotes, 'Est. Low', true));
             editForm.estHigh = formatMoney(item.estHigh || getNoteValue(item.conditionNotes, 'Est. High', true));
             const rawItemLoc = String(item.storageLocation || '').trim();
-            editForm.storageLocation = (!rawItemLoc || rawItemLoc.toLowerCase() === 'backstock') ? 'HG' : rawItemLoc;
+            editForm.storageLocation = (!rawItemLoc || rawItemLoc.toLowerCase() === 'backstock') ? getDefaultStorageLocation() : rawItemLoc;
             editForm.sourcingLocation = item.sourcingLocation || getNoteValue(item.conditionNotes, 'Location') || '';
             editForm.orderId = item.orderId || getNoteValue(item.conditionNotes, 'Order #') || getNoteValue(item.conditionNotes, 'Imported from Order #') || '';
             editForm.status = item.status || 'acquired';

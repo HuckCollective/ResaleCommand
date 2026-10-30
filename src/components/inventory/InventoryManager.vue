@@ -153,6 +153,7 @@
                             @update-sort="handleUpdateSort"
                             @select-all="toggleAll"
                             @clear-selection="handleClearSelection"
+                            @quick-assign-location="handleQuickAssignLocation"
                         />
 
                         <!-- Row 3: Wrapping Active Filter Chips Bar (Conditional - takes ZERO space when no filters active) -->
@@ -1755,12 +1756,39 @@ const applyBulkStatus = async () => {
     }
 };
 
+const isRetailBoothLocation = (loc) => {
+    const clean = String(loc || '').trim().toUpperCase();
+    return clean === 'MD' || clean === 'DT' || clean.startsWith('MD-') || clean.startsWith('DT-') || clean.includes('MEMORY DEN') || clean.includes('DUSTY TIGER');
+};
+
+const handleQuickAssignLocation = async (targetCode) => {
+    if (!targetCode) return;
+    if (selectedItems.value.length === 0) {
+        if (filteredInventory.value.length === 0) return;
+        const count = filteredInventory.value.length;
+        if (count > 1) {
+            const confirmed = await confirmDialog(
+                `Assign ${count} filtered item(s) to "${targetCode}"?`,
+                `Assign Location (${targetCode})`,
+                `Move ${count} Items to ${targetCode}`,
+                'Cancel',
+                'btn-primary'
+            );
+            if (!confirmed) return;
+        }
+        selectedItems.value = filteredInventory.value.map(i => i.$id);
+    }
+    bulkLocationTarget.value = targetCode;
+    await applyBulkLocation();
+};
+
 const applyBulkLocation = async () => {
     const rawTarget = bulkLocationTarget.value === '__custom__' ? bulkCustomLocation.value.trim() : bulkLocationTarget.value;
     if (!rawTarget || selectedItems.value.length === 0) return;
     
     processingBulkLoc.value = true;
     const targetLoc = rawTarget;
+    const isBooth = isRetailBoothLocation(targetLoc);
     const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
     const total = itemsToUpdate.length;
     let successCount = 0;
@@ -1791,10 +1819,14 @@ const applyBulkLocation = async () => {
                 if (data.success) {
                     itemsToUpdate.forEach(item => {
                         item.storageLocation = targetLoc;
-                        if (['scouted', 'acquired', 'received'].includes(item.status)) {
+                        if (isBooth && ['scouted', 'acquired', 'received'].includes(item.status)) {
                             item.status = 'placed';
+                        } else if (!isBooth && item.status === 'scouted') {
+                            item.status = 'received';
                         }
                     });
+                    inventoryItems.value = [...inventoryItems.value];
+                    selectedItems.value = [];
                     pruneFilteredOutSelections();
                     bulkLocationTarget.value = '';
                     bulkCustomLocation.value = '';
@@ -1823,9 +1855,10 @@ const applyBulkLocation = async () => {
                 storageLocation: targetLoc
             };
             
-            // If item status is scouted, acquired, or received, update status to placed
-            if (['scouted', 'acquired', 'received'].includes(item.status)) {
+            if (isBooth && ['scouted', 'acquired', 'received'].includes(item.status)) {
                 updates.status = 'placed';
+            } else if (!isBooth && item.status === 'scouted') {
+                updates.status = 'received';
             }
             
             await updateInventoryItem(item.$id, updates);
@@ -1835,6 +1868,8 @@ const applyBulkLocation = async () => {
             if (total > 1 && idx < total - 1) await new Promise(r => setTimeout(r, 120));
         }
         
+        inventoryItems.value = [...inventoryItems.value];
+        selectedItems.value = [];
         pruneFilteredOutSelections();
         bulkLocationTarget.value = '';
         bulkCustomLocation.value = '';
@@ -1937,12 +1972,15 @@ const onDockApplyBulkUnified = async (payload) => {
         const success = await applyBulkUnified(itemIds, updates);
         if (success) {
             // Update in-memory items immediately for instant UI reactivity
+            const isBooth = updates.storageLocation !== undefined ? isRetailBoothLocation(updates.storageLocation) : false;
             inventoryItems.value.forEach(item => {
                 if (itemIds.includes(item.$id)) {
                     if (updates.storageLocation !== undefined) {
                         item.storageLocation = updates.storageLocation;
-                        if (['scouted', 'acquired', 'received'].includes(item.status) && !updates.status) {
+                        if (isBooth && ['scouted', 'acquired', 'received'].includes(item.status) && !updates.status) {
                             item.status = 'placed';
+                        } else if (!isBooth && item.status === 'scouted' && !updates.status) {
+                            item.status = 'received';
                         }
                     }
                     if (updates.status !== undefined) {
@@ -1954,6 +1992,7 @@ const onDockApplyBulkUnified = async (payload) => {
                     item.$updatedAt = new Date().toISOString();
                 }
             });
+            inventoryItems.value = [...inventoryItems.value];
 
             // Synchronize linked Purchase Order status (Received / Partial / Pending)
             try {

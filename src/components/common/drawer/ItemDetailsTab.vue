@@ -1139,6 +1139,7 @@
               class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100">
               <option value="HG">Huck's Garage (HG)</option>
               <option value="HH">Huck's Hideout (HH)</option>
+              <option value="HD">Huck's Den (HD)</option>
               <option value="MD">
                 Memory Den - Huck's Adventures Outfitters (MD)
               </option>
@@ -1950,7 +1951,7 @@ const emit = defineEmits([
     'open-restock'
 ]);
 
-const KNOWN_CODES = ['HG', 'HH', 'MD', 'DT'];
+const KNOWN_CODES = ['HG', 'HH', 'HD', 'MD', 'DT'];
 
 const isSold = computed(() => {
     return (props.editForm?.status || props.item?.status) === 'sold';
