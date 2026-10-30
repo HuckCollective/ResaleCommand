@@ -12,7 +12,7 @@
             @click.stop="$emit('toggle-select', item)"
             title="Tap photo to select item"
         >
-            <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover pointer-events-none" loading="lazy" />
+            <img v-if="imageUrl && !imageLoadError && !imageBroken" :src="imageUrl" :alt="title" @error="onImgError" class="w-full h-full object-cover pointer-events-none" loading="lazy" />
             <div v-else class="flex items-center justify-center w-full h-full opacity-30 bg-base-300 pointer-events-none">
                 <Icon icon="solar:box-linear" class="w-7 h-7" />
             </div>
@@ -121,7 +121,7 @@
         
         <!-- Image Area -->
         <figure class="bg-base-200 relative overflow-hidden group-hover:opacity-95 transition-opacity flex-none aspect-[4/3] w-full cursor-pointer">
-            <img v-if="imageUrl" :src="imageUrl" :alt="title" class="w-full h-full object-cover" loading="lazy" />
+            <img v-if="imageUrl && !imageLoadError && !imageBroken" :src="imageUrl" :alt="title" @error="onImgError" class="w-full h-full object-cover" loading="lazy" />
             <div v-else class="flex flex-col items-center justify-center w-full h-full opacity-30 bg-base-300 p-2">
                 <Icon icon="solar:box-linear" class="w-10 h-10" />
             </div>
@@ -244,7 +244,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useManifest } from '../../composables/useManifest';
 
@@ -252,10 +252,17 @@ const props = defineProps({
     item: { type: Object, required: true },
     compact: { type: Boolean, default: false }, // Makes it look like the small inventory cards
     horizontal: { type: Boolean, default: false }, // Horizontal list row for mobile feed
-    selected: { type: Boolean, default: false } // Whether this item is currently selected
+    selected: { type: Boolean, default: false }, // Whether this item is currently selected
+    imageBroken: { type: Boolean, default: false } // Parent-tracked broken image state
 });
 
-const emit = defineEmits(['click-card', 'click', 'toggle-select']);
+const emit = defineEmits(['click-card', 'click', 'toggle-select', 'image-error']);
+
+const imageLoadError = ref(false);
+const onImgError = () => {
+    imageLoadError.value = true;
+    emit('image-error', props.item?.$id);
+};
 
 const { getStagedInfo } = useManifest();
 const stagedInfo = computed(() => getStagedInfo(props.item?.$id));
@@ -515,5 +522,9 @@ const imageUrl = computed(() => {
     }
     
     return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
+});
+
+watch(imageUrl, () => {
+    imageLoadError.value = false;
 });
 </script>

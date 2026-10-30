@@ -14,7 +14,7 @@
                         <div class="card-body p-4">
                             <div class="flex gap-4 cursor-pointer hover:opacity-80 transition-opacity" @click="openEdit(item)">
                                 <div class="w-16 h-16 bg-base-300 rounded-lg shrink-0 overflow-hidden relative">
-                                    <img v-if="getImageUrl(item)" :src="getImageUrl(item)" class="w-full h-full object-cover" />
+                                    <img v-if="getImageUrl(item) && !brokenImageIds.has(item.$id)" :src="getImageUrl(item)" @error="onCardImageError(item.$id)" class="w-full h-full object-cover" />
                                     <div v-else class="flex items-center justify-center w-full h-full opacity-30"><Icon icon="solar:box-linear" class="w-8 h-8" /></div>
                                 </div>
                                 <div class="flex-1 min-w-0">
@@ -103,7 +103,7 @@
                                 <input 
                                     type="text" 
                                     v-model="searchQuery" 
-                                    placeholder="Search title, UPC, PO, vendor, location..." 
+                                    placeholder="Search title, UPC, 0EJ, keywords, PO, location..." 
                                     class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-14 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
                                 />
                                 <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
@@ -130,7 +130,7 @@
                             <button 
                                 type="button" 
                                 @click="openFilterTray" 
-                                class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold shrink-0 h-8 min-h-8 px-2.5 transition-all"
+                                class="hidden sm:inline-flex btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold shrink-0 h-8 min-h-8 px-2.5 transition-all"
                                 :class="activeFilterCount > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
                                 title="Open Filter Options"
                             >
@@ -139,6 +139,18 @@
                                 <span v-if="activeFilterCount > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ activeFilterCount }}</span>
                             </button>
                         </div>
+
+                        <!-- Row 2.5: Spatial Location Tabs, Smart Queues & Partner Switcher -->
+                        <InventorySpatialBar
+                            :inventoryItems="inventoryItems"
+                            v-model:filterLocation="filterBinLocation"
+                            v-model:filterSmartQueue="filterSmartQueue"
+                            v-model:filterBarcode="filterUpcPrefix"
+                            :filteredCount="filteredInventory.length"
+                            :selectedCount="selectedItems.length"
+                            @select-all="toggleAll"
+                            @clear-selection="handleClearSelection"
+                        />
 
                         <!-- Row 3: Wrapping Active Filter Chips Bar (Conditional - takes ZERO space when no filters active) -->
                         <div v-if="activeFilterChips && activeFilterChips.length > 0" class="flex flex-wrap items-center gap-1 pt-1 text-xs">
@@ -250,19 +262,24 @@
                         :compact="false"
                         :horizontal="isHorizontalCard"
                         :selected="selectedItems.includes(item.$id)"
+                        :imageBroken="brokenImageIds.has(item.$id)"
+                        @image-error="onCardImageError(item.$id)"
                         @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
                         :class="{'ring-2 ring-primary': selectedItems.includes(item.$id)}">
                         
                         <template #absolute-top-left>
                             <!-- Expanded hit area for reliable one-tap selection -->
-                            <label class="z-20 p-2 -m-1.5 flex items-center justify-center cursor-pointer touch-manipulation active:scale-90 transition-transform" @click.stop title="Select Item">
-                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-xs sm:checkbox-sm checkbox-primary shadow-xs cursor-pointer border-none bg-white/80 ring-1 ring-white/50" />
+                            <label v-if="!isHorizontalCard" class="z-20 p-2 -m-1.5 flex items-center justify-center cursor-pointer touch-manipulation active:scale-90 transition-transform" @click.stop title="Select Item">
+                                <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-sm checkbox-primary shadow-md cursor-pointer border-2 border-primary/80 bg-base-100/95 rounded-md" />
                             </label>
                         </template>
 
                         <template #actions>
-                            <div class="flex items-center gap-1.5 w-full mt-2 pt-2 border-t border-base-200/70 z-10" @click.stop.prevent>
+                            <div class="flex items-center gap-1.5 w-full z-10" :class="{ 'mt-2 pt-2 border-t border-base-200/70': !isHorizontalCard }" @click.stop.prevent>
+                                <label v-if="isHorizontalCard" class="btn btn-sm btn-ghost border border-base-300 h-8 min-h-8 w-8 min-w-8 p-0 rounded-xl flex items-center justify-center cursor-pointer touch-manipulation active:scale-90" :class="selectedItems.includes(item.$id) ? 'bg-primary/15 border-primary text-primary' : 'bg-base-200/60'" @click.stop title="Select item for bulk actions">
+                                    <input type="checkbox" :value="item.$id" v-model="selectedItems" class="checkbox checkbox-xs checkbox-primary cursor-pointer" @click.stop />
+                                </label>
                                 <button 
                                     type="button"
                                     @click.stop.prevent="openEdit(item)" 
@@ -357,7 +374,7 @@
                             :missingPhotosCount="missingPhotosCount"
                             :missingPricingCount="missingPricingCount"
                             :totalCount="inventoryItems.length"
-                            :showKeywords="false"
+                            :showKeywords="true"
                         />
                     </template>
                 </InventoryPaginationDock>
@@ -733,6 +750,7 @@ import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from './ItemPreviewModal.vue';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import InventoryFilterPanel from './InventoryFilterPanel.vue';
+import InventorySpatialBar from './InventorySpatialBar.vue';
 import BundleModal from './BundleModal.vue';
 import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { addToast } from '../../stores/toast';
@@ -878,7 +896,7 @@ const onLotSplitCompleted = async (payload) => {
             }
         }
     } else {
-        await fetchInventory(currentTeam.value?.$id || '');
+        await fetchInventory('');
     }
 };
 
@@ -977,7 +995,7 @@ const handleBulkDelete = async () => {
         }
         addToast({ type: 'success', message: `Deleted ${count} items.` });
         selectedItems.value = [];
-        await fetchInventory(currentTeam.value?.$id || '');
+        await fetchInventory('');
     } catch (e) {
         addToast({ type: 'error', message: 'Bulk delete failed: ' + e.message });
     } finally {
@@ -1120,6 +1138,7 @@ const {
     filterFlaggedLocated,
     insightFilter,
     filterUpcPrefix,
+    filterSmartQueue,
     filterLotType,
     filterKeywords,
     filterPurchaseId,
@@ -1975,7 +1994,7 @@ onMounted(async () => {
         if (inventoryItems.value.length === 0) {
             showLoader("Loading Inventory...");
         }
-        await fetchInventory(currentTeam.value?.$id || ''); 
+        await fetchInventory(''); 
     } catch (e) {
         console.error("Failed to load inventory:", e);
     } finally {
@@ -1987,7 +2006,7 @@ onMounted(async () => {
 watch(authLoading, async (newVal, oldVal) => {
     if (oldVal && !newVal) {
         try {
-            await fetchInventory(currentTeam.value?.$id || ''); 
+            await fetchInventory(''); 
         } finally {
             hideLoader();
         }
@@ -1997,7 +2016,7 @@ watch(authLoading, async (newVal, oldVal) => {
 watch(currentTeam, async (newTeam, oldTeam) => {
     if (newTeam?.$id !== oldTeam?.$id) {
         try {
-            await fetchInventory(newTeam?.$id || '');
+            await fetchInventory('');
         } finally {
             hideLoader();
         }
@@ -2031,6 +2050,13 @@ const getImageUrl = (item) => {
     
     if (!id) return null;
     return getAssetUrl(id, { preview: true, width: 350, height: 350, quality: 80 });
+};
+const brokenImageIds = ref(new Set());
+const onCardImageError = (id) => {
+    if (!id) return;
+    const next = new Set(brokenImageIds.value);
+    next.add(id);
+    brokenImageIds.value = next;
 };
 const getObjectUrl = (file) => URL.createObjectURL(file);
 const formatCurrency = (val) => {
@@ -3173,7 +3199,7 @@ onMounted(async () => {
         window.addEventListener('resize', updateIsMobile);
     }
     if (inventoryItems.value.length === 0 && !loading.value) {
-        await fetchInventory(currentTeam.value?.$id || '');
+        await fetchInventory('');
     }
     if (allPurchases.value.length === 0) {
         fetchPurchases();

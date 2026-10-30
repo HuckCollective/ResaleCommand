@@ -1,7 +1,14 @@
 import { ref, computed, watch, type Ref } from 'vue';
 import type { Models } from 'appwrite';
 import { getAssetUrl, resolveItemImageUrls, normalizeInventoryStatus } from '../lib/inventory';
-import { getWarehouseFacilityOptions, findFacility, matchesLocationFilter } from '../lib/warehouses';
+import { getWarehouseFacilityOptions, findFacility } from '../lib/warehouses';
+import {
+    SMART_QUEUES,
+    matchesSmartQueue,
+    matchesPartnerPrefix,
+    matchesSpatialLocation,
+    type SmartQueueId
+} from '../lib/inventoryVibes';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 
 export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
@@ -71,7 +78,8 @@ export function useInventoryFilters(
     const hideDeconstructed = ref(true); // Excludes split/deconstructed parent lots
     const filterPlacedLocated = ref(false); // Only placed items with a storage location
     const filterInsight = ref(''); // 'ready_to_list' | 'missing_photos' | 'missing_pricing' | 'missing_cost' | 'missing_sold_price' | 'missing_description'
-    const filterBarcode = ref('all'); // 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | string prefix
+    const filterBarcode = ref('all'); // 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | '0EJ' | string prefix
+    const filterSmartQueue = ref<SmartQueueId | ''>(''); // '' | 'md_restock' | 'dt_restock' | 'booth_bins' | 'has_booth_sku' | 'missing_booth_sku'
     const filterLotType = ref('all'); // 'all' | 'lots_only' | 'extracted_only' | 'standalone_only'
     const filterKeywords = ref<string[]>([]);
     const filterPurchaseId = ref('');
@@ -372,9 +380,10 @@ export function useInventoryFilters(
         }).length;
     });
 
-    // -- 2. SEARCH PREDICATE OVERRIDE --
-    const inventorySearchPredicate = (item: any, q: string, rawQuery: string, digits: string): boolean => {
+    // -- 2. TOKENIZED DEEP SEARCH PREDICATE OVERRIDE --
+    const inventorySearchPredicate = (item: any, q: string, rawQuery: string, _digits: string): boolean => {
         const itemUpc = (item.upc || item.sku || '').toLowerCase();
+        const itemLocSku = (item.locationSku || '').toLowerCase();
 
         // Multi-SKU comma-separated list search (e.g. "HUCK-1431, HUCK-0049, HUCK-1475")
         if (rawQuery.includes(',')) {
@@ -382,52 +391,80 @@ export function useInventoryFilters(
             if (tokens.length > 1) {
                 return tokens.some(token => 
                     itemUpc.includes(token) || 
+                    itemLocSku.includes(token) ||
                     (item.title || '').toLowerCase().includes(token) ||
                     (item.$id || '').toLowerCase().includes(token)
                 );
             }
         }
 
-        // Explicit prefix queries like 'upc:huck-' or 'barcode:0012'
-        if (q.startsWith('upc:') || q.startsWith('barcode:')) {
-            const target = q.replace(/^(upc|barcode):/, '').trim();
-            return itemUpc.includes(target);
+        // Explicit prefix queries like 'upc:huck-', 'barcode:0012', 'sku:0ej', or 'loc:hg'
+        if (q.startsWith('upc:') || q.startsWith('barcode:') || q.startsWith('sku:')) {
+            const target = q.replace(/^(upc|barcode|sku):/, '').trim();
+            return itemUpc.includes(target) || itemLocSku.includes(target);
+        }
+        if (q.startsWith('loc:')) {
+            const target = q.replace(/^loc:/, '').trim();
+            return (item.storageLocation || '').toLowerCase().includes(target);
         }
 
-        const titleMatch = (item.title || item.itemName || '').toLowerCase().includes(q);
-        const idMatch = (item.$id || '').toLowerCase().includes(q);
-        const identityMatch = (item.identity || '').toLowerCase().includes(q);
-        const binMatch = (item.storageLocation || '').toLowerCase().includes(q);
-        const orderMatch = (item.orderId || item.sourceOrderId || '').toLowerCase().includes(q);
-        const cartMatch = (item.cartId || '').toLowerCase().includes(q) || (item.cartId && matchingPurchaseIds.value.has(item.cartId));
-        const purchaseMatch = (item.purchaseId || '').toLowerCase().includes(q) || (item.purchaseId && matchingPurchaseIds.value.has(item.purchaseId));
-        const sourcingMatch = (item.sourcingLocation || '').toLowerCase().includes(q);
-        const locSkuMatch = (item.locationSku || '').toLowerCase().includes(q);
-        const notesMatch = (item.conditionNotes || item.marketDescription || '').toLowerCase().includes(q);
-        const rawAnalysisMatch = (item.rawAnalysis || '').toLowerCase().includes(q);
-        const componentsMatch = (item.components || '').toLowerCase().includes(q);
-        const keywordMatch = Array.isArray(item.keywords) && item.keywords.some((k: string) => k.toLowerCase().includes(q));
-        const vendorMatch = getVendorName(item).toLowerCase().includes(q);
-        const upcMatch = itemUpc.includes(q);
+        const tokens = q.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return true;
 
-        // Numeric suffix & partial number matching (e.g. searching "0735" or "735" matches "HUCK-0735")
-        let numericMatch = false;
-        if (digits.length >= 1) {
-            const itemUpcDigits = itemUpc.replace(/\D/g, '');
-            if (itemUpcDigits) {
-                if (itemUpcDigits.endsWith(digits) || itemUpcDigits.includes(digits)) {
-                    numericMatch = true;
+        const titleLower = (item.title || item.itemName || '').toLowerCase();
+        const idLower = (item.$id || '').toLowerCase();
+        const identityLower = (item.identity || '').toLowerCase();
+        const binLower = (item.storageLocation || '').toLowerCase();
+        const orderLower = (item.orderId || item.sourceOrderId || '').toLowerCase();
+        const cartLower = (item.cartId || '').toLowerCase();
+        const purchaseLower = (item.purchaseId || '').toLowerCase();
+        const sourcingLower = (item.sourcingLocation || '').toLowerCase();
+        const notesLower = (item.conditionNotes || '').toLowerCase();
+        const marketDescLower = (item.marketDescription || '').toLowerCase();
+        const componentsLower = (item.components || '').toLowerCase();
+        const vendorLower = getVendorName(item).toLowerCase();
+        const keywordsArr = Array.isArray(item.keywords) ? item.keywords.map((k: string) => String(k).toLowerCase()) : [];
+        const itemUpcDigits = itemUpc.replace(/\D/g, '');
+
+        return tokens.every(token => {
+            if (
+                titleLower.includes(token) ||
+                idLower.includes(token) ||
+                identityLower.includes(token) ||
+                itemUpc.includes(token) ||
+                itemLocSku.includes(token) ||
+                binLower.includes(token) ||
+                sourcingLower.includes(token) ||
+                orderLower.includes(token) ||
+                cartLower.includes(token) ||
+                purchaseLower.includes(token) ||
+                notesLower.includes(token) ||
+                marketDescLower.includes(token) ||
+                componentsLower.includes(token) ||
+                vendorLower.includes(token) ||
+                keywordsArr.some((k: string) => k.includes(token))
+            ) {
+                return true;
+            }
+
+            if (tokens.length === 1) {
+                if (item.cartId && matchingPurchaseIds.value.has(item.cartId)) return true;
+                if (item.purchaseId && matchingPurchaseIds.value.has(item.purchaseId)) return true;
+            }
+
+            const tokenDigits = token.replace(/\D/g, '');
+            if (tokenDigits.length >= 1 && itemUpcDigits) {
+                if (itemUpcDigits.endsWith(tokenDigits) || itemUpcDigits.includes(tokenDigits)) {
+                    return true;
                 }
-                const padded = digits.padStart(4, '0');
+                const padded = tokenDigits.padStart(4, '0');
                 if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) {
-                    numericMatch = true;
+                    return true;
                 }
             }
-        }
 
-        return titleMatch || idMatch || identityMatch || binMatch || keywordMatch ||
-               orderMatch || cartMatch || purchaseMatch || sourcingMatch || locSkuMatch ||
-               notesMatch || rawAnalysisMatch || componentsMatch || upcMatch || vendorMatch || numericMatch;
+            return false;
+        });
     };
 
     // -- 3. SORT ACCESSORS --
@@ -491,6 +528,7 @@ export function useInventoryFilters(
         const ch = filterChannel.value;
         const insight = filterInsight.value;
         const bc = filterBarcode.value;
+        const queue = filterSmartQueue.value;
         const lot = filterLotType.value;
         const placedOnly = filterPlacedLocated.value;
         const doHideSold = hideSold.value;
@@ -527,9 +565,6 @@ export function useInventoryFilters(
             if (!insight && !filterParentLotId.value) {
                 if (st === 'active') {
                     // Active Stock mode: governed directly by the exclusion flags above.
-                    // If user unchecks hideSold, sold items pass through.
-                    // If user unchecks hideTracked, tracked/scouted items pass through.
-                    // If user unchecks hideCombined, combined items pass through.
                 } else if (st === 'tracked') {
                     if (normalizeInventoryStatus(itemStatus) !== 'tracked') return false;
                 } else if (st !== 'all') {
@@ -581,9 +616,9 @@ export function useInventoryFilters(
                 if (!hasLocation || !isPlaced) return false;
             }
 
-            // 10. Location / Booth filter
+            // 10. Location / Booth filter (supports __unassigned__, HD, HH, HG, MD, DT, and custom bins)
             if (loc && loc !== 'all' && loc.trim() !== '') {
-                if (!matchesLocationFilter(anyItem, loc)) return false;
+                if (!matchesSpatialLocation(anyItem, loc)) return false;
             }
 
             // 11. Sales Channel filter
@@ -600,7 +635,7 @@ export function useInventoryFilters(
                 if (!matchesLoc(anyItem.sellingLocations)) return false;
             }
 
-            // 12. Barcode / UPC filter
+            // 12. Barcode / Partner Prefix / 0EJ filter
             if (bc && bc !== 'all') {
                 const code = (anyItem.upc || anyItem.locationSku || anyItem.sku || '').trim().toUpperCase();
                 if (bc === '__missing__') {
@@ -610,9 +645,13 @@ export function useInventoryFilters(
                 } else if (bc === '__has_barcode__') {
                     if (!code) return false;
                 } else {
-                    const target = bc.toUpperCase();
-                    if (!code.startsWith(target) && !code.includes(target)) return false;
+                    if (!matchesPartnerPrefix(anyItem, bc)) return false;
                 }
+            }
+
+            // 12b. Operational Smart Queue filter
+            if (queue) {
+                if (!matchesSmartQueue(anyItem, queue)) return false;
             }
 
             // 13. Lot Type filter
@@ -686,6 +725,7 @@ export function useInventoryFilters(
         filterPlacedLocated,
         filterInsight,
         filterBarcode,
+        filterSmartQueue,
         filterLotType,
         filterKeywords,
         filterPurchaseId,
@@ -718,12 +758,29 @@ export function useInventoryFilters(
 
         // Location chip
         if (filterLocation.value !== 'all' && filterLocation.value !== '') {
-            const fac = findFacility(filterLocation.value);
-            const display = fac ? fac.displayName : filterLocation.value;
+            let display = filterLocation.value;
+            if (filterLocation.value === '__unassigned__') {
+                display = '🚨 Unassigned';
+            } else if (filterLocation.value.toUpperCase() === 'HD') {
+                display = '🛋️ HD';
+            } else {
+                const fac = findFacility(filterLocation.value);
+                if (fac) display = fac.displayName;
+            }
             chips.push({
                 id: 'location',
                 label: `Location: ${display}`,
                 onRemove: () => { filterLocation.value = 'all'; }
+            });
+        }
+
+        // Smart Queue chip
+        if (filterSmartQueue.value) {
+            const meta = SMART_QUEUES.find(q => q.id === filterSmartQueue.value);
+            chips.push({
+                id: 'smartQueue',
+                label: `Queue: ${meta ? meta.shortLabel : filterSmartQueue.value}`,
+                onRemove: () => { filterSmartQueue.value = ''; }
             });
         }
 
@@ -758,7 +815,7 @@ export function useInventoryFilters(
         } else if (filterBarcode.value !== 'all' && filterBarcode.value !== '') {
             chips.push({
                 id: 'barcode-prefix',
-                label: `UPC: ${filterBarcode.value}`,
+                label: `Partner/SKU: ${filterBarcode.value}`,
                 onRemove: () => { filterBarcode.value = 'all'; }
             });
         }
@@ -896,6 +953,7 @@ export function useInventoryFilters(
         if (!hideCombined.value && filterStatus.value !== 'combined') c++;
         if (!hideDeconstructed.value && filterStatus.value !== 'deconstructed') c++;
         if (filterBarcode.value && filterBarcode.value !== 'all') c++;
+        if (filterSmartQueue.value) c++;
         if (filterLocation.value && filterLocation.value !== 'all') c++;
         if (filterChannel.value && filterChannel.value !== 'all') c++;
         if (filterLotType.value !== 'all') c++;
@@ -916,6 +974,7 @@ export function useInventoryFilters(
         filterChannel.value = 'all';
         filterInsight.value = '';
         filterBarcode.value = 'all';
+        filterSmartQueue.value = '';
         filterLotType.value = 'all';
         filterPlacedLocated.value = false;
         filterKeywords.value = [];
@@ -934,6 +993,9 @@ export function useInventoryFilters(
 
         if (p.has('insightFilter')) {
             filterInsight.value = p.get('insightFilter') || '';
+        }
+        if (p.has('queue') || p.has('smartQueue')) {
+            filterSmartQueue.value = (p.get('queue') || p.get('smartQueue') || '') as SmartQueueId | '';
         }
         if (p.has('search') || p.has('q')) {
             searchQuery.value = p.get('search') || p.get('q') || '';
@@ -992,6 +1054,7 @@ export function useInventoryFilters(
         insightFilter: filterInsight, // Alias for InventoryManager
         filterBarcode,
         filterUpcPrefix: filterBarcode, // Alias for InventoryManager
+        filterSmartQueue,
         filterLotType,
         filterKeywords,
         filterPurchaseId,

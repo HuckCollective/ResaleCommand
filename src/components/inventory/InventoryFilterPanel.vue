@@ -78,7 +78,9 @@
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
                     <select :value="filterLocation" @change="$emit('update:filterLocation', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
                         <option value="all">All Locations</option>
+                        <option value="__unassigned__">🚨 Unassigned (Missing Location)</option>
                         <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
+                        <option value="HD">🛋️ Hideout Legacy (HD)</option>
                     </select>
                 </div>
 
