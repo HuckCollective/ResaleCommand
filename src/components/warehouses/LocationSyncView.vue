@@ -220,9 +220,15 @@
               <span class="badge badge-xs badge-success text-success-content font-mono font-bold">
                 {{ mdVerifyReport.summary.totalCatalog }} Booth Items Audited
               </span>
+              <span
+                v-if="verifyStatusFilter !== 'ALL'"
+                class="badge badge-xs badge-primary text-primary-content font-mono font-bold"
+              >
+                Filtered: {{ verifyStatusFilter }}
+              </span>
             </div>
             <p class="text-[11px] opacity-70">
-              Verified {{ formatDate(mdVerifyReport.timestamp) }}
+              Verified {{ formatDate(mdVerifyReport.timestamp) }} • Click any pill below to filter the table
             </p>
           </div>
         </div>
@@ -232,21 +238,21 @@
             v-if="mdVerifyReport.summary.unlinkedInRc > 0"
             type="button"
             class="btn btn-xs btn-primary font-bold gap-1"
-            @click="loadVerifyReportIntoWorkspace('unlinked')"
+            @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
           >
             <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
           </button>
           <button
             type="button"
             class="btn btn-xs btn-outline border-base-300 font-bold gap-1"
-            @click="loadVerifyReportIntoWorkspace('all')"
+            @click="applyVerificationPillFilter('ALL')"
           >
             <span>📋 Load All {{ mdVerifyReport.summary.totalCatalog }} Items</span>
           </button>
           <button
             type="button"
             class="btn btn-xs btn-ghost opacity-60 hover:opacity-100"
-            @click="mdVerifyReport = null"
+            @click="mdVerifyReport = null; verifyStatusFilter = 'ALL'"
             title="Dismiss scorecard"
           >
             ✕
@@ -254,23 +260,73 @@
         </div>
       </div>
 
+      <!-- 4 Clickable Filter Pills -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div class="p-2.5 rounded-xl bg-success/10 border border-success/30 flex items-center justify-between">
+        <button
+          type="button"
+          class="p-2.5 rounded-xl bg-success/10 hover:bg-success/20 border border-success/30 flex items-center justify-between text-left transition-all cursor-pointer"
+          :class="verifyStatusFilter === 'VERIFIED_MATCH' ? 'ring-2 ring-success ring-offset-1 bg-success/20' : ''"
+          @click="applyVerificationPillFilter('VERIFIED_MATCH')"
+          title="Click to filter table to Verified items in Memory Den"
+        >
           <span class="text-xs font-bold text-success">🟢 Verified in MD</span>
           <span class="font-mono font-black text-sm text-success">{{ mdVerifyReport.summary.verifiedMatch }}</span>
-        </div>
-        <div class="p-2.5 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between">
+        </button>
+
+        <button
+          type="button"
+          class="p-2.5 rounded-xl bg-warning/10 hover:bg-warning/20 border border-warning/30 flex items-center justify-between text-left transition-all cursor-pointer"
+          :class="verifyStatusFilter === 'MISSING_IN_MD' ? 'ring-2 ring-warning ring-offset-1 bg-warning/20' : ''"
+          @click="applyVerificationPillFilter('MISSING_IN_MD')"
+          title="Click to inspect the items still missing a UPC in Memory Den"
+        >
           <span class="text-xs font-bold text-warning">🟡 Missing UPC in MD</span>
           <span class="font-mono font-black text-sm text-warning">{{ mdVerifyReport.summary.missingInMd }}</span>
-        </div>
-        <div class="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-between">
+        </button>
+
+        <button
+          type="button"
+          class="p-2.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 flex items-center justify-between text-left transition-all cursor-pointer"
+          :class="verifyStatusFilter === 'MISMATCH_UPC' ? 'ring-2 ring-orange-500 ring-offset-1 bg-orange-500/20' : ''"
+          @click="applyVerificationPillFilter('MISMATCH_UPC')"
+          title="Click to inspect items whose Memory Den UPC differs from Resale Command"
+        >
           <span class="text-xs font-bold text-orange-500">🟠 Mismatched UPC</span>
           <span class="font-mono font-black text-sm text-orange-500">{{ mdVerifyReport.summary.mismatchUpc }}</span>
-        </div>
-        <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300 flex items-center justify-between">
+        </button>
+
+        <button
+          type="button"
+          class="p-2.5 rounded-xl bg-base-200/70 hover:bg-base-300/70 border border-base-300 flex items-center justify-between text-left transition-all cursor-pointer"
+          :class="verifyStatusFilter === 'UNLINKED_IN_RC' ? 'ring-2 ring-primary ring-offset-1 bg-primary/10' : ''"
+          @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
+          title="Click to load & match unlinked Memory Den items (shows In-Stock first)"
+        >
           <span class="text-xs font-bold opacity-80">⚪ Unlinked in RC</span>
           <span class="font-mono font-black text-sm text-base-content">{{ mdVerifyReport.summary.unlinkedInRc }}</span>
+        </button>
+      </div>
+
+      <!-- Diagnostic Banner When Viewing "🟡 Missing UPC in MD" -->
+      <div
+        v-if="verifyStatusFilter === 'MISSING_IN_MD'"
+        class="p-3 rounded-xl bg-warning/15 border border-warning/40 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
+      >
+        <div class="space-y-0.5">
+          <div class="font-black text-warning-content flex items-center gap-1.5">
+            <span>🔎 Why these {{ displayedRows.length }} item(s) didn't accept their UPC in Memory Den:</span>
+          </div>
+          <p class="opacity-85 leading-relaxed">
+            Memory Den's POS rejects a barcode if that exact <code>HUCK-XXXX</code> is <strong>already used on another <code>0EJ...</code> SKU</strong> (for example, two separate booth tags linked to the same DB item). Click <strong>🔧 Assign Unique Barcode</strong> on any row below to give it its own unique <code>HUCK-</code> barcode, then re-run the Bookmarklet!
+          </p>
         </div>
+        <button
+          type="button"
+          class="btn btn-xs btn-warning text-warning-content font-black shrink-0 gap-1"
+          @click="verifyStatusFilter = 'ALL'; filterTab = 'all'"
+        >
+          <span>Show All {{ syncRows.length }} Rows</span>
+        </button>
       </div>
     </div>
 
@@ -561,8 +617,8 @@
             <!-- 4. All Rows -->
             <button 
               class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all" 
-              :class="filterTab === 'all' ? 'btn-primary text-white shadow-md shadow-primary/20' : 'btn-ghost bg-base-200'" 
-              @click="filterTab = 'all'"
+              :class="filterTab === 'all' && verifyStatusFilter === 'ALL' ? 'btn-primary text-white shadow-md shadow-primary/20' : 'btn-ghost bg-base-200'" 
+              @click="filterTab = 'all'; verifyStatusFilter = 'ALL'"
             >
               All ({{ syncRows.length }})
             </button>
@@ -780,12 +836,27 @@
                         <span v-if="row.isSavedToMd" class="badge badge-xs badge-success text-success-content font-black gap-0.5 whitespace-nowrap shrink-0">
                           ✓ Saved to MD
                         </span>
+                        <span v-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" title="Missing UPC in Memory Den — click Assign Unique Barcode if this barcode is shared with another 0EJ SKU">
+                          🟡 Missing UPC in MD
+                        </span>
                         <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-black gap-0.5 whitespace-nowrap shrink-0" :title="row.aiReason || 'Matched by Gemini AI'">
                           ✨ AI
                         </span>
                       </div>
                       <div class="text-xs font-bold leading-snug text-base-content break-words whitespace-normal">
                         {{ row.mappedItem.title }}
+                      </div>
+                      <div v-if="row.verifyStatus === 'MISSING_IN_MD'" class="pt-1 flex items-center gap-2 flex-wrap">
+                        <span class="text-[11px] text-warning font-semibold">
+                          {{ getRowConflictReason(row) }}
+                        </span>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-warning text-warning-content font-black gap-1 shadow-2xs"
+                          @click="assignUniqueUpcToRow(row)"
+                        >
+                          <span>🔧 Assign Unique Barcode ({{ getRowPreviewUpc(row) }})</span>
+                        </button>
                       </div>
                     </div>
 
@@ -810,42 +881,58 @@
                     </div>
                   </div>
 
-                  <!-- Unmatched Trigger: Open Match Drawer + Quick Add -->
-                  <div v-else class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                    <button
-                      type="button"
-                      class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[175px] shadow-2xs"
-                      @click="openMatchDrawer(row)"
-                    >
-                      <span class="flex items-center gap-1.5 truncate">
-                        <span>🔍 Open Match Drawer</span>
-                      </span>
-                      <span
-                        v-if="getRowSuggestedCount(row) > 0"
-                        class="badge badge-xs badge-success text-success-content font-black whitespace-nowrap shrink-0"
+                  <!-- Unmatched Trigger: Open Match Drawer + Quick Add + Partner Prefix Protection -->
+                  <div v-else class="space-y-1.5">
+                    <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      <button
+                        type="button"
+                        class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[175px] shadow-2xs"
+                        @click="openMatchDrawer(row)"
                       >
-                        {{ getRowSuggestedCount(row) }} suggested
-                      </span>
-                      <span
-                        v-else
-                        class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0"
-                      >
-                        Search
-                      </span>
-                    </button>
+                        <span class="flex items-center gap-1.5 truncate">
+                          <span>🔍 Open Match Drawer</span>
+                        </span>
+                        <span
+                          v-if="getRowSuggestedCount(row) > 0"
+                          class="badge badge-xs badge-success text-success-content font-black whitespace-nowrap shrink-0"
+                        >
+                          {{ getRowSuggestedCount(row) }} suggested
+                        </span>
+                        <span
+                          v-else
+                          class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0"
+                        >
+                          Search
+                        </span>
+                      </button>
 
-                    <!-- Quick Add Button per row with HUCK- preview -->
-                    <button 
-                      type="button"
-                      class="btn btn-xs sm:btn-sm btn-primary shrink-0 gap-1 font-bold shadow-xs"
-                      :disabled="row.isQuickAdding"
-                      @click="quickAddRow(row)"
-                      title="Quick create this item with next sequential barcode"
-                    >
-                      <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
-                      <Icon v-else icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
-                      + Add ({{ nextPreviewUpc }})
-                    </button>
+                      <!-- Quick Add Button per row with Partner Prefix Protection (BB- / PDXGL- / HUCK-) -->
+                      <button 
+                        type="button"
+                        class="btn btn-xs sm:btn-sm shrink-0 gap-1 font-bold shadow-xs"
+                        :class="row.isBbRow || row.orgBucket === 'BB' ? 'btn-warning text-warning-content' : row.customPrefix === 'PDXGL-' ? 'btn-secondary text-secondary-content' : 'btn-primary'"
+                        :disabled="row.isQuickAdding"
+                        @click="quickAddRow(row)"
+                        title="Quick create this item with partner-protected sequential barcode"
+                      >
+                        <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
+                        <Icon v-else icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                        + Add ({{ getRowPreviewUpc(row) }})
+                      </button>
+                    </div>
+
+                    <!-- Partner Prefix Protection Guard Pill for Board/Card Games -->
+                    <div v-if="isBoardOrCardGameRow(row) && !row.isBbRow && row.orgBucket !== 'BB'" class="flex items-center">
+                      <button
+                        type="button"
+                        class="badge badge-sm font-bold gap-1 py-2.5 px-2.5 cursor-pointer transition-all shadow-2xs"
+                        :class="row.customPrefix === 'PDXGL-' ? 'badge-secondary text-secondary-content' : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-300 border border-amber-500/40'"
+                        @click="toggleRowPdxglPrefix(row)"
+                      >
+                        <span v-if="row.customPrefix === 'PDXGL-'">🎲 Using PDXGL- (Click to switch back to {{ upcPrefix }})</span>
+                        <span v-else>🎲 Board Game — Switch prefix to PDXGL-?</span>
+                      </button>
+                    </div>
                   </div>
                 </td>
 
@@ -1084,7 +1171,7 @@
                   @click="quickAddFromDrawer(activeMatchRow)"
                 >
                   <span v-if="activeMatchRow.isQuickAdding" class="loading loading-spinner loading-xs"></span>
-                  <span>+ Add as New Item ({{ nextPreviewUpc }})</span>
+                  <span>+ Add as New Item ({{ getRowPreviewUpc(activeMatchRow) }})</span>
                 </button>
               </div>
             </div>
@@ -1155,7 +1242,7 @@
                 {{ matchDrawerSearch ? `No unclaimed items matched "${matchDrawerSearch}"` : 'No close unclaimed matches suggested automatically' }}
               </div>
               <p class="text-xs opacity-65 max-w-md mx-auto">
-                Items already assigned to a different <code>0EJ</code> Memory Den SKU or claimed by another CSV row are automatically ruled out. Try typing a keyword above, switching to <strong>📋 All Unclaimed</strong>, or click <strong>+ Add as New Item ({{ nextPreviewUpc }})</strong>.
+                Items already assigned to a different <code>0EJ</code> Memory Den SKU or claimed by another CSV row are automatically ruled out. Try typing a keyword above, switching to <strong>📋 All Unclaimed</strong>, or click <strong>+ Add as New Item ({{ getRowPreviewUpc(activeMatchRow) }})</strong>.
               </p>
               <div class="flex justify-center gap-2 pt-1">
                 <button
@@ -1171,7 +1258,7 @@
                   :disabled="activeMatchRow.isQuickAdding"
                   @click="quickAddFromDrawer(activeMatchRow)"
                 >
-                  + Add as New Item ({{ nextPreviewUpc }})
+                  + Add as New Item ({{ getRowPreviewUpc(activeMatchRow) }})
                 </button>
               </div>
             </div>
@@ -1333,7 +1420,7 @@
 
             <!-- 2. Two Clear Side-by-Side Plain-English Methods -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <!-- METHOD A: Self-Contained Pre-Loaded Bookmarklet -->
+              <!-- METHOD A: Evergreen Live-Fetch Bookmarklet -->
               <div class="p-5 rounded-2xl bg-base-200/60 border-2 border-warning/50 flex flex-col justify-between shadow-sm space-y-4">
                 <div class="space-y-3">
                   <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -1342,23 +1429,23 @@
                       <span>1-Click Browser Bookmark</span>
                     </div>
                     <span class="badge badge-xs badge-warning/20 text-warning font-bold whitespace-nowrap shrink-0">
-                      All {{ ricochetSyncableItems.length }} Items Pre-Loaded
+                      Install Once • Auto-Updates Live
                     </span>
                   </div>
 
                   <!-- Draggable Bookmarklet Pill Zone -->
                   <div class="p-3.5 rounded-2xl bg-base-100 border-2 border-dashed border-warning/60 text-center space-y-2">
                     <div class="text-[11px] font-bold uppercase tracking-wider text-warning flex items-center justify-center gap-1">
-                      <span>⬆️ Drag this yellow button up to your Bookmarks Bar</span>
+                      <span>⬆️ Drag this yellow button up to your Bookmarks Bar (Once Forever!)</span>
                     </div>
                     <div class="flex justify-center">
                       <a
                         :href="bookmarkletHref"
                         class="btn btn-sm sm:btn-md bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 font-black rounded-xl shadow-md cursor-grab active:cursor-grabbing gap-2 px-4"
-                        title="Drag me up to your Chrome Bookmarks Bar!"
+                        title="Drag me once to your Chrome Bookmarks Bar — auto-updates live from Resale Command!"
                         @click.prevent="copyBookmarkletCode"
                       >
-                        <span>⚡ Sync {{ ricochetSyncableItems.length }} MD Barcodes</span>
+                        <span>⚡ Memory Den Sync</span>
                       </a>
                     </div>
                     <div>
@@ -1376,7 +1463,7 @@
                   <div class="text-xs space-y-2 bg-base-100 p-3.5 rounded-xl border border-base-300">
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-                      <span>Drag the yellow <strong>⚡ Sync {{ ricochetSyncableItems.length }} MD Barcodes</strong> button above up to your Chrome Bookmarks Bar (at the very top of your browser).</span>
+                      <span>Drag the yellow <strong>⚡ Memory Den Sync</strong> button above up to your Chrome Bookmarks Bar once (you never need to re-drag it when new items are added!).</span>
                     </div>
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
@@ -1384,7 +1471,7 @@
                     </div>
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-                      <span>Click <strong>⚡ Sync {{ ricochetSyncableItems.length }} MD Barcodes</strong> on your Bookmarks Bar — a floating progress box will pop up on Memory Den with all <strong>{{ ricochetSyncableItems.length }}</strong> items pre-loaded! Click <strong>Test 1 Item</strong> or <strong>Start Sync</strong>.</span>
+                      <span>Click <strong>⚡ Memory Den Sync</strong> on your Bookmarks Bar — it automatically fetches all <strong>{{ ricochetSyncableItems.length }}</strong> live barcodes from Resale Command and lets you filter by <strong>⭐ HUCK</strong>, <strong>🎲 PDXGL</strong>, or <strong>💛 B&amp;B</strong>!</span>
                     </div>
                   </div>
                 </div>
@@ -1484,47 +1571,63 @@
                 </div>
               </div>
 
-              <!-- 4-State Verification Pills -->
+              <!-- 4-State Clickable Verification Pills -->
               <div v-if="mdVerifyReport" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                <div class="p-2.5 rounded-xl bg-success/10 border border-success/30 flex flex-col justify-between">
+                <button
+                  type="button"
+                  class="p-2.5 rounded-xl bg-success/10 hover:bg-success/20 border border-success/30 flex flex-col justify-between text-left cursor-pointer transition-all"
+                  @click="applyVerificationPillFilter('VERIFIED_MATCH')"
+                >
                   <div class="text-[11px] font-bold text-success flex items-center gap-1">
                     <span>🟢 Verified in MD</span>
                   </div>
                   <div class="text-lg font-black font-mono text-success mt-0.5">
                     {{ mdVerifyReport.summary.verifiedMatch }}
                   </div>
-                  <div class="text-[10px] opacity-70">UPC Confirmed</div>
-                </div>
+                  <div class="text-[10px] opacity-70">Click to View</div>
+                </button>
 
-                <div class="p-2.5 rounded-xl bg-warning/10 border border-warning/30 flex flex-col justify-between">
+                <button
+                  type="button"
+                  class="p-2.5 rounded-xl bg-warning/10 hover:bg-warning/20 border border-warning/30 flex flex-col justify-between text-left cursor-pointer transition-all"
+                  @click="applyVerificationPillFilter('MISSING_IN_MD')"
+                >
                   <div class="text-[11px] font-bold text-warning flex items-center gap-1">
                     <span>🟡 Missing UPC in MD</span>
                   </div>
                   <div class="text-lg font-black font-mono text-warning mt-0.5">
                     {{ mdVerifyReport.summary.missingInMd }}
                   </div>
-                  <div class="text-[10px] opacity-70">Ready to Fill</div>
-                </div>
+                  <div class="text-[10px] opacity-70">Click to Inspect &amp; Fix</div>
+                </button>
 
-                <div class="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/30 flex flex-col justify-between">
+                <button
+                  type="button"
+                  class="p-2.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 flex flex-col justify-between text-left cursor-pointer transition-all"
+                  @click="applyVerificationPillFilter('MISMATCH_UPC')"
+                >
                   <div class="text-[11px] font-bold text-orange-500 flex items-center gap-1">
                     <span>🟠 Mismatched UPC</span>
                   </div>
                   <div class="text-lg font-black font-mono text-orange-500 mt-0.5">
                     {{ mdVerifyReport.summary.mismatchUpc }}
                   </div>
-                  <div class="text-[10px] opacity-70">Differs from RC</div>
-                </div>
+                  <div class="text-[10px] opacity-70">Click to View</div>
+                </button>
 
-                <div class="p-2.5 rounded-xl bg-base-100 border border-base-300 flex flex-col justify-between">
+                <button
+                  type="button"
+                  class="p-2.5 rounded-xl bg-base-100 hover:bg-base-300/60 border border-base-300 flex flex-col justify-between text-left cursor-pointer transition-all"
+                  @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
+                >
                   <div class="text-[11px] font-bold opacity-80 flex items-center gap-1">
                     <span>⚪ Unlinked in RC</span>
                   </div>
                   <div class="text-lg font-black font-mono text-base-content mt-0.5">
                     {{ mdVerifyReport.summary.unlinkedInRc }}
                   </div>
-                  <div class="text-[10px] opacity-70">Needs Match in RC</div>
-                </div>
+                  <div class="text-[10px] opacity-70">Click to Match In-Stock</div>
+                </button>
               </div>
 
               <!-- 1-Click Action to Load Unlinked Items into Slide-Over Match Drawer Table -->
@@ -1537,14 +1640,14 @@
                     v-if="mdVerifyReport.summary.unlinkedInRc > 0"
                     type="button"
                     class="btn btn-xs btn-primary font-bold gap-1"
-                    @click="loadVerifyReportIntoWorkspace('unlinked')"
+                    @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
                   >
                     <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
                   </button>
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1"
-                    @click="loadVerifyReportIntoWorkspace('all')"
+                    @click="applyVerificationPillFilter('ALL')"
                   >
                     <span>📋 View All {{ mdVerifyReport.summary.totalCatalog }} Report Rows</span>
                   </button>
@@ -1631,6 +1734,7 @@ import {
 const showBrowserSyncModal = ref(false);
 const mdVerifyReport = ref<any | null>(null);
 const isCheckingVerifyReport = ref(false);
+const verifyStatusFilter = ref<'ALL' | 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC'>('ALL');
 
 const fetchMdVerifyReport = async (showManualToast = false) => {
   isCheckingVerifyReport.value = true;
@@ -1669,22 +1773,22 @@ watch(showBrowserSyncModal, (isOpen) => {
   }
 });
 
-const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'unlinked') => {
+const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'all') => {
   if (!mdVerifyReport.value || !Array.isArray(mdVerifyReport.value.rows)) return;
-  const sourceRows =
-    mode === 'unlinked'
-      ? mdVerifyReport.value.rows.filter((r: any) => r.verifyStatus === 'UNLINKED_IN_RC')
-      : mdVerifyReport.value.rows;
+  // Always load all 808 rows into syncRows so matchedCount stays at 714/808 and pills filter instantaneously!
+  const sourceRows = mdVerifyReport.value.rows;
 
   if (sourceRows.length === 0) {
-    addToast({ type: 'info', message: 'No rows match that filter in the verification report.' });
+    addToast({ type: 'info', message: 'No rows found in the verification report.' });
     return;
   }
 
   const esc = (val: any) => `"${String(val ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
-  const header = `"Product ID",SKU,UPC,Expected_RC_UPC,Verify_Status,Name,"Agreed Price",Quantity,Inventory`;
+  const header = `"Product ID",SKU,UPC,Expected_RC_UPC,Verify_Status,Partner,Conflict_Reason,Name,"Agreed Price",Quantity,Inventory`;
   const csvLines = [header];
   for (const r of sourceRows) {
+    const rawQty = r.quantity !== undefined && r.quantity !== null ? Number(r.quantity) : 1;
+    const invStr = r.inventory || (rawQty > 0 ? 'In Stock' : 'Sold');
     csvLines.push(
       [
         esc(r.productId),
@@ -1692,33 +1796,181 @@ const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'unlinked') =>
         esc(r.upc),
         esc(r.expectedRcUpc),
         esc(r.verifyStatus),
+        esc(r.partner || ''),
+        esc(r.conflictReason || ''),
         esc(r.name),
         esc(Number(r.agreedPrice || 0).toFixed(2)),
-        esc(r.quantity ?? 1),
-        esc(r.inventory || (Number(r.quantity ?? 1) > 0 ? 'In Stock' : 'Sold')),
+        esc(rawQty),
+        esc(invStr),
       ].join(',')
     );
   }
 
   showBrowserSyncModal.value = false;
-  parseCsvData(
-    csvLines.join('\n'),
-    mode === 'unlinked' ? 'MD-Unlinked-Items-Report.csv' : 'MD-Barcode-Verification-Report.csv'
-  );
+  parseCsvData(csvLines.join('\n'), 'MD-Barcode-Verification-Report.csv');
+
   if (mode === 'unlinked') {
-    filterTab.value = 'unmatched';
+    verifyStatusFilter.value = 'UNLINKED_IN_RC';
+    const hasInStockUnlinked = syncRows.value.some(
+      (r) => r.verifyStatus === 'UNLINKED_IN_RC' && r.status !== 'sold' && r.status !== 'paid' && !r.mappedItem
+    );
+    filterTab.value = hasInStockUnlinked ? 'unmatched-instock' : 'unmatched';
+  } else {
+    verifyStatusFilter.value = 'ALL';
+    filterTab.value = 'all';
   }
 };
 
-// Direct DB + CSV syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so the user never has to upload a CSV first!
+const applyVerificationPillFilter = (
+  targetStatus: 'ALL' | 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC'
+) => {
+  showBrowserSyncModal.value = false;
+  const hasLoadedVerifyRows = syncRows.value.length > 0 && syncRows.value.some((r) => Boolean(r.verifyStatus));
+  if (!hasLoadedVerifyRows && mdVerifyReport.value?.rows?.length) {
+    loadVerifyReportIntoWorkspace('all');
+  }
+
+  verifyStatusFilter.value = targetStatus;
+  searchQuery.value = '';
+  selectedOrgBucket.value = 'all';
+
+  if (targetStatus === 'UNLINKED_IN_RC') {
+    const hasInStockUnlinked = syncRows.value.some(
+      (r) => r.verifyStatus === 'UNLINKED_IN_RC' && r.status !== 'sold' && r.status !== 'paid' && !r.mappedItem
+    );
+    filterTab.value = hasInStockUnlinked ? 'unmatched-instock' : 'all';
+  } else {
+    filterTab.value = 'all';
+  }
+};
+
+// Partner Prefix Protection & Board Game Detection Helpers
+const BOARD_OR_CARD_GAME_REGEX = /\b(board\s*game|card\s*game|deck\s*building|expansion|dice\s*game)\b/i;
+
+const isBoardOrCardGameRow = (row: any): boolean => {
+  if (!row) return false;
+  const text = `${row.itemName || ''} ${row.extraText || ''}`;
+  return BOARD_OR_CARD_GAME_REGEX.test(text);
+};
+
+const toggleRowPdxglPrefix = (row: any) => {
+  if (!row) return;
+  if (row.customPrefix === 'PDXGL-') {
+    row.customPrefix = '';
+    row.orgBucket = primaryOrgKey.value;
+    addToast({ type: 'info', message: `Switched "${row.itemName}" back to ${upcPrefix.value || 'HUCK-'}` });
+  } else {
+    row.customPrefix = 'PDXGL-';
+    row.orgBucket = 'PDXGL';
+    addToast({ type: 'success', message: `🎲 Switched "${row.itemName}" to PDXGL- partner barcode!` });
+  }
+};
+
+const getRowEffectivePrefix = (row: any): string => {
+  if (row?.isBbRow || String(row?.orgBucket || '').toUpperCase() === 'BB') {
+    return 'BB-';
+  }
+  if (row?.customPrefix) {
+    const cp = String(row.customPrefix).trim().toUpperCase();
+    return cp.endsWith('-') || cp.endsWith('_') ? cp : `${cp}-`;
+  }
+  if (String(row?.orgBucket || '').toUpperCase() === 'PDXGL') {
+    return 'PDXGL-';
+  }
+  let p = upcPrefix.value?.trim() || 'HUCK-';
+  if (!p.endsWith('-') && !p.endsWith('_')) p = `${p}-`;
+  return p;
+};
+
+const getRowPreviewUpc = (row: any): string => {
+  if (!row) return nextPreviewUpc.value;
+  if (row.isBbRow || String(row.orgBucket || '').toUpperCase() === 'BB') {
+    const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+    return cleanSku ? `BB-${cleanSku}` : (getNextUpc ? getNextUpc('BB-') : 'BB-0001');
+  }
+  const effPrefix = getRowEffectivePrefix(row);
+  return getNextUpc ? getNextUpc(effPrefix) : `${effPrefix}0001`;
+};
+
+const getRowConflictReason = (row: any): string => {
+  if (!row) return '';
+  if (row.conflictReason) return String(row.conflictReason);
+  const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+  const targetUpc = cleanCatalogSku(row.mappedItem?.upc || row.expectedRcUpc || row.extractedUpc).toUpperCase();
+  if (!cleanSku || !targetUpc) {
+    return `⚠️ Shared/rejected UPC in Memory Den (${targetUpc || 'NO UPC'})`;
+  }
+  // Find any other row or DB item with a different 0EJ SKU using the same UPC
+  const otherRow = syncRows.value.find((r) => {
+    const rSku = cleanCatalogSku(r.extractedSku).toUpperCase();
+    const rUpc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
+    return rSku && rSku !== cleanSku && rUpc === targetUpc;
+  });
+  if (otherRow) {
+    return `⚠️ ${cleanSku}: ${targetUpc} is already used on ${cleanCatalogSku(otherRow.extractedSku).toUpperCase()}`;
+  }
+  const otherDb = (inventoryItems.value || []).find((i: any) => {
+    const iSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
+    const iUpc = cleanCatalogSku(i?.upc).toUpperCase();
+    return iSku && /^0EJ/i.test(iSku) && iSku !== cleanSku && iUpc === targetUpc;
+  });
+  if (otherDb) {
+    return `⚠️ ${cleanSku}: ${targetUpc} is already used on ${cleanCatalogSku(otherDb.locationSku || otherDb.sku).toUpperCase()}`;
+  }
+  return `⚠️ ${cleanSku}: ${targetUpc} was rejected by Memory Den (shared/duplicate barcode)`;
+};
+
+const assignUniqueUpcToRow = async (row: any) => {
+  if (!row) return;
+  const prefix = getRowEffectivePrefix(row);
+  const newUpc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+  const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+
+  try {
+    if (row.mappedItem && row.mappedItem.$id && !String(row.mappedItem.$id).startsWith('subclient_')) {
+      const updatePayload: any = { upc: newUpc };
+      if (cleanSku) updatePayload.locationSku = cleanSku;
+      await updateInventoryItem(row.mappedItem.$id, updatePayload);
+      row.mappedItem.upc = newUpc;
+      if (cleanSku) row.mappedItem.locationSku = cleanSku;
+    }
+    row.extractedUpc = newUpc;
+    row.expectedRcUpc = newUpc;
+    row.conflictReason = '';
+    row.isSavedToMd = true;
+    addToast({
+      type: 'success',
+      message: `🔧 Assigned unique barcode ${newUpc} to ${cleanSku || row.itemName}! Now click ⚡ Memory Den Sync on Memory Den.`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Failed to assign unique barcode: ${err?.message || 'Unknown error'}`,
+    });
+  }
+};
+
+function isRealProductionUpc(upc: any): boolean {
+  const u = cleanCatalogSku(upc).toUpperCase();
+  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
+  if (/test|demo/i.test(u)) return false;
+  return true;
+}
+
+// Direct DB + Preverified + Report syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so all ~714 matched items are ALWAYS included!
 const dbZeroEjItems = computed(() => {
   const list: Array<{ id: string; sku: string; upc: string; title: string }> = [];
   const seenSkus = new Set<string>();
+  const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+  const byId = new Map<string, any>();
+  for (const item of activeItems) {
+    if (item?.$id) byId.set(item.$id, item);
+  }
 
-  for (const item of inventoryItems.value || []) {
+  for (const item of activeItems) {
     const sku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
     const upc = cleanCatalogSku(item?.upc).toUpperCase();
-    if (!sku || !/^0EJ/i.test(sku) || !upc) continue;
+    if (!sku || !/^0EJ/i.test(sku) || !isRealProductionUpc(upc)) continue;
     if (seenSkus.has(sku)) continue;
     seenSkus.add(sku);
     list.push({
@@ -1729,13 +1981,23 @@ const dbZeroEjItems = computed(() => {
     });
   }
 
-  for (const [skuKey, mappedUpc] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
+  for (const [skuKey, mappedUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
     const sku = cleanCatalogSku(skuKey).toUpperCase();
-    const upc = cleanCatalogSku(mappedUpc).toUpperCase();
-    if (!sku || !upc || seenSkus.has(sku)) continue;
-    if (!/^(HUCK-|PDXGL-|BB-)/i.test(upc)) continue;
+    if (!sku || seenSkus.has(sku)) continue;
+    let resolvedUpc = cleanCatalogSku(mappedUpcOrId).toUpperCase();
+    let resolvedTitle = '';
+    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
+      const dbMatch = byId.get(String(mappedUpcOrId).trim());
+      if (dbMatch?.upc) {
+        resolvedUpc = cleanCatalogSku(dbMatch.upc).toUpperCase();
+        resolvedTitle = String(dbMatch.title || dbMatch.identity || '');
+      } else {
+        continue;
+      }
+    }
+    if (!isRealProductionUpc(resolvedUpc)) continue;
     seenSkus.add(sku);
-    list.push({ id: '', sku, upc, title: '' });
+    list.push({ id: '', sku, upc: resolvedUpc, title: resolvedTitle });
   }
 
   return list;
@@ -1746,12 +2008,12 @@ const dbZeroEjItemsCount = computed(() => dbZeroEjItems.value.length);
 const ricochetSyncableItems = computed(() => {
   const mapBySkuOrKey = new Map<string, { id: string; sku: string; upc: string; title: string }>();
 
-  // 1. If a CSV is loaded, include all matched CSV rows first (carries Product ID when present)
+  // 1. If a CSV or Verification Report is loaded in syncRows, include all matched rows first (all 714+ matched items!)
   for (const r of syncRows.value) {
-    const upc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc).toUpperCase();
-    if (!r.mappedItem || !upc) continue;
+    const upc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
+    if (!isRealProductionUpc(upc)) continue;
     const sku = cleanCatalogSku(r.extractedSku || r.mappedItem?.locationSku).toUpperCase();
-    const key = sku || r.productId || r.mappedItem.$id || r.itemName;
+    const key = sku || r.productId || r.mappedItem?.$id || r.itemName;
     if (!key) continue;
     mapBySkuOrKey.set(key, {
       id: r.productId || '',
@@ -1761,7 +2023,38 @@ const ricochetSyncableItems = computed(() => {
     });
   }
 
-  // 2. Always include all DB items that have both a `0EJ...` locationSku and a `upc`
+  // 2. If mdVerifyReport is loaded (even before clicking Load All 808 Items), match its rows against inventoryItems so all 714 items are in the payload!
+  if (syncRows.value.length === 0 && mdVerifyReport.value && Array.isArray(mdVerifyReport.value.rows)) {
+    const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+    const claimedItemIdToSku = new Map<string, string>();
+    const multiBinResolvedBySku = buildLockedMultiBinMap(activeItems, claimedItemIdToSku);
+    for (const r of mdVerifyReport.value.rows) {
+      const sku = cleanCatalogSku(r.sku).toUpperCase();
+      if (!sku || mapBySkuOrKey.has(sku)) continue;
+      const matched = matchMemoryDenInventoryItem({
+        sku,
+        upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
+        title: String(r.name || ''),
+        price: Number(r.agreedPrice || 0),
+        extraText: '',
+        allowPrefixForPayout: false,
+        activeItems,
+        claimedItemIdToSku,
+        multiBinResolvedBySku,
+      });
+      if (matched && cleanSkuAndUpcValid(sku, matched.upc)) {
+        if (!claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
+        mapBySkuOrKey.set(sku, {
+          id: String(r.productId || ''),
+          sku,
+          upc: cleanCatalogSku(matched.upc).toUpperCase(),
+          title: String(matched.title || r.name || ''),
+        });
+      }
+    }
+  }
+
+  // 3. Always include all DB items that have both a `0EJ...` locationSku and a `upc`
   for (const dbEntry of dbZeroEjItems.value) {
     if (!mapBySkuOrKey.has(dbEntry.sku)) {
       mapBySkuOrKey.set(dbEntry.sku, dbEntry);
@@ -1771,31 +2064,79 @@ const ricochetSyncableItems = computed(() => {
   return Array.from(mapBySkuOrKey.values());
 });
 
+function cleanSkuAndUpcValid(sku: string, upc: any): boolean {
+  return Boolean(sku && isRealProductionUpc(upc));
+}
+
 const firstTestSyncItem = computed(() => ricochetSyncableItems.value[0] || null);
 
 const ricochetBarcodePayloadMap = computed(() => {
   const out: Record<string, string> = {};
   for (const entry of ricochetSyncableItems.value) {
-    if (entry.sku && entry.upc) {
+    if (entry.sku && entry.upc && isRealProductionUpc(entry.upc)) {
       out[entry.sku] = entry.upc;
     }
   }
   return out;
 });
 
+const ricochetSkuMetaMap = computed(() => {
+  const out: Record<string, { upc: string; partner: 'HUCK' | 'PDXGL' | 'BB'; title: string }> = {};
+  for (const entry of ricochetSyncableItems.value) {
+    if (!entry.sku || !entry.upc) continue;
+    const u = entry.upc.toUpperCase();
+    const partner: 'HUCK' | 'PDXGL' | 'BB' = u.startsWith('BB-') ? 'BB' : u.startsWith('PDXGL-') ? 'PDXGL' : 'HUCK';
+    out[entry.sku] = {
+      upc: entry.upc,
+      partner,
+      title: entry.title || '',
+    };
+  }
+  return out;
+});
+
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
-// Self-contained Bookmarklet URL with all `{ "0EJ...": "HUCK-XXXX" }` pairs pre-embedded inside `window.__RC_PRELOADED_BARCODES__`
+// Sync the live payload map to /api/md-verify-report so GET ?mode=payload always has all 714+ matched items ready!
+const syncLivePayloadToCloudEndpoint = async () => {
+  const map = ricochetBarcodePayloadMap.value;
+  if (!map || Object.keys(map).length === 0) return;
+  try {
+    await fetch('/api/md-verify-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'payload',
+        skuToUpcMap: map,
+        skuToMetaMap: ricochetSkuMetaMap.value,
+      }),
+    });
+  } catch (e) {
+    // Non-blocking background cache sync
+  }
+};
+
+watch(
+  ricochetBarcodePayloadCount,
+  (newCount) => {
+    if (newCount > 0) {
+      void syncLivePayloadToCloudEndpoint();
+    }
+  },
+  { immediate: true }
+);
+
+// Evergreen Bookmarklet (`⚡ Memory Den Sync`) — Install Once Forever, auto-fetches live barcodes from `/api/md-verify-report?mode=payload` on every open!
 const bookmarkletHref = computed(() => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://resalecmd.com';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.resalecmd.com';
   const embeddedJson = JSON.stringify(ricochetBarcodePayloadMap.value);
-  return `javascript:(function(){window.__RC_PRELOADED_BARCODES__=${embeddedJson};if(window.__RC_HYDRATE_PRELOADED__){window.__RC_HYDRATE_PRELOADED__(true);return;}const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+  return `javascript:(function(){window.__RC_PRELOADED_BARCODES__=${embeddedJson};if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
 });
 
 const copyBookmarkletCode = () => {
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
     navigator.clipboard.writeText(bookmarkletHref.value);
-    addToast({ type: 'success', message: `Copied self-contained Bookmarklet (with ${ricochetBarcodePayloadCount.value} pre-loaded items)! Drag the yellow button to your Bookmarks Bar or paste into a bookmark URL.` });
+    addToast({ type: 'success', message: `Copied Evergreen "⚡ Memory Den Sync" Bookmarklet! Drag the yellow button to your Bookmarks Bar once — it auto-updates live from Resale Command.` });
   }
 };
 
@@ -1927,6 +2268,14 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
     } else if (upc && /^(HUCK|PDXGL|BB)-/i.test(upc)) {
       verifyStatus = 'VERIFIED_MATCH';
     }
+    const firstItem = Array.isArray(p.items) ? p.items[0] : (p.items && typeof p.items === 'object' ? Object.values(p.items).flat()[0] : null);
+    const rawPrice = p.price ?? p.agreed_price ?? p.retail_price ?? p.aged_price ?? p['Agreed Price'] ?? p.cost ?? p.amount ?? firstItem?.price ?? firstItem?.agreed_price ?? 0;
+    const agreedPrice = parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0;
+    const rawStatusStr = cleanStr(p.status ?? p.inventory ?? p.Inventory ?? p.state ?? firstItem?.status ?? '').toLowerCase();
+    const isSoldOrPaidFlag = p.sold === true || p.paid === true || rawStatusStr === 'sold' || rawStatusStr === 'paid';
+    const rawQty = p.quantity ?? p.qty ?? p.in_stock ?? p.stock ?? p.Quantity ?? firstItem?.quantity ?? 1;
+    const parsedQty = isSoldOrPaidFlag ? 0 : (parseInt(String(rawQty).replace(/[^0-9-]/g, ''), 10) || 0);
+    const inventory = (p.paid === true || rawStatusStr.includes('paid')) ? 'Paid' : ((isSoldOrPaidFlag || parsedQty === 0) ? 'Sold' : 'In Stock');
     return {
       productId: String(p.id || ''),
       sku,
@@ -1934,9 +2283,9 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
       expectedRcUpc,
       verifyStatus,
       name: cleanStr(p.name || p.title || sku),
-      agreedPrice: parseFloat(String(p.agreed_price ?? p.price ?? 0)) || 0,
-      quantity: parseInt(String(p.quantity ?? 1), 10) || 0,
-      inventory: (parseInt(String(p.quantity ?? 1), 10) || 0) > 0 ? 'In Stock' : 'Sold'
+      agreedPrice,
+      quantity: parsedQty,
+      inventory
     };
   });
 
@@ -2236,8 +2585,18 @@ const inStockCount = computed(() => syncRows.value.filter(r => r.status !== 'sol
 const soldCount = computed(() => syncRows.value.filter(r => r.status === 'sold' || r.status === 'paid').length);
 const matchedCount = computed(() => syncRows.value.filter(r => r.mappedItem !== null).length);
 const unmatchedCount = computed(() => syncRows.value.filter(r => r.mappedItem === null).length);
-const unmatchedSoldCount = computed(() => isCatalogExport.value ? 0 : syncRows.value.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length);
-const unmatchedInStockCount = computed(() => syncRows.value.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null).length);
+const unmatchedSoldCount = computed(() => {
+  const base = verifyStatusFilter.value !== 'ALL'
+    ? syncRows.value.filter(r => r.verifyStatus === verifyStatusFilter.value)
+    : syncRows.value;
+  return base.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length;
+});
+const unmatchedInStockCount = computed(() => {
+  const base = verifyStatusFilter.value !== 'ALL'
+    ? syncRows.value.filter(r => r.verifyStatus === verifyStatusFilter.value)
+    : syncRows.value;
+  return base.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null).length;
+});
 
 const nextPreviewUpc = computed(() => {
   const p = upcPrefix.value?.trim() || 'HUCK-';
@@ -2264,6 +2623,11 @@ const totalSoldNet = computed(() => {
 
 const displayedRows = computed(() => {
   let rows = syncRows.value;
+
+  // Verification Report Pill Filter (4-State Scorecard)
+  if (verifyStatusFilter.value !== 'ALL') {
+    rows = rows.filter(r => r.verifyStatus === verifyStatusFilter.value);
+  }
 
   // Org Bucket Filter
   if (selectedOrgBucket.value === 'primary') {
@@ -2694,6 +3058,7 @@ const parseCsvData = (rawText: string, fileName: string) => {
       const qtyIdx = qtyIdxExact !== -1 ? qtyIdxExact : headerCols.findIndex(h => h.includes('quantity') || h.includes('qty'));
       const expectedRcUpcIdx = headerCols.findIndex(h => h === 'expected_rc_upc' || h === 'expected rc upc' || h.includes('expected_rc_upc'));
       const verifyStatusIdx = headerCols.findIndex(h => h === 'verify_status' || h === 'verify status' || h.includes('verify_status'));
+      const conflictReasonIdx = headerCols.findIndex(h => h === 'conflict_reason' || h === 'conflict reason' || h.includes('conflict_reason'));
       const isVerifyReportCsv = expectedRcUpcIdx !== -1 || verifyStatusIdx !== -1;
       isCatalogExport.value = isVerifyReportCsv || isProductCatalogHeaders(rawHeaders);
 
@@ -2709,6 +3074,7 @@ const parseCsvData = (rawText: string, fileName: string) => {
             upc: upcIdx !== -1 ? cleanCatalogSku(c[upcIdx]).toUpperCase() : '',
             expectedRcUpc: expectedRcUpcIdx !== -1 ? cleanCatalogSku(c[expectedRcUpcIdx]).toUpperCase() : '',
             verifyStatus: vStatus || 'UNLINKED_IN_RC',
+            conflictReason: conflictReasonIdx !== -1 ? (c[conflictReasonIdx] || '').trim() : '',
             name: nameIdx !== -1 ? (c[nameIdx] || '').trim() : '',
             agreedPrice: agreedPriceIdx !== -1 ? (parseFloat((c[agreedPriceIdx] || '').replace(/[^0-9.]/g, '')) || 0) : 0,
             quantity: qtyIdx !== -1 ? (parseInt((c[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || 0) : 1,
@@ -2788,7 +3154,12 @@ const parseCsvData = (rawText: string, fileName: string) => {
         let cleanSku = cleanCatalogSku(rawSku).replace(/^["]+/, '').replace(/['"]+$/, '').toUpperCase();
         let rawUpc = upcIdx !== -1 ? cols[upcIdx] : '';
         let cleanUpc = cleanCatalogSku(rawUpc).replace(/^['"]+/, '').replace(/['"]+$/, '');
-        let rowQty = qtyIdx !== -1 ? (parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || (isCatalogExport.value ? 0 : 1)) : 1;
+        const rowExpectedRcUpc = expectedRcUpcIdx !== -1 ? cleanCatalogSku(cols[expectedRcUpcIdx]).toUpperCase() : '';
+        const rowVerifyStatus = verifyStatusIdx !== -1 ? (cols[verifyStatusIdx] || '').trim().toUpperCase() : '';
+        const rawQtyCell = qtyIdx !== -1 ? (cols[qtyIdx] || '').trim() : '';
+        const parsedQtyNum = rawQtyCell !== '' ? parseInt(rawQtyCell.replace(/[^0-9-]/g, ''), 10) : NaN;
+        const isExplicitZeroQty = !isNaN(parsedQtyNum) && parsedQtyNum === 0;
+        let rowQty = !isNaN(parsedQtyNum) ? Math.max(0, parsedQtyNum) : (isCatalogExport.value ? 0 : 1);
         let saleTicketIdRaw = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
         // Canonical numeric ticket id so legacy "T-217301 • Title" records dedupe against "217301"
         let saleTicketId = canonicalTicketNumber(saleTicketIdRaw) || saleTicketIdRaw;
@@ -2824,10 +3195,10 @@ const parseCsvData = (rawText: string, fileName: string) => {
         }
 
         const extraText = descIdx !== -1 ? (cols[descIdx] || '') : '';
-        const rowIsBb = isBbConsignorRow({ sku: cleanSku, upc: cleanUpc, title: name, extraText });
+        const rowIsBb = isBbConsignorRow({ sku: cleanSku, upc: cleanUpc || rowExpectedRcUpc, title: name, extraText });
 
         // Multi-Org SKU & Prefix Extraction
-        const detectedPrefix = rowIsBb ? 'BB' : extractOrgPrefix(cleanUpc || cleanSku);
+        const detectedPrefix = rowIsBb ? 'BB' : extractOrgPrefix(cleanUpc || rowExpectedRcUpc || cleanSku);
         const hasOrgPrefix = (cleanUpc && (cleanUpc.toUpperCase().startsWith(`${cleanOrg}-`) || cleanUpc.toUpperCase().startsWith(cleanOrg))) ||
                              (cleanSku && (cleanSku.toUpperCase().startsWith(`${cleanOrg}-`) || cleanSku.toUpperCase().startsWith(cleanOrg)));
         const matchesInventoryItem = activeItems.some(item => {
@@ -2876,13 +3247,18 @@ const parseCsvData = (rawText: string, fileName: string) => {
           netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
         }
 
-        // A row is only "sold" when the CSV says so explicitly: a sold/paid status, or a Sold / Paid date, or pre-verified Oct sold override (0EJ0MU).
+        // A row is only "sold" when the CSV says so explicitly: a sold/paid status, qty===0 in Ricochet, a Sold / Paid date, or pre-verified Oct sold override (0EJ0MU).
         // Multi-Qty Booth Bins with CSV Qty > 0 and HUCK-9458 (0EJ0O0) stay 'instock' (placed) in Catalog mode!
         let hasSoldIndicatorDate = (soldDateIdx !== -1 && !!(cols[soldDateIdx] || '').trim()) || (paidDateIdx !== -1 && !!(cols[paidDateIdx] || '').trim());
         let rawStatus = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
         const isMultiBin = Boolean(PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku]);
         const isOverrideSold = !isMultiBin && cleanSku !== '0EJ0O0' && (cleanSku === '0EJ0MU' || Boolean(PREVERIFIED_MD_SINGLE_UPC_BY_SKU[cleanSku]));
-        let isSoldOrPaid = rawStatus.includes('sold') || rawStatus.includes('paid') || hasSoldIndicatorDate || isOverrideSold;
+        let isSoldOrPaid =
+          rawStatus.includes('sold') ||
+          rawStatus.includes('paid') ||
+          hasSoldIndicatorDate ||
+          isOverrideSold ||
+          (!isMultiBin && cleanSku !== '0EJ0O0' && isExplicitZeroQty);
         if (isCatalogExport.value && (isMultiBin || cleanSku === '0EJ0O0')) {
           isSoldOrPaid = false;
           if (isMultiBin && (!rowQty || rowQty < 1)) {
@@ -2896,7 +3272,7 @@ const parseCsvData = (rawText: string, fileName: string) => {
         // Match against existing inventory items using verified Memory Den matcher (enforcing B&B isolation, trap guards & multi-bin locks)
         let matched = matchMemoryDenInventoryItem({
           sku: cleanSku,
-          upc: cleanUpc,
+          upc: cleanUpc || rowExpectedRcUpc,
           title: name,
           price: grossPrice,
           extraText,
@@ -2908,6 +3284,28 @@ const parseCsvData = (rawText: string, fileName: string) => {
 
         if (matched && cleanSku && !claimedItemIdToSku.has(matched.$id)) {
           claimedItemIdToSku.set(matched.$id, cleanSku);
+        }
+
+        // Price & Sold-Status Fallback from Matched DB Item:
+        // 1) Never show $0.00 when the matched DB item has a known resalePrice / listPrice / price / soldPrice!
+        // 2) In Verification Report mode, if the matched DB item is already 'sold' (and not a multi-bin or 0EJ0O0), preserve 'sold' status so Load All 808 Items never marks 304 sold items as In-Stock!
+        if (matched) {
+          const dbPrice = Number(matched.resalePrice || matched.listPrice || matched.price || matched.soldPrice || 0);
+          if (grossPrice <= 0 && dbPrice > 0) {
+            grossPrice = Number(dbPrice.toFixed(2));
+            if (explicitPayout <= 0) {
+              netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
+            }
+            commFee = grossPrice > netSoldPrice ? Number((grossPrice - netSoldPrice).toFixed(2)) : 0;
+          }
+          if (
+            isVerifyReportCsv &&
+            !isMultiBin &&
+            cleanSku !== '0EJ0O0' &&
+            String(matched.status || '').toLowerCase() === 'sold'
+          ) {
+            isSoldOrPaid = true;
+          }
         }
 
         // Auto-stage missing B&B (BB-) items so they never match HUCK- and auto-create cleanly with cost: 0 on commit
@@ -2929,9 +3327,15 @@ const parseCsvData = (rawText: string, fileName: string) => {
         rows.push({
           originalLineIndex: i,
           orgBucket,
+          isBbRow: rowIsBb,
+          extraText,
+          customPrefix: rowIsBb ? 'BB-' : (detectedPrefix === 'PDXGL' ? 'PDXGL-' : ''),
+          conflictReason: conflictReasonIdx !== -1 ? (cols[conflictReasonIdx] || '').trim() : '',
           productId: prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim() : '',
           extractedSku: cleanSku,
-          extractedUpc: cleanUpc || (matched?.upc || ''),
+          extractedUpc: cleanUpc || (matched?.upc || '') || rowExpectedRcUpc,
+          expectedRcUpc: rowExpectedRcUpc || (matched?.upc || ''),
+          verifyStatus: rowVerifyStatus || undefined,
           itemName: name,
           listedPrice: grossPrice,
           netSoldPrice: netSoldPrice,
@@ -2999,6 +3403,7 @@ const resetSync = () => {
   rawCsvHeader.value = '';
   rawCsvLines.value = [];
   filterTab.value = 'all';
+  verifyStatusFilter.value = 'ALL';
   searchQuery.value = '';
   currentFileName.value = '';
   newItemsCreatedInSession.value = 0;
@@ -3119,38 +3524,40 @@ const quickAddRow = async (row: any) => {
   row.isQuickAdding = true;
   try {
     const isSold = row.status === 'sold' || row.status === 'paid';
-    const locName = currentLocation.value?.name || '';
+    const locName = currentLocation.value?.name || 'Memory Den';
+    const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+    const isMd = /^0EJ/i.test(cleanSku) || /memory\s*den/i.test(locName) || selectedLocationId.value === MD_CANONICAL_WAREHOUSE_ID;
+    const targetStorageCode = isMd ? 'MD' : (currentLocation.value?.code || locName || 'HG');
     const listedPrice = Number(row.listedPrice || row.netSoldPrice || 0);
     const netSoldPrice = Number(row.netSoldPrice || row.listedPrice || 0);
     
-    // Normalize prefix (e.g. "PDXGL" -> "PDXGL-")
-    let prefix = upcPrefix.value?.trim() || 'HUCK-';
-    if (!prefix.endsWith('-') && !prefix.endsWith('_')) {
-      prefix = `${prefix}-`;
-    }
-    
+    // Partner Prefix Protection: force BB- on B&B rows, PDXGL- when toggled, or active org prefix
+    const prefix = getRowEffectivePrefix(row);
     const partnerTag = prefix.replace(/[-_]$/, '');
     const isCustomPartner = partnerTag.toUpperCase() !== 'HUCK';
     const partnerNote = isCustomPartner ? ` | Partner: ${partnerTag}` : '';
 
-    // Generate next UPC using active prefix
-    const upc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+    // Generate next UPC using partner-protected prefix (or BB-0EJ... for B&B items)
+    const upc =
+      partnerTag.toUpperCase() === 'BB' && cleanSku
+        ? `BB-${cleanSku}`
+        : (getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`);
 
     const doc = await withRetry(() => saveItemToInventory(
       {
         title: row.itemName || 'Unnamed Item',
-        condition_notes: `Added from ${locName || 'Booth'} Sync. SKU: ${row.extractedSku || 'N/A'}${partnerNote}`
+        condition_notes: `Added from ${locName || 'Booth'} Sync. SKU: ${cleanSku || 'N/A'}${partnerNote}`
       },
       null,
       {
         title: row.itemName || 'Unnamed Item',
         status: isSold ? 'sold' : 'placed',
-        locationSku: row.extractedSku || (isCustomPartner ? partnerTag : ''),
+        locationSku: cleanSku || (isCustomPartner ? partnerTag : ''),
         cost: '0',
         resalePrice: String(listedPrice),
         soldPrice: isSold ? netSoldPrice : undefined,
         sellingLocations: locName ? [locName] : [],
-        storageLocation: locName || '',
+        storageLocation: targetStorageCode,
         upc: upc
       },
       team.value?.$id || user.value?.$id || '',
@@ -3159,6 +3566,9 @@ const quickAddRow = async (row: any) => {
 
     inventoryItems.value.unshift(doc);
     row.mappedItem = doc;
+    row.extractedUpc = upc;
+    row.expectedRcUpc = upc;
+    row.isSavedToMd = true;
     row.isSearching = false;
     row.searchQuery = '';
 
@@ -3202,16 +3612,12 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
   if (!prefix.endsWith('-') && !prefix.endsWith('_')) {
     prefix = `${prefix}-`;
   }
-  
-  const partnerTag = prefix.replace(/[-_]$/, '');
-  const isCustomPartner = partnerTag.toUpperCase() !== 'HUCK';
-  const partnerNote = isCustomPartner ? ` | Partner: ${partnerTag}` : '';
 
   const label = onlySold ? `${unmapped.length} unmatched SOLD items` : `${unmapped.length} unmatched items`;
 
   const ok = await showCustomConfirm({
     title: `Create & Track ${label}?`,
-    message: `This will auto-generate "${prefix}" barcodes, save items to inventory, and track all sales and revenue.`,
+    message: `This will auto-generate partner-protected barcodes ("${prefix}", "PDXGL-", or "BB-"), save items to inventory, and track all sales and revenue.`,
     type: 'success',
     icon: 'solar:cart-check-bold',
     confirmText: `Create ${unmapped.length} Items`,
@@ -3235,7 +3641,7 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
   });
 
   try {
-    const locName = currentLocation.value?.name || '';
+    const locName = currentLocation.value?.name || 'Memory Den';
 
     for (let idx = 0; idx < total; idx++) {
       if (isCancelled) break;
@@ -3254,25 +3660,35 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
 
       try {
         const isSold = row.status === 'sold' || row.status === 'paid';
+        const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+        const isMd = /^0EJ/i.test(cleanSku) || /memory\s*den/i.test(locName) || selectedLocationId.value === MD_CANONICAL_WAREHOUSE_ID;
+        const targetStorageCode = isMd ? 'MD' : (currentLocation.value?.code || locName || 'HG');
         const listedPrice = Number(row.listedPrice || row.netSoldPrice || 0);
         const netSoldPrice = Number(row.netSoldPrice || row.listedPrice || 0);
-        const upc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+        const rowPrefix = getRowEffectivePrefix(row);
+        const rowPartnerTag = rowPrefix.replace(/[-_]$/, '');
+        const isRowCustomPartner = rowPartnerTag.toUpperCase() !== 'HUCK';
+        const rowPartnerNote = isRowCustomPartner ? ` | Partner: ${rowPartnerTag}` : '';
+        const upc =
+          rowPartnerTag.toUpperCase() === 'BB' && cleanSku
+            ? `BB-${cleanSku}`
+            : (getNextUpc ? getNextUpc(rowPrefix) : `${rowPrefix}${Math.floor(1000 + Math.random() * 9000)}`);
 
         const doc = await withRetry(() => saveItemToInventory(
           {
             title: row.itemName || 'Unnamed Item',
-            condition_notes: `Added from ${locName || 'Booth'} Sync. SKU: ${row.extractedSku || 'N/A'}${partnerNote}`
+            condition_notes: `Added from ${locName || 'Booth'} Sync. SKU: ${cleanSku || 'N/A'}${rowPartnerNote}`
           },
           null,
           {
             title: row.itemName || 'Unnamed Item',
             status: isSold ? 'sold' : 'placed',
-            locationSku: row.extractedSku || (isCustomPartner ? partnerTag : ''),
+            locationSku: cleanSku || (isRowCustomPartner ? rowPartnerTag : ''),
             cost: '0',
             resalePrice: String(listedPrice),
             soldPrice: isSold ? netSoldPrice : undefined,
             sellingLocations: locName ? [locName] : [],
-            storageLocation: locName || '',
+            storageLocation: targetStorageCode,
             upc: upc
           },
           team.value?.$id || user.value?.$id || '',
@@ -3281,6 +3697,9 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
 
         inventoryItems.value.unshift(doc);
         row.mappedItem = doc;
+        row.extractedUpc = upc;
+        row.expectedRcUpc = upc;
+        row.isSavedToMd = true;
         row.isSearching = false;
         row.searchQuery = '';
         successCount++;
