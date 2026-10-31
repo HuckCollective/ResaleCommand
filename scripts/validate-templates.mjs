@@ -131,8 +131,10 @@ for (const diag of diagnostics) {
     // TS2304: Cannot find name 'x' (catches missing imports)
     // TS2552: Cannot find name 'x'. Did you mean 'y'?
     // TS2307: Cannot find module 'x' (catches broken import paths)
+    // TS2448: Block-scoped variable 'x' used before its declaration (TDZ)
+    // TS2454: Variable 'x' is used before being assigned (TDZ)
     // TS1xxx: Any TypeScript/JavaScript syntax error
-    const isCritical = (code === 2304 || code === 2552 || code === 2307 || (code >= 1000 && code < 2000));
+    const isCritical = (code === 2304 || code === 2552 || code === 2307 || code === 2448 || code === 2454 || (code >= 1000 && code < 2000));
 
     if (isCritical) {
         // Ignore known benign imports of raw Vue SFC components without shim in virtual TS files
@@ -172,8 +174,136 @@ for (const relPath of pricingCriticalFiles) {
     }
 }
 
+// 4. VALIDATE <script setup> TDZ & IMMEDIATE WATCHER DECLARATION ORDER
+for (const file of vueFiles) {
+    const relativePath = path.relative(process.cwd(), file).replace(/\\/g, '/');
+    const content = fs.readFileSync(file, 'utf8');
+    const { descriptor } = parse(content, { filename: file });
+    if (!descriptor.scriptSetup) continue;
+
+    const setupContent = descriptor.scriptSetup.content;
+    const setupStartLine = descriptor.scriptSetup.loc.start.line;
+    const sf = ts.createSourceFile(file + '.setup.ts', setupContent, ts.ScriptTarget.ESNext, true);
+
+    // Collect top-level const/let declarations & their positions, plus computed() dependency graph
+    const declPosByName = new Map();
+    const declLineByName = new Map();
+    const computedDeps = new Map();
+
+    function extractBindingNames(nameNode, pos, line) {
+        if (ts.isIdentifier(nameNode)) {
+            declPosByName.set(nameNode.text, pos);
+            declLineByName.set(nameNode.text, line);
+        } else if (ts.isObjectBindingPattern(nameNode) || ts.isArrayBindingPattern(nameNode)) {
+            for (const el of nameNode.elements) {
+                if (ts.isBindingElement(el)) {
+                    extractBindingNames(el.name, pos, line);
+                }
+            }
+        }
+    }
+
+    function collectIdentifiers(node, outSet) {
+        if (!node) return;
+        if (ts.isIdentifier(node)) {
+            // Skip property access right-hand side (obj.prop) unless it's the object itself
+            if (node.parent && ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) {
+                return;
+            }
+            if (node.parent && ts.isPropertyAssignment(node.parent) && node.parent.name === node) {
+                return;
+            }
+            outSet.add(node.text);
+        }
+        ts.forEachChild(node, child => collectIdentifiers(child, outSet));
+    }
+
+    for (const stmt of sf.statements) {
+        if (ts.isVariableStatement(stmt)) {
+            const isConstOrLet = (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
+            if (!isConstOrLet) continue;
+            for (const decl of stmt.declarationList.declarations) {
+                const line = setupStartLine + sf.getLineAndCharacterOfPosition(decl.getStart()).line;
+                extractBindingNames(decl.name, decl.getStart(), line);
+                if (
+                    ts.isIdentifier(decl.name) &&
+                    decl.initializer &&
+                    ts.isCallExpression(decl.initializer) &&
+                    ts.isIdentifier(decl.initializer.expression) &&
+                    decl.initializer.expression.text === 'computed'
+                ) {
+                    const idents = new Set();
+                    collectIdentifiers(decl.initializer.arguments[0], idents);
+                    computedDeps.set(decl.name.text, idents);
+                }
+            }
+        }
+    }
+
+    // Resolve transitive dependencies for any identifier (including chains of computed -> computed -> ref)
+    function getTransitiveDeps(rootName, visited = new Set()) {
+        if (visited.has(rootName)) return visited;
+        visited.add(rootName);
+        const direct = computedDeps.get(rootName);
+        if (direct) {
+            for (const dep of direct) {
+                if (declPosByName.has(dep)) {
+                    getTransitiveDeps(dep, visited);
+                }
+            }
+        }
+        return visited;
+    }
+
+    // Check every watch(..., { immediate: true }) and watchEffect(...) in <script setup>
+    for (const stmt of sf.statements) {
+        if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) continue;
+        const call = stmt.expression;
+        if (!ts.isIdentifier(call.expression)) continue;
+        const fnName = call.expression.text;
+        const callPos = call.getStart();
+        const callLine = setupStartLine + sf.getLineAndCharacterOfPosition(callPos).line;
+
+        const isWatchEffect = fnName === 'watchEffect';
+        const isImmediateWatch =
+            fnName === 'watch' &&
+            call.arguments.length >= 3 &&
+            call.arguments[2] &&
+            call.arguments[2].getText().includes('immediate') &&
+            call.arguments[2].getText().includes('true');
+
+        if (!isWatchEffect && !isImmediateWatch) continue;
+
+        const watchedRoots = new Set();
+        collectIdentifiers(call.arguments[0], watchedRoots);
+        if (call.arguments[1]) {
+            collectIdentifiers(call.arguments[1], watchedRoots);
+        }
+
+        const allEvaluated = new Set();
+        for (const r of watchedRoots) {
+            if (declPosByName.has(r)) {
+                for (const d of getTransitiveDeps(r)) {
+                    allEvaluated.add(d);
+                }
+            }
+        }
+
+        for (const dep of allEvaluated) {
+            const depPos = declPosByName.get(dep);
+            const depLine = declLineByName.get(dep);
+            if (depPos !== undefined && depPos > callPos) {
+                console.error(
+                    `❌ TDZ ReferenceError Risk in ${relativePath}:${callLine}: "${fnName}(..., { immediate: true })" evaluates "${dep}" before its declaration at line ${depLine}!`
+                );
+                hasErrors = true;
+            }
+        }
+    }
+}
+
 if (!hasErrors) {
-    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, and price-parsing invariants passed with ZERO errors!`);
+    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, and price-parsing invariants passed with ZERO errors!`);
 } else {
     process.exit(1);
 }

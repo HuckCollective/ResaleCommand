@@ -1700,12 +1700,31 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
+import { databases, ID } from '../../lib/appwrite';
+import {
+  DB_ID,
+  getCollectionId,
+  saveItemToInventory,
+  updateInventoryItem,
+  extractOrgPrefix,
+  KNOWN_ORG_PREFIXES,
+  normalizeOrgPrefix,
+  getAssetUrl,
+} from '../../lib/inventory';
+import {
+  getSyncHistory,
+  recordSyncHistory,
+  deleteSyncHistoryEntry,
+  clearLocationSyncHistory,
+  type SyncHistoryEntry,
+} from '../../lib/syncHistory';
 import {
   stripBom,
   normalizeCsvHeader,
@@ -1730,11 +1749,418 @@ import {
   getPrimaryItemImageId,
 } from '../../lib/salesBucketing';
 
-// Browser Auto-Sync Helper State
+// =========================================================================
+// 1. ALL COMPOSABLES & REACTIVE REFS (Strictly at top to prevent TDZ errors)
+// =========================================================================
+const { user, currentTeam: team } = useAuth();
+const { inventoryItems, fetchInventory, getNextUpc } = useInventory();
+const { showLoader, hideLoader } = useLoader();
+
 const showBrowserSyncModal = ref(false);
 const mdVerifyReport = ref<any | null>(null);
 const isCheckingVerifyReport = ref(false);
 const verifyStatusFilter = ref<'ALL' | 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC'>('ALL');
+
+const isDragging = ref(false);
+const isParsing = ref(false);
+const isCommitting = ref(false);
+const isBulkQuickAdding = ref(false);
+const isAiMatching = ref(false);
+const bulkProgressMessage = ref('');
+const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'matched' | 'sold' | 'instock' | 'all'>('unmatched-sold');
+const searchQuery = ref('');
+const exportUpdatedCsv = ref(true);
+
+const upcPrefix = ref<string>(team.value?.prefs?.upcPrefix || 'HUCK-');
+const onlySyncOrgPrefix = ref<boolean>(false);
+const skippedNonOrgCount = ref<number>(0);
+const selectedOrgBucket = ref<string>('all'); // 'all' | 'primary' | 'partner' | 'unassigned'
+
+const currentFileName = ref<string>('');
+const showHistoryModal = ref<boolean>(false);
+const syncHistoryList = ref<SyncHistoryEntry[]>([]);
+const newItemsCreatedInSession = ref<number>(0);
+
+const showNewLocationModal = ref(false);
+const isCreatingLocation = ref(false);
+const newLocationForm = ref({
+  name: '',
+  type: 'Consignment Booth',
+  commissionRate: 15,
+  monthlyRent: 0,
+});
+
+const locations = ref<any[]>([]);
+const selectedLocationId = ref<string>('');
+const syncRows = ref<any[]>([]);
+// Ricochet Product Catalog export (Products-*.csv): items-only sync, NEVER creates sales
+const isCatalogExport = ref(false);
+const rawCsvHeader = ref<string>('');
+const rawCsvLines = ref<string[]>([]);
+
+const detectedRentDeductions = ref<{ title: string; amount: number; date: string }[]>([]);
+const isLoggingRent = ref<boolean>(false);
+
+const confirmDialog = ref<{
+  isOpen: boolean;
+  title: string;
+  message: string;
+  type: 'primary' | 'error' | 'success' | 'warning';
+  icon: string;
+  confirmText: string;
+  cancelText: string;
+}>({
+  isOpen: false,
+  title: '',
+  message: '',
+  type: 'primary',
+  icon: 'solar:question-circle-bold',
+  confirmText: 'Confirm',
+  cancelText: 'Cancel',
+});
+let confirmResolve: ((val: boolean) => void) | null = null;
+
+// Slide-Over Inventory Match Drawer Refs
+const isMatchDrawerOpen = ref(false);
+const activeMatchRow = ref<any | null>(null);
+const matchDrawerSearch = ref('');
+const matchDrawerFilter = ref<'suggested' | 'all' | 'same_price' | 'backstock'>('suggested');
+const isSavingDrawerLink = ref<string | null>(null);
+const matchDrawerSearchInput = ref<HTMLInputElement | null>(null);
+
+// =========================================================================
+// 2. PURE HELPER FUNCTIONS (Used by computed properties & actions)
+// =========================================================================
+const BOARD_OR_CARD_GAME_REGEX = /\b(board\s*game|card\s*game|deck\s*building|expansion|dice\s*game)\b/i;
+const STOP_WORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'in', 'on', 'at', 'to', 'with', 'by', 'from', 'is', 'it', 'as', 'game', 'sc', 'aeg']);
+
+function isRealProductionUpc(upc: any): boolean {
+  const u = cleanCatalogSku(upc).toUpperCase();
+  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
+  if (/test|demo/i.test(u)) return false;
+  return true;
+}
+
+function cleanSkuAndUpcValid(sku: string, upc: any): boolean {
+  return Boolean(sku && isRealProductionUpc(upc));
+}
+
+// =========================================================================
+// 3. COMPUTED PROPERTIES (Strict topological order — never references below)
+// =========================================================================
+const availableOrgPrefixes = computed(() => {
+  const list: Array<{ prefix: string; label: string; orgKey: string; name: string }> = [];
+  const teamPref = team.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+  const primary = normalizeOrgPrefix(teamPref);
+  list.push({ prefix: primary, label: primary, orgKey: primary.replace(/[-_]$/, ''), name: 'Primary Org' });
+
+  const partners = team.value?.prefs?.partnerPrefixes || user.value?.prefs?.partnerPrefixes || [
+    { prefix: 'PDXGL-', name: 'PDX Game Library' },
+  ];
+  partners.forEach((p: any) => {
+    const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p.prefix);
+    const pName = typeof p === 'string' ? `${pStr.replace(/[-_]$/, '')} Partner` : (p.name || 'Partner');
+    if (!list.some((item) => item.prefix === pStr)) {
+      list.push({
+        prefix: pStr,
+        label: pStr,
+        orgKey: pStr.replace(/[-_]$/, ''),
+        name: pName,
+      });
+    }
+  });
+  return list;
+});
+
+const primaryOrgKey = computed(() => {
+  return (upcPrefix.value || 'HUCK-').replace(/[-_]$/, '').toUpperCase();
+});
+
+const primaryBucketCount = computed(() => {
+  const p = primaryOrgKey.value;
+  return (syncRows.value || []).filter((r) => (r.orgBucket || '').toUpperCase() === p).length;
+});
+
+const partnerBucketCount = computed(() => {
+  const p = primaryOrgKey.value;
+  return (syncRows.value || []).filter((r) => {
+    const b = (r.orgBucket || '').toUpperCase();
+    return b !== p && b !== 'UNASSIGNED';
+  }).length;
+});
+
+const unassignedBucketCount = computed(() => {
+  return (syncRows.value || []).filter((r) => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED').length;
+});
+
+const totalRentDetected = computed(() => {
+  return (detectedRentDeductions.value || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+});
+
+const currentLocation = computed(() => {
+  return (locations.value || []).find((l) => l.$id === selectedLocationId.value) || null;
+});
+
+const locationHistory = computed(() => {
+  if (!selectedLocationId.value && !currentLocation.value) return [];
+  const locName = (currentLocation.value?.name || '').toLowerCase();
+  return (syncHistoryList.value || []).filter(
+    (h) =>
+      h.locationId === selectedLocationId.value ||
+      (locName && h.locationName.toLowerCase() === locName)
+  );
+});
+
+const inStockCount = computed(() => (syncRows.value || []).filter((r) => r.status !== 'sold' && r.status !== 'paid').length);
+const soldCount = computed(() => (syncRows.value || []).filter((r) => r.status === 'sold' || r.status === 'paid').length);
+const matchedCount = computed(() => (syncRows.value || []).filter((r) => r.mappedItem !== null).length);
+const unmatchedCount = computed(() => (syncRows.value || []).filter((r) => r.mappedItem === null).length);
+
+const unmatchedSoldCount = computed(() => {
+  const rows = syncRows.value || [];
+  const base = verifyStatusFilter.value !== 'ALL'
+    ? rows.filter((r) => r.verifyStatus === verifyStatusFilter.value)
+    : rows;
+  return base.filter((r) => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length;
+});
+
+const unmatchedInStockCount = computed(() => {
+  const rows = syncRows.value || [];
+  const base = verifyStatusFilter.value !== 'ALL'
+    ? rows.filter((r) => r.verifyStatus === verifyStatusFilter.value)
+    : rows;
+  return base.filter((r) => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null).length;
+});
+
+const nextPreviewUpc = computed(() => {
+  const p = upcPrefix.value?.trim() || 'HUCK-';
+  return getNextUpc ? getNextUpc(p) : `${p}0001`;
+});
+
+const totalInStockGross = computed(() => {
+  return (syncRows.value || [])
+    .filter((r) => r.status !== 'sold' && r.status !== 'paid')
+    .reduce((acc, r) => acc + (r.listedPrice || 0), 0);
+});
+
+const totalSoldGross = computed(() => {
+  return (syncRows.value || [])
+    .filter((r) => r.status === 'sold' || r.status === 'paid')
+    .reduce((acc, r) => acc + (r.listedPrice || r.netSoldPrice || 0), 0);
+});
+
+const totalSoldNet = computed(() => {
+  return (syncRows.value || [])
+    .filter((r) => r.status === 'sold' || r.status === 'paid')
+    .reduce((acc, r) => acc + (r.netSoldPrice || 0), 0);
+});
+
+const displayedRows = computed(() => {
+  let rows = syncRows.value || [];
+
+  if (verifyStatusFilter.value !== 'ALL') {
+    rows = rows.filter((r) => r.verifyStatus === verifyStatusFilter.value);
+  }
+
+  if (selectedOrgBucket.value === 'primary') {
+    const p = primaryOrgKey.value;
+    rows = rows.filter((r) => (r.orgBucket || '').toUpperCase() === p);
+  } else if (selectedOrgBucket.value === 'partner') {
+    const p = primaryOrgKey.value;
+    rows = rows.filter((r) => {
+      const b = (r.orgBucket || '').toUpperCase();
+      return b !== p && b !== 'UNASSIGNED';
+    });
+  } else if (selectedOrgBucket.value === 'unassigned') {
+    rows = rows.filter((r) => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED');
+  }
+
+  if (filterTab.value === 'unmatched-sold') rows = rows.filter((r) => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null);
+  else if (filterTab.value === 'unmatched-instock') rows = rows.filter((r) => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null);
+  else if (filterTab.value === 'matched') rows = rows.filter((r) => r.mappedItem !== null);
+  else if (filterTab.value === 'unmatched') rows = rows.filter((r) => r.mappedItem === null);
+  else if (filterTab.value === 'instock') rows = rows.filter((r) => r.status !== 'sold' && r.status !== 'paid');
+  else if (filterTab.value === 'sold') rows = rows.filter((r) => r.status === 'sold' || r.status === 'paid');
+
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase();
+    rows = rows.filter((r) =>
+      (r.itemName || '').toLowerCase().includes(q) ||
+      (r.extractedSku && r.extractedSku.toLowerCase().includes(q)) ||
+      (r.listedPrice && r.listedPrice.toString().includes(q)) ||
+      (r.netSoldPrice && r.netSoldPrice.toString().includes(q)) ||
+      (r.mappedItem && r.mappedItem.title && r.mappedItem.title.toLowerCase().includes(q)) ||
+      (r.mappedItem && r.mappedItem.upc && r.mappedItem.upc.toLowerCase().includes(q))
+    );
+  }
+
+  return rows;
+});
+
+// Direct DB + Preverified + Report syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so all ~714 matched items are ALWAYS included!
+const dbZeroEjItems = computed(() => {
+  const list: Array<{ id: string; sku: string; upc: string; title: string }> = [];
+  const seenSkus = new Set<string>();
+  const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+  const byId = new Map<string, any>();
+  for (const item of activeItems) {
+    if (item?.$id) byId.set(item.$id, item);
+  }
+
+  for (const item of activeItems) {
+    const sku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
+    const upc = cleanCatalogSku(item?.upc).toUpperCase();
+    if (!sku || !/^0EJ/i.test(sku) || !isRealProductionUpc(upc)) continue;
+    if (seenSkus.has(sku)) continue;
+    seenSkus.add(sku);
+    list.push({
+      id: '',
+      sku,
+      upc,
+      title: String(item?.title || item?.identity || ''),
+    });
+  }
+
+  for (const [skuKey, mappedUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
+    const sku = cleanCatalogSku(skuKey).toUpperCase();
+    if (!sku || seenSkus.has(sku)) continue;
+    let resolvedUpc = cleanCatalogSku(mappedUpcOrId).toUpperCase();
+    let resolvedTitle = '';
+    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
+      const dbMatch = byId.get(String(mappedUpcOrId).trim());
+      if (dbMatch?.upc) {
+        resolvedUpc = cleanCatalogSku(dbMatch.upc).toUpperCase();
+        resolvedTitle = String(dbMatch.title || dbMatch.identity || '');
+      } else {
+        continue;
+      }
+    }
+    if (!isRealProductionUpc(resolvedUpc)) continue;
+    seenSkus.add(sku);
+    list.push({ id: '', sku, upc: resolvedUpc, title: resolvedTitle });
+  }
+
+  return list;
+});
+
+const dbZeroEjItemsCount = computed(() => dbZeroEjItems.value.length);
+
+const ricochetSyncableItems = computed(() => {
+  const mapBySkuOrKey = new Map<string, { id: string; sku: string; upc: string; title: string }>();
+  const currentRows = Array.isArray(syncRows.value) ? syncRows.value : [];
+
+  // 1. If a CSV or Verification Report is loaded in syncRows, include all matched rows first (all 714+ matched items!)
+  for (const r of currentRows) {
+    const upc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
+    if (!isRealProductionUpc(upc)) continue;
+    const sku = cleanCatalogSku(r.extractedSku || r.mappedItem?.locationSku).toUpperCase();
+    const key = sku || r.productId || r.mappedItem?.$id || r.itemName;
+    if (!key) continue;
+    mapBySkuOrKey.set(key, {
+      id: r.productId || '',
+      sku,
+      upc,
+      title: r.mappedItem?.title || r.itemName || '',
+    });
+  }
+
+  // 2. If mdVerifyReport is loaded (even before clicking Load All 808 Items), match its rows against inventoryItems so all 714 items are in the payload!
+  if (currentRows.length === 0 && mdVerifyReport.value && Array.isArray(mdVerifyReport.value.rows)) {
+    const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+    const claimedItemIdToSku = new Map<string, string>();
+    const multiBinResolvedBySku = buildLockedMultiBinMap(activeItems, claimedItemIdToSku);
+    for (const r of mdVerifyReport.value.rows) {
+      const sku = cleanCatalogSku(r.sku).toUpperCase();
+      if (!sku || mapBySkuOrKey.has(sku)) continue;
+      const matched = matchMemoryDenInventoryItem({
+        sku,
+        upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
+        title: String(r.name || ''),
+        price: Number(r.agreedPrice || 0),
+        extraText: '',
+        allowPrefixForPayout: false,
+        activeItems,
+        claimedItemIdToSku,
+        multiBinResolvedBySku,
+      });
+      if (matched && cleanSkuAndUpcValid(sku, matched.upc)) {
+        if (!claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
+        mapBySkuOrKey.set(sku, {
+          id: String(r.productId || ''),
+          sku,
+          upc: cleanCatalogSku(matched.upc).toUpperCase(),
+          title: String(matched.title || r.name || ''),
+        });
+      }
+    }
+  }
+
+  // 3. Always include all DB items that have both a `0EJ...` locationSku and a `upc`
+  for (const dbEntry of dbZeroEjItems.value) {
+    if (!mapBySkuOrKey.has(dbEntry.sku)) {
+      mapBySkuOrKey.set(dbEntry.sku, dbEntry);
+    }
+  }
+
+  return Array.from(mapBySkuOrKey.values());
+});
+
+const firstTestSyncItem = computed(() => ricochetSyncableItems.value[0] || null);
+
+const ricochetBarcodePayloadMap = computed(() => {
+  const out: Record<string, string> = {};
+  for (const entry of ricochetSyncableItems.value) {
+    if (entry.sku && entry.upc && isRealProductionUpc(entry.upc)) {
+      out[entry.sku] = entry.upc;
+    }
+  }
+  return out;
+});
+
+const ricochetSkuMetaMap = computed(() => {
+  const out: Record<string, { upc: string; partner: 'HUCK' | 'PDXGL' | 'BB'; title: string }> = {};
+  for (const entry of ricochetSyncableItems.value) {
+    if (!entry.sku || !entry.upc) continue;
+    const u = entry.upc.toUpperCase();
+    const partner: 'HUCK' | 'PDXGL' | 'BB' = u.startsWith('BB-') ? 'BB' : u.startsWith('PDXGL-') ? 'PDXGL' : 'HUCK';
+    out[entry.sku] = {
+      upc: entry.upc,
+      partner,
+      title: entry.title || '',
+    };
+  }
+  return out;
+});
+
+const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
+
+// Evergreen Bookmarklet (`⚡ Memory Den Sync`) — Install Once Forever, auto-fetches live barcodes from `/api/md-verify-report?mode=payload` on every open!
+const bookmarkletHref = computed(() => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.resalecmd.com';
+  const embeddedJson = JSON.stringify(ricochetBarcodePayloadMap.value);
+  return `javascript:(function(){window.__RC_PRELOADED_BARCODES__=${embeddedJson};if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+});
+
+// =========================================================================
+// 4. METHODS, WATCHERS & LIFECYCLE (All refs & computeds are now initialized)
+// =========================================================================
+const syncLivePayloadToCloudEndpoint = async () => {
+  const map = ricochetBarcodePayloadMap.value;
+  if (!map || Object.keys(map).length === 0) return;
+  try {
+    await fetch('/api/md-verify-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'payload',
+        skuToUpcMap: map,
+        skuToMetaMap: ricochetSkuMetaMap.value,
+      }),
+    });
+  } catch (e) {
+    // Non-blocking background cache sync
+  }
+};
 
 const fetchMdVerifyReport = async (showManualToast = false) => {
   isCheckingVerifyReport.value = true;
@@ -1770,12 +2196,22 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
 watch(showBrowserSyncModal, (isOpen) => {
   if (isOpen) {
     void fetchMdVerifyReport(false);
+    void syncLivePayloadToCloudEndpoint();
   }
 });
 
+watch(ricochetBarcodePayloadCount, (newCount) => {
+  if (newCount > 0) {
+    void syncLivePayloadToCloudEndpoint();
+  }
+});
+
+watch(() => team.value?.prefs?.upcPrefix, (newPref) => {
+  if (newPref) upcPrefix.value = normalizeOrgPrefix(newPref);
+}, { immediate: true });
+
 const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'all') => {
   if (!mdVerifyReport.value || !Array.isArray(mdVerifyReport.value.rows)) return;
-  // Always load all 808 rows into syncRows so matchedCount stays at 714/808 and pills filter instantaneously!
   const sourceRows = mdVerifyReport.value.rows;
 
   if (sourceRows.length === 0) {
@@ -1811,7 +2247,7 @@ const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'all') => {
 
   if (mode === 'unlinked') {
     verifyStatusFilter.value = 'UNLINKED_IN_RC';
-    const hasInStockUnlinked = syncRows.value.some(
+    const hasInStockUnlinked = (syncRows.value || []).some(
       (r) => r.verifyStatus === 'UNLINKED_IN_RC' && r.status !== 'sold' && r.status !== 'paid' && !r.mappedItem
     );
     filterTab.value = hasInStockUnlinked ? 'unmatched-instock' : 'unmatched';
@@ -1825,7 +2261,7 @@ const applyVerificationPillFilter = (
   targetStatus: 'ALL' | 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC'
 ) => {
   showBrowserSyncModal.value = false;
-  const hasLoadedVerifyRows = syncRows.value.length > 0 && syncRows.value.some((r) => Boolean(r.verifyStatus));
+  const hasLoadedVerifyRows = (syncRows.value || []).length > 0 && (syncRows.value || []).some((r) => Boolean(r.verifyStatus));
   if (!hasLoadedVerifyRows && mdVerifyReport.value?.rows?.length) {
     loadVerifyReportIntoWorkspace('all');
   }
@@ -1835,7 +2271,7 @@ const applyVerificationPillFilter = (
   selectedOrgBucket.value = 'all';
 
   if (targetStatus === 'UNLINKED_IN_RC') {
-    const hasInStockUnlinked = syncRows.value.some(
+    const hasInStockUnlinked = (syncRows.value || []).some(
       (r) => r.verifyStatus === 'UNLINKED_IN_RC' && r.status !== 'sold' && r.status !== 'paid' && !r.mappedItem
     );
     filterTab.value = hasInStockUnlinked ? 'unmatched-instock' : 'all';
@@ -1843,9 +2279,6 @@ const applyVerificationPillFilter = (
     filterTab.value = 'all';
   }
 };
-
-// Partner Prefix Protection & Board Game Detection Helpers
-const BOARD_OR_CARD_GAME_REGEX = /\b(board\s*game|card\s*game|deck\s*building|expansion|dice\s*game)\b/i;
 
 const isBoardOrCardGameRow = (row: any): boolean => {
   if (!row) return false;
@@ -1900,8 +2333,7 @@ const getRowConflictReason = (row: any): string => {
   if (!cleanSku || !targetUpc) {
     return `⚠️ Shared/rejected UPC in Memory Den (${targetUpc || 'NO UPC'})`;
   }
-  // Find any other row or DB item with a different 0EJ SKU using the same UPC
-  const otherRow = syncRows.value.find((r) => {
+  const otherRow = (syncRows.value || []).find((r) => {
     const rSku = cleanCatalogSku(r.extractedSku).toUpperCase();
     const rUpc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
     return rSku && rSku !== cleanSku && rUpc === targetUpc;
@@ -1949,189 +2381,6 @@ const assignUniqueUpcToRow = async (row: any) => {
     });
   }
 };
-
-function isRealProductionUpc(upc: any): boolean {
-  const u = cleanCatalogSku(upc).toUpperCase();
-  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
-  if (/test|demo/i.test(u)) return false;
-  return true;
-}
-
-// Direct DB + Preverified + Report syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so all ~714 matched items are ALWAYS included!
-const dbZeroEjItems = computed(() => {
-  const list: Array<{ id: string; sku: string; upc: string; title: string }> = [];
-  const seenSkus = new Set<string>();
-  const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
-  const byId = new Map<string, any>();
-  for (const item of activeItems) {
-    if (item?.$id) byId.set(item.$id, item);
-  }
-
-  for (const item of activeItems) {
-    const sku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
-    const upc = cleanCatalogSku(item?.upc).toUpperCase();
-    if (!sku || !/^0EJ/i.test(sku) || !isRealProductionUpc(upc)) continue;
-    if (seenSkus.has(sku)) continue;
-    seenSkus.add(sku);
-    list.push({
-      id: '',
-      sku,
-      upc,
-      title: String(item?.title || item?.identity || ''),
-    });
-  }
-
-  for (const [skuKey, mappedUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
-    const sku = cleanCatalogSku(skuKey).toUpperCase();
-    if (!sku || seenSkus.has(sku)) continue;
-    let resolvedUpc = cleanCatalogSku(mappedUpcOrId).toUpperCase();
-    let resolvedTitle = '';
-    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
-      const dbMatch = byId.get(String(mappedUpcOrId).trim());
-      if (dbMatch?.upc) {
-        resolvedUpc = cleanCatalogSku(dbMatch.upc).toUpperCase();
-        resolvedTitle = String(dbMatch.title || dbMatch.identity || '');
-      } else {
-        continue;
-      }
-    }
-    if (!isRealProductionUpc(resolvedUpc)) continue;
-    seenSkus.add(sku);
-    list.push({ id: '', sku, upc: resolvedUpc, title: resolvedTitle });
-  }
-
-  return list;
-});
-
-const dbZeroEjItemsCount = computed(() => dbZeroEjItems.value.length);
-
-const ricochetSyncableItems = computed(() => {
-  const mapBySkuOrKey = new Map<string, { id: string; sku: string; upc: string; title: string }>();
-
-  // 1. If a CSV or Verification Report is loaded in syncRows, include all matched rows first (all 714+ matched items!)
-  for (const r of syncRows.value) {
-    const upc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
-    if (!isRealProductionUpc(upc)) continue;
-    const sku = cleanCatalogSku(r.extractedSku || r.mappedItem?.locationSku).toUpperCase();
-    const key = sku || r.productId || r.mappedItem?.$id || r.itemName;
-    if (!key) continue;
-    mapBySkuOrKey.set(key, {
-      id: r.productId || '',
-      sku,
-      upc,
-      title: r.mappedItem?.title || r.itemName || '',
-    });
-  }
-
-  // 2. If mdVerifyReport is loaded (even before clicking Load All 808 Items), match its rows against inventoryItems so all 714 items are in the payload!
-  if (syncRows.value.length === 0 && mdVerifyReport.value && Array.isArray(mdVerifyReport.value.rows)) {
-    const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
-    const claimedItemIdToSku = new Map<string, string>();
-    const multiBinResolvedBySku = buildLockedMultiBinMap(activeItems, claimedItemIdToSku);
-    for (const r of mdVerifyReport.value.rows) {
-      const sku = cleanCatalogSku(r.sku).toUpperCase();
-      if (!sku || mapBySkuOrKey.has(sku)) continue;
-      const matched = matchMemoryDenInventoryItem({
-        sku,
-        upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
-        title: String(r.name || ''),
-        price: Number(r.agreedPrice || 0),
-        extraText: '',
-        allowPrefixForPayout: false,
-        activeItems,
-        claimedItemIdToSku,
-        multiBinResolvedBySku,
-      });
-      if (matched && cleanSkuAndUpcValid(sku, matched.upc)) {
-        if (!claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
-        mapBySkuOrKey.set(sku, {
-          id: String(r.productId || ''),
-          sku,
-          upc: cleanCatalogSku(matched.upc).toUpperCase(),
-          title: String(matched.title || r.name || ''),
-        });
-      }
-    }
-  }
-
-  // 3. Always include all DB items that have both a `0EJ...` locationSku and a `upc`
-  for (const dbEntry of dbZeroEjItems.value) {
-    if (!mapBySkuOrKey.has(dbEntry.sku)) {
-      mapBySkuOrKey.set(dbEntry.sku, dbEntry);
-    }
-  }
-
-  return Array.from(mapBySkuOrKey.values());
-});
-
-function cleanSkuAndUpcValid(sku: string, upc: any): boolean {
-  return Boolean(sku && isRealProductionUpc(upc));
-}
-
-const firstTestSyncItem = computed(() => ricochetSyncableItems.value[0] || null);
-
-const ricochetBarcodePayloadMap = computed(() => {
-  const out: Record<string, string> = {};
-  for (const entry of ricochetSyncableItems.value) {
-    if (entry.sku && entry.upc && isRealProductionUpc(entry.upc)) {
-      out[entry.sku] = entry.upc;
-    }
-  }
-  return out;
-});
-
-const ricochetSkuMetaMap = computed(() => {
-  const out: Record<string, { upc: string; partner: 'HUCK' | 'PDXGL' | 'BB'; title: string }> = {};
-  for (const entry of ricochetSyncableItems.value) {
-    if (!entry.sku || !entry.upc) continue;
-    const u = entry.upc.toUpperCase();
-    const partner: 'HUCK' | 'PDXGL' | 'BB' = u.startsWith('BB-') ? 'BB' : u.startsWith('PDXGL-') ? 'PDXGL' : 'HUCK';
-    out[entry.sku] = {
-      upc: entry.upc,
-      partner,
-      title: entry.title || '',
-    };
-  }
-  return out;
-});
-
-const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
-
-// Sync the live payload map to /api/md-verify-report so GET ?mode=payload always has all 714+ matched items ready!
-const syncLivePayloadToCloudEndpoint = async () => {
-  const map = ricochetBarcodePayloadMap.value;
-  if (!map || Object.keys(map).length === 0) return;
-  try {
-    await fetch('/api/md-verify-report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'payload',
-        skuToUpcMap: map,
-        skuToMetaMap: ricochetSkuMetaMap.value,
-      }),
-    });
-  } catch (e) {
-    // Non-blocking background cache sync
-  }
-};
-
-watch(
-  ricochetBarcodePayloadCount,
-  (newCount) => {
-    if (newCount > 0) {
-      void syncLivePayloadToCloudEndpoint();
-    }
-  },
-  { immediate: true }
-);
-
-// Evergreen Bookmarklet (`⚡ Memory Den Sync`) — Install Once Forever, auto-fetches live barcodes from `/api/md-verify-report?mode=payload` on every open!
-const bookmarkletHref = computed(() => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.resalecmd.com';
-  const embeddedJson = JSON.stringify(ricochetBarcodePayloadMap.value);
-  return `javascript:(function(){window.__RC_PRELOADED_BARCODES__=${embeddedJson};if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
-});
 
 const copyBookmarkletCode = () => {
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -2309,117 +2558,13 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
   }
 };
 
-// Resolve the real register date for a sale: the CSV row's Sold date first, then the item's own soldDate.
-// Only falls back to "now" as a last resort so imports never silently stamp sales with today's date.
 const toValidIso = (raw: any): string | null => {
   if (!raw) return null;
   return toSaleIso(raw) || null;
 };
 const resolveSoldIso = (row: any, item?: any): string =>
   toValidIso(row?.soldDate) || toValidIso(item?.soldDate) || new Date().toISOString();
-import { databases, ID } from '../../lib/appwrite';
-import { DB_ID, getCollectionId, saveItemToInventory, updateInventoryItem, extractOrgPrefix, KNOWN_ORG_PREFIXES, normalizeOrgPrefix, getAssetUrl } from '../../lib/inventory';
-import { 
-  getSyncHistory, 
-  recordSyncHistory, 
-  deleteSyncHistoryEntry, 
-  clearLocationSyncHistory, 
-  type SyncHistoryEntry 
-} from '../../lib/syncHistory';
-import { Icon } from '@iconify/vue';
 
-const { user, currentTeam: team } = useAuth();
-const { inventoryItems, fetchInventory, getNextUpc } = useInventory();
-const { showLoader, hideLoader } = useLoader();
-
-const isDragging = ref(false);
-const isParsing = ref(false);
-const isCommitting = ref(false);
-const isBulkQuickAdding = ref(false);
-const isAiMatching = ref(false);
-const bulkProgressMessage = ref('');
-const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'matched' | 'sold' | 'instock' | 'all'>('unmatched-sold');
-const searchQuery = ref('');
-const exportUpdatedCsv = ref(true);
-
-const availableOrgPrefixes = computed(() => {
-  const list: Array<{ prefix: string; label: string; orgKey: string; name: string }> = [];
-  const teamPref = team.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
-  const primary = normalizeOrgPrefix(teamPref);
-  list.push({ prefix: primary, label: primary, orgKey: primary.replace(/[-_]$/, ''), name: 'Primary Org' });
-
-  // Partner prefixes from team prefs (e.g. PDXGL-)
-  const partners = team.value?.prefs?.partnerPrefixes || user.value?.prefs?.partnerPrefixes || [
-    { prefix: 'PDXGL-', name: 'PDX Game Library' }
-  ];
-  partners.forEach((p: any) => {
-    const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p.prefix);
-    const pName = typeof p === 'string' ? `${pStr.replace(/[-_]$/, '')} Partner` : (p.name || 'Partner');
-    if (!list.some(item => item.prefix === pStr)) {
-      list.push({
-        prefix: pStr,
-        label: pStr,
-        orgKey: pStr.replace(/[-_]$/, ''),
-        name: pName
-      });
-    }
-  });
-  return list;
-});
-
-const upcPrefix = ref<string>(team.value?.prefs?.upcPrefix || 'HUCK-');
-watch(() => team.value?.prefs?.upcPrefix, (newPref) => {
-  if (newPref) upcPrefix.value = normalizeOrgPrefix(newPref);
-}, { immediate: true });
-
-const onlySyncOrgPrefix = ref<boolean>(false);
-const skippedNonOrgCount = ref<number>(0);
-const selectedOrgBucket = ref<string>('all'); // 'all' | 'primary' | 'partner' | 'unassigned'
-
-const primaryOrgKey = computed(() => {
-  return (upcPrefix.value || 'HUCK-').replace(/[-_]$/, '').toUpperCase();
-});
-
-const primaryBucketCount = computed(() => {
-  const p = primaryOrgKey.value;
-  return syncRows.value.filter(r => (r.orgBucket || '').toUpperCase() === p).length;
-});
-
-const partnerBucketCount = computed(() => {
-  const p = primaryOrgKey.value;
-  return syncRows.value.filter(r => {
-    const b = (r.orgBucket || '').toUpperCase();
-    return b !== p && b !== 'UNASSIGNED';
-  }).length;
-});
-
-const unassignedBucketCount = computed(() => {
-  return syncRows.value.filter(r => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED').length;
-});
-
-const currentFileName = ref<string>('');
-const showHistoryModal = ref<boolean>(false);
-const syncHistoryList = ref<SyncHistoryEntry[]>([]);
-const newItemsCreatedInSession = ref<number>(0);
-
-const showNewLocationModal = ref(false);
-const isCreatingLocation = ref(false);
-const newLocationForm = ref({
-  name: '',
-  type: 'Consignment Booth',
-  commissionRate: 15,
-  monthlyRent: 0
-});
-
-const locations = ref<any[]>([]);
-const selectedLocationId = ref<string>('');
-const syncRows = ref<any[]>([]);
-// Ricochet Product Catalog export (Products-*.csv): items-only sync, NEVER creates sales
-const isCatalogExport = ref(false);
-const rawCsvHeader = ref<string>('');
-const rawCsvLines = ref<string[]>([]);
-
-const detectedRentDeductions = ref<{ title: string; amount: number; date: string }[]>([]);
 function parseFlexibleDate(dateStr: string): string {
   if (!dateStr) return new Date().toISOString();
   const m = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
@@ -2431,14 +2576,8 @@ function parseFlexibleDate(dateStr: string): string {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
-const isLoggingRent = ref<boolean>(false);
-
-const totalRentDetected = computed(() => {
-  return detectedRentDeductions.value.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-});
-
 const logRentDeductionsToExpenses = async () => {
-  if (detectedRentDeductions.value.length === 0) return;
+  if ((detectedRentDeductions.value || []).length === 0) return;
   isLoggingRent.value = true;
   try {
     const locName = currentLocation.value?.name || 'Memory Den';
@@ -2451,13 +2590,13 @@ const logRentDeductionsToExpenses = async () => {
         amount: Number(rent.amount) || 382.50,
         note: `[BOOTH_RENT] ${locName} - ${rent.title} (${rent.date || 'Monthly'})`,
         date: parseFlexibleDate(rent.date),
-        purchaseId: locId !== 'booth' ? locId : undefined
+        purchaseId: locId !== 'booth' ? locId : undefined,
       });
       count++;
     }
-    addToast({ 
-      type: 'success', 
-      message: `Successfully logged ${count} booth rent deductions ($${totalRentDetected.value.toFixed(2)}) to your tax expenses ledger!` 
+    addToast({
+      type: 'success',
+      message: `Successfully logged ${count} booth rent deductions ($${totalRentDetected.value.toFixed(2)}) to your tax expenses ledger!`,
     });
     detectedRentDeductions.value = [];
   } catch (err: any) {
@@ -2468,19 +2607,6 @@ const logRentDeductionsToExpenses = async () => {
   }
 };
 
-const currentLocation = computed(() => {
-  return locations.value.find(l => l.$id === selectedLocationId.value) || null;
-});
-
-const locationHistory = computed(() => {
-  if (!selectedLocationId.value && !currentLocation.value) return [];
-  const locName = (currentLocation.value?.name || '').toLowerCase();
-  return syncHistoryList.value.filter(h => 
-    h.locationId === selectedLocationId.value || 
-    (locName && h.locationName.toLowerCase() === locName)
-  );
-});
-
 const formatDate = (isoStr: string) => {
   try {
     return new Date(isoStr).toLocaleString('en-US', {
@@ -2488,7 +2614,7 @@ const formatDate = (isoStr: string) => {
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   } catch {
     return isoStr;
@@ -2510,26 +2636,6 @@ const deleteHistoryItem = (id: string) => {
   addToast({ type: 'info', message: 'Removed sync history record.' });
 };
 
-const confirmDialog = ref<{
-  isOpen: boolean;
-  title: string;
-  message: string;
-  type: 'primary' | 'error' | 'success' | 'warning';
-  icon: string;
-  confirmText: string;
-  cancelText: string;
-}>({
-  isOpen: false,
-  title: '',
-  message: '',
-  type: 'primary',
-  icon: 'solar:question-circle-bold',
-  confirmText: 'Confirm',
-  cancelText: 'Cancel'
-});
-
-let confirmResolve: ((val: boolean) => void) | null = null;
-
 const showCustomConfirm = (options: {
   title: string;
   message: string;
@@ -2545,7 +2651,7 @@ const showCustomConfirm = (options: {
     type: options.type || 'primary',
     icon: options.icon || 'solar:question-circle-bold',
     confirmText: options.confirmText || 'Confirm',
-    cancelText: options.cancelText || 'Cancel'
+    cancelText: options.cancelText || 'Cancel',
   };
   return new Promise((resolve) => {
     confirmResolve = resolve;
@@ -2573,7 +2679,7 @@ const clearHistoryForCurrentLocation = async () => {
     type: 'error',
     icon: 'solar:trash-bin-trash-bold',
     confirmText: 'Clear History',
-    cancelText: 'Keep History'
+    cancelText: 'Keep History',
   });
   if (!ok) return;
   clearLocationSyncHistory(team.value.$id, selectedLocationId.value);
@@ -2581,111 +2687,23 @@ const clearHistoryForCurrentLocation = async () => {
   addToast({ type: 'info', message: `Cleared sync history for ${locName}.` });
 };
 
-const inStockCount = computed(() => syncRows.value.filter(r => r.status !== 'sold' && r.status !== 'paid').length);
-const soldCount = computed(() => syncRows.value.filter(r => r.status === 'sold' || r.status === 'paid').length);
-const matchedCount = computed(() => syncRows.value.filter(r => r.mappedItem !== null).length);
-const unmatchedCount = computed(() => syncRows.value.filter(r => r.mappedItem === null).length);
-const unmatchedSoldCount = computed(() => {
-  const base = verifyStatusFilter.value !== 'ALL'
-    ? syncRows.value.filter(r => r.verifyStatus === verifyStatusFilter.value)
-    : syncRows.value;
-  return base.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null).length;
-});
-const unmatchedInStockCount = computed(() => {
-  const base = verifyStatusFilter.value !== 'ALL'
-    ? syncRows.value.filter(r => r.verifyStatus === verifyStatusFilter.value)
-    : syncRows.value;
-  return base.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null).length;
-});
-
-const nextPreviewUpc = computed(() => {
-  const p = upcPrefix.value?.trim() || 'HUCK-';
-  return getNextUpc ? getNextUpc(p) : `${p}0001`;
-});
-
-const totalInStockGross = computed(() => {
-  return syncRows.value
-    .filter(r => r.status !== 'sold' && r.status !== 'paid')
-    .reduce((acc, r) => acc + (r.listedPrice || 0), 0);
-});
-
-const totalSoldGross = computed(() => {
-  return syncRows.value
-    .filter(r => r.status === 'sold' || r.status === 'paid')
-    .reduce((acc, r) => acc + (r.listedPrice || r.netSoldPrice || 0), 0);
-});
-
-const totalSoldNet = computed(() => {
-  return syncRows.value
-    .filter(r => r.status === 'sold' || r.status === 'paid')
-    .reduce((acc, r) => acc + (r.netSoldPrice || 0), 0);
-});
-
-const displayedRows = computed(() => {
-  let rows = syncRows.value;
-
-  // Verification Report Pill Filter (4-State Scorecard)
-  if (verifyStatusFilter.value !== 'ALL') {
-    rows = rows.filter(r => r.verifyStatus === verifyStatusFilter.value);
-  }
-
-  // Org Bucket Filter
-  if (selectedOrgBucket.value === 'primary') {
-    const p = primaryOrgKey.value;
-    rows = rows.filter(r => (r.orgBucket || '').toUpperCase() === p);
-  } else if (selectedOrgBucket.value === 'partner') {
-    const p = primaryOrgKey.value;
-    rows = rows.filter(r => {
-      const b = (r.orgBucket || '').toUpperCase();
-      return b !== p && b !== 'UNASSIGNED';
-    });
-  } else if (selectedOrgBucket.value === 'unassigned') {
-    rows = rows.filter(r => (r.orgBucket || '').toUpperCase() === 'UNASSIGNED');
-  }
-
-  if (filterTab.value === 'unmatched-sold') rows = rows.filter(r => (r.status === 'sold' || r.status === 'paid') && r.mappedItem === null);
-  else if (filterTab.value === 'unmatched-instock') rows = rows.filter(r => r.status !== 'sold' && r.status !== 'paid' && r.mappedItem === null);
-  else if (filterTab.value === 'matched') rows = rows.filter(r => r.mappedItem !== null);
-  else if (filterTab.value === 'unmatched') rows = rows.filter(r => r.mappedItem === null);
-  else if (filterTab.value === 'instock') rows = rows.filter(r => r.status !== 'sold' && r.status !== 'paid');
-  else if (filterTab.value === 'sold') rows = rows.filter(r => r.status === 'sold' || r.status === 'paid');
-
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase();
-    rows = rows.filter(r => 
-      r.itemName.toLowerCase().includes(q) || 
-      (r.extractedSku && r.extractedSku.toLowerCase().includes(q)) ||
-      (r.listedPrice && r.listedPrice.toString().includes(q)) ||
-      (r.netSoldPrice && r.netSoldPrice.toString().includes(q)) ||
-      (r.mappedItem && r.mappedItem.title && r.mappedItem.title.toLowerCase().includes(q)) ||
-      (r.mappedItem && r.mappedItem.upc && r.mappedItem.upc.toLowerCase().includes(q))
-    );
-  }
-
-  return rows;
-});
-
-const STOP_WORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'for', 'in', 'on', 'at', 'to', 'with', 'by', 'from', 'is', 'it', 'as', 'game', 'sc', 'aeg']);
-
 function extractKeywords(str: string): string[] {
   return (str || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 }
 
 function findBestItemMatch(csvName: string, inventory: any[]): any {
   if (!csvName || !inventory || inventory.length === 0) return null;
 
-  // Exclude unacquired pre-buy watch items
-  const eligibleInventory = inventory.filter(i => {
+  const eligibleInventory = inventory.filter((i) => {
     const s = String(i?.status || '').toLowerCase().trim();
     return s !== 'tracked' && s !== 'scouted' && s !== 'draft';
   });
   if (eligibleInventory.length === 0) return null;
 
-  // 1. Direct exact or cleaned substring match
   const cleanCsv = csvName.toLowerCase().replace(/[^a-z0-9]/g, '');
   for (const item of eligibleInventory) {
     const cleanTitle = (item?.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2694,7 +2712,6 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
     }
   }
 
-  // 2. Tokenized keyword overlap scoring
   const csvTokens = new Set(extractKeywords(csvName));
   if (csvTokens.size === 0) return null;
 
@@ -2716,8 +2733,7 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
     const score = matchingTokens / minSize;
     const jaccard = matchingTokens / (csvTokens.size + dbTokens.size - matchingTokens);
 
-    // Overlap threshold: >= 55% overlap and (>= 2 matching words or 1 distinct word >= 5 chars)
-    if (score >= 0.55 && (matchingTokens >= 2 || (matchingTokens === 1 && [...csvTokens].some(t => dbTokens.has(t) && t.length >= 5)))) {
+    if (score >= 0.55 && (matchingTokens >= 2 || (matchingTokens === 1 && [...csvTokens].some((t) => dbTokens.has(t) && t.length >= 5)))) {
       const combinedScore = score * 0.6 + jaccard * 0.4;
       if (combinedScore > bestScore) {
         bestScore = combinedScore;
@@ -2732,14 +2748,6 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
 // =========================================================================
 // SLIDE-OVER INVENTORY MATCH DRAWER STATE & 1-CLICK LINK & SAVE TO MD
 // =========================================================================
-
-const isMatchDrawerOpen = ref(false);
-const activeMatchRow = ref<any | null>(null);
-const matchDrawerSearch = ref('');
-const matchDrawerFilter = ref<'suggested' | 'all' | 'same_price' | 'backstock'>('suggested');
-const isSavingDrawerLink = ref<string | null>(null);
-const matchDrawerSearchInput = ref<HTMLInputElement | null>(null);
-
 const getItemThumbUrl = (item: any): string => {
   const imgId = getPrimaryItemImageId(item);
   if (!imgId) return '';
