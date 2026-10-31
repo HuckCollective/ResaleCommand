@@ -3026,11 +3026,12 @@ const parseMemoryDenPayout = (csvText: string) => {
       claimedItemIdToSku,
       multiBinResolvedBySku,
     });
+    const normSkuCheck = cleanCatalogSku(extractedSku).toUpperCase();
+    const rowClaimKey = normSkuCheck || (itemName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (verifiedMatch) {
       matched = verifiedMatch;
-      const normSkuCheck = cleanCatalogSku(extractedSku).toUpperCase();
       if (!multiBinResolvedBySku.has(normSkuCheck) && matched.$id) {
-        claimedItemIdToSku.set(matched.$id, normSkuCheck || itemName);
+        claimedItemIdToSku.set(matched.$id, rowClaimKey);
       }
     }
 
@@ -3064,7 +3065,8 @@ const parseMemoryDenPayout = (csvText: string) => {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
       const exactCandidates = titleEligibleInventory.value.filter(item => {
         if (isBbConsignorDbItem(item) !== isBB) return false;
-        if (claimedItemIdToSku.has(item.$id) && claimedItemIdToSku.get(item.$id) !== extractedSku) return false;
+        const existingClaim = claimedItemIdToSku.get(item.$id);
+        if (existingClaim && existingClaim !== normSkuCheck && existingClaim !== rowClaimKey) return false;
         const titles = getItemTitles(item);
         return titles.some(t => t.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName);
       });
@@ -3096,7 +3098,8 @@ const parseMemoryDenPayout = (csvText: string) => {
       if (cleanName.length >= 6) {
         const subCandidates = titleEligibleInventory.value.filter(item => {
           if (isBbConsignorDbItem(item) !== isBB) return false;
-          if (claimedItemIdToSku.has(item.$id) && claimedItemIdToSku.get(item.$id) !== extractedSku) return false;
+          const existingClaim = claimedItemIdToSku.get(item.$id);
+          if (existingClaim && existingClaim !== normSkuCheck && existingClaim !== rowClaimKey) return false;
           const titles = getItemTitles(item);
           return titles.some(t => {
             const itemClean = t.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -3315,9 +3318,9 @@ const refreshAlreadyRecordedFlags = async () => {
 };
 
 const executeImport = async () => {
-  const rowsToImport = cycleFilteredRows.value.filter(r => r.mappedItem !== null);
+  const rowsToImport = cycleFilteredRows.value;
   if (rowsToImport.length === 0) {
-    addToast({ type: 'warning', message: 'No matched items to commit in the selected view.' });
+    addToast({ type: 'warning', message: 'No sales rows to commit in the selected view.' });
     return;
   }
   
@@ -3405,7 +3408,18 @@ const executeImport = async () => {
 
       try {
         let item = row.mappedItem;
-        if (!item) continue;
+        if (!item) {
+          const fallbackSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+          const fallbackUpc = (fallbackSku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[fallbackSku]) || fallbackSku || '';
+          item = {
+            $id: '',
+            title: row.itemName || 'Memory Den Sale',
+            upc: fallbackUpc,
+            locationSku: fallbackSku || undefined,
+            tenantId: activeTeamId.value,
+            isSubClient: Boolean(row.isSubClient),
+          };
+        }
 
         const isSoldOrPaid = row.status === 'sold' || row.status === 'paid' || true;
         const occNum = Math.max(Number(row.ticketOccurrence || 1), Number((row as any).occurrenceIndex || 1));

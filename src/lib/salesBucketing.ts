@@ -972,6 +972,8 @@ export function matchMemoryDenInventoryItem(params: {
         return itm;
     };
 
+    const rowClaimKey = normSku || normalizeTitleForMdMatch(params.title);
+
     const canUseCandidate = (cand: any): boolean => {
         if (!cand) return false;
         const s = String(cand.status || '').toLowerCase().trim();
@@ -980,7 +982,7 @@ export function matchMemoryDenInventoryItem(params: {
         const candIsBb = isBbConsignorDbItem(cand);
         if (rowIsBb !== candIsBb) return false;
         const existingClaimSku = claimed.get(cand.$id);
-        if (existingClaimSku && existingClaimSku !== normSku) return false;
+        if (existingClaimSku && existingClaimSku !== normSku && existingClaimSku !== rowClaimKey) return false;
         return true;
     };
 
