@@ -25,6 +25,7 @@ Whenever you are about to create or modify UI, consult this decision matrix:
 | **Paginate through large database tables** | **Pagination Dock** | [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) | Numeric jump pill, First/Prev/Next/Last controls, rows-per-page selector. |
 | **Slide up deep filters or batch operations** | **Interactive Bottom Sheet / Detent Tray** | [`DropcastStagingTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/social/DropcastStagingTray.vue) pattern | Rounded-t-3xl card, drag pill, sticky header tabs, sticky dock footer. |
 | **Full-bleed visual editing or media previews** | **Fullscreen Studio Workspace** | `SlideImageEditorModal.vue` pattern | Header filmstrip toolbar, centered preview canvas, sticky `BottomActionDock`. |
+| **Match CSV / POS rows to existing inventory items** | **Slide-Over Inventory Match Drawer** | [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue) & [`SalesImporter.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/sales/SalesImporter.vue) + [`getUnclaimedMatchCandidatesForRow`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/salesBucketing.ts) | Pinned target row banner, strict exclusion of items with other `0EJ` SKUs, top 5–8 suggested unclaimed matches before typing, photo thumbnails, full untruncated titles, and 1-click `🔗 Link & Save to MD`. |
 
 ### ⚠️ Opportunity Radar (Code Smell Detection):
 Watch out for these red flags in existing or new code, and refactor them to use the catalog:
@@ -36,6 +37,8 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    👉 *Refactor To*: `<ScannerWidget>`.
 4. **Red Flag: Astro page with a dock showing a footer gap**
    👉 *Fix*: Add `hideFooter={true}` to `<Layout>` and `pb-36 sm:pb-44` to the content container.
+5. **Red Flag: Tiny inline table-cell search dropdowns (`<input placeholder="Search inventory to match..." />` inside a `<td>`)**
+   👉 *FORBIDDEN UI ANTI-PATTERN*: Never place floating search autocomplete dropdowns inside table cells (they clip inside table containers, hide photos, and truncate titles). Always use a clean `🔍 Open Match Drawer` trigger button (`X suggested`) that opens the **Slide-Over Inventory Match Drawer** with photo thumbnails, full untruncated titles, price comparison badges, strict exclusion of items already assigned to other `0EJ` SKUs, and a 1-click `🔗 Link & Save to MD` button.
 
 ---
 

@@ -565,15 +565,44 @@
                     </div>
                   </td>
                   <td class="font-mono text-success font-bold">${{ row.salePrice.toFixed(2) }}</td>
-                  <td @click.stop="openMatcherDrawer(row)">
-                    <div v-if="row.mappedItem" class="flex items-center gap-2">
-                      <span class="badge badge-sm badge-outline font-mono font-bold">{{ row.mappedItem.upc || 'NO UPC' }}</span>
-                      <span class="truncate max-w-xs text-sm font-medium">{{ row.mappedItem.title }}</span>
-                      <button class="btn btn-xs btn-ghost text-error ml-auto hover:bg-error/10" @click.stop="row.mappedItem = null" title="Unlink Item">✕</button>
+                  <td @click.stop="openMatcherDrawer(row)" class="py-2.5">
+                    <div v-if="row.mappedItem" class="flex items-start sm:items-center gap-2.5 p-2 rounded-xl bg-base-100 border border-base-300">
+                      <div class="w-9 h-9 rounded-lg bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
+                        <img
+                          v-if="getItemThumbUrl(row.mappedItem)"
+                          :src="getItemThumbUrl(row.mappedItem)"
+                          :alt="row.mappedItem.title"
+                          class="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-4 h-4 opacity-35" />
+                      </div>
+                      <div class="flex-1 min-w-0 space-y-0.5">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="badge badge-xs badge-primary text-primary-content font-mono font-black">{{ row.mappedItem.upc || 'NO UPC' }}</span>
+                          <span class="badge badge-xs badge-ghost font-mono">DB: ${{ Number(row.mappedItem.resalePrice || 0).toFixed(2) }}</span>
+                          <span v-if="row.isSavedToMd" class="badge badge-xs badge-success text-success-content font-black">✓ Saved to MD</span>
+                        </div>
+                        <div class="text-xs font-bold leading-snug text-base-content break-words whitespace-normal">
+                          {{ row.mappedItem.title }}
+                        </div>
+                      </div>
+                      <button class="btn btn-xs btn-ghost text-error shrink-0 hover:bg-error/10" @click.stop="row.mappedItem = null; row.isSavedToMd = false;" title="Unlink Item">✕</button>
                     </div>
-                    <div v-else class="text-xs opacity-60 italic flex items-center gap-1.5">
-                      <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 text-warning" />
-                      <span>Unmatched — click Match to search</span>
+                    <div v-else class="flex items-center gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-outline border-base-300 hover:border-primary text-base-content font-bold gap-1.5"
+                        @click.stop="openMatcherDrawer(row)"
+                      >
+                        <span>🔍 Open Match Drawer</span>
+                        <span
+                          v-if="getRowSuggestedCount(row) > 0"
+                          class="badge badge-xs badge-success text-success-content font-black"
+                        >
+                          {{ getRowSuggestedCount(row) }} suggested
+                        </span>
+                      </button>
                     </div>
                   </td>
                   <td class="text-center" @click.stop>
@@ -583,10 +612,9 @@
                         class="btn btn-xs gap-1 font-bold rounded-lg shadow-xs"
                         :class="row.mappedItem ? 'btn-ghost border border-base-300 hover:btn-primary' : 'btn-primary'"
                         @click="openMatcherDrawer(row)"
-                        :title="row.mappedItem ? 'Edit item match in drawer' : 'Open search & matcher drawer'"
+                        :title="row.mappedItem ? 'Open Inventory Match Drawer to change item' : 'Open Inventory Match Drawer'"
                       >
-                        <Icon :icon="row.mappedItem ? 'solar:pen-new-square-bold' : 'solar:magnifer-linear'" class="w-3.5 h-3.5" />
-                        <span>{{ row.mappedItem ? 'Edit' : 'Match' }}</span>
+                        <span>{{ row.mappedItem ? '🔄 Change' : '🔍 Match' }}</span>
                       </button>
                       <button 
                         v-if="!row.mappedItem"
@@ -1121,19 +1149,19 @@
               <div class="tabs tabs-boxed bg-base-200 p-1 rounded-xl">
                 <a 
                   class="tab text-xs font-bold flex-1" 
-                  :class="{'tab-active !bg-primary !text-primary-content': drawerSubTab === 'create'}" 
-                  @click="drawerSubTab = 'create'"
-                >
-                  <Icon icon="solar:add-circle-bold" class="w-4 h-4 mr-1.5 inline" />
-                  <span>Create As Sold Item</span>
-                </a>
-                <a 
-                  class="tab text-xs font-bold flex-1" 
                   :class="{'tab-active !bg-primary !text-primary-content': drawerSubTab === 'search'}" 
                   @click="drawerSubTab = 'search'"
                 >
                   <Icon icon="solar:magnifer-linear" class="w-4 h-4 mr-1.5 inline" />
-                  <span>Search Catalog ({{ availableItems.length }})</span>
+                  <span>🎯 Suggested &amp; Search ({{ filteredCandidateResults.length }})</span>
+                </a>
+                <a 
+                  class="tab text-xs font-bold flex-1" 
+                  :class="{'tab-active !bg-primary !text-primary-content': drawerSubTab === 'create'}" 
+                  @click="drawerSubTab = 'create'"
+                >
+                  <Icon icon="solar:add-circle-bold" class="w-4 h-4 mr-1.5 inline" />
+                  <span>+ Create As Sold Item</span>
                 </a>
               </div>
 
@@ -1273,15 +1301,17 @@
                 </div>
               </div>
 
-              <!-- TAB 2: SEARCH CATALOG -->
+              <!-- TAB 2: SEARCH CATALOG (Rich Visual Candidate Cards + Strict 0EJ Exclusion) -->
               <div v-show="drawerSubTab === 'search'" class="card bg-base-100 border border-base-300 p-4 rounded-2xl space-y-3 shadow-xs">
-                <h5 class="font-bold text-sm text-base-content flex items-center justify-between">
-                  <span class="flex items-center gap-1.5">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <h5 class="font-bold text-sm text-base-content flex items-center gap-1.5">
                     <Icon icon="solar:magnifer-linear" class="w-4 h-4 text-primary" />
-                    <span>Select from Existing Active Items</span>
+                    <span>Unclaimed Inventory Candidates</span>
+                  </h5>
+                  <span class="text-[11px] opacity-65">
+                    🛡️ Ruling out other <code>0EJ</code> SKUs &amp; cross-org items
                   </span>
-                  <span class="badge badge-sm badge-ghost font-mono">{{ availableItems.length }} unmapped</span>
-                </h5>
+                </div>
 
                 <div class="relative">
                   <Icon icon="solar:magnifer-linear" class="absolute left-3 top-2.5 w-4 h-4 opacity-50" />
@@ -1289,7 +1319,7 @@
                     type="text" 
                     v-model="drawerSearchQuery" 
                     class="input input-sm input-bordered w-full pl-9 text-xs rounded-xl" 
-                    placeholder="Filter by title, UPC, or SKU..."
+                    placeholder="Multi-word search by title, noun, brand, UPC, or price (e.g. 'wand', 'vampire', 'tweed')..."
                   />
                   <button 
                     v-if="drawerSearchQuery" 
@@ -1301,35 +1331,106 @@
                   </button>
                 </div>
 
-                <div class="max-h-80 overflow-y-auto space-y-1.5 pr-1">
-                  <div 
-                    v-for="item in filteredCandidateItems" 
-                    :key="item.$id"
-                    class="p-2.5 rounded-xl border border-base-200 hover:border-primary/50 hover:bg-base-200/50 transition-colors flex items-center justify-between gap-2 text-xs"
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    class="btn btn-xs rounded-lg font-bold"
+                    :class="drawerFilterMode === 'suggested' && !drawerSearchQuery ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
+                    @click="drawerSearchQuery = ''; drawerFilterMode = 'suggested'"
                   >
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="badge badge-xs badge-outline font-mono font-bold">{{ item.upc || 'NO UPC' }}</span>
-                        <span class="font-bold truncate text-base-content">{{ item.title }}</span>
+                    🎯 Top Suggested
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs rounded-lg font-bold"
+                    :class="drawerFilterMode === 'same_price' ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
+                    @click="drawerFilterMode = 'same_price'"
+                  >
+                    💲 Close Price (~${{ Number(activeDrawerRow.listedPrice || activeDrawerRow.salePrice || 0).toFixed(0) }})
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs rounded-lg font-bold"
+                    :class="drawerFilterMode === 'all' ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
+                    @click="drawerFilterMode = 'all'"
+                  >
+                    📋 All Unclaimed
+                  </button>
+                </div>
+
+                <div class="max-h-96 overflow-y-auto space-y-2.5 pr-1">
+                  <div 
+                    v-for="cand in filteredCandidateResults" 
+                    :key="cand.item.$id"
+                    class="p-3 rounded-xl border border-base-300 hover:border-primary/50 hover:bg-base-200/40 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                      <!-- Photo Thumbnail -->
+                      <div class="w-12 h-12 rounded-xl bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
+                        <img
+                          v-if="getItemThumbUrl(cand.item)"
+                          :src="getItemThumbUrl(cand.item)"
+                          :alt="cand.item.title"
+                          class="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-5 h-5 opacity-35" />
                       </div>
-                      <div class="text-[11px] opacity-60 font-mono mt-0.5 flex items-center gap-2">
-                        <span>Listed: ${{ (item.resalePrice || 0).toFixed(2) }}</span>
-                        <span>Cost: ${{ getItemCost(item).toFixed(2) }}</span>
-                        <span v-if="item.storageLocation">Loc: {{ item.storageLocation }}</span>
+
+                      <div class="min-w-0 flex-1 space-y-1">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="badge badge-xs font-mono font-black" :class="cand.item.upc ? 'badge-primary text-primary-content' : 'badge-ghost'">
+                            {{ cand.item.upc || 'NO UPC' }}
+                          </span>
+                          <span class="badge badge-xs badge-outline font-mono font-bold">
+                            {{ cand.item.status || 'received' }} @ {{ cand.item.storageLocation || 'HG' }}
+                          </span>
+                          <span v-if="cand.isExactPrice" class="badge badge-xs badge-success text-success-content font-black">
+                            ✓ Exact ${{ Number(cand.item.resalePrice || 0).toFixed(2) }}
+                          </span>
+                          <span v-else class="badge badge-xs badge-ghost font-mono">
+                            DB: ${{ Number(cand.item.resalePrice || 0).toFixed(2) }} • Cost: ${{ getItemCost(cand.item).toFixed(2) }}
+                          </span>
+                        </div>
+
+                        <!-- Full Untruncated Title -->
+                        <div class="font-bold text-sm leading-snug text-base-content break-words whitespace-normal">
+                          {{ cand.item.title }}
+                        </div>
+
+                        <div v-if="cand.reasons && cand.reasons.length > 0" class="flex items-center gap-1 flex-wrap">
+                          <span
+                            v-for="(reason, rIdx) in cand.reasons"
+                            :key="rIdx"
+                            class="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold"
+                          >
+                            {{ reason }}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
                     <button 
                       type="button"
-                      class="btn btn-xs btn-primary font-bold shrink-0 gap-1 rounded-lg"
-                      @click="linkItemToActiveRow(item)"
+                      class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black shrink-0 gap-1 rounded-lg w-full sm:w-auto"
+                      :disabled="isSavingDrawerLink === cand.item.$id"
+                      @click="linkAndSaveItemToActiveRow(cand.item)"
                     >
-                      <Icon icon="solar:link-bold" class="w-3 h-3" />
-                      <span>Link</span>
+                      <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>🔗 Link &amp; Save to MD</span>
                     </button>
                   </div>
 
-                  <div v-if="filteredCandidateItems.length === 0" class="text-center py-6 text-xs text-base-content/60">
-                    No matching items found. Switch to "Create As Sold Item" to mint a new barcode!
+                  <div v-if="filteredCandidateResults.length === 0" class="text-center py-6 text-xs text-base-content/60 space-y-2">
+                    <div>No unclaimed candidate items matched.</div>
+                    <div class="flex justify-center gap-2">
+                      <button type="button" class="btn btn-xs btn-outline" @click="drawerFilterMode = 'all'">
+                        📋 Browse All Unclaimed
+                      </button>
+                      <button type="button" class="btn btn-xs btn-primary font-bold" @click="drawerSubTab = 'create'">
+                        + Create As Sold Item
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1454,7 +1555,7 @@ import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
-import { getCollectionId, DB_ID, normalizeOrgPrefix } from '../../lib/inventory';
+import { getCollectionId, DB_ID, normalizeOrgPrefix, getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { salesApi } from '../../lib/sales';
 import {
   stripBom,
@@ -1477,6 +1578,8 @@ import {
   resolveMemoryDenSkuFromPayoutRow,
   buildLockedMultiBinMap,
   matchMemoryDenInventoryItem,
+  getUnclaimedMatchCandidatesForRow,
+  getPrimaryItemImageId,
 } from '../../lib/salesBucketing';
 import { warehousesApi } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
@@ -1702,9 +1805,11 @@ watch(activeView, () => {
 // Slide-Over Item Matcher Drawer State
 const isMatcherDrawerOpen = ref(false);
 const activeDrawerRowIndex = ref<number>(-1);
-const drawerSubTab = ref<'create' | 'search'>('create');
+const drawerSubTab = ref<'create' | 'search'>('search');
 const drawerSearchQuery = ref('');
+const drawerFilterMode = ref<'suggested' | 'all' | 'same_price'>('suggested');
 const isDrawerSaving = ref(false);
+const isSavingDrawerLink = ref<string | null>(null);
 const drawerForm = ref({
   title: '',
   prefix: 'HUCK',
@@ -1714,6 +1819,40 @@ const drawerForm = ref({
   storageLocation: 'MD',
   isMultiQty: false
 });
+
+const getItemThumbUrl = (item: any): string => {
+  const imgId = getPrimaryItemImageId(item);
+  if (!imgId) return '';
+  return getAssetUrl(imgId, { preview: true, width: 160, height: 160, quality: 80 });
+};
+
+const claimedItemIdsForRow = (targetRow?: any): Set<string> => {
+  const set = new Set<string>();
+  for (const r of parsedRows.value) {
+    if (r === targetRow) continue;
+    if (r.mappedItem && r.mappedItem.$id) {
+      set.add(r.mappedItem.$id);
+    }
+  }
+  return set;
+};
+
+const getRowSuggestedCount = (row: any): number => {
+  if (!row || !inventoryItems.value || inventoryItems.value.length === 0) return 0;
+  return getUnclaimedMatchCandidatesForRow({
+    rowSku: row.extractedSku,
+    rowTitle: row.itemName,
+    rowPrice: Number(row.listedPrice || row.salePrice || 0),
+    rowIsInStock: false,
+    rowIsBb: Boolean(row.isSubClient || isBbConsignorRow({ sku: row.extractedSku, title: row.itemName })),
+    searchQuery: '',
+    filterMode: 'suggested',
+    allItems: inventoryItems.value,
+    claimedItemIds: claimedItemIdsForRow(row),
+    allowMultiQtyReuse: true,
+    limit: 8,
+  }).length;
+};
 
 const activeDrawerRow = computed(() => {
   if (activeDrawerRowIndex.value < 0 || activeDrawerRowIndex.value >= displayedRows.value.length) {
@@ -1743,7 +1882,9 @@ const populateDrawerForm = (row: any) => {
     isMultiQty: !!(row.isMultiQty || row.isMultiQtyCandidate || row.mappedItem?.isMultiQty || (row.mappedItem?.quantity && row.mappedItem.quantity > 1))
   };
   drawerSearchQuery.value = '';
-  drawerSubTab.value = row.mappedItem ? 'search' : 'create';
+  const suggestedCount = getRowSuggestedCount(row);
+  drawerFilterMode.value = suggestedCount > 0 ? 'suggested' : 'all';
+  drawerSubTab.value = row.mappedItem || suggestedCount > 0 ? 'search' : 'create';
 };
 
 const openMatcherDrawer = (row: any) => {
@@ -1773,49 +1914,89 @@ const goToNextDrawerRow = () => {
   }
 };
 
-const filteredCandidateItems = computed(() => {
-  if (!drawerSearchQuery.value.trim()) {
-    // If no manual search query, provide smart suggestions based on the CSV row's title keywords
-    if (activeDrawerRow.value?.itemName) {
-      const rowTokens = new Set(extractKeywords(activeDrawerRow.value.itemName));
-      if (rowTokens.size > 0) {
-        const scored = availableItems.value.map(item => {
-          const dbTokens = new Set(extractKeywords(item.title || ''));
-          let matches = 0;
-          for (const t of rowTokens) {
-            if (dbTokens.has(t)) matches++;
-          }
-          return { item, matches };
-        }).filter(s => s.matches > 0).sort((a, b) => b.matches - a.matches);
-        if (scored.length > 0) {
-          return scored.slice(0, 25).map(s => s.item);
-        }
-      }
-    }
-    return availableItems.value.slice(0, 20);
-  }
-  const q = drawerSearchQuery.value.toLowerCase().trim();
-  return availableItems.value.filter(item => {
-    return (item.title || '').toLowerCase().includes(q) ||
-           (item.upc || '').toLowerCase().includes(q) ||
-           (item.locationSku || '').toLowerCase().includes(q);
-  }).slice(0, 30);
+const filteredCandidateResults = computed(() => {
+  const row = activeDrawerRow.value;
+  if (!row || !inventoryItems.value) return [];
+  const q = drawerSearchQuery.value.trim();
+  const effectiveFilter = q ? 'all' : drawerFilterMode.value;
+  return getUnclaimedMatchCandidatesForRow({
+    rowSku: row.extractedSku,
+    rowTitle: row.itemName,
+    rowPrice: Number(row.listedPrice || row.salePrice || 0),
+    rowIsInStock: false,
+    rowIsBb: Boolean(row.isSubClient || isBbConsignorRow({ sku: row.extractedSku, title: row.itemName })),
+    searchQuery: q,
+    filterMode: effectiveFilter,
+    allItems: inventoryItems.value,
+    claimedItemIds: claimedItemIdsForRow(row),
+    allowMultiQtyReuse: true,
+    limit: q || effectiveFilter !== 'suggested' ? 35 : 8,
+  });
 });
 
-const linkItemToActiveRow = (item: any) => {
-  if (!activeDrawerRow.value) return;
+/**
+ * 1-Click `🔗 Link & Save to MD` inside SalesImporter Drawer:
+ * Links the item to the active Payout row AND persists `locationSku`, `storageLocation: 'MD'`,
+ * and `warehouseId: '6a7e70050009db0e1857'` to Appwrite right now!
+ */
+const linkAndSaveItemToActiveRow = async (item: any) => {
+  const row = activeDrawerRow.value;
+  if (!row || !item) return;
   const target = dereferenceParentLot(item);
-  activeDrawerRow.value.mappedItem = target;
-  if (target?.isMultiQty || (target?.quantity && target.quantity > 1)) {
-    activeDrawerRow.value.isMultiQty = true;
+  if (!target || !target.$id) return;
+
+  isSavingDrawerLink.value = target.$id;
+  try {
+    const cleanSku = cleanCatalogSku(row.extractedSku);
+    const normSkuUpper = cleanSku.toUpperCase();
+    const binConfig = PREVERIFIED_MD_MULTI_QTY_BINS[normSkuUpper];
+    const isMultiBin = Boolean(binConfig) || Boolean(target.isMultiQty) || Number(target.quantity || 1) > 1;
+    const targetStatus = isMultiBin ? 'placed' : 'sold';
+    const targetQty = binConfig
+      ? Math.max(1, binConfig.expectedRemainingQty)
+      : Math.max(1, Number(target.quantity || 1));
+
+    const updatePayload: any = {
+      status: targetStatus,
+      storageLocation: 'MD',
+      warehouseId: MD_CANONICAL_WAREHOUSE_ID,
+      quantity: targetQty,
+    };
+    if (cleanSku) {
+      updatePayload.locationSku = cleanSku;
+    }
+
+    await updateInventoryItem(target.$id, updatePayload);
+
+    target.status = targetStatus;
+    target.storageLocation = 'MD';
+    target.warehouseId = MD_CANONICAL_WAREHOUSE_ID;
+    target.quantity = targetQty;
+    if (cleanSku) target.locationSku = cleanSku;
+
+    row.mappedItem = target;
+    row.isSavedToMd = true;
+    if (isMultiBin) {
+      row.isMultiQty = true;
+    }
+    saveStagingSession();
+    addToast({
+      type: 'success',
+      message: `✅ Linked & Saved [${target.upc || 'ITEM'}] ➔ ${cleanSku || 'MD'} (${targetStatus} @ MD)!`,
+    });
+    closeMatcherDrawer();
+  } catch (err: any) {
+    console.error('[SalesImporter] Failed to link & save item to MD:', err);
+    addToast({ type: 'error', message: `Failed to save link to Appwrite: ${err?.message || 'Unknown error'}` });
+  } finally {
+    isSavingDrawerLink.value = null;
   }
-  saveStagingSession();
-  addToast({ type: 'success', message: `Linked [${target.upc || 'ITEM'}] to sale!` });
 };
 
 const unlinkActiveRow = () => {
   if (!activeDrawerRow.value) return;
   activeDrawerRow.value.mappedItem = null;
+  activeDrawerRow.value.isSavedToMd = false;
   saveStagingSession();
   addToast({ type: 'info', message: 'Item unlinked.' });
 };
@@ -2833,21 +3014,21 @@ const parseMemoryDenPayout = (csvText: string) => {
     let matched: any = null;
 
     // 0. Verified Dry-Run Matcher (handles locked Multi-Qty Booth Bins, trap guards, B&B namespace isolation, and pre-verified UPCs)
-    const verifiedMatch = matchMemoryDenInventoryItem(
-      {
-        sku: extractedSku,
-        title: itemName,
-        price: grossPrice,
-        qty: 1,
-        inventoryStatus: 'Paid',
-        isBb: isBB
-      },
-      activeInventory.value,
+    const verifiedMatch = matchMemoryDenInventoryItem({
+      sku: extractedSku,
+      title: itemName,
+      price: grossPrice,
+      allowPrefixForPayout: true,
+      activeItems: activeInventory.value,
       claimedItemIdToSku,
-      multiBinResolvedBySku
-    );
-    if (verifiedMatch.matched) {
-      matched = verifiedMatch.matched;
+      multiBinResolvedBySku,
+    });
+    if (verifiedMatch) {
+      matched = verifiedMatch;
+      const normSkuCheck = cleanCatalogSku(extractedSku).toUpperCase();
+      if (!multiBinResolvedBySku.has(normSkuCheck) && matched.$id) {
+        claimedItemIdToSku.set(matched.$id, normSkuCheck || itemName);
+      }
     }
 
     // 1. Exact Location SKU match for historical months (with strict B&B namespace isolation)

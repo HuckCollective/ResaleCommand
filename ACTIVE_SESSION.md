@@ -16,6 +16,10 @@
 6. **Verified Oct 2026 Memory Den CSV Sync Ported to Live App UI (`LocationSyncView.vue` & `SalesImporter.vue`)**:
    - Ported verified dry-run rules from `scripts/reconcile-md-oct2026.mjs` into `src/lib/salesBucketing.ts`, `src/components/warehouses/LocationSyncView.vue`, and `src/components/sales/SalesImporter.vue`.
    - Added RFC-4180 multiline CSV parser (`parseCsvRfc4180Rows`), locked Multi-Qty Booth Bin priority (`buildLockedMultiBinMap`: `0EJ0FR` -> `HUCK-1309`, `0EJ0H5` -> `HUCK-1425`/`HUCK-1380` `qty: 3` over sold split children `HUCK-9515`), strict `B&B` (`BB-`) namespace isolation + auto-creation (`cost: 0`), trap guards (`0EJ0NY` -> `HUCK-9459` sold, `0EJ0O0` -> `HUCK-9458` stays `placed`, `0EJ0MU` -> `HUCK-8968` sold, `0EJ0N3` -> `HUCK-1501` sold), and per-unit cost basis (`resolveMdUnitCostBasis`: `$2.61`, `$0.81`, `$4.46`, `$4.16`, etc.).
+7. **Slide-Over Inventory Match Drawer Invariant (`LocationSyncView.vue` & `SalesImporter.vue`)**:
+   - Eliminated cramped inline table-cell search dropdowns (`"Search inventory to match..."`) and replaced them with the canonical **Slide-Over Inventory Match Drawer** (`🔍 Open Match Drawer` with `X suggested` badge when unmatched; Photo Thumbnail + `UPC` badge + full untruncated title + `DB Price` + `🔄 Change` when matched).
+   - Built shared candidate exclusion & ranking engine (`getUnclaimedMatchCandidatesForRow` + `PREVERIFIED_MD_SKU_TO_UPC_OR_ID` in `src/lib/salesBucketing.ts`) that strictly rules out items already assigned to a different `0EJ...` `locationSku`, items already claimed by another CSV row, `sold` items on `In Stock` rows, and cross-org `BB-` vs `HUCK-`/`PDXGL-` items.
+   - Added **1-Click `🔗 Link & Save to MD`** inside the drawer (`linkAndSaveCandidateToMd` / `linkAndSaveItemToActiveRow`), which immediately persists `locationSku`, `storageLocation: 'MD'`, `warehouseId: '6a7e70050009db0e1857'`, `status: 'placed' | 'sold'`, and `quantity` to Appwrite upon linking.
 
 ## Next Up:
 1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).

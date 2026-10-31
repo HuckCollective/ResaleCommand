@@ -581,6 +581,50 @@ export const PREVERIFIED_OCT_BB_SKUS = new Set<string>([
     '0EJ0IT', '0EJ0IU', '0EJ0IV', '0EJ0J5', '0EJ0J8', '0EJ0KA', '0EJ0LM',
 ]);
 
+/**
+ * Pre-verified unambiguous Memory Den SKU -> UPC (or Appwrite $id) map.
+ * Consulted automatically during Products-*.csv and Payouts *.csv matching.
+ * Add 100% unambiguous verified In-Stock or Sold pairs here so they auto-link on upload.
+ */
+export const PREVERIFIED_MD_SKU_TO_UPC_OR_ID: Record<string, string> = {
+    // Multi-Qty Booth Bins
+    '0EJ0H5': 'HUCK-1425',
+    '0EJ0FR': 'HUCK-1309',
+    '0EJ0FQ': 'HUCK-1308',
+    '0EJ0MN': 'HUCK-1323',
+    '0EJ0EC': 'HUCK-0113',
+    '0EJ0JK': 'HUCK-1460',
+    '0EJ0NQ': 'HUCK-9455',
+    '0EJ09E': 'HUCK-0296',
+    // Trap Guards & Verified Singles
+    '0EJ0NY': 'HUCK-9459',
+    '0EJ0O0': 'HUCK-9458',
+    '0EJ0N8': 'HUCK-1440',
+    '0EJ0O1': 'HUCK-9456',
+    '0EJ0N6': 'HUCK-1502',
+    '0EJ0NZ': 'HUCK-9457',
+    '0EJ0OE': 'HUCK-1787',
+    '0EJ0O7': 'HUCK-1794',
+    '0EJ0H9': 'HUCK-1389',
+    '0EJ0NX': 'HUCK-1795',
+    '0EJ0NI': 'HUCK-1405',
+    '0EJ0N1': 'HUCK-0158',
+    '0EJ0MU': 'HUCK-8968',
+    '0EJ0NO': 'HUCK-1508',
+    '0EJ0ET': 'HUCK-1249-c',
+    '0EJ0JN': 'HUCK-1422',
+    '0EJ0JQ': 'HUCK-1409',
+    '0EJ0NA': 'HUCK-1504',
+    '0EJ0N3': 'HUCK-1501',
+    '0EJ0EV': 'HUCK-1248',
+    '0EJ0N2': 'HUCK-0374',
+    '0EJ0N0': 'HUCK-5064',
+    '0EJ0GV': 'HUCK-1369',
+    '0EJ0NE': 'HUCK-0025',
+    '0EJ0MP': 'HUCK-2808',
+    '0EJ0JR': 'HUCK-1262',
+};
+
 export interface MdPreverifiedMultiBin {
     upc: string | null;
     altUpc?: string;
@@ -943,7 +987,16 @@ export function matchMemoryDenInventoryItem(params: {
         if (huck9458) return dereferenceParent(huck9458);
     }
 
-    // 2. Pre-verified single item UPC override
+    // 2. Pre-verified SKU -> UPC/ID override map (PREVERIFIED_MD_SKU_TO_UPC_OR_ID + PREVERIFIED_MD_SINGLE_UPC_BY_SKU)
+    const preMappedTarget = normSku ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID[normSku] : '';
+    if (preMappedTarget) {
+        const upperTarget = preMappedTarget.toUpperCase();
+        const byMapped = activeItems.find(
+            i => (cleanCatalogSku(i?.upc).toUpperCase() === upperTarget || String(i?.$id || '') === preMappedTarget) && canUseCandidate(i)
+        );
+        if (byMapped) return dereferenceParent(byMapped);
+    }
+
     const preSingle = PREVERIFIED_MD_SINGLE_UPC_BY_SKU[normSku];
     if (preSingle && preSingle.upc) {
         const targetPreUpc = preSingle.upc.toUpperCase();
@@ -1022,4 +1075,218 @@ export function matchMemoryDenInventoryItem(params: {
 
     return bestCand ? dereferenceParent(bestCand) : null;
 }
+
+/**
+ * Extracts the primary imageId or galleryImageIds[0] from an item document.
+ */
+export function getPrimaryItemImageId(item: any): string {
+    if (!item) return '';
+    if (typeof item.imageId === 'string' && item.imageId.trim()) return item.imageId.trim();
+    if (Array.isArray(item.galleryImageIds) && item.galleryImageIds.length > 0) {
+        const first = String(item.galleryImageIds[0] || '').trim();
+        if (first) return first;
+    }
+    return '';
+}
+
+export interface UnclaimedMatchCandidateResult {
+    item: any;
+    score: number;
+    reasons: string[];
+    priceDiff: number | null;
+    isExactPrice: boolean;
+    isClosePrice: boolean;
+}
+
+const MATCH_STOP_WORDS = new Set([
+    'the', 'and', 'with', 'for', 'from', 'vintage', 'style', 'new', 'old', 'size',
+    'black', 'white', 'red', 'blue', 'green', 'brown', 'dark', 'light', 'small',
+    'medium', 'large', 'womens', 'mens', 'unisex', 'item', 'lot', 'assorted',
+]);
+
+/**
+ * Returns strictly filtered & ranked unclaimed inventory candidates for the Slide-Over Inventory Match Drawer.
+ *
+ * STRICT CANDIDATE EXCLUSION LAWS:
+ * 1. Rules out any item that already has a different Memory Den `0EJ...` locationSku.
+ * 2. Rules out any item already claimed by another row in the active CSV sync (unless allowMultiQtyReuse is true and qty > 1).
+ * 3. Rules out `status === 'sold'` items when matching an `In Stock` row (`rowIsInStock === true`).
+ * 4. Enforces strict B&B (`BB-`) vs `HUCK-`/`PDXGL-` namespace isolation.
+ * 5. Rules out non-working statuses (`combined`, `deconstructed`, `tracked`, `draft`, `scouted`) and `(Sold Unit)` split children.
+ */
+export function getUnclaimedMatchCandidatesForRow(params: {
+    rowSku?: string;
+    rowTitle?: string;
+    rowPrice?: number;
+    rowIsInStock?: boolean;
+    rowIsBb?: boolean;
+    searchQuery?: string;
+    filterMode?: 'suggested' | 'all' | 'same_price' | 'backstock';
+    allItems: any[];
+    claimedItemIds?: Set<string>;
+    allowMultiQtyReuse?: boolean;
+    limit?: number;
+}): UnclaimedMatchCandidateResult[] {
+    const rowSku = cleanCatalogSku(params.rowSku).toUpperCase();
+    const rowTitle = String(params.rowTitle || '').trim();
+    const rowPrice = Number(params.rowPrice ?? 0);
+    const rowIsInStock = Boolean(params.rowIsInStock);
+    const rowIsBb = params.rowIsBb !== undefined
+        ? params.rowIsBb
+        : isBbConsignorRow({ sku: rowSku, title: rowTitle });
+    const rawQuery = String(params.searchQuery || '').trim().toLowerCase();
+    const queryTokens = rawQuery.split(/\s+/).filter(Boolean);
+    const filterMode = params.filterMode || (queryTokens.length > 0 ? 'all' : 'suggested');
+    const claimedIds = params.claimedItemIds || new Set<string>();
+    const limit = params.limit ?? (queryTokens.length > 0 ? 40 : 12);
+
+    const normRowTitle = normalizeTitleForMdMatch(rowTitle);
+    const rowTokens = normRowTitle.split(' ').filter(t => t.length >= 2);
+    const distinctiveRowTokens = rowTokens.filter(t => t.length >= 3 && !MATCH_STOP_WORDS.has(t));
+
+    const results: UnclaimedMatchCandidateResult[] = [];
+
+    for (const item of params.allItems || []) {
+        if (!item || !item.$id) continue;
+
+        // 1. Exclude non-working statuses & split children
+        const status = String(item.status || '').toLowerCase().trim();
+        if (
+            status === 'combined' ||
+            status === 'deconstructed' ||
+            status === 'tracked' ||
+            status === 'draft' ||
+            status === 'scouted'
+        ) {
+            continue;
+        }
+        const rawItemTitle = String(item.title || item.identity || '');
+        if (/\(sold unit\)/i.test(rawItemTitle)) continue;
+
+        // 2. Rule out `sold` items when matching an `In Stock` row
+        if (rowIsInStock && status === 'sold') continue;
+
+        // 3. Strict B&B vs HUCK/PDXGL namespace isolation
+        if (isBbConsignorDbItem(item) !== rowIsBb) continue;
+
+        // 4. Rule out items that already have a DIFFERENT Memory Den `0EJ...` locationSku
+        const itemLocSku = cleanCatalogSku(item.locationSku || item.sku).toUpperCase();
+        if (/^0EJ/i.test(itemLocSku) && (!rowSku || itemLocSku !== rowSku)) {
+            continue;
+        }
+
+        // 5. Rule out items already claimed by another row in this CSV sync
+        if (claimedIds.has(item.$id)) {
+            const isReusableBin = Boolean(params.allowMultiQtyReuse) && Number(item.quantity ?? 1) > 1 && status === 'placed';
+            if (!isReusableBin) continue;
+        }
+
+        const itemUpc = cleanCatalogSku(item.upc).toUpperCase();
+        const itemCategory = String(item.category || '').trim();
+        const itemStorage = String(item.storageLocation || '').toUpperCase().trim();
+        const dbPrice = Number(item.resalePrice ?? 0);
+        const hasValidPrices = rowPrice > 0 && dbPrice > 0;
+        const priceDiff = hasValidPrices ? Math.abs(dbPrice - rowPrice) : null;
+        const isExactPrice = priceDiff !== null && priceDiff < 0.05;
+        const isClosePrice = priceDiff !== null && priceDiff <= 5.01;
+
+        // Optional quick filter pills
+        if (filterMode === 'same_price' && !isClosePrice) continue;
+        if (filterMode === 'backstock' && itemStorage === 'MD') continue;
+
+        // If user typed a multi-word search query, every token must match across searchable fields
+        if (queryTokens.length > 0) {
+            const searchableBlob = [
+                rawItemTitle,
+                item.identity || '',
+                itemUpc,
+                itemLocSku,
+                itemCategory,
+                itemStorage,
+                item.conditionNotes || '',
+                dbPrice > 0 ? `$${dbPrice.toFixed(2)} ${dbPrice}` : '',
+            ]
+                .join(' ')
+                .toLowerCase();
+
+            const matchesAllTokens = queryTokens.every(tok => searchableBlob.includes(tok));
+            if (!matchesAllTokens) continue;
+        }
+
+        // Compute candidate relevance score & human-readable match reasons
+        let score = 0;
+        const reasons: string[] = [];
+
+        // Direct SKU match (same 0EJ SKU if unassigned in CSV)
+        if (rowSku && itemLocSku === rowSku) {
+            score += 100;
+            reasons.push(`SKU ${rowSku}`);
+        }
+
+        const normCandTitle = normalizeTitleForMdMatch(rawItemTitle);
+        const candTokens = new Set(normCandTitle.split(' ').filter(Boolean));
+
+        // Distinctive noun/brand overlap
+        let matchedDistinctive: string[] = [];
+        for (const dt of distinctiveRowTokens) {
+            if (candTokens.has(dt) || normCandTitle.includes(dt)) {
+                matchedDistinctive.push(dt);
+            }
+        }
+        if (matchedDistinctive.length > 0) {
+            score += matchedDistinctive.length * 18;
+            reasons.push(`Keywords: ${matchedDistinctive.slice(0, 3).join(', ')}`);
+        }
+
+        // General Jaccard title similarity
+        const sim = computeMdTitleSimilarity(normRowTitle, normCandTitle);
+        if (sim > 0) {
+            score += Math.round(sim * 40);
+        }
+
+        // Price proximity bonus
+        if (isExactPrice) {
+            score += 25;
+            reasons.push(`Exact $${rowPrice.toFixed(0)} price`);
+        } else if (isClosePrice && priceDiff !== null) {
+            score += 12;
+            reasons.push(`Close price ($${dbPrice.toFixed(0)})`);
+        }
+
+        // Backstock / Unassigned location bonus (items in HG/HH/HD or missing 0EJ SKU are prime candidates)
+        if (!itemLocSku) {
+            score += 5;
+        }
+        if (itemStorage === 'HG' || itemStorage === 'HH' || itemStorage === 'HD') {
+            score += 4;
+        }
+
+        // When in default 'suggested' mode (no search query), require either keyword overlap or exact price match
+        if (queryTokens.length === 0 && filterMode === 'suggested') {
+            if (matchedDistinctive.length === 0 && !isExactPrice && sim < 0.2) {
+                continue;
+            }
+        }
+
+        results.push({
+            item,
+            score,
+            reasons,
+            priceDiff,
+            isExactPrice,
+            isClosePrice,
+        });
+    }
+
+    results.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (a.priceDiff !== null && b.priceDiff !== null && a.priceDiff !== b.priceDiff) {
+            return a.priceDiff - b.priceDiff;
+        }
+        return String(b.item.$createdAt || '').localeCompare(String(a.item.$createdAt || ''));
+    });
+
+    return results.slice(0, limit);
+}
+
 
