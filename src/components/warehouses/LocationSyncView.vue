@@ -836,7 +836,10 @@
                         <span v-if="row.isSavedToMd" class="badge badge-xs badge-success text-success-content font-black gap-0.5 whitespace-nowrap shrink-0">
                           ✓ Saved to MD
                         </span>
-                        <span v-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" title="Missing UPC in Memory Den — click Assign Unique Barcode if this barcode is shared with another 0EJ SKU">
+                        <span v-if="row.uniqueBarcodeAssigned" class="badge badge-xs badge-success text-success-content font-black gap-0.5 whitespace-nowrap shrink-0">
+                          ✅ Unique Barcode Assigned (Push in MD Widget)
+                        </span>
+                        <span v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" title="Missing UPC in Memory Den — click Assign Unique Barcode if this barcode is shared with another 0EJ SKU">
                           🟡 Missing UPC in MD
                         </span>
                         <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-black gap-0.5 whitespace-nowrap shrink-0" :title="row.aiReason || 'Matched by Gemini AI'">
@@ -846,15 +849,22 @@
                       <div class="text-xs font-bold leading-snug text-base-content break-words whitespace-normal">
                         {{ row.mappedItem.title }}
                       </div>
-                      <div v-if="row.verifyStatus === 'MISSING_IN_MD'" class="pt-1 flex items-center gap-2 flex-wrap">
+                      <div v-if="row.uniqueBarcodeAssigned" class="pt-1 flex items-center gap-2 flex-wrap">
+                        <span class="badge badge-sm badge-success text-success-content font-bold gap-1 py-2.5 px-2.5 shadow-2xs">
+                          ✅ Unique Barcode Assigned ({{ row.mappedItem.upc || row.extractedUpc }}) — Push in MD Widget
+                        </span>
+                      </div>
+                      <div v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="pt-1 flex items-center gap-2 flex-wrap">
                         <span class="text-[11px] text-warning font-semibold">
                           {{ getRowConflictReason(row) }}
                         </span>
                         <button
                           type="button"
                           class="btn btn-xs btn-warning text-warning-content font-black gap-1 shadow-2xs"
+                          :disabled="row.isAssigningUniqueUpc"
                           @click="assignUniqueUpcToRow(row)"
                         >
+                          <span v-if="row.isAssigningUniqueUpc" class="loading loading-spinner loading-xs"></span>
                           <span>🔧 Assign Unique Barcode ({{ getRowPreviewUpc(row) }})</span>
                         </button>
                       </div>
@@ -2001,6 +2011,7 @@ const displayedRows = computed(() => {
 const dbZeroEjItems = computed(() => {
   const list: Array<{ id: string; sku: string; upc: string; title: string }> = [];
   const seenSkus = new Set<string>();
+  const usedUpcs = new Set<string>();
   const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
   const byId = new Map<string, any>();
   for (const item of activeItems) {
@@ -2011,8 +2022,9 @@ const dbZeroEjItems = computed(() => {
     const sku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
     const upc = cleanCatalogSku(item?.upc).toUpperCase();
     if (!sku || !/^0EJ/i.test(sku) || !isRealProductionUpc(upc)) continue;
-    if (seenSkus.has(sku)) continue;
+    if (seenSkus.has(sku) || usedUpcs.has(upc)) continue;
     seenSkus.add(sku);
+    usedUpcs.add(upc);
     list.push({
       id: '',
       sku,
@@ -2035,8 +2047,9 @@ const dbZeroEjItems = computed(() => {
         continue;
       }
     }
-    if (!isRealProductionUpc(resolvedUpc)) continue;
+    if (!isRealProductionUpc(resolvedUpc) || usedUpcs.has(resolvedUpc)) continue;
     seenSkus.add(sku);
+    usedUpcs.add(resolvedUpc);
     list.push({ id: '', sku, upc: resolvedUpc, title: resolvedTitle });
   }
 
@@ -2047,15 +2060,17 @@ const dbZeroEjItemsCount = computed(() => dbZeroEjItems.value.length);
 
 const ricochetSyncableItems = computed(() => {
   const mapBySkuOrKey = new Map<string, { id: string; sku: string; upc: string; title: string }>();
+  const usedUpcs = new Set<string>();
   const currentRows = Array.isArray(syncRows.value) ? syncRows.value : [];
 
   // 1. If a CSV or Verification Report is loaded in syncRows, include all matched rows first (all 714+ matched items!)
   for (const r of currentRows) {
     const upc = cleanCatalogSku(r.mappedItem?.upc || r.extractedUpc || r.expectedRcUpc).toUpperCase();
-    if (!isRealProductionUpc(upc)) continue;
+    if (!isRealProductionUpc(upc) || usedUpcs.has(upc)) continue;
     const sku = cleanCatalogSku(r.extractedSku || r.mappedItem?.locationSku).toUpperCase();
     const key = sku || r.productId || r.mappedItem?.$id || r.itemName;
-    if (!key) continue;
+    if (!key || mapBySkuOrKey.has(key)) continue;
+    usedUpcs.add(upc);
     mapBySkuOrKey.set(key, {
       id: r.productId || '',
       sku,
@@ -2083,21 +2098,24 @@ const ricochetSyncableItems = computed(() => {
         claimedItemIdToSku,
         multiBinResolvedBySku,
       });
-      if (matched && cleanSkuAndUpcValid(sku, matched.upc)) {
+      const matchedUpc = cleanCatalogSku(matched?.upc).toUpperCase();
+      if (matched && cleanSkuAndUpcValid(sku, matchedUpc) && !usedUpcs.has(matchedUpc)) {
         if (!claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
+        usedUpcs.add(matchedUpc);
         mapBySkuOrKey.set(sku, {
           id: String(r.productId || ''),
           sku,
-          upc: cleanCatalogSku(matched.upc).toUpperCase(),
+          upc: matchedUpc,
           title: String(matched.title || r.name || ''),
         });
       }
     }
   }
 
-  // 3. Always include all DB items that have both a `0EJ...` locationSku and a `upc`
+  // 3. Always include all DB items that have both a `0EJ...` locationSku and a unique `upc`
   for (const dbEntry of dbZeroEjItems.value) {
-    if (!mapBySkuOrKey.has(dbEntry.sku)) {
+    if (!mapBySkuOrKey.has(dbEntry.sku) && !usedUpcs.has(dbEntry.upc)) {
+      usedUpcs.add(dbEntry.upc);
       mapBySkuOrKey.set(dbEntry.sku, dbEntry);
     }
   }
@@ -2109,8 +2127,10 @@ const firstTestSyncItem = computed(() => ricochetSyncableItems.value[0] || null)
 
 const ricochetBarcodePayloadMap = computed(() => {
   const out: Record<string, string> = {};
+  const usedUpcs = new Set<string>();
   for (const entry of ricochetSyncableItems.value) {
-    if (entry.sku && entry.upc && isRealProductionUpc(entry.upc)) {
+    if (entry.sku && entry.upc && isRealProductionUpc(entry.upc) && !usedUpcs.has(entry.upc)) {
+      usedUpcs.add(entry.upc);
       out[entry.sku] = entry.upc;
     }
   }
@@ -2353,32 +2373,107 @@ const getRowConflictReason = (row: any): string => {
 };
 
 const assignUniqueUpcToRow = async (row: any) => {
-  if (!row) return;
+  if (!row || row.isAssigningUniqueUpc || row.uniqueBarcodeAssigned) return;
+  row.isAssigningUniqueUpc = true;
   const prefix = getRowEffectivePrefix(row);
   const newUpc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
   const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
 
   try {
-    if (row.mappedItem && row.mappedItem.$id && !String(row.mappedItem.$id).startsWith('subclient_')) {
-      const updatePayload: any = { upc: newUpc };
-      if (cleanSku) updatePayload.locationSku = cleanSku;
-      await updateInventoryItem(row.mappedItem.$id, updatePayload);
-      row.mappedItem.upc = newUpc;
-      if (cleanSku) row.mappedItem.locationSku = cleanSku;
+    // 1. Clear conflicting locationSku from any OTHER item in inventoryItems that still claims cleanSku
+    if (cleanSku) {
+      const staleSameSkuItems = (inventoryItems.value || []).filter((i: any) => {
+        const iSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
+        return i?.$id && iSku === cleanSku && i.$id !== row.mappedItem?.$id;
+      });
+      for (const staleItem of staleSameSkuItems) {
+        try {
+          await updateInventoryItem(staleItem.$id, { locationSku: '' });
+          staleItem.locationSku = '';
+        } catch (clearErr) {
+          console.warn('Could not clear stale locationSku on', staleItem.$id, clearErr);
+        }
+      }
     }
+
+    const mapped = row.mappedItem;
+    const mappedExistingSku = cleanCatalogSku(mapped?.locationSku || mapped?.sku).toUpperCase();
+    const isSharedWithOtherRow = Boolean(
+      mapped?.$id &&
+        (syncRows.value || []).some((r) => {
+          const rSku = cleanCatalogSku(r.extractedSku).toUpperCase();
+          return r !== row && rSku && rSku !== cleanSku && r.mappedItem?.$id === mapped.$id;
+        })
+    );
+    const belongsToOtherZeroEjSku = Boolean(
+      cleanSku && mappedExistingSku && /^0EJ/i.test(mappedExistingSku) && mappedExistingSku !== cleanSku
+    );
+
+    if (
+      mapped &&
+      mapped.$id &&
+      !String(mapped.$id).startsWith('subclient_') &&
+      !isSharedWithOtherRow &&
+      !belongsToOtherZeroEjSku
+    ) {
+      const updatePayload: any = {
+        upc: newUpc,
+        storageLocation: 'MD',
+        warehouseId: MD_CANONICAL_WAREHOUSE_ID,
+      };
+      if (cleanSku) updatePayload.locationSku = cleanSku;
+      await updateInventoryItem(mapped.$id, updatePayload);
+      mapped.upc = newUpc;
+      mapped.storageLocation = 'MD';
+      mapped.warehouseId = MD_CANONICAL_WAREHOUSE_ID;
+      if (cleanSku) mapped.locationSku = cleanSku;
+    } else {
+      // Mapped item is shared with another 0EJ SKU (e.g. 0EJ02D vs 0EJ05G on HUCK-9543): create a dedicated item for cleanSku
+      const isSold = row.status === 'sold' || row.status === 'paid';
+      const locName = currentLocation.value?.name || 'Memory Den';
+      const listedPrice = Number(row.listedPrice || mapped?.resalePrice || row.netSoldPrice || 0);
+      const netSoldPrice = Number(row.netSoldPrice || row.listedPrice || 0);
+      const doc = await saveItemToInventory(
+        {
+          title: row.itemName || mapped?.title || 'Memory Den Item',
+          condition_notes: `Assigned unique barcode for SKU: ${cleanSku || 'N/A'}`,
+        },
+        null,
+        {
+          title: row.itemName || mapped?.title || 'Memory Den Item',
+          status: isSold ? 'sold' : 'placed',
+          locationSku: cleanSku,
+          cost: String(mapped?.cost ?? 0),
+          resalePrice: String(listedPrice),
+          soldPrice: isSold ? netSoldPrice : undefined,
+          sellingLocations: locName ? [locName] : [],
+          storageLocation: 'MD',
+          upc: newUpc,
+        },
+        team.value?.$id || user.value?.$id || '',
+        team.value?.$id ? 'team' : 'user'
+      );
+      inventoryItems.value.unshift(doc);
+      row.mappedItem = doc;
+    }
+
     row.extractedUpc = newUpc;
     row.expectedRcUpc = newUpc;
     row.conflictReason = '';
+    row.uniqueBarcodeAssigned = true;
     row.isSavedToMd = true;
+    void syncLivePayloadToCloudEndpoint();
     addToast({
       type: 'success',
-      message: `🔧 Assigned unique barcode ${newUpc} to ${cleanSku || row.itemName}! Now click ⚡ Memory Den Sync on Memory Den.`,
+      message: `✅ Assigned unique barcode ${newUpc} to ${cleanSku || row.itemName}! Push in MD Widget to finish.`,
     });
   } catch (err: any) {
     addToast({
       type: 'error',
       message: `Failed to assign unique barcode: ${err?.message || 'Unknown error'}`,
     });
+  } finally {
+    row.isAssigningUniqueUpc = false;
   }
 };
 
@@ -3855,6 +3950,12 @@ const executeSync = async () => {
       // Catalog & Stock-Level Sync (Products-*.csv): items only. NEVER create sales here (no Sale# / Sold Date in this file).
       if (isCatalogExport.value) {
         const catalogUpdate: any = {};
+        if (!item.upc) {
+          const effPrefix = getRowEffectivePrefix(row);
+          const autoUpc = getNextUpc ? getNextUpc(effPrefix) : `${effPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+          catalogUpdate.upc = autoUpc;
+          item.upc = autoUpc;
+        }
         if (normSku && item.locationSku !== normSku) catalogUpdate.locationSku = normSku;
         if (item.storageLocation !== 'MD') catalogUpdate.storageLocation = 'MD';
         if (item.warehouseId !== targetWarehouseId) catalogUpdate.warehouseId = targetWarehouseId;
@@ -3881,7 +3982,7 @@ const executeSync = async () => {
           } catch (itemErr: any) {
             console.warn(`Could not update catalog item "${row.itemName}":`, itemErr);
           }
-          await new Promise(r => setTimeout(r, 400));
+          await new Promise(r => setTimeout(r, 120));
         } else {
           count++;
         }
@@ -4081,10 +4182,12 @@ const executeSync = async () => {
       refreshSyncHistory();
     }
 
+    await syncLivePayloadToCloudEndpoint();
     addToast({ type: 'success', message: `Successfully synced ${count} items to ${locName}!${skippedRecorded > 0 ? ` (${skippedRecorded} already recorded, skipped)` : ''}` });
     resetSync();
     if (team.value) {
       await fetchInventory();
+      await syncLivePayloadToCloudEndpoint();
     }
   } catch (err: any) {
     console.error('Sync commit error:', err);

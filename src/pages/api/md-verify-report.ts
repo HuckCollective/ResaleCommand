@@ -1,6 +1,12 @@
 import type { APIRoute } from 'astro';
 import { Client as NodeClient, Databases as NodeDatabases, Query as NodeQuery } from 'node-appwrite';
-import { PREVERIFIED_MD_SKU_TO_UPC_OR_ID, cleanCatalogSku, isBbConsignorRow } from '../../lib/salesBucketing';
+import {
+  PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+  buildLockedMultiBinMap,
+  cleanCatalogSku,
+  isBbConsignorRow,
+  matchMemoryDenInventoryItem,
+} from '../../lib/salesBucketing';
 
 export const prerender = false;
 
@@ -89,27 +95,15 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
 }> {
   const skuToUpcMap: Record<string, string> = {};
   const skuToMetaMap: Record<string, MdSkuMeta> = {};
+  const usedUpcs = new Set<string>();
+  const rawUpcToSkus = new Map<string, Set<string>>();
 
-  // 1. Start with any live payload pushed from LocationSyncView.vue session
-  const cachedLive = getStoredLivePayload();
-  if (cachedLive?.skuToUpcMap) {
-    for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
-      const sku = cleanCatalogSku(rawSku).toUpperCase();
-      const upc = cleanCatalogSku(rawUpc).toUpperCase();
-      if (!sku || !/^0EJ/i.test(sku) || !isValidProductionUpc(upc)) continue;
-      skuToUpcMap[sku] = upc;
-      const meta = cachedLive.skuToMetaMap?.[sku];
-      skuToMetaMap[sku] = {
-        upc,
-        partner: meta?.partner || detectPartnerFromUpcOrTitle(upc, meta?.title || ''),
-        title: meta?.title || '',
-        price: Number(meta?.price || 0),
-        status: meta?.status || 'placed',
-      };
-    }
-  }
+  const recordRawMapping = (sku: string, upc: string) => {
+    if (!rawUpcToSkus.has(upc)) rawUpcToSkus.set(upc, new Set());
+    rawUpcToSkus.get(upc)!.add(sku);
+  };
 
-  // 2. Query Appwrite resale_db.items live
+  // 1. Query Appwrite resale_db.items live first (canonical source of truth)
   const endpoint =
     (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) ||
     process.env.PUBLIC_APPWRITE_ENDPOINT ||
@@ -132,6 +126,8 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     'items';
 
   const byId = new Map<string, any>();
+  const allDocs: any[] = [];
+  const candidatesBySku = new Map<string, any[]>();
 
   if (endpoint && project) {
     try {
@@ -149,20 +145,16 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
         const docs = res.documents || [];
         for (const doc of docs as any[]) {
           if (doc?.$id) byId.set(doc.$id, doc);
+          allDocs.push(doc);
           const sku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
           const upc = cleanCatalogSku(doc?.upc).toUpperCase();
           const title = String(doc?.title || doc?.identity || '');
           if (!sku || !/^0EJ/i.test(sku) || !isValidProductionUpc(upc)) continue;
           if (/test|demo/i.test(title) && /test|demo/i.test(upc)) continue;
 
-          skuToUpcMap[sku] = upc;
-          skuToMetaMap[sku] = {
-            upc,
-            partner: detectPartnerFromUpcOrTitle(upc, title),
-            title,
-            price: Number(doc?.resalePrice || doc?.listPrice || doc?.price || doc?.soldPrice || 0),
-            status: String(doc?.status || 'placed'),
-          };
+          if (!candidatesBySku.has(sku)) candidatesBySku.set(sku, []);
+          candidatesBySku.get(sku)!.push(doc);
+          recordRawMapping(sku, upc);
         }
         if (docs.length < 100) break;
         cursor = docs[docs.length - 1].$id;
@@ -172,7 +164,37 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  // 3. Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID (resolving Appwrite $ids via byId when available)
+  // Sort SKUs so SKUs with exactly 1 DB candidate claim their UPC first, then multi-candidate SKUs pick the newest unclaimed UPC
+  const sortedSkus = Array.from(candidatesBySku.keys()).sort((a, b) => {
+    const lenA = candidatesBySku.get(a)!.length;
+    const lenB = candidatesBySku.get(b)!.length;
+    if (lenA !== lenB) return lenA - lenB;
+    return a.localeCompare(b);
+  });
+
+  for (const sku of sortedSkus) {
+    const docsForSku = candidatesBySku.get(sku) || [];
+    // docsForSku is already in orderDesc('$id') (newest first). Prefer newest candidate whose UPC is not yet in usedUpcs!
+    const chosen = docsForSku.find((d) => {
+      const u = cleanCatalogSku(d?.upc).toUpperCase();
+      return isValidProductionUpc(u) && !usedUpcs.has(u);
+    });
+    if (!chosen) continue;
+
+    const upc = cleanCatalogSku(chosen.upc).toUpperCase();
+    const title = String(chosen.title || chosen.identity || '');
+    usedUpcs.add(upc);
+    skuToUpcMap[sku] = upc;
+    skuToMetaMap[sku] = {
+      upc,
+      partner: detectPartnerFromUpcOrTitle(upc, title),
+      title,
+      price: Number(chosen.resalePrice || chosen.listPrice || chosen.price || chosen.soldPrice || 0),
+      status: String(chosen.status || 'placed'),
+    };
+  }
+
+  // 2. Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID for any SKU not yet in skuToUpcMap (enforcing usedUpcs)
   for (const [rawSku, rawUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
     const sku = cleanCatalogSku(rawSku).toUpperCase();
     if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku]) continue;
@@ -194,6 +216,10 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
 
     if (!isValidProductionUpc(resolvedUpc)) continue;
+    recordRawMapping(sku, resolvedUpc);
+    if (usedUpcs.has(resolvedUpc)) continue;
+
+    usedUpcs.add(resolvedUpc);
     skuToUpcMap[sku] = resolvedUpc;
     skuToMetaMap[sku] = {
       upc: resolvedUpc,
@@ -204,17 +230,76 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     };
   }
 
-  // 4. Compute duplicate UPC warnings (where >1 0EJ SKU maps to the same UPC)
-  const upcToSkus = new Map<string, string[]>();
-  for (const [sku, upc] of Object.entries(skuToUpcMap)) {
-    const list = upcToSkus.get(upc) || [];
-    list.push(sku);
-    upcToSkus.set(upc, list);
+  // 3. Merge any live payload pushed from LocationSyncView.vue session for remaining SKUs (enforcing usedUpcs)
+  const cachedLive = getStoredLivePayload();
+  if (cachedLive?.skuToUpcMap) {
+    for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
+      const sku = cleanCatalogSku(rawSku).toUpperCase();
+      const upc = cleanCatalogSku(rawUpc).toUpperCase();
+      if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku] || !isValidProductionUpc(upc)) continue;
+      recordRawMapping(sku, upc);
+      if (usedUpcs.has(upc)) continue;
+
+      usedUpcs.add(upc);
+      skuToUpcMap[sku] = upc;
+      const meta = cachedLive.skuToMetaMap?.[sku];
+      skuToMetaMap[sku] = {
+        upc,
+        partner: meta?.partner || detectPartnerFromUpcOrTitle(upc, meta?.title || ''),
+        title: meta?.title || '',
+        price: Number(meta?.price || 0),
+        status: meta?.status || 'placed',
+      };
+    }
   }
+
+  // 4. Fallback: if a Verification Report is stored in memory, run matchMemoryDenInventoryItem for any remaining report rows
+  const storedReport = getStoredReport();
+  if (storedReport?.rows?.length && allDocs.length > 0) {
+    const claimedItemIdToSku = new Map<string, string>();
+    for (const doc of allDocs) {
+      const dSku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
+      if (dSku && skuToUpcMap[dSku] && cleanCatalogSku(doc?.upc).toUpperCase() === skuToUpcMap[dSku]) {
+        claimedItemIdToSku.set(doc.$id, dSku);
+      }
+    }
+    const multiBinResolvedBySku = buildLockedMultiBinMap(allDocs, claimedItemIdToSku);
+    for (const r of storedReport.rows) {
+      const sku = cleanCatalogSku(r.sku).toUpperCase();
+      if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku]) continue;
+      const matched = matchMemoryDenInventoryItem({
+        sku,
+        upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
+        title: String(r.name || ''),
+        price: Number(r.agreedPrice || 0),
+        extraText: '',
+        allowPrefixForPayout: false,
+        activeItems: allDocs,
+        claimedItemIdToSku,
+        multiBinResolvedBySku,
+      });
+      const matchedUpc = cleanCatalogSku(matched?.upc).toUpperCase();
+      if (matched && isValidProductionUpc(matchedUpc) && !usedUpcs.has(matchedUpc)) {
+        usedUpcs.add(matchedUpc);
+        claimedItemIdToSku.set(matched.$id, sku);
+        const title = String(matched.title || r.name || '');
+        skuToUpcMap[sku] = matchedUpc;
+        skuToMetaMap[sku] = {
+          upc: matchedUpc,
+          partner: detectPartnerFromUpcOrTitle(matchedUpc, title),
+          title,
+          price: Number(matched.resalePrice || matched.listPrice || matched.price || r.agreedPrice || 0),
+          status: String(matched.status || 'placed'),
+        };
+      }
+    }
+  }
+
+  // 5. Compute any historical duplicate UPC warnings (though skuToUpcMap is now guaranteed 100% duplicate-free)
   const duplicateUpcWarnings: Array<{ upc: string; skus: string[] }> = [];
-  for (const [upc, skus] of upcToSkus.entries()) {
-    if (skus.length > 1) {
-      duplicateUpcWarnings.push({ upc, skus });
+  for (const [upc, skuSet] of rawUpcToSkus.entries()) {
+    if (skuSet.size > 1) {
+      duplicateUpcWarnings.push({ upc, skus: Array.from(skuSet) });
     }
   }
 

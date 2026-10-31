@@ -626,6 +626,11 @@ export const PREVERIFIED_MD_SKU_TO_UPC_OR_ID: Record<string, string> = {
     '0EJ0NE': 'HUCK-0025',
     '0EJ0MP': 'HUCK-2808',
     '0EJ0JR': 'HUCK-1262',
+    // Collision-resolved 1-to-1 locks (preventing 0EJ09A, 0EJ0MW, 0EJ0MY, 0EJ02D from hijacking shared UPCs)
+    '0EJ0MQ': 'HUCK-0334',
+    '0EJ0HE': 'HUCK-1379',
+    '0EJ0JJ': 'HUCK-1461',
+    '0EJ05G': 'HUCK-9543',
 };
 
 export interface MdPreverifiedMultiBin {
@@ -981,6 +986,10 @@ export function matchMemoryDenInventoryItem(params: {
         if (isSoldUnitSplitChild(cand)) return false;
         const candIsBb = isBbConsignorDbItem(cand);
         if (rowIsBb !== candIsBb) return false;
+        const candLocSku = cleanCatalogSku(cand.locationSku || cand.sku).toUpperCase();
+        if (normSku && /^0EJ/i.test(normSku) && /^0EJ/i.test(candLocSku) && candLocSku !== normSku) {
+            return false;
+        }
         const existingClaimSku = claimed.get(cand.$id);
         if (existingClaimSku && existingClaimSku !== normSku && existingClaimSku !== rowClaimKey) return false;
         return true;
