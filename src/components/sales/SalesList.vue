@@ -583,7 +583,13 @@ import PaginationDock from '../common/PaginationDock.vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
-import { pacificMonthKey } from '../../lib/salesBucketing';
+import {
+  pacificMonthKey,
+  PREVERIFIED_MD_MULTI_QTY_BINS,
+  resolveMdUnitCostBasis,
+  cleanCatalogSku,
+  buildLockedMultiBinMap,
+} from '../../lib/salesBucketing';
 
 const { currentTeam } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
@@ -752,21 +758,40 @@ const getCommissionRate = (locNameOrId: string) => {
 const consolidatedSales = computed(() => {
   const list: any[] = [];
   const linkedSaleIds = new Set<string>();
-  const linkedItemIds = new Set<string>();
-  const seenSingleItemKeys = new Set<string>();
+  const multiBinBySku = buildLockedMultiBinMap(inventoryItems.value || []);
+  const isSoldUnitSplitChild = (it: any) => /\(sold unit\)/i.test(String(it?.title || ''));
 
   // 1. Process official sales collection documents
   sales.value.forEach(sale => {
     if (sale.status === 'Cancelled') return; // Skip cancelled sales so they drop from realized revenue
 
-    const sSo = (sale.soNumber || '').trim().toUpperCase();
-    const sOrd = (sale.orderId || '').trim().toUpperCase();
-    // Prefer the item explicitly linked to this sale (items.saleId); only then fall back to UPC / SKU lookups
-    const linkedItem = inventoryItems.value.find(i => i.saleId === sale.$id) || inventoryItems.value.find(i => 
-      (sSo && (i.locationSku?.toUpperCase() === sSo || i.upc?.toUpperCase() === sSo)) ||
-      (sOrd && (i.locationSku?.toUpperCase() === sOrd || i.upc?.toUpperCase() === sOrd))
+    const sSo = cleanCatalogSku(sale.soNumber).toUpperCase();
+    const sOrd = cleanCatalogSku(sale.orderId).toUpperCase();
+    // Prefer locked Multi-Qty Booth Bins when SKU is a known Booth Bin, then explicit saleId, then UPC / SKU lookups (preferring non-split-child items)
+    const linkedItem =
+      (sSo && multiBinBySku.get(sSo)) ||
+      (sOrd && multiBinBySku.get(sOrd)) ||
+      inventoryItems.value.find(i => i.saleId === sale.$id && !isSoldUnitSplitChild(i)) ||
+      inventoryItems.value.find(i =>
+        !isSoldUnitSplitChild(i) && (
+          (sSo && (cleanCatalogSku(i.locationSku).toUpperCase() === sSo || cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
+          (sOrd && (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd || cleanCatalogSku(i.upc).toUpperCase() === sOrd))
+        )
+      ) ||
+      inventoryItems.value.find(i => i.saleId === sale.$id) ||
+      inventoryItems.value.find(i =>
+        (sSo && (cleanCatalogSku(i.locationSku).toUpperCase() === sSo || cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
+        (sOrd && (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd || cleanCatalogSku(i.upc).toUpperCase() === sOrd))
+      );
+    const resolvedBinSku = cleanCatalogSku(linkedItem?.locationSku || linkedItem?.sku || sSo).toUpperCase();
+    const resolvedUpc = cleanCatalogSku(linkedItem?.upc || sSo).toUpperCase();
+    const matchedBinEntry = Object.entries(PREVERIFIED_MD_MULTI_QTY_BINS).find(
+      ([skuKey, b]) =>
+        skuKey === resolvedBinSku ||
+        (resolvedUpc && ((b.upc && b.upc.toUpperCase() === resolvedUpc) || (b.altUpc && b.altUpc.toUpperCase() === resolvedUpc)))
     );
-    const isMultiQty = linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
+    const isKnownMultiBin = Boolean(matchedBinEntry);
+    const isMultiQty = isKnownMultiBin || linkedItem?.isMultiQty || (linkedItem?.quantity && linkedItem.quantity > 1);
 
     // Resale Invariant: 1 Sale Record = 1 Register Transaction. Dedupe by sale document id ONLY.
     // Never collapse several sales that share an item: depleted multi-qty bins (e.g. HUCK-1219 Shadowrun x4,
@@ -798,14 +823,20 @@ const consolidatedSales = computed(() => {
     }
 
     const partner: PartnerKey = isBB ? 'BB' : (isPDXGL ? 'PDXGL' : 'HUCK');
-    // Cost basis per sale: single-unit = item cost; multi-qty bin = per-unit cost (same rule as the cards/drawer)
+    // Cost basis per sale: single-unit = item cost; multi-qty bin = verified per-unit cost basis ($2.61, $0.81, $4.46, $4.16, etc.); B&B = $0
     let costBasis = 0;
-    if (linkedItem) {
-      const rawCost = Number(linkedItem.cost ?? linkedItem.purchasePrice ?? 0) || 0;
-      const itemQty = Math.max(1, Number(linkedItem.quantity || 1));
-      costBasis = isMultiQty
-        ? resolveMultiQtyCost(rawCost, itemQty, (linkedItem as any).resalePrice || 0).unitCost
-        : rawCost;
+    if (isBB) {
+      costBasis = 0;
+    } else if (linkedItem) {
+      if (isKnownMultiBin) {
+        costBasis = resolveMdUnitCostBasis(linkedItem, matchedBinEntry ? matchedBinEntry[0] : resolvedBinSku, true);
+      } else {
+        const rawCost = Number(linkedItem.cost ?? linkedItem.purchasePrice ?? 0) || 0;
+        const itemQty = Math.max(1, Number(linkedItem.quantity || 1));
+        costBasis = isMultiQty
+          ? resolveMultiQtyCost(rawCost, itemQty, (linkedItem as any).resalePrice || 0).unitCost
+          : rawCost;
+      }
     }
     const netPayoutVal = Number(sale.netPayout !== undefined ? sale.netPayout : (sale.grossAmount - comm));
 
