@@ -2919,6 +2919,7 @@ const parseMemoryDenPayout = (csvText: string) => {
     const q = Math.max(1, Number(item.quantity || 1));
     remainingStockMap.set(item.$id, q);
   });
+  const ticketLineOccurrenceMap = new Map<string, number>();
 
   for (let i = 1; i < rfcRows.length; i++) {
     const cols = rfcRows[i];
@@ -2965,7 +2966,7 @@ const parseMemoryDenPayout = (csvText: string) => {
     
     let agreedPriceVal = agreedPriceIdx !== -1 ? parseFloat((cols[agreedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
     let agedPriceVal = agedPriceIdx !== -1 ? parseFloat((cols[agedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
-    let grossPrice = agreedPriceVal > 0 ? agreedPriceVal : agedPriceVal;
+    let grossPrice = Number((agreedPriceVal > 0 ? agreedPriceVal : agedPriceVal).toFixed(2));
 
     let consignorPct = 85; // 85% default payout
     if (splitIdx !== -1 && cols[splitIdx]) {
@@ -2975,8 +2976,8 @@ const parseMemoryDenPayout = (csvText: string) => {
 
     let amountVal = amountIdx !== -1 ? parseFloat((cols[amountIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
     let netSoldPrice = 0;
-    if (amountVal > 0 && amountVal !== grossPrice) {
-      netSoldPrice = amountVal;
+    if (amountVal > 0) {
+      netSoldPrice = Number(amountVal.toFixed(2));
     } else if (grossPrice > 0) {
       netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
     }
@@ -2990,6 +2991,8 @@ const parseMemoryDenPayout = (csvText: string) => {
     const rawTicket = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
     // Canonical numeric ticket id ("T-217301 • Title" / "Ticket #217301" / "217301" -> "217301")
     const ticketNumber = canonicalTicketNumber(rawTicket) || rawTicket;
+    const ticketOcc = ticketNumber ? (ticketLineOccurrenceMap.get(ticketNumber) || 0) + 1 : 1;
+    if (ticketNumber) ticketLineOccurrenceMap.set(ticketNumber, ticketOcc);
     const customerName = customerIdx !== -1 ? (cols[customerIdx]?.trim() || '') : '';
 
     // MemoryDen SKU either from explicit SKU column, end of title ("Item Name - 0EJ066"), or pre-verified Oct payout map
@@ -3226,6 +3229,7 @@ const parseMemoryDenPayout = (csvText: string) => {
       itemName: itemName,
       extractedSku,
       ticketNumber,
+      ticketOccurrence: ticketOcc,
       customerName,
       status: statusVal,
       listedPrice: grossPrice,
@@ -3237,7 +3241,7 @@ const parseMemoryDenPayout = (csvText: string) => {
       parentPartner: isBB ? 'PDXGL-' : (matched?.parentPartner || null),
       isMultiQtyCandidate: isMultiCandidate,
       repeatCount: repeatCount,
-      isMultiQty: isMultiQty
+      isMultiQty: isMultiQty || ticketOcc > 1
     });
   }
 
@@ -3404,40 +3408,23 @@ const executeImport = async () => {
         if (!item) continue;
 
         const isSoldOrPaid = row.status === 'sold' || row.status === 'paid' || true;
-        const orderRef = row.ticketNumber ? `Ticket #${row.ticketNumber}` : (row.extractedSku || batchId);
+        const occNum = Math.max(Number(row.ticketOccurrence || 1), Number((row as any).occurrenceIndex || 1));
+        const formattedTicketRef = row.ticketNumber
+          ? (occNum > 1 ? `Ticket #${row.ticketNumber} #${occNum}` : `Ticket #${row.ticketNumber}`)
+          : '';
+        const orderRef = formattedTicketRef || row.extractedSku || batchId;
 
-        // Cardinal Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless multi-qty)
+        // Cardinal Resale Invariant: Every line in a Ricochet Payouts *.csv is a real register sale.
+        // Deduplication relies strictly on occurrence-indexed `row.isAlreadyRecorded` (`flagAlreadyRecordedRows`),
+        // NEVER on `existingSoldSkuSet` or `item.status === 'sold'`, so 2nd/3rd/4th lines on the same ticket (e.g. Ticket #225210 x2) are never dropped!
         const normRowSku = cleanCatalogSku(row.extractedSku || item.locationSku).toUpperCase();
         const binConfig = normRowSku ? PREVERIFIED_MD_MULTI_QTY_BINS[normRowSku] : undefined;
-        const isMultiQty = !!(binConfig || item.isMultiQty || (item.quantity && item.quantity > 1));
-        const skuKey = (row.extractedSku || item.locationSku || item.upc || '').trim().toUpperCase();
+        const isMultiQty = !!(binConfig || item.isMultiQty || (item.quantity && item.quantity > 1) || occNum > 1);
 
-        if (!isMultiQty) {
-          // If this ticket was already recorded, skip!
-          if (row.isAlreadyRecorded) { // count-aware duplicate guard (canonical ticket + occurrence); see flagAlreadyRecordedRows
-            importedCount++;
-            importedRowRefs.add(row);
-            continue;
-          }
-          // If this SKU was already recorded in sales, skip!
-          if (skuKey && existingSoldSkuSet.has(skuKey)) {
-            importedCount++;
-            importedRowRefs.add(row);
-            continue;
-          }
-          // If the item in inventory is already marked sold with a sale record, skip!
-          if (item.status === 'sold' && item.saleId) {
-            importedCount++;
-            importedRowRefs.add(row);
-            continue;
-          }
-        } else {
-          // For multi-quantity items, skip only if THIS specific ticket was already recorded
-          if (row.isAlreadyRecorded) { // count-aware duplicate guard (canonical ticket + occurrence); see flagAlreadyRecordedRows
-            importedCount++;
-            importedRowRefs.add(row);
-            continue;
-          }
+        if (row.isAlreadyRecorded) {
+          importedCount++;
+          importedRowRefs.add(row);
+          continue;
         }
 
         // If it's an auto-detected sub-client item (like B&B) not yet persisted, create it with valid Appwrite attributes
@@ -3513,7 +3500,7 @@ const executeImport = async () => {
               tenantId: item.tenantId || activeTeamId.value,
               warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
               soNumber: item.upc || cleanCatalogSku(row.extractedSku || item.locationSku) || `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-              orderId: row.ticketNumber ? `Ticket #${row.ticketNumber}` : (cleanCatalogSku(row.extractedSku || item.locationSku) || orderRef),
+              orderId: formattedTicketRef || cleanCatalogSku(row.extractedSku || item.locationSku) || orderRef,
               saleDate: parsedSaleDate,
               grossAmount: gross,
               commissionFee: fee,

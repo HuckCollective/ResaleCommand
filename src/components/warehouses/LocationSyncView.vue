@@ -2440,12 +2440,13 @@ const parseCsvData = (rawText: string, fileName: string) => {
           }
         }
 
-        // 3. Read or Apply Exact Net Payout
-        let explicitPayout = amountIdx !== -1 ? parseFloat((cols[amountIdx] || '').replace(/[^0-9.]/g, '')) || 0 : 0;
+        // 3. Read or Apply Exact Net Payout (preserve exact Agreed & Amount cents, never round $9.99 -> $10.00)
+        grossPrice = Number(grossPrice.toFixed(2));
+        let explicitPayout = amountIdx !== -1 ? parseFloat((cols[amountIdx] || '').replace(/[^0-9.-]/g, '')) || 0 : 0;
         let netSoldPrice = 0;
 
-        if (explicitPayout > 0 && explicitPayout !== grossPrice) {
-          netSoldPrice = explicitPayout;
+        if (explicitPayout > 0) {
+          netSoldPrice = Number(explicitPayout.toFixed(2));
         } else if (grossPrice > 0) {
           netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
         }
@@ -3063,31 +3064,29 @@ const executeSync = async () => {
       const currentQty = Number(item.quantity || 1);
 
       if (isSold || isMultiBin) {
-        const gross = Number(row.listedPrice || row.netSoldPrice || 0);
-        const net = Number(row.netSoldPrice || (gross * (1 - (commissionRate / 100))));
-        const commFee = Number(row.commissionFee || (gross - net));
+        const gross = Number(Number(row.listedPrice || row.netSoldPrice || 0).toFixed(2));
+        const net = Number(Number(row.netSoldPrice || (gross * (1 - (commissionRate / 100)))).toFixed(2));
+        const commFee = Math.max(0, Number((gross - net).toFixed(2)));
+        const occNum = Math.max(1, Number((row as any).occurrenceIndex || 1));
+        const formattedTicketRef = row.saleTicketId
+          ? (occNum > 1 ? `Ticket #${row.saleTicketId} #${occNum}` : `Ticket #${row.saleTicketId}`)
+          : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`);
+        const canonicalSoNumber = item.upc || cleanCatalogSku(row.extractedSku || item.locationSku) || `SO-${nextSoNum++}`;
 
         if (currentQty > 1 || isMultiBin) {
-          // Multi-quantity lot: decrement parent (or use verified remaining bin qty) and keep it in stock
-          const totalCost = Number(item.cost || 0);
-          const unitCost = resolveMdUnitCostBasis(item, normSku, true);
+          // Multi-quantity Booth Bin: keep parent lot active at status='placed' (never create '(Sold Unit)' split children)
           const remainingQty = binConfig ? Math.max(1, binConfig.expectedRemainingQty) : Math.max(1, currentQty - 1);
-          const remainingCost = Math.max(0, Number((totalCost - unitCost).toFixed(2)));
 
           updateData.quantity = remainingQty;
-          updateData.cost = remainingCost;
-          updateData.status = 'placed'; // Parent lot stays active in booth!
+          updateData.status = 'placed';
           updateData.storageLocation = 'MD';
           updateData.warehouseId = targetWarehouseId;
 
-          // Record official sale document
-          let soNum = `SO-${nextSoNum++}`;
-          let saleDoc: any = null;
           try {
-            saleDoc = await withRetry(() => salesApi.createSale({
-              soNumber: soNum,
-              warehouseId: currentLocation.value?.$id || '',
-              orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
+            await withRetry(() => salesApi.createSale({
+              soNumber: canonicalSoNumber,
+              warehouseId: targetWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              orderId: formattedTicketRef,
               saleDate: resolveSoldIso(row, item),
               status: 'Sold',
               grossAmount: gross,
@@ -3101,56 +3100,20 @@ const executeSync = async () => {
             console.error('Error creating sale document during lot sync:', saleErr);
           }
 
-          // Create Child Sold item document in inventory
-          try {
-            const prefix = upcPrefix.value?.trim() || 'HUCK-';
-            const childDoc = await withRetry(() => saveItemToInventory(
-              {
-                title: `${item.title} (Sold Unit)`,
-                identity: `${item.identity || 'Item'}-SOLD-${Date.now().toString().slice(-4)}`,
-                condition_notes: `Sold unit from Lot: ${item.title} (${item.$id}). Synced from ${locName}.`
-              },
-              null,
-              {
-                title: item.title,
-                status: 'sold',
-                locationSku: row.extractedSku || item.locationSku || '',
-                cost: unitCost,
-                resalePrice: gross,
-                soldPrice: net,
-                quantity: 1,
-                parentLotId: item.$id,
-                saleId: saleDoc?.$id || undefined,
-                sellingLocations: [locName],
-                storageLocation: item.storageLocation || locName,
-                upc: item.upc || row.upc || (getNextUpc ? getNextUpc(prefix) : undefined),
-                soldDate: resolveSoldIso(row, item)
-              },
-              team.value?.$id || user.value?.$id || '',
-              team.value?.$id ? 'team' : 'user'
-            ));
-            if (childDoc) {
-              inventoryItems.value.unshift(childDoc);
-            }
-          } catch (childErr) {
-            console.error('Error creating child sold item:', childErr);
-          }
-
         } else {
           // Single unit item sold
           updateData.status = 'sold';
+          updateData.quantity = 1;
           updateData.resalePrice = gross;
           updateData.soldPrice = net; // The exact amount made after fees!
           updateData.soldDate = resolveSoldIso(row, item);
 
           // Record official sale document in sales collection
           try {
-            const soNum = `SO-${nextSoNum++}`;
-
             const saleDoc = await withRetry(() => salesApi.createSale({
-              soNumber: soNum,
-              warehouseId: currentLocation.value?.$id || '',
-              orderId: row.saleTicketId ? `Ticket #${row.saleTicketId}` : (item.upc || row.extractedSku || `SYNC-${Date.now()}-${idx}`),
+              soNumber: canonicalSoNumber,
+              warehouseId: targetWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              orderId: formattedTicketRef,
               saleDate: resolveSoldIso(row, item),
               status: 'Sold',
               grossAmount: gross,

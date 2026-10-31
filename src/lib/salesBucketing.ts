@@ -570,6 +570,7 @@ export const PREVERIFIED_MD_SINGLE_UPC_BY_SKU: Record<string, MdPreverifiedSingl
     '0EJ0NE': { upc: 'HUCK-0025', saleNum: '218413', gross: 65.00, label: 'Y2K Desigual T Shirt Dress Black' },
     '0EJ0MP': { upc: 'HUCK-2808', saleNum: '218335', gross: 20.00, label: 'CP2020 Solo of Fortune Mag 2013' },
     '0EJ0JR': { upc: 'HUCK-1262', saleNum: '217606', gross: 55.00, label: 'Vintage Brown Suede Western Cowboy Hat' },
+    '0EJ06K': { upc: 'HUCK-1206', saleNum: '225288', gross: 30.00, label: '0EJ06K HUCK-1206' },
     '0EJ0JV': { upc: null, saleNum: '225058', gross: 55.00, label: 'Tripp NYC Black Gothic Punk Alternative Lace-Up Mini Skirt Size 4' },
     '0EJ07F': { upc: null, saleNum: '221996', gross: 40.00, label: 'Goth Mini Skirt - Lips & Crossbones Patch' },
     '0EJ0C7': { upc: null, saleNum: '219981', gross: 70.00, label: 'Frank Frazetta ICON A Retrospective Art Book' },
@@ -596,7 +597,9 @@ export const PREVERIFIED_MD_SKU_TO_UPC_OR_ID: Record<string, string> = {
     '0EJ0JK': 'HUCK-1460',
     '0EJ0NQ': 'HUCK-9455',
     '0EJ09E': 'HUCK-0296',
+    '0EJ0M8': 'HUCK-1498',
     // Trap Guards & Verified Singles
+    '0EJ06K': 'HUCK-1206',
     '0EJ0NY': 'HUCK-9459',
     '0EJ0O0': 'HUCK-9458',
     '0EJ0N8': 'HUCK-1440',
@@ -718,6 +721,15 @@ export const PREVERIFIED_MD_MULTI_QTY_BINS: Record<string, MdPreverifiedMultiBin
         totalUnitsInLot: 3,
         unitCostOverride: Number((12.47 / 3).toFixed(2)), // $4.16
         label: 'Vintage Paperback Books J.R.R. Tolkien',
+    },
+    '0EJ0M8': {
+        upc: 'HUCK-1498',
+        octUnitsSold: 2,
+        expectedRemainingQty: 15,
+        unitPrice: 10.00,
+        totalUnitsInLot: null,
+        unitCostOverride: 0.04,
+        label: 'Fantasy/Sci-Fi MM Paperbacks',
     },
 };
 
