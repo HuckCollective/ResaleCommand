@@ -1227,7 +1227,26 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 };
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, canonicalTicketNumber, toSaleIso, isProductCatalogHeaders, cleanCatalogSku } from '../../lib/salesBucketing';
+import {
+  stripBom,
+  normalizeCsvHeader,
+  isSaleNumberHeader,
+  isSoldDateHeader,
+  flagAlreadyRecordedRows,
+  canonicalTicketNumber,
+  toSaleIso,
+  isProductCatalogHeaders,
+  cleanCatalogSku,
+  parseCsvRfc4180Rows,
+  MD_CANONICAL_WAREHOUSE_ID,
+  PREVERIFIED_MD_SINGLE_UPC_BY_SKU,
+  PREVERIFIED_MD_MULTI_QTY_BINS,
+  isBbConsignorRow,
+  resolveMdUnitCostBasis,
+  resolveMemoryDenSkuFromPayoutRow,
+  buildLockedMultiBinMap,
+  matchMemoryDenInventoryItem,
+} from '../../lib/salesBucketing';
 
 // Resolve the real register date for a sale: the CSV row's Sold date first, then the item's own soldDate.
 // Only falls back to "now" as a last resort so imports never silently stamp sales with today's date.
@@ -1809,8 +1828,9 @@ const parseCsvData = (rawText: string, fileName: string) => {
       return;
     }
 
+    const parsedMatrix = parseCsvRfc4180Rows(text);
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length < 2) {
+    if (parsedMatrix.length < 2) {
       addToast({ type: 'error', message: 'CSV file is empty or invalid.' });
       isParsing.value = false;
       return;
@@ -1826,10 +1846,11 @@ const parseCsvData = (rawText: string, fileName: string) => {
       }
     }
 
-      rawCsvHeader.value = lines[0];
+      rawCsvHeader.value = lines[0] || parsedMatrix[0].join(',');
       rawCsvLines.value = lines;
 
-      const headerCols = splitCsvLine(lines[0]).map(h => normalizeCsvHeader(h));
+      const rawHeaders = parsedMatrix[0];
+      const headerCols = rawHeaders.map(h => normalizeCsvHeader(h));
       const skuIdx = headerCols.findIndex(h => h === 'sku' || h.includes('sku') || h.includes('barcode') || h.includes('custom sku'));
       const upcIdx = headerCols.findIndex(h => h === 'upc' || h.includes('upc'));
       const prodIdIdx = headerCols.findIndex(h => h === 'product id' || h.includes('product id') || h.includes('item id'));
@@ -1840,31 +1861,19 @@ const parseCsvData = (rawText: string, fileName: string) => {
       
       const amountIdx = headerCols.findIndex(h => h === 'payout' || h === 'net' || h === 'net payout' || h === 'vendor payout' || h === 'consignor amount' || h === 'net amount' || h === 'sold amount' || h === 'take home' || h === 'final amount' || h === 'amount');
       const agedPriceIdx = headerCols.findIndex(h => h === 'aged price' || h.includes('aged price'));
-      const agreedPriceIdx = headerCols.findIndex(h => h === 'agreed' || h === 'agreed price' || h.includes('agreed') || h === 'gross' || h === 'gross amount' || h === 'price' || h.includes('price') || h.includes('total'));
+      const agreedPriceIdx = headerCols.findIndex(h => h === 'agreed' || h === 'agreed price' || h.includes('agreed') || h === 'gross' || h === 'gross amount' || h === 'price' || h.includes('price') || h === 'total');
+      const descIdx = headerCols.findIndex(h => h === 'description' || h.includes('description') || h === 'brand' || h === 'category');
       
       const splitIdx = headerCols.findIndex(h => h === 'consignor %' || h.includes('consignor %') || h === 'split / cost' || h.includes('split') || h.includes('consignor percent'));
       const statusIdx = headerCols.findIndex(h => h === 'status' || h.includes('status') || h === 'inventory' || h.includes('state'));
       const qtyIdxExact = headerCols.findIndex(h => h === 'quantity' || h === 'qty');
       // NOTE: a Products-*.csv "In stock" column is the date the item was added to stock - never a quantity
       const qtyIdx = qtyIdxExact !== -1 ? qtyIdxExact : headerCols.findIndex(h => h.includes('quantity') || h.includes('qty'));
-      isCatalogExport.value = isProductCatalogHeaders(splitCsvLine(lines[0]));
+      isCatalogExport.value = isProductCatalogHeaders(rawHeaders);
 
       const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
-      // Lineage Absorption Law: exclude combined/deconstructed child items from title/fuzzy searches
-      const titleSearchCandidates = activeItems.filter(item => {
-        const s = String(item?.status || '').toLowerCase().trim();
-        return s !== 'combined' && s !== 'deconstructed' && s !== 'tracked' && s !== 'draft' && s !== 'scouted';
-      });
-
-      const dereferenceParent = (itm: any): any => {
-        if (!itm) return null;
-        const s = String(itm.status || '').toLowerCase().trim();
-        if ((s === 'combined' || s === 'deconstructed') && itm.parentLotId) {
-          const parent = activeItems.find(p => p.$id === itm.parentLotId);
-          if (parent) return dereferenceParent(parent);
-        }
-        return itm;
-      };
+      const claimedItemIdToSku = new Map<string, string>();
+      const multiBinResolvedBySku = buildLockedMultiBinMap(activeItems, claimedItemIdToSku);
 
       const defaultCommission = currentLocation.value?.commissionRate || 15;
       const defaultConsignorPct = 100 - defaultCommission; // e.g. 85%
@@ -1874,8 +1883,8 @@ const parseCsvData = (rawText: string, fileName: string) => {
       let nonOrgSkipped = 0;
       detectedRentDeductions.value = [];
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = splitCsvLine(lines[i]);
+      for (let i = 1; i < parsedMatrix.length; i++) {
+        const cols = parsedMatrix[i];
         if (cols.length === 0 || !cols.some(c => c.trim().length > 0)) continue;
 
         let fullItemName = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : `Item ${i}`;
@@ -1918,9 +1927,9 @@ const parseCsvData = (rawText: string, fileName: string) => {
         }
 
         let rawSku = skuIdx !== -1 ? cols[skuIdx] : (prodIdIdx !== -1 ? cols[prodIdIdx] : '');
-        let cleanSku = cleanCatalogSku(rawSku).replace(/^["]+/, '').replace(/['"]+$/, '');
+        let cleanSku = cleanCatalogSku(rawSku).replace(/^["]+/, '').replace(/['"]+$/, '').toUpperCase();
         let rawUpc = upcIdx !== -1 ? cols[upcIdx] : '';
-        let cleanUpc = (rawUpc || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
+        let cleanUpc = cleanCatalogSku(rawUpc).replace(/^['"]+/, '').replace(/['"]+$/, '');
         let rowQty = qtyIdx !== -1 ? (parseInt((cols[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || (isCatalogExport.value ? 0 : 1)) : 1;
         let saleTicketIdRaw = saleIdx !== -1 ? (cols[saleIdx] || '').trim() : '';
         // Canonical numeric ticket id so legacy "T-217301 • Title" records dedupe against "217301"
@@ -1933,13 +1942,34 @@ const parseCsvData = (rawText: string, fileName: string) => {
         if (!cleanSku) {
           const skuMatch = fullItemName.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
           if (skuMatch) {
-            cleanSku = skuMatch[1].trim();
+            cleanSku = skuMatch[1].trim().toUpperCase();
             name = fullItemName.replace(skuMatch[0], '').trim();
           }
         }
 
+        // 1. Read Gross Sticker / Agreed Price directly from Memory Den row
+        let grossPrice = 0;
+        if (agreedPriceIdx !== -1 && cols[agreedPriceIdx]) {
+          grossPrice = parseFloat(cols[agreedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
+        }
+        if (grossPrice === 0 && agedPriceIdx !== -1 && cols[agedPriceIdx]) {
+          grossPrice = parseFloat(cols[agedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
+        }
+
+        if (!cleanSku && !isCatalogExport.value) {
+          cleanSku = resolveMemoryDenSkuFromPayoutRow({
+            extractedSku: cleanSku,
+            itemName: name,
+            ticketNumber: saleTicketId,
+            grossPrice
+          });
+        }
+
+        const extraText = descIdx !== -1 ? (cols[descIdx] || '') : '';
+        const rowIsBb = isBbConsignorRow({ sku: cleanSku, upc: cleanUpc, title: name, extraText });
+
         // Multi-Org SKU & Prefix Extraction
-        const detectedPrefix = extractOrgPrefix(cleanUpc || cleanSku);
+        const detectedPrefix = rowIsBb ? 'BB' : extractOrgPrefix(cleanUpc || cleanSku);
         const hasOrgPrefix = (cleanUpc && (cleanUpc.toUpperCase().startsWith(`${cleanOrg}-`) || cleanUpc.toUpperCase().startsWith(cleanOrg))) ||
                              (cleanSku && (cleanSku.toUpperCase().startsWith(`${cleanOrg}-`) || cleanSku.toUpperCase().startsWith(cleanOrg)));
         const matchesInventoryItem = activeItems.some(item => {
@@ -1953,7 +1983,9 @@ const parseCsvData = (rawText: string, fileName: string) => {
         const isOrgItem = hasOrgPrefix || matchesInventoryItem;
 
         let orgBucket = 'UNASSIGNED';
-        if (isOrgItem || detectedPrefix === cleanOrg) {
+        if (rowIsBb) {
+          orgBucket = 'BB';
+        } else if (isOrgItem || detectedPrefix === cleanOrg) {
           orgBucket = cleanOrg;
         } else if (detectedPrefix && detectedPrefix !== 'NONE') {
           orgBucket = detectedPrefix;
@@ -1964,15 +1996,6 @@ const parseCsvData = (rawText: string, fileName: string) => {
         if (onlySyncOrgPrefix.value && (cleanSku || cleanUpc) && !isOrgItem) {
           nonOrgSkipped++;
           continue;
-        }
-
-        // 1. Read Gross Sticker / Agreed Price directly from Memory Den row
-        let grossPrice = 0;
-        if (agreedPriceIdx !== -1 && cols[agreedPriceIdx]) {
-          grossPrice = parseFloat(cols[agreedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
-        }
-        if (grossPrice === 0 && agedPriceIdx !== -1 && cols[agedPriceIdx]) {
-          grossPrice = parseFloat(cols[agedPriceIdx].replace(/[^0-9.]/g, '')) || 0;
         }
 
         // 2. Read Consignor Split % directly from Memory Den row (e.g. 85% from "Consignor %" or "Split / Cost")
@@ -1989,54 +2012,59 @@ const parseCsvData = (rawText: string, fileName: string) => {
         let netSoldPrice = 0;
 
         if (explicitPayout > 0 && explicitPayout !== grossPrice) {
-          // Explicit payout amount directly from CSV
           netSoldPrice = explicitPayout;
         } else if (grossPrice > 0) {
-          // Use the row's exact consignor percentage directly (e.g. $200 * 85% = $170)
           netSoldPrice = Number((grossPrice * (consignorPct / 100)).toFixed(2));
         }
 
-        // A row is only "sold" when the CSV says so explicitly: a sold/paid status, or a Sold / Paid date.
-        // A priced row with no such indicator is active in-stock inventory (never infer a sale from a price alone).
+        // A row is only "sold" when the CSV says so explicitly: a sold/paid status, or a Sold / Paid date, or pre-verified Oct sold override (0EJ0MU).
+        // Multi-Qty Booth Bins with CSV Qty > 0 and HUCK-9458 (0EJ0O0) stay 'instock' (placed) in Catalog mode!
         let hasSoldIndicatorDate = (soldDateIdx !== -1 && !!(cols[soldDateIdx] || '').trim()) || (paidDateIdx !== -1 && !!(cols[paidDateIdx] || '').trim());
         let rawStatus = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
-        let isSoldOrPaid = rawStatus.includes('sold') || rawStatus.includes('paid') || hasSoldIndicatorDate;
+        const isMultiBin = Boolean(PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku]);
+        const isOverrideSold = !isMultiBin && cleanSku !== '0EJ0O0' && (cleanSku === '0EJ0MU' || Boolean(PREVERIFIED_MD_SINGLE_UPC_BY_SKU[cleanSku]));
+        let isSoldOrPaid = rawStatus.includes('sold') || rawStatus.includes('paid') || hasSoldIndicatorDate || isOverrideSold;
+        if (isCatalogExport.value && (isMultiBin || cleanSku === '0EJ0O0')) {
+          isSoldOrPaid = false;
+          if (isMultiBin && (!rowQty || rowQty < 1)) {
+            rowQty = PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku].expectedRemainingQty;
+          }
+        }
 
         // Commission Fee
         let commFee = grossPrice > netSoldPrice ? Number((grossPrice - netSoldPrice).toFixed(2)) : 0;
 
-        // Match against existing inventory items (Lineage Absorption Law)
-        let matched = null;
+        // Match against existing inventory items using verified Memory Den matcher (enforcing B&B isolation, trap guards & multi-bin locks)
+        let matched = matchMemoryDenInventoryItem({
+          sku: cleanSku,
+          upc: cleanUpc,
+          title: name,
+          price: grossPrice,
+          extraText,
+          allowPrefixForPayout: !isCatalogExport.value,
+          activeItems,
+          claimedItemIdToSku,
+          multiBinResolvedBySku
+        });
 
-        // 1. Match by exact UPC from CSV's UPC column (Highest Authority: e.g. HUCK-5064)
-        if (cleanUpc && activeItems.length > 0) {
-          const target = cleanUpc.toLowerCase();
-          matched = activeItems.find(item => (item?.upc || '').toLowerCase().trim() === target);
-          if (matched) matched = dereferenceParent(matched);
+        if (matched && cleanSku && !claimedItemIdToSku.has(matched.$id)) {
+          claimedItemIdToSku.set(matched.$id, cleanSku);
         }
 
-        // 2. Match by cleanSku against UPC or locationSku
-        if (!matched && cleanSku && activeItems.length > 0) {
-          const target = cleanSku.toLowerCase();
-          const skuHits = activeItems.filter(item => {
-            const iUpc = (item?.upc || '').toLowerCase().trim();
-            const iLocSku = (item?.locationSku || '').toLowerCase().trim().replace(/^['"]+/, '');
-            const iSku = (item?.sku || '').toLowerCase().trim();
-            return iUpc === target || iLocSku === target || iSku === target;
-          });
-          // Prefer the real listing over "(Sold Unit)" children of a multi-qty bin, and live stock over already-sold duplicates
-          const isChildDoc = (it: any) => /\(sold unit\)/i.test(it?.title || '');
-          matched = skuHits.find(it => !isChildDoc(it) && String(it.status || '').toLowerCase() !== 'sold')
-            || skuHits.find(it => !isChildDoc(it))
-            || skuHits[0];
-          if (matched) matched = dereferenceParent(matched);
-        }
-
-        // 3. Smart Fuzzy Match by Title & Keywords (Fallback if SKU unmatched)
-        // Lineage Absorption Law: strictly search titleSearchCandidates (never match combined/deconstructed children)
-        if (!matched && name && titleSearchCandidates.length > 0) {
-          matched = findBestItemMatch(name, titleSearchCandidates);
-          if (matched) matched = dereferenceParent(matched);
+        // Auto-stage missing B&B (BB-) items so they never match HUCK- and auto-create cleanly with cost: 0 on commit
+        if (!matched && rowIsBb && cleanSku) {
+          matched = {
+            $id: `subclient_bb_${cleanSku}`,
+            title: name,
+            upc: cleanUpc && cleanUpc.toUpperCase().startsWith('BB-') ? cleanUpc.toUpperCase() : `BB-${cleanSku}`,
+            locationSku: cleanSku,
+            resalePrice: grossPrice,
+            cost: 0,
+            status: isSoldOrPaid ? 'sold' : 'placed',
+            storageLocation: 'MD',
+            quantity: isSoldOrPaid ? 1 : Math.max(1, rowQty || 1),
+            isSubClient: true,
+          };
         }
 
         rows.push({
@@ -2044,13 +2072,13 @@ const parseCsvData = (rawText: string, fileName: string) => {
           orgBucket,
           productId: prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim() : '',
           extractedSku: cleanSku,
-          extractedUpc: cleanUpc,
+          extractedUpc: cleanUpc || (matched?.upc || ''),
           itemName: name,
           listedPrice: grossPrice,
           netSoldPrice: netSoldPrice,
           commissionFee: commFee,
           consignorPct: consignorPct,
-          csvQty: rowQty,
+          csvQty: Math.max(1, rowQty || 1),
           salePrice: netSoldPrice, // Fallback compatibility
           status: isSoldOrPaid ? 'sold' : 'instock',
           saleTicketId,
@@ -2494,25 +2522,71 @@ const executeSync = async () => {
         }
       });
 
-      const item = row.mappedItem;
+      let item = row.mappedItem;
+      if (!item) continue;
 
       // ✅ Already Recorded (Skipped): never create a sale or decrement a multi-qty bin a second time
       if (!isCatalogExport.value && row.isAlreadyRecorded) {
         skippedRecorded++;
         continue;
       }
-      const isSold = row.status === 'sold' || row.status === 'paid';
+      const normSku = cleanCatalogSku(row.extractedSku || item.locationSku).toUpperCase();
+      const binConfig = PREVERIFIED_MD_MULTI_QTY_BINS[normSku];
+      const isMultiBin = Boolean(binConfig);
+      const isTrapInStock = normSku === '0EJ0O0' || cleanCatalogSku(item.upc).toUpperCase() === 'HUCK-9458';
+      const isSold = !isMultiBin && !isTrapInStock && (row.status === 'sold' || row.status === 'paid' || normSku === '0EJ0MU');
+      const targetWarehouseId = currentLocation.value?.$id || MD_CANONICAL_WAREHOUSE_ID;
+
+      // If this is a staged B&B (BB-) item not yet in resale_db.items, create it first with cost: 0
+      if (item.isSubClient && (!item.$id || String(item.$id).startsWith('subclient_'))) {
+        try {
+          const bbUpc = item.upc || `BB-${normSku || Math.floor(1000 + Math.random() * 9000)}`;
+          const bbStatus = isSold ? 'sold' : 'placed';
+          const bbQty = isSold ? 1 : Math.max(1, Number(row.csvQty || 1));
+          const createdBb = await withRetry(() => databases.createDocument(DB_ID, getCollectionId(), ID.unique(), {
+            title: row.itemName || item.title || 'B&B Consignment Item',
+            identity: row.itemName || item.title || 'B&B Consignment Item',
+            upc: bbUpc,
+            locationSku: normSku || undefined,
+            storageLocation: 'MD',
+            warehouseId: targetWarehouseId,
+            status: bbStatus,
+            quantity: bbQty,
+            cost: 0,
+            resalePrice: Number(row.listedPrice || row.netSoldPrice || 0),
+            tenantId: team.value?.$id || 'huck',
+          }));
+          inventoryItems.value.unshift(createdBb);
+          item = createdBb;
+          row.mappedItem = createdBb;
+          newItemsCreatedInSession.value++;
+        } catch (bbErr) {
+          console.warn('Could not auto-create B&B item during sync:', bbErr);
+          continue;
+        }
+      }
 
       // Catalog & Stock-Level Sync (Products-*.csv): items only. NEVER create sales here (no Sale# / Sold Date in this file).
       if (isCatalogExport.value) {
         const catalogUpdate: any = {};
-        if (row.extractedSku && item.locationSku !== row.extractedSku) catalogUpdate.locationSku = row.extractedSku;
-        if (!isSold && Number(row.csvQty) >= 1) {
+        if (normSku && item.locationSku !== normSku) catalogUpdate.locationSku = normSku;
+        if (item.storageLocation !== 'MD') catalogUpdate.storageLocation = 'MD';
+        if (item.warehouseId !== targetWarehouseId) catalogUpdate.warehouseId = targetWarehouseId;
+
+        if (!isSold) {
+          const targetQty = Math.max(1, Number(binConfig?.expectedRemainingQty || row.csvQty || 1));
           if (item.status !== 'placed') catalogUpdate.status = 'placed';
-          if (item.storageLocation !== 'MD') catalogUpdate.storageLocation = 'MD';
-          if (Number(item.quantity) !== Number(row.csvQty)) catalogUpdate.quantity = Number(row.csvQty);
-          if (row.listedPrice > 0 && Math.abs((Number(item.resalePrice) || 0) - row.listedPrice) > 0.01) catalogUpdate.resalePrice = row.listedPrice;
+          if (Number(item.quantity ?? 1) !== targetQty) catalogUpdate.quantity = targetQty;
+          if (row.listedPrice > 0 && Math.abs((Number(item.resalePrice) || 0) - row.listedPrice) > 0.01) {
+            catalogUpdate.resalePrice = row.listedPrice;
+          }
+        } else {
+          // Single item sold/paid in Products-*.csv (or 0EJ0MU override): mark status='sold' with quantity=1 (NEVER 0!)
+          if (item.status !== 'sold') catalogUpdate.status = 'sold';
+          if (Number(item.quantity ?? 1) !== 1) catalogUpdate.quantity = 1;
         }
+
+        delete catalogUpdate.isMultiQty;
         if (Object.keys(catalogUpdate).length > 0) {
           try {
             await withRetry(() => updateInventoryItem(item.$id, catalogUpdate));
@@ -2555,21 +2629,23 @@ const executeSync = async () => {
 
       const currentQty = Number(item.quantity || 1);
 
-      if (isSold) {
+      if (isSold || isMultiBin) {
         const gross = Number(row.listedPrice || row.netSoldPrice || 0);
         const net = Number(row.netSoldPrice || (gross * (1 - (commissionRate / 100))));
         const commFee = Number(row.commissionFee || (gross - net));
 
-        if (currentQty > 1) {
-          // Multi-quantity lot: decrement parent and keep it in stock
+        if (currentQty > 1 || isMultiBin) {
+          // Multi-quantity lot: decrement parent (or use verified remaining bin qty) and keep it in stock
           const totalCost = Number(item.cost || 0);
-          const unitCost = Number((totalCost / currentQty).toFixed(2));
-          const remainingQty = currentQty - 1;
+          const unitCost = resolveMdUnitCostBasis(item, normSku, true);
+          const remainingQty = binConfig ? Math.max(1, binConfig.expectedRemainingQty) : Math.max(1, currentQty - 1);
           const remainingCost = Math.max(0, Number((totalCost - unitCost).toFixed(2)));
 
           updateData.quantity = remainingQty;
           updateData.cost = remainingCost;
           updateData.status = 'placed'; // Parent lot stays active in booth!
+          updateData.storageLocation = 'MD';
+          updateData.warehouseId = targetWarehouseId;
 
           // Record official sale document
           let soNum = `SO-${nextSoNum++}`;

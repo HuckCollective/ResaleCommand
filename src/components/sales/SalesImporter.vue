@@ -1456,7 +1456,28 @@ import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID, normalizeOrgPrefix } from '../../lib/inventory';
 import { salesApi } from '../../lib/sales';
-import { stripBom, normalizeCsvHeader, isSaleNumberHeader, isSoldDateHeader, flagAlreadyRecordedRows, isPayoutSummaryRow, splitTrailingBoothSku, canonicalTicketNumber, toSaleIso, isProductCatalogHeaders } from '../../lib/salesBucketing';
+import {
+  stripBom,
+  normalizeCsvHeader,
+  isSaleNumberHeader,
+  isSoldDateHeader,
+  flagAlreadyRecordedRows,
+  isPayoutSummaryRow,
+  splitTrailingBoothSku,
+  canonicalTicketNumber,
+  toSaleIso,
+  isProductCatalogHeaders,
+  parseCsvRfc4180Rows,
+  MD_CANONICAL_WAREHOUSE_ID,
+  PREVERIFIED_MD_MULTI_QTY_BINS,
+  cleanCatalogSku,
+  isBbConsignorRow,
+  isBbConsignorDbItem,
+  resolveMdUnitCostBasis,
+  resolveMemoryDenSkuFromPayoutRow,
+  buildLockedMultiBinMap,
+  matchMemoryDenInventoryItem,
+} from '../../lib/salesBucketing';
 import { warehousesApi } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -2324,10 +2345,9 @@ const partnerSettlements = computed(() => {
     const venueFee = Number((row.venueFee !== undefined ? row.venueFee : (grossPrice - netStoreDeposit)).toFixed(2));
     let costBasis = 0;
     if (!isPureConsignor && item) {
-      const itemCost = getItemCost(item);
       const itemQty = Math.max(1, Number(item.quantity || 1));
-      const isMulti = item.isMultiQty || itemQty > 1 || row.isMultiQty;
-      costBasis = isMulti ? Number((itemCost / itemQty).toFixed(2)) : itemCost;
+      const isMulti = Boolean(item.isMultiQty || itemQty > 1 || row.isMultiQty);
+      costBasis = resolveMdUnitCostBasis(item, row.extractedSku, isMulti);
     }
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
     const curatorTake = isPureConsignor ? netStoreDeposit : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
@@ -2619,14 +2639,14 @@ const pickSkuMatch = (sku: string, name: string) => {
 };
 
 const parseMemoryDenPayout = (csvText: string) => {
-  const lines = stripBom(csvText).split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) {
+  const rfcRows = parseCsvRfc4180Rows(csvText);
+  if (rfcRows.length < 2) {
     addToast({ type: 'error', message: 'CSV is empty or invalid.' });
     isProcessing.value = false;
     return;
   }
 
-  const headers = splitCsvLine(lines[0]).map(h => normalizeCsvHeader(h));
+  const headers = rfcRows[0].map(h => normalizeCsvHeader(h));
 
   // Product Catalog export (Products-*.csv): no Sale# and no Sold Date. It can never produce sales - redirect the user.
   if (isProductCatalogHeaders(headers)) {
@@ -2672,10 +2692,14 @@ const parseMemoryDenPayout = (csvText: string) => {
   detectedRentMap.value = {};
   const rows: any[] = [];
 
+  // Pre-build locked Multi-Qty Booth Bin map (`0EJ0FR` -> `HUCK-1309`, `0EJ0H5` -> `HUCK-1425`, etc.)
+  const claimedItemIdToSku = new Map<string, string>();
+  const multiBinResolvedBySku = buildLockedMultiBinMap(activeInventory.value, claimedItemIdToSku);
+
   // Pre-scan pass to detect multi-quantity items by SKU frequency across rows
   const skuCounts = new Map<string, number>();
-  for (let i = 1; i < lines.length; i++) {
-    const cols = splitCsvLine(lines[i]);
+  for (let i = 1; i < rfcRows.length; i++) {
+    const cols = rfcRows[i];
     if (cols.length <= itemIdx) continue;
     const fullItemName = cols[itemIdx]?.trim() || '';
     if (!fullItemName) continue;
@@ -2683,12 +2707,26 @@ const parseMemoryDenPayout = (csvText: string) => {
     if (lowerName.includes('total for payout') || lowerName.includes('total paid:') || lowerName.includes('space rental') || lowerName.includes('rental') || lowerName.includes('(credit)')) {
       continue;
     }
-    let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
-    const skuMatch = fullItemName.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
-    if (!extractedSku && skuMatch) {
-      extractedSku = skuMatch[1];
+    let extractedSku = skuIdx !== -1 ? cleanCatalogSku(cols[skuIdx]) : '';
+    const trailing = splitTrailingBoothSku(fullItemName);
+    let itemName = trailing.sku ? trailing.title : fullItemName;
+    if (!extractedSku && trailing.sku) {
+      extractedSku = trailing.sku;
     }
-    const skuKey = (extractedSku || fullItemName).trim().toUpperCase();
+    const rawTicket = ticketIdx !== -1 ? (cols[ticketIdx]?.trim() || '') : '';
+    const ticketNumber = canonicalTicketNumber(rawTicket) || rawTicket;
+    const agreedPriceVal = agreedPriceIdx !== -1 ? parseFloat((cols[agreedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    const agedPriceVal = agedPriceIdx !== -1 ? parseFloat((cols[agedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
+    const grossPrice = agreedPriceVal > 0 ? agreedPriceVal : agedPriceVal;
+
+    extractedSku = resolveMemoryDenSkuFromPayoutRow({
+      extractedSku,
+      itemName,
+      ticketNumber,
+      grossPrice
+    });
+
+    const skuKey = (extractedSku || itemName).trim().toUpperCase();
     if (skuKey) {
       skuCounts.set(skuKey, (skuCounts.get(skuKey) || 0) + 1);
     }
@@ -2701,8 +2739,8 @@ const parseMemoryDenPayout = (csvText: string) => {
     remainingStockMap.set(item.$id, q);
   });
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = splitCsvLine(lines[i]);
+  for (let i = 1; i < rfcRows.length; i++) {
+    const cols = rfcRows[i];
     if (cols.length <= itemIdx) continue;
     
     const fullItemName = cols[itemIdx]?.trim() || '';
@@ -2773,29 +2811,60 @@ const parseMemoryDenPayout = (csvText: string) => {
     const ticketNumber = canonicalTicketNumber(rawTicket) || rawTicket;
     const customerName = customerIdx !== -1 ? (cols[customerIdx]?.trim() || '') : '';
 
-    // MemoryDen SKU either from explicit SKU column or end of title: "Item Name - 0EJ066"
-    // Ricochet booth SKU: a trailing " - 0EJ08B" is the item's locationSku. Extract it for exact matching and strip it from the display title.
-    let extractedSku = skuIdx !== -1 ? (cols[skuIdx]?.replace(/^'/, '').trim() || '') : '';
+    // MemoryDen SKU either from explicit SKU column, end of title ("Item Name - 0EJ066"), or pre-verified Oct payout map
+    let extractedSku = skuIdx !== -1 ? cleanCatalogSku(cols[skuIdx]) : '';
     let itemName = fullItemName;
     const trailing = splitTrailingBoothSku(fullItemName);
     if (trailing.sku) {
       if (!extractedSku) extractedSku = trailing.sku;
       itemName = trailing.title;
     }
+    extractedSku = resolveMemoryDenSkuFromPayoutRow({
+      extractedSku,
+      itemName,
+      ticketNumber,
+      grossPrice
+    });
 
-    // Matching Logic Priority against all inventory (Lineage Absorption Law)
+    // Strict B&B Consignor namespace check (never match HUCK- or PDXGL- items)
+    const isBB = isBbConsignorRow({ sku: extractedSku, title: fullItemName });
+
+    // Matching Logic Priority against all inventory (Verified Dry-Run Matcher + Lineage Absorption Law)
     let matched: any = null;
-    
-    // 1. Exact Location SKU match (auto-dereference combined/deconstructed child items)
-    if (extractedSku) {
-      matched = pickSkuMatch(extractedSku, itemName);
-      if (matched) matched = dereferenceParentLot(matched);
+
+    // 0. Verified Dry-Run Matcher (handles locked Multi-Qty Booth Bins, trap guards, B&B namespace isolation, and pre-verified UPCs)
+    const verifiedMatch = matchMemoryDenInventoryItem(
+      {
+        sku: extractedSku,
+        title: itemName,
+        price: grossPrice,
+        qty: 1,
+        inventoryStatus: 'Paid',
+        isBb: isBB
+      },
+      activeInventory.value,
+      claimedItemIdToSku,
+      multiBinResolvedBySku
+    );
+    if (verifiedMatch.matched) {
+      matched = verifiedMatch.matched;
     }
-    
-    // 2. Exact UPC match (auto-dereference combined/deconstructed child items)
+
+    // 1. Exact Location SKU match for historical months (with strict B&B namespace isolation)
     if (!matched && extractedSku) {
-      matched = activeInventory.value.find(item => item.upc === extractedSku);
-      if (matched) matched = dereferenceParentLot(matched);
+      const skuCand = pickSkuMatch(extractedSku, itemName);
+      if (skuCand && isBbConsignorDbItem(skuCand) === isBB) {
+        const deref = dereferenceParentLot(skuCand);
+        if (isBbConsignorDbItem(deref) === isBB) {
+          matched = deref;
+        }
+      }
+    }
+
+    // 2. Exact UPC match (with strict B&B namespace isolation)
+    if (!matched && extractedSku) {
+      const upcCand = activeInventory.value.find(item => item.upc === extractedSku && isBbConsignorDbItem(item) === isBB);
+      if (upcCand) matched = dereferenceParentLot(upcCand);
     }
 
     // Helper to get candidate titles for an item (both tagTitle and title)
@@ -2806,10 +2875,12 @@ const parseMemoryDenPayout = (csvText: string) => {
       return list;
     };
 
-    // 3. Exact Cleaned Title Match (Lineage Absorption Law: strictly titleEligibleInventory)
-    if (!matched && itemName) {
+    // 3. Exact Cleaned Title Match (strictly titleEligibleInventory & matching namespace)
+    if (!matched && itemName && !isBB) {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
       const exactCandidates = titleEligibleInventory.value.filter(item => {
+        if (isBbConsignorDbItem(item) !== isBB) return false;
+        if (claimedItemIdToSku.has(item.$id) && claimedItemIdToSku.get(item.$id) !== extractedSku) return false;
         const titles = getItemTitles(item);
         return titles.some(t => t.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName);
       });
@@ -2835,11 +2906,13 @@ const parseMemoryDenPayout = (csvText: string) => {
       }
     }
 
-    // 4. Substring Containment Match (strictly titleEligibleInventory)
-    if (!matched && itemName) {
+    // 4. Substring Containment Match (strictly titleEligibleInventory & non-BB)
+    if (!matched && itemName && !isBB) {
       const cleanName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (cleanName.length >= 6) {
         const subCandidates = titleEligibleInventory.value.filter(item => {
+          if (isBbConsignorDbItem(item) !== isBB) return false;
+          if (claimedItemIdToSku.has(item.$id) && claimedItemIdToSku.get(item.$id) !== extractedSku) return false;
           const titles = getItemTitles(item);
           return titles.some(t => {
             const itemClean = t.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2869,13 +2942,15 @@ const parseMemoryDenPayout = (csvText: string) => {
       }
     }
 
-    // 5. Smart Fuzzy Keyword Overlap & Jaccard Matching (Fallback for reordered, truncated, or slightly differing titles)
-    if (!matched && itemName) {
+    // 5. Smart Fuzzy Keyword Overlap & Jaccard Matching (Fallback for historical months lacking SKUs; never for B&B or rows with an explicit 0EJ SKU)
+    if (!matched && itemName && !isBB && !extractedSku) {
       const csvTokens = new Set(extractKeywords(itemName));
       if (csvTokens.size > 0) {
         const scoredCandidates: { item: any; score: number }[] = [];
 
         for (const item of titleEligibleInventory.value) {
+          if (isBbConsignorDbItem(item) !== isBB) continue;
+          if (claimedItemIdToSku.has(item.$id)) continue;
           const combinedText = `${item.tagTitle || ''} ${item.title || ''}`;
           if (!combinedText.trim()) continue;
           const dbTokens = new Set(extractKeywords(combinedText));
@@ -2903,24 +2978,19 @@ const parseMemoryDenPayout = (csvText: string) => {
 
         if (scoredCandidates.length > 0) {
           scoredCandidates.sort((a, b) => {
-            // First priority: large difference in fuzzy similarity score (> 0.15)
             if (Math.abs(a.score - b.score) > 0.15) {
               return b.score - a.score;
             }
-
-            // Second priority: remaining stock capacity > 0
             const remA = remainingStockMap.get(a.item.$id) ?? 0;
             const remB = remainingStockMap.get(b.item.$id) ?? 0;
             if (remA > 0 && remB <= 0) return -1;
             if (remB > 0 && remA <= 0) return 1;
 
-            // Third priority: multi-quantity lot
             const qtyA = Number(a.item.quantity || 1);
             const qtyB = Number(b.item.quantity || 1);
             if (qtyA > 1 && qtyB <= 1) return -1;
             if (qtyB > 1 && qtyA <= 1) return 1;
 
-            // Fourth priority: active placed status
             const placedA = a.item.status === 'placed' ? 1 : 0;
             const placedB = b.item.status === 'placed' ? 1 : 0;
             if (placedB !== placedA) return placedB - placedA;
@@ -2939,30 +3009,31 @@ const parseMemoryDenPayout = (csvText: string) => {
       remainingStockMap.set(matched.$id, curStock - 1);
     }
 
-    // 4. Sub-Client B&B Auto-Mapping (PDXGL Consignor)
-    const upperName = fullItemName.toUpperCase();
-    const isBB = upperName.startsWith('B&B ') || upperName.startsWith('B&B-') || 
-                 upperName.startsWith('BB ') || upperName.startsWith('BB-') || 
-                 (extractedSku && extractedSku.toUpperCase().startsWith('BB'));
-
+    // 6. Sub-Client B&B Auto-Mapping (PDXGL Consignor - strict namespace isolation, cost: 0)
     if (!matched && isBB) {
+      const bbCode = extractedSku || String(i).padStart(4, '0');
       matched = {
-        $id: `subclient_bb_${extractedSku || i}`,
+        $id: `subclient_bb_${bbCode}`,
         title: itemName,
-        upc: `BB-${extractedSku || String(i).padStart(4, '0')}`,
-        locationSku: extractedSku,
+        upc: `BB-${bbCode}`,
+        locationSku: extractedSku || undefined,
         price: grossPrice,
+        resalePrice: grossPrice,
         cost: 0,
+        quantity: 1,
+        storageLocation: 'MD',
         isSubClient: true,
         subClientName: 'B&B Consignment',
         parentPartner: 'PDXGL-'
       };
     }
 
+    const normSku = cleanCatalogSku(extractedSku || matched?.locationSku).toUpperCase();
+    const isPreverifiedMultiBin = !!(normSku && PREVERIFIED_MD_MULTI_QTY_BINS[normSku]);
     const skuKey = (extractedSku || fullItemName).trim().toUpperCase();
     const repeatCount = skuCounts.get(skuKey) || 1;
     const isMultiCandidate = repeatCount > 1;
-    const isItemMulti = !!(matched?.isMultiQty || (matched?.quantity && Number(matched.quantity) > 1));
+    const isItemMulti = !!(isPreverifiedMultiBin || matched?.isMultiQty || (matched?.quantity && Number(matched.quantity) > 1));
     const isMultiQty = isItemMulti || isMultiCandidate;
 
     rows.push({
@@ -3133,6 +3204,7 @@ const executeImport = async () => {
     });
 
     const updatedItemIds = new Set<string>();
+    const createdSubClientBySku = new Map<string, any>();
 
     for (let idx = 0; idx < rowsToImport.length; idx++) {
       const row = rowsToImport[idx];
@@ -3154,7 +3226,9 @@ const executeImport = async () => {
         const orderRef = row.ticketNumber ? `Ticket #${row.ticketNumber}` : (row.extractedSku || batchId);
 
         // Cardinal Resale Invariant: 1 SKU = 1 Physical Unit = at most 1 Sale (Unless multi-qty)
-        const isMultiQty = item.isMultiQty || (item.quantity && item.quantity > 1);
+        const normRowSku = cleanCatalogSku(row.extractedSku || item.locationSku).toUpperCase();
+        const binConfig = normRowSku ? PREVERIFIED_MD_MULTI_QTY_BINS[normRowSku] : undefined;
+        const isMultiQty = !!(binConfig || item.isMultiQty || (item.quantity && item.quantity > 1));
         const skuKey = (row.extractedSku || item.locationSku || item.upc || '').trim().toUpperCase();
 
         if (!isMultiQty) {
@@ -3187,28 +3261,38 @@ const executeImport = async () => {
 
         // If it's an auto-detected sub-client item (like B&B) not yet persisted, create it with valid Appwrite attributes
         if (item.isSubClient && (!item.$createdAt)) {
-          try {
-            const subDoc: Record<string, any> = {
-              title: item.title || row.itemName || 'Consignment Item',
-              status: 'sold',
-              cost: 0,
-              resalePrice: Number(row.listedPrice || row.salePrice || 0),
-              soldPrice: Number(row.salePrice || 0)
-            };
-            if (activeTeamId.value) subDoc.tenantId = activeTeamId.value;
-            if (item.upc) subDoc.upc = item.upc;
-            if (row.extractedSku || item.locationSku) subDoc.locationSku = row.extractedSku || item.locationSku;
+          const bbSkuCacheKey = normRowSku || item.upc || row.itemName;
+          if (bbSkuCacheKey && createdSubClientBySku.has(bbSkuCacheKey)) {
+            item = createdSubClientBySku.get(bbSkuCacheKey);
+            row.mappedItem = item;
+          } else {
+            try {
+              const subDoc: Record<string, any> = {
+                title: item.title || row.itemName || 'Consignment Item',
+                status: 'sold',
+                cost: 0,
+                quantity: 1,
+                storageLocation: 'MD',
+                warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+                resalePrice: Number(row.listedPrice || row.salePrice || 0),
+                soldPrice: Number(row.salePrice || 0)
+              };
+              if (activeTeamId.value) subDoc.tenantId = activeTeamId.value;
+              if (item.upc) subDoc.upc = item.upc;
+              if (row.extractedSku || item.locationSku) subDoc.locationSku = cleanCatalogSku(row.extractedSku || item.locationSku);
 
-            const createdDoc = await databases.createDocument(DB_ID, ITEMS_COL, ID.unique(), subDoc);
-            item = createdDoc;
-            row.mappedItem = createdDoc;
-          } catch (subErr) {
-            console.warn("Sub-client item creation skipped:", subErr);
+              const createdDoc = await databases.createDocument(DB_ID, ITEMS_COL, ID.unique(), subDoc);
+              item = createdDoc;
+              row.mappedItem = createdDoc;
+              if (bbSkuCacheKey) createdSubClientBySku.set(bbSkuCacheKey, createdDoc);
+            } catch (subErr) {
+              console.warn("Sub-client item creation skipped:", subErr);
+            }
           }
         }
 
         const updatePayload: Record<string, any> = {
-          locationSku: row.extractedSku || item.locationSku || undefined
+          locationSku: cleanCatalogSku(row.extractedSku || item.locationSku) || undefined
         };
 
         if (isSoldOrPaid) {
@@ -3246,9 +3330,9 @@ const executeImport = async () => {
 
             const newSale = await salesApi.createSale({
               tenantId: item.tenantId || activeTeamId.value,
-              warehouseId: mdWarehouseId,
-              soNumber: item.upc || item.locationSku || `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-              orderId: row.ticketNumber ? `Ticket #${row.ticketNumber}` : (row.extractedSku || item.locationSku || orderRef),
+              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              soNumber: item.upc || cleanCatalogSku(row.extractedSku || item.locationSku) || `SO-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+              orderId: row.ticketNumber ? `Ticket #${row.ticketNumber}` : (cleanCatalogSku(row.extractedSku || item.locationSku) || orderRef),
               saleDate: parsedSaleDate,
               grossAmount: gross,
               commissionFee: fee,
@@ -3264,28 +3348,48 @@ const executeImport = async () => {
         }
 
         // Update the item in Appwrite (Appwrite Schema Safe)
-        // Partial vs. Full Multi-Quantity Depletion Law
+        // Partial vs. Full Multi-Quantity Depletion Law + Verified Multi-Qty Booth Bin Guard
         if (item.$id && !item.$id.startsWith('subclient_') && !updatedItemIds.has(item.$id)) {
           updatedItemIds.add(item.$id);
           const K = salesPerItemCount.get(item.$id) || 1;
           const N = Math.max(1, Number(item.quantity || 1));
-          const isMulti = item.isMultiQty || N > 1 || row.isMultiQty;
+          const isMulti = !!(binConfig || item.isMultiQty || N > 1 || row.isMultiQty);
 
-          if (isMulti && K < N) {
+          if (binConfig) {
+            // Verified Active Multi-Qty Booth Bin (e.g. 0EJ0H5 Frank Frazetta qty=3, 0EJ0FR HMM Reader qty=12):
+            // Always stay `status: 'placed'` at `MD` with `quantity >= 1`, never overwrite parent Booth Bin `saleId` or mark `sold`!
+            const targetQty = Math.max(1, binConfig.expectedRemainingQty);
+            const lotPayload: Record<string, any> = {
+              status: 'placed',
+              storageLocation: 'MD',
+              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              quantity: targetQty
+            };
+            if (row.extractedSku || item.locationSku) {
+              lotPayload.locationSku = cleanCatalogSku(row.extractedSku || item.locationSku);
+            }
+            await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
+            item.status = 'placed';
+            item.storageLocation = 'MD';
+            item.warehouseId = mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID;
+            item.quantity = targetQty;
+          } else if (isMulti && K < N) {
             // Partial Depletion Law (K < N):
             // e.g. 4 sold out of 9: quantity becomes 5, status stays 'placed' (or 'in-stock')!
-            const remainingQty = N - K;
+            const remainingQty = Math.max(1, N - K);
             const totalCost = Number(item.cost || 0);
             const unitCost = N > 0 ? (totalCost / N) : 0;
             const remainingCost = Math.max(0, Number((totalCost - (unitCost * K)).toFixed(2)));
 
             const lotPayload: Record<string, any> = {
-              quantity: Math.max(1, remainingQty),
+              quantity: remainingQty,
               cost: remainingCost,
-              status: item.status === 'placed' ? 'placed' : 'in-stock'
+              status: item.status === 'placed' ? 'placed' : 'in-stock',
+              storageLocation: 'MD',
+              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID
             };
             if (row.extractedSku || item.locationSku) {
-              lotPayload.locationSku = row.extractedSku || item.locationSku;
+              lotPayload.locationSku = cleanCatalogSku(row.extractedSku || item.locationSku);
             }
             await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
             item.quantity = remainingQty;
@@ -3294,16 +3398,20 @@ const executeImport = async () => {
             // Full Depletion Law (K >= N or single-unit item):
             const lotPayload: Record<string, any> = {
               status: 'sold',
-              quantity: 1, // Appwrite constraint: quantity >= 1
+              storageLocation: 'MD',
+              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              quantity: 1, // Appwrite constraint: quantity >= 1 (never 0)
               resalePrice: Number(row.listedPrice || row.salePrice || 0),
               soldPrice: Number(row.salePrice || 0),
               saleId: updatePayload.saleId || orderRef
             };
             if (row.extractedSku || item.locationSku) {
-              lotPayload.locationSku = row.extractedSku || item.locationSku;
+              lotPayload.locationSku = cleanCatalogSku(row.extractedSku || item.locationSku);
             }
             await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
             item.status = 'sold';
+            item.storageLocation = 'MD';
+            item.warehouseId = mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID;
             item.quantity = 1;
             item.soldPrice = Number(row.salePrice || 0);
           }
