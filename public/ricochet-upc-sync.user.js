@@ -1,406 +1,775 @@
 // ==UserScript==
-// @name         Resale Command ➔ Ricochet UPC Auto-Sync
+// @name         Resale Command ➔ Ricochet POS Auto-UPC Injector & 2-Way Verifier
 // @namespace    https://resalecmd.com/
-// @version      2.0.0
-// @description  Bulk-sync custom HUCK-XXXX / PDXGL- / BB- UPC barcodes into Ricochet POS with zero manual entry
-// @author       Resale Command
+// @version      3.0
+// @description  Audits all ~808 live Memory Den items, injects missing HUCK-/PDXGL-/BB- barcodes into Ricochet POS, and sends a 2-Way Verification Report back to Resale Command or CSV!
+// @author       Huckleberry Collective
 // @match        *://*.ricoconsign.com/*
 // @grant        none
-// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  // If already loaded and user clicked the Bookmarklet again with fresh preloaded barcodes, hydrate and open modal
-  if (window.__RC_RICOCHET_SYNC_LOADED__ && typeof window.__RC_HYDRATE_PRELOADED__ === 'function') {
-    window.__RC_HYDRATE_PRELOADED__(true);
-    return;
+  let parsedMap = {};
+  let catalogProducts = [];
+  let auditRows = [];
+  let missingQueue = [];
+
+  const cleanStr = (val) =>
+    String(val ?? '')
+      .trim()
+      .replace(/^['"]+/, '')
+      .replace(/['"]+$/, '')
+      .trim();
+
+  function extractRicochetSku(p) {
+    if (!p || typeof p !== 'object') return '';
+    const directCandidates = [
+      p.sku,
+      p.SKU,
+      p.number,
+      p.code,
+      p.custom_sku,
+      p.product_sku,
+      p.items && Array.isArray(p.items) && p.items[0] ? p.items[0].sku : '',
+    ];
+    for (const c of directCandidates) {
+      const cleaned = cleanStr(c).toUpperCase();
+      if (cleaned && /^0EJ[A-Z0-9]{2,6}$/i.test(cleaned)) return cleaned;
+    }
+    if (p.sku_quantities && typeof p.sku_quantities === 'object') {
+      for (const k of Object.keys(p.sku_quantities)) {
+        const cleaned = cleanStr(k).toUpperCase();
+        if (cleaned) return cleaned;
+      }
+    }
+    for (const c of directCandidates) {
+      const cleaned = cleanStr(c).toUpperCase();
+      if (cleaned) return cleaned;
+    }
+    for (const v of Object.values(p)) {
+      if (typeof v === 'string') {
+        const cleaned = cleanStr(v).toUpperCase();
+        if (/^0EJ[A-Z0-9]{3,5}$/i.test(cleaned)) return cleaned;
+      }
+    }
+    return '';
   }
-  window.__RC_RICOCHET_SYNC_LOADED__ = true;
 
-  console.log('⚡ [Resale Command] Ricochet UPC Sync Helper v2.0 Loaded');
+  function extractRicochetUpc(p) {
+    if (!p || typeof p !== 'object') return '';
+    const directCandidates = [
+      p.upc_code,
+      p.upc,
+      p.UPC,
+      p.barcode,
+      p.items && Array.isArray(p.items) && p.items[0] ? p.items[0].upc_code || p.items[0].upc : '',
+    ];
+    for (const c of directCandidates) {
+      const cleaned = cleanStr(c).toUpperCase();
+      if (cleaned) return cleaned;
+    }
+    if (p.items && typeof p.items === 'object' && !Array.isArray(p.items)) {
+      const flat = Object.values(p.items).flat();
+      if (flat[0]) {
+        const cleaned = cleanStr(flat[0].upc_code || flat[0].upc).toUpperCase();
+        if (cleaned) return cleaned;
+      }
+    }
+    for (const v of Object.values(p)) {
+      if (typeof v === 'string') {
+        const cleaned = cleanStr(v).toUpperCase();
+        if (/^(HUCK|PDXGL|BB)-[A-Z0-9-]+$/i.test(cleaned)) return cleaned;
+      }
+    }
+    return '';
+  }
 
-  // --- UI Injection ---
-  const container = document.createElement('div');
-  container.id = 'rc-sync-root';
-  container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
-  document.body.appendChild(container);
+  function extractRicochetQuantity(p) {
+    if (!p || typeof p !== 'object') return 0;
+    if (typeof p.quantity === 'number') return p.quantity;
+    if (typeof p.qty === 'number') return p.qty;
+    if (p.sku_quantities && typeof p.sku_quantities === 'object') {
+      const vals = Object.values(p.sku_quantities).map((n) => Number(n) || 0);
+      if (vals.length > 0) return vals.reduce((a, b) => a + b, 0);
+    }
+    const parsed = parseInt(String(p.quantity ?? p.qty ?? '1'), 10);
+    return isNaN(parsed) ? 1 : parsed;
+  }
 
-  // Floating Launcher Pill Button
-  const launcher = document.createElement('button');
-  launcher.id = 'rc-sync-launcher';
-  launcher.innerHTML = `
-    <span style="font-size:16px;">⚡</span>
-    <span style="font-weight:700;font-size:13px;letter-spacing:-0.2px;">Resale Command Barcode Sync</span>
-    <span id="rc-badge" style="background:rgba(255,255,255,0.25);border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;display:none;">0</span>
-  `;
-  launcher.style.cssText = `
-    display:flex;align-items:center;gap:8px;padding:10px 16px;
-    background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-    color:#fff;border:none;border-radius:9999px;box-shadow:0 10px 25px -5px rgba(79,70,229,0.5),0 8px 10px -6px rgba(79,70,229,0.5);
-    cursor:pointer;transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  `;
-  container.appendChild(launcher);
+  function extractRicochetPrice(p) {
+    if (!p || typeof p !== 'object') return 0;
+    const raw = p.agreed_price ?? p.price ?? p.retail_price ?? p.aged_price ?? p.amount ?? 0;
+    const num = parseFloat(String(raw).replace(/[^0-9.-]/g, ''));
+    return isNaN(num) ? 0 : Number(num.toFixed(2));
+  }
 
-  // Modal Overlay
-  const modal = document.createElement('div');
-  modal.id = 'rc-sync-modal';
-  modal.style.cssText = `
-    display:none;position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);
-    width:580px;max-width:94vw;max-height:88vh;overflow-y:auto;
-    background:#18181b;color:#f4f4f5;border:1px solid #27272a;
-    border-radius:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.7);
-    padding:24px;box-sizing:border-box;z-index:1000000;
-  `;
-  container.appendChild(modal);
+  function extractRicochetInventoryState(p, qty) {
+    if (!p || typeof p !== 'object') return qty > 0 ? 'In Stock' : 'Sold';
+    const rawStatus = cleanStr(p.inventory || p.status || p.state || '');
+    if (rawStatus) return rawStatus;
+    return qty > 0 ? 'In Stock' : 'Sold';
+  }
 
-  // Backdrop
-  const backdrop = document.createElement('div');
-  backdrop.id = 'rc-sync-backdrop';
-  backdrop.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);z-index:999998;';
-  container.appendChild(backdrop);
+  function setInlineBanner(message, tone = 'info') {
+    const banner = document.getElementById('rc-inline-banner');
+    if (!banner) return;
+    if (!message) {
+      banner.style.display = 'none';
+      banner.textContent = '';
+      return;
+    }
+    const styles = {
+      info: { bg: 'rgba(59,130,246,0.18)', border: 'rgba(96,165,250,0.45)', color: '#bfdbfe' },
+      success: { bg: 'rgba(16,185,129,0.2)', border: 'rgba(52,211,153,0.5)', color: '#a7f3d0' },
+      warning: { bg: 'rgba(245,158,11,0.2)', border: 'rgba(251,191,36,0.5)', color: '#fde68a' },
+      error: { bg: 'rgba(239,68,68,0.22)', border: 'rgba(248,113,113,0.55)', color: '#fecaca' },
+    };
+    const s = styles[tone] || styles.info;
+    banner.style.display = 'block';
+    banner.style.background = s.bg;
+    banner.style.border = `1px solid ${s.border}`;
+    banner.style.color = s.color;
+    banner.textContent = message;
+  }
 
-  let isModalOpen = false;
-  const toggleModal = (open) => {
-    isModalOpen = typeof open === 'boolean' ? open : !isModalOpen;
-    modal.style.display = isModalOpen ? 'block' : 'none';
-    backdrop.style.display = isModalOpen ? 'block' : 'none';
-  };
-  launcher.onclick = () => toggleModal();
-  backdrop.onclick = () => toggleModal(false);
+  function injectWidget() {
+    if (document.getElementById('rc-upc-sync-widget')) return;
 
-  // --- State ---
-  let itemsToSync = []; // [{ id, sku, upc, title }]
-  let isSyncing = false;
-  let isPaused = false;
-  let cachedCatalog = null;
+    const container = document.createElement('div');
+    container.id = 'rc-upc-sync-widget';
+    container.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999999;
+      background: #0f172a;
+      color: #f8fafc;
+      border: 2px solid #f59e0b;
+      border-radius: 16px;
+      padding: 16px;
+      width: 390px;
+      max-width: calc(100vw - 32px);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+    `;
 
-  function renderModal() {
-    modal.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #27272a;padding-bottom:14px;margin-bottom:14px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="background:rgba(234,179,8,0.2);color:#facc15;padding:8px 10px;border-radius:12px;font-size:18px;">🏷️</div>
+    container.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #334155; padding-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">⚡</span>
           <div>
-            <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.3px;">Memory Den Barcode Auto-Filler</h2>
-            <p style="margin:2px 0 0;font-size:11px;color:#a1a1aa;">Automatically fills in your HUCK-, PDXGL-, and BB- barcodes on Memory Den</p>
+            <div style="font-weight:800; font-size:14px; color:#f8fafc;">Resale Command Barcode Verifier</div>
+            <div style="font-size:10px; color:#94a3b8;">Memory Den (0EJ) ➔ HUCK / PDXGL / BB Sync</div>
           </div>
         </div>
-        <button id="rc-close-btn" style="background:transparent;border:none;color:#a1a1aa;cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
+        <button id="rc-close-btn" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:16px; padding:2px 6px;">✕</button>
       </div>
 
-      <!-- Summary Stats & Primary Actions -->
-      <div id="rc-sync-controls" style="display:none;background:#27272a;border:1px solid #3f3f46;border-radius:16px;padding:16px;margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <div>
-            <div style="font-size:14px;font-weight:800;color:#4ade80;" id="rc-matched-title">0 Items Pre-Loaded & Ready</div>
-            <div style="font-size:11px;color:#d4d4d8;margin-top:2px;" id="rc-matched-subtitle">Matched by Memory Den 0EJ... Booth SKU</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button id="rc-test-one-btn" style="background:#3f3f46;color:#fde047;border:1px solid #52525b;padding:8px 13px;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">
-              🧪 Test 1 Item
-            </button>
-            <button id="rc-start-sync-btn" style="background:#10b981;color:#052e16;border:none;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:900;cursor:pointer;">
-              🚀 Start Sync
-            </button>
-            <button id="rc-pause-sync-btn" style="display:none;background:#eab308;color:#000;border:none;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">
-              Pause
-            </button>
-          </div>
-        </div>
+      <!-- Inline Status Banner (Zero native window.alert calls) -->
+      <div id="rc-inline-banner" style="display:none; margin-bottom:10px; padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; line-height:1.4;"></div>
 
-        <!-- Progress Bar -->
-        <div style="width:100%;height:8px;background:#18181b;border-radius:9999px;overflow:hidden;margin-bottom:6px;">
-          <div id="rc-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg, #10b981, #06b6d4);transition:width 0.2s;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:#a1a1aa;font-family:monospace;">
-          <span id="rc-progress-count">0 / 0 updated</span>
-          <span id="rc-progress-percent">0%</span>
+      <!-- Preloaded Status Banner -->
+      <div id="rc-preloaded-banner" style="display:none; margin-bottom:10px; padding:9px 11px; border-radius:10px; background:rgba(16,185,129,0.14); border:1px solid rgba(16,185,129,0.4); color:#a7f3d0; font-size:11px; line-height:1.35;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <span>✅ <strong id="rc-preloaded-count">0</strong> barcodes pre-loaded from Resale Command</span>
+          <button id="rc-toggle-manual" style="background:none; border:none; color:#6ee7b7; text-decoration:underline; font-size:10px; cursor:pointer; padding:0;">Edit JSON</button>
         </div>
       </div>
 
-      <!-- Fallback Paste / File Loader (Collapsible if already preloaded) -->
-      <details id="rc-fallback-details" style="background:rgba(39,39,42,0.5);border:1px solid #27272a;border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:11px;">
-        <summary style="cursor:pointer;font-weight:700;color:#d4d4d8;">📋 Optional: Paste JSON or Drop CSV File</summary>
-        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
-          <textarea id="rc-json-paste" rows="3" placeholder='Paste { "0EJ0FR": "HUCK-1309", ... } JSON here if needed' style="width:100%;box-sizing:border-box;background:#09090b;color:#f4f4f5;border:1px solid #3f3f46;border-radius:8px;padding:8px;font-family:monospace;font-size:11px;"></textarea>
-          <div style="display:flex;gap:8px;">
-            <button type="button" id="rc-load-json-btn" style="background:#4f46e5;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">Load Pasted JSON</button>
-            <button type="button" id="rc-browse-btn" style="background:#3f3f46;color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">Or Select CSV/JSON File</button>
-            <input type="file" id="rc-file-input" accept=".csv,.json" style="display:none;" />
+      <!-- Manual Fallback Input Section -->
+      <div id="rc-input-section">
+        <div style="font-size:11px; color:#cbd5e1; margin-bottom:8px; line-height:1.4;">
+          Paste your <b>SKU ➔ UPC JSON</b> or upload your synced CSV:
+        </div>
+
+        <textarea id="rc-json-input" rows="2" placeholder='Paste { "0EJ08G": "HUCK-1021", ... } here' style="width:100%; background:#1e293b; color:#f8fafc; border:1px solid #475569; border-radius:8px; padding:6px 8px; font-family:monospace; font-size:11px; margin-bottom:8px; resize:vertical;"></textarea>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <label style="background:#334155; hover:background:#475569; color:#e2e8f0; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; display:inline-block;">
+            📂 Or Choose CSV
+            <input type="file" id="rc-csv-file" accept=".csv" style="display:none;" />
+          </label>
+          <span id="rc-match-count" style="font-size:11px; color:#38bdf8; font-weight:700;">0 UPCs queued</span>
+        </div>
+      </div>
+
+      <!-- Live Verification Summary Pills (4 States) -->
+      <div id="rc-audit-card" style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:11px; font-weight:800; color:#e2e8f0;">📊 Live Memory Den Audit (<span id="rc-total-catalog">0</span> items)</span>
+          <button id="rc-rescan-btn" style="background:#334155; color:#cbd5e1; border:none; border-radius:6px; padding:3px 8px; font-size:10px; font-weight:700; cursor:pointer;">🔄 Re-Scan</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px;">
+          <div style="background:rgba(16,185,129,0.14); border:1px solid rgba(16,185,129,0.35); border-radius:8px; padding:6px 8px; color:#a7f3d0; display:flex; justify-content:space-between; align-items:center;">
+            <span>🟢 Verified</span>
+            <strong id="rc-pill-verified" style="font-family:monospace; font-size:12px;">0</strong>
+          </div>
+          <div style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.38); border-radius:8px; padding:6px 8px; color:#fde68a; display:flex; justify-content:space-between; align-items:center;">
+            <span>🟡 Missing UPC</span>
+            <strong id="rc-pill-missing" style="font-family:monospace; font-size:12px;">0</strong>
+          </div>
+          <div style="background:rgba(249,115,22,0.15); border:1px solid rgba(249,115,22,0.38); border-radius:8px; padding:6px 8px; color:#fed7aa; display:flex; justify-content:space-between; align-items:center;">
+            <span>🟠 Mismatch</span>
+            <strong id="rc-pill-mismatch" style="font-family:monospace; font-size:12px;">0</strong>
+          </div>
+          <div style="background:rgba(148,163,184,0.15); border:1px solid rgba(148,163,184,0.35); border-radius:8px; padding:6px 8px; color:#e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+            <span>⚪ Unlinked RC</span>
+            <strong id="rc-pill-unlinked" style="font-family:monospace; font-size:12px;">0</strong>
           </div>
         </div>
-      </details>
+      </div>
 
-      <!-- Live Terminal / Audit Log -->
-      <div style="background:#09090b;border:1px solid #27272a;border-radius:12px;padding:12px;max-height:150px;overflow-y:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:10px;color:#a1a1aa;line-height:1.5;" id="rc-terminal-log">
-        <div>Ready to fill in Memory Den barcodes.</div>
+      <!-- Sync Progress Section -->
+      <div id="rc-progress-section" style="display:none; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+          <span id="rc-status-text">Scanning Memory Den...</span>
+          <span id="rc-progress-num" style="font-family:monospace; font-weight:700;">0/0</span>
+        </div>
+        <div style="width:100%; background:#334155; height:7px; border-radius:4px; overflow:hidden;">
+          <div id="rc-progress-bar" style="width:0%; background:#10b981; height:100%; transition:width 0.2s;"></div>
+        </div>
+        <div id="rc-log-box" style="margin-top:6px; max-height:95px; overflow-y:auto; background:#020617; padding:6px; border-radius:6px; font-family:monospace; font-size:10px; color:#94a3b8;"></div>
+      </div>
+
+      <!-- Primary Sync Buttons (Test 1 Missing vs Fill All Missing) -->
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button id="rc-test-one-btn" disabled style="flex:1; background:#3b82f6; color:#ffffff; font-weight:700; border:none; padding:9px 8px; border-radius:8px; cursor:pointer; font-size:11px; opacity:0.5;">
+          🧪 Test 1 Missing
+        </button>
+        <button id="rc-start-btn" disabled style="flex:1.4; background:#f59e0b; color:#0f172a; font-weight:800; border:none; padding:9px 8px; border-radius:8px; cursor:pointer; font-size:11px; opacity:0.5;">
+          🚀 Fill All Missing
+        </button>
+      </div>
+
+      <!-- 2-Way Verification Report Export Buttons -->
+      <div style="display:flex; gap:6px; padding-top:8px; border-top:1px solid #334155;">
+        <button id="rc-send-report-btn" disabled style="flex:1.15; background:#10b981; color:#052e16; font-weight:800; border:none; padding:8px 6px; border-radius:8px; cursor:pointer; font-size:11px; opacity:0.5;">
+          📡 Send Report to RC
+        </button>
+        <button id="rc-download-csv-btn" disabled style="flex:1; background:#1e293b; color:#e2e8f0; border:1px solid #475569; font-weight:700; padding:8px 6px; border-radius:8px; cursor:pointer; font-size:11px; opacity:0.5;">
+          📥 Download CSV
+        </button>
       </div>
     `;
 
-    modal.querySelector('#rc-close-btn').onclick = () => toggleModal(false);
-    const fileInput = modal.querySelector('#rc-file-input');
-    modal.querySelector('#rc-browse-btn').onclick = () => fileInput.click();
-    fileInput.onchange = (e) => {
-      if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
-    };
+    document.body.appendChild(container);
 
-    modal.querySelector('#rc-load-json-btn').onclick = () => {
-      const raw = (modal.querySelector('#rc-json-paste')?.value || '').trim();
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw);
-        loadFromObjectOrArray(parsed);
-      } catch (err) {
-        log('❌ Invalid JSON: ' + err.message, '#ef4444');
-      }
-    };
+    const closeBtn = document.getElementById('rc-close-btn');
+    const jsonInput = document.getElementById('rc-json-input');
+    const csvFile = document.getElementById('rc-csv-file');
+    const matchCount = document.getElementById('rc-match-count');
+    const startBtn = document.getElementById('rc-start-btn');
+    const testOneBtn = document.getElementById('rc-test-one-btn');
+    const rescanBtn = document.getElementById('rc-rescan-btn');
+    const sendReportBtn = document.getElementById('rc-send-report-btn');
+    const downloadCsvBtn = document.getElementById('rc-download-csv-btn');
+    const preloadedBanner = document.getElementById('rc-preloaded-banner');
+    const preloadedCount = document.getElementById('rc-preloaded-count');
+    const inputSection = document.getElementById('rc-input-section');
+    const toggleManualBtn = document.getElementById('rc-toggle-manual');
 
-    modal.querySelector('#rc-test-one-btn').onclick = () => startSync(true);
-    modal.querySelector('#rc-start-sync-btn').onclick = () => startSync(false);
-    modal.querySelector('#rc-pause-sync-btn').onclick = togglePause;
-  }
+    closeBtn.onclick = () => container.remove();
 
-  function log(msg, color = '#a1a1aa') {
-    const term = modal.querySelector('#rc-terminal-log');
-    if (!term) return;
-    const line = document.createElement('div');
-    line.style.color = color;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    term.appendChild(line);
-    term.scrollTop = term.scrollHeight;
-  }
-
-  function loadFromObjectOrArray(data) {
-    if (Array.isArray(data)) {
-      itemsToSync = data
-        .filter(x => x && x.upc)
-        .map(x => ({
-          id: x.id || '',
-          sku: String(x.sku || '').trim().replace(/^'+/, '').toUpperCase(),
-          upc: String(x.upc || '').trim().toUpperCase(),
-          title: x.title || x.sku || '',
-        }));
-    } else if (data && typeof data === 'object') {
-      itemsToSync = Object.entries(data)
-        .filter(([sku, upc]) => sku && upc)
-        .map(([sku, upc]) => ({
-          id: '',
-          sku: String(sku).trim().replace(/^'+/, '').toUpperCase(),
-          upc: String(upc).trim().toUpperCase(),
-          title: String(sku).trim().toUpperCase(),
-        }));
-    }
-    showLoadedItems();
-  }
-
-  function handleFile(file) {
-    log(`Reading ${file.name}...`);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      if (file.name.endsWith('.json')) {
-        try {
-          loadFromObjectOrArray(JSON.parse(text));
-        } catch (err) {
-          log('❌ Invalid JSON file: ' + err.message, '#ef4444');
-        }
+    toggleManualBtn.onclick = () => {
+      if (inputSection.style.display === 'none') {
+        inputSection.style.display = 'block';
+        toggleManualBtn.textContent = 'Hide JSON';
       } else {
-        parseCsv(text);
+        inputSection.style.display = 'none';
+        toggleManualBtn.textContent = 'Edit JSON';
       }
     };
-    reader.readAsText(file);
-  }
 
-  function parseCsv(text) {
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length < 2) return;
-    const headers = lines[0].split(',').map(h => h.toLowerCase().replace(/["']/g, '').trim());
-    const prodIdIdx = headers.findIndex(h => h === 'product id' || h.includes('product id') || h === 'id');
-    const skuIdx = headers.findIndex(h => h === 'sku' || h.includes('sku'));
-    const upcIdx = headers.findIndex(h => h === 'upc' || h.includes('upc'));
-    const nameIdx = headers.findIndex(h => h === 'name' || h === 'title' || h.includes('item'));
-    if (upcIdx === -1) return;
-
-    const list = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
-      const upc = (cols[upcIdx] || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '');
-      const sku = skuIdx !== -1 ? (cols[skuIdx] || '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '') : '';
-      const prodId = prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim().replace(/[^0-9]/g, '') : '';
-      const title = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : '';
-      if (upc && /^(HUCK|PDXGL|BB)/i.test(upc)) {
-        list.push({ id: prodId, sku: sku.toUpperCase(), upc: upc.toUpperCase(), title: title || sku });
+    function updateCounter(isPreloaded = false) {
+      const count = Object.keys(parsedMap).length;
+      matchCount.textContent = `${count} SKU ➔ UPC pairs loaded`;
+      if (isPreloaded && count > 0) {
+        preloadedCount.textContent = String(count);
+        preloadedBanner.style.display = 'block';
+        inputSection.style.display = 'none';
+      }
+      if (catalogProducts.length > 0) {
+        recomputeAuditFromCatalog();
+      } else {
+        updateActionButtons();
       }
     }
-    itemsToSync = list;
-    showLoadedItems();
-  }
 
-  function showLoadedItems() {
-    const controls = modal.querySelector('#rc-sync-controls');
-    const title = modal.querySelector('#rc-matched-title');
-    const subtitle = modal.querySelector('#rc-matched-subtitle');
-    const testBtn = modal.querySelector('#rc-test-one-btn');
-    const startBtn = modal.querySelector('#rc-start-sync-btn');
-    const badge = launcher.querySelector('#rc-badge');
+    function updateActionButtons() {
+      const actionableCount = missingQueue.length;
+      const mapCount = Object.keys(parsedMap).length;
+      const canSync = catalogProducts.length > 0 ? actionableCount > 0 : mapCount > 0;
 
-    if (itemsToSync.length > 0) {
-      const first = itemsToSync[0];
-      controls.style.display = 'block';
-      title.textContent = `✅ ${itemsToSync.length} Memory Den Barcodes Pre-Loaded!`;
-      subtitle.textContent = `First item: ${first.sku || 'Item'} → ${first.upc}`;
-      if (testBtn) testBtn.textContent = `🧪 Test 1 Item (${first.sku} → ${first.upc})`;
-      if (startBtn) startBtn.textContent = `🚀 Start Sync (${itemsToSync.length})`;
-      badge.style.display = 'inline-block';
-      badge.textContent = itemsToSync.length;
-      log(`✅ Pre-loaded ${itemsToSync.length} Memory Den SKU → UPC pairs! Click "Test 1 Item" or "Start Sync".`, '#10b981');
-    } else {
-      controls.style.display = 'none';
-    }
-  }
+      startBtn.disabled = !canSync;
+      startBtn.style.opacity = canSync ? '1' : '0.5';
+      startBtn.textContent =
+        catalogProducts.length > 0
+          ? `🚀 Fill All Missing (${actionableCount})`
+          : `🚀 Fill All (${mapCount})`;
 
-  async function ensureCatalogLoaded() {
-    if (cachedCatalog && cachedCatalog.length > 0) return cachedCatalog;
-    if (!window.axios) {
-      log('⚠️ Please run this on memoryden.ricoconsign.com while logged in.', '#eab308');
-      return [];
-    }
-    log('📡 Loading your Memory Den inventory catalog...', '#60a5fa');
-    const catalog = [];
-    let consignorId = null;
-    for (let offset = 0; offset < 900; offset += 100) {
-      try {
-        const q = consignorId ? '&consignor_id=' + consignorId : '';
-        const catRes = await window.axios.get('/api/product?store=1&limit=100&offset=' + offset + '&order_by=id&direction=desc' + q);
-        const prods = catRes.data.products || (Array.isArray(catRes.data) ? catRes.data : []);
-        if (!consignorId && prods[0]?.consignor_id) consignorId = prods[0].consignor_id;
-        const myProds = consignorId ? prods.filter(p => !p.consignor_id || p.consignor_id === consignorId) : prods;
-        catalog.push(...myProds);
-        if (prods.length < 100) break;
-      } catch (e) {
-        break;
-      }
-    }
-    cachedCatalog = catalog;
-    log(`📡 Loaded ${catalog.length} products from Memory Den.`, '#10b981');
-    return catalog;
-  }
-
-  async function startSync(testSingleOnly = false) {
-    if (isSyncing) return;
-    if (itemsToSync.length === 0) {
-      log('⚠️ No items loaded yet.', '#eab308');
-      return;
-    }
-
-    const batch = testSingleOnly ? itemsToSync.slice(0, 1) : itemsToSync;
-    isSyncing = true;
-    isPaused = false;
-
-    const startBtn = modal.querySelector('#rc-start-sync-btn');
-    const testBtn = modal.querySelector('#rc-test-one-btn');
-    const pauseBtn = modal.querySelector('#rc-pause-sync-btn');
-    const progressBar = modal.querySelector('#rc-progress-bar');
-    const progressCount = modal.querySelector('#rc-progress-count');
-    const progressPercent = modal.querySelector('#rc-progress-percent');
-
-    startBtn.style.display = 'none';
-    testBtn.style.display = 'none';
-    pauseBtn.style.display = 'inline-block';
-
-    const catalog = await ensureCatalogLoaded();
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < batch.length; i++) {
-      while (isPaused) {
-        await new Promise(r => setTimeout(r, 200));
+      testOneBtn.disabled = !canSync;
+      testOneBtn.style.opacity = canSync ? '1' : '0.5';
+      if (actionableCount > 0) {
+        const first = missingQueue[0];
+        testOneBtn.textContent = `🧪 Test 1 (${first.sku} ➔ ${first.expectedRcUpc})`;
+      } else if (mapCount > 0 && catalogProducts.length === 0) {
+        const firstSku = Object.keys(parsedMap)[0];
+        testOneBtn.textContent = `🧪 Test 1 (${firstSku} ➔ ${parsedMap[firstSku]})`;
+      } else {
+        testOneBtn.textContent = '🧪 Test 1 Missing (0)';
       }
 
-      const item = batch[i];
-      const percent = Math.round(((i + 1) / batch.length) * 100);
-      progressBar.style.width = percent + '%';
-      progressCount.textContent = `${i + 1} / ${batch.length} (${item.sku} → ${item.upc})`;
-      progressPercent.textContent = percent + '%';
+      const hasReport = auditRows.length > 0;
+      sendReportBtn.disabled = !hasReport;
+      sendReportBtn.style.opacity = hasReport ? '1' : '0.5';
+      downloadCsvBtn.disabled = !hasReport;
+      downloadCsvBtn.style.opacity = hasReport ? '1' : '0.5';
+    }
 
-      try {
-        const cleanSku = (item.sku || '').trim().toUpperCase();
-        let prod = null;
-        if (item.id) prod = catalog.find(p => String(p.id) === String(item.id));
-        if (!prod && cleanSku) {
-          prod = catalog.find(p => {
-            if (p.sku && p.sku.trim().toUpperCase() === cleanSku) return true;
-            if (p.sku_quantities && Object.keys(p.sku_quantities).some(s => s.trim().toUpperCase() === cleanSku)) return true;
-            return false;
-          });
-        }
+    function recomputeAuditFromCatalog() {
+      let verifiedMatch = 0;
+      let missingInMd = 0;
+      let mismatchUpc = 0;
+      let unlinkedInRc = 0;
+      auditRows = [];
+      missingQueue = [];
 
-        if (!prod) {
-          failCount++;
-          log(`✕ [${cleanSku}] Not found in current Memory Den catalog`, '#f87171');
-          continue;
-        }
+      for (const p of catalogProducts) {
+        const sku = extractRicochetSku(p);
+        const liveUpc = extractRicochetUpc(p);
+        const expectedRcUpc = sku && parsedMap[sku] ? cleanStr(parsedMap[sku]).toUpperCase() : '';
+        const qty = extractRicochetQuantity(p);
+        const agreedPrice = extractRicochetPrice(p);
+        const invState = extractRicochetInventoryState(p, qty);
+        const name = cleanStr(p.name || p.title || p.description || sku || `Product #${p.id}`);
 
-        const detailRes = await window.axios.get('/api/product/show/' + prod.id);
-        const payload = detailRes.data.product || detailRes.data.data || detailRes.data;
-        const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items || {}).flat();
-        const targetItem = allItems.find(it => (it.sku || '').trim().toUpperCase() === cleanSku) || allItems[0];
-
-        if (!targetItem) {
-          failCount++;
-          continue;
-        }
-
-        if (targetItem.upc_code === item.upc) {
-          successCount++;
-          log(`ℹ️ [${cleanSku}] Already has barcode ${item.upc}`, '#34d399');
-          continue;
-        }
-
-        targetItem.store = 1;
-        targetItem.upc_code = item.upc;
-        const saveRes = await window.axios.put('/api/product/items', targetItem);
-        if (saveRes.status === 200 || saveRes.status === 201) {
-          successCount++;
-          log(`✓ [${cleanSku}] Filled in barcode ➔ ${item.upc}`, '#34d399');
+        let verifyStatus = 'UNLINKED_IN_RC';
+        if (expectedRcUpc) {
+          if (!liveUpc) {
+            verifyStatus = 'MISSING_IN_MD';
+            missingInMd++;
+          } else if (liveUpc.toUpperCase() === expectedRcUpc.toUpperCase()) {
+            verifyStatus = 'VERIFIED_MATCH';
+            verifiedMatch++;
+          } else {
+            verifyStatus = 'MISMATCH_UPC';
+            mismatchUpc++;
+          }
         } else {
-          failCount++;
-          log(`✕ [${cleanSku}] HTTP ${saveRes.status}`, '#f87171');
+          // Even if not in parsedMap, check if Memory Den already has a HUCK-/PDXGL-/BB- UPC on it
+          if (liveUpc && /^(HUCK|PDXGL|BB)-/i.test(liveUpc)) {
+            verifyStatus = 'VERIFIED_MATCH';
+            verifiedMatch++;
+          } else {
+            verifyStatus = 'UNLINKED_IN_RC';
+            unlinkedInRc++;
+          }
         }
-      } catch (err) {
-        failCount++;
-        log(`✕ [${item.sku}] Error: ${err.message}`, '#f87171');
+
+        const rowObj = {
+          productId: String(p.id ?? ''),
+          sku: sku || String(p.id ?? ''),
+          upc: liveUpc,
+          expectedRcUpc: expectedRcUpc || (liveUpc && /^(HUCK|PDXGL|BB)-/i.test(liveUpc) ? liveUpc : ''),
+          verifyStatus,
+          name,
+          agreedPrice,
+          quantity: qty,
+          inventory: invState,
+          rawProduct: p,
+        };
+        auditRows.push(rowObj);
+
+        if (verifyStatus === 'MISSING_IN_MD' || verifyStatus === 'MISMATCH_UPC') {
+          missingQueue.push(rowObj);
+        }
       }
 
-      await new Promise(r => setTimeout(r, 200));
+      const elTotal = document.getElementById('rc-total-catalog');
+      const elVerified = document.getElementById('rc-pill-verified');
+      const elMissing = document.getElementById('rc-pill-missing');
+      const elMismatch = document.getElementById('rc-pill-mismatch');
+      const elUnlinked = document.getElementById('rc-pill-unlinked');
+
+      if (elTotal) elTotal.textContent = String(catalogProducts.length);
+      if (elVerified) elVerified.textContent = String(verifiedMatch);
+      if (elMissing) elMissing.textContent = String(missingInMd);
+      if (elMismatch) elMismatch.textContent = String(mismatchUpc);
+      if (elUnlinked) elUnlinked.textContent = String(unlinkedInRc);
+
+      updateActionButtons();
     }
 
-    isSyncing = false;
-    startBtn.style.display = 'inline-block';
-    testBtn.style.display = 'inline-block';
-    pauseBtn.style.display = 'none';
+    async function runCatalogAudit() {
+      if (!window.axios) {
+        setInlineBanner(
+          '⚠️ Ricochet session (window.axios) not detected. Make sure you are logged into memoryden.ricoconsign.com.',
+          'warning'
+        );
+        return;
+      }
 
-    log(`🎉 Done! ${successCount} updated/verified, ${failCount} skipped.`, '#10b981');
-    alert(`🎉 Memory Den Barcode Sync Complete!\n\n${successCount} item(s) updated/verified.\nRefresh your Memory Den page to see the new barcodes!`);
-  }
+      setInlineBanner('🔍 Scanning live Memory Den catalog...', 'info');
+      rescanBtn.disabled = true;
+      rescanBtn.textContent = '⏳ Scanning...';
 
-  function togglePause() {
-    isPaused = !isPaused;
-    const pauseBtn = modal.querySelector('#rc-pause-sync-btn');
-    pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
-    log(isPaused ? '⏸ Sync paused.' : '▶️ Resuming sync...');
-  }
+      try {
+        const fetched = [];
+        let consignorId = null;
 
-  window.__RC_HYDRATE_PRELOADED__ = function (autoOpen = false) {
-    if (window.__RC_PRELOADED_BARCODES__) {
-      loadFromObjectOrArray(window.__RC_PRELOADED_BARCODES__);
-      if (autoOpen) toggleModal(true);
-    } else if (autoOpen) {
-      toggleModal(true);
+        for (let offset = 0; offset < 2000; offset += 100) {
+          const q = consignorId ? `&consignor_id=${consignorId}` : '';
+          const res = await window.axios.get(
+            `/api/product?store=1&limit=100&offset=${offset}&order_by=id&direction=desc${q}`
+          );
+          const prods = res.data?.products || (Array.isArray(res.data) ? res.data : []);
+          if (!consignorId && prods[0]?.consignor_id) {
+            consignorId = prods[0].consignor_id;
+          }
+          const myProds = consignorId
+            ? prods.filter((p) => !p.consignor_id || p.consignor_id === consignorId)
+            : prods;
+          fetched.push(...myProds);
+          if (prods.length < 100) break;
+        }
+
+        catalogProducts = fetched;
+        recomputeAuditFromCatalog();
+
+        const verified = auditRows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length;
+        const missing = auditRows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length;
+        const unlinked = auditRows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length;
+
+        setInlineBanner(
+          `✅ Audited ${catalogProducts.length} Memory Den items: ${verified} Verified, ${missing} Missing UPC, ${unlinked} Unlinked in RC.`,
+          'success'
+        );
+      } catch (err) {
+        setInlineBanner(
+          `✕ Failed to scan Memory Den catalog: ${err?.response?.status || err?.message || 'Unknown error'}`,
+          'error'
+        );
+      } finally {
+        rescanBtn.disabled = false;
+        rescanBtn.textContent = '🔄 Re-Scan';
+      }
     }
-  };
 
-  renderModal();
-  window.__RC_HYDRATE_PRELOADED__(Boolean(window.__RC_PRELOADED_BARCODES__));
+    function hydratePreloaded(fromBookmarklet = false) {
+      const preloaded = window.__RC_PRELOADED_BARCODES__;
+      if (preloaded && typeof preloaded === 'object') {
+        const nextMap = {};
+        for (const [k, v] of Object.entries(preloaded)) {
+          const cleanK = cleanStr(k).toUpperCase();
+          const cleanV = cleanStr(v).toUpperCase();
+          if (cleanK && cleanV) nextMap[cleanK] = cleanV;
+        }
+        if (Object.keys(nextMap).length > 0) {
+          parsedMap = nextMap;
+          jsonInput.value = JSON.stringify(parsedMap, null, 2);
+          updateCounter(true);
+          if (fromBookmarklet || catalogProducts.length === 0) {
+            runCatalogAudit();
+          }
+        }
+      }
+    }
+
+    window.__RC_HYDRATE_PRELOADED__ = hydratePreloaded;
+    hydratePreloaded(false);
+
+    jsonInput.addEventListener('input', () => {
+      try {
+        const raw = jsonInput.value.trim();
+        if (!raw) {
+          parsedMap = {};
+          updateCounter(false);
+          return;
+        }
+        const obj = JSON.parse(raw);
+        parsedMap = {};
+        for (const [k, v] of Object.entries(obj)) {
+          const cleanK = cleanStr(k).toUpperCase();
+          const cleanV = cleanStr(v).toUpperCase();
+          if (cleanK && cleanV) parsedMap[cleanK] = cleanV;
+        }
+        updateCounter(false);
+      } catch {
+        matchCount.textContent = 'Invalid JSON format';
+      }
+    });
+
+    csvFile.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = String(ev.target.result || '');
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length < 2) return;
+
+        const headers = lines[0].split(',').map((h) => cleanStr(h).toLowerCase());
+        const skuIdx = headers.findIndex((h) => h === 'sku' || h.includes('sku'));
+        const upcIdx = headers.findIndex((h) => h === 'upc' || h.includes('upc') || h === 'expected_rc_upc');
+        if (skuIdx === -1 || upcIdx === -1) {
+          setInlineBanner('CSV must contain both SKU and UPC columns.', 'error');
+          return;
+        }
+
+        parsedMap = {};
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map((c) => cleanStr(c));
+          const sku = (cols[skuIdx] || '').toUpperCase();
+          const upc = (cols[upcIdx] || '').toUpperCase();
+          if (sku && upc && sku !== upc) {
+            parsedMap[sku] = upc;
+          }
+        }
+        jsonInput.value = JSON.stringify(parsedMap, null, 2);
+        updateCounter(false);
+        if (catalogProducts.length === 0) {
+          runCatalogAudit();
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    rescanBtn.onclick = () => runCatalogAudit();
+
+    function buildVerificationReportPayload() {
+      const rows = auditRows.map((r) => ({
+        productId: r.productId,
+        sku: r.sku,
+        upc: r.upc,
+        expectedRcUpc: r.expectedRcUpc,
+        verifyStatus: r.verifyStatus,
+        name: r.name,
+        agreedPrice: r.agreedPrice,
+        quantity: r.quantity,
+        inventory: r.inventory,
+      }));
+      return {
+        timestamp: new Date().toISOString(),
+        source: window.location.hostname || 'memoryden.ricoconsign.com',
+        summary: {
+          totalCatalog: rows.length,
+          verifiedMatch: rows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length,
+          missingInMd: rows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length,
+          mismatchUpc: rows.filter((r) => r.verifyStatus === 'MISMATCH_UPC').length,
+          unlinkedInRc: rows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length,
+        },
+        rows,
+      };
+    }
+
+    downloadCsvBtn.onclick = () => {
+      if (auditRows.length === 0) {
+        setInlineBanner('Run a catalog scan first before downloading CSV.', 'warning');
+        return;
+      }
+      const esc = (val) => `"${String(val ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+      const header = `"Product ID",SKU,UPC,Expected_RC_UPC,Verify_Status,Name,"Agreed Price",Quantity,Inventory`;
+      const lines = [header];
+      for (const r of auditRows) {
+        lines.push(
+          [
+            esc(r.productId),
+            esc(r.sku),
+            esc(r.upc),
+            esc(r.expectedRcUpc),
+            esc(r.verifyStatus),
+            esc(r.name),
+            esc(Number(r.agreedPrice || 0).toFixed(2)),
+            esc(r.quantity),
+            esc(r.inventory),
+          ].join(',')
+        );
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MD-Barcode-Verification-Report-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setInlineBanner(
+        `📥 Downloaded MD-Barcode-Verification-Report.csv (${auditRows.length} items). You can also drop this CSV right into Resale Command!`,
+        'success'
+      );
+    };
+
+    sendReportBtn.onclick = async () => {
+      if (auditRows.length === 0) {
+        setInlineBanner('Run a catalog scan first before sending report.', 'warning');
+        return;
+      }
+      const payload = buildVerificationReportPayload();
+      sendReportBtn.disabled = true;
+      sendReportBtn.textContent = '⏳ Sending...';
+
+      // Broadcast via postMessage if opened from Resale Command
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'RC_MD_VERIFY_REPORT', report: payload }, '*');
+        }
+      } catch {}
+
+      const endpoints = [
+        'https://www.resalecmd.com/api/md-verify-report',
+        'https://resalecmd.com/api/md-verify-report',
+      ];
+      let sentOk = false;
+
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            sentOk = true;
+            break;
+          }
+        } catch {}
+      }
+
+      sendReportBtn.disabled = false;
+      sendReportBtn.textContent = '📡 Send Report to RC';
+
+      if (sentOk) {
+        setInlineBanner(
+          `📡 Sent Live Verification Report (${payload.summary.verifiedMatch} Verified, ${payload.summary.missingInMd} Missing, ${payload.summary.unlinkedInRc} Unlinked) to Resale Command!`,
+          'success'
+        );
+      } else {
+        setInlineBanner(
+          '⚠️ Could not reach resalecmd.com directly (browser CORS/network). Click "📥 Download CSV" and drop it into Resale Command!',
+          'warning'
+        );
+      }
+    };
+
+    async function executeBarcodeSync(testSingleOnly = false) {
+      if (!window.axios) {
+        setInlineBanner('⚠️ Ricochet session not detected. Please refresh memoryden.ricoconsign.com.', 'error');
+        return;
+      }
+
+      if (catalogProducts.length === 0) {
+        await runCatalogAudit();
+      }
+
+      const targets = testSingleOnly ? missingQueue.slice(0, 1) : [...missingQueue];
+      if (targets.length === 0) {
+        setInlineBanner('🎉 All linked Memory Den items already have verified UPC barcodes!', 'success');
+        return;
+      }
+
+      startBtn.disabled = true;
+      testOneBtn.disabled = true;
+      startBtn.style.opacity = '0.5';
+      testOneBtn.style.opacity = '0.5';
+
+      const progSec = document.getElementById('rc-progress-section');
+      const statusTxt = document.getElementById('rc-status-text');
+      const progNum = document.getElementById('rc-progress-num');
+      const progBar = document.getElementById('rc-progress-bar');
+      const logBox = document.getElementById('rc-log-box');
+
+      progSec.style.display = 'block';
+      logBox.innerHTML = '';
+
+      const log = (msg, color = '#94a3b8') => {
+        const div = document.createElement('div');
+        div.style.color = color;
+        div.textContent = msg;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+      };
+
+      let updatedCount = 0;
+      let alreadyMatchedCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < targets.length; i++) {
+        const row = targets[i];
+        const prod = row.rawProduct;
+        const targetUpc = row.expectedRcUpc;
+
+        statusTxt.textContent = `${testSingleOnly ? 'Testing' : 'Syncing'} ${row.sku} ➔ ${targetUpc}...`;
+        progNum.textContent = `${i + 1}/${targets.length}`;
+        progBar.style.width = `${Math.round(((i + 1) / targets.length) * 100)}%`;
+
+        try {
+          const detailRes = await window.axios.get(`/api/product/show/${prod.id}`);
+          const payload = detailRes.data?.product || detailRes.data?.data || detailRes.data;
+          const allItems = Array.isArray(payload?.items)
+            ? payload.items
+            : Object.values(payload?.items || {}).flat();
+          const targetItem = allItems[0];
+
+          if (!targetItem) {
+            log(`✕ ${row.sku}: No editable item payload in Ricochet`, '#ef4444');
+            failedCount++;
+            continue;
+          }
+
+          const existingDetailUpc = cleanStr(targetItem.upc_code || targetItem.upc).toUpperCase();
+          if (existingDetailUpc === targetUpc) {
+            prod.upc_code = targetUpc;
+            alreadyMatchedCount++;
+            log(`✓ ${row.sku}: Already had ${targetUpc}`, '#38bdf8');
+            recomputeAuditFromCatalog();
+            continue;
+          }
+
+          targetItem.store = 1;
+          targetItem.upc_code = targetUpc;
+
+          const saveRes = await window.axios.put('/api/product/items', targetItem);
+          if (saveRes.status === 200 || saveRes.status === 201) {
+            prod.upc_code = targetUpc;
+            updatedCount++;
+            log(`✓ ${row.sku} (${row.name.slice(0, 22)}) ➔ ${targetUpc}`, '#10b981');
+            recomputeAuditFromCatalog();
+          } else {
+            log(`✕ ${row.sku}: HTTP ${saveRes.status}`, '#ef4444');
+            failedCount++;
+          }
+        } catch (err) {
+          log(`✕ ${row.sku}: ${err?.response?.status || err?.message || 'Error'}`, '#ef4444');
+          failedCount++;
+        }
+
+        await new Promise((r) => setTimeout(r, 220));
+      }
+
+      recomputeAuditFromCatalog();
+      statusTxt.textContent = testSingleOnly ? '🎉 1-Item Test Complete!' : '🎉 Barcode Sync Complete!';
+      setInlineBanner(
+        `✅ ${updatedCount} updated, ${alreadyMatchedCount} already matched, ${failedCount} failed. Click "📡 Send Report to RC" or "📥 Download CSV" below!`,
+        failedCount > 0 ? 'warning' : 'success'
+      );
+    }
+
+    testOneBtn.onclick = () => executeBarcodeSync(true);
+    startBtn.onclick = () => executeBarcodeSync(false);
+
+    // Auto-run catalog audit on mount if axios is ready
+    if (window.axios && catalogProducts.length === 0) {
+      runCatalogAudit();
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(injectWidget, 400);
+  } else {
+    window.addEventListener('DOMContentLoaded', () => setTimeout(injectWidget, 400));
+  }
 })();

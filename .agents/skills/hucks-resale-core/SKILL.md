@@ -61,7 +61,7 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 
 ## 4. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)
 
-# Active Session Summary (Updated Oct 30, 2026)
+# Active Session Summary (Updated Oct 31, 2026)
 
 ## Completed & Live on Production (`resalecmd.com`)
 1. **AI Scout & Vision Pipeline**: Modular schemas, Buy-Target Authority Law, physical substrate priority (`art_decor` before `books`), and Appwrite `/preview` aspect-ratio fix for `bounding_box` auto-cropping.
@@ -83,6 +83,10 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
    - Eliminated cramped inline table-cell search dropdowns (`"Search inventory to match..."`) and replaced them with the canonical **Slide-Over Inventory Match Drawer** (`🔍 Open Match Drawer` with `X suggested` badge when unmatched; Photo Thumbnail + `UPC` badge + full untruncated title + `DB Price` + `🔄 Change` when matched).
    - Built shared candidate exclusion & ranking engine (`getUnclaimedMatchCandidatesForRow` + `PREVERIFIED_MD_SKU_TO_UPC_OR_ID` in `src/lib/salesBucketing.ts`) that strictly rules out items already assigned to a different `0EJ...` `locationSku`, items already claimed by another CSV row, `sold` items on `In Stock` rows, and cross-org `BB-` vs `HUCK-`/`PDXGL-` items.
    - Added **1-Click `🔗 Link & Save to MD`** inside the drawer (`linkAndSaveCandidateToMd` / `linkAndSaveItemToActiveRow`), which immediately persists `locationSku`, `storageLocation: 'MD'`, `warehouseId: '6a7e70050009db0e1857'`, `status: 'placed' | 'sold'`, and `quantity` to Appwrite upon linking.
+8. **Plain-English Ricochet Barcode Sync Modal & 2-Way Verification Report (`LocationSyncView.vue`, `public/ricochet-upc-sync.user.js`, `/api/md-verify-report`)**:
+   - Redesigned the `Ricochet POS Barcode Sync` modal in `LocationSyncView.vue` with plain-English Method A (Self-Contained Pre-Loaded Bookmarklet with `window.__RC_PRELOADED_BARCODES__`) and Method B (Quick Copy-Paste with `🧪 Test 1 Item First` vs `📋 Copy All X Items`).
+   - Upgraded `public/ricochet-upc-sync.user.js` (and `public/scripts/ricochet-upc-sync.user.js`) to v3.0: removed all native `window.alert()` calls, added `extractRicochetSku(p)` & `extractRicochetUpc(p)`, built the 4-state live Memory Den catalog audit (`VERIFIED_MATCH`, `MISSING_IN_MD`, `MISMATCH_UPC`, `UNLINKED_IN_RC`), and added `📡 Send Report to RC` + `📥 Download CSV` (`MD-Barcode-Verification-Report.csv`).
+   - Created CORS-enabled `/api/md-verify-report` endpoint and added the **📊 Memory Den Barcode Verification Scorecard** to `LocationSyncView.vue` with 1-click **`🔍 Match Z Unlinked Items`** loading directly into the Slide-Over Match Drawer.
 
 ## Next Up:
 1. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).

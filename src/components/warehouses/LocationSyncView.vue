@@ -202,6 +202,78 @@
       </div>
     </div>
 
+    <!-- Live Memory Den Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
+    <div
+      v-if="mdVerifyReport"
+      class="card bg-base-100 border border-success/30 shadow-sm p-4 space-y-3"
+    >
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-success/15 text-success rounded-xl shrink-0">
+            <span class="text-base leading-none">📊</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-black text-sm text-base-content">
+                Memory Den Barcode Verification Report
+              </h3>
+              <span class="badge badge-xs badge-success text-success-content font-mono font-bold">
+                {{ mdVerifyReport.summary.totalCatalog }} Booth Items Audited
+              </span>
+            </div>
+            <p class="text-[11px] opacity-70">
+              Verified {{ formatDate(mdVerifyReport.timestamp) }}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button
+            v-if="mdVerifyReport.summary.unlinkedInRc > 0"
+            type="button"
+            class="btn btn-xs btn-primary font-bold gap-1"
+            @click="loadVerifyReportIntoWorkspace('unlinked')"
+          >
+            <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs btn-outline border-base-300 font-bold gap-1"
+            @click="loadVerifyReportIntoWorkspace('all')"
+          >
+            <span>📋 Load All {{ mdVerifyReport.summary.totalCatalog }} Items</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost opacity-60 hover:opacity-100"
+            @click="mdVerifyReport = null"
+            title="Dismiss scorecard"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div class="p-2.5 rounded-xl bg-success/10 border border-success/30 flex items-center justify-between">
+          <span class="text-xs font-bold text-success">🟢 Verified in MD</span>
+          <span class="font-mono font-black text-sm text-success">{{ mdVerifyReport.summary.verifiedMatch }}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between">
+          <span class="text-xs font-bold text-warning">🟡 Missing UPC in MD</span>
+          <span class="font-mono font-black text-sm text-warning">{{ mdVerifyReport.summary.missingInMd }}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-between">
+          <span class="text-xs font-bold text-orange-500">🟠 Mismatched UPC</span>
+          <span class="font-mono font-black text-sm text-orange-500">{{ mdVerifyReport.summary.mismatchUpc }}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300 flex items-center justify-between">
+          <span class="text-xs font-bold opacity-80">⚪ Unlinked in RC</span>
+          <span class="font-mono font-black text-sm text-base-content">{{ mdVerifyReport.summary.unlinkedInRc }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Step 1: Upload Dropzone (if no CSV is loaded) -->
     <div v-if="syncRows.length === 0" class="space-y-6">
       <div 
@@ -1375,6 +1447,111 @@
               </div>
             </div>
 
+        <!-- 3. 2-Way Live Barcode Verification Scorecard -->
+            <div class="p-4 rounded-2xl bg-base-200/70 border border-base-300 space-y-3 shadow-xs">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2">
+                  <span class="text-base leading-none">📊</span>
+                  <div>
+                    <h4 class="font-black text-xs sm:text-sm text-base-content">
+                      Memory Den Barcode Verification Scorecard
+                    </h4>
+                    <p class="text-[11px] opacity-70">
+                      <span v-if="mdVerifyReport">
+                        Last verified {{ formatDate(mdVerifyReport.timestamp) }} • {{ mdVerifyReport.summary.totalCatalog }} live Memory Den items audited
+                      </span>
+                      <span v-else>
+                        Click <strong>📡 Send Report to RC</strong> or <strong>📥 Download CSV</strong> inside the Memory Den widget to verify all ~808 booth items.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline border-base-300 font-bold gap-1"
+                    :disabled="isCheckingVerifyReport"
+                    @click="fetchMdVerifyReport(true)"
+                  >
+                    <span v-if="isCheckingVerifyReport" class="loading loading-spinner loading-xs"></span>
+                    <span v-else>🔄 Check for Live Report</span>
+                  </button>
+                  <label class="btn btn-xs btn-outline border-base-300 font-bold gap-1 cursor-pointer">
+                    <span>📂 Drop/Load Verify CSV</span>
+                    <input type="file" accept=".csv" class="hidden" @change="handleFileSelect" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- 4-State Verification Pills -->
+              <div v-if="mdVerifyReport" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                <div class="p-2.5 rounded-xl bg-success/10 border border-success/30 flex flex-col justify-between">
+                  <div class="text-[11px] font-bold text-success flex items-center gap-1">
+                    <span>🟢 Verified in MD</span>
+                  </div>
+                  <div class="text-lg font-black font-mono text-success mt-0.5">
+                    {{ mdVerifyReport.summary.verifiedMatch }}
+                  </div>
+                  <div class="text-[10px] opacity-70">UPC Confirmed</div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-warning/10 border border-warning/30 flex flex-col justify-between">
+                  <div class="text-[11px] font-bold text-warning flex items-center gap-1">
+                    <span>🟡 Missing UPC in MD</span>
+                  </div>
+                  <div class="text-lg font-black font-mono text-warning mt-0.5">
+                    {{ mdVerifyReport.summary.missingInMd }}
+                  </div>
+                  <div class="text-[10px] opacity-70">Ready to Fill</div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/30 flex flex-col justify-between">
+                  <div class="text-[11px] font-bold text-orange-500 flex items-center gap-1">
+                    <span>🟠 Mismatched UPC</span>
+                  </div>
+                  <div class="text-lg font-black font-mono text-orange-500 mt-0.5">
+                    {{ mdVerifyReport.summary.mismatchUpc }}
+                  </div>
+                  <div class="text-[10px] opacity-70">Differs from RC</div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-base-100 border border-base-300 flex flex-col justify-between">
+                  <div class="text-[11px] font-bold opacity-80 flex items-center gap-1">
+                    <span>⚪ Unlinked in RC</span>
+                  </div>
+                  <div class="text-lg font-black font-mono text-base-content mt-0.5">
+                    {{ mdVerifyReport.summary.unlinkedInRc }}
+                  </div>
+                  <div class="text-[10px] opacity-70">Needs Match in RC</div>
+                </div>
+              </div>
+
+              <!-- 1-Click Action to Load Unlinked Items into Slide-Over Match Drawer Table -->
+              <div v-if="mdVerifyReport && (mdVerifyReport.summary.unlinkedInRc > 0 || mdVerifyReport.rows?.length > 0)" class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-300/70">
+                <span class="text-[11px] opacity-75">
+                  Want to link the <strong>{{ mdVerifyReport.summary.unlinkedInRc }}</strong> unlinked Memory Den items in the Slide-Over Match Drawer?
+                </span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button
+                    v-if="mdVerifyReport.summary.unlinkedInRc > 0"
+                    type="button"
+                    class="btn btn-xs btn-primary font-bold gap-1"
+                    @click="loadVerifyReportIntoWorkspace('unlinked')"
+                  >
+                    <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1"
+                    @click="loadVerifyReportIntoWorkspace('all')"
+                  >
+                    <span>📋 View All {{ mdVerifyReport.summary.totalCatalog }} Report Rows</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- 4. Quiet Collapsible Advanced Developer Options Footer -->
             <details class="rounded-2xl bg-base-200/50 border border-base-300 px-4 py-2.5 text-xs">
               <summary class="cursor-pointer font-bold opacity-75 hover:opacity-100 select-none">
@@ -1452,6 +1629,86 @@ import {
 
 // Browser Auto-Sync Helper State
 const showBrowserSyncModal = ref(false);
+const mdVerifyReport = ref<any | null>(null);
+const isCheckingVerifyReport = ref(false);
+
+const fetchMdVerifyReport = async (showManualToast = false) => {
+  isCheckingVerifyReport.value = true;
+  try {
+    const res = await fetch('/api/md-verify-report');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.hasReport && data?.report) {
+        const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== data.report.timestamp;
+        mdVerifyReport.value = data.report;
+        if (showManualToast || isNewer) {
+          addToast({
+            type: 'success',
+            message: `📊 Loaded Memory Den Verification Report: ${data.report.summary.verifiedMatch} Verified, ${data.report.summary.missingInMd} Missing, ${data.report.summary.unlinkedInRc} Unlinked!`,
+          });
+        }
+      } else if (showManualToast) {
+        addToast({
+          type: 'info',
+          message: 'No live report received yet. Click "📡 Send Report to RC" or "📥 Download CSV" inside the Memory Den widget!',
+        });
+      }
+    }
+  } catch (e) {
+    if (showManualToast) {
+      addToast({ type: 'warning', message: 'Could not check live report endpoint.' });
+    }
+  } finally {
+    isCheckingVerifyReport.value = false;
+  }
+};
+
+watch(showBrowserSyncModal, (isOpen) => {
+  if (isOpen) {
+    void fetchMdVerifyReport(false);
+  }
+});
+
+const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'unlinked') => {
+  if (!mdVerifyReport.value || !Array.isArray(mdVerifyReport.value.rows)) return;
+  const sourceRows =
+    mode === 'unlinked'
+      ? mdVerifyReport.value.rows.filter((r: any) => r.verifyStatus === 'UNLINKED_IN_RC')
+      : mdVerifyReport.value.rows;
+
+  if (sourceRows.length === 0) {
+    addToast({ type: 'info', message: 'No rows match that filter in the verification report.' });
+    return;
+  }
+
+  const esc = (val: any) => `"${String(val ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+  const header = `"Product ID",SKU,UPC,Expected_RC_UPC,Verify_Status,Name,"Agreed Price",Quantity,Inventory`;
+  const csvLines = [header];
+  for (const r of sourceRows) {
+    csvLines.push(
+      [
+        esc(r.productId),
+        esc(r.sku),
+        esc(r.upc),
+        esc(r.expectedRcUpc),
+        esc(r.verifyStatus),
+        esc(r.name),
+        esc(Number(r.agreedPrice || 0).toFixed(2)),
+        esc(r.quantity ?? 1),
+        esc(r.inventory || (Number(r.quantity ?? 1) > 0 ? 'In Stock' : 'Sold')),
+      ].join(',')
+    );
+  }
+
+  showBrowserSyncModal.value = false;
+  parseCsvData(
+    csvLines.join('\n'),
+    mode === 'unlinked' ? 'MD-Unlinked-Items-Report.csv' : 'MD-Barcode-Verification-Report.csv'
+  );
+  if (mode === 'unlinked') {
+    filterTab.value = 'unmatched';
+  }
+};
 
 // Direct DB + CSV syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so the user never has to upload a CSV first!
 const dbZeroEjItems = computed(() => {
@@ -1569,36 +1826,60 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
     matched = matched.slice(0, 1);
   }
 
-  const script = `// ⚡ Resale Command ➔ Ricochet Preloaded UPC Auto-Sync (\${isTest ? 'TEST 1 ITEM' : 'ALL ' + matched.length + ' ITEMS'})
+  const fullMap = ricochetBarcodePayloadMap.value;
+  const script = `// ⚡ Resale Command ➔ Ricochet Preloaded UPC Auto-Sync & 2-Way Verifier (${isTest ? 'TEST 1 ITEM' : 'ALL ' + matched.length + ' ITEMS'})
 (async function() {
-  const isTestMode = \${isTest};
-  const items = \${JSON.stringify(matched, null, 2)};
+  const isTestMode = ${isTest};
+  const items = ${JSON.stringify(matched, null, 2)};
+  const fullMap = ${JSON.stringify(fullMap)};
+  const cleanStr = (v) => String(v ?? '').trim().replace(/^['"]+/, '').replace(/['"]+$/, '').trim();
+  const extractRicochetSku = (p) => {
+    if (!p || typeof p !== 'object') return '';
+    for (const c of [p.sku, p.SKU, p.number, p.code, p.items?.[0]?.sku]) {
+      const s = cleanStr(c).toUpperCase();
+      if (s && /^0EJ[A-Z0-9]{2,6}$/i.test(s)) return s;
+    }
+    if (p.sku_quantities && typeof p.sku_quantities === 'object') {
+      for (const k of Object.keys(p.sku_quantities)) {
+        const s = cleanStr(k).toUpperCase();
+        if (s) return s;
+      }
+    }
+    for (const v of Object.values(p)) {
+      if (typeof v === 'string' && /^'?0EJ[A-Z0-9]{3,5}$/i.test(v.trim())) return cleanStr(v).toUpperCase();
+    }
+    return cleanStr(p.sku || p.SKU || p.number || p.code).toUpperCase();
+  };
+  const extractRicochetUpc = (p) => {
+    if (!p || typeof p !== 'object') return '';
+    for (const c of [p.upc_code, p.upc, p.UPC, p.barcode, p.items?.[0]?.upc_code, p.items?.[0]?.upc]) {
+      const u = cleanStr(c).toUpperCase();
+      if (u) return u;
+    }
+    for (const v of Object.values(p)) {
+      if (typeof v === 'string' && /^'?(HUCK|PDXGL|BB)-[A-Z0-9-]+$/i.test(v.trim())) return cleanStr(v).toUpperCase();
+    }
+    return '';
+  };
+
   console.log('%c[Resale Command]%c ' + (isTestMode ? '🧪 Starting SAFE TEST RUN for 1 item only...' : 'Starting bulk UPC sync for ' + items.length + ' items...'), 'background:#4f46e5;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold;', '');
-  
   if (!window.axios) {
-    alert('Please run this script inside your logged-in Ricochet portal (e.g. memoryden.ricoconsign.com)');
+    console.error('[Resale Command] Please run this script inside your logged-in Ricochet portal (memoryden.ricoconsign.com)');
     return;
   }
 
-  // 1. Fetch recent products for consignor (scans up to 800 items sorted desc)
-  console.log('%c[Resale Command]%c Scanning your consignor catalog in Ricochet...', 'background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;', '');
   let catalog = [];
   let consignorId = null;
-
-  for (let offset = 0; offset < 800; offset += 100) {
+  for (let offset = 0; offset < 2000; offset += 100) {
     try {
       const q = consignorId ? '&consignor_id=' + consignorId : '';
       const catRes = await window.axios.get('/api/product?store=1&limit=100&offset=' + offset + '&order_by=id&direction=desc' + q);
       const prods = catRes.data.products || (Array.isArray(catRes.data) ? catRes.data : []);
-      if (!consignorId && prods[0]?.consignor_id) {
-        consignorId = prods[0].consignor_id;
-      }
+      if (!consignorId && prods[0]?.consignor_id) consignorId = prods[0].consignor_id;
       const myProds = consignorId ? prods.filter(p => !p.consignor_id || p.consignor_id === consignorId) : prods;
       catalog.push(...myProds);
       if (prods.length < 100) break;
-    } catch (e) {
-      break;
-    }
+    } catch (e) { break; }
   }
   console.log('📡 Loaded ' + catalog.length + ' consignor products from Ricochet.');
 
@@ -1607,83 +1888,68 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const cleanSku = (item.sku || '').trim().toUpperCase();
-    const cleanTitle = (item.title || '').trim().toLowerCase();
-
-    // Matching Strategy:
-    // 1. Exact Product ID (if pre-known)
-    // 2. Direct SKU match in sku_quantities or product SKU
-    // 3. Exact Title match
-    // 4. Fuzzy Title match (starts with or key phrases)
-    let prod = null;
-    if (item.id) {
-      prod = catalog.find(p => String(p.id) === String(item.id));
-    }
-    if (!prod && cleanSku) {
-      prod = catalog.find(p => {
-        if (p.sku && p.sku.toUpperCase() === cleanSku) return true;
-        if (p.sku_quantities && Object.keys(p.sku_quantities).some(s => s.trim().toUpperCase() === cleanSku)) return true;
-        return false;
-      });
-    }
-    if (!prod && cleanTitle) {
-      const titleWords = cleanTitle.replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2);
-      prod = catalog.find(p => {
-        const pName = (p.name || p.title || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '');
-        if (pName === cleanTitle.replace(/[^a-z0-9\\s]/g, '')) return true;
-        if (titleWords.length >= 2) {
-          const prefix = titleWords[0] + ' ' + titleWords[1];
-          if (pName.includes(prefix)) return true;
-        }
-        return false;
-      });
-    }
-
-    if (!prod) {
-      console.warn('✕ [' + (i+1) + '/' + items.length + '] Skipping "' + (item.title || cleanSku) + '": No match found in Ricochet catalog');
-      failed++;
-      continue;
-    }
+    const cleanSku = cleanStr(item.sku).toUpperCase();
+    let prod = catalog.find(p => extractRicochetSku(p) === cleanSku);
+    if (!prod) continue;
 
     try {
       const detailRes = await window.axios.get('/api/product/show/' + prod.id);
       const payload = detailRes.data.product || detailRes.data.data || detailRes.data;
       const allItems = Array.isArray(payload.items) ? payload.items : Object.values(payload.items || {}).flat();
       const targetItem = allItems[0];
+      if (!targetItem) { failed++; continue; }
 
-      if (!targetItem) {
-        console.warn('✕ Product ' + prod.id + ' (' + prod.name + ') has no items payload');
-        failed++;
-        continue;
-      }
-
-      if (targetItem.upc_code === item.upc) {
-        console.log('ℹ️ [' + (prod.name || targetItem.sku) + '] Already has UPC: ' + item.upc);
+      if (cleanStr(targetItem.upc_code).toUpperCase() === item.upc) {
+        prod.upc_code = item.upc;
         success++;
         continue;
       }
 
       targetItem.store = 1;
       targetItem.upc_code = item.upc;
-
       const saveRes = await window.axios.put('/api/product/items', targetItem);
       if (saveRes.status === 200 || saveRes.status === 201) {
+        prod.upc_code = item.upc;
         success++;
-        console.log('%c✓ [' + (i+1) + '/' + items.length + '] ' + (prod.name || targetItem.sku) + ' ➔ UPC: ' + item.upc, 'color:#10b981;font-weight:bold;font-size:12px;');
-      } else {
-        console.warn('✕ HTTP ' + saveRes.status + ' on ' + prod.name);
-        failed++;
-      }
-    } catch (err) {
-      console.error('✕ Error on ' + (prod?.name || cleanSku) + ':', err.response?.data || err.message);
-      failed++;
-    }
-
+        console.log('%c✓ [' + (i+1) + '/' + items.length + '] ' + cleanSku + ' ➔ UPC: ' + item.upc, 'color:#10b981;font-weight:bold;font-size:12px;');
+      } else { failed++; }
+    } catch (err) { failed++; }
     await new Promise(r => setTimeout(r, 200));
   }
 
-  console.log('%c🎉 ' + (isTestMode ? 'Test Run Complete!' : 'Sync Finished!') + ' ' + success + ' updated, ' + failed + ' failed.', 'color:#10b981;font-weight:bold;font-size:14px;');
-  alert('🎉 Ricochet Barcode Sync Finished!\\n\\n' + success + ' items verified/updated in Ricochet.\\n' + failed + ' failed.\\nRefresh page to verify!');
+  const reportRows = catalog.map(p => {
+    const sku = extractRicochetSku(p);
+    const upc = extractRicochetUpc(p);
+    const expectedRcUpc = cleanStr(fullMap[sku] || '').toUpperCase();
+    let verifyStatus = 'UNLINKED_IN_RC';
+    if (expectedRcUpc) {
+      verifyStatus = !upc ? 'MISSING_IN_MD' : (upc === expectedRcUpc ? 'VERIFIED_MATCH' : 'MISMATCH_UPC');
+    } else if (upc && /^(HUCK|PDXGL|BB)-/i.test(upc)) {
+      verifyStatus = 'VERIFIED_MATCH';
+    }
+    return {
+      productId: String(p.id || ''),
+      sku,
+      upc,
+      expectedRcUpc,
+      verifyStatus,
+      name: cleanStr(p.name || p.title || sku),
+      agreedPrice: parseFloat(String(p.agreed_price ?? p.price ?? 0)) || 0,
+      quantity: parseInt(String(p.quantity ?? 1), 10) || 0,
+      inventory: (parseInt(String(p.quantity ?? 1), 10) || 0) > 0 ? 'In Stock' : 'Sold'
+    };
+  });
+
+  try {
+    await fetch('https://www.resalecmd.com/api/md-verify-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp: new Date().toISOString(), rows: reportRows })
+    });
+    console.log('%c📡 Sent Live Verification Report to Resale Command!', 'color:#38bdf8;font-weight:bold;');
+  } catch (e) {}
+
+  console.log('%c🎉 ' + (isTestMode ? 'Test Run Complete!' : 'Sync Finished!') + ' ' + success + ' verified/updated, ' + failed + ' failed.', 'color:#10b981;font-weight:bold;font-size:14px;');
 })();`;
 
   navigator.clipboard.writeText(script);
@@ -2426,7 +2692,42 @@ const parseCsvData = (rawText: string, fileName: string) => {
       const qtyIdxExact = headerCols.findIndex(h => h === 'quantity' || h === 'qty');
       // NOTE: a Products-*.csv "In stock" column is the date the item was added to stock - never a quantity
       const qtyIdx = qtyIdxExact !== -1 ? qtyIdxExact : headerCols.findIndex(h => h.includes('quantity') || h.includes('qty'));
-      isCatalogExport.value = isProductCatalogHeaders(rawHeaders);
+      const expectedRcUpcIdx = headerCols.findIndex(h => h === 'expected_rc_upc' || h === 'expected rc upc' || h.includes('expected_rc_upc'));
+      const verifyStatusIdx = headerCols.findIndex(h => h === 'verify_status' || h === 'verify status' || h.includes('verify_status'));
+      const isVerifyReportCsv = expectedRcUpcIdx !== -1 || verifyStatusIdx !== -1;
+      isCatalogExport.value = isVerifyReportCsv || isProductCatalogHeaders(rawHeaders);
+
+      if (isVerifyReportCsv && !fileName.includes('Unlinked')) {
+        const verifyRows: any[] = [];
+        for (let rIdx = 1; rIdx < parsedMatrix.length; rIdx++) {
+          const c = parsedMatrix[rIdx];
+          if (!c || c.length === 0) continue;
+          const vStatus = verifyStatusIdx !== -1 ? (c[verifyStatusIdx] || '').trim().toUpperCase() : 'UNLINKED_IN_RC';
+          verifyRows.push({
+            productId: prodIdIdx !== -1 ? (c[prodIdIdx] || '').trim() : '',
+            sku: skuIdx !== -1 ? cleanCatalogSku(c[skuIdx]).toUpperCase() : '',
+            upc: upcIdx !== -1 ? cleanCatalogSku(c[upcIdx]).toUpperCase() : '',
+            expectedRcUpc: expectedRcUpcIdx !== -1 ? cleanCatalogSku(c[expectedRcUpcIdx]).toUpperCase() : '',
+            verifyStatus: vStatus || 'UNLINKED_IN_RC',
+            name: nameIdx !== -1 ? (c[nameIdx] || '').trim() : '',
+            agreedPrice: agreedPriceIdx !== -1 ? (parseFloat((c[agreedPriceIdx] || '').replace(/[^0-9.]/g, '')) || 0) : 0,
+            quantity: qtyIdx !== -1 ? (parseInt((c[qtyIdx] || '').replace(/[^0-9]/g, ''), 10) || 0) : 1,
+            inventory: statusIdx !== -1 ? (c[statusIdx] || '').trim() : 'In Stock',
+          });
+        }
+        mdVerifyReport.value = {
+          timestamp: new Date().toISOString(),
+          source: fileName,
+          summary: {
+            totalCatalog: verifyRows.length,
+            verifiedMatch: verifyRows.filter(r => r.verifyStatus === 'VERIFIED_MATCH').length,
+            missingInMd: verifyRows.filter(r => r.verifyStatus === 'MISSING_IN_MD').length,
+            mismatchUpc: verifyRows.filter(r => r.verifyStatus === 'MISMATCH_UPC').length,
+            unlinkedInRc: verifyRows.filter(r => r.verifyStatus === 'UNLINKED_IN_RC').length,
+          },
+          rows: verifyRows,
+        };
+      }
 
       const activeItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
       const claimedItemIdToSku = new Map<string, string>();
@@ -3441,6 +3742,18 @@ const loadData = async () => {
 
 onMounted(() => {
   loadData();
+  void fetchMdVerifyReport(false);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.type === 'RC_MD_VERIFY_REPORT' && ev.data.report) {
+        mdVerifyReport.value = ev.data.report;
+        addToast({
+          type: 'success',
+          message: `📡 Received Live Memory Den Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
+        });
+      }
+    });
+  }
 });
 
 watch(team, (newTeam) => {
