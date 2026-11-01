@@ -31,6 +31,12 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
    - `Payouts *.csv`: Interim current-month sales (`Sale#` + `Sold Date`). Deduplicates by 6-digit ticket # + occurrence.
    - `Payout History *.csv`: Settled monthly checks (`Sale` + `Sold` + ` - 0EJXXX` suffix).
 
+### UX & INFORMATION ARCHITECTURE EMPATHY GUARDRAILS
+
+1. **Never Ask User for Manual Browser Plumbing:** Always wire solutions directly into the native UI (such as the Drag-and-Drop Permanent Live-Loader bookmarklet `⚡ Memory Den Sync` in `LocationSyncView.vue`) rather than asking the user to manually edit bookmark URLs or install extra extensions.
+2. **No Stale Client Snapshots (Single Source of Truth):** Bookmarklets and sync tools must be thin live-loaders (`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()`) that fetch fresh code and fresh `locationSku` (`0EJ...`) ➔ `HUCK-XXXX` mappings from the cloud (`/api/md-verify-report?mode=payload`) on open, displaying `"✅ Live Auto-Updated Script"`. Never bake static JSON snapshots into bookmarklet `href`s.
+3. **Booth Operations & Bin SKU Awareness:** Always link Memory Den `0EJ...` SKUs in `locationSku` on the backend and respect physical booth workflows (distinguishing legitimate multi-qty Booth Bin SKUs from true duplicate barcode collision pairs).
+
 ## 2. The 5 Focused AI Studio Chats & PowerShell Skill Loaders
 
 Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your clipboard (`Ctrl+V` into the chat):

@@ -74,6 +74,11 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
    - \`Payouts *.csv\`: Interim current-month sales (\`Sale#\` + \`Sold Date\`). Deduplicates by 6-digit ticket # + occurrence.
    - \`Payout History *.csv\`: Settled monthly checks (\`Sale\` + \`Sold\` + \` - 0EJXXX\` suffix).
 
+### UX & INFORMATION ARCHITECTURE EMPATHY GUARDRAILS
+1. **Never Ask User for Manual Browser Plumbing:** Always wire solutions directly into the native UI (such as the Drag-and-Drop Permanent Live-Loader bookmarklet \`⚡ Memory Den Sync\` in \`LocationSyncView.vue\`) rather than asking the user to manually edit bookmark URLs or install extra extensions.
+2. **No Stale Client Snapshots (Single Source of Truth):** Bookmarklets and sync tools must be thin live-loaders (\`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()\`) that fetch fresh code and fresh \`locationSku\` (\`0EJ...\`) ➔ \`HUCK-XXXX\` mappings from the cloud (\`/api/md-verify-report?mode=payload\`) on open, displaying \`"✅ Live Auto-Updated Script"\`. Never bake static JSON snapshots into bookmarklet \`href\`s.
+3. **Booth Operations & Bin SKU Awareness:** Always link Memory Den \`0EJ...\` SKUs in \`locationSku\` on the backend and respect physical booth workflows (distinguishing legitimate multi-qty Booth Bin SKUs from true duplicate barcode collision pairs).
+
 ---
 
 ## 2. The 3 Golden Rules
@@ -130,9 +135,10 @@ const GEMINI_WEB_BUNDLES = [
   {
     id: 'rc-3-booth-drops',
     description:
-      'Chat 3 (Booth Drops & Theme Puller) bundle: haul ingestion SOP, booth merchandising & bundling, and direct thermal label printing (Ricochet POS & Dusty Tiger).',
+      'Chat 3 (Booth Drops & Theme Puller) bundle: haul ingestion SOP, booth sync & UX empathy guardrails, booth merchandising & bundling, and direct thermal label printing (Ricochet POS & Dusty Tiger).',
     sources: [
       { type: 'skill', name: 'haul-ingestion' },
+      { type: 'skill', name: 'resale-booth-sync' },
       { type: 'skill', name: 'resale-merchandising-and-bundling' },
       { type: 'skill', name: 'thermal-label-printing' },
     ],

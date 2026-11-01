@@ -233,9 +233,9 @@
         <!-- Header -->
         <div style="padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <div style="font-weight: 800; font-size: 14px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+            <div style="font-weight: 800; font-size: 14px; color: #f8fafc; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span>⚡ Memory Den Barcode Sync &amp; Verifier</span>
-              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 1px 6px; border-radius: 999px; font-weight: 700;">Live Cloud</span>
+              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800;">✅ Live Auto-Updated Script</span>
             </div>
             <div style="font-size: 11px; color: #94a3b8;" id="rc-catalog-status">Connecting to Ricochet session...</div>
           </div>
@@ -431,8 +431,8 @@
       });
     });
 
-    // Hydrate pre-loaded barcodes first as instant baseline, then live-fetch from cloud
-    hydratePreloadedBarcodes(false);
+    // Open panel and immediately fetch live cloud state from Resale Command (zero stale client snapshots)
+    hydratePreloadedBarcodes(true);
   }
 
   // Canonical 1-to-1 secondary overrides so stale preloaded bookmarklet maps never collide
@@ -480,7 +480,7 @@
     isFetchingCloudPayload = true;
     const cloudBadge = document.getElementById('rc-cloud-badge');
     if (cloudBadge) {
-      cloudBadge.textContent = 'Syncing Cloud...';
+      cloudBadge.textContent = '⏳ Syncing Live Cloud...';
       cloudBadge.style.background = '#1e3a8a';
       cloudBadge.style.color = '#93c5fd';
     }
@@ -495,19 +495,11 @@
             const liveMap = sanitizeBarcodeMap(data.skuToUpcMap);
             const liveCount = Object.keys(liveMap).length;
             if (liveCount > 0) {
-              // Clear any stale runtime conflicts and use live cloud map as authoritative 1-to-1 source
+              // Single source of truth: replace parsedMap directly with live cloud map and clear stale conflicts
               runtime422Conflicts = {};
-              const liveUsedUpcs = new Set(Object.values(liveMap));
-              const merged = { ...liveMap };
-              for (const [oldSku, oldUpc] of Object.entries(sanitizeBarcodeMap(parsedMap))) {
-                if (!merged[oldSku] && !liveUsedUpcs.has(oldUpc)) {
-                  merged[oldSku] = oldUpc;
-                  liveUsedUpcs.add(oldUpc);
-                }
-              }
-              parsedMap = sanitizeBarcodeMap(merged);
+              parsedMap = liveMap;
               if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
-                skuMetaMap = { ...skuMetaMap, ...data.skuToMetaMap };
+                skuMetaMap = { ...data.skuToMetaMap };
               }
               cloudLiveSyncedCount = Object.keys(parsedMap).length;
               const ta = document.getElementById('rc-sync-textarea');
@@ -515,7 +507,7 @@
                 ta.value = JSON.stringify(parsedMap, null, 2);
               }
               if (cloudBadge) {
-                cloudBadge.textContent = `Live Cloud (${cloudLiveSyncedCount})`;
+                cloudBadge.textContent = `✅ Live Auto-Updated (${cloudLiveSyncedCount})`;
                 cloudBadge.style.background = '#065f46';
                 cloudBadge.style.color = '#6ee7b7';
               }
@@ -523,7 +515,7 @@
               if (manualTrigger) {
                 setStatusBanner(
                   'success',
-                  `☁️ Auto-updated ${cloudLiveSyncedCount} live barcodes from Resale Command!`
+                  `✅ Live Auto-Updated Script: Fetched ${cloudLiveSyncedCount} live barcodes from Resale Command!`
                 );
               }
               isFetchingCloudPayload = false;
@@ -540,30 +532,26 @@
     isFetchingCloudPayload = false;
     if (cloudBadge) {
       const fallbackCount = Object.keys(parsedMap).length;
-      cloudBadge.textContent = fallbackCount > 0 ? `Cached (${fallbackCount})` : 'Offline';
+      cloudBadge.textContent = fallbackCount > 0 ? `✅ Live Auto-Updated (${fallbackCount})` : '⚠️ Offline';
       cloudBadge.style.background = '#78350f';
       cloudBadge.style.color = '#fde68a';
     }
     return false;
   }
 
-  // Hydrate from window.__RC_PRELOADED_BARCODES__ when launched via Bookmarklet
+  // Launch panel and immediately fetch live payload from cloud (ignoring any legacy window.__RC_PRELOADED_BARCODES__)
   function hydratePreloadedBarcodes(forceOpen) {
-    const preloaded = window.__RC_PRELOADED_BARCODES__;
-    if (preloaded && typeof preloaded === 'object' && Object.keys(preloaded).length > 0) {
-      parsedMap = { ...sanitizeBarcodeMap(preloaded), ...sanitizeBarcodeMap(parsedMap) };
-      const ta = document.getElementById('rc-sync-textarea');
-      if (ta) {
-        ta.value = JSON.stringify(parsedMap, null, 2);
-      }
+    try {
+      delete window.__RC_PRELOADED_BARCODES__;
+    } catch (e) {
+      window.__RC_PRELOADED_BARCODES__ = undefined;
     }
     if (forceOpen && !isOpen) {
       togglePanel();
     } else {
       updateUI();
+      fetchLivePayloadFromCloud(false);
     }
-    // Always fetch latest live payload from Resale Command cloud
-    fetchLivePayloadFromCloud(false);
   }
 
   window.__RC_HYDRATE_PRELOADED__ = hydratePreloadedBarcodes;

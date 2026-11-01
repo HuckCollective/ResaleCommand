@@ -182,3 +182,11 @@ Every dollar added to a Booth Bin's (multi-qty SKU) cost basis MUST be backed by
   1. Automatically falls back from `/preview` to raw `/view` (`getAssetUrl(id, { preview: false })`).
   2. Falls back to the next valid photo ID in `galleryImageIds` (`ItemCard.vue`, `actualMainPhoto` in `PhotoGalleryManager.vue`).
   3. Surfaces a clear `"⚠️ Missing in Storage"` indicator tile in `PhotoGalleryManager.vue` only if `/view` also fails (404 in Appwrite Storage).
+
+## 12. UX & Information Architecture Empathy Guardrails
+1. **Never Ask User for Manual Browser Plumbing**:
+   * Always wire solutions into the native UI (such as the Drag-and-Drop Permanent Live-Loader bookmarklet `⚡ Memory Den Sync` in `LocationSyncView.vue`) rather than asking the user to manually edit bookmark URLs or install extra extensions.
+2. **No Stale Client Snapshots (Single Source of Truth)**:
+   * Bookmarklets and sync tools must be thin live-loaders (`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()`) that fetch fresh code and fresh `locationSku` (`0EJ...`) ➔ `HUCK-XXXX` mappings from the cloud (`/api/md-verify-report?mode=payload`) on open, showing `"✅ Live Auto-Updated Script"`. Never bake static JSON snapshots into bookmarklet `href`s.
+3. **Booth Operations & Bin SKU Awareness**:
+   * Always link Memory Den `0EJ...` SKUs in `locationSku` on the backend and respect physical booth workflows (distinguishing legitimate multi-qty Booth Bin SKUs from true duplicate barcode collision pairs).

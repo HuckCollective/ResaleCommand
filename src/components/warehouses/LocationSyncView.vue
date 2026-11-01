@@ -2154,11 +2154,13 @@ const ricochetSkuMetaMap = computed(() => {
 
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
-// Evergreen Bookmarklet (`⚡ Memory Den Sync`) — Install Once Forever, auto-fetches live barcodes from `/api/md-verify-report?mode=payload` on every open!
+// Permanent Live-Loader Bookmarklet (`⚡ Memory Den Sync`) — Zero baked-in snapshot, 100% live script + live cloud fetch on every open!
 const bookmarkletHref = computed(() => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.resalecmd.com';
-  const embeddedJson = JSON.stringify(ricochetBarcodePayloadMap.value);
-  return `javascript:(function(){window.__RC_PRELOADED_BARCODES__=${embeddedJson};if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}const s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
+      ? window.location.origin
+      : 'https://resalecmd.com';
+  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}var s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?v='+Date.now();document.body.appendChild(s);})();`;
 });
 
 // =========================================================================
