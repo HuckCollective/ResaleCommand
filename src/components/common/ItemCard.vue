@@ -259,7 +259,20 @@ const props = defineProps({
 const emit = defineEmits(['click-card', 'click', 'toggle-select', 'image-error']);
 
 const imageLoadError = ref(false);
+const useDirectViewFallback = ref(false);
+const fallbackGalleryIndex = ref(0);
+
 const onImgError = () => {
+    if (!useDirectViewFallback.value) {
+        useDirectViewFallback.value = true;
+        return;
+    }
+    const gallery = Array.isArray(props.item?.galleryImageIds) ? props.item.galleryImageIds.filter(Boolean) : [];
+    if (fallbackGalleryIndex.value + 1 < gallery.length) {
+        fallbackGalleryIndex.value += 1;
+        useDirectViewFallback.value = false;
+        return;
+    }
     imageLoadError.value = true;
     emit('image-error', props.item?.$id);
 };
@@ -505,8 +518,11 @@ const profitWidth = computed(() => {
 const imageUrl = computed(() => {
     const item = props.item;
     if (!item) return null;
-    let id = item.imageId;
-    if (!id && Array.isArray(item.galleryImageIds) && item.galleryImageIds.length > 0) id = item.galleryImageIds[0];
+    const gallery = Array.isArray(item.galleryImageIds) ? item.galleryImageIds.filter(Boolean) : [];
+    let id = fallbackGalleryIndex.value > 0 && gallery[fallbackGalleryIndex.value]
+        ? gallery[fallbackGalleryIndex.value]
+        : item.imageId;
+    if (!id && gallery.length > 0) id = gallery[0];
     
     if (!id && item.conditionNotes && typeof item.conditionNotes === 'string') {
          const match = item.conditionNotes.match(/\[MAIN IMAGE ID: ([^\]]+)\]/);
@@ -514,17 +530,24 @@ const imageUrl = computed(() => {
     }
     
     if (!id) return null;
+    const cleanId = String(id).trim().replace(/^["'\[\]]+|["'\[\]]+$/g, '');
+    if (!cleanId) return null;
     
     // If it's a full http URL, proxy it if needed, or just return it if it's already an appwrite standard url
-    if (id.startsWith('http')) {
-        if (id.includes('/api/proxy-image') || id.includes('/storage/buckets/')) return id;
-        return `/api/proxy-image?url=${encodeURIComponent(id)}`;
+    if (cleanId.startsWith('http')) {
+        if (cleanId.includes('/api/proxy-image') || cleanId.includes('/storage/buckets/')) return cleanId;
+        return `/api/proxy-image?url=${encodeURIComponent(cleanId)}`;
     }
     
-    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${id}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
+    if (useDirectViewFallback.value) {
+        return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${cleanId}/view?project=${PROJECT}`;
+    }
+    return `${ENDPOINT}/storage/buckets/${BUCKET}/files/${cleanId}/preview?project=${PROJECT}&width=350&height=350&quality=80&output=webp`;
 });
 
-watch(imageUrl, () => {
+watch(() => [props.item?.$id, props.item?.imageId], () => {
     imageLoadError.value = false;
+    useDirectViewFallback.value = false;
+    fallbackGalleryIndex.value = 0;
 });
 </script>

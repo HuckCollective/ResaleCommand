@@ -204,3 +204,13 @@ Ricochet exports three different files. Classify by headers, never by file name.
 
 ### Idempotent re-uploads
 Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`). Fingerprint = `canonicalTicket|titleOrSku|gross#occurrence`; two identical copies on one ticket are `#1`/`#2`. Already-recorded rows are skipped, so any file can be uploaded again with no duplicates.
+
+---
+
+## 14. Evergreen Live-Fetch Bookmarklet (`⚡ Memory Den Sync`) & 1-to-1 `0EJ...` ↔ `UPC` Bijection Law
+1. **Strict 1-to-1 `0EJ...` SKU ↔ `UPC` Uniqueness**:
+   - Every Ricochet SKU (`0EJ...` stored in `items.locationSku`) MUST map 1-to-1 to a unique barcode (`items.upc`: `HUCK-XXXX`, `PDXGL-XXXX`, or `BB-...`).
+   - Two `0EJ...` SKUs may NEVER share the same `upc` (Ricochet POS returns `HTTP 422 Unprocessable Entity` on duplicate `upc_code`).
+2. **Server & Userscript Collision Self-Healing**:
+   - `GET /api/md-verify-report?mode=payload` enforces `EXPLICIT_COLLISION_PAIRS` (`0EJ0MQ` ➔ `HUCK-0334` / `0EJ09A` ➔ `HUCK-9716`, `0EJ0HE` ➔ `HUCK-1379` / `0EJ0MW` ➔ `HUCK-9724`, `0EJ0JJ` ➔ `HUCK-1461` / `0EJ0MY` ➔ `HUCK-9732`, `0EJ05G` ➔ `HUCK-9543` / `0EJ02D` ➔ `HUCK-9740`) and a global `usedUpcs` Set, auto-allocating and persisting a unique `HUCK-XXXX` in Appwrite if any collision is detected.
+   - `public/ricochet-upc-sync.user.js` applies `CANONICAL_COLLISION_OVERRIDES` in `sanitizeBarcodeMap()` and clears `runtime422Conflicts` whenever `fetchLivePayloadFromCloud()` succeeds.

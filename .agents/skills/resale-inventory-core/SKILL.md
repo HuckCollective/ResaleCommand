@@ -169,3 +169,16 @@ Every dollar added to a Booth Bin's (multi-qty SKU) cost basis MUST be backed by
 ## 9. Multi-Qty Cost Parity (`resolveMultiQtyCost`)
 * `item.cost` on multi-qty items may be saved as a per-unit or a total value. `resolveMultiQtyCost(rawCost, qty, unitResale)` (`src/composables/useItemDrawerForm.ts`) uses the same ROI heuristic as `ItemCard.vue` (`isDetectedUnitCost`) and returns `{ totalCost, unitCost }`.
 * Every surface (`ItemCard`, drawer Acquisition card, Est. Margin badge, Restock preview, Playbook `ItemLotTab`) MUST use it so one item shows the same `$X/ea` (`$Y total`) everywhere. Never divide `item.cost / quantity` directly.
+
+## 10. 1-to-1 `locationSku` (`0EJ...`) ↔ `HUCK-XXXX` Barcode Bijection & Collision Self-Healing
+* **Strict 1-to-1 Bijection Law**: Every Memory Den Ricochet SKU (`0EJ...` stored in `items.locationSku`) MUST map 1-to-1 to a unique `HUCK-XXXX`, `PDXGL-XXXX`, or `BB-...` barcode (`items.upc`). Two distinct `0EJ...` SKUs may NEVER share the same `upc` (Ricochet POS rejects duplicate `upc_code` values with HTTP `422 Unprocessable Entity`).
+* **Collision Self-Healing (`src/pages/api/md-verify-report.ts` & `public/ricochet-upc-sync.user.js`)**:
+  - `GET /api/md-verify-report?mode=payload` enforces `EXPLICIT_COLLISION_PAIRS` (`0EJ0MQ` ➔ `HUCK-0334` / `0EJ09A` ➔ `HUCK-9716`, `0EJ0HE` ➔ `HUCK-1379` / `0EJ0MW` ➔ `HUCK-9724`, `0EJ0JJ` ➔ `HUCK-1461` / `0EJ0MY` ➔ `HUCK-9732`, `0EJ05G` ➔ `HUCK-9543` / `0EJ02D` ➔ `HUCK-9740`) and a global `usedUpcs` Set. If any secondary `0EJ...` SKU in `resale_db.items` collides on an already-claimed `upc`, the endpoint auto-allocates the next available `HUCK-XXXX`, persists it to Appwrite (`databases.updateDocument`), and returns a 100% conflict-free map.
+  - In `public/ricochet-upc-sync.user.js`, `sanitizeBarcodeMap()` applies `CANONICAL_COLLISION_OVERRIDES` and `usedUpcs` deduplication, and `fetchLivePayloadFromCloud()` resets `runtime422Conflicts = {}` and prevents stale preloaded keys from re-introducing duplicate UPCs.
+
+## 11. Appwrite Image `/preview` ➔ `/view` Fallback Invariant (`PhotoGalleryManager.vue` & `ItemCard.vue`)
+* Appwrite Storage `/preview?...&output=webp` transformations can fail on certain source image formats or transformation limits even when the underlying file exists in `item_images`.
+* Every `<img>` rendering an existing Appwrite Storage file ID (`PhotoGalleryManager.vue` cover & supporting thumbnails, `ItemCard.vue` card thumbnail) MUST attach an `@error` handler that:
+  1. Automatically falls back from `/preview` to raw `/view` (`getAssetUrl(id, { preview: false })`).
+  2. Falls back to the next valid photo ID in `galleryImageIds` (`ItemCard.vue`, `actualMainPhoto` in `PhotoGalleryManager.vue`).
+  3. Surfaces a clear `"⚠️ Missing in Storage"` indicator tile in `PhotoGalleryManager.vue` only if `/view` also fails (404 in Appwrite Storage).

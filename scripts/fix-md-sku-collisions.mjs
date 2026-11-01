@@ -2,12 +2,13 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, Storage, ID, Query } from 'node-appwrite';
 
 const ENDPOINT = process.env.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1';
 const PROJECT_ID = process.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
 const API_KEY = process.env.APPWRITE_API_KEY;
 const DB_ID = process.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+const BUCKET_ID = process.env.PUBLIC_APPWRITE_BUCKET_ID || 'item_images';
 
 const MD_WAREHOUSE_ID = '6a7e70050009db0e1857';
 const MD_CODE = 'MD';
@@ -24,6 +25,7 @@ const client = new Client()
     .setKey(API_KEY);
 
 const db = new Databases(client);
+const storage = new Storage(client);
 
 // ============================================================================
 // 1. RFC-4180 MULTILINE-AWARE CSV PARSER & FILE DISCOVERY
@@ -322,6 +324,29 @@ async function main() {
 
     let dbItems = await fetchAllItems();
     console.log(`🗄️  Loaded resale_db.items: ${dbItems.length}\n`);
+
+    // ============================================================================
+    // STEP 0: PRE-FIX DIAGNOSTIC PRINTOUT OF THE 3 CONFLICT PAIRS
+    // ============================================================================
+    const targetConflictUpcs = new Set(['HUCK-0334', 'HUCK-1379', 'HUCK-1461', 'HUCK-9543', 'HUCK-9716', 'HUCK-9724', 'HUCK-9732']);
+    const targetConflictSkus = new Set(['0EJ0MQ', '0EJ09A', '0EJ0HE', '0EJ0MW', '0EJ0JJ', '0EJ0MY', '0EJ05G', '0EJ02D']);
+    const preFixHits = dbItems.filter(i => {
+        const u = normalizeUpc(i.upc);
+        const s = normalizeSku(i.locationSku || i.sku);
+        const notes = String(i.conditionNotes || '');
+        if (targetConflictUpcs.has(u) || targetConflictSkus.has(s)) return true;
+        for (const tSku of targetConflictSkus) {
+            if (notes.toUpperCase().includes(tSku)) return true;
+        }
+        return false;
+    });
+    console.log('🔎 STEP 0: Pre-Fix Documents Found for Conflict UPCs (HUCK-0334, HUCK-1379, HUCK-1461) & SKUs (0EJ0MQ/0EJ09A, 0EJ0HE/0EJ0MW, 0EJ0JJ/0EJ0MY):');
+    for (const d of preFixHits) {
+        console.log(
+            `   • $id=${d.$id} | upc=${d.upc || '-'} | locationSku=${d.locationSku || '-'} | status=${d.status} | qty=${d.quantity ?? 1} | price=$${d.resalePrice ?? 0} | title="${d.title}"`
+        );
+    }
+    console.log('');
 
     // Track all existing numeric HUCK- barcodes so we can allocate clean sequential UPCs
     const allUsedUpcs = new Set();
@@ -908,6 +933,115 @@ async function main() {
             `    - ${pair.primarySku}: UPC=${pDoc?.upc || 'MISSING'} ($id=${pDoc?.$id || '-'}, "${(pDoc?.title || '').slice(0, 38)}")\n` +
             `      ${pair.secondarySku}: UPC=${sDoc?.upc || 'MISSING'} ($id=${sDoc?.$id || '-'}, "${(sDoc?.title || '').slice(0, 38)}")`
         );
+    }
+    console.log('================================================================================\n');
+
+    // ============================================================================
+    // STEP 6: INSPECT & REPAIR HUCK-1183 (69e91594...) BROKEN IMAGES
+    // ============================================================================
+    console.log('================================================================================');
+    console.log('🖼️  PART 2: INSPECTING HUCK-1183 (69e91594...) PHOTO & STORAGE REFERENCES');
+    console.log('================================================================================');
+    const huck1183 = dbItems.find(
+        i => normalizeUpc(i.upc) === 'HUCK-1183' || String(i.$id || '').startsWith('69e91594')
+    );
+
+    if (!huck1183) {
+        console.log('⚠️  Could not find item HUCK-1183 (69e91594...) in resale_db.items.');
+    } else {
+        console.log(`  • Document $id     : ${huck1183.$id}`);
+        console.log(`  • UPC              : ${huck1183.upc}`);
+        console.log(`  • Title            : ${huck1183.title}`);
+        console.log(`  • Status / Loc     : ${huck1183.status} / ${huck1183.storageLocation || '-'} (SKU: ${huck1183.locationSku || '-'})`);
+        console.log(`  • Parent Lot ID    : ${huck1183.parentLotId || '-'}`);
+        console.log(`  • Sourcing Loc     : ${huck1183.sourcingLocation || '-'}`);
+        console.log(`  • imageId          : ${JSON.stringify(huck1183.imageId)}`);
+        console.log(`  • galleryImageIds  : ${JSON.stringify(huck1183.galleryImageIds)}`);
+        console.log(`  • conditionNotes   : ${String(huck1183.conditionNotes || '').slice(0, 220)}`);
+
+        const rawIds = [];
+        if (huck1183.imageId) rawIds.push(String(huck1183.imageId).trim());
+        if (Array.isArray(huck1183.galleryImageIds)) {
+            for (const g of huck1183.galleryImageIds) {
+                if (g && !rawIds.includes(String(g).trim())) rawIds.push(String(g).trim());
+            }
+        }
+
+        const validStorageIds = [];
+        const brokenStorageIds = [];
+        for (const fid of rawIds) {
+            const cleanId = fid.replace(/^["'\[\]]+|["'\[\]]+$/g, '').trim();
+            if (!cleanId) continue;
+            if (cleanId.startsWith('http://') || cleanId.startsWith('https://')) {
+                console.log(`  🔎 Photo ref "${cleanId}" is an external URL.`);
+                try {
+                    const r = await fetch(cleanId, { method: 'HEAD' });
+                    console.log(`     -> HTTP status: ${r.status}`);
+                    if (r.ok) validStorageIds.push(cleanId);
+                    else brokenStorageIds.push({ id: cleanId, reason: `HTTP ${r.status}` });
+                } catch (err) {
+                    brokenStorageIds.push({ id: cleanId, reason: err.message });
+                }
+                continue;
+            }
+
+            try {
+                const fileMeta = await storage.getFile(BUCKET_ID, cleanId);
+                console.log(
+                    `  ✅ Storage File [${cleanId}] EXISTS in "${BUCKET_ID}": name="${fileMeta.name}", size=${fileMeta.sizeOriginal} bytes, mime="${fileMeta.mimeType}"`
+                );
+                if (Number(fileMeta.sizeOriginal || 0) > 0) {
+                    validStorageIds.push(cleanId);
+                } else {
+                    brokenStorageIds.push({ id: cleanId, reason: '0-byte empty file in Appwrite Storage' });
+                }
+            } catch (err) {
+                console.log(
+                    `  ❌ Storage File [${cleanId}] MISSING/BROKEN in "${BUCKET_ID}": ${err?.message || err} (code=${err?.code || '?'})`
+                );
+                brokenStorageIds.push({ id: cleanId, reason: `${err?.message || 'Not found'} (code=${err?.code || 404})` });
+            }
+        }
+
+        // Check if parentLotId or conditionNotes has valid fallback images if all 3 are broken
+        if (brokenStorageIds.length > 0) {
+            console.log(`\n  🩺 Diagnosis for HUCK-1183: ${brokenStorageIds.length} of ${rawIds.length} photo ID(s) failed in bucket "${BUCKET_ID}".`);
+            let recoveredIds = [...validStorageIds];
+
+            if (recoveredIds.length === 0 && huck1183.parentLotId) {
+                const parentDoc = dbItems.find(p => p.$id === huck1183.parentLotId);
+                if (parentDoc) {
+                    console.log(`  🔗 Checking parentLotId=${parentDoc.$id} ("${parentDoc.title}") for valid images...`);
+                    const parentCandidates = [
+                        parentDoc.imageId,
+                        ...(Array.isArray(parentDoc.galleryImageIds) ? parentDoc.galleryImageIds : []),
+                    ].filter(Boolean);
+                    for (const pid of parentCandidates) {
+                        try {
+                            const f = await storage.getFile(BUCKET_ID, pid);
+                            if (Number(f.sizeOriginal || 0) > 0 && !recoveredIds.includes(pid)) {
+                                recoveredIds.push(pid);
+                                console.log(`     -> Recovered valid parent photo [${pid}] (${f.sizeOriginal} bytes)`);
+                            }
+                        } catch {}
+                    }
+                }
+            }
+
+            if (recoveredIds.length !== rawIds.length) {
+                const nextImageId = recoveredIds[0] || '';
+                const nextGalleryIds = recoveredIds;
+                console.log(`  🔧 Updating HUCK-1183 ($id=${huck1183.$id}): imageId="${nextImageId}", galleryImageIds=${JSON.stringify(nextGalleryIds)}`);
+                if (!DRY_RUN) {
+                    await db.updateDocument(DB_ID, 'items', huck1183.$id, {
+                        imageId: nextImageId,
+                        galleryImageIds: nextGalleryIds,
+                    });
+                }
+            }
+        } else {
+            console.log(`  ✅ All ${validStorageIds.length} storage file(s) on HUCK-1183 exist in Appwrite Storage (UI now auto-falls back from /preview to /view if preview transform fails).`);
+        }
     }
     console.log('================================================================================');
 }

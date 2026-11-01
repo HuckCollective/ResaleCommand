@@ -58,12 +58,18 @@
       <!-- A. Hero Main Cover Photo Card -->
       <div class="relative w-full rounded-2xl overflow-hidden border-2 border-primary/40 bg-base-300/40 shadow-sm group aspect-4/3 sm:aspect-16/9 max-h-64 flex items-center justify-center">
         <img 
-          v-if="actualMainPhoto.url"
+          v-if="actualMainPhoto.url && (!actualMainPhoto.id || !brokenExistingIds[actualMainPhoto.id])"
           :src="actualMainPhoto.url" 
           referrerpolicy="no-referrer"
           class="w-full h-full object-contain bg-black/10" 
           alt="Main Cover Photo"
+          @error="onMainPhotoError($event)"
         />
+        <div v-else-if="actualMainPhoto.id && brokenExistingIds[actualMainPhoto.id]" class="flex flex-col items-center justify-center text-warning gap-1.5 px-4 text-center">
+          <Icon icon="solar:danger-triangle-bold-duotone" class="w-9 h-9" />
+          <span class="font-bold text-xs">Photo file missing in cloud storage ({{ actualMainPhoto.id.slice(0, 8) }}…)</span>
+          <span class="text-[11px] opacity-75">Tap trash icon (top-right) to remove broken reference or upload a replacement photo.</span>
+        </div>
         <div v-else class="flex flex-col items-center justify-center opacity-40 text-xs">
           <Icon icon="solar:gallery-linear" class="w-8 h-8" />
           <span>No image selected</span>
@@ -124,7 +130,18 @@
             :class="actualMainPhoto?.id === id ? 'border-primary ring-2 ring-primary/40' : 'border-base-300 hover:border-primary/50'"
             @click="setMainPhoto('existing', id)"
           >
-            <img :src="getAssetUrl(id, { preview: true, width: 220, height: 220, quality: 80 })" referrerpolicy="no-referrer" class="w-full h-full object-cover" loading="lazy" />
+            <img
+              v-if="!brokenExistingIds[id]"
+              :src="getExistingThumbUrl(id)"
+              referrerpolicy="no-referrer"
+              class="w-full h-full object-cover"
+              loading="lazy"
+              @error="onExistingThumbError($event, id)"
+            />
+            <div v-else class="w-full h-full flex flex-col items-center justify-center bg-warning/10 text-warning p-1 text-center">
+              <Icon icon="solar:danger-triangle-bold" class="w-5 h-5" />
+              <span class="text-[9px] font-bold leading-tight mt-0.5">Missing</span>
+            </div>
             
             <!-- Index Pill -->
             <span class="badge badge-neutral badge-xs absolute bottom-1 left-1 font-mono font-bold text-[9px] opacity-80">
@@ -290,10 +307,26 @@ const emit = defineEmits<{
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const isDragging = ref(false);
 const previewZoomUrl = ref<string | null>(null);
+const directViewFallbackIds = ref<Record<string, boolean>>({});
+const brokenExistingIds = ref<Record<string, boolean>>({});
 
 const internalSelection = ref<MainSelection>({ ...props.mainSelection });
 
 const objectUrlMap = new WeakMap<File, string>();
+
+const getExistingThumbUrl = (id: string): string => {
+  if (directViewFallbackIds.value[id]) {
+    return getAssetUrl(id, { preview: false });
+  }
+  return getAssetUrl(id, { preview: true, width: 220, height: 220, quality: 80 });
+};
+
+const getExistingCoverUrl = (id: string): string => {
+  if (directViewFallbackIds.value[id]) {
+    return getAssetUrl(id, { preview: false });
+  }
+  return getAssetUrl(id, { preview: true, width: 900, height: 675, quality: 85 });
+};
 
 const getPhotoUrl = (item: any): string => {
   if (!item) return '';
@@ -327,7 +360,7 @@ const actualMainPhoto = computed(() => {
   } else if (sel.type === 'existing' && props.existingImages && props.existingImages.includes(sel.val)) {
     return {
       file: null,
-      url: getAssetUrl(sel.val, { preview: true, width: 900, height: 675, quality: 85 }),
+      url: getExistingCoverUrl(sel.val),
       type: 'existing' as const,
       id: sel.val,
       idx: null
@@ -345,18 +378,37 @@ const actualMainPhoto = computed(() => {
       };
     }
     if (props.existingImages && props.existingImages.length > 0) {
-      const firstId = props.existingImages[0];
+      const firstValidId = props.existingImages.find((id) => !brokenExistingIds.value[id]) || props.existingImages[0];
       return {
         file: null,
-        url: getAssetUrl(firstId, { preview: true, width: 900, height: 675, quality: 85 }),
+        url: getExistingCoverUrl(firstValidId),
         type: 'existing' as const,
-        id: firstId,
+        id: firstValidId,
         idx: null
       };
     }
     return { file: null, url: '', type: 'none' as const, id: null, idx: null };
   }
 });
+
+const onExistingThumbError = (_e: Event, id: string) => {
+  if (!id) return;
+  if (!directViewFallbackIds.value[id]) {
+    directViewFallbackIds.value = { ...directViewFallbackIds.value, [id]: true };
+    return;
+  }
+  brokenExistingIds.value = { ...brokenExistingIds.value, [id]: true };
+};
+
+const onMainPhotoError = (_e: Event) => {
+  const id = actualMainPhoto.value?.id;
+  if (!id) return;
+  if (!directViewFallbackIds.value[id]) {
+    directViewFallbackIds.value = { ...directViewFallbackIds.value, [id]: true };
+    return;
+  }
+  brokenExistingIds.value = { ...brokenExistingIds.value, [id]: true };
+};
 
 const isNewSelected = (item: any, idx: number): boolean => {
   const sel = props.mainSelection?.type ? props.mainSelection : internalSelection.value;

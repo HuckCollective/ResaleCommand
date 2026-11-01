@@ -435,14 +435,40 @@
     hydratePreloadedBarcodes(false);
   }
 
-  // Sanitize a barcode map to strip any test/demo UPCs
+  // Canonical 1-to-1 secondary overrides so stale preloaded bookmarklet maps never collide
+  const CANONICAL_COLLISION_OVERRIDES = {
+    '0EJ0MQ': 'HUCK-0334',
+    '0EJ09A': 'HUCK-9716',
+    '0EJ0HE': 'HUCK-1379',
+    '0EJ0MW': 'HUCK-9724',
+    '0EJ0JJ': 'HUCK-1461',
+    '0EJ0MY': 'HUCK-9732',
+    '0EJ05G': 'HUCK-9543',
+    '0EJ02D': 'HUCK-9740',
+  };
+
+  // Sanitize a barcode map to strip any test/demo UPCs and enforce strict 1-to-1 SKU <-> UPC uniqueness
   function sanitizeBarcodeMap(rawMap) {
     const clean = {};
     if (!rawMap || typeof rawMap !== 'object') return clean;
+    const usedUpcs = new Set();
+
+    // Pass 1: Apply canonical collision overrides if those SKUs exist in rawMap
+    for (const [overrideSku, overrideUpc] of Object.entries(CANONICAL_COLLISION_OVERRIDES)) {
+      if (rawMap[overrideSku] !== undefined) {
+        clean[overrideSku] = overrideUpc;
+        usedUpcs.add(overrideUpc);
+      }
+    }
+
+    // Pass 2: Copy all remaining valid 1-to-1 mappings
     for (const [k, v] of Object.entries(rawMap)) {
       const sku = cleanStr(k).toUpperCase();
+      if (!sku || clean[sku]) continue;
       const upc = cleanStr(v).toUpperCase();
-      if (!sku || !upc || !isRealUpc(upc)) continue;
+      if (!upc || !isRealUpc(upc)) continue;
+      if (usedUpcs.has(upc)) continue;
+      usedUpcs.add(upc);
       clean[sku] = upc;
     }
     return clean;
@@ -469,8 +495,17 @@
             const liveMap = sanitizeBarcodeMap(data.skuToUpcMap);
             const liveCount = Object.keys(liveMap).length;
             if (liveCount > 0) {
-              // Merge with any preloaded map, giving priority to live cloud data
-              parsedMap = { ...sanitizeBarcodeMap(parsedMap), ...liveMap };
+              // Clear any stale runtime conflicts and use live cloud map as authoritative 1-to-1 source
+              runtime422Conflicts = {};
+              const liveUsedUpcs = new Set(Object.values(liveMap));
+              const merged = { ...liveMap };
+              for (const [oldSku, oldUpc] of Object.entries(sanitizeBarcodeMap(parsedMap))) {
+                if (!merged[oldSku] && !liveUsedUpcs.has(oldUpc)) {
+                  merged[oldSku] = oldUpc;
+                  liveUsedUpcs.add(oldUpc);
+                }
+              }
+              parsedMap = sanitizeBarcodeMap(merged);
               if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
                 skuMetaMap = { ...skuMetaMap, ...data.skuToMetaMap };
               }

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { Client as NodeClient, Databases as NodeDatabases, Query as NodeQuery } from 'node-appwrite';
+import { Client as NodeClient, Databases as NodeDatabases, ID as NodeID, Query as NodeQuery } from 'node-appwrite';
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
@@ -88,15 +88,54 @@ function isValidProductionUpc(upc: string): boolean {
   return true;
 }
 
+// Explicit 1-to-1 collision resolution rules:
+// Primary SKU keeps the original HUCK barcode; secondary SKU gets its own dedicated unique HUCK barcode.
+const EXPLICIT_COLLISION_PAIRS: Array<{
+  primarySku: string;
+  primaryUpc: string;
+  secondarySku: string;
+  secondaryUpc: string;
+  defaultTitle: string;
+}> = [
+  {
+    primarySku: '0EJ0MQ',
+    primaryUpc: 'HUCK-0334',
+    secondarySku: '0EJ09A',
+    secondaryUpc: 'HUCK-9716',
+    defaultTitle: 'Heavy Metal Magazine',
+  },
+  {
+    primarySku: '0EJ0HE',
+    primaryUpc: 'HUCK-1379',
+    secondarySku: '0EJ0MW',
+    secondaryUpc: 'HUCK-9724',
+    defaultTitle: 'Memory Den Booth Item 0EJ0MW',
+  },
+  {
+    primarySku: '0EJ0JJ',
+    primaryUpc: 'HUCK-1461',
+    secondarySku: '0EJ0MY',
+    secondaryUpc: 'HUCK-9732',
+    defaultTitle: 'Memory Den Booth Item 0EJ0MY',
+  },
+  {
+    primarySku: '0EJ05G',
+    primaryUpc: 'HUCK-9543',
+    secondarySku: '0EJ02D',
+    secondaryUpc: 'HUCK-9740',
+    defaultTitle: 'Memory Den Booth Item 0EJ02D',
+  },
+];
+
 async function buildLiveMdPayloadFromAppwrite(): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
   duplicateUpcWarnings: Array<{ upc: string; skus: string[] }>;
 }> {
-  const skuToUpcMap: Record<string, string> = {};
   const skuToMetaMap: Record<string, MdSkuMeta> = {};
   const usedUpcs = new Set<string>();
   const rawUpcToSkus = new Map<string, Set<string>>();
+  const finalSkuToUpcMap: Record<string, string> = {};
 
   const recordRawMapping = (sku: string, upc: string) => {
     if (!rawUpcToSkus.has(upc)) rawUpcToSkus.set(upc, new Set());
@@ -128,6 +167,9 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
   const byId = new Map<string, any>();
   const allDocs: any[] = [];
   const candidatesBySku = new Map<string, any[]>();
+  const allExistingUpcs = new Set<string>();
+  let maxHuckNum = 9740;
+  let databasesClient: NodeDatabases | null = null;
 
   if (endpoint && project) {
     try {
@@ -136,6 +178,7 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
         client.setKey(apiKey);
       }
       const databases = new NodeDatabases(client);
+      if (apiKey) databasesClient = databases;
       let cursor: string | null = null;
 
       for (let page = 0; page < 25; page++) {
@@ -149,12 +192,19 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
           const sku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
           const upc = cleanCatalogSku(doc?.upc).toUpperCase();
           const title = String(doc?.title || doc?.identity || '');
+          if (upc) {
+            allExistingUpcs.add(upc);
+            const m = upc.match(/^HUCK-(\d{4})$/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > maxHuckNum && n < 9900) maxHuckNum = n;
+            }
+          }
           if (!sku || !/^0EJ/i.test(sku) || !isValidProductionUpc(upc)) continue;
           if (/test|demo/i.test(title) && /test|demo/i.test(upc)) continue;
 
           if (!candidatesBySku.has(sku)) candidatesBySku.set(sku, []);
           candidatesBySku.get(sku)!.push(doc);
-          recordRawMapping(sku, upc);
         }
         if (docs.length < 100) break;
         cursor = docs[docs.length - 1].$id;
@@ -162,6 +212,121 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     } catch (err) {
       console.warn('[/api/md-verify-report] Live Appwrite query warning:', (err as any)?.message);
     }
+  }
+
+  const allocateUniqueHuckUpc = (preferred?: string): string => {
+    if (preferred && !usedUpcs.has(preferred) && !allExistingUpcs.has(preferred)) {
+      usedUpcs.add(preferred);
+      allExistingUpcs.add(preferred);
+      return preferred;
+    }
+    while (true) {
+      maxHuckNum++;
+      const cand = `HUCK-${String(maxHuckNum).padStart(4, '0')}`;
+      if (!usedUpcs.has(cand) && !allExistingUpcs.has(cand)) {
+        usedUpcs.add(cand);
+        allExistingUpcs.add(cand);
+        return cand;
+      }
+    }
+  };
+
+  // 1a. Explicitly lock the 4 known collision pairs so Primary & Secondary SKUs NEVER share a barcode
+  for (const pair of EXPLICIT_COLLISION_PAIRS) {
+    const { primarySku, primaryUpc, secondarySku, secondaryUpc, defaultTitle } = pair;
+    const primaryDocs = candidatesBySku.get(primarySku) || [];
+    const primaryDoc =
+      allDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() === primaryUpc) ||
+      primaryDocs[0] ||
+      null;
+
+    if (!usedUpcs.has(primaryUpc)) {
+      usedUpcs.add(primaryUpc);
+      finalSkuToUpcMap[primarySku] = primaryUpc;
+      if (primaryDoc && databasesClient && cleanCatalogSku(primaryDoc.locationSku).toUpperCase() !== primarySku) {
+        try {
+          await databasesClient.updateDocument(dbId, itemsCol, primaryDoc.$id, {
+            locationSku: primarySku,
+            upc: primaryUpc,
+            storageLocation: 'MD',
+            warehouseId: '6a7e70050009db0e1857',
+          });
+          primaryDoc.locationSku = primarySku;
+        } catch {}
+      }
+      const pTitle = String(primaryDoc?.title || primaryDoc?.identity || defaultTitle);
+      skuToMetaMap[primarySku] = {
+        upc: primaryUpc,
+        partner: detectPartnerFromUpcOrTitle(primaryUpc, pTitle),
+        title: pTitle,
+        price: Number(primaryDoc?.resalePrice || primaryDoc?.listPrice || primaryDoc?.price || 0),
+        status: String(primaryDoc?.status || 'placed'),
+      };
+      recordRawMapping(primarySku, primaryUpc);
+    }
+
+    // Secondary SKU: find a dedicated doc that is NOT primaryDoc and does NOT use primaryUpc
+    const secondaryDocs = (candidatesBySku.get(secondarySku) || []).filter(
+      (d) => (!primaryDoc || d.$id !== primaryDoc.$id)
+    );
+    let preferredDoc =
+      allDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() === secondaryUpc) ||
+      secondaryDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() !== primaryUpc) ||
+      secondaryDocs[0] ||
+      null;
+
+    let resolvedSecUpc = preferredDoc ? cleanCatalogSku(preferredDoc.upc).toUpperCase() : '';
+    if (!isValidProductionUpc(resolvedSecUpc) || resolvedSecUpc === primaryUpc || usedUpcs.has(resolvedSecUpc)) {
+      resolvedSecUpc = !usedUpcs.has(secondaryUpc) ? secondaryUpc : allocateUniqueHuckUpc();
+    }
+
+    if (preferredDoc && databasesClient && (!primaryDoc || preferredDoc.$id !== primaryDoc.$id)) {
+      if (
+        cleanCatalogSku(preferredDoc.upc).toUpperCase() !== resolvedSecUpc ||
+        cleanCatalogSku(preferredDoc.locationSku).toUpperCase() !== secondarySku
+      ) {
+        try {
+          await databasesClient.updateDocument(dbId, itemsCol, preferredDoc.$id, {
+            upc: resolvedSecUpc,
+            locationSku: secondarySku,
+            storageLocation: 'MD',
+            warehouseId: '6a7e70050009db0e1857',
+          });
+          preferredDoc.upc = resolvedSecUpc;
+          preferredDoc.locationSku = secondarySku;
+        } catch {}
+      }
+    } else if (!preferredDoc && databasesClient) {
+      const sTitleToCreate = String(primaryDoc?.title || primaryDoc?.identity || defaultTitle);
+      const sPriceToCreate = Number(primaryDoc?.resalePrice || primaryDoc?.listPrice || 0);
+      try {
+        preferredDoc = await databasesClient.createDocument(dbId, itemsCol, NodeID.unique(), {
+          title: sTitleToCreate,
+          identity: sTitleToCreate,
+          upc: resolvedSecUpc,
+          locationSku: secondarySku,
+          storageLocation: 'MD',
+          warehouseId: '6a7e70050009db0e1857',
+          status: 'placed',
+          quantity: 1,
+          cost: Number(primaryDoc?.cost || 0),
+          resalePrice: sPriceToCreate,
+          tenantId: primaryDoc?.tenantId || 'huck',
+        });
+      } catch {}
+    }
+
+    usedUpcs.add(resolvedSecUpc);
+    finalSkuToUpcMap[secondarySku] = resolvedSecUpc;
+    const sTitle = String(preferredDoc?.title || preferredDoc?.identity || primaryDoc?.title || defaultTitle);
+    skuToMetaMap[secondarySku] = {
+      upc: resolvedSecUpc,
+      partner: detectPartnerFromUpcOrTitle(resolvedSecUpc, sTitle),
+      title: sTitle,
+      price: Number(preferredDoc?.resalePrice || primaryDoc?.resalePrice || 0),
+      status: String(preferredDoc?.status || 'placed'),
+    };
+    recordRawMapping(secondarySku, resolvedSecUpc);
   }
 
   // Sort SKUs so SKUs with exactly 1 DB candidate claim their UPC first, then multi-candidate SKUs pick the newest unclaimed UPC
@@ -173,18 +338,37 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
   });
 
   for (const sku of sortedSkus) {
+    if (finalSkuToUpcMap[sku]) continue;
     const docsForSku = candidatesBySku.get(sku) || [];
     // docsForSku is already in orderDesc('$id') (newest first). Prefer newest candidate whose UPC is not yet in usedUpcs!
-    const chosen = docsForSku.find((d) => {
+    let chosen = docsForSku.find((d) => {
       const u = cleanCatalogSku(d?.upc).toUpperCase();
       return isValidProductionUpc(u) && !usedUpcs.has(u);
     });
+
+    // If all candidates for this SKU had a UPC already claimed by another SKU, auto-allocate a unique UPC so no SKU is dropped or duplicated!
+    if (!chosen && docsForSku.length > 0) {
+      const fallbackDoc = docsForSku[0];
+      const newUniqueUpc = allocateUniqueHuckUpc();
+      if (databasesClient && fallbackDoc?.$id) {
+        try {
+          await databasesClient.updateDocument(dbId, itemsCol, fallbackDoc.$id, {
+            upc: newUniqueUpc,
+            locationSku: sku,
+          });
+        } catch {}
+      }
+      fallbackDoc.upc = newUniqueUpc;
+      chosen = fallbackDoc;
+    }
+
     if (!chosen) continue;
 
     const upc = cleanCatalogSku(chosen.upc).toUpperCase();
     const title = String(chosen.title || chosen.identity || '');
     usedUpcs.add(upc);
-    skuToUpcMap[sku] = upc;
+    finalSkuToUpcMap[sku] = upc;
+    recordRawMapping(sku, upc);
     skuToMetaMap[sku] = {
       upc,
       partner: detectPartnerFromUpcOrTitle(upc, title),
@@ -194,10 +378,10 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     };
   }
 
-  // 2. Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID for any SKU not yet in skuToUpcMap (enforcing usedUpcs)
+  // 2. Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID for any SKU not yet in finalSkuToUpcMap (enforcing usedUpcs)
   for (const [rawSku, rawUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
     const sku = cleanCatalogSku(rawSku).toUpperCase();
-    if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku]) continue;
+    if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
     let resolvedUpc = cleanCatalogSku(rawUpcOrId).toUpperCase();
     let resolvedTitle = '';
     let resolvedPrice = 0;
@@ -216,11 +400,11 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
 
     if (!isValidProductionUpc(resolvedUpc)) continue;
-    recordRawMapping(sku, resolvedUpc);
     if (usedUpcs.has(resolvedUpc)) continue;
 
     usedUpcs.add(resolvedUpc);
-    skuToUpcMap[sku] = resolvedUpc;
+    finalSkuToUpcMap[sku] = resolvedUpc;
+    recordRawMapping(sku, resolvedUpc);
     skuToMetaMap[sku] = {
       upc: resolvedUpc,
       partner: detectPartnerFromUpcOrTitle(resolvedUpc, resolvedTitle),
@@ -236,12 +420,12 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
       const sku = cleanCatalogSku(rawSku).toUpperCase();
       const upc = cleanCatalogSku(rawUpc).toUpperCase();
-      if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku] || !isValidProductionUpc(upc)) continue;
-      recordRawMapping(sku, upc);
+      if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku] || !isValidProductionUpc(upc)) continue;
       if (usedUpcs.has(upc)) continue;
 
       usedUpcs.add(upc);
-      skuToUpcMap[sku] = upc;
+      finalSkuToUpcMap[sku] = upc;
+      recordRawMapping(sku, upc);
       const meta = cachedLive.skuToMetaMap?.[sku];
       skuToMetaMap[sku] = {
         upc,
@@ -259,14 +443,14 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     const claimedItemIdToSku = new Map<string, string>();
     for (const doc of allDocs) {
       const dSku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
-      if (dSku && skuToUpcMap[dSku] && cleanCatalogSku(doc?.upc).toUpperCase() === skuToUpcMap[dSku]) {
+      if (dSku && finalSkuToUpcMap[dSku] && cleanCatalogSku(doc?.upc).toUpperCase() === finalSkuToUpcMap[dSku]) {
         claimedItemIdToSku.set(doc.$id, dSku);
       }
     }
     const multiBinResolvedBySku = buildLockedMultiBinMap(allDocs, claimedItemIdToSku);
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();
-      if (!sku || !/^0EJ/i.test(sku) || skuToUpcMap[sku]) continue;
+      if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
       const matched = matchMemoryDenInventoryItem({
         sku,
         upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
@@ -283,7 +467,8 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
         usedUpcs.add(matchedUpc);
         claimedItemIdToSku.set(matched.$id, sku);
         const title = String(matched.title || r.name || '');
-        skuToUpcMap[sku] = matchedUpc;
+        finalSkuToUpcMap[sku] = matchedUpc;
+        recordRawMapping(sku, matchedUpc);
         skuToMetaMap[sku] = {
           upc: matchedUpc,
           partner: detectPartnerFromUpcOrTitle(matchedUpc, title),
@@ -295,7 +480,7 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  // 5. Compute any historical duplicate UPC warnings (though skuToUpcMap is now guaranteed 100% duplicate-free)
+  // 5. Compute any duplicate UPC warnings (finalSkuToUpcMap is guaranteed 100% 1-to-1 unique)
   const duplicateUpcWarnings: Array<{ upc: string; skus: string[] }> = [];
   for (const [upc, skuSet] of rawUpcToSkus.entries()) {
     if (skuSet.size > 1) {
@@ -303,7 +488,7 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  return { skuToUpcMap, skuToMetaMap, duplicateUpcWarnings };
+  return { skuToUpcMap: finalSkuToUpcMap, skuToMetaMap, duplicateUpcWarnings };
 }
 
 export const OPTIONS: APIRoute = async () => {
