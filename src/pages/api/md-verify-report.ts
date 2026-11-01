@@ -1,11 +1,18 @@
 import type { APIRoute } from 'astro';
-import { Client as NodeClient, Databases as NodeDatabases, ID as NodeID, Query as NodeQuery } from 'node-appwrite';
+import {
+  Client as NodeClient,
+  Databases as NodeDatabases,
+  Permission as NodePermission,
+  Role as NodeRole,
+  Query as NodeQuery,
+} from 'node-appwrite';
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
   cleanCatalogSku,
   isBbConsignorRow,
   matchMemoryDenInventoryItem,
+  MD_CANONICAL_WAREHOUSE_ID,
 } from '../../lib/salesBucketing';
 
 export const prerender = false;
@@ -16,6 +23,9 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json',
 };
+
+const PERSISTED_REPORT_DOC_ID = 'md_verify_report_latest';
+const MANIFESTS_COL_ID = 'manifests';
 
 export interface MdVerifyRow {
   productId: string;
@@ -74,36 +84,7 @@ const setStoredLivePayload = (payload: {
   (globalThis as any).__LATEST_MD_LIVE_PAYLOAD__ = payload;
 };
 
-function detectPartnerFromUpcOrTitle(upc: string, title = ''): 'HUCK' | 'PDXGL' | 'BB' {
-  const u = cleanCatalogSku(upc).toUpperCase();
-  if (u.startsWith('BB-') || isBbConsignorRow({ upc: u, title })) return 'BB';
-  if (u.startsWith('PDXGL-')) return 'PDXGL';
-  return 'HUCK';
-}
-
-function isValidProductionUpc(upc: string): boolean {
-  const u = cleanCatalogSku(upc).toUpperCase();
-  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
-  if (/test|demo|sample/i.test(u)) return false;
-  return true;
-}
-
-async function buildLiveMdPayloadFromAppwrite(): Promise<{
-  skuToUpcMap: Record<string, string>;
-  skuToMetaMap: Record<string, MdSkuMeta>;
-  duplicateUpcWarnings: Array<{ upc: string; skus: string[] }>;
-}> {
-  const skuToMetaMap: Record<string, MdSkuMeta> = {};
-  const usedUpcs = new Set<string>();
-  const rawUpcToSkus = new Map<string, Set<string>>();
-  const finalSkuToUpcMap: Record<string, string> = {};
-
-  const recordRawMapping = (sku: string, upc: string) => {
-    if (!rawUpcToSkus.has(upc)) rawUpcToSkus.set(upc, new Set());
-    rawUpcToSkus.get(upc)!.add(sku);
-  };
-
-  // 1. Query Appwrite resale_db.items live first (canonical dynamic source of truth — zero hardcoded collision maps)
+function getAppwriteConfig() {
   const endpoint =
     (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) ||
     process.env.PUBLIC_APPWRITE_ENDPOINT ||
@@ -125,23 +106,126 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     process.env.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID ||
     'items';
 
+  let databases: NodeDatabases | null = null;
+  if (endpoint && project) {
+    const client = new NodeClient().setEndpoint(endpoint).setProject(project);
+    if (apiKey) client.setKey(apiKey);
+    databases = new NodeDatabases(client);
+  }
+  return { endpoint, project, apiKey, dbId, itemsCol, databases };
+}
+
+async function loadPersistedReportFromAppwrite(): Promise<MdVerifyReportPayload | null> {
+  const { databases, dbId } = getAppwriteConfig();
+  if (!databases) return getStoredReport();
+  try {
+    const doc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID);
+    if (doc?.itemsSnapshot) {
+      const parsed =
+        typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+      if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
+        setStoredReport(parsed);
+        return parsed as MdVerifyReportPayload;
+      }
+    }
+  } catch {
+    // Document may not exist yet on first run
+  }
+  return getStoredReport();
+}
+
+async function getOrLoadReport(): Promise<MdVerifyReportPayload | null> {
+  const loaded = await loadPersistedReportFromAppwrite();
+  return loaded || getStoredReport();
+}
+
+async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Promise<void> {
+  setStoredReport(report);
+  const { databases, dbId } = getAppwriteConfig();
+  if (!databases) return;
+
+  const docPayload: Record<string, any> = {
+    name: 'Memory Den Live Barcode Verification Report',
+    tenantId: 'system',
+    locationId: MD_CANONICAL_WAREHOUSE_ID,
+    locationName: 'Memory Den',
+    status: 'system_sync_report',
+    itemCount: Number(report.summary?.totalCatalog || report.rows?.length || 0),
+    itemsSnapshot: JSON.stringify(report),
+    notes: JSON.stringify({
+      timestamp: report.timestamp,
+      summary: report.summary,
+    }).slice(0, 4900),
+  };
+
+  try {
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID, docPayload);
+  } catch (updateErr: any) {
+    if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
+      try {
+        await databases.createDocument(
+          dbId,
+          MANIFESTS_COL_ID,
+          PERSISTED_REPORT_DOC_ID,
+          docPayload,
+          [
+            NodePermission.read(NodeRole.any()),
+            NodePermission.update(NodeRole.any()),
+            NodePermission.delete(NodeRole.any()),
+          ]
+        );
+      } catch (createErr) {
+        console.warn('[/api/md-verify-report] Could not create persisted report doc:', (createErr as any)?.message);
+      }
+    } else {
+      console.warn('[/api/md-verify-report] Could not update persisted report doc:', updateErr?.message);
+    }
+  }
+}
+
+function detectPartnerFromUpcOrTitle(upc: string, title = ''): 'HUCK' | 'PDXGL' | 'BB' {
+  const u = cleanCatalogSku(upc).toUpperCase();
+  if (u.startsWith('BB-') || isBbConsignorRow({ upc: u, title })) return 'BB';
+  if (u.startsWith('PDXGL-')) return 'PDXGL';
+  return 'HUCK';
+}
+
+function isValidProductionUpc(upc: string): boolean {
+  const u = cleanCatalogSku(upc).toUpperCase();
+  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
+  if (/test|demo|sample/i.test(u)) return false;
+  return true;
+}
+
+async function buildLiveMdPayloadFromAppwrite(): Promise<{
+  skuToUpcMap: Record<string, string>;
+  skuToMetaMap: Record<string, MdSkuMeta>;
+  verifiedMdUpcBySku: Record<string, string>;
+  duplicateUpcWarnings: Array<{ upc: string; skus: string[] }>;
+}> {
+  const skuToMetaMap: Record<string, MdSkuMeta> = {};
+  const usedUpcs = new Set<string>();
+  const rawUpcToSkus = new Map<string, Set<string>>();
+  const finalSkuToUpcMap: Record<string, string> = {};
+  const verifiedMdUpcBySku: Record<string, string> = {};
+
+  const recordRawMapping = (sku: string, upc: string) => {
+    if (!rawUpcToSkus.has(upc)) rawUpcToSkus.set(upc, new Set());
+    rawUpcToSkus.get(upc)!.add(sku);
+  };
+
+  // 1. Query Appwrite resale_db.items live first (canonical dynamic source of truth — zero hardcoded collision maps)
+  const { databases, apiKey, dbId, itemsCol } = getAppwriteConfig();
   const byId = new Map<string, any>();
   const allDocs: any[] = [];
   const candidatesBySku = new Map<string, any[]>();
   const allExistingUpcs = new Set<string>();
   let maxHuckNum = 9740;
-  let databasesClient: NodeDatabases | null = null;
+  const databasesClient = apiKey && databases ? databases : null;
 
-  if (endpoint && project) {
+  if (databases) {
     try {
-      const client = new NodeClient().setEndpoint(endpoint).setProject(project);
-      if (apiKey) {
-        client.setKey(apiKey);
-      }
-      const databases = new NodeDatabases(client);
-      if (apiKey) databasesClient = databases;
       let cursor: string | null = null;
-
       for (let page = 0; page < 25; page++) {
         const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
         if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
@@ -203,13 +287,11 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
   for (const sku of sortedSkus) {
     if (finalSkuToUpcMap[sku]) continue;
     const docsForSku = candidatesBySku.get(sku) || [];
-    // docsForSku is already in orderDesc('$id') (newest first). Prefer newest candidate whose UPC is not yet in usedUpcs!
     let chosen = docsForSku.find((d) => {
       const u = cleanCatalogSku(d?.upc).toUpperCase();
       return isValidProductionUpc(u) && !usedUpcs.has(u);
     });
 
-    // If all candidates for this SKU had a UPC already claimed by another SKU, auto-allocate a unique UPC so no SKU is dropped or duplicated!
     if (!chosen && docsForSku.length > 0) {
       const fallbackDoc = docsForSku[0];
       const newUniqueUpc = allocateUniqueHuckUpc();
@@ -300,45 +382,55 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  // 4. Fallback: if a Verification Report is stored in memory, run matchMemoryDenInventoryItem for any remaining report rows
-  const storedReport = getStoredReport();
-  if (storedReport?.rows?.length && allDocs.length > 0) {
-    const claimedItemIdToSku = new Map<string, string>();
-    for (const doc of allDocs) {
-      const dSku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
-      if (dSku && finalSkuToUpcMap[dSku] && cleanCatalogSku(doc?.upc).toUpperCase() === finalSkuToUpcMap[dSku]) {
-        claimedItemIdToSku.set(doc.$id, dSku);
-      }
-    }
-    const multiBinResolvedBySku = buildLockedMultiBinMap(allDocs, claimedItemIdToSku);
+  // 4. Load persisted Verification Report from Appwrite (if RAM is cold) and extract verifiedMdUpcBySku + remaining matches
+  const storedReport = await getOrLoadReport();
+  if (storedReport?.rows?.length) {
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();
-      if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
-      const matched = matchMemoryDenInventoryItem({
-        sku,
-        upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
-        title: String(r.name || ''),
-        price: Number(r.agreedPrice || 0),
-        extraText: '',
-        allowPrefixForPayout: false,
-        activeItems: allDocs,
-        claimedItemIdToSku,
-        multiBinResolvedBySku,
-      });
-      const matchedUpc = cleanCatalogSku(matched?.upc).toUpperCase();
-      if (matched && isValidProductionUpc(matchedUpc) && !usedUpcs.has(matchedUpc)) {
-        usedUpcs.add(matchedUpc);
-        claimedItemIdToSku.set(matched.$id, sku);
-        const title = String(matched.title || r.name || '');
-        finalSkuToUpcMap[sku] = matchedUpc;
-        recordRawMapping(sku, matchedUpc);
-        skuToMetaMap[sku] = {
-          upc: matchedUpc,
-          partner: detectPartnerFromUpcOrTitle(matchedUpc, title),
-          title,
-          price: Number(matched.resalePrice || matched.listPrice || matched.price || r.agreedPrice || 0),
-          status: String(matched.status || 'placed'),
-        };
+      const actualMdUpc = cleanCatalogSku(r.upc).toUpperCase();
+      if (sku && /^0EJ/i.test(sku) && isValidProductionUpc(actualMdUpc)) {
+        verifiedMdUpcBySku[sku] = actualMdUpc;
+      }
+    }
+
+    if (allDocs.length > 0) {
+      const claimedItemIdToSku = new Map<string, string>();
+      for (const doc of allDocs) {
+        const dSku = cleanCatalogSku(doc?.locationSku || doc?.sku).toUpperCase();
+        if (dSku && finalSkuToUpcMap[dSku] && cleanCatalogSku(doc?.upc).toUpperCase() === finalSkuToUpcMap[dSku]) {
+          claimedItemIdToSku.set(doc.$id, dSku);
+        }
+      }
+      const multiBinResolvedBySku = buildLockedMultiBinMap(allDocs, claimedItemIdToSku);
+      for (const r of storedReport.rows) {
+        const sku = cleanCatalogSku(r.sku).toUpperCase();
+        if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
+        const matched = matchMemoryDenInventoryItem({
+          sku,
+          upc: cleanCatalogSku(r.upc || r.expectedRcUpc),
+          title: String(r.name || ''),
+          price: Number(r.agreedPrice || 0),
+          extraText: '',
+          allowPrefixForPayout: false,
+          activeItems: allDocs,
+          claimedItemIdToSku,
+          multiBinResolvedBySku,
+        });
+        const matchedUpc = cleanCatalogSku(matched?.upc).toUpperCase();
+        if (matched && isValidProductionUpc(matchedUpc) && !usedUpcs.has(matchedUpc)) {
+          usedUpcs.add(matchedUpc);
+          claimedItemIdToSku.set(matched.$id, sku);
+          const title = String(matched.title || r.name || '');
+          finalSkuToUpcMap[sku] = matchedUpc;
+          recordRawMapping(sku, matchedUpc);
+          skuToMetaMap[sku] = {
+            upc: matchedUpc,
+            partner: detectPartnerFromUpcOrTitle(matchedUpc, title),
+            title,
+            price: Number(matched.resalePrice || matched.listPrice || matched.price || r.agreedPrice || 0),
+            status: String(matched.status || 'placed'),
+          };
+        }
       }
     }
   }
@@ -351,7 +443,12 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  return { skuToUpcMap: finalSkuToUpcMap, skuToMetaMap, duplicateUpcWarnings };
+  return {
+    skuToUpcMap: finalSkuToUpcMap,
+    skuToMetaMap,
+    verifiedMdUpcBySku,
+    duplicateUpcWarnings,
+  };
 }
 
 export const OPTIONS: APIRoute = async () => {
@@ -364,7 +461,8 @@ export const OPTIONS: APIRoute = async () => {
 export const GET: APIRoute = async ({ url }) => {
   const mode = url.searchParams.get('mode');
   if (mode === 'payload') {
-    const { skuToUpcMap, skuToMetaMap, duplicateUpcWarnings } = await buildLiveMdPayloadFromAppwrite();
+    const { skuToUpcMap, skuToMetaMap, verifiedMdUpcBySku, duplicateUpcWarnings } =
+      await buildLiveMdPayloadFromAppwrite();
     return new Response(
       JSON.stringify({
         ok: true,
@@ -372,6 +470,7 @@ export const GET: APIRoute = async ({ url }) => {
         count: Object.keys(skuToUpcMap).length,
         skuToUpcMap,
         skuToMetaMap,
+        verifiedMdUpcBySku,
         duplicateUpcWarnings,
       }),
       {
@@ -381,7 +480,7 @@ export const GET: APIRoute = async ({ url }) => {
     );
   }
 
-  const report = getStoredReport();
+  const report = await getOrLoadReport();
   return new Response(
     JSON.stringify({
       ok: true,
@@ -416,27 +515,55 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const rows: MdVerifyRow[] = Array.isArray(body?.rows) ? body.rows : [];
-    const summaryInput = body?.summary || {};
+    const incomingRows: MdVerifyRow[] = Array.isArray(body?.rows) ? body.rows : [];
 
-    const verifiedMatch =
-      typeof summaryInput.verifiedMatch === 'number'
-        ? summaryInput.verifiedMatch
-        : rows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length;
-    const missingInMd =
-      typeof summaryInput.missingInMd === 'number'
-        ? summaryInput.missingInMd
-        : rows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length;
-    const mismatchUpc =
-      typeof summaryInput.mismatchUpc === 'number'
-        ? summaryInput.mismatchUpc
-        : rows.filter((r) => r.verifyStatus === 'MISMATCH_UPC').length;
-    const unlinkedInRc =
-      typeof summaryInput.unlinkedInRc === 'number'
-        ? summaryInput.unlinkedInRc
-        : rows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length;
-    const totalCatalog =
-      typeof summaryInput.totalCatalog === 'number' ? summaryInput.totalCatalog : rows.length;
+    // Preserve previously verified Memory Den UPCs if Ricochet's /api/product list endpoint omitted nested item UPCs after a page refresh
+    const previousReport = await getOrLoadReport();
+    const prevVerifiedUpcBySku = new Map<string, string>();
+    if (previousReport?.rows?.length && !body?.forceResetVerified) {
+      for (const pr of previousReport.rows) {
+        const pSku = cleanCatalogSku(pr.sku).toUpperCase();
+        const pUpc = cleanCatalogSku(pr.upc).toUpperCase();
+        if (pSku && isValidProductionUpc(pUpc)) {
+          prevVerifiedUpcBySku.set(pSku, pUpc);
+        }
+      }
+    }
+
+    const rows: MdVerifyRow[] = incomingRows.map((r) => {
+      const cleanSku = cleanCatalogSku(r.sku).toUpperCase();
+      let mdUpc = cleanCatalogSku(r.upc).toUpperCase();
+      const expectedRcUpc = cleanCatalogSku(r.expectedRcUpc).toUpperCase();
+
+      if (!mdUpc && cleanSku && prevVerifiedUpcBySku.has(cleanSku)) {
+        mdUpc = prevVerifiedUpcBySku.get(cleanSku)!;
+      }
+
+      let verifyStatus = r.verifyStatus;
+      if (expectedRcUpc) {
+        if (!mdUpc) verifyStatus = 'MISSING_IN_MD';
+        else if (mdUpc === expectedRcUpc) verifyStatus = 'VERIFIED_MATCH';
+        else verifyStatus = 'MISMATCH_UPC';
+      } else if (mdUpc && isValidProductionUpc(mdUpc)) {
+        verifyStatus = 'VERIFIED_MATCH';
+      } else {
+        verifyStatus = 'UNLINKED_IN_RC';
+      }
+
+      return {
+        ...r,
+        sku: cleanSku || r.sku,
+        upc: mdUpc,
+        expectedRcUpc,
+        verifyStatus,
+      };
+    });
+
+    const verifiedMatch = rows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length;
+    const missingInMd = rows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length;
+    const mismatchUpc = rows.filter((r) => r.verifyStatus === 'MISMATCH_UPC').length;
+    const unlinkedInRc = rows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length;
+    const totalCatalog = rows.length;
 
     const payload: MdVerifyReportPayload = {
       timestamp: body?.timestamp || new Date().toISOString(),
@@ -451,7 +578,7 @@ export const POST: APIRoute = async ({ request }) => {
       rows,
     };
 
-    setStoredReport(payload);
+    await savePersistedReportToAppwrite(payload);
 
     return new Response(
       JSON.stringify({

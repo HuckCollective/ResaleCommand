@@ -1969,7 +1969,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
@@ -1977,7 +1977,7 @@ import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import { warehousesApi } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
-import { databases, ID } from '../../lib/appwrite';
+import { client, databases, ID } from '../../lib/appwrite';
 import {
   DB_ID,
   getCollectionId,
@@ -2144,7 +2144,7 @@ function getTopStagedCandidateForRow(row: any): UnclaimedMatchCandidateResult | 
     rowSku: row.extractedSku,
     rowTitle: row.itemName,
     rowPrice: Number(row.listedPrice || 0),
-    rowIsInStock,
+    rowIsInStock: isRowInStock,
     rowIsBb: Boolean(row.isBbRow),
     searchQuery: '',
     filterMode: 'suggested',
@@ -2579,24 +2579,44 @@ const syncLivePayloadToCloudEndpoint = async () => {
 const fetchMdVerifyReport = async (showManualToast = false) => {
   isCheckingVerifyReport.value = true;
   try {
-    const res = await fetch('/api/md-verify-report');
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.hasReport && data?.report) {
-        const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== data.report.timestamp;
-        mdVerifyReport.value = data.report;
-        if (showManualToast || isNewer) {
-          addToast({
-            type: 'success',
-            message: `📊 Loaded Memory Den Verification Report: ${data.report.summary.verifiedMatch} Verified, ${data.report.summary.missingInMd} Missing, ${data.report.summary.unlinkedInRc} Unlinked!`,
-          });
+    let loadedReport: any = null;
+    try {
+      const res = await fetch(`/api/md-verify-report?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.hasReport && data?.report) {
+          loadedReport = data.report;
         }
-      } else if (showManualToast) {
+      }
+    } catch {}
+
+    // Direct Appwrite fallback in case serverless memory is cold
+    if (!loadedReport) {
+      try {
+        const doc: any = await databases.getDocument(DB_ID, 'manifests', 'md_verify_report_latest');
+        if (doc?.itemsSnapshot) {
+          const parsed = typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+          if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
+            loadedReport = parsed;
+          }
+        }
+      } catch {}
+    }
+
+    if (loadedReport) {
+      const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== loadedReport.timestamp;
+      mdVerifyReport.value = loadedReport;
+      if (showManualToast || isNewer) {
         addToast({
-          type: 'info',
-          message: 'No live report received yet. Click "📡 Send Report to RC" or "📥 Download CSV" inside the Memory Den widget!',
+          type: 'success',
+          message: `📊 Loaded Memory Den Verification Report: ${loadedReport.summary.verifiedMatch} Verified, ${loadedReport.summary.missingInMd} Missing, ${loadedReport.summary.unlinkedInRc} Unlinked!`,
         });
       }
+    } else if (showManualToast) {
+      addToast({
+        type: 'info',
+        message: 'No live report received yet. Click "📡 Send Report to RC" or "📥 Download CSV" inside the Memory Den widget!',
+      });
     }
   } catch (e) {
     if (showManualToast) {
@@ -4868,6 +4888,8 @@ const loadData = async () => {
   }
 };
 
+let unsubscribeMdRealtime: (() => void) | null = null;
+
 onMounted(() => {
   loadData();
   void fetchMdVerifyReport(false);
@@ -4897,6 +4919,34 @@ onMounted(() => {
       }
     } catch {}
 
+    try {
+      unsubscribeMdRealtime = client.subscribe(
+        `databases.${DB_ID}.collections.manifests.documents.md_verify_report_latest`,
+        (response: any) => {
+          const doc = response?.payload;
+          if (doc?.itemsSnapshot) {
+            try {
+              const parsed = typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+              if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
+                const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== parsed.timestamp;
+                mdVerifyReport.value = parsed;
+                if (isNewer) {
+                  addToast({
+                    type: 'success',
+                    message: `📡 Live Appwrite Realtime: Memory Den Verification Report updated (${parsed.summary.verifiedMatch || 0} Verified)!`,
+                  });
+                }
+              }
+            } catch {}
+          } else {
+            void fetchMdVerifyReport(false);
+          }
+        }
+      );
+    } catch (rtErr) {
+      console.warn('[LocationSyncView] Appwrite Realtime subscription skipped:', rtErr);
+    }
+
     window.addEventListener('focus', () => {
       if (!isCommitting.value && !isBulkQuickAdding.value) {
         void fetchMdVerifyReport(false);
@@ -4908,6 +4958,18 @@ onMounted(() => {
       }
     });
   }
+});
+
+onUnmounted(() => {
+  try {
+    if (unsubscribeMdRealtime) unsubscribeMdRealtime();
+  } catch {}
+  try {
+    if (rcSyncChannel) {
+      rcSyncChannel.close();
+      rcSyncChannel = null;
+    }
+  } catch {}
 });
 
 watch(team, (newTeam) => {

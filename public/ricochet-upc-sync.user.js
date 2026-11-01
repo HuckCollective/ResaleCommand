@@ -27,6 +27,7 @@
   let catalogProducts = []; // Full product objects from /api/product
   let parsedMap = {}; // { "0EJ08G": "HUCK-1024", ... }
   let skuMetaMap = {}; // { "0EJ08G": { upc, partner, title }, ... }
+  let verifiedMdUpcMap = {}; // Persisted verified MD UPCs by SKU across page refreshes (localStorage + Appwrite cloud)
   let activePartnerBucket = 'ALL'; // 'ALL' | 'HUCK' | 'PDXGL' | 'BB'
   let runtime422Conflicts = {}; // { "0EJ09A": "⚠️ 0EJ09A: HUCK-0334 is already used on 0EJ0MQ" }
   let progressCurrent = 0;
@@ -89,9 +90,48 @@
     return cleanStr(p.sku || p.SKU || p.number || p.code).toUpperCase();
   }
 
-  // Inspect all possible Ricochet product fields for UPC / Barcode
+  const VERIFIED_STORAGE_KEY = 'rc_md_verified_upcs_v1';
+
+  function loadVerifiedMdUpcCache() {
+    try {
+      const raw = localStorage.getItem(VERIFIED_STORAGE_KEY);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object') {
+          for (const [k, v] of Object.entries(obj)) {
+            const s = cleanStr(k).toUpperCase();
+            const u = cleanStr(v).toUpperCase();
+            if (s && u && isRealUpc(u)) {
+              verifiedMdUpcMap[s] = u;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  function saveVerifiedMdUpcCache() {
+    try {
+      localStorage.setItem(VERIFIED_STORAGE_KEY, JSON.stringify(verifiedMdUpcMap));
+    } catch (e) {}
+  }
+
+  function recordVerifiedMdUpc(sku, upc) {
+    const s = cleanStr(sku).toUpperCase();
+    const u = cleanStr(upc).toUpperCase();
+    if (!s || !u || !isRealUpc(u)) return;
+    if (verifiedMdUpcMap[s] !== u) {
+      verifiedMdUpcMap[s] = u;
+      saveVerifiedMdUpcCache();
+    }
+  }
+
+  loadVerifiedMdUpcCache();
+
+  // Inspect all possible Ricochet product fields for UPC / Barcode (falling back to persisted verifiedMdUpcMap when /api/product list omits nested item UPCs)
   function extractRicochetUpc(p) {
     if (!p || typeof p !== 'object') return '';
+    const sku = extractRicochetSku(p);
     const directCandidates = [
       p.upc_code,
       p.upc,
@@ -104,15 +144,23 @@
     ];
     for (const c of directCandidates) {
       const cleaned = cleanStr(c).toUpperCase();
-      if (cleaned && isRealUpc(cleaned)) return cleaned;
+      if (cleaned && isRealUpc(cleaned)) {
+        if (sku) recordVerifiedMdUpc(sku, cleaned);
+        return cleaned;
+      }
     }
     for (const val of Object.values(p)) {
       if (typeof val === 'string') {
         const cleaned = cleanStr(val).toUpperCase();
         if (/^(HUCK|PDXGL|BB)-[A-Z0-9-]+$/i.test(cleaned) && isRealUpc(cleaned)) {
+          if (sku) recordVerifiedMdUpc(sku, cleaned);
           return cleaned;
         }
       }
+    }
+    if (sku && verifiedMdUpcMap[sku] && isRealUpc(verifiedMdUpcMap[sku])) {
+      p.upc_code = verifiedMdUpcMap[sku];
+      return verifiedMdUpcMap[sku];
     }
     return '';
   }
@@ -505,6 +553,11 @@
               parsedMap = liveMap;
               if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
                 skuMetaMap = { ...data.skuToMetaMap };
+              }
+              if (data.verifiedMdUpcBySku && typeof data.verifiedMdUpcBySku === 'object') {
+                for (const [vSku, vUpc] of Object.entries(data.verifiedMdUpcBySku)) {
+                  recordVerifiedMdUpc(vSku, vUpc);
+                }
               }
               cloudLiveSyncedCount = Object.keys(parsedMap).length;
               const ta = document.getElementById('rc-sync-textarea');
@@ -1099,8 +1152,14 @@
           continue;
         }
 
-        if (cleanStr(targetItem.upc_code).toUpperCase() === targetUpc) {
+        const existingItemUpc = cleanStr(targetItem.upc_code).toUpperCase();
+        if (existingItemUpc && isRealUpc(existingItemUpc)) {
+          recordVerifiedMdUpc(sku, existingItemUpc);
+        }
+
+        if (existingItemUpc === targetUpc) {
           product.upc_code = targetUpc;
+          recordVerifiedMdUpc(sku, targetUpc);
           addLog(`✓ [${sku}] Already set to ${targetUpc}`, '#94a3b8');
           successCount++;
           continue;
@@ -1115,6 +1174,7 @@
           if (Array.isArray(product.items) && product.items[0]) {
             product.items[0].upc_code = targetUpc;
           }
+          recordVerifiedMdUpc(sku, targetUpc);
           delete runtime422Conflicts[sku];
           successCount++;
           addLog(`✅ [${sku}] Updated UPC ➔ ${targetUpc}`, '#10b981');

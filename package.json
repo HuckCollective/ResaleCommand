@@ -8,6 +8,7 @@
     "inspect": "node scripts/inspect_schema.js",
     "audit:schema": "node scripts/audit_schema.mjs",
     "skills:sync": "node scripts/sync-ai-context.mjs",
+    "verify": "node scripts/validate-templates.mjs && node scripts/sync-ai-context.mjs",
     "start": "astro dev",
     "build": "node scripts/validate-templates.mjs && astro build",
     "lint": "node scripts/validate-templates.mjs",
