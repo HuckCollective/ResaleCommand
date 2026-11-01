@@ -1115,10 +1115,67 @@ export function getPrimaryItemImageId(item: any): string {
 export interface UnclaimedMatchCandidateResult {
     item: any;
     score: number;
+    confidence: number;
     reasons: string[];
     priceDiff: number | null;
     isExactPrice: boolean;
     isClosePrice: boolean;
+    isParentLot: boolean;
+    estimatedLotCount: number;
+    unitCostShare: number;
+    recommendedAction: 'link' | 'split_lot' | 'create_new';
+}
+
+const PARENT_LOT_TITLE_REGEX = /\b(lot\s+of\s+\d+|\d+\s*(pcs|pc|pack|lot|set|issues|books|mags|magazines|figures|wands|pins|cards)|bulk\s+lot|mixed\s+lot|collection\s+lot)\b/i;
+
+/**
+ * Detects whether an inventory item is a multi-piece Parent Lot or Multi-Qty Bin
+ * that can have individual pieces split & linked to multiple Memory Den booth SKUs.
+ */
+export function isParentLotCandidate(item: any): boolean {
+    if (!item) return false;
+    const qty = Number(item.quantity ?? 1);
+    if (qty > 1) return true;
+    const title = String(item.title || item.identity || '');
+    if (PARENT_LOT_TITLE_REGEX.test(title)) return true;
+    if (Array.isArray(item.components) && item.components.length > 1) return true;
+    if (typeof item.components === 'string' && item.components.trim().startsWith('[')) {
+        try {
+            const parsed = JSON.parse(item.components);
+            if (Array.isArray(parsed) && parsed.length > 1) return true;
+        } catch {}
+    }
+    return false;
+}
+
+/**
+ * Extracts the estimated piece count from a Parent Lot's quantity, components array, or title ("Lot of 5", "18 pcs", etc.).
+ */
+export function extractEstimatedLotPieceCount(item: any): number {
+    if (!item) return 1;
+    const qty = Number(item.quantity ?? 1);
+    if (qty > 1) return qty;
+    if (Array.isArray(item.components) && item.components.length > 1) {
+        return item.components.length;
+    }
+    if (typeof item.components === 'string' && item.components.trim().startsWith('[')) {
+        try {
+            const parsed = JSON.parse(item.components);
+            if (Array.isArray(parsed) && parsed.length > 1) return parsed.length;
+        } catch {}
+    }
+    const title = String(item.title || item.identity || '');
+    const lotOfMatch = title.match(/\blot\s+of\s+(\d{1,3})\b/i);
+    if (lotOfMatch) {
+        const n = parseInt(lotOfMatch[1], 10);
+        if (n > 1) return n;
+    }
+    const pcsMatch = title.match(/\b(\d{1,3})\s*(pcs|pc|pack|lot|set|issues|books|mags|magazines|figures|wands|pins)\b/i);
+    if (pcsMatch) {
+        const n = parseInt(pcsMatch[1], 10);
+        if (n > 1) return n;
+    }
+    return isParentLotCandidate(item) ? 4 : 1;
 }
 
 const MATCH_STOP_WORDS = new Set([
@@ -1128,11 +1185,12 @@ const MATCH_STOP_WORDS = new Set([
 ]);
 
 /**
- * Returns strictly filtered & ranked unclaimed inventory candidates for the Slide-Over Inventory Match Drawer.
+ * Returns strictly filtered & ranked unclaimed inventory candidates for the Slide-Over Inventory Match Drawer
+ * and Inline High-Confidence Preview.
  *
  * STRICT CANDIDATE EXCLUSION LAWS:
- * 1. Rules out any item that already has a different Memory Den `0EJ...` locationSku.
- * 2. Rules out any item already claimed by another row in the active CSV sync (unless allowMultiQtyReuse is true and qty > 1).
+ * 1. Rules out any single item that already has a different Memory Den `0EJ...` locationSku (Parent Lots stay reusable for remaining pieces!).
+ * 2. Rules out any single item already claimed by another row in the active CSV sync (Parent Lots stay matchable so remaining pieces can be split!).
  * 3. Rules out `status === 'sold'` items when matching an `In Stock` row (`rowIsInStock === true`).
  * 4. Enforces strict B&B (`BB-`) vs `HUCK-`/`PDXGL-` namespace isolation.
  * 5. Rules out non-working statuses (`combined`, `deconstructed`, `tracked`, `draft`, `scouted`) and `(Sold Unit)` split children.
@@ -1192,14 +1250,18 @@ export function getUnclaimedMatchCandidatesForRow(params: {
         // 3. Strict B&B vs HUCK/PDXGL namespace isolation
         if (isBbConsignorDbItem(item) !== rowIsBb) continue;
 
-        // 4. Rule out items that already have a DIFFERENT Memory Den `0EJ...` locationSku
+        const isLot = isParentLotCandidate(item);
         const itemLocSku = cleanCatalogSku(item.locationSku || item.sku).toUpperCase();
-        if (/^0EJ/i.test(itemLocSku) && (!rowSku || itemLocSku !== rowSku)) {
+
+        // 4. Rule out single-piece items that already have a DIFFERENT Memory Den `0EJ...` locationSku
+        // (Parent Lots remain available so remaining pieces from that lot can be split & linked!)
+        if (/^0EJ/i.test(itemLocSku) && (!rowSku || itemLocSku !== rowSku) && !isLot) {
             continue;
         }
 
-        // 5. Rule out items already claimed by another row in this CSV sync
-        if (claimedIds.has(item.$id)) {
+        // 5. Rule out single-piece items already claimed by another row in this CSV sync
+        // (Parent Lots are NEVER ruled out after 1 piece is linked!)
+        if (claimedIds.has(item.$id) && !isLot) {
             const isReusableBin = Boolean(params.allowMultiQtyReuse) && Number(item.quantity ?? 1) > 1 && status === 'placed';
             if (!isReusableBin) continue;
         }
@@ -1276,6 +1338,17 @@ export function getUnclaimedMatchCandidatesForRow(params: {
             reasons.push(`Close price ($${dbPrice.toFixed(0)})`);
         }
 
+        // Parent Lot indicator reason
+        const estimatedLotCount = isLot ? extractEstimatedLotPieceCount(item) : 1;
+        const lotCost = Number(item.cost ?? 0);
+        const unitCostShare = isLot
+            ? Number((lotCost / Math.max(1, estimatedLotCount)).toFixed(2))
+            : Number(lotCost.toFixed(2));
+        if (isLot && matchedDistinctive.length > 0) {
+            score += 8;
+            reasons.push(`📦 Multi-Piece Lot (~${estimatedLotCount} pcs • $${unitCostShare.toFixed(2)}/ea cost)`);
+        }
+
         // Backstock / Unassigned location bonus (items in HG/HH/HD or missing 0EJ SKU are prime candidates)
         if (!itemLocSku) {
             score += 5;
@@ -1291,13 +1364,35 @@ export function getUnclaimedMatchCandidatesForRow(params: {
             }
         }
 
+        // Calibrate 0-100 confidence score
+        let confidence = Math.min(99, Math.max(25, Math.round(35 + score * 0.85)));
+        if (rowSku && itemLocSku === rowSku) {
+            confidence = 99;
+        } else if (matchedDistinctive.length >= 2 && isExactPrice) {
+            confidence = Math.max(confidence, 94);
+        } else if (matchedDistinctive.length >= 2 && isClosePrice) {
+            confidence = Math.max(confidence, 88);
+        } else if (matchedDistinctive.length === 0 && isExactPrice) {
+            confidence = Math.min(confidence, 68);
+        }
+
+        const recommendedAction: 'link' | 'split_lot' | 'create_new' =
+            isLot && (!itemLocSku || itemLocSku !== rowSku)
+                ? 'split_lot'
+                : 'link';
+
         results.push({
             item,
             score,
+            confidence,
             reasons,
             priceDiff,
             isExactPrice,
             isClosePrice,
+            isParentLot: isLot,
+            estimatedLotCount,
+            unitCostShare,
+            recommendedAction,
         });
     }
 

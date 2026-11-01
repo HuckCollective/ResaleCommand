@@ -1,6 +1,6 @@
 ---
 name: resale-booth-sync
-description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails.
+description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, High-Confidence UX Pro Reconciliation (Inline #1 Preview, Multi-Piece Lot Split, 1-Call AI Stager, Live Tab Auto-Refresh), multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails.
 ---
 
 # Resale Booth Sync & UX/IA Empathy Guardrails (`resale-booth-sync`)
@@ -13,28 +13,30 @@ This skill governs all 2-way catalog & barcode synchronization between **Resale 
 
 1. **Never Ask User for Manual Browser Plumbing**:
    - Always wire solutions directly into the native Resale Command UI (such as the Drag-and-Drop Permanent Live-Loader Bookmarklet `⚡ Memory Den Sync` in [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue)) rather than asking the user to manually edit bookmark URLs, paste raw payloads, or configure external browser extensions.
-   - Use plain-English operational labels (`⚡ Memory Den Sync`, `🔄 Live Fetch`, `📡 Send Report to RC`, `📥 Download CSV`, `🔧 Assign Unique Barcode`) instead of developer jargon (`PUT /api/product/items`, `JSON Payload`, `Userscript`).
+   - Use plain-English operational labels (`⚡ Memory Den Sync`, `🔄 Live Fetch`, `📡 Send Report to RC`, `📥 Download CSV`, `🔧 Assign Unique Barcode`, `🔗 Confirm Link`, `✂️ Split Piece from Lot`) instead of developer jargon (`PUT /api/product/items`, `JSON Payload`, `Userscript`).
 
-2. **No Stale Client Snapshots (Single Source of Truth)**:
+2. **No Stale Client Snapshots & Zero Hardcoded Collision Maps (Single Source of Truth)**:
    - Bookmarklets and sync tools must be **thin permanent live-loaders** that dynamically load the latest script (`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()`) and fetch live `locationSku` (`0EJ...`) ➔ `HUCK-XXXX` mappings from `/api/md-verify-report?mode=payload` on every open.
-   - **Prohibition of Baked-In Bookmark Payloads**: Never bake static `window.__RC_PRELOADED_BARCODES__` JSON snapshots into the `href` of a draggable bookmarklet (`bookmarkletHref`). The user drags the bookmark **once forever**, and the widget displays **`✅ Live Auto-Updated Script`** (`✅ Live Auto-Updated (N)`) to confirm it is running live code and live cloud data.
+   - **Prohibition of Baked-In Bookmark Payloads & Hardcoded Collision Maps**: Never bake static `window.__RC_PRELOADED_BARCODES__` JSON snapshots into the `href` of a draggable bookmarklet (`bookmarkletHref`), and never hardcode static collision maps (`EXPLICIT_COLLISION_PAIRS` / `CANONICAL_COLLISION_OVERRIDES`) in API routes or client scripts. Rely strictly on dynamic Appwrite state (`resale_db.items` with `usedUpcs` Set + newest-candidate priority).
 
-3. **Booth Operations & Bin SKU Awareness**:
+3. **Confidence First — Zero Blind Writes**:
+   - Never auto-commit AI or heuristic matches without explicit user approval.
+   - Stage every recommendation visually with its photo thumbnail, calibrated confidence badge (`🟢 High 88%+`, `🟡 Review 60–87%`, `⚪ New Booth Item`), match reason, and 1-click confirmation action (`🔗 Confirm Link`, `✂️ Split Piece from Lot & Link`, or `✅ Approve Selected Matches`).
+
+4. **Booth Operations, Multi-Qty Bin SKUs, & Multi-Piece Parent Lot Splitting**:
    - Always link Memory Den `0EJ...` SKUs in `items.locationSku` on the backend (`resale_db.items`) and respect physical booth workflows:
-     - **Multi-Quantity Booth Bins (`📦 Booth Bin (Multi-Qty)`)**: Bin SKUs (`0EJ0FR` ➔ `HUCK-1309`, `0EJ0H5` ➔ `HUCK-1425`, `0EJ0FQ` ➔ `HUCK-1308`, `0EJ0M8` ➔ `HUCK-1498`, `0EJ0EC` ➔ `HUCK-0113`, `0EJ0JK` ➔ `HUCK-1460`, `0EJ0MN` ➔ `HUCK-1323`, `0EJ0NQ` ➔ `HUCK-9455`, `0EJ09E` ➔ `HUCK-0296`) represent a single `0EJ...` SKU with `quantity > 1` that legitimately sells multiple times across tickets.
-     - **True Duplicate SKU Collisions (1-to-1 Bijection)**: Two *different* `0EJ...` SKUs in Ricochet POS may **NEVER** share the same `upc` (`422 Unprocessable Entity`). True collision pairs (`0EJ0MQ` ➔ `HUCK-0334` / `0EJ09A` ➔ `HUCK-9716`, `0EJ0HE` ➔ `HUCK-1379` / `0EJ0MW` ➔ `HUCK-9724`, `0EJ0JJ` ➔ `HUCK-1461` / `0EJ0MY` ➔ `HUCK-9732`, `0EJ05G` ➔ `HUCK-9543` / `0EJ02D` ➔ `HUCK-9740`) are automatically separated and self-healed on the backend so every `0EJ...` SKU has a strictly 1-to-1 unique `HUCK-XXXX` barcode.
+     - **Multi-Quantity Booth Bins (`📦 Booth Bin (Multi-Qty)`)**: Bin SKUs (`0EJ0FR`, `0EJ0H5`, `0EJ0FQ`, `0EJ0M8`, `0EJ0EC`, `0EJ0JK`, `0EJ0MN`, `0EJ0NQ`, `0EJ09E`) represent a single `0EJ...` SKU with `quantity > 1` that legitimately sells multiple times across tickets.
+     - **Multi-Piece Parent Lots (`✂️ Split Piece from Lot & Link to MD`)**: Unsplit backstock lots (`isParentLotCandidate(item)` in `src/lib/salesBucketing.ts`: `quantity > 1`, `components.length > 1`, or titles matching `/\b(lot\s+of\s+\d+|\d+\s*(pcs|pc|pack|lot|set|issues|books|mags|magazines|figures|wands|pins|cards))\b/i`) are **NEVER** ruled out after 1 piece is linked! Remaining pieces from that Parent Lot stay matchable across multiple booth rows, and clicking `✂️ Split Piece from Lot & Link` (or `✂️ Split & Link All N Pieces` in the Match Drawer) creates a child item with `parentLotId`, proportional cost share (`lotCost / pieceCount`), inherited `purchaseId`/`orderId`/photos, `locationSku: '0EJ...'`, `storageLocation: 'MD'`, `warehouseId: '6a7e70050009db0e1857'`, and a fresh sequential `HUCK-XXXX` barcode.
 
 ---
 
-## 2. Permanent Live-Loader Architecture (`LocationSyncView.vue` ➔ `ricochet-upc-sync.user.js` ➔ `/api/md-verify-report`)
+## 2. Permanent Live-Loader, 1-Call AI Stager, & Live Tab Connection (`LocationSyncView.vue` ➔ `ricochet-upc-sync.user.js` ➔ `/api/md-verify-report` & `/api/ai-match-booth-items`)
 
 1. **Drag-Once Live-Loader Bookmarklet (`bookmarkletHref` in `LocationSyncView.vue`)**:
    ```javascript
    javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}var s=document.createElement('script');s.src='https://resalecmd.com/ricochet-upc-sync.user.js?v='+Date.now();document.body.appendChild(s);})();
    ```
-2. **Immediate Cloud Sync on Startup (`public/ricochet-upc-sync.user.js`)**:
-   - On load, `initUI()` opens the widget panel, displays **`✅ Live Auto-Updated Script`**, clears any legacy `window.__RC_PRELOADED_BARCODES__`, and immediately calls `fetchLivePayloadFromCloud(false)` against `/api/md-verify-report?mode=payload`.
-   - `parsedMap` is replaced directly by `liveMap` (single source of truth) and `runtime422Conflicts` is reset to `{}`.
-3. **Multi-Partner Bucket Controls**:
-   - Supports filtering audit counts and `🧪 Test 1` / `🚀 Fill Missing` actions by **`All Booth`**, **`⭐ HUCK`**, **`🎲 PDXGL`**, and **`💛 B&B`**.
-
+2. **1-Call AI Smart-Match Stager (`src/pages/api/ai-match-booth-items.ts`)**:
+   - Uses a single compact `gemini-2.5-flash` text call (`getModel('gemini-2.5-flash')` + `generateContentWithBackoff`) to score unlinked booth rows against unclaimed inventory & parent lots (`action: 'link' | 'split_lot' | 'create_new'`, `candidateId`, `confidence: 0-100`, `reason`, `estimatedLotPieces`), staging recommendations in `LocationSyncView.vue` for 1-click user review.
+3. **Live Tab Connection & Auto-Refresh (`BroadcastChannel('resale_command_sync')` + `visibilitychange` / `focus`)**:
+   - Both `LocationSyncView.vue` and `public/ricochet-upc-sync.user.js` subscribe to `BroadcastChannel('resale_command_sync')` as well as `window.addEventListener('focus', ...)` and `document.addEventListener('visibilitychange', ...)`, automatically refreshing barcodes and verification reports whenever the user switches tabs or links items.

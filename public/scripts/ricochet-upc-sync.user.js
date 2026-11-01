@@ -433,35 +433,40 @@
 
     // Open panel and immediately fetch live cloud state from Resale Command (zero stale client snapshots)
     hydratePreloadedBarcodes(true);
+    setupLiveTabConnection();
   }
 
-  // Canonical 1-to-1 secondary overrides so stale preloaded bookmarklet maps never collide
-  const CANONICAL_COLLISION_OVERRIDES = {
-    '0EJ0MQ': 'HUCK-0334',
-    '0EJ09A': 'HUCK-9716',
-    '0EJ0HE': 'HUCK-1379',
-    '0EJ0MW': 'HUCK-9724',
-    '0EJ0JJ': 'HUCK-1461',
-    '0EJ0MY': 'HUCK-9732',
-    '0EJ05G': 'HUCK-9543',
-    '0EJ02D': 'HUCK-9740',
-  };
+  let rcBroadcastChannel = null;
+  function setupLiveTabConnection() {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        rcBroadcastChannel = new BroadcastChannel('resale_command_sync');
+        rcBroadcastChannel.onmessage = (ev) => {
+          if (ev?.data?.type === 'RC_BARCODES_UPDATED' && !isRunning) {
+            fetchLivePayloadFromCloud(false);
+          }
+        };
+      }
+    } catch (e) {}
 
-  // Sanitize a barcode map to strip any test/demo UPCs and enforce strict 1-to-1 SKU <-> UPC uniqueness
+    window.addEventListener('focus', () => {
+      if (isOpen && !isRunning) {
+        fetchLivePayloadFromCloud(false);
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && isOpen && !isRunning) {
+        fetchLivePayloadFromCloud(false);
+      }
+    });
+  }
+
+  // Sanitize a barcode map to strip any test/demo UPCs and enforce strict 1-to-1 SKU <-> UPC uniqueness dynamically
   function sanitizeBarcodeMap(rawMap) {
     const clean = {};
     if (!rawMap || typeof rawMap !== 'object') return clean;
     const usedUpcs = new Set();
 
-    // Pass 1: Apply canonical collision overrides if those SKUs exist in rawMap
-    for (const [overrideSku, overrideUpc] of Object.entries(CANONICAL_COLLISION_OVERRIDES)) {
-      if (rawMap[overrideSku] !== undefined) {
-        clean[overrideSku] = overrideUpc;
-        usedUpcs.add(overrideUpc);
-      }
-    }
-
-    // Pass 2: Copy all remaining valid 1-to-1 mappings
     for (const [k, v] of Object.entries(rawMap)) {
       const sku = cleanStr(k).toUpperCase();
       if (!sku || clean[sku]) continue;
@@ -910,7 +915,7 @@
     }
   }
 
-  // Send 2-Way Verification Report back to Resale Command (API + window.opener postMessage)
+  // Send 2-Way Verification Report back to Resale Command (API + BroadcastChannel + window.opener postMessage)
   async function sendReportToResaleCommand(silent = false) {
     if (catalogProducts.length === 0) {
       await loadConsignorCatalog();
@@ -920,6 +925,12 @@
     if (window.opener && typeof window.opener.postMessage === 'function') {
       try {
         window.opener.postMessage({ type: 'RC_MD_VERIFY_REPORT', report }, '*');
+      } catch (e) {}
+    }
+
+    if (rcBroadcastChannel) {
+      try {
+        rcBroadcastChannel.postMessage({ type: 'RC_MD_VERIFY_REPORT', report, timestamp: Date.now() });
       } catch (e) {}
     }
 

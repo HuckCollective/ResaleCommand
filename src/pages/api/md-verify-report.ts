@@ -88,45 +88,6 @@ function isValidProductionUpc(upc: string): boolean {
   return true;
 }
 
-// Explicit 1-to-1 collision resolution rules:
-// Primary SKU keeps the original HUCK barcode; secondary SKU gets its own dedicated unique HUCK barcode.
-const EXPLICIT_COLLISION_PAIRS: Array<{
-  primarySku: string;
-  primaryUpc: string;
-  secondarySku: string;
-  secondaryUpc: string;
-  defaultTitle: string;
-}> = [
-  {
-    primarySku: '0EJ0MQ',
-    primaryUpc: 'HUCK-0334',
-    secondarySku: '0EJ09A',
-    secondaryUpc: 'HUCK-9716',
-    defaultTitle: 'Heavy Metal Magazine',
-  },
-  {
-    primarySku: '0EJ0HE',
-    primaryUpc: 'HUCK-1379',
-    secondarySku: '0EJ0MW',
-    secondaryUpc: 'HUCK-9724',
-    defaultTitle: 'Memory Den Booth Item 0EJ0MW',
-  },
-  {
-    primarySku: '0EJ0JJ',
-    primaryUpc: 'HUCK-1461',
-    secondarySku: '0EJ0MY',
-    secondaryUpc: 'HUCK-9732',
-    defaultTitle: 'Memory Den Booth Item 0EJ0MY',
-  },
-  {
-    primarySku: '0EJ05G',
-    primaryUpc: 'HUCK-9543',
-    secondarySku: '0EJ02D',
-    secondaryUpc: 'HUCK-9740',
-    defaultTitle: 'Memory Den Booth Item 0EJ02D',
-  },
-];
-
 async function buildLiveMdPayloadFromAppwrite(): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
@@ -142,7 +103,7 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     rawUpcToSkus.get(upc)!.add(sku);
   };
 
-  // 1. Query Appwrite resale_db.items live first (canonical source of truth)
+  // 1. Query Appwrite resale_db.items live first (canonical dynamic source of truth — zero hardcoded collision maps)
   const endpoint =
     (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_ENDPOINT) ||
     process.env.PUBLIC_APPWRITE_ENDPOINT ||
@@ -230,104 +191,6 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
       }
     }
   };
-
-  // 1a. Explicitly lock the 4 known collision pairs so Primary & Secondary SKUs NEVER share a barcode
-  for (const pair of EXPLICIT_COLLISION_PAIRS) {
-    const { primarySku, primaryUpc, secondarySku, secondaryUpc, defaultTitle } = pair;
-    const primaryDocs = candidatesBySku.get(primarySku) || [];
-    const primaryDoc =
-      allDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() === primaryUpc) ||
-      primaryDocs[0] ||
-      null;
-
-    if (!usedUpcs.has(primaryUpc)) {
-      usedUpcs.add(primaryUpc);
-      finalSkuToUpcMap[primarySku] = primaryUpc;
-      if (primaryDoc && databasesClient && cleanCatalogSku(primaryDoc.locationSku).toUpperCase() !== primarySku) {
-        try {
-          await databasesClient.updateDocument(dbId, itemsCol, primaryDoc.$id, {
-            locationSku: primarySku,
-            upc: primaryUpc,
-            storageLocation: 'MD',
-            warehouseId: '6a7e70050009db0e1857',
-          });
-          primaryDoc.locationSku = primarySku;
-        } catch {}
-      }
-      const pTitle = String(primaryDoc?.title || primaryDoc?.identity || defaultTitle);
-      skuToMetaMap[primarySku] = {
-        upc: primaryUpc,
-        partner: detectPartnerFromUpcOrTitle(primaryUpc, pTitle),
-        title: pTitle,
-        price: Number(primaryDoc?.resalePrice || primaryDoc?.listPrice || primaryDoc?.price || 0),
-        status: String(primaryDoc?.status || 'placed'),
-      };
-      recordRawMapping(primarySku, primaryUpc);
-    }
-
-    // Secondary SKU: find a dedicated doc that is NOT primaryDoc and does NOT use primaryUpc
-    const secondaryDocs = (candidatesBySku.get(secondarySku) || []).filter(
-      (d) => (!primaryDoc || d.$id !== primaryDoc.$id)
-    );
-    let preferredDoc =
-      allDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() === secondaryUpc) ||
-      secondaryDocs.find((d) => cleanCatalogSku(d?.upc).toUpperCase() !== primaryUpc) ||
-      secondaryDocs[0] ||
-      null;
-
-    let resolvedSecUpc = preferredDoc ? cleanCatalogSku(preferredDoc.upc).toUpperCase() : '';
-    if (!isValidProductionUpc(resolvedSecUpc) || resolvedSecUpc === primaryUpc || usedUpcs.has(resolvedSecUpc)) {
-      resolvedSecUpc = !usedUpcs.has(secondaryUpc) ? secondaryUpc : allocateUniqueHuckUpc();
-    }
-
-    if (preferredDoc && databasesClient && (!primaryDoc || preferredDoc.$id !== primaryDoc.$id)) {
-      if (
-        cleanCatalogSku(preferredDoc.upc).toUpperCase() !== resolvedSecUpc ||
-        cleanCatalogSku(preferredDoc.locationSku).toUpperCase() !== secondarySku
-      ) {
-        try {
-          await databasesClient.updateDocument(dbId, itemsCol, preferredDoc.$id, {
-            upc: resolvedSecUpc,
-            locationSku: secondarySku,
-            storageLocation: 'MD',
-            warehouseId: '6a7e70050009db0e1857',
-          });
-          preferredDoc.upc = resolvedSecUpc;
-          preferredDoc.locationSku = secondarySku;
-        } catch {}
-      }
-    } else if (!preferredDoc && databasesClient) {
-      const sTitleToCreate = String(primaryDoc?.title || primaryDoc?.identity || defaultTitle);
-      const sPriceToCreate = Number(primaryDoc?.resalePrice || primaryDoc?.listPrice || 0);
-      try {
-        preferredDoc = await databasesClient.createDocument(dbId, itemsCol, NodeID.unique(), {
-          title: sTitleToCreate,
-          identity: sTitleToCreate,
-          upc: resolvedSecUpc,
-          locationSku: secondarySku,
-          storageLocation: 'MD',
-          warehouseId: '6a7e70050009db0e1857',
-          status: 'placed',
-          quantity: 1,
-          cost: Number(primaryDoc?.cost || 0),
-          resalePrice: sPriceToCreate,
-          tenantId: primaryDoc?.tenantId || 'huck',
-        });
-      } catch {}
-    }
-
-    usedUpcs.add(resolvedSecUpc);
-    finalSkuToUpcMap[secondarySku] = resolvedSecUpc;
-    const sTitle = String(preferredDoc?.title || preferredDoc?.identity || primaryDoc?.title || defaultTitle);
-    skuToMetaMap[secondarySku] = {
-      upc: resolvedSecUpc,
-      partner: detectPartnerFromUpcOrTitle(resolvedSecUpc, sTitle),
-      title: sTitle,
-      price: Number(preferredDoc?.resalePrice || primaryDoc?.resalePrice || 0),
-      status: String(preferredDoc?.status || 'placed'),
-    };
-    recordRawMapping(secondarySku, resolvedSecUpc);
-  }
 
   // Sort SKUs so SKUs with exactly 1 DB candidate claim their UPC first, then multi-candidate SKUs pick the newest unclaimed UPC
   const sortedSkus = Array.from(candidatesBySku.keys()).sort((a, b) => {

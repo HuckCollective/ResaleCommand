@@ -678,6 +678,93 @@
         </div>
       </div>
 
+      <!-- HIGH-CONFIDENCE UX PRO RECONCILIATION SUMMARY BAR (Confidence First — Zero Blind Writes) -->
+      <div
+        v-if="unmatchedCount > 0"
+        class="bg-base-100 rounded-2xl border-2 border-primary/25 p-3.5 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3"
+      >
+        <div class="space-y-1.5 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-black uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <span>🎯 Staged Match Confidence Triage</span>
+            </span>
+            <span class="badge badge-xs badge-success text-success-content font-bold gap-1">
+              🟢 Live Tab Sync Active
+            </span>
+            <span class="text-[11px] opacity-70">
+              Review inline previews below — nothing commits until you click Confirm, Split, or Approve Selected!
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+            <button
+              type="button"
+              class="btn btn-xs rounded-lg font-bold gap-1"
+              :class="confidenceTierFilter === 'ALL' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200'"
+              @click="confidenceTierFilter = 'ALL'"
+            >
+              All Unlinked ({{ unmatchedCount }})
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs rounded-lg font-bold gap-1"
+              :class="confidenceTierFilter === 'HIGH' ? 'btn-success text-success-content shadow-xs' : 'btn-ghost bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'"
+              @click="filterTab = 'unmatched'; confidenceTierFilter = confidenceTierFilter === 'HIGH' ? 'ALL' : 'HIGH'"
+            >
+              🟢 High Confidence 88%+ ({{ highConfidenceUnmatchedRows.length }})
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs rounded-lg font-bold gap-1"
+              :class="confidenceTierFilter === 'LOT_SPLIT' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/30'"
+              @click="filterTab = 'unmatched'; confidenceTierFilter = confidenceTierFilter === 'LOT_SPLIT' ? 'ALL' : 'LOT_SPLIT'"
+            >
+              📦 Multi-Piece Lot Splits ({{ lotSplitUnmatchedRows.length }})
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs rounded-lg font-bold gap-1"
+              :class="confidenceTierFilter === 'REVIEW' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/30'"
+              @click="filterTab = 'unmatched'; confidenceTierFilter = confidenceTierFilter === 'REVIEW' ? 'ALL' : 'REVIEW'"
+            >
+              🟡 Review 60–87% ({{ reviewUnmatchedRows.length }})
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs rounded-lg font-bold gap-1"
+              :class="confidenceTierFilter === 'NEW_ITEM' ? 'btn-info text-info-content shadow-xs' : 'btn-ghost bg-base-200 border border-base-300'"
+              @click="filterTab = 'unmatched'; confidenceTierFilter = confidenceTierFilter === 'NEW_ITEM' ? 'ALL' : 'NEW_ITEM'"
+            >
+              ⚪ New Booth Items ({{ newBoothUnmatchedRows.length }})
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+          <button
+            type="button"
+            class="btn btn-xs sm:btn-sm bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black border-none shadow-xs gap-1.5"
+            :disabled="isAiMatching || isBatchApproving"
+            @click="triggerAiMatching"
+            title="1-Call Gemini 2.5 Flash Smart-Stager: scores unlinked booth items against unclaimed inventory & parent lots without blind writes"
+          >
+            <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
+            <span v-else>✨ AI Smart-Stage Unlinked ({{ unmatchedCount }})</span>
+          </button>
+
+          <button
+            v-if="selectedHighConfidenceRows.length > 0"
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-success text-success-content font-black shadow-xs gap-1.5"
+            :disabled="isBatchApproving"
+            @click="approveSelectedStagedMatches"
+          >
+            <span v-if="isBatchApproving" class="loading loading-spinner loading-xs"></span>
+            <span>✅ Approve Selected Matches ({{ selectedHighConfidenceRows.length }})</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Main Reconciliation Table Container (pb-44 for bottom dock clearance) -->
       <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-x-auto pb-44">
         <table class="table w-full">
@@ -891,28 +978,142 @@
                     </div>
                   </div>
 
-                  <!-- Unmatched Trigger: Open Match Drawer + Quick Add + Partner Prefix Protection -->
+                  <!-- Unmatched Trigger: Inline #1 High-Confidence Staged Preview + Lot Split + Match Drawer + Quick Add -->
                   <div v-else class="space-y-1.5">
-                    <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <!-- Inline #1 Candidate Preview Card (Confidence First — Never Auto-Commits Without User Click) -->
+                    <div
+                      v-if="getTopStagedCandidateForRow(row)"
+                      class="p-2.5 rounded-xl border transition-all space-y-2"
+                      :class="
+                        getTopStagedCandidateForRow(row)!.confidence >= 88
+                          ? 'bg-emerald-500/5 border-emerald-500/35'
+                          : getTopStagedCandidateForRow(row)!.isParentLot || getTopStagedCandidateForRow(row)!.recommendedAction === 'split_lot'
+                            ? 'bg-purple-500/5 border-purple-500/35'
+                            : 'bg-amber-500/5 border-amber-500/30'
+                      "
+                    >
+                      <div class="flex items-start gap-2.5">
+                        <!-- Batch Approval Checkbox -->
+                        <input
+                          type="checkbox"
+                          v-model="row.selectedForApproval"
+                          class="checkbox checkbox-xs checkbox-success mt-1 shrink-0"
+                          title="Include this staged match in '✅ Approve Selected Matches'"
+                        />
+
+                        <!-- Candidate Photo Thumbnail -->
+                        <div class="w-10 h-10 rounded-lg bg-base-300 border border-base-content/10 overflow-hidden shrink-0 flex items-center justify-center">
+                          <img
+                            v-if="getItemThumbUrl(getTopStagedCandidateForRow(row)!.item)"
+                            :src="getItemThumbUrl(getTopStagedCandidateForRow(row)!.item)"
+                            :alt="getTopStagedCandidateForRow(row)!.item.title"
+                            class="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-5 h-5 opacity-35" />
+                        </div>
+
+                        <!-- Candidate Info + Confidence Badge + Reason -->
+                        <div class="flex-1 min-w-0 space-y-1">
+                          <div class="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              class="badge badge-xs font-black whitespace-nowrap shrink-0"
+                              :class="
+                                getTopStagedCandidateForRow(row)!.confidence >= 88
+                                  ? 'badge-success text-success-content'
+                                  : 'badge-warning text-warning-content'
+                              "
+                            >
+                              {{ getTopStagedCandidateForRow(row)!.confidence >= 88 ? '🟢 High' : '🟡 Review' }} {{ getTopStagedCandidateForRow(row)!.confidence }}%
+                            </span>
+                            <span
+                              v-if="getTopStagedCandidateForRow(row)!.isParentLot || getTopStagedCandidateForRow(row)!.recommendedAction === 'split_lot'"
+                              class="badge badge-xs badge-secondary text-secondary-content font-black whitespace-nowrap shrink-0"
+                            >
+                              📦 Lot Split (~{{ getTopStagedCandidateForRow(row)!.estimatedLotCount }} pcs • ${{ getTopStagedCandidateForRow(row)!.unitCostShare.toFixed(2) }}/ea cost)
+                            </span>
+                            <span class="badge badge-xs badge-primary text-primary-content font-mono font-black whitespace-nowrap shrink-0">
+                              {{ getTopStagedCandidateForRow(row)!.item.upc || 'NO UPC' }}
+                            </span>
+                            <span class="badge badge-xs badge-ghost font-mono font-semibold whitespace-nowrap shrink-0">
+                              DB: ${{ Number(getTopStagedCandidateForRow(row)!.item.resalePrice || 0).toFixed(2) }} • Cost: ${{ Number(getTopStagedCandidateForRow(row)!.item.cost || 0).toFixed(2) }}
+                            </span>
+                          </div>
+
+                          <div class="text-xs font-bold leading-snug text-base-content break-words whitespace-normal">
+                            {{ getTopStagedCandidateForRow(row)!.item.title || getTopStagedCandidateForRow(row)!.item.identity }}
+                          </div>
+
+                          <div v-if="getTopStagedCandidateForRow(row)!.reasons?.length" class="flex items-center gap-1 flex-wrap">
+                            <span
+                              v-for="(reason, rIdx) in getTopStagedCandidateForRow(row)!.reasons.slice(0, 3)"
+                              :key="rIdx"
+                              class="text-[10px] px-1.5 py-0.5 rounded bg-base-200 text-base-content/80 font-semibold"
+                            >
+                              {{ reason }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 1-Click Inline Action Row: Confirm Link OR Split Piece from Lot + Drawer + Add New -->
+                      <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-base-300/60">
+                        <button
+                          v-if="getTopStagedCandidateForRow(row)!.isParentLot || getTopStagedCandidateForRow(row)!.recommendedAction === 'split_lot'"
+                          type="button"
+                          class="btn btn-xs btn-secondary text-secondary-content font-black gap-1 shadow-2xs"
+                          :disabled="row.isConfirmingInline"
+                          @click="splitLotPieceAndLinkToMd(row, getTopStagedCandidateForRow(row)!.item, getTopStagedCandidateForRow(row)!.estimatedLotCount)"
+                        >
+                          <span v-if="row.isConfirmingInline" class="loading loading-spinner loading-xs"></span>
+                          <span>✂️ Split Piece from Lot &amp; Link</span>
+                        </button>
+                        <button
+                          v-else
+                          type="button"
+                          class="btn btn-xs btn-success text-success-content font-black gap-1 shadow-2xs"
+                          :disabled="row.isConfirmingInline"
+                          @click="confirmInlineCandidateLink(row, getTopStagedCandidateForRow(row)!.item)"
+                        >
+                          <span v-if="row.isConfirmingInline" class="loading loading-spinner loading-xs"></span>
+                          <span>🔗 Confirm Link</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-outline border-base-300 hover:border-primary font-bold gap-1"
+                          @click="openMatchDrawer(row)"
+                        >
+                          <span>🔍 Drawer ({{ getRowSuggestedCount(row) }})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1 ml-auto"
+                          :disabled="row.isQuickAdding"
+                          @click="quickAddRow(row)"
+                        >
+                          <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
+                          <span>+ Add New ({{ getRowPreviewUpc(row) }})</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Fallback when 0 suggested candidates: New Booth Item pill + Open Match Drawer + Quick Add -->
+                    <div v-else class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      <span class="badge badge-xs badge-ghost font-bold whitespace-nowrap shrink-0">
+                        ⚪ New Booth Item
+                      </span>
                       <button
                         type="button"
-                        class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[175px] shadow-2xs"
+                        class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[155px] shadow-2xs"
                         @click="openMatchDrawer(row)"
                       >
                         <span class="flex items-center gap-1.5 truncate">
                           <span>🔍 Open Match Drawer</span>
                         </span>
-                        <span
-                          v-if="getRowSuggestedCount(row) > 0"
-                          class="badge badge-xs badge-success text-success-content font-black whitespace-nowrap shrink-0"
-                        >
-                          {{ getRowSuggestedCount(row) }} suggested
-                        </span>
-                        <span
-                          v-else
-                          class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0"
-                        >
-                          Search
+                        <span class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0">
+                          Search All
                         </span>
                       </button>
 
@@ -1276,83 +1477,142 @@
             <div
               v-for="cand in drawerDisplayCandidates"
               :key="cand.item.$id"
-              class="p-3.5 rounded-2xl bg-base-100 hover:bg-base-200/50 border border-base-300 hover:border-primary/50 transition-all shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+              class="p-3.5 rounded-2xl bg-base-100 hover:bg-base-200/50 border border-base-300 hover:border-primary/50 transition-all shadow-xs space-y-3"
               :class="{ 'ring-2 ring-primary bg-primary/5': activeMatchRow.mappedItem?.$id === cand.item.$id }"
             >
-              <!-- Left: Photo Thumbnail + Full Untruncated Details -->
-              <div class="flex items-start gap-3 flex-1 min-w-0">
-                <div class="w-14 h-14 rounded-xl bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
-                  <img
-                    v-if="getItemThumbUrl(cand.item)"
-                    :src="getItemThumbUrl(cand.item)"
-                    :alt="cand.item.title"
-                    class="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-6 h-6 opacity-35" />
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <!-- Left: Photo Thumbnail + Full Untruncated Details -->
+                <div class="flex items-start gap-3 flex-1 min-w-0">
+                  <div class="w-14 h-14 rounded-xl bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img
+                      v-if="getItemThumbUrl(cand.item)"
+                      :src="getItemThumbUrl(cand.item)"
+                      :alt="cand.item.title"
+                      class="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-6 h-6 opacity-35" />
+                  </div>
+
+                  <div class="flex-1 min-w-0 space-y-1">
+                    <!-- Badges Row: Confidence, UPC, Status @ Location, Lot Info, Price Comparison -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        class="badge badge-xs font-black"
+                        :class="cand.confidence >= 88 ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
+                      >
+                        {{ cand.confidence >= 88 ? '🟢' : '🟡' }} {{ cand.confidence }}% Match
+                      </span>
+                      <span
+                        v-if="cand.isParentLot"
+                        class="badge badge-xs badge-secondary text-secondary-content font-black"
+                      >
+                        📦 Parent Lot (~{{ cand.estimatedLotCount }} pcs • ${{ cand.unitCostShare.toFixed(2) }}/ea cost)
+                      </span>
+                      <span class="badge badge-xs font-mono font-black" :class="cand.item.upc ? 'badge-primary text-primary-content' : 'badge-ghost'">
+                        {{ cand.item.upc || 'NO UPC' }}
+                      </span>
+                      <span class="badge badge-xs badge-outline font-mono font-bold">
+                        {{ cand.item.status || 'received' }} @ {{ cand.item.storageLocation || 'HG' }}
+                      </span>
+                      <span v-if="Number(cand.item.quantity) > 1" class="badge badge-xs badge-warning text-warning-content font-mono font-bold">
+                        Qty: {{ cand.item.quantity }}
+                      </span>
+                      <span
+                        v-if="cand.isExactPrice"
+                        class="badge badge-xs badge-success text-success-content font-black"
+                      >
+                        ✓ Exact ${{ Number(cand.item.resalePrice || 0).toFixed(2) }}
+                      </span>
+                      <span
+                        v-else-if="cand.isClosePrice"
+                        class="badge badge-xs badge-info text-info-content font-bold"
+                      >
+                        DB: ${{ Number(cand.item.resalePrice || 0).toFixed(2) }} (Δ ${{ (cand.priceDiff || 0).toFixed(2) }})
+                      </span>
+                      <span
+                        v-else
+                        class="badge badge-xs badge-ghost font-mono"
+                      >
+                        DB: ${{ Number(cand.item.resalePrice || 0).toFixed(2) }} • Cost: ${{ Number(cand.item.cost || 0).toFixed(2) }}
+                      </span>
+                    </div>
+
+                    <!-- Full Untruncated Candidate Title -->
+                    <div class="text-sm font-bold leading-snug text-base-content break-words whitespace-normal">
+                      {{ cand.item.title || cand.item.identity || 'Untitled Item' }}
+                    </div>
+
+                    <!-- Match Reasons / Notes -->
+                    <div v-if="cand.reasons && cand.reasons.length > 0" class="flex items-center gap-1 flex-wrap pt-0.5">
+                      <span
+                        v-for="(reason, rIdx) in cand.reasons"
+                        :key="rIdx"
+                        class="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold"
+                      >
+                        {{ reason }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="flex-1 min-w-0 space-y-1">
-                  <!-- Badges Row: UPC, Status @ Location, Price Comparison -->
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="badge badge-xs font-mono font-black" :class="cand.item.upc ? 'badge-primary text-primary-content' : 'badge-ghost'">
-                      {{ cand.item.upc || 'NO UPC' }}
-                    </span>
-                    <span class="badge badge-xs badge-outline font-mono font-bold">
-                      {{ cand.item.status || 'received' }} @ {{ cand.item.storageLocation || 'HG' }}
-                    </span>
-                    <span v-if="Number(cand.item.quantity) > 1" class="badge badge-xs badge-warning text-warning-content font-mono font-bold">
-                      Qty: {{ cand.item.quantity }}
-                    </span>
-                    <span
-                      v-if="cand.isExactPrice"
-                      class="badge badge-xs badge-success text-success-content font-black"
-                    >
-                      ✓ Exact ${{ Number(cand.item.resalePrice || 0).toFixed(2) }}
-                    </span>
-                    <span
-                      v-else-if="cand.isClosePrice"
-                      class="badge badge-xs badge-info text-info-content font-bold"
-                    >
-                      DB: ${{ Number(cand.item.resalePrice || 0).toFixed(2) }} (Δ ${{ (cand.priceDiff || 0).toFixed(2) }})
-                    </span>
-                    <span
-                      v-else
-                      class="badge badge-xs badge-ghost font-mono"
-                    >
-                      DB: ${{ Number(cand.item.resalePrice || 0).toFixed(2) }}
-                    </span>
-                  </div>
-
-                  <!-- Full Untruncated Candidate Title -->
-                  <div class="text-sm font-bold leading-snug text-base-content break-words whitespace-normal">
-                    {{ cand.item.title || cand.item.identity || 'Untitled Item' }}
-                  </div>
-
-                  <!-- Match Reasons / Notes -->
-                  <div v-if="cand.reasons && cand.reasons.length > 0" class="flex items-center gap-1 flex-wrap pt-0.5">
-                    <span
-                      v-for="(reason, rIdx) in cand.reasons"
-                      :key="rIdx"
-                      class="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold"
-                    >
-                      {{ reason }}
-                    </span>
-                  </div>
+                <!-- Right: 1-Click Link & Save to MD OR Split from Lot & Link to MD -->
+                <div class="flex sm:flex-col items-center sm:items-end justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-base-200">
+                  <button
+                    v-if="cand.isParentLot"
+                    type="button"
+                    class="btn btn-xs sm:btn-sm btn-secondary text-secondary-content font-black gap-1.5 shadow-sm w-full sm:w-auto"
+                    :disabled="isSavingDrawerLink === cand.item.$id"
+                    @click="splitLotPieceAndLinkToMd(activeMatchRow, cand.item, cand.estimatedLotCount, true)"
+                  >
+                    <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
+                    <span v-else>✂️ Split from Lot &amp; Link to MD</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs sm:btn-sm font-black gap-1.5 shadow-sm w-full sm:w-auto"
+                    :class="cand.isParentLot ? 'btn-outline btn-primary' : 'btn-primary text-primary-content'"
+                    :disabled="isSavingDrawerLink === cand.item.$id"
+                    @click="linkAndSaveCandidateToMd(cand.item)"
+                  >
+                    <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
+                    <span v-else>🔗 {{ cand.isParentLot ? 'Link Whole Lot' : 'Link & Save to MD' }}</span>
+                  </button>
                 </div>
               </div>
 
-              <!-- Right: 1-Click Link & Save to MD Button -->
-              <div class="flex sm:flex-col items-center sm:items-end justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-base-200">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary text-primary-content font-black gap-1.5 shadow-sm w-full sm:w-auto"
-                  :disabled="isSavingDrawerLink === cand.item.$id"
-                  @click="linkAndSaveCandidateToMd(cand.item)"
-                >
-                  <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
-                  <span v-else>🔗 Link &amp; Save to MD</span>
-                </button>
+              <!-- Multi-Piece Sibling Lot Checklist: When this candidate is a Parent Lot, show other unmatched booth rows matching this same Lot! -->
+              <div
+                v-if="cand.isParentLot && getOtherUnmatchedRowsMatchingLot(cand.item, activeMatchRow).length > 0"
+                class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-2"
+              >
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <div class="text-xs font-black text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                    <span>📦 Other Unlinked Booth Items Matching This Same Parent Lot ({{ getOtherUnmatchedRowsMatchingLot(cand.item, activeMatchRow).length }})</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-secondary text-secondary-content font-black gap-1"
+                    :disabled="isSplittingLotId === cand.item.$id"
+                    @click="splitMultiplePiecesFromLot(cand.item, cand.estimatedLotCount, [activeMatchRow, ...getOtherUnmatchedRowsMatchingLot(cand.item, activeMatchRow)])"
+                  >
+                    <span v-if="isSplittingLotId === cand.item.$id" class="loading loading-spinner loading-xs"></span>
+                    <span>✂️ Split &amp; Link All {{ 1 + getOtherUnmatchedRowsMatchingLot(cand.item, activeMatchRow).length }} Pieces ($ {{ cand.unitCostShare.toFixed(2) }}/ea cost)</span>
+                  </button>
+                </div>
+                <div class="grid grid-cols-1 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  <div
+                    v-for="sibRow in getOtherUnmatchedRowsMatchingLot(cand.item, activeMatchRow)"
+                    :key="sibRow.originalLineIndex"
+                    class="flex items-center justify-between gap-2 text-xs bg-base-100/90 px-2.5 py-1.5 rounded-lg border border-base-300"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="badge badge-xs badge-secondary font-mono font-bold shrink-0">{{ sibRow.extractedSku || 'NO SKU' }}</span>
+                      <span class="font-semibold truncate">{{ sibRow.itemName }}</span>
+                    </div>
+                    <span class="font-mono font-bold text-primary shrink-0">${{ Number(sibRow.listedPrice || 0).toFixed(2) }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1757,6 +2017,9 @@ import {
   matchMemoryDenInventoryItem,
   getUnclaimedMatchCandidatesForRow,
   getPrimaryItemImageId,
+  isParentLotCandidate,
+  extractEstimatedLotPieceCount,
+  type UnclaimedMatchCandidateResult,
 } from '../../lib/salesBucketing';
 
 // =========================================================================
@@ -1770,6 +2033,9 @@ const showBrowserSyncModal = ref(false);
 const mdVerifyReport = ref<any | null>(null);
 const isCheckingVerifyReport = ref(false);
 const verifyStatusFilter = ref<'ALL' | 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC'>('ALL');
+const confidenceTierFilter = ref<'ALL' | 'HIGH' | 'LOT_SPLIT' | 'REVIEW' | 'NEW_ITEM'>('ALL');
+const isBatchApproving = ref(false);
+const isSplittingLotId = ref<string | null>(null);
 
 const isDragging = ref(false);
 const isParsing = ref(false);
@@ -1853,6 +2119,40 @@ function isRealProductionUpc(upc: any): boolean {
 
 function cleanSkuAndUpcValid(sku: string, upc: any): boolean {
   return Boolean(sku && isRealProductionUpc(upc));
+}
+
+function claimedItemIdsForRow(targetRow?: any): Set<string> {
+  const set = new Set<string>();
+  for (const r of syncRows.value || []) {
+    if (r === targetRow) continue;
+    if (r.mappedItem && r.mappedItem.$id) {
+      set.add(r.mappedItem.$id);
+    }
+  }
+  return set;
+}
+
+function getTopStagedCandidateForRow(row: any): UnclaimedMatchCandidateResult | null {
+  if (!row || row.mappedItem) return null;
+  if (row.stagedCandidate && row.stagedCandidate.item) {
+    return row.stagedCandidate as UnclaimedMatchCandidateResult;
+  }
+  const allItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+  if (allItems.length === 0) return null;
+  const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
+  const cands = getUnclaimedMatchCandidatesForRow({
+    rowSku: row.extractedSku,
+    rowTitle: row.itemName,
+    rowPrice: Number(row.listedPrice || 0),
+    rowIsInStock,
+    rowIsBb: Boolean(row.isBbRow),
+    searchQuery: '',
+    filterMode: 'suggested',
+    allItems,
+    claimedItemIds: claimedItemIdsForRow(row),
+    limit: 1,
+  });
+  return cands[0] || null;
 }
 
 // =========================================================================
@@ -1965,11 +2265,59 @@ const totalSoldNet = computed(() => {
     .reduce((acc, r) => acc + (r.netSoldPrice || 0), 0);
 });
 
+const highConfidenceUnmatchedRows = computed(() => {
+  return (syncRows.value || []).filter((r) => {
+    if (r.mappedItem) return false;
+    const top = getTopStagedCandidateForRow(r);
+    return Boolean(top && top.confidence >= 88);
+  });
+});
+
+const lotSplitUnmatchedRows = computed(() => {
+  return (syncRows.value || []).filter((r) => {
+    if (r.mappedItem) return false;
+    const top = getTopStagedCandidateForRow(r);
+    return Boolean(top && (top.isParentLot || top.recommendedAction === 'split_lot'));
+  });
+});
+
+const reviewUnmatchedRows = computed(() => {
+  return (syncRows.value || []).filter((r) => {
+    if (r.mappedItem) return false;
+    const top = getTopStagedCandidateForRow(r);
+    return Boolean(top && top.confidence < 88);
+  });
+});
+
+const newBoothUnmatchedRows = computed(() => {
+  return (syncRows.value || []).filter((r) => {
+    if (r.mappedItem) return false;
+    const top = getTopStagedCandidateForRow(r);
+    return !top;
+  });
+});
+
+const selectedHighConfidenceRows = computed(() => {
+  return (syncRows.value || []).filter((r) => !r.mappedItem && r.selectedForApproval && getTopStagedCandidateForRow(r));
+});
+
 const displayedRows = computed(() => {
   let rows = syncRows.value || [];
 
   if (verifyStatusFilter.value !== 'ALL') {
     rows = rows.filter((r) => r.verifyStatus === verifyStatusFilter.value);
+  }
+
+  if (confidenceTierFilter.value !== 'ALL') {
+    rows = rows.filter((r) => {
+      if (r.mappedItem) return false;
+      const top = getTopStagedCandidateForRow(r);
+      if (confidenceTierFilter.value === 'HIGH') return Boolean(top && top.confidence >= 88);
+      if (confidenceTierFilter.value === 'LOT_SPLIT') return Boolean(top && (top.isParentLot || top.recommendedAction === 'split_lot'));
+      if (confidenceTierFilter.value === 'REVIEW') return Boolean(top && top.confidence < 88);
+      if (confidenceTierFilter.value === 'NEW_ITEM') return !top;
+      return true;
+    });
   }
 
   if (selectedOrgBucket.value === 'primary') {
@@ -2005,6 +2353,50 @@ const displayedRows = computed(() => {
   }
 
   return rows;
+});
+
+const activeMatchRowIndex = computed(() => {
+  if (!activeMatchRow.value) return -1;
+  return displayedRows.value.indexOf(activeMatchRow.value);
+});
+
+const drawerSuggestedCandidates = computed(() => {
+  const row = activeMatchRow.value;
+  if (!row || !inventoryItems.value) return [];
+  const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
+  return getUnclaimedMatchCandidatesForRow({
+    rowSku: row.extractedSku,
+    rowTitle: row.itemName,
+    rowPrice: Number(row.listedPrice || 0),
+    rowIsInStock: isRowInStock,
+    rowIsBb: Boolean(row.isBbRow),
+    searchQuery: '',
+    filterMode: 'suggested',
+    allItems: inventoryItems.value,
+    claimedItemIds: claimedItemIdsForRow(row),
+    limit: 8,
+  });
+});
+
+const drawerDisplayCandidates = computed(() => {
+  const row = activeMatchRow.value;
+  if (!row || !inventoryItems.value) return [];
+  const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
+  const query = matchDrawerSearch.value.trim();
+  const effectiveFilter = query ? 'all' : matchDrawerFilter.value;
+
+  return getUnclaimedMatchCandidatesForRow({
+    rowSku: row.extractedSku,
+    rowTitle: row.itemName,
+    rowPrice: Number(row.listedPrice || 0),
+    rowIsInStock: isRowInStock,
+    rowIsBb: Boolean(row.isBbRow),
+    searchQuery: query,
+    filterMode: effectiveFilter,
+    allItems: inventoryItems.value,
+    claimedItemIds: claimedItemIdsForRow(row),
+    limit: query || effectiveFilter !== 'suggested' ? 40 : 8,
+  });
 });
 
 // Direct DB + Preverified + Report syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so all ~714 matched items are ALWAYS included!
@@ -2843,26 +3235,22 @@ function findBestItemMatch(csvName: string, inventory: any[]): any {
 }
 
 // =========================================================================
-// SLIDE-OVER INVENTORY MATCH DRAWER STATE & 1-CLICK LINK & SAVE TO MD
+// SLIDE-OVER INVENTORY MATCH DRAWER STATE, INLINE CONFIRM & LOT SPLITTING
 // =========================================================================
+let rcSyncChannel: BroadcastChannel | null = null;
+const broadcastBarcodesUpdated = () => {
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      if (!rcSyncChannel) rcSyncChannel = new BroadcastChannel('resale_command_sync');
+      rcSyncChannel.postMessage({ type: 'RC_BARCODES_UPDATED', timestamp: Date.now() });
+    }
+  } catch {}
+};
+
 const getItemThumbUrl = (item: any): string => {
   const imgId = getPrimaryItemImageId(item);
   if (!imgId) return '';
   return getAssetUrl(imgId, { preview: true, width: 160, height: 160, quality: 80 });
-};
-
-/**
- * Set of Appwrite item `$id`s currently claimed by other rows in this CSV sync.
- */
-const claimedItemIdsForRow = (targetRow?: any): Set<string> => {
-  const set = new Set<string>();
-  for (const r of syncRows.value) {
-    if (r === targetRow) continue;
-    if (r.mappedItem && r.mappedItem.$id) {
-      set.add(r.mappedItem.$id);
-    }
-  }
-  return set;
 };
 
 const getRowSuggestedCount = (row: any): number => {
@@ -2882,50 +3270,6 @@ const getRowSuggestedCount = (row: any): number => {
   });
   return cands.length;
 };
-
-const activeMatchRowIndex = computed(() => {
-  if (!activeMatchRow.value) return -1;
-  return displayedRows.value.indexOf(activeMatchRow.value);
-});
-
-const drawerSuggestedCandidates = computed(() => {
-  const row = activeMatchRow.value;
-  if (!row || !inventoryItems.value) return [];
-  const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
-  return getUnclaimedMatchCandidatesForRow({
-    rowSku: row.extractedSku,
-    rowTitle: row.itemName,
-    rowPrice: Number(row.listedPrice || 0),
-    rowIsInStock: isRowInStock,
-    rowIsBb: Boolean(row.isBbRow),
-    searchQuery: '',
-    filterMode: 'suggested',
-    allItems: inventoryItems.value,
-    claimedItemIds: claimedItemIdsForRow(row),
-    limit: 8,
-  });
-});
-
-const drawerDisplayCandidates = computed(() => {
-  const row = activeMatchRow.value;
-  if (!row || !inventoryItems.value) return [];
-  const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
-  const query = matchDrawerSearch.value.trim();
-  const effectiveFilter = query ? 'all' : matchDrawerFilter.value;
-
-  return getUnclaimedMatchCandidatesForRow({
-    rowSku: row.extractedSku,
-    rowTitle: row.itemName,
-    rowPrice: Number(row.listedPrice || 0),
-    rowIsInStock: isRowInStock,
-    rowIsBb: Boolean(row.isBbRow),
-    searchQuery: query,
-    filterMode: effectiveFilter,
-    allItems: inventoryItems.value,
-    claimedItemIds: claimedItemIdsForRow(row),
-    limit: query || effectiveFilter !== 'suggested' ? 40 : 8,
-  });
-});
 
 const openMatchDrawer = (row: any) => {
   activeMatchRow.value = row;
@@ -2961,15 +3305,13 @@ const quickAddFromDrawer = async (row: any) => {
 };
 
 /**
- * 1-Click `🔗 Link & Save to MD` Handler inside the Match Drawer:
- * Immediately links the candidate in the UI AND persists `locationSku`, `storageLocation: 'MD'`,
- * `warehouseId: '6a7e70050009db0e1857'`, `status: 'placed' | 'sold'`, and `quantity` to Appwrite right now!
+ * Shared persistence helper: links a single inventory item to a booth row and saves to Appwrite MD.
  */
-const linkAndSaveCandidateToMd = async (item: any) => {
-  const row = activeMatchRow.value;
+const linkAndSaveItemToSpecificRow = async (row: any, item: any, closeDrawerOnSuccess = false) => {
   if (!row || !item || !item.$id) return;
 
   isSavingDrawerLink.value = item.$id;
+  row.isConfirmingInline = true;
   try {
     const cleanSku = cleanCatalogSku(row.extractedSku);
     const isRowSold = row.status === 'sold' || row.status === 'paid';
@@ -3007,7 +3349,6 @@ const linkAndSaveCandidateToMd = async (item: any) => {
 
     await updateInventoryItem(item.$id, updatePayload);
 
-    // Mutate item reactive fields in-place so UI reflects saved state immediately
     item.status = targetStatus;
     item.storageLocation = targetStorageCode;
     item.warehouseId = targetWarehouseId;
@@ -3015,15 +3356,22 @@ const linkAndSaveCandidateToMd = async (item: any) => {
     if (cleanSku) item.locationSku = cleanSku;
 
     row.mappedItem = item;
+    row.extractedUpc = item.upc || row.extractedUpc;
+    row.expectedRcUpc = item.upc || row.expectedRcUpc;
     row.isSavedToMd = true;
-    row.aiMatched = false;
+    row.selectedForApproval = false;
+
+    void syncLivePayloadToCloudEndpoint();
+    broadcastBarcodesUpdated();
 
     addToast({
       type: 'success',
       message: `✅ Linked & Saved ${item.upc || item.title} ➔ ${cleanSku || targetStorageCode} (${targetStatus} @ ${targetStorageCode})`,
     });
 
-    closeMatchDrawer();
+    if (closeDrawerOnSuccess) {
+      closeMatchDrawer();
+    }
   } catch (err: any) {
     console.error('[LocationSyncView] Failed to link & save item to MD:', err);
     addToast({
@@ -3032,6 +3380,186 @@ const linkAndSaveCandidateToMd = async (item: any) => {
     });
   } finally {
     isSavingDrawerLink.value = null;
+    row.isConfirmingInline = false;
+  }
+};
+
+const linkAndSaveCandidateToMd = async (item: any) => {
+  await linkAndSaveItemToSpecificRow(activeMatchRow.value, item, true);
+};
+
+const confirmInlineCandidateLink = async (row: any, item: any) => {
+  await linkAndSaveItemToSpecificRow(row, item, false);
+};
+
+/**
+ * 1-Click `✂️ Split Piece from Lot & Link to MD`:
+ * Creates a child item inheriting parentLotId, proportional cost share (`lotCost / pieceCount`),
+ * purchaseId/orderId/photos, stamps `locationSku: rowSku`, `storageLocation: 'MD'`, `warehouseId: '6a7e70050009db0e1857'`,
+ * and assigns a fresh sequential `HUCK-XXXX` / `PDXGL-` / `BB-` barcode while keeping the Parent Lot matchable for remaining pieces!
+ */
+const splitLotPieceAndLinkToMd = async (
+  row: any,
+  parentLot: any,
+  estimatedCount?: number,
+  closeDrawerAfter = false
+) => {
+  if (!row || !parentLot || !team.value) return;
+  row.isConfirmingInline = true;
+  isSavingDrawerLink.value = parentLot.$id;
+
+  try {
+    const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+    const isSold = row.status === 'sold' || row.status === 'paid';
+    const pieceCount = Math.max(2, Number(estimatedCount || extractEstimatedLotPieceCount(parentLot) || 2));
+    const lotCost = Number(parentLot.cost ?? 0);
+    const unitCostShare = Number((lotCost / pieceCount).toFixed(2));
+    const listedPrice = Number(row.listedPrice || row.netSoldPrice || parentLot.resalePrice || 0);
+    const netSoldPrice = Number(row.netSoldPrice || row.listedPrice || 0);
+    const locName = currentLocation.value?.name || 'Memory Den';
+
+    const prefix = getRowEffectivePrefix(row);
+    const newUpc =
+      prefix.toUpperCase().startsWith('BB') && cleanSku
+        ? `BB-${cleanSku}`
+        : (getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`);
+
+    const parentImgId = getPrimaryItemImageId(parentLot);
+    const parentGallery = Array.isArray(parentLot.galleryImageIds) ? parentLot.galleryImageIds : [];
+
+    const childDoc = await withRetry(() =>
+      saveItemToInventory(
+        {
+          title: row.itemName || parentLot.title || 'Split Lot Piece',
+          condition_notes: `✂️ Split 1/${pieceCount} from Parent Lot ${parentLot.upc || parentLot.$id} ("${parentLot.title}") • Proportional Cost: $${unitCostShare.toFixed(2)} • Booth SKU: ${cleanSku || 'MD'}`,
+        },
+        null,
+        {
+          title: row.itemName || parentLot.title || 'Split Lot Piece',
+          status: isSold ? 'sold' : 'placed',
+          locationSku: cleanSku,
+          cost: String(unitCostShare),
+          resalePrice: String(listedPrice),
+          soldPrice: isSold ? netSoldPrice : undefined,
+          sellingLocations: [locName],
+          storageLocation: 'MD',
+          upc: newUpc,
+          parentLotId: parentLot.$id,
+          purchaseId: parentLot.purchaseId || undefined,
+          orderId: parentLot.orderId || undefined,
+          purchaseLocation: parentLot.purchaseLocation || undefined,
+          imageId: parentImgId || undefined,
+          galleryImageIds: parentGallery.length > 0 ? parentGallery : (parentImgId ? [parentImgId] : []),
+        } as any,
+        team.value?.$id || user.value?.$id || '',
+        team.value?.$id ? 'team' : 'user'
+      )
+    );
+
+    // Decrement parent lot quantity if > 1 (never write quantity: 0!)
+    const currentParentQty = Number(parentLot.quantity ?? 1);
+    if (currentParentQty > 1) {
+      const nextParentQty = Math.max(1, currentParentQty - 1);
+      const nextParentCost = Math.max(0, Number((lotCost - unitCostShare).toFixed(2)));
+      try {
+        await updateInventoryItem(parentLot.$id, {
+          quantity: nextParentQty,
+          cost: nextParentCost,
+        });
+        parentLot.quantity = nextParentQty;
+        parentLot.cost = nextParentCost;
+      } catch {}
+    }
+
+    inventoryItems.value.unshift(childDoc);
+    row.mappedItem = childDoc;
+    row.extractedUpc = newUpc;
+    row.expectedRcUpc = newUpc;
+    row.isSavedToMd = true;
+    row.selectedForApproval = false;
+    newItemsCreatedInSession.value++;
+
+    void syncLivePayloadToCloudEndpoint();
+    broadcastBarcodesUpdated();
+
+    addToast({
+      type: 'success',
+      message: `✂️ Split "${row.itemName}" from Lot ${parentLot.upc || ''} ➔ ${newUpc} ($${unitCostShare.toFixed(2)} cost share, SKU ${cleanSku})!`,
+    });
+
+    if (closeDrawerAfter) {
+      closeMatchDrawer();
+    }
+  } catch (err: any) {
+    console.error('[LocationSyncView] Lot split failed:', err);
+    addToast({
+      type: 'error',
+      message: `Failed to split piece from lot: ${err?.message || 'Unknown error'}`,
+    });
+  } finally {
+    row.isConfirmingInline = false;
+    isSavingDrawerLink.value = null;
+  }
+};
+
+/**
+ * Finds other unmatched rows in syncRows that also match this same Parent Lot so the user can split & link multiple pieces in 1 click.
+ */
+const getOtherUnmatchedRowsMatchingLot = (parentLot: any, excludeRow?: any): any[] => {
+  if (!parentLot || !parentLot.$id) return [];
+  const lotKeywords = new Set(extractKeywords(parentLot.title || parentLot.identity || ''));
+  if (lotKeywords.size === 0) return [];
+
+  return (syncRows.value || []).filter((r) => {
+    if (!r || r.mappedItem || r === excludeRow) return false;
+    if (r.stagedCandidate?.item?.$id === parentLot.$id) return true;
+    const rowWords = extractKeywords(r.itemName || '');
+    return rowWords.some((w) => w.length >= 4 && lotKeywords.has(w));
+  });
+};
+
+const splitMultiplePiecesFromLot = async (parentLot: any, estimatedCount: number, targetRows: any[]) => {
+  if (!parentLot || !Array.isArray(targetRows) || targetRows.length === 0) return;
+  isSplittingLotId.value = parentLot.$id;
+  try {
+    for (const r of targetRows) {
+      if (!r || r.mappedItem) continue;
+      await splitLotPieceAndLinkToMd(r, parentLot, estimatedCount, false);
+      await new Promise((res) => setTimeout(res, 180));
+    }
+    closeMatchDrawer();
+  } finally {
+    isSplittingLotId.value = null;
+  }
+};
+
+/**
+ * Batch approves all user-checked staged matches (`✅ Approve Selected Matches (N)`).
+ */
+const approveSelectedStagedMatches = async () => {
+  const rowsToApprove = [...selectedHighConfidenceRows.value];
+  if (rowsToApprove.length === 0) return;
+
+  isBatchApproving.value = true;
+  let approved = 0;
+  try {
+    for (const row of rowsToApprove) {
+      const top = getTopStagedCandidateForRow(row);
+      if (!top || !top.item) continue;
+      if (top.isParentLot || top.recommendedAction === 'split_lot') {
+        await splitLotPieceAndLinkToMd(row, top.item, top.estimatedLotCount, false);
+      } else {
+        await confirmInlineCandidateLink(row, top.item);
+      }
+      approved++;
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    addToast({
+      type: 'success',
+      message: `✅ Approved & linked ${approved} staged booth match${approved === 1 ? '' : 'es'} to Memory Den!`,
+    });
+  } finally {
+    isBatchApproving.value = false;
   }
 };
 
@@ -3429,6 +3957,21 @@ const parseCsvData = (rawText: string, fileName: string) => {
           };
         }
 
+        const initialTopCand = !matched
+          ? getUnclaimedMatchCandidatesForRow({
+              rowSku: cleanSku,
+              rowTitle: name,
+              rowPrice: grossPrice,
+              rowIsInStock: !isSoldOrPaid,
+              rowIsBb,
+              searchQuery: '',
+              filterMode: 'suggested',
+              allItems: activeItems,
+              claimedItemIds: new Set<string>(claimedItemIdToSku.keys()),
+              limit: 1,
+            })[0] || null
+          : null;
+
         rows.push({
           originalLineIndex: i,
           orgBucket,
@@ -3452,6 +3995,9 @@ const parseCsvData = (rawText: string, fileName: string) => {
           saleTicketId,
           soldDate,
           mappedItem: matched || null,
+          stagedCandidate: initialTopCand,
+          selectedForApproval: Boolean(initialTopCand && initialTopCand.confidence >= 88),
+          isConfirmingInline: false,
           searchQuery: '',
           isSearching: false,
           isQuickAdding: false
@@ -3549,75 +4095,125 @@ const triggerAiMatching = async () => {
   }
 
   isAiMatching.value = true;
-  showLoader("Gemini AI is analyzing unmatched items...", {
-    step: `Scanning ${unmappedRows.length} items against catalog...`,
-    progress: 25
+  showLoader("✨ Gemini 2.5 Flash Smart-Stager...", {
+    step: `Staging high-confidence recommendations & multi-piece lot splits for ${unmappedRows.length} items...`,
+    progress: 30
   });
 
   try {
-    const unmatchedPayload = unmappedRows.map((r, idx) => ({
-      index: idx,
-      originalIndex: r.originalLineIndex,
+    const claimedIds = claimedItemIdsForRow();
+    const rowsPayload = unmappedRows.map((r) => ({
+      sku: r.extractedSku || `ROW_${r.originalLineIndex}`,
       title: r.itemName,
-      sku: r.extractedSku,
-      price: r.listedPrice || r.netSoldPrice
+      price: Number(r.listedPrice || r.netSoldPrice || 0),
+      status: r.status,
     }));
 
-    const availablePayload = inventoryItems.value.map(i => ({
-      dbId: i.$id,
-      title: i.title,
-      upc: i.upc,
-      sku: i.sku || i.locationSku,
-      price: Number(i.resalePrice || i.listPrice || 0)
-    }));
+    const candidatesPayload = (inventoryItems.value || [])
+      .filter((i: any) => {
+        if (!i || !i.$id) return false;
+        const s = String(i.status || '').toLowerCase();
+        if (['combined', 'deconstructed', 'tracked', 'draft', 'scouted'].includes(s)) return false;
+        const isLot = isParentLotCandidate(i);
+        const locSku = cleanCatalogSku(i.locationSku || i.sku).toUpperCase();
+        if (/^0EJ/i.test(locSku) && !isLot) return false;
+        if (claimedIds.has(i.$id) && !isLot) return false;
+        return true;
+      })
+      .slice(0, 120)
+      .map((i: any) => ({
+        id: i.$id,
+        upc: i.upc || '',
+        title: i.title || i.identity || '',
+        price: Number(i.resalePrice || i.listPrice || 0),
+        cost: Number(i.cost || 0),
+        quantity: Number(i.quantity || 1),
+        isParentLot: isParentLotCandidate(i),
+        estimatedLotCount: extractEstimatedLotPieceCount(i),
+        storageLocation: i.storageLocation || 'HG',
+      }));
 
-    const res = await fetch('/api/match-inventory', {
+    const res = await fetch('/api/ai-match-booth-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        unmatchedCsvItems: unmatchedPayload,
-        availableDbItems: availablePayload
-      })
+        rows: rowsPayload,
+        candidates: candidatesPayload,
+      }),
     });
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `AI server error (${res.status})`);
+      throw new Error(errData.error || `AI Smart-Stage server error (${res.status})`);
     }
 
     const data = await res.json();
-    const mappings = data.mappings || [];
+    const matches = Array.isArray(data?.matches) ? data.matches : [];
 
-    let matchedCount = 0;
-    for (const m of mappings) {
-      const targetUnmapped = unmatchedPayload[m.csvIndex];
-      if (targetUnmapped) {
-        const row = syncRows.value.find(r => r.originalLineIndex === targetUnmapped.originalIndex);
-        const dbItem = inventoryItems.value.find(i => i.$id === m.dbId);
-        if (row && dbItem) {
-          row.mappedItem = dbItem;
-          row.aiMatched = true;
-          row.aiConfidence = m.confidence;
-          row.aiReason = m.reason;
-          matchedCount++;
-        }
+    let stagedCount = 0;
+    let lotSplitCount = 0;
+    for (const m of matches) {
+      const row = unmappedRows.find(
+        (r) => (r.extractedSku || `ROW_${r.originalLineIndex}`) === m.sku
+      );
+      if (!row) continue;
+
+      if (m.action === 'create_new' || !m.candidateId) {
+        row.stagedCandidate = null;
+        row.selectedForApproval = false;
+        continue;
       }
+
+      const dbItem = (inventoryItems.value || []).find((i: any) => i.$id === m.candidateId);
+      if (!dbItem) continue;
+
+      const isLot = m.action === 'split_lot' || isParentLotCandidate(dbItem);
+      const estPieces = Math.max(
+        1,
+        Number(m.estimatedLotPieces || extractEstimatedLotPieceCount(dbItem) || 1)
+      );
+      const lotCost = Number(dbItem.cost ?? 0);
+      const unitCostShare = isLot ? Number((lotCost / estPieces).toFixed(2)) : lotCost;
+      const rowPrice = Number(row.listedPrice || 0);
+      const dbPrice = Number(dbItem.resalePrice || 0);
+      const priceDiff = rowPrice > 0 && dbPrice > 0 ? Math.abs(dbPrice - rowPrice) : null;
+      const conf = Math.min(99, Math.max(30, Number(m.confidence || 80)));
+
+      // CONFIDENCE FIRST (NO BLIND WRITES): Stage visually in row.stagedCandidate for user review!
+      row.stagedCandidate = {
+        item: dbItem,
+        score: conf,
+        confidence: conf,
+        reasons: [
+          `✨ AI: ${m.reason || (isLot ? 'Multi-Piece Lot Split' : 'Semantic Title Match')}`,
+        ],
+        priceDiff,
+        isExactPrice: priceDiff !== null && priceDiff < 0.05,
+        isClosePrice: priceDiff !== null && priceDiff <= 5.01,
+        isParentLot: isLot,
+        estimatedLotCount: estPieces,
+        unitCostShare,
+        recommendedAction: isLot ? 'split_lot' : 'link',
+      };
+      row.selectedForApproval = conf >= 88;
+      stagedCount++;
+      if (isLot) lotSplitCount++;
     }
 
-    if (matchedCount > 0) {
-      addToast({ 
-        type: 'success', 
-        message: `✨ AI successfully mapped ${matchedCount} ${matchedCount === 1 ? 'item' : 'items'}!` 
+    if (stagedCount > 0) {
+      addToast({
+        type: 'success',
+        message: `✨ AI Smart-Staged ${stagedCount} recommendation${stagedCount === 1 ? '' : 's'} (${lotSplitCount} Lot Split${lotSplitCount === 1 ? '' : 's'})! Review inline cards or click "✅ Approve Selected Matches".`,
       });
     } else {
-      addToast({ 
-        type: 'info', 
-        message: 'AI analyzed remaining items but found no additional high-confidence matches.' 
+      addToast({
+        type: 'info',
+        message: 'AI analyzed remaining items and classified them as ⚪ New Booth Items.',
       });
     }
   } catch (err: any) {
-    console.error('AI Matching failed:', err);
-    addToast({ type: 'error', message: 'AI matching failed: ' + err.message });
+    console.error('AI Smart-Stager failed:', err);
+    addToast({ type: 'error', message: 'AI Smart-Stage failed: ' + err.message });
   } finally {
     isAiMatching.value = false;
     hideLoader();
@@ -4283,6 +4879,32 @@ onMounted(() => {
           type: 'success',
           message: `📡 Received Live Memory Den Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
         });
+      }
+    });
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        rcSyncChannel = new BroadcastChannel('resale_command_sync');
+        rcSyncChannel.onmessage = (ev) => {
+          if (ev?.data?.type === 'RC_MD_VERIFY_REPORT' && ev.data.report) {
+            mdVerifyReport.value = ev.data.report;
+            addToast({
+              type: 'success',
+              message: `📡 Auto-Refreshed Live Memory Den Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
+            });
+          }
+        };
+      }
+    } catch {}
+
+    window.addEventListener('focus', () => {
+      if (!isCommitting.value && !isBulkQuickAdding.value) {
+        void fetchMdVerifyReport(false);
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !isCommitting.value && !isBulkQuickAdding.value) {
+        void fetchMdVerifyReport(false);
       }
     });
   }
