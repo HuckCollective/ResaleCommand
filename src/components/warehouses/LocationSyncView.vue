@@ -746,10 +746,11 @@
             class="btn btn-xs sm:btn-sm bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black border-none shadow-xs gap-1.5"
             :disabled="isAiMatching || isBatchApproving"
             @click="triggerAiMatching"
-            title="1-Call Gemini 2.5 Flash Smart-Stager: scores unlinked booth items against unclaimed inventory & parent lots without blind writes"
+            title="Chunked Gemini 2.5 Flash Smart-Stager: scores unlinked booth items in batches of 20 against unclaimed inventory & parent lots without blind writes"
           >
             <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
-            <span v-else>✨ AI Smart-Stage Unlinked ({{ unmatchedCount }})</span>
+            <span v-if="isAiMatching">{{ aiMatchingProgressText || '⏳ AI Analyzing...' }}</span>
+            <span v-else>✨ AI Smart-Stage Unlinked ({{ targetAiUnmappedRows.length }})</span>
           </button>
 
           <button
@@ -1100,36 +1101,41 @@
                     </div>
 
                     <!-- Fallback when 0 suggested candidates: New Booth Item pill + Open Match Drawer + Quick Add -->
-                    <div v-else class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                      <span class="badge badge-xs badge-ghost font-bold whitespace-nowrap shrink-0">
-                        ⚪ New Booth Item
-                      </span>
-                      <button
-                        type="button"
-                        class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[155px] shadow-2xs"
-                        @click="openMatchDrawer(row)"
-                      >
-                        <span class="flex items-center gap-1.5 truncate">
-                          <span>🔍 Open Match Drawer</span>
+                    <div v-else class="space-y-1">
+                      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <span class="badge badge-xs badge-ghost font-bold whitespace-nowrap shrink-0">
+                          ⚪ New Booth Item
                         </span>
-                        <span class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0">
-                          Search All
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/5 text-base-content font-bold gap-1.5 flex-1 justify-between min-w-[155px] shadow-2xs"
+                          @click="openMatchDrawer(row)"
+                        >
+                          <span class="flex items-center gap-1.5 truncate">
+                            <span>🔍 Open Match Drawer</span>
+                          </span>
+                          <span class="badge badge-xs badge-ghost opacity-70 whitespace-nowrap shrink-0">
+                            Search All
+                          </span>
+                        </button>
 
-                      <!-- Quick Add Button per row with Partner Prefix Protection (BB- / PDXGL- / HUCK-) -->
-                      <button 
-                        type="button"
-                        class="btn btn-xs sm:btn-sm shrink-0 gap-1 font-bold shadow-xs"
-                        :class="row.isBbRow || row.orgBucket === 'BB' ? 'btn-warning text-warning-content' : row.customPrefix === 'PDXGL-' ? 'btn-secondary text-secondary-content' : 'btn-primary'"
-                        :disabled="row.isQuickAdding"
-                        @click="quickAddRow(row)"
-                        title="Quick create this item with partner-protected sequential barcode"
-                      >
-                        <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
-                        <Icon v-else icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
-                        + Add ({{ getRowPreviewUpc(row) }})
-                      </button>
+                        <!-- Quick Add Button per row with Partner Prefix Protection (BB- / PDXGL- / HUCK-) -->
+                        <button 
+                          type="button"
+                          class="btn btn-xs sm:btn-sm shrink-0 gap-1 font-bold shadow-xs"
+                          :class="row.isBbRow || row.orgBucket === 'BB' ? 'btn-warning text-warning-content' : row.customPrefix === 'PDXGL-' ? 'btn-secondary text-secondary-content' : 'btn-primary'"
+                          :disabled="row.isQuickAdding"
+                          @click="quickAddRow(row)"
+                          title="Quick create this item with partner-protected sequential barcode"
+                        >
+                          <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
+                          <Icon v-else icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
+                          + Add ({{ getRowPreviewUpc(row) }})
+                        </button>
+                      </div>
+                      <div v-if="row.aiEvaluated && row.aiReason" class="text-[10px] text-purple-600 dark:text-purple-300 font-semibold px-1">
+                        ✨ AI: {{ row.aiReason }}
+                      </div>
                     </div>
 
                     <!-- Partner Prefix Protection Guard Pill for Board/Card Games -->
@@ -1199,13 +1205,16 @@
                 class="btn btn-xs sm:btn-sm bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-xs gap-1.5 border-none active:scale-95 shrink-0 min-h-[40px]"
                 :disabled="isAiMatching || isBulkQuickAdding"
                 @click="triggerAiMatching"
-                title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks"
+                title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks in batches of 20"
               >
                 <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
                 <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4 text-yellow-300" />
-                <span class="hidden md:inline">✨ AI Match</span>
-                <span class="md:hidden">✨ AI</span>
-                <span>({{ unmatchedCount }})</span>
+                <span v-if="isAiMatching">{{ aiMatchingProgressText || '⏳ AI Analyzing...' }}</span>
+                <template v-else>
+                  <span class="hidden md:inline">✨ AI Match</span>
+                  <span class="md:hidden">✨ AI</span>
+                  <span>({{ targetAiUnmappedRows.length }})</span>
+                </template>
               </button>
 
               <button 
@@ -2042,6 +2051,7 @@ const isParsing = ref(false);
 const isCommitting = ref(false);
 const isBulkQuickAdding = ref(false);
 const isAiMatching = ref(false);
+const aiMatchingProgressText = ref('');
 const bulkProgressMessage = ref('');
 const filterTab = ref<'unmatched-sold' | 'unmatched-instock' | 'unmatched' | 'matched' | 'sold' | 'instock' | 'all'>('unmatched-sold');
 const searchQuery = ref('');
@@ -2137,6 +2147,9 @@ function getTopStagedCandidateForRow(row: any): UnclaimedMatchCandidateResult | 
   if (row.stagedCandidate && row.stagedCandidate.item) {
     return row.stagedCandidate as UnclaimedMatchCandidateResult;
   }
+  if (row.aiEvaluated) {
+    return null;
+  }
   const allItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
   if (allItems.length === 0) return null;
   const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
@@ -2153,6 +2166,16 @@ function getTopStagedCandidateForRow(row: any): UnclaimedMatchCandidateResult | 
     limit: 1,
   });
   return cands[0] || null;
+}
+
+function mergeStagedCandidateAtTop(
+  row: any,
+  list: UnclaimedMatchCandidateResult[]
+): UnclaimedMatchCandidateResult[] {
+  const staged = row?.stagedCandidate;
+  if (!staged || !staged.item || !staged.item.$id) return list;
+  const filtered = list.filter((c) => c.item?.$id !== staged.item.$id);
+  return [staged, ...filtered];
 }
 
 // =========================================================================
@@ -2360,11 +2383,17 @@ const activeMatchRowIndex = computed(() => {
   return displayedRows.value.indexOf(activeMatchRow.value);
 });
 
+const targetAiUnmappedRows = computed(() => {
+  const inView = (displayedRows.value || []).filter((r) => r.mappedItem === null);
+  if (inView.length > 0) return inView;
+  return (syncRows.value || []).filter((r) => r.mappedItem === null);
+});
+
 const drawerSuggestedCandidates = computed(() => {
   const row = activeMatchRow.value;
   if (!row || !inventoryItems.value) return [];
   const isRowInStock = row.status !== 'sold' && row.status !== 'paid';
-  return getUnclaimedMatchCandidatesForRow({
+  const base = getUnclaimedMatchCandidatesForRow({
     rowSku: row.extractedSku,
     rowTitle: row.itemName,
     rowPrice: Number(row.listedPrice || 0),
@@ -2376,6 +2405,7 @@ const drawerSuggestedCandidates = computed(() => {
     claimedItemIds: claimedItemIdsForRow(row),
     limit: 8,
   });
+  return mergeStagedCandidateAtTop(row, base);
 });
 
 const drawerDisplayCandidates = computed(() => {
@@ -2385,7 +2415,7 @@ const drawerDisplayCandidates = computed(() => {
   const query = matchDrawerSearch.value.trim();
   const effectiveFilter = query ? 'all' : matchDrawerFilter.value;
 
-  return getUnclaimedMatchCandidatesForRow({
+  const base = getUnclaimedMatchCandidatesForRow({
     rowSku: row.extractedSku,
     rowTitle: row.itemName,
     rowPrice: Number(row.listedPrice || 0),
@@ -2397,6 +2427,7 @@ const drawerDisplayCandidates = computed(() => {
     claimedItemIds: claimedItemIdsForRow(row),
     limit: query || effectiveFilter !== 'suggested' ? 40 : 8,
   });
+  return !query && effectiveFilter === 'suggested' ? mergeStagedCandidateAtTop(row, base) : base;
 });
 
 // Direct DB + Preverified + Report syncable items (`0EJ...` -> `HUCK-XXXX` / `PDXGL-` / `BB-`) so all ~714 matched items are ALWAYS included!
@@ -3288,7 +3319,7 @@ const getRowSuggestedCount = (row: any): number => {
     claimedItemIds: claimedItemIdsForRow(row),
     limit: 8,
   });
-  return cands.length;
+  return mergeStagedCandidateAtTop(row, cands).length;
 };
 
 const openMatchDrawer = (row: any) => {
@@ -4108,122 +4139,199 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 8, initialDelay =
 }
 
 const triggerAiMatching = async () => {
-  const unmappedRows = syncRows.value.filter(r => r.mappedItem === null);
+  const unmappedRows = [...targetAiUnmappedRows.value];
   if (unmappedRows.length === 0) {
-    addToast({ type: 'info', message: 'All items are already mapped!' });
+    addToast({ type: 'info', message: 'All items in this view are already mapped!' });
     return;
   }
 
+  const BATCH_SIZE = 20;
+  const totalRows = unmappedRows.length;
   isAiMatching.value = true;
+  aiMatchingProgressText.value = `⏳ AI Analyzing 1–${Math.min(BATCH_SIZE, totalRows)} of ${totalRows}...`;
+
   showLoader("✨ Gemini 2.5 Flash Smart-Stager...", {
-    step: `Staging high-confidence recommendations & multi-piece lot splits for ${unmappedRows.length} items...`,
-    progress: 30
+    step: aiMatchingProgressText.value,
+    progress: 15
   });
 
   try {
+    const allItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
     const claimedIds = claimedItemIdsForRow();
-    const rowsPayload = unmappedRows.map((r) => ({
-      sku: r.extractedSku || `ROW_${r.originalLineIndex}`,
-      title: r.itemName,
-      price: Number(r.listedPrice || r.netSoldPrice || 0),
-      status: r.status,
-    }));
-
-    const candidatesPayload = (inventoryItems.value || [])
-      .filter((i: any) => {
-        if (!i || !i.$id) return false;
-        const s = String(i.status || '').toLowerCase();
-        if (['combined', 'deconstructed', 'tracked', 'draft', 'scouted'].includes(s)) return false;
-        const isLot = isParentLotCandidate(i);
-        const locSku = cleanCatalogSku(i.locationSku || i.sku).toUpperCase();
-        if (/^0EJ/i.test(locSku) && !isLot) return false;
-        if (claimedIds.has(i.$id) && !isLot) return false;
-        return true;
-      })
-      .slice(0, 120)
-      .map((i: any) => ({
-        id: i.$id,
-        upc: i.upc || '',
-        title: i.title || i.identity || '',
-        price: Number(i.resalePrice || i.listPrice || 0),
-        cost: Number(i.cost || 0),
-        quantity: Number(i.quantity || 1),
-        isParentLot: isParentLotCandidate(i),
-        estimatedLotCount: extractEstimatedLotPieceCount(i),
-        storageLocation: i.storageLocation || 'HG',
-      }));
-
-    const res = await fetch('/api/ai-match-booth-items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rows: rowsPayload,
-        candidates: candidatesPayload,
-      }),
+    const eligiblePool = allItems.filter((i: any) => {
+      if (!i || !i.$id) return false;
+      const s = String(i.status || '').toLowerCase();
+      if (['combined', 'deconstructed', 'tracked', 'draft', 'scouted'].includes(s)) return false;
+      const isLot = isParentLotCandidate(i);
+      const locSku = cleanCatalogSku(i.locationSku || i.sku).toUpperCase();
+      if (/^0EJ/i.test(locSku) && !isLot) return false;
+      if (claimedIds.has(i.$id) && !isLot) return false;
+      return true;
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `AI Smart-Stage server error (${res.status})`);
-    }
-
-    const data = await res.json();
-    const matches = Array.isArray(data?.matches) ? data.matches : [];
 
     let stagedCount = 0;
     let lotSplitCount = 0;
-    for (const m of matches) {
-      const row = unmappedRows.find(
-        (r) => (r.extractedSku || `ROW_${r.originalLineIndex}`) === m.sku
-      );
-      if (!row) continue;
+    let newBoothCount = 0;
 
-      if (m.action === 'create_new' || !m.candidateId) {
-        row.stagedCandidate = null;
-        row.selectedForApproval = false;
-        continue;
+    for (let offset = 0; offset < totalRows; offset += BATCH_SIZE) {
+      const batchRows = unmappedRows.slice(offset, offset + BATCH_SIZE);
+      const startNum = offset + 1;
+      const endNum = Math.min(offset + BATCH_SIZE, totalRows);
+      const progressPct = Math.min(95, Math.round((endNum / totalRows) * 90) + 10);
+
+      aiMatchingProgressText.value = `⏳ AI Analyzing ${startNum}–${endNum} of ${totalRows}...`;
+      showLoader("✨ Gemini 2.5 Flash Smart-Stager...", {
+        step: aiMatchingProgressText.value,
+        progress: progressPct,
+      });
+
+      const rowsPayload = batchRows.map((r) => ({
+        sku: r.extractedSku || `ROW_${r.originalLineIndex}`,
+        title: r.itemName,
+        price: Number(r.listedPrice || r.netSoldPrice || 0),
+        status: r.status,
+      }));
+
+      // Build targeted candidate pool for this batch:
+      // 1) Top heuristic & all-mode candidates for each row in the batch
+      // 2) All eligible Parent Lots (e.g. HUCK-0790, HUCK-0467, etc.)
+      // 3) Remaining unclaimed items up to 90 candidates
+      const prioritizedMap = new Map<string, any>();
+      for (const r of batchRows) {
+        const isRowInStock = r.status !== 'sold' && r.status !== 'paid';
+        const topForRow = getUnclaimedMatchCandidatesForRow({
+          rowSku: r.extractedSku,
+          rowTitle: r.itemName,
+          rowPrice: Number(r.listedPrice || 0),
+          rowIsInStock: isRowInStock,
+          rowIsBb: Boolean(r.isBbRow),
+          searchQuery: '',
+          filterMode: 'all',
+          allItems,
+          claimedItemIds: claimedIds,
+          limit: 6,
+        });
+        for (const c of topForRow) {
+          if (c.item?.$id && !prioritizedMap.has(c.item.$id)) {
+            prioritizedMap.set(c.item.$id, c.item);
+          }
+        }
       }
 
-      const dbItem = (inventoryItems.value || []).find((i: any) => i.$id === m.candidateId);
-      if (!dbItem) continue;
+      for (const item of eligiblePool) {
+        if (isParentLotCandidate(item) && !prioritizedMap.has(item.$id)) {
+          prioritizedMap.set(item.$id, item);
+        }
+      }
 
-      const isLot = m.action === 'split_lot' || isParentLotCandidate(dbItem);
-      const estPieces = Math.max(
-        1,
-        Number(m.estimatedLotPieces || extractEstimatedLotPieceCount(dbItem) || 1)
-      );
-      const lotCost = Number(dbItem.cost ?? 0);
-      const unitCostShare = isLot ? Number((lotCost / estPieces).toFixed(2)) : lotCost;
-      const rowPrice = Number(row.listedPrice || 0);
-      const dbPrice = Number(dbItem.resalePrice || 0);
-      const priceDiff = rowPrice > 0 && dbPrice > 0 ? Math.abs(dbPrice - rowPrice) : null;
-      const conf = Math.min(99, Math.max(30, Number(m.confidence || 80)));
+      for (const item of eligiblePool) {
+        if (prioritizedMap.size >= 90) break;
+        if (!prioritizedMap.has(item.$id)) {
+          prioritizedMap.set(item.$id, item);
+        }
+      }
 
-      // CONFIDENCE FIRST (NO BLIND WRITES): Stage visually in row.stagedCandidate for user review!
-      row.stagedCandidate = {
-        item: dbItem,
-        score: conf,
-        confidence: conf,
-        reasons: [
-          `✨ AI: ${m.reason || (isLot ? 'Multi-Piece Lot Split' : 'Semantic Title Match')}`,
-        ],
-        priceDiff,
-        isExactPrice: priceDiff !== null && priceDiff < 0.05,
-        isClosePrice: priceDiff !== null && priceDiff <= 5.01,
-        isParentLot: isLot,
-        estimatedLotCount: estPieces,
-        unitCostShare,
-        recommendedAction: isLot ? 'split_lot' : 'link',
-      };
-      row.selectedForApproval = conf >= 88;
-      stagedCount++;
-      if (isLot) lotSplitCount++;
+      const candidatesPayload = Array.from(prioritizedMap.values())
+        .slice(0, 90)
+        .map((i: any) => ({
+          id: i.$id,
+          upc: i.upc || '',
+          title: i.title || i.identity || '',
+          price: Number(i.resalePrice || i.listPrice || 0),
+          cost: Number(i.cost || 0),
+          quantity: Number(i.quantity || 1),
+          isParentLot: isParentLotCandidate(i),
+          estimatedLotCount: extractEstimatedLotPieceCount(i),
+          storageLocation: i.storageLocation || 'HG',
+        }));
+
+      const res = await fetch('/api/ai-match-booth-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: rowsPayload,
+          candidates: candidatesPayload,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `AI Smart-Stage server error (${res.status})`);
+      }
+
+      const data = await res.json();
+      const matches = Array.isArray(data?.matches) ? data.matches : [];
+
+      for (const m of matches) {
+        const normMatchSku = String(m.sku || '').trim().toUpperCase();
+        const row = batchRows.find(
+          (r) => String(r.extractedSku || `ROW_${r.originalLineIndex}`).trim().toUpperCase() === normMatchSku
+        );
+        if (!row) continue;
+
+        const rawCandId = String(m.candidateId || '').trim();
+        const normCandUpc = cleanCatalogSku(rawCandId).toUpperCase();
+        const dbItem = rawCandId
+          ? allItems.find(
+              (i: any) =>
+                i.$id === rawCandId ||
+                (normCandUpc && cleanCatalogSku(i.upc).toUpperCase() === normCandUpc)
+            )
+          : null;
+
+        if (m.action === 'create_new' || !rawCandId || !dbItem || Number(m.confidence || 0) < 50) {
+          row.aiEvaluated = true;
+          row.aiMatched = false;
+          row.aiReason = m.reason || 'Classified as New Booth Item (no matching inventory item)';
+          row.stagedCandidate = null;
+          row.selectedForApproval = false;
+          newBoothCount++;
+          continue;
+        }
+
+        const isLot = m.action === 'split_lot' || isParentLotCandidate(dbItem);
+        const estPieces = Math.max(
+          1,
+          Number(m.estimatedLotPieces || extractEstimatedLotPieceCount(dbItem) || 1)
+        );
+        const lotCost = Number(dbItem.cost ?? 0);
+        const unitCostShare = isLot ? Number((lotCost / estPieces).toFixed(2)) : lotCost;
+        const rowPrice = Number(row.listedPrice || 0);
+        const dbPrice = Number(dbItem.resalePrice || 0);
+        const priceDiff = rowPrice > 0 && dbPrice > 0 ? Math.abs(dbPrice - rowPrice) : null;
+        const conf = Math.min(99, Math.max(50, Number(m.confidence || 76)));
+
+        // CONFIDENCE FIRST (NO BLIND WRITES): Override row.stagedCandidate & Match Drawer #1 candidate!
+        row.aiEvaluated = true;
+        row.aiReason = m.reason || (isLot ? 'Multi-Piece Lot Split' : 'Semantic Title Match');
+        row.stagedCandidate = {
+          item: dbItem,
+          score: conf,
+          confidence: conf,
+          reasons: [
+            `✨ AI: ${row.aiReason}`,
+          ],
+          priceDiff,
+          isExactPrice: priceDiff !== null && priceDiff < 0.05,
+          isClosePrice: priceDiff !== null && priceDiff <= 5.01,
+          isParentLot: isLot,
+          estimatedLotCount: estPieces,
+          unitCostShare,
+          recommendedAction: isLot ? 'split_lot' : 'link',
+        };
+        row.selectedForApproval = conf >= 88;
+        stagedCount++;
+        if (isLot) lotSplitCount++;
+      }
+
+      // Trigger reactive table & drawer refresh after each batch
+      syncRows.value = [...syncRows.value];
     }
 
-    if (stagedCount > 0) {
+    if (stagedCount > 0 || newBoothCount > 0) {
       addToast({
         type: 'success',
-        message: `✨ AI Smart-Staged ${stagedCount} recommendation${stagedCount === 1 ? '' : 's'} (${lotSplitCount} Lot Split${lotSplitCount === 1 ? '' : 's'})! Review inline cards or click "✅ Approve Selected Matches".`,
+        message: `✨ AI Smart-Staged ${stagedCount} match${stagedCount === 1 ? '' : 'es'} (${lotSplitCount} Lot Split${lotSplitCount === 1 ? '' : 's'}) & flagged ${newBoothCount} New Booth Item${newBoothCount === 1 ? '' : 's'}!`,
       });
     } else {
       addToast({
@@ -4236,6 +4344,7 @@ const triggerAiMatching = async () => {
     addToast({ type: 'error', message: 'AI Smart-Stage failed: ' + err.message });
   } finally {
     isAiMatching.value = false;
+    aiMatchingProgressText.value = '';
     hideLoader();
   }
 };
@@ -4840,11 +4949,61 @@ const createNewLocation = async () => {
   }
 };
 
+const healZeroEj0CqParentLotIfNeeded = async () => {
+  try {
+    const allItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
+    if (allItems.length === 0) return;
+
+    const item0ej0cq = allItems.find(
+      (i: any) => cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase() === '0EJ0CQ'
+    );
+    const huck0790 = allItems.find(
+      (i: any) => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-0790'
+    );
+    const huck0467 = allItems.find(
+      (i: any) => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-0467'
+    );
+
+    if (!item0ej0cq || !huck0790) return;
+
+    const currentParentId = String(item0ej0cq.parentLotId || '').trim();
+    const notesStr = String(item0ej0cq.conditionNotes || '');
+    const isLinkedTo0467 =
+      (huck0467 && currentParentId === huck0467.$id) ||
+      /HUCK-0467/i.test(notesStr);
+
+    if (isLinkedTo0467 && currentParentId !== huck0790.$id) {
+      const pieceCount = Math.max(2, extractEstimatedLotPieceCount(huck0790) || 5);
+      const lotCost = Number(huck0790.cost ?? 0);
+      const unitCostShare = Number((lotCost / pieceCount).toFixed(2));
+      const updatedNotes = `✂️ Split 1/${pieceCount} from Parent Lot HUCK-0790 ("${huck0790.title}") • Proportional Cost: $${unitCostShare.toFixed(2)} • Booth SKU: 0EJ0CQ`;
+
+      const patchPayload: any = {
+        parentLotId: huck0790.$id,
+        cost: unitCostShare,
+        conditionNotes: updatedNotes,
+      };
+      if (huck0790.purchaseId) patchPayload.purchaseId = huck0790.purchaseId;
+      if (huck0790.orderId) patchPayload.orderId = huck0790.orderId;
+
+      await updateInventoryItem(item0ej0cq.$id, patchPayload);
+      Object.assign(item0ej0cq, patchPayload);
+      addToast({
+        type: 'info',
+        message: `✅ Updated 0EJ0CQ ("${item0ej0cq.title}") parentLotId from HUCK-0467 ➔ HUCK-0790 ($${unitCostShare.toFixed(2)} cost share)!`,
+      });
+    }
+  } catch (e) {
+    console.warn('[LocationSyncView] 0EJ0CQ parent lot check skipped:', e);
+  }
+};
+
 const loadData = async () => {
   if (!team.value) return;
   try {
     locations.value = await warehousesApi.listWarehouses(team.value.$id);
     await fetchInventory(team.value.$id);
+    void healZeroEj0CqParentLotIfNeeded();
 
     // If team has no locations created yet, auto-provision Memory Den
     if (locations.value.length === 0) {

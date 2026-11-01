@@ -1179,21 +1179,130 @@ export function extractEstimatedLotPieceCount(item: any): number {
 }
 
 const MATCH_STOP_WORDS = new Set([
-    'the', 'and', 'with', 'for', 'from', 'vintage', 'style', 'new', 'old', 'size',
-    'black', 'white', 'red', 'blue', 'green', 'brown', 'dark', 'light', 'small',
-    'medium', 'large', 'womens', 'mens', 'unisex', 'item', 'lot', 'assorted',
+    'the', 'and', 'with', 'for', 'from', 'into', 'over', 'under', 'this', 'that',
+    'item', 'pcs', 'pc', 'pack', 'lot', 'lots', 'assorted', 'mixed', 'bundle',
+    'collection', 'of', 'in', 'on', 'to', 'by', 'at', 'or', 'an', 'as', 'is',
 ]);
+
+/**
+ * Generic category, form-factor, condition, and multi-item brand tokens.
+ * Matching ONLY these tokens without matching specific/identifying tokens
+ * must NEVER produce a High Confidence (88%+) score.
+ */
+const GENERIC_CATEGORY_FORM_TOKENS = new Set([
+    // RPG / Books / Media generic form & system words
+    'dungeons', 'dragons', 'dnd', 'add', 'ad', 'rpg', 'ttrpg', 'fantasy', 'scifi',
+    'game', 'games', 'gaming', 'tabletop', 'board', 'card', 'cards', 'dice',
+    'book', 'books', 'rulebook', 'sourcebook', 'supplement', 'module', 'adventure',
+    'campaign', 'setting', 'settings', 'world', 'edition', 'ed', 'vol', 'volume',
+    'issue', 'issues', 'magazine', 'magazines', 'mag', 'mags', 'hardcover',
+    'softcover', 'paperback', 'hc', 'pb', 'tsr', 'wizards', 'coast', 'wotc',
+    'box', 'boxed', 'set', 'sets', 'kit', 'starter', 'core', 'complete',
+    // Apparel / Accessories / Condition generic words
+    'vintage', 'vtg', 'retro', 'modern', 'classic', 'style', 'new', 'old', 'used',
+    'preowned', 'nwt', 'nwot', 'size', 'sz', 'small', 'medium', 'large', 'xl',
+    'xxl', '2x', '3x', 'xs', 'petite', 'tall', 'plus', 'womens', 'women', 'woman',
+    'mens', 'men', 'man', 'unisex', 'adult', 'ladies', 'shirt', 'blouse', 'top',
+    'tee', 'tshirt', 'dress', 'skirt', 'pants', 'jeans', 'trousers', 'shorts',
+    'jacket', 'coat', 'sweater', 'cardigan', 'hoodie', 'sweatshirt', 'vest',
+    'suit', 'blazer', 'hat', 'cap', 'beanie', 'beret', 'cloche', 'bowler',
+    'bag', 'handbag', 'purse', 'tote', 'backpack', 'wallet', 'clutch', 'crossbody',
+    'belt', 'scarf', 'gloves', 'shoes', 'boots', 'sandals', 'heels', 'sneakers',
+    'flats', 'loafers', 'jewelry', 'necklace', 'bracelet', 'earrings', 'ring',
+    'pin', 'pins', 'brooch', 'pendant', 'charm', 'wand', 'wands', 'print',
+    'printed', 'pattern', 'patterned', 'solid', 'graphic', 'sleeve', 'sleeves',
+    'long', 'short', 'sleeveless', 'button', 'front', 'open', 'zip', 'zipper',
+    'collar', 'collared', 'neck', 'vneck', 'crew', 'scoop', 'mock', 'turtleneck',
+    'mini', 'midi', 'maxi', 'cropped', 'high', 'low', 'rise', 'waist', 'fit',
+    'slim', 'relaxed', 'loose', 'stretch', 'cotton', 'silk', 'wool', 'polyester',
+    'linen', 'rayon', 'nylon', 'spandex', 'acrylic', 'cashmere', 'leather', 'faux',
+    'suede', 'velvet', 'satin', 'chiffon', 'denim', 'corduroy', 'fleece', 'flannel',
+    'lace', 'mesh', 'knit', 'woven', 'collectible', 'collectibles', 'figure',
+    'figures', 'miniature', 'miniatures', 'statue', 'toy', 'toys', 'plush',
+    'art', 'decor', 'wall', 'framed', 'poster',
+    // High-frequency multi-item brands (require matching color/motif/specific noun to be high confidence)
+    'banana', 'republic', 'ann', 'taylor', 'loft', 'chicos', 'talbots', 'jcrew',
+    'anthropologie', 'free', 'people', 'zara', 'uniqlo', 'express', 'torrid',
+    'lane', 'bryant', 'eileen', 'fisher', 'lularoe', 'gap', 'target', 'universal',
+    'thread', 'wild', 'fable', 'shein', 'romwe', 'forever', 'charlotte', 'russe',
+    'hot', 'topic', 'tripp', 'nyc', 'killstar', 'disturbia', 'foxblood', 'blackcraft',
+    'restyle', 'punk', 'rave', 'widow', 'dollskill', 'betsey', 'johnson', 'michael',
+    'kors', 'coach', 'kate', 'spade', 'levi', 'levis', 'wrangler', 'lee', 'cece',
+    'notations', 'madusella', 'her', 'promise', 'desigual',
+]);
+
+const COLOR_CONFLICT_TOKENS = new Set([
+    'black', 'white', 'red', 'blue', 'navy', 'green', 'emerald', 'olive', 'sage',
+    'yellow', 'gold', 'mustard', 'orange', 'rust', 'coral', 'purple', 'violet',
+    'plum', 'lavender', 'lilac', 'pink', 'magenta', 'fuchsia', 'rose', 'blush',
+    'brown', 'tan', 'camel', 'beige', 'cream', 'ivory', 'khaki', 'grey', 'gray',
+    'charcoal', 'silver', 'burgundy', 'maroon', 'wine', 'teal', 'turquoise', 'aqua',
+]);
+
+const PATTERN_CONFLICT_TOKENS = new Set([
+    'animal', 'leopard', 'cheetah', 'zebra', 'snake', 'snakeskin', 'tiger',
+    'dash', 'polka', 'dot', 'dots', 'striped', 'stripe', 'stripes', 'plaid',
+    'tartan', 'gingham', 'check', 'checkered', 'houndstooth', 'paisley', 'floral',
+    'flower', 'flowers', 'botanical', 'tropical', 'camo', 'camouflage', 'geometric',
+    'abstract', 'tie', 'dye', 'ombre', 'skull', 'skulls', 'skeleton', 'bat', 'bats',
+    'spider', 'spiderweb', 'cobweb', 'pentagram', 'cross', 'crossbones', 'moon',
+    'crescent', 'star', 'stars', 'celestial', 'cat', 'cats', 'kitten', 'butterfly',
+    'moth', 'dragon', 'cherry', 'cherries', 'strawberry', 'heart', 'hearts',
+]);
+
+const RPG_SETTING_CONFLICT_TOKENS = new Set([
+    'planescape', 'eberron', 'forgotten', 'realms', 'greyhawk', 'dragonlance',
+    'ravenloft', 'spelljammer', 'birthright', 'mystara', 'lankhmar', 'darksun',
+    'cyberpunk', 'shadowrun', 'pathfinder', 'starfinder', 'warhammer', '40k',
+    'infinity', 'corvus', 'belli', 'battletech', 'cthulhu', 'vampire', 'masquerade',
+    'werewolf', 'mage', 'gurps', 'traveller', 'palladium', 'rifts', 'robotech',
+    'starwars', 'startrek', 'tolkien', 'merp', 'conan', 'frazetta',
+]);
+
+const EDITION_CONFLICT_TOKENS = new Set([
+    '1st', '1e', '2nd', '2e', '3rd', '3e', '35e', '4th', '4e', '5th', '5e', 'n3', 'n4',
+]);
+
+const GARMENT_TYPE_CONFLICT_TOKENS = new Set([
+    'blouse', 'shirt', 'top', 'tee', 'tshirt', 'dress', 'skirt', 'pants', 'jeans',
+    'trousers', 'shorts', 'jacket', 'coat', 'sweater', 'cardigan', 'hoodie', 'vest',
+    'blazer', 'hat', 'cap', 'headband', 'veil', 'handbag', 'purse', 'tote', 'backpack',
+    'wallet', 'belt', 'scarf', 'shoes', 'boots', 'sandals', 'heels', 'sneakers',
+    'necklace', 'bracelet', 'earrings', 'ring', 'pin', 'brooch', 'wand',
+]);
+
+function tokenizeForCandidateMatch(raw: string): string[] {
+    const preNormalized = String(raw || '')
+        .toLowerCase()
+        .replace(/\bad\s*&\s*d\b/g, ' add ')
+        .replace(/\bd\s*&\s*d\b/g, ' dnd ')
+        .replace(/\b3\.5\s*e?\b/g, ' 35e ')
+        .replace(/\b1st\s+ed(ition)?\b/g, ' 1e ')
+        .replace(/\b2nd\s+ed(ition)?\b/g, ' 2e ')
+        .replace(/\b3rd\s+ed(ition)?\b/g, ' 3e ')
+        .replace(/\b4th\s+ed(ition)?\b/g, ' 4e ')
+        .replace(/\b5th\s+ed(ition)?\b/g, ' 5e ')
+        .replace(/\bdark\s+sun\b/g, ' darksun ')
+        .replace(/\bstar\s+wars\b/g, ' starwars ')
+        .replace(/\bstar\s+trek\b/g, ' startrek ')
+        .replace(/['’]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    if (!preNormalized) return [];
+    return preNormalized.split(/\s+/).filter(t => t.length >= 2);
+}
 
 /**
  * Returns strictly filtered & ranked unclaimed inventory candidates for the Slide-Over Inventory Match Drawer
  * and Inline High-Confidence Preview.
  *
- * STRICT CANDIDATE EXCLUSION LAWS:
+ * STRICT CANDIDATE EXCLUSION & CONFIDENCE CALIBRATION LAWS:
  * 1. Rules out any single item that already has a different Memory Den `0EJ...` locationSku (Parent Lots stay reusable for remaining pieces!).
  * 2. Rules out any single item already claimed by another row in the active CSV sync (Parent Lots stay matchable so remaining pieces can be split!).
  * 3. Rules out `status === 'sold'` items when matching an `In Stock` row (`rowIsInStock === true`).
  * 4. Enforces strict B&B (`BB-`) vs `HUCK-`/`PDXGL-` namespace isolation.
- * 5. Rules out non-working statuses (`combined`, `deconstructed`, `tracked`, `draft`, `scouted`) and `(Sold Unit)` split children.
+ * 5. Separates generic category/form/brand tokens (`campaign, setting, set, boxed, print, blouse, banana, republic`) from distinctive identifying tokens (`planescape, eberron, corvus, belli, infinity, n4, red, animal, navy, dash`).
+ * 6. Never awards `🟢 High (88%+)` unless distinctive identifying tokens match with zero conflicting color/pattern/setting/edition tokens.
  */
 export function getUnclaimedMatchCandidatesForRow(params: {
     rowSku?: string;
@@ -1222,8 +1331,36 @@ export function getUnclaimedMatchCandidatesForRow(params: {
     const limit = params.limit ?? (queryTokens.length > 0 ? 40 : 12);
 
     const normRowTitle = normalizeTitleForMdMatch(rowTitle);
-    const rowTokens = normRowTitle.split(' ').filter(t => t.length >= 2);
-    const distinctiveRowTokens = rowTokens.filter(t => t.length >= 3 && !MATCH_STOP_WORDS.has(t));
+    const rowTokens = tokenizeForCandidateMatch(rowTitle);
+    const rowTokenSet = new Set(rowTokens);
+
+    // Specific identifying tokens (excluding stop words & generic category/form/common-brand words)
+    const specificRowTokens = rowTokens.filter(
+        t => !MATCH_STOP_WORDS.has(t) && !GENERIC_CATEGORY_FORM_TOKENS.has(t)
+    );
+    // Generic category/brand/form tokens present in the row
+    const genericRowTokens = rowTokens.filter(
+        t => !MATCH_STOP_WORDS.has(t) && GENERIC_CATEGORY_FORM_TOKENS.has(t)
+    );
+
+    const rowColors = rowTokens.filter(t => COLOR_CONFLICT_TOKENS.has(t));
+    const rowPatterns = rowTokens.filter(t => PATTERN_CONFLICT_TOKENS.has(t));
+    const rowSettings = rowTokens.filter(t => RPG_SETTING_CONFLICT_TOKENS.has(t));
+    const rowEditions = rowTokens.filter(t => EDITION_CONFLICT_TOKENS.has(t));
+    const rowGarmentTypes = rowTokens.filter(t => GARMENT_TYPE_CONFLICT_TOKENS.has(t));
+
+    const rowIsBoxedSet =
+        (rowTokenSet.has('boxed') || rowTokenSet.has('box')) &&
+        (rowTokenSet.has('set') || rowTokenSet.has('sets'));
+    const rowIsDndOrRpg =
+        rowTokenSet.has('add') ||
+        rowTokenSet.has('dnd') ||
+        rowTokenSet.has('dungeons') ||
+        rowTokenSet.has('dragons') ||
+        rowTokenSet.has('rpg') ||
+        rowTokenSet.has('ttrpg') ||
+        rowTokenSet.has('tsr') ||
+        rowTokenSet.has('campaign');
 
     const results: UnclaimedMatchCandidateResult[] = [];
 
@@ -1298,82 +1435,240 @@ export function getUnclaimedMatchCandidatesForRow(params: {
             if (!matchesAllTokens) continue;
         }
 
+        const normCandTitle = normalizeTitleForMdMatch(rawItemTitle);
+        const candTokens = tokenizeForCandidateMatch(rawItemTitle);
+        const candTokenSet = new Set(candTokens);
+
+        const candColors = candTokens.filter(t => COLOR_CONFLICT_TOKENS.has(t));
+        const candPatterns = candTokens.filter(t => PATTERN_CONFLICT_TOKENS.has(t));
+        const candSettings = candTokens.filter(t => RPG_SETTING_CONFLICT_TOKENS.has(t));
+        const candEditions = candTokens.filter(t => EDITION_CONFLICT_TOKENS.has(t));
+        const candGarmentTypes = candTokens.filter(t => GARMENT_TYPE_CONFLICT_TOKENS.has(t));
+
+        const candIsBoxedSet =
+            (candTokenSet.has('boxed') || candTokenSet.has('box')) &&
+            (candTokenSet.has('set') || candTokenSet.has('sets'));
+        const candIsDndOrRpg =
+            candTokenSet.has('add') ||
+            candTokenSet.has('dnd') ||
+            candTokenSet.has('dungeons') ||
+            candTokenSet.has('dragons') ||
+            candTokenSet.has('rpg') ||
+            candTokenSet.has('ttrpg') ||
+            candTokenSet.has('tsr') ||
+            candTokenSet.has('campaign');
+
+        // 1. Specific/Distinctive token matches (whole-token match only, no false substring hits)
+        const matchedSpecific: string[] = [];
+        for (const st of specificRowTokens) {
+            if (candTokenSet.has(st)) {
+                matchedSpecific.push(st);
+            }
+        }
+
+        // 2. Generic/Category/Brand token matches
+        const matchedGeneric: string[] = [];
+        for (const gt of genericRowTokens) {
+            if (candTokenSet.has(gt)) {
+                matchedGeneric.push(gt);
+            }
+        }
+
+        // 3. Detect Conflicts (Color, Pattern/Motif, RPG Campaign Setting, Edition, Garment Type)
+        const hasColorConflict =
+            rowColors.length > 0 &&
+            candColors.length > 0 &&
+            !rowColors.some(c => candTokenSet.has(c));
+
+        const hasPatternConflict =
+            rowPatterns.length > 0 &&
+            candPatterns.length > 0 &&
+            !rowPatterns.some(p => candTokenSet.has(p));
+
+        const hasSettingConflict =
+            rowSettings.length > 0 &&
+            candSettings.length > 0 &&
+            !rowSettings.some(s => candTokenSet.has(s));
+
+        const hasEditionConflict =
+            rowEditions.length > 0 &&
+            candEditions.length > 0 &&
+            !rowEditions.some(e => candTokenSet.has(e));
+
+        const hasGarmentTypeConflict =
+            rowGarmentTypes.length > 0 &&
+            candGarmentTypes.length > 0 &&
+            !rowGarmentTypes.some(g => candTokenSet.has(g));
+
+        // Also detect if candidate is an explicitly enumerated lot (e.g. "Lot of 5: D&D 3.5e Eberron..., Player's Handbook...")
+        // that does NOT contain the row's specific identifying token (like "Planescape")
+        const candSpecificTokens = candTokens.filter(
+            t => !MATCH_STOP_WORDS.has(t) && !GENERIC_CATEGORY_FORM_TOKENS.has(t)
+        );
+        const isUnenumeratedCategoryLot =
+            isLot && candSpecificTokens.length === 0 && candSettings.length === 0;
+        const isEnumeratedLotMissingRowSpecific =
+            isLot &&
+            specificRowTokens.length > 0 &&
+            matchedSpecific.length === 0 &&
+            candSpecificTokens.length >= 2;
+
+        const hasHardConflict =
+            hasColorConflict ||
+            hasPatternConflict ||
+            hasSettingConflict ||
+            hasGarmentTypeConflict ||
+            (hasEditionConflict && matchedSpecific.length === 0) ||
+            isEnumeratedLotMissingRowSpecific;
+
         // Compute candidate relevance score & human-readable match reasons
         let score = 0;
         const reasons: string[] = [];
 
-        // Direct SKU match (same 0EJ SKU if unassigned in CSV)
-        if (rowSku && itemLocSku === rowSku) {
-            score += 100;
+        const isDirectSkuMatch = Boolean(rowSku && itemLocSku === rowSku);
+        if (isDirectSkuMatch) {
+            score += 120;
             reasons.push(`SKU ${rowSku}`);
         }
 
-        const normCandTitle = normalizeTitleForMdMatch(rawItemTitle);
-        const candTokens = new Set(normCandTitle.split(' ').filter(Boolean));
+        if (matchedSpecific.length > 0) {
+            score += matchedSpecific.length * 26;
+            reasons.push(`Matched: ${matchedSpecific.slice(0, 4).join(', ')}`);
+        }
 
-        // Distinctive noun/brand overlap
-        let matchedDistinctive: string[] = [];
-        for (const dt of distinctiveRowTokens) {
-            if (candTokens.has(dt) || normCandTitle.includes(dt)) {
-                matchedDistinctive.push(dt);
+        if (matchedGeneric.length > 0) {
+            // Generic/form/brand words contribute a small context bonus (capped so they never inflate confidence)
+            score += Math.min(18, matchedGeneric.length * 5);
+            if (matchedSpecific.length === 0) {
+                reasons.push(`Category/Form: ${matchedGeneric.slice(0, 3).join(', ')}`);
             }
         }
-        if (matchedDistinctive.length > 0) {
-            score += matchedDistinctive.length * 18;
-            reasons.push(`Keywords: ${matchedDistinctive.slice(0, 3).join(', ')}`);
+
+        // Un-enumerated Boxed Set / Category Parent Lot match (e.g. HUCK-0790 "Lot Of 5 Pcs Dungeons And Dragons Boxed Sets" for 0EJ07J "AD&D Planescape Campaign Setting Boxed Set")
+        const isBoxedSetLotMatch =
+            isLot &&
+            rowIsBoxedSet &&
+            candIsBoxedSet &&
+            rowIsDndOrRpg &&
+            candIsDndOrRpg &&
+            !hasSettingConflict &&
+            !hasEditionConflict;
+
+        if (isBoxedSetLotMatch) {
+            score += 48;
+            reasons.unshift(`📦 Unsplit D&D Boxed Sets Lot`);
+        } else if (isUnenumeratedCategoryLot && rowIsDndOrRpg && candIsDndOrRpg && !hasHardConflict) {
+            score += 24;
         }
 
-        // General Jaccard title similarity
+        // General Jaccard title similarity (weighted lightly so generic words don't dominate)
         const sim = computeMdTitleSimilarity(normRowTitle, normCandTitle);
-        if (sim > 0) {
-            score += Math.round(sim * 40);
+        if (sim > 0 && !hasHardConflict) {
+            score += Math.round(sim * 22);
         }
 
-        // Price proximity bonus
-        if (isExactPrice) {
-            score += 25;
-            reasons.push(`Exact $${rowPrice.toFixed(0)} price`);
-        } else if (isClosePrice && priceDiff !== null) {
-            score += 12;
-            reasons.push(`Close price ($${dbPrice.toFixed(0)})`);
+        // Price proximity bonus (only full bonus when there is no hard conflict!)
+        if (!hasHardConflict) {
+            if (isExactPrice) {
+                score += matchedSpecific.length > 0 ? 22 : 10;
+                reasons.push(`Exact $${rowPrice.toFixed(0)} price`);
+            } else if (isClosePrice && priceDiff !== null) {
+                score += matchedSpecific.length > 0 ? 10 : 4;
+                reasons.push(`Close price ($${dbPrice.toFixed(0)})`);
+            }
         }
 
-        // Parent Lot indicator reason
+        // Apply heavy penalties for conflicting distinctive attributes
+        if (hasColorConflict || hasPatternConflict) {
+            score -= 65;
+            reasons.push(`⚠️ Conflicting color/print`);
+        }
+        if (hasSettingConflict) {
+            score -= 55;
+            reasons.push(`⚠️ Different campaign setting (${candSettings.join(', ')})`);
+        }
+        if (hasEditionConflict && matchedSpecific.length === 0) {
+            score -= 35;
+            reasons.push(`⚠️ Different edition (${candEditions.join(', ')})`);
+        }
+        if (hasGarmentTypeConflict) {
+            score -= 50;
+        }
+        if (isEnumeratedLotMissingRowSpecific && !hasSettingConflict) {
+            score -= 40;
+            reasons.push(`⚠️ Enumerated lot missing "${specificRowTokens[0]}"`);
+        }
+
         const estimatedLotCount = isLot ? extractEstimatedLotPieceCount(item) : 1;
         const lotCost = Number(item.cost ?? 0);
         const unitCostShare = isLot
             ? Number((lotCost / Math.max(1, estimatedLotCount)).toFixed(2))
             : Number(lotCost.toFixed(2));
-        if (isLot && matchedDistinctive.length > 0) {
-            score += 8;
+        if (isLot && (matchedSpecific.length > 0 || isBoxedSetLotMatch || isUnenumeratedCategoryLot)) {
+            score += 6;
             reasons.push(`📦 Multi-Piece Lot (~${estimatedLotCount} pcs • $${unitCostShare.toFixed(2)}/ea cost)`);
         }
 
-        // Backstock / Unassigned location bonus (items in HG/HH/HD or missing 0EJ SKU are prime candidates)
-        if (!itemLocSku) {
-            score += 5;
-        }
-        if (itemStorage === 'HG' || itemStorage === 'HH' || itemStorage === 'HD') {
-            score += 4;
-        }
+        if (!itemLocSku) score += 3;
+        if (itemStorage === 'HG' || itemStorage === 'HH' || itemStorage === 'HD') score += 3;
 
-        // When in default 'suggested' mode (no search query), require either keyword overlap or exact price match
+        // In default 'suggested' mode (no user search query), strictly exclude conflicting or purely generic noise matches
         if (queryTokens.length === 0 && filterMode === 'suggested') {
-            if (matchedDistinctive.length === 0 && !isExactPrice && sim < 0.2) {
+            if (hasColorConflict || hasPatternConflict || hasGarmentTypeConflict) {
+                continue;
+            }
+            if (hasSettingConflict || isEnumeratedLotMissingRowSpecific) {
+                continue;
+            }
+            if (
+                !isDirectSkuMatch &&
+                matchedSpecific.length === 0 &&
+                !isBoxedSetLotMatch &&
+                !(isUnenumeratedCategoryLot && matchedGeneric.length >= 2)
+            ) {
                 continue;
             }
         }
 
-        // Calibrate 0-100 confidence score
-        let confidence = Math.min(99, Math.max(25, Math.round(35 + score * 0.85)));
-        if (rowSku && itemLocSku === rowSku) {
+        // Calibrate 0-100 confidence score with strict guardrails:
+        // NEVER award High Confidence (88%+) unless distinctive identifying tokens actually match without conflict!
+        const specificOverlapRatio =
+            specificRowTokens.length > 0
+                ? matchedSpecific.length / specificRowTokens.length
+                : 0;
+
+        let confidence = 30;
+        if (isDirectSkuMatch) {
             confidence = 99;
-        } else if (matchedDistinctive.length >= 2 && isExactPrice) {
-            confidence = Math.max(confidence, 94);
-        } else if (matchedDistinctive.length >= 2 && isClosePrice) {
-            confidence = Math.max(confidence, 88);
-        } else if (matchedDistinctive.length === 0 && isExactPrice) {
-            confidence = Math.min(confidence, 68);
+        } else if (hasHardConflict) {
+            confidence = Math.max(20, Math.min(45, 35 + Math.round(score * 0.25)));
+        } else if (isBoxedSetLotMatch && matchedSpecific.length === 0) {
+            // Un-enumerated Boxed Set Lot (e.g. HUCK-0790 for 0EJ07J / 0EJ0CQ): rank #1 in Review / Lot Split tier (~76%)
+            confidence = 76;
+        } else if (matchedSpecific.length === 0) {
+            // Only generic category/form/brand words matched — cap strictly in Review/Low tier (never >= 88%)
+            confidence = Math.min(62, Math.max(30, 35 + matchedGeneric.length * 6 + (isExactPrice ? 8 : 0)));
+        } else {
+            // At least 1 specific identifying token matched and zero conflicts
+            const baseFromSpecific =
+                matchedSpecific.length >= 3
+                    ? 84
+                    : matchedSpecific.length === 2
+                    ? 76
+                    : 64;
+            const ratioBonus = Math.round(specificOverlapRatio * 10);
+            const priceBonus = isExactPrice ? 8 : isClosePrice ? 4 : 0;
+            confidence = Math.min(98, baseFromSpecific + ratioBonus + priceBonus);
+
+            // Require either >=2 specific tokens OR 100% of row's specific tokens + price/generic confirmation to cross 88%
+            const canReachHighConfidence =
+                matchedSpecific.length >= 2 ||
+                (specificRowTokens.length === 1 &&
+                    matchedSpecific.length === 1 &&
+                    (matchedGeneric.length >= 2 || isExactPrice || isClosePrice));
+            if (!canReachHighConfidence) {
+                confidence = Math.min(confidence, 82);
+            }
         }
 
         const recommendedAction: 'link' | 'split_lot' | 'create_new' =
@@ -1397,6 +1692,7 @@ export function getUnclaimedMatchCandidatesForRow(params: {
     }
 
     results.sort((a, b) => {
+        if (b.confidence !== a.confidence) return b.confidence - a.confidence;
         if (b.score !== a.score) return b.score - a.score;
         if (a.priceDiff !== null && b.priceDiff !== null && a.priceDiff !== b.priceDiff) {
             return a.priceDiff - b.priceDiff;

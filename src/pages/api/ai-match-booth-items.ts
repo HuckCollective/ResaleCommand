@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const compactRows = rows.slice(0, 60).map((r) => ({
+    const compactRows = rows.slice(0, 25).map((r) => ({
       sku: String(r.sku || '').trim(),
       title: String(r.title || '').trim(),
       price: Number(r.price || 0),
@@ -65,21 +65,27 @@ export const POST: APIRoute = async ({ request }) => {
     }));
 
     const prompt = `You are the Principal Inventory Reconciliation Architect for Resale Command (Memory Den Vintage Mall Booth #0EJ).
-Your job is to stage high-confidence recommendations matching unlinked Memory Den booth rows ("rows") against unclaimed Resale Command inventory & multi-piece backstock lots ("candidates").
+Your job is to evaluate each unlinked Memory Den booth row ("rows") against unclaimed Resale Command inventory & multi-piece backstock lots ("candidates").
 
-CRITICAL RULES:
-1. SINGLE ITEMS ("link"): If a booth row clearly matches a single-piece candidate (by brand, noun, edition, subject, or exact/close price), set "action": "link", "candidateId": "<candidate.id>", and "confidence" (0-100). A single-piece candidate ("isLot": false and "qty": 1) can only be linked to AT MOST ONE booth row.
-2. MULTI-PIECE PARENT LOTS ("split_lot"): Many backstock items are unsplit bulk lots (e.g., "Lot of 5 Heavy Metal Magazines", "18 Pcs Vintage Pins Lot", "Lot of 4 RPG Sourcebooks", "isLot": true or "qty" > 1). Multiple booth rows CAN match the SAME Parent Lot! When a booth row is one piece from a Parent Lot, set "action": "split_lot", "candidateId": "<lot.id>", "estimatedLotPieces": <number of pieces in lot>, and "confidence" (0-100).
-3. TRULY NEW BOOTH ITEMS ("create_new"): If no candidate is a plausible match (confidence < 50), set "action": "create_new", "candidateId": null, "confidence": 95, and explain why it should be added as a new booth item.
-4. Return ONLY valid JSON matching this schema:
+STRICT ANTI-HALLUCINATION & CONFIDENCE CALIBRATION RULES:
+1. DISTINCTIVE TOKENS REQUIRED FOR HIGH CONFIDENCE (88-99):
+   - Only assign "confidence" >= 88 when specific identifying titles, franchises, model numbers, or explicitly named lot components match (e.g., "Corvus Belli Infinity N4" matching "HUCK-0453 Corvus Belli Infinity N4", or "D&D 3.5e Dungeon Master's Guide" matching "HUCK-0467 Lot of 5: D&D 3.5e Eberron Campaign Setting, Player's Handbook, Dungeon Master's Guide, Monster Manual").
+2. COLOR, PRINT & EDITION CONFLICTS MUST BE REJECTED ("create_new"):
+   - NEVER match apparel/accessories that share only a brand and garment type when their color or print conflicts! For example, "Banana Republic Women's Red Black Animal Print Long Sleeve Blouse" MUST NOT match "Banana Republic Navy Dash Print Blouse" -> set "action": "create_new", "candidateId": null.
+3. ENUMERATED LOTS vs UN-ENUMERATED BOXED SET / CATEGORY LOTS ("split_lot"):
+   - NEVER match a specific RPG book/boxed set (like "AD&D Planescape Campaign Setting Boxed Set") to a lot that explicitly enumerates DIFFERENT books/settings (like "HUCK-0467 Lot of 5: D&D 3.5e Eberron Campaign Setting, Player's Handbook, Dungeon Master's Guide, Monster Manual").
+   - Instead, if there is a generic un-enumerated lot of the matching form factor (such as "HUCK-0790" "Lot Of 5 Pcs Dungeons And Dragons Boxed Sets Fantasy RPG Campaign Books" for "AD&D Planescape Campaign Setting Boxed Set"), recommend "action": "split_lot" with "candidateId" set to that generic Boxed Sets lot's "id" and "confidence": 76 (Review tier, < 88).
+4. TRULY NEW BOOTH ITEMS ("create_new"):
+   - If no candidate is a genuine match or plausible parent lot, set "action": "create_new", "candidateId": null, "confidence": 95, and give a concise reason (e.g. "No matching Red Black Animal Print blouse in inventory — add as new booth item").
+5. Return ONLY valid JSON matching this exact schema (include an entry for EVERY row in "rows"):
 {
   "matches": [
     {
       "sku": "0EJ...",
       "action": "link" | "split_lot" | "create_new",
-      "candidateId": "string or null",
-      "confidence": 85,
-      "reason": "Short 1-line explanation (e.g. 'Exact brand + title match ($28)' or '1 piece from Lot of 5 Heavy Metal Mags ($2.40/ea cost)')",
+      "candidateId": "<exact candidate.id string or null>",
+      "confidence": 76,
+      "reason": "Short 1-line explanation",
       "estimatedLotPieces": 5
     }
   ]
@@ -94,7 +100,10 @@ ${JSON.stringify(compactCandidates)}`;
     const model = getModel('gemini-2.5-flash');
     const result = await generateContentWithBackoff(model, prompt);
     const responseText = result.response.text();
-    const parsed = parseAiJson<{ matches?: AiStagedMatchResult[] }>(responseText, 'ai-match-booth-items');
+    const parsed = parseAiJson<{ matches?: AiStagedMatchResult[] }>(
+      responseText,
+      'ai-match-booth-items'
+    );
     const matches = Array.isArray(parsed?.matches) ? parsed.matches : [];
 
     return new Response(
@@ -122,4 +131,3 @@ ${JSON.stringify(compactCandidates)}`;
     );
   }
 };
-
