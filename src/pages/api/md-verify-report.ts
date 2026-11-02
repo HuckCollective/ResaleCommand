@@ -450,55 +450,23 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     };
   }
 
-  // 2. Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID for any SKU not yet in finalSkuToUpcMap (enforcing usedUpcs)
-  for (const [rawSku, rawUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
-    const sku = cleanCatalogSku(rawSku).toUpperCase();
-    if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
-    let resolvedUpc = cleanCatalogSku(rawUpcOrId).toUpperCase();
-    let resolvedTitle = '';
-    let resolvedPrice = 0;
-    let resolvedStatus = 'placed';
-
-    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
-      const matchedDoc = byId.get(String(rawUpcOrId).trim());
-      if (matchedDoc?.upc) {
-        resolvedUpc = cleanCatalogSku(matchedDoc.upc).toUpperCase();
-        resolvedTitle = String(matchedDoc.title || matchedDoc.identity || '');
-        resolvedPrice = Number(matchedDoc.resalePrice || matchedDoc.listPrice || matchedDoc.price || 0);
-        resolvedStatus = String(matchedDoc.status || 'placed');
-      } else {
-        continue;
-      }
-    }
-
-    if (!isValidProductionUpc(resolvedUpc)) continue;
-    if (usedUpcs.has(resolvedUpc)) continue;
-
-    usedUpcs.add(resolvedUpc);
-    finalSkuToUpcMap[sku] = resolvedUpc;
-    recordRawMapping(sku, resolvedUpc);
-    skuToMetaMap[sku] = {
-      upc: resolvedUpc,
-      partner: detectPartnerFromUpcOrTitle(resolvedUpc, resolvedTitle),
-      title: resolvedTitle,
-      price: resolvedPrice,
-      status: resolvedStatus,
-    };
-  }
-
-  // 3. Merge any live payload pushed from LocationSyncView.vue or persisted in Appwrite manifests ('md_live_payload_latest')
+  // 2. Merge live payload persisted in Appwrite manifests ('md_live_payload_latest') BEFORE static baseline
+  // so adopted booth tags (adopt_md_upc) and soldSkus status are NEVER reverted by PREVERIFIED_MD_SKU_TO_UPC_OR_ID!
   const cachedLive = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload();
   if (cachedLive?.skuToUpcMap) {
     for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
       const sku = cleanCatalogSku(rawSku).toUpperCase();
       const upc = cleanCatalogSku(rawUpc).toUpperCase();
+      const meta = cachedLive.skuToMetaMap?.[sku];
+      if (sku && skuToMetaMap[sku] && meta?.status === 'sold') {
+        skuToMetaMap[sku].status = 'sold';
+      }
       if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku] || !isValidProductionUpc(upc)) continue;
       if (usedUpcs.has(upc)) continue;
 
       usedUpcs.add(upc);
       finalSkuToUpcMap[sku] = upc;
       recordRawMapping(sku, upc);
-      const meta = cachedLive.skuToMetaMap?.[sku];
       skuToMetaMap[sku] = {
         upc,
         partner: meta?.partner || detectPartnerFromUpcOrTitle(upc, meta?.title || ''),
@@ -509,15 +477,23 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  // 4. Load persisted Verification Report from Appwrite (if RAM is cold) and extract verifiedMdUpcBySku + remaining matches
+  // 3. Load persisted Verification Report from Appwrite ('md_verify_report_latest') and extract verifiedMdUpcBySku + sold status
   const storedReport = await getOrLoadReport();
   if (storedReport?.rows?.length) {
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();
       const actualMdUpc = cleanCatalogSku(r.upc).toUpperCase();
       const expUpc = cleanCatalogSku(r.expectedRcUpc).toUpperCase();
+      const isRowSold =
+        String(r.inventory || '').toLowerCase().includes('sold') ||
+        String(r.inventory || '').toLowerCase().includes('paid') ||
+        Number(r.quantity ?? 1) === 0;
+
       if (sku && /^0EJ/i.test(sku) && isValidProductionUpc(actualMdUpc)) {
         verifiedMdUpcBySku[sku] = actualMdUpc;
+      }
+      if (sku && skuToMetaMap[sku] && isRowSold) {
+        skuToMetaMap[sku].status = 'sold';
       }
       const candidateReportUpc = isValidProductionUpc(expUpc)
         ? expUpc
@@ -533,7 +509,7 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
           partner: detectPartnerFromUpcOrTitle(candidateReportUpc, String(r.name || '')),
           title: String(r.name || ''),
           price: Number(r.agreedPrice || 0),
-          status: String(r.inventory || '').toLowerCase().includes('sold') || String(r.inventory || '').toLowerCase().includes('paid') ? 'sold' : 'placed',
+          status: isRowSold ? 'sold' : 'placed',
         };
       }
     }
@@ -578,6 +554,42 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
         }
       }
     }
+  }
+
+  // 4. Fallback: Merge PREVERIFIED_MD_SKU_TO_UPC_OR_ID for any SKU not yet in finalSkuToUpcMap (enforcing usedUpcs)
+  for (const [rawSku, rawUpcOrId] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
+    const sku = cleanCatalogSku(rawSku).toUpperCase();
+    if (!sku || !/^0EJ/i.test(sku) || finalSkuToUpcMap[sku]) continue;
+    let resolvedUpc = cleanCatalogSku(rawUpcOrId).toUpperCase();
+    let resolvedTitle = '';
+    let resolvedPrice = 0;
+    let resolvedStatus = 'placed';
+
+    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
+      const matchedDoc = byId.get(String(rawUpcOrId).trim());
+      if (matchedDoc?.upc) {
+        resolvedUpc = cleanCatalogSku(matchedDoc.upc).toUpperCase();
+        resolvedTitle = String(matchedDoc.title || matchedDoc.identity || '');
+        resolvedPrice = Number(matchedDoc.resalePrice || matchedDoc.listPrice || matchedDoc.price || 0);
+        resolvedStatus = String(matchedDoc.status || 'placed');
+      } else {
+        continue;
+      }
+    }
+
+    if (!isValidProductionUpc(resolvedUpc)) continue;
+    if (usedUpcs.has(resolvedUpc)) continue;
+
+    usedUpcs.add(resolvedUpc);
+    finalSkuToUpcMap[sku] = resolvedUpc;
+    recordRawMapping(sku, resolvedUpc);
+    skuToMetaMap[sku] = {
+      upc: resolvedUpc,
+      partner: detectPartnerFromUpcOrTitle(resolvedUpc, resolvedTitle),
+      title: resolvedTitle,
+      price: resolvedPrice,
+      status: resolvedStatus,
+    };
   }
 
   // Persist complete payload map to Appwrite manifests if we resolved more SKUs from resale_db.items
@@ -652,14 +664,44 @@ export const POST: APIRoute = async ({ request }) => {
     const body = await request.json();
 
     if (body?.mode === 'payload' && body?.skuToUpcMap) {
+      // Merge incoming client payload into existing cloud payload so partial browser maps (e.g. 498 items)
+      // NEVER wipe out the full 808-item cloud map or strip soldSkus status!
+      const existingPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
+        skuToUpcMap: {},
+        skuToMetaMap: {},
+      };
+      const mergedSkuToUpcMap: Record<string, string> = { ...(existingPayload.skuToUpcMap || {}) };
+      const mergedSkuToMetaMap: Record<string, MdSkuMeta> = { ...(existingPayload.skuToMetaMap || {}) };
+      const incomingMap = body.skuToUpcMap || {};
+      const incomingMeta = body.skuToMetaMap || {};
+
+      for (const [rawSku, rawUpc] of Object.entries(incomingMap)) {
+        const s = cleanCatalogSku(rawSku).toUpperCase();
+        const u = cleanCatalogSku(rawUpc).toUpperCase();
+        if (!s || !/^0EJ/i.test(s) || !isValidProductionUpc(u)) continue;
+        // Do not overwrite an existing cloud mapping unless it is a brand-new SKU not yet in the cloud map
+        if (!mergedSkuToUpcMap[s]) {
+          mergedSkuToUpcMap[s] = u;
+        }
+        const prevStatus = mergedSkuToMetaMap[s]?.status;
+        const incMeta = incomingMeta[s];
+        mergedSkuToMetaMap[s] = {
+          upc: mergedSkuToUpcMap[s],
+          partner: incMeta?.partner || mergedSkuToMetaMap[s]?.partner || detectPartnerFromUpcOrTitle(mergedSkuToUpcMap[s], incMeta?.title || ''),
+          title: incMeta?.title || mergedSkuToMetaMap[s]?.title || '',
+          price: Number(incMeta?.price ?? mergedSkuToMetaMap[s]?.price ?? 0),
+          status: prevStatus === 'sold' ? 'sold' : (incMeta?.status || prevStatus || 'placed'),
+        };
+      }
+
       await savePersistedLivePayloadToAppwrite({
-        skuToUpcMap: body.skuToUpcMap || {},
-        skuToMetaMap: body.skuToMetaMap || {},
+        skuToUpcMap: mergedSkuToUpcMap,
+        skuToMetaMap: mergedSkuToMetaMap,
       });
       return new Response(
         JSON.stringify({
           ok: true,
-          count: Object.keys(body.skuToUpcMap || {}).length,
+          count: Object.keys(mergedSkuToUpcMap).length,
         }),
         {
           status: 200,
@@ -669,6 +711,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     // Physical Sticker Wins ("Adopt Booth Tag"): Update RC DB + Live Payload to adopt Ricochet's existing physical UPC
+    // Supports automatic 2-way criss-cross barcode swaps (e.g. 0EJ0GF <-> 0EJ0GG) so usedUpcs never drops either item!
     if (body?.mode === 'adopt_md_upc') {
       const targetSku = cleanCatalogSku(body?.sku).toUpperCase();
       const adoptedUpc = cleanCatalogSku(body?.mdUpc).toUpperCase();
@@ -682,14 +725,33 @@ export const POST: APIRoute = async ({ request }) => {
         );
       }
 
+      const cachedPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
+        skuToUpcMap: {},
+        skuToMetaMap: {},
+      };
+      const previousTargetUpc = cleanCatalogSku(cachedPayload.skuToUpcMap[targetSku] || '').toUpperCase();
+
       const { databases, dbId, itemsCol } = getAppwriteConfig();
       let updatedDocId: string | null = null;
       let conflictingSku: string | null = null;
+      let swappedUpcForConflict: string | null = null;
+
+      // Check if another SKU in cachedPayload currently holds adoptedUpc
+      for (const [kSku, kUpc] of Object.entries(cachedPayload.skuToUpcMap)) {
+        if (kSku !== targetSku && cleanCatalogSku(kUpc).toUpperCase() === adoptedUpc) {
+          conflictingSku = kSku;
+          break;
+        }
+      }
 
       if (databases) {
         try {
           let cursor: string | null = null;
           let targetDoc: any = null;
+          let conflictingDoc: any = null;
+          const existingUpcSet = new Set<string>(Object.values(cachedPayload.skuToUpcMap));
+          let maxHuck = 9750;
+
           for (let page = 0; page < 25; page++) {
             const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
             if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
@@ -698,24 +760,49 @@ export const POST: APIRoute = async ({ request }) => {
             for (const d of docs as any[]) {
               const dSku = cleanCatalogSku(d?.locationSku || d?.sku).toUpperCase();
               const dUpc = cleanCatalogSku(d?.upc).toUpperCase();
+              if (dUpc) {
+                existingUpcSet.add(dUpc);
+                const m = dUpc.match(/^HUCK-(\d{4})$/);
+                if (m) {
+                  const n = parseInt(m[1], 10);
+                  if (n > maxHuck && n < 9900) maxHuck = n;
+                }
+              }
               if (dSku === targetSku && !targetDoc) {
                 targetDoc = d;
               } else if (dUpc === adoptedUpc && dSku && /^0EJ/i.test(dSku) && dSku !== targetSku) {
                 conflictingSku = dSku;
+                conflictingDoc = d;
+              } else if (conflictingSku && dSku === conflictingSku && !conflictingDoc) {
+                conflictingDoc = d;
               }
             }
             if (docs.length < 100) break;
             cursor = docs[docs.length - 1].$id;
           }
 
+          const targetOldUpc = cleanCatalogSku(targetDoc?.upc || previousTargetUpc).toUpperCase();
           if (conflictingSku) {
-            return new Response(
-              JSON.stringify({
-                ok: false,
-                error: `Cannot adopt ${adoptedUpc} for ${targetSku} because ${adoptedUpc} is already assigned to active booth SKU ${conflictingSku}.`,
-              }),
-              { status: 409, headers: CORS_HEADERS }
-            );
+            if (targetOldUpc && targetOldUpc !== adoptedUpc && isValidProductionUpc(targetOldUpc)) {
+              swappedUpcForConflict = targetOldUpc;
+            } else {
+              while (true) {
+                maxHuck++;
+                const cand = `HUCK-${String(maxHuck).padStart(4, '0')}`;
+                if (!existingUpcSet.has(cand)) {
+                  swappedUpcForConflict = cand;
+                  break;
+                }
+              }
+            }
+
+            if (conflictingDoc?.$id && swappedUpcForConflict) {
+              await databases.updateDocument(dbId, itemsCol, conflictingDoc.$id, {
+                upc: swappedUpcForConflict,
+                locationSku: conflictingSku,
+                storageLocation: 'MD',
+              });
+            }
           }
 
           if (targetDoc?.$id) {
@@ -731,11 +818,21 @@ export const POST: APIRoute = async ({ request }) => {
         }
       }
 
+      // If conflictingSku was found in cachedPayload even if not in client-visible DB docs, assign its swapped UPC
+      if (conflictingSku && !swappedUpcForConflict) {
+        if (previousTargetUpc && previousTargetUpc !== adoptedUpc && isValidProductionUpc(previousTargetUpc)) {
+          swappedUpcForConflict = previousTargetUpc;
+        }
+      }
+
+      if (conflictingSku && swappedUpcForConflict) {
+        cachedPayload.skuToUpcMap[conflictingSku] = swappedUpcForConflict;
+        if (cachedPayload.skuToMetaMap[conflictingSku]) {
+          cachedPayload.skuToMetaMap[conflictingSku].upc = swappedUpcForConflict;
+        }
+      }
+
       // Update persisted live payload map ('md_live_payload_latest')
-      const cachedPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
-        skuToUpcMap: {},
-        skuToMetaMap: {},
-      };
       cachedPayload.skuToUpcMap[targetSku] = adoptedUpc;
       if (cachedPayload.skuToMetaMap[targetSku]) {
         cachedPayload.skuToMetaMap[targetSku].upc = adoptedUpc;
@@ -750,10 +847,17 @@ export const POST: APIRoute = async ({ request }) => {
       const currentReport = await getOrLoadReport();
       if (currentReport?.rows?.length) {
         for (const r of currentReport.rows) {
-          if (cleanCatalogSku(r.sku).toUpperCase() === targetSku) {
+          const rSku = cleanCatalogSku(r.sku).toUpperCase();
+          if (rSku === targetSku) {
             r.upc = adoptedUpc;
             r.expectedRcUpc = adoptedUpc;
             r.verifyStatus = 'VERIFIED_MATCH';
+          } else if (conflictingSku && swappedUpcForConflict && rSku === conflictingSku) {
+            r.expectedRcUpc = swappedUpcForConflict;
+            if (cleanCatalogSku(r.upc).toUpperCase() === swappedUpcForConflict || !r.upc) {
+              r.upc = swappedUpcForConflict;
+              r.verifyStatus = 'VERIFIED_MATCH';
+            }
           }
         }
         currentReport.summary = {
@@ -772,6 +876,8 @@ export const POST: APIRoute = async ({ request }) => {
           ok: true,
           sku: targetSku,
           adoptedUpc,
+          swappedSku: conflictingSku,
+          swappedUpc: swappedUpcForConflict,
           updatedDocId,
           summary: currentReport?.summary || null,
         }),

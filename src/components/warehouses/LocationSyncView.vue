@@ -2541,15 +2541,15 @@ const ricochetSyncableItems = computed(() => {
         claimedItemIdToSku,
         multiBinResolvedBySku,
       });
-      const matchedUpc = cleanCatalogSku(matched?.upc).toUpperCase();
-      if (matched && cleanSkuAndUpcValid(sku, matchedUpc) && !usedUpcs.has(matchedUpc)) {
-        if (!claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
+      const matchedUpc = cleanCatalogSku(matched?.upc || r.expectedRcUpc || r.upc).toUpperCase();
+      if (cleanSkuAndUpcValid(sku, matchedUpc) && !usedUpcs.has(matchedUpc)) {
+        if (matched?.$id && !claimedItemIdToSku.has(matched.$id)) claimedItemIdToSku.set(matched.$id, sku);
         usedUpcs.add(matchedUpc);
         mapBySkuOrKey.set(sku, {
           id: String(r.productId || ''),
           sku,
           upc: matchedUpc,
-          title: String(matched.title || r.name || ''),
+          title: String(matched?.title || r.name || ''),
         });
       }
     }
@@ -2603,7 +2603,7 @@ const bookmarkletHref = computed(() => {
     typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
       ? window.location.origin
       : 'https://resalecmd.com';
-  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;if(window.__RC_REFRESH_FROM_CLOUD__){window.__RC_REFRESH_FROM_CLOUD__();return;}var s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?v='+Date.now();document.body.appendChild(s);})();`;
+  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?v='+Date.now();document.body.appendChild(s);})();`;
 });
 
 // =========================================================================

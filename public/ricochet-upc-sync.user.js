@@ -235,9 +235,17 @@
     updateUI();
   }
 
-  // Create Floating Action Button & Slide-Over Panel
+  // Create Floating Action Button & Slide-Over Panel (Hot-replaces any prior in-page widget instance on bookmarklet click)
   function initUI() {
-    if (document.getElementById('rc-ricochet-sync-root')) return;
+    const existingRoot = document.getElementById('rc-ricochet-sync-root');
+    if (existingRoot) {
+      existingRoot.remove();
+    }
+    window.__RC_LIVE_TAB_LISTENER_BOUND__ = false;
+    if (Array.isArray(window.__RC_CATALOG_PRODUCTS_CACHE__) && window.__RC_CATALOG_PRODUCTS_CACHE__.length > 0) {
+      catalogProducts = window.__RC_CATALOG_PRODUCTS_CACHE__;
+      consignorId = window.__RC_CONSIGNOR_ID_CACHE__ || consignorId;
+    }
 
     const root = document.createElement('div');
     root.id = 'rc-ricochet-sync-root';
@@ -569,15 +577,24 @@
         if (res.ok) {
           const data = await res.json();
           if (data && data.ok && data.skuToUpcMap && typeof data.skuToUpcMap === 'object') {
-            const liveMap = sanitizeBarcodeMap(data.skuToUpcMap);
+            const combinedPrioritized = {};
+            for (const [k, v] of Object.entries(data.skuToUpcMap)) {
+              combinedPrioritized[k] = v;
+            }
+            for (const [k, v] of Object.entries(parsedMap)) {
+              if (!(k in combinedPrioritized)) {
+                combinedPrioritized[k] = v;
+              }
+            }
+            const liveMap = sanitizeBarcodeMap(combinedPrioritized);
             const liveCount = Object.keys(liveMap).length;
             if (liveCount > 0) {
               const prevCount = cloudLiveSyncedCount;
-              // Single source of truth: replace parsedMap directly with live cloud map and clear stale conflicts
+              // Single source of truth: update parsedMap with live cloud map while preserving any local mappings
               runtime422Conflicts = {};
               parsedMap = liveMap;
               if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
-                skuMetaMap = { ...data.skuToMetaMap };
+                skuMetaMap = { ...skuMetaMap, ...data.skuToMetaMap };
               }
               if (data.verifiedMdUpcBySku && typeof data.verifiedMdUpcBySku === 'object') {
                 for (const [vSku, vUpc] of Object.entries(data.verifiedMdUpcBySku)) {
@@ -714,6 +731,8 @@
       if (statusEl) {
         statusEl.textContent = `Loaded ${catalogProducts.length} booth items (Consignor #${consignorId || 'Auto'})`;
       }
+      window.__RC_CATALOG_PRODUCTS_CACHE__ = catalogProducts;
+      window.__RC_CONSIGNOR_ID_CACHE__ = consignorId;
       addLog(`✅ Loaded ${catalogProducts.length} booth items from Memory Den.`, '#10b981');
       if (Object.keys(parsedMap).length === 0 && !isFetchingCloudPayload) {
         await fetchLivePayloadFromCloud(false);
@@ -782,7 +801,7 @@
     for (const p of catalogProducts) {
       const sku = extractRicochetSku(p);
       let mdUpc = extractRicochetUpc(p);
-      const expectedRcUpc = cleanStr(parsedMap[sku] || '').toUpperCase();
+      const expectedRcUpc = cleanStr(parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || '').toUpperCase();
       const itemTitle = cleanStr(p.name || p.title || p.description || sku);
       const partner = resolvePartnerBucket(sku, expectedRcUpc, mdUpc, itemTitle);
 
@@ -1102,16 +1121,18 @@
     }
   }
 
-  // Physical Sticker Wins: 1-Click Adopt Ricochet's Existing Physical Barcode into Resale Command
+  // Physical Sticker Wins: 1-Click Adopt Ricochet's Existing Physical Barcode into Resale Command (Supports 2-Way Criss-Cross Swaps)
   async function adoptBoothTagInRc(sku, mdUpc, btnEl) {
     const cleanSku = cleanStr(sku).toUpperCase();
     const cleanUpc = cleanStr(mdUpc).toUpperCase();
     if (!cleanSku || !cleanUpc) return;
+    const prevUpcForTarget = cleanStr(parsedMap[cleanSku] || (skuMetaMap[cleanSku] && skuMetaMap[cleanSku].upc) || '').toUpperCase();
     if (btnEl) {
       btnEl.disabled = true;
       btnEl.textContent = `⏳ Adopting ${cleanUpc}...`;
     }
     let adoptedOk = false;
+    let adoptData = null;
     let errMsg = '';
     for (const endpoint of RC_REPORT_ENDPOINTS) {
       try {
@@ -1127,6 +1148,7 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok && data?.ok) {
           adoptedOk = true;
+          adoptData = data;
           break;
         } else if (data?.error) {
           errMsg = data.error;
@@ -1135,6 +1157,27 @@
     }
 
     if (adoptedOk) {
+      // If another SKU previously held cleanUpc (criss-cross swap), swap its mapping to swappedUpc or prevUpcForTarget
+      const swappedSku = cleanStr(adoptData?.swappedSku || '').toUpperCase();
+      const swappedUpc = cleanStr(adoptData?.swappedUpc || prevUpcForTarget || '').toUpperCase();
+      if (swappedSku && swappedUpc && swappedSku !== cleanSku) {
+        parsedMap[swappedSku] = swappedUpc;
+        if (skuMetaMap[swappedSku]) {
+          skuMetaMap[swappedSku].upc = swappedUpc;
+        }
+      }
+      for (const [otherSku, otherUpc] of Object.entries(parsedMap)) {
+        if (otherSku !== cleanSku && cleanStr(otherUpc).toUpperCase() === cleanUpc) {
+          if (swappedUpc && swappedUpc !== cleanUpc) {
+            parsedMap[otherSku] = swappedUpc;
+            if (skuMetaMap[otherSku]) {
+              skuMetaMap[otherSku].upc = swappedUpc;
+            }
+          } else {
+            delete parsedMap[otherSku];
+          }
+        }
+      }
       parsedMap[cleanSku] = cleanUpc;
       recordVerifiedMdUpc(cleanSku, cleanUpc);
       if (skuMetaMap[cleanSku]) {
@@ -1142,10 +1185,12 @@
       }
       const textarea = document.getElementById('rc-sync-textarea');
       if (textarea) textarea.value = JSON.stringify(parsedMap, null, 2);
-      addLog(`🏷️ Adopted existing physical booth tag ${cleanUpc} for ${cleanSku} in Resale Command!`, '#10b981');
+      const swapNote =
+        swappedSku && swappedUpc ? ` (and swapped ${swappedSku} ➔ ${swappedUpc})` : '';
+      addLog(`🏷️ Adopted existing physical booth tag ${cleanUpc} for ${cleanSku}${swapNote} in Resale Command!`, '#10b981');
       setStatusBanner(
         'success',
-        `🏷️ Adopted Booth Tag ${cleanUpc} for ${cleanSku}! Resale Command now matches the physical tag on the shelf.`
+        `🏷️ Adopted Booth Tag ${cleanUpc} for ${cleanSku}${swapNote}! Resale Command now matches the physical tag on the shelf.`
       );
       updateUI();
       await sendReportToResaleCommand(true);
