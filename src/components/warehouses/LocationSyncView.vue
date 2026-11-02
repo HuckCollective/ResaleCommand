@@ -21,12 +21,12 @@
 
       <!-- Location Selector, History Button & Commission Badge -->
       <div class="flex items-end gap-2 w-full md:w-auto flex-wrap">
-        <div class="form-control flex-1 md:w-64">
+        <div class="form-control flex-1 min-w-[18rem] sm:min-w-[23rem] md:w-96">
           <label class="label py-1 flex justify-between items-center">
             <span class="label-text text-xs font-bold uppercase opacity-60">Target Location</span>
             <button @click="showNewLocationModal = true" class="text-[11px] text-primary hover:underline font-bold">+ New</button>
           </label>
-          <select v-model="selectedLocationId" class="select select-bordered select-sm w-full font-bold">
+          <select v-model="selectedLocationId" class="select select-bordered select-sm w-full pr-9 font-bold truncate">
             <option value="" disabled>Select a location...</option>
             <option v-for="loc in locations" :key="loc.$id" :value="loc.$id">
               {{ loc.name }} ({{ loc.type || 'Booth' }})
@@ -2250,6 +2250,52 @@ const totalRentDetected = computed(() => {
   return (detectedRentDeductions.value || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 });
 
+function resolveCanonicalLocationCode(locOrStr: any): string {
+  if (!locOrStr) return '';
+  const idStr = typeof locOrStr === 'object' ? String(locOrStr.$id || '') : String(locOrStr);
+  const codeStr = typeof locOrStr === 'object' ? String(locOrStr.code || '') : '';
+  const nameStr = typeof locOrStr === 'object' ? String(locOrStr.name || '') : String(locOrStr);
+  const combined = `${idStr} ${codeStr} ${nameStr}`.toLowerCase();
+
+  if (
+    idStr === MD_CANONICAL_WAREHOUSE_ID ||
+    codeStr.toUpperCase() === 'MD' ||
+    nameStr.trim().toUpperCase() === 'MD' ||
+    combined.includes('memory den') ||
+    combined.includes('memoryden') ||
+    combined.includes('adventures outfitters') ||
+    combined.includes('0ej')
+  ) {
+    return 'MD';
+  }
+  if (
+    idStr === '6a7e71eb001f53734a86' ||
+    codeStr.toUpperCase() === 'DT' ||
+    nameStr.trim().toUpperCase() === 'DT' ||
+    combined.includes('dusty tiger') ||
+    combined.includes('dustytiger')
+  ) {
+    return 'DT';
+  }
+  if (
+    idStr === '6a7e6f73003a5a2a7c34' ||
+    codeStr.toUpperCase() === 'HG' ||
+    nameStr.trim().toUpperCase() === 'HG' ||
+    combined.includes('garage')
+  ) {
+    return 'HG';
+  }
+  if (
+    idStr === '6ae3afbd0030a7eb8a9c' ||
+    codeStr.toUpperCase() === 'HH' ||
+    nameStr.trim().toUpperCase() === 'HH' ||
+    combined.includes('hideout')
+  ) {
+    return 'HH';
+  }
+  return codeStr.toUpperCase() || nameStr.trim();
+}
+
 const currentLocation = computed(() => {
   return (locations.value || []).find((l) => l.$id === selectedLocationId.value) || null;
 });
@@ -2257,11 +2303,17 @@ const currentLocation = computed(() => {
 const locationHistory = computed(() => {
   if (!selectedLocationId.value && !currentLocation.value) return [];
   const locName = (currentLocation.value?.name || '').toLowerCase();
-  return (syncHistoryList.value || []).filter(
-    (h) =>
-      h.locationId === selectedLocationId.value ||
-      (locName && h.locationName.toLowerCase() === locName)
-  );
+  const activeCanonicalCode = resolveCanonicalLocationCode(currentLocation.value || selectedLocationId.value);
+  return (syncHistoryList.value || []).filter((h) => {
+    if (h.locationId === selectedLocationId.value) return true;
+    if (locName && (h.locationName || '').toLowerCase() === locName) return true;
+    if (activeCanonicalCode) {
+      const entryCode =
+        resolveCanonicalLocationCode(h.locationName) || resolveCanonicalLocationCode(h.locationId);
+      if (entryCode && entryCode === activeCanonicalCode) return true;
+    }
+    return false;
+  });
 });
 
 const inStockCount = computed(() => (syncRows.value || []).filter((r) => r.status !== 'sold' && r.status !== 'paid').length);
@@ -2645,8 +2697,9 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
     if (!loadedReport) {
       try {
         const doc: any = await databases.getDocument(DB_ID, 'manifests', 'md_verify_report_latest');
-        if (doc?.itemsSnapshot) {
-          const parsed = typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+        const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
+        if (rawSnap) {
+          const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
           if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
             loadedReport = parsed;
           }
@@ -2710,12 +2763,14 @@ const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'all') => {
   for (const r of sourceRows) {
     const rawQty = r.quantity !== undefined && r.quantity !== null ? Number(r.quantity) : 1;
     const invStr = r.inventory || (rawQty > 0 ? 'In Stock' : 'Sold');
+    const resolvedUpc = r.mdUpc || r.upc || r.expectedRcUpc || '';
+    const resolvedExpectedUpc = r.expectedRcUpc || r.mdUpc || r.upc || '';
     csvLines.push(
       [
         esc(r.productId),
         esc(r.sku),
-        esc(r.upc),
-        esc(r.expectedRcUpc),
+        esc(resolvedUpc),
+        esc(resolvedExpectedUpc),
         esc(r.verifyStatus),
         esc(r.partner || ''),
         esc(r.conflictReason || ''),
@@ -5088,6 +5143,27 @@ const healZeroEj0CqParentLotIfNeeded = async () => {
   }
 };
 
+const normalizeLocationUrlParam = (locObjOrId: any) => {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  const code = resolveCanonicalLocationCode(locObjOrId);
+  if (!code) return;
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('location') !== code) {
+      url.searchParams.set('location', code);
+      window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
+    }
+  } catch {}
+};
+
+watch(selectedLocationId, (newId) => {
+  if (!newId) return;
+  const loc = (locations.value || []).find((l) => l.$id === newId);
+  if (loc) {
+    normalizeLocationUrlParam(loc);
+  }
+});
+
 const loadData = async () => {
   if (!team.value) return;
   try {
@@ -5114,21 +5190,28 @@ const loadData = async () => {
 
     if (typeof window !== 'undefined' && window.location?.search) {
       const p = new URLSearchParams(window.location.search);
-      const locName = p.get('location');
-      if (locName) {
-        const cleanTarget = locName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const found = locations.value.find(w => w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget);
+      const locParam = p.get('location');
+      if (locParam) {
+        const targetCode = resolveCanonicalLocationCode(locParam);
+        const cleanTarget = locParam.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const found = locations.value.find((w) => {
+          if (w.$id === locParam) return true;
+          if (targetCode && resolveCanonicalLocationCode(w) === targetCode) return true;
+          return w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget;
+        });
         if (found) {
           selectedLocationId.value = found.$id;
-          return;
+          normalizeLocationUrlParam(found);
         }
       }
     }
 
     // Default to Memory Den if available, otherwise first location
     if (!selectedLocationId.value && locations.value.length > 0) {
-      const memDen = locations.value.find(l => l.name.toLowerCase().includes('memory') || l.name.toLowerCase().includes('den'));
-      selectedLocationId.value = memDen ? memDen.$id : locations.value[0].$id;
+      const memDen = locations.value.find(l => resolveCanonicalLocationCode(l) === 'MD');
+      const fallbackLoc = memDen || locations.value[0];
+      selectedLocationId.value = fallbackLoc.$id;
+      normalizeLocationUrlParam(fallbackLoc);
     }
 
     refreshSyncHistory();
@@ -5173,9 +5256,10 @@ onMounted(() => {
         `databases.${DB_ID}.collections.manifests.documents.md_verify_report_latest`,
         (response: any) => {
           const doc = response?.payload;
-          if (doc?.itemsSnapshot) {
+          const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
+          if (rawSnap) {
             try {
-              const parsed = typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+              const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
               if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
                 const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== parsed.timestamp;
                 mdVerifyReport.value = parsed;

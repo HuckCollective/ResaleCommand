@@ -69,12 +69,6 @@ export const SPATIAL_LOCATIONS: SpatialLocationMeta[] = [
         label: '🏡 HH',
         shortLabel: '🏡 HH',
         description: "Huck's Hideout — Climate-Controlled Backstock & Staging"
-    },
-    {
-        id: 'HD',
-        label: '🛋️ HD',
-        shortLabel: '🛋️ HD',
-        description: 'Legacy HD Location Code Records'
     }
 ];
 

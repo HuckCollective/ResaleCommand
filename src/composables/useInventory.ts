@@ -91,7 +91,7 @@ export function useInventory() {
 
                 while (hasMoreItems) {
                     const queries: any[] = [
-                        Query.orderDesc('$createdAt'),
+                        Query.orderDesc('$id'),
                         Query.limit(pageSize)
                     ];
 

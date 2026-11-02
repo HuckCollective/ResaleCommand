@@ -1745,9 +1745,12 @@ export function matchMemoryDenInventoryItem(params: {
         const s = String(cand.status || '').toLowerCase().trim();
         if (s === 'tracked' || s === 'draft' || s === 'scouted') return false;
         if (isSoldUnitSplitChild(cand)) return false;
-        const candIsBb = isBbConsignorDbItem(cand);
-        if (rowIsBb !== candIsBb) return false;
         const candLocSku = cleanCatalogSku(cand.locationSku || cand.sku).toUpperCase();
+        const isExplicitSkuMatch = Boolean(normSku && /^0EJ/i.test(normSku) && candLocSku === normSku);
+        if (!isExplicitSkuMatch) {
+            const candIsBb = isBbConsignorDbItem(cand);
+            if (rowIsBb !== candIsBb) return false;
+        }
         if (normSku && /^0EJ/i.test(normSku) && /^0EJ/i.test(candLocSku) && candLocSku !== normSku) {
             return false;
         }
@@ -1771,7 +1774,30 @@ export function matchMemoryDenInventoryItem(params: {
         if (huck9458) return dereferenceParent(huck9458);
     }
 
-    // 2. Pre-verified SKU -> UPC/ID override map (PREVERIFIED_MD_SKU_TO_UPC_OR_ID + PREVERIFIED_MD_SINGLE_UPC_BY_SKU)
+    // 2. Direct locationSku + UPC or Direct locationSku match (live Appwrite links always take priority over static baseline)
+    if (normSku) {
+        const skuHits = activeItems.filter(i => {
+            const iLocSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
+            const iUpc = cleanCatalogSku(i?.upc).toUpperCase();
+            return (iLocSku === normSku || iUpc === normSku) && canUseCandidate(i);
+        });
+        if (skuHits.length > 0) {
+            const chosen =
+                (normUpc ? skuHits.find(it => cleanCatalogSku(it?.upc).toUpperCase() === normUpc) : null)
+                || skuHits.find(it => it.status === 'placed' && Number(it.quantity ?? 1) > 1)
+                || skuHits.find(it => String(it.status || '').toLowerCase() !== 'sold')
+                || skuHits[0];
+            return dereferenceParent(chosen);
+        }
+    }
+
+    // 3. Direct UPC match
+    if (normUpc) {
+        const byUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === normUpc && canUseCandidate(i));
+        if (byUpc) return dereferenceParent(byUpc);
+    }
+
+    // 4. Pre-verified SKU -> UPC/ID override map (PREVERIFIED_MD_SKU_TO_UPC_OR_ID + PREVERIFIED_MD_SINGLE_UPC_BY_SKU)
     const preMappedTarget = normSku ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID[normSku] : '';
     if (preMappedTarget) {
         const upperTarget = preMappedTarget.toUpperCase();
@@ -1790,27 +1816,6 @@ export function matchMemoryDenInventoryItem(params: {
             const altPreUpc = preSingle.altUpc.toUpperCase();
             const byAltUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === altPreUpc && canUseCandidate(i));
             if (byAltUpc) return dereferenceParent(byAltUpc);
-        }
-    }
-
-    // 3. Direct UPC match
-    if (normUpc) {
-        const byUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === normUpc && canUseCandidate(i));
-        if (byUpc) return dereferenceParent(byUpc);
-    }
-
-    // 4. Direct locationSku match (preferring active placed / multi-qty over sold duplicates)
-    if (normSku) {
-        const skuHits = activeItems.filter(i => {
-            const iLocSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
-            const iUpc = cleanCatalogSku(i?.upc).toUpperCase();
-            return (iLocSku === normSku || iUpc === normSku) && canUseCandidate(i);
-        });
-        if (skuHits.length > 0) {
-            const chosen = skuHits.find(it => it.status === 'placed' && Number(it.quantity ?? 1) > 1)
-                || skuHits.find(it => String(it.status || '').toLowerCase() !== 'sold')
-                || skuHits[0];
-            return dereferenceParent(chosen);
         }
     }
 

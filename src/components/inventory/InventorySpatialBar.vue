@@ -237,7 +237,6 @@ const emit = defineEmits<{
 const TRIAGE_TARGETS = [
     { code: 'HG', icon: '🏠', name: "Huck's Garage" },
     { code: 'HH', icon: '🏡', name: "Huck's Hideout" },
-    { code: 'HD', icon: '🛋️', name: "Huck's Den" },
     { code: 'MD', icon: '🔮', name: 'Memory Den Booth #0EJ' },
     { code: 'DT', icon: '🐯', name: 'Dusty Tiger' }
 ] as const;
