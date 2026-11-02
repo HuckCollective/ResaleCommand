@@ -324,7 +324,7 @@ function isValidProductionUpc(upc: string): boolean {
   return true;
 }
 
-async function buildLiveMdPayloadFromAppwrite(): Promise<{
+export async function buildLiveMdPayloadFromAppwrite(): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
   verifiedMdUpcBySku: Record<string, string>;
@@ -590,6 +590,14 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
       price: resolvedPrice,
       status: resolvedStatus,
     };
+  }
+
+  // Ensure every mapped SKU in finalSkuToUpcMap is also present in verifiedMdUpcBySku so the bookmarklet
+  // always resolves the verified barcode when Ricochet /api/product list omits nested item upc_code fields
+  for (const [sku, upc] of Object.entries(finalSkuToUpcMap)) {
+    if (!verifiedMdUpcBySku[sku] && isValidProductionUpc(upc)) {
+      verifiedMdUpcBySku[sku] = upc;
+    }
   }
 
   // Persist complete payload map to Appwrite manifests if we resolved more SKUs from resale_db.items

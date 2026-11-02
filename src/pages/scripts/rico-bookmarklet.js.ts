@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PREVERIFIED_MD_SKU_TO_UPC_OR_ID } from '../../lib/salesBucketing';
+import { buildLiveMdPayloadFromAppwrite } from '../api/md-verify-report';
 
 export const prerender = false;
 
@@ -22,7 +24,31 @@ export const GET: APIRoute = async () => {
   try {
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
-    return new Response(source, {
+
+    // Server-inject the merged 808-item baseline (md_live_payload_latest + md_verify_report_latest + PREVERIFIED_MD_SKU_TO_UPC_OR_ID)
+    // so the bookmarklet immediately knows all 808 In-Stock, Sold/Historical, and Partner items on load!
+    let injectedBootstrap = '';
+    try {
+      const livePayload = await buildLiveMdPayloadFromAppwrite();
+      const mergedMap: Record<string, string> = {
+        ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+        ...(livePayload.skuToUpcMap || {}),
+      };
+      const bootData = {
+        skuToUpcMap: mergedMap,
+        skuToMetaMap: livePayload.skuToMetaMap || {},
+        verifiedMdUpcBySku: livePayload.verifiedMdUpcBySku || {},
+      };
+      injectedBootstrap = `window.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify(bootData)};\n`;
+    } catch {
+      injectedBootstrap = `window.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify({
+        skuToUpcMap: PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+        skuToMetaMap: {},
+        verifiedMdUpcBySku: {},
+      })};\n`;
+    }
+
+    return new Response(injectedBootstrap + source, {
       status: 200,
       headers: CORS_NO_STORE_HEADERS,
     });
@@ -34,4 +60,5 @@ export const GET: APIRoute = async () => {
     });
   }
 };
+
 

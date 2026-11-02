@@ -555,6 +555,33 @@
     return clean;
   }
 
+  // Hydrate server-injected 808-item bootstrap payload if present on window.__RC_BOOTSTRAP_PAYLOAD__
+  function applyBootstrapPayloadIfPresent() {
+    try {
+      const boot = window.__RC_BOOTSTRAP_PAYLOAD__;
+      if (boot && typeof boot === 'object') {
+        if (boot.skuToUpcMap && typeof boot.skuToUpcMap === 'object') {
+          const merged = { ...boot.skuToUpcMap, ...parsedMap };
+          parsedMap = sanitizeBarcodeMap(merged);
+          cloudLiveSyncedCount = Object.keys(parsedMap).length;
+        }
+        if (boot.skuToMetaMap && typeof boot.skuToMetaMap === 'object') {
+          skuMetaMap = { ...boot.skuToMetaMap, ...skuMetaMap };
+        }
+        if (boot.verifiedMdUpcBySku && typeof boot.verifiedMdUpcBySku === 'object') {
+          for (const [vSku, vUpc] of Object.entries(boot.verifiedMdUpcBySku)) {
+            recordVerifiedMdUpc(vSku, vUpc);
+          }
+        }
+        for (const [bSku, bUpc] of Object.entries(parsedMap)) {
+          recordVerifiedMdUpc(bSku, bUpc);
+        }
+      }
+    } catch (e) {}
+  }
+
+  applyBootstrapPayloadIfPresent();
+
   // Evergreen Live Cloud Fetch from /api/md-verify-report?mode=payload
   async function fetchLivePayloadFromCloud(manualTrigger = false, forceBypassCooldown = false) {
     if (isFetchingCloudPayload) return false;
@@ -570,65 +597,146 @@
       cloudBadge.style.color = '#93c5fd';
     }
 
+    const mergedCloudSkuToUpc = {};
+    const mergedCloudMeta = {};
+    const mergedVerifiedBySku = {};
+    let bestEndpointData = null;
+
+    // Also pull the full 808-item persisted report (`?mode=report` / default GET) and merge with `?mode=payload`
+    // so all 501 In-Stock + 307 Sold/Historical + 83 Partner items are guaranteed present!
     for (const baseEndpoint of RC_REPORT_ENDPOINTS) {
       try {
-        const url = `${baseEndpoint}?mode=payload&t=${Date.now()}`;
-        const res = await fetch(url, { method: 'GET', mode: 'cors' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.ok && data.skuToUpcMap && typeof data.skuToUpcMap === 'object') {
-            const combinedPrioritized = {};
-            for (const [k, v] of Object.entries(data.skuToUpcMap)) {
-              combinedPrioritized[k] = v;
-            }
-            for (const [k, v] of Object.entries(parsedMap)) {
-              if (!(k in combinedPrioritized)) {
-                combinedPrioritized[k] = v;
+        const [payloadRes, reportRes] = await Promise.all([
+          fetch(`${baseEndpoint}?mode=payload&t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
+          fetch(`${baseEndpoint}?t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
+        ]);
+
+        if (reportRes && reportRes.ok) {
+          const rData = await reportRes.json().catch(() => null);
+          const reportRows = rData?.report?.rows;
+          if (Array.isArray(reportRows)) {
+            for (const r of reportRows) {
+              const rSku = cleanStr(r.sku).toUpperCase();
+              const rUpc = cleanStr(r.upc).toUpperCase();
+              const rExpUpc = cleanStr(r.expectedRcUpc || r.upc).toUpperCase();
+              if (!rSku || !/^0EJ/i.test(rSku)) continue;
+              if (rUpc && isRealUpc(rUpc)) {
+                mergedVerifiedBySku[rSku] = rUpc;
               }
-            }
-            const liveMap = sanitizeBarcodeMap(combinedPrioritized);
-            const liveCount = Object.keys(liveMap).length;
-            if (liveCount > 0) {
-              const prevCount = cloudLiveSyncedCount;
-              // Single source of truth: update parsedMap with live cloud map while preserving any local mappings
-              runtime422Conflicts = {};
-              parsedMap = liveMap;
-              if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
-                skuMetaMap = { ...skuMetaMap, ...data.skuToMetaMap };
+              const targetUpc = rExpUpc && isRealUpc(rExpUpc) ? rExpUpc : rUpc;
+              if (targetUpc && isRealUpc(targetUpc)) {
+                mergedCloudSkuToUpc[rSku] = targetUpc;
+                const invStr = String(r.inventory || '').toLowerCase();
+                const isSoldStatus = invStr.includes('sold') || invStr.includes('paid') || Number(r.quantity ?? 1) === 0;
+                mergedCloudMeta[rSku] = {
+                  upc: targetUpc,
+                  partner: r.partner || resolvePartnerBucket(rSku, targetUpc, rUpc, r.name || ''),
+                  title: String(r.name || ''),
+                  price: Number(r.agreedPrice || 0),
+                  status: isSoldStatus ? 'sold' : 'placed',
+                };
               }
-              if (data.verifiedMdUpcBySku && typeof data.verifiedMdUpcBySku === 'object') {
-                for (const [vSku, vUpc] of Object.entries(data.verifiedMdUpcBySku)) {
-                  recordVerifiedMdUpc(vSku, vUpc);
-                }
-              }
-              cloudLiveSyncedCount = Object.keys(parsedMap).length;
-              const ta = document.getElementById('rc-sync-textarea');
-              if (ta) {
-                ta.value = JSON.stringify(parsedMap, null, 2);
-              }
-              if (cloudBadge) {
-                cloudBadge.textContent = `✅ Live Auto-Updated (${cloudLiveSyncedCount})`;
-                cloudBadge.style.background = '#065f46';
-                cloudBadge.style.color = '#6ee7b7';
-              }
-              if (manualTrigger || prevCount !== cloudLiveSyncedCount) {
-                addLog(`☁️ Live-fetched ${cloudLiveSyncedCount} active barcodes from Resale Command!`, '#38bdf8');
-              }
-              if (manualTrigger) {
-                setStatusBanner(
-                  'success',
-                  `✅ Live Auto-Updated Script: Fetched ${cloudLiveSyncedCount} live barcodes from Resale Command!`
-                );
-              }
-              isFetchingCloudPayload = false;
-              updateUI();
-              return true;
             }
           }
+        }
+
+        if (payloadRes && payloadRes.ok) {
+          const data = await payloadRes.json().catch(() => null);
+          if (data && data.ok && data.skuToUpcMap && typeof data.skuToUpcMap === 'object') {
+            for (const [k, v] of Object.entries(data.skuToUpcMap)) {
+              const s = cleanStr(k).toUpperCase();
+              const u = cleanStr(v).toUpperCase();
+              if (s && u && isRealUpc(u)) {
+                mergedCloudSkuToUpc[s] = u;
+              }
+            }
+            if (data.skuToMetaMap && typeof data.skuToMetaMap === 'object') {
+              for (const [k, m] of Object.entries(data.skuToMetaMap)) {
+                const s = cleanStr(k).toUpperCase();
+                if (s && m) {
+                  const prevSold = mergedCloudMeta[s]?.status === 'sold';
+                  mergedCloudMeta[s] = {
+                    ...mergedCloudMeta[s],
+                    ...m,
+                    status: prevSold ? 'sold' : (m.status || 'placed'),
+                  };
+                }
+              }
+            }
+            if (data.verifiedMdUpcBySku && typeof data.verifiedMdUpcBySku === 'object') {
+              for (const [vSku, vUpc] of Object.entries(data.verifiedMdUpcBySku)) {
+                const s = cleanStr(vSku).toUpperCase();
+                const u = cleanStr(vUpc).toUpperCase();
+                if (s && u && isRealUpc(u)) {
+                  mergedVerifiedBySku[s] = u;
+                }
+              }
+            }
+            bestEndpointData = data;
+          }
+        }
+
+        if (Object.keys(mergedCloudSkuToUpc).length >= 800 || bestEndpointData) {
+          break;
         }
       } catch (e) {
         // try next endpoint
       }
+    }
+
+    const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
+    const combinedPrioritized = {};
+    for (const [k, v] of Object.entries(mergedCloudSkuToUpc)) {
+      combinedPrioritized[k] = v;
+    }
+    for (const [k, v] of Object.entries(bootMap)) {
+      if (!(k in combinedPrioritized)) {
+        combinedPrioritized[k] = v;
+      }
+    }
+    for (const [k, v] of Object.entries(parsedMap)) {
+      if (!(k in combinedPrioritized)) {
+        combinedPrioritized[k] = v;
+      }
+    }
+
+    const liveMap = sanitizeBarcodeMap(combinedPrioritized);
+    const liveCount = Object.keys(liveMap).length;
+    if (liveCount > 0) {
+      const prevCount = cloudLiveSyncedCount;
+      runtime422Conflicts = {};
+      parsedMap = liveMap;
+      skuMetaMap = { ...skuMetaMap, ...mergedCloudMeta };
+      for (const [vSku, vUpc] of Object.entries(mergedVerifiedBySku)) {
+        recordVerifiedMdUpc(vSku, vUpc);
+      }
+      for (const [mSku, mUpc] of Object.entries(parsedMap)) {
+        if (!verifiedMdUpcMap[mSku]) {
+          recordVerifiedMdUpc(mSku, mUpc);
+        }
+      }
+      cloudLiveSyncedCount = Object.keys(parsedMap).length;
+      const ta = document.getElementById('rc-sync-textarea');
+      if (ta) {
+        ta.value = JSON.stringify(parsedMap, null, 2);
+      }
+      if (cloudBadge) {
+        cloudBadge.textContent = `✅ Live Auto-Updated (${cloudLiveSyncedCount})`;
+        cloudBadge.style.background = '#065f46';
+        cloudBadge.style.color = '#6ee7b7';
+      }
+      if (manualTrigger || prevCount !== cloudLiveSyncedCount) {
+        addLog(`☁️ Live-fetched ${cloudLiveSyncedCount} active barcodes from Resale Command!`, '#38bdf8');
+      }
+      if (manualTrigger) {
+        setStatusBanner(
+          'success',
+          `✅ Live Auto-Updated Script: Fetched ${cloudLiveSyncedCount} live barcodes from Resale Command!`
+        );
+      }
+      isFetchingCloudPayload = false;
+      updateUI();
+      return true;
     }
 
     isFetchingCloudPayload = false;
@@ -801,7 +909,13 @@
     for (const p of catalogProducts) {
       const sku = extractRicochetSku(p);
       let mdUpc = extractRicochetUpc(p);
-      const expectedRcUpc = cleanStr(parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || '').toUpperCase();
+      const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
+      const expectedRcUpc = cleanStr(
+        parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku] || verifiedMdUpcMap[sku] || ''
+      ).toUpperCase();
+      if (!mdUpc && expectedRcUpc && isRealUpc(expectedRcUpc) && verifiedMdUpcMap[sku]) {
+        mdUpc = verifiedMdUpcMap[sku];
+      }
       const itemTitle = cleanStr(p.name || p.title || p.description || sku);
       const partner = resolvePartnerBucket(sku, expectedRcUpc, mdUpc, itemTitle);
 
