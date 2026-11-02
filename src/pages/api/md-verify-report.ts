@@ -795,10 +795,25 @@ export const POST: APIRoute = async ({ request }) => {
       }
     }
 
+    // Build set of active In-Stock UPCs in Ricochet so on-the-fly phone booth entries with an unclaimed HUCK-XXXX tag auto-adopt cleanly
+    const activeInStockSkusByUpc = new Map<string, Set<string>>();
+    for (const ir of incomingRows) {
+      const iSku = cleanCatalogSku(ir.sku).toUpperCase();
+      const iUpc = cleanCatalogSku(ir.upc || prevVerifiedUpcBySku.get(iSku) || '').toUpperCase();
+      const iInv = String(ir.inventory || '').toLowerCase();
+      const iSold = iInv.includes('sold') || iInv.includes('paid') || Number(ir.quantity ?? 1) === 0;
+      if (!iSold && iSku && isValidProductionUpc(iUpc)) {
+        if (!activeInStockSkusByUpc.has(iUpc)) activeInStockSkusByUpc.set(iUpc, new Set());
+        activeInStockSkusByUpc.get(iUpc)!.add(iSku);
+      }
+    }
+
+    const onTheFlyAdoptedPairs: Array<{ sku: string; upc: string; title: string; price: number; qty: number }> = [];
+
     const rows: MdVerifyRow[] = incomingRows.map((r) => {
       const cleanSku = cleanCatalogSku(r.sku).toUpperCase();
       let mdUpc = cleanCatalogSku(r.upc).toUpperCase();
-      const expectedRcUpc = cleanCatalogSku(r.expectedRcUpc || skuToUpcMap[cleanSku] || '').toUpperCase();
+      let expectedRcUpc = cleanCatalogSku(r.expectedRcUpc || skuToUpcMap[cleanSku] || '').toUpperCase();
       const meta = skuToMetaMap[cleanSku];
 
       if (!mdUpc && cleanSku && prevVerifiedUpcBySku.has(cleanSku)) {
@@ -812,13 +827,42 @@ export const POST: APIRoute = async ({ request }) => {
         Number(r.quantity ?? 1) === 0 ||
         String(meta?.status || '').toLowerCase() === 'sold';
 
+      // Check if an active In-Stock item was tagged on the fly at the booth with a valid HUCK-/PDXGL-/BB- barcode
+      // that is NOT claimed by any other active In-Stock 0EJ SKU
+      const otherInStockClaimants = mdUpc ? Array.from(activeInStockSkusByUpc.get(mdUpc) || []).filter((s) => s !== cleanSku) : [];
+      const canAutoAdoptOnTheFlyUpc =
+        !isSoldRow &&
+        Boolean(cleanSku && /^0EJ/i.test(cleanSku)) &&
+        Boolean(mdUpc && isValidProductionUpc(mdUpc)) &&
+        otherInStockClaimants.length === 0;
+
       let verifyStatus = r.verifyStatus;
-      if (expectedRcUpc) {
+      if (isSoldRow && (expectedRcUpc || (mdUpc && isValidProductionUpc(mdUpc)))) {
+        // Historical Sold/Paid items that have already left the shelf are ALWAYS VERIFIED_MATCH (never MISMATCH_UPC)
+        if (!mdUpc) mdUpc = expectedRcUpc;
+        if (!expectedRcUpc) expectedRcUpc = mdUpc;
+        verifyStatus = 'VERIFIED_MATCH';
+      } else if (canAutoAdoptOnTheFlyUpc && (!expectedRcUpc || mdUpc !== expectedRcUpc)) {
+        // On-the-Fly Booth Addition / Physical Tag Wins: automatically adopt unclaimed HUCK-XXXX tag entered on phone in Ricochet
+        expectedRcUpc = mdUpc;
+        skuToUpcMap[cleanSku] = mdUpc;
+        skuToMetaMap[cleanSku] = {
+          upc: mdUpc,
+          partner: detectPartnerFromUpcOrTitle(mdUpc, String(r.name || '')),
+          title: String(r.name || ''),
+          price: Number(r.agreedPrice || 0),
+          status: 'placed',
+        };
+        onTheFlyAdoptedPairs.push({
+          sku: cleanSku,
+          upc: mdUpc,
+          title: String(r.name || cleanSku),
+          price: Number(r.agreedPrice || 0),
+          qty: Math.max(1, Number(r.quantity || 1)),
+        });
+        verifyStatus = 'VERIFIED_MATCH';
+      } else if (expectedRcUpc) {
         if (mdUpc === expectedRcUpc) {
-          verifyStatus = 'VERIFIED_MATCH';
-        } else if (!mdUpc && isSoldRow) {
-          // Historical sold/paid item already linked in Resale Command
-          mdUpc = expectedRcUpc;
           verifyStatus = 'VERIFIED_MATCH';
         } else if (!mdUpc) {
           verifyStatus = 'MISSING_IN_MD';
@@ -826,6 +870,7 @@ export const POST: APIRoute = async ({ request }) => {
           verifyStatus = 'MISMATCH_UPC';
         }
       } else if (mdUpc && isValidProductionUpc(mdUpc)) {
+        expectedRcUpc = mdUpc;
         verifyStatus = 'VERIFIED_MATCH';
       } else {
         verifyStatus = 'UNLINKED_IN_RC';
@@ -840,6 +885,47 @@ export const POST: APIRoute = async ({ request }) => {
         verifyStatus,
       };
     });
+
+    // Persist any on-the-fly booth additions / adopted phone tags to resale_db.items and md_live_payload_latest
+    if (onTheFlyAdoptedPairs.length > 0) {
+      await savePersistedLivePayloadToAppwrite({
+        skuToUpcMap,
+        skuToMetaMap,
+      });
+      const { databases, dbId, itemsCol } = getAppwriteConfig();
+      if (databases) {
+        for (const pair of onTheFlyAdoptedPairs) {
+          try {
+            const byUpcRes = await databases.listDocuments(dbId, itemsCol, [
+              NodeQuery.equal('upc', pair.upc),
+              NodeQuery.limit(5),
+            ]);
+            const existingByUpc = byUpcRes.documents?.[0] as any;
+            if (existingByUpc?.$id) {
+              await databases.updateDocument(dbId, itemsCol, existingByUpc.$id, {
+                locationSku: pair.sku,
+                storageLocation: 'MD',
+                status: 'placed',
+              });
+            } else {
+              const bySkuRes = await databases.listDocuments(dbId, itemsCol, [
+                NodeQuery.equal('locationSku', pair.sku),
+                NodeQuery.limit(5),
+              ]);
+              const existingBySku = bySkuRes.documents?.[0] as any;
+              if (existingBySku?.$id) {
+                await databases.updateDocument(dbId, itemsCol, existingBySku.$id, {
+                  upc: pair.upc,
+                  locationSku: pair.sku,
+                  storageLocation: 'MD',
+                  status: 'placed',
+                });
+              }
+            }
+          } catch {}
+        }
+      }
+    }
 
     const verifiedMatch = rows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length;
     const missingInMd = rows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length;

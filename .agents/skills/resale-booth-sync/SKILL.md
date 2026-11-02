@@ -24,9 +24,13 @@ In physical retail booth operations, a barcode (`HUCK-XXXX`, `PDXGL-XXXX`, `BB-X
      - `🏷️ Pre-Tagged` (`HUCK-0001..9739`, `PDXGL-`, `BB-`): Existing inventory barcode from your collection.
      - `🆕 Virtual (9740+)`: Newly minted virtual barcode from database reconciliation (safe to write to Ricochet if the booth tag has no HUCK barcode sticker; if the item at the booth already has a physical `HUCK-XXXX` sticker attached, adopt that physical sticker instead).
 
-3. **Law #3 — Physical Sticker Wins (`🏷️ Adopt Booth Tag ([mdUpc]) in RC`)**:
+3. **Law #3 — Physical Sticker Wins (`🏷️ Adopt Booth Tag ([mdUpc]) in RC`), Clean 4-Digit `HUCK-XXXX` Standard, & On-the-Fly Phone Booth Additions**:
    - Whenever an item has `verifyStatus === 'MISMATCH_UPC'` (Ricochet has `mdUpc` on the booth tag while Resale Command DB has `expectedRcUpc`), the physical tag at the booth is the source of truth unless proven to be a duplicate collision.
    - Both the Memory Den widget (`#rc-mismatch-box` in `public/ricochet-upc-sync.user.js`) and [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue) provide a 1-click **`🏷️ Adopt Booth Tag ([mdUpc])`** button (`POST /api/md-verify-report` with `{ mode: 'adopt_md_upc', sku, mdUpc }`) that updates `resale_db.items`, `md_live_payload_latest`, and `md_verify_report_latest` to match Ricochet's existing physical barcode so no tag at the booth ever needs to be reprinted or re-stickered.
+   - **Clean 4-Digit `HUCK-XXXX` Standard (No `-A`/`-B`/`-C` Suffixes)**: Split-lot children and booth items must ALWAYS receive a clean sequential 4-digit `HUCK-XXXX` barcode (using `parentLotId` for lot lineage, never `-A`/`-B`/`-C` suffixes). Historical `Sold`/`Paid` (`Qty: 0`) items linked in Resale Command are always classified as `VERIFIED_MATCH` (never `MISMATCH_UPC`) since they have already left the physical shelf.
+   - **On-the-Fly Phone Booth Additions**: When an item is added on the fly at Memory Den via phone:
+     - If an active `In Stock` `0EJ...` item has a valid `HUCK-XXXX` / `PDXGL-XXXX` / `BB-XXXX` barcode typed into Ricochet (`mdUpc`) that is not claimed by any other active `In Stock` `0EJ...` SKU, `/api/md-verify-report` and `public/ricochet-upc-sync.user.js` automatically adopt `mdUpc`, link `locationSku = 0EJ...` (`placed @ MD`) in `resale_db.items`, and mark it `VERIFIED_MATCH` (never inventing a competing `HUCK-9xxx` virtual code).
+     - If a brand-new `0EJ...` item is added on the fly in Ricochet with a blank UPC, `LocationSyncView.vue` surfaces it with a `🆕 New Booth Item` badge and a 1-click `+ Import to RC (HUCK-XXXX)` button.
 
 ---
 

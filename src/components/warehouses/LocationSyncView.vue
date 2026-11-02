@@ -1120,8 +1120,11 @@
                     <!-- Fallback when 0 suggested candidates: New Booth Item pill + Open Match Drawer + Quick Add -->
                     <div v-else class="space-y-1">
                       <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <span class="badge badge-xs badge-ghost font-bold whitespace-nowrap shrink-0">
-                          ⚪ New Booth Item
+                        <span
+                          class="badge badge-xs badge-info text-info-content font-black whitespace-nowrap shrink-0"
+                          title="Added on the fly at the booth — 1 click imports to Resale Command (placed @ MD) &amp; assigns sequential barcode"
+                        >
+                          🆕 New Booth Item
                         </span>
                         <button
                           type="button"
@@ -1143,11 +1146,11 @@
                           :class="row.isBbRow || row.orgBucket === 'BB' ? 'btn-warning text-warning-content' : row.customPrefix === 'PDXGL-' ? 'btn-secondary text-secondary-content' : 'btn-primary'"
                           :disabled="row.isQuickAdding"
                           @click="quickAddRow(row)"
-                          title="Quick create this item with partner-protected sequential barcode"
+                          title="Import this new booth item to Resale Command (placed @ MD) with partner-protected sequential barcode"
                         >
                           <span v-if="row.isQuickAdding" class="loading loading-spinner loading-xs"></span>
                           <Icon v-else icon="solar:add-circle-bold" class="w-3.5 h-3.5" />
-                          + Add ({{ getRowPreviewUpc(row) }})
+                          + Import to RC ({{ getRowPreviewUpc(row) }})
                         </button>
                       </div>
                       <div v-if="row.aiEvaluated && row.aiReason" class="text-[10px] text-purple-600 dark:text-purple-300 font-semibold px-1">

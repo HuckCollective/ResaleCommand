@@ -842,20 +842,34 @@
 
       let verifyStatus = 'UNLINKED_IN_RC';
       let conflictReason = '';
-      if (expectedRcUpc) {
-        if (mdUpc === expectedRcUpc) {
-          verifyStatus = 'VERIFIED_MATCH';
-        } else if (!mdUpc && isSoldRow) {
-          mdUpc = expectedRcUpc;
+      let effectiveExpectedRcUpc = expectedRcUpc;
+
+      // Check if an active In-Stock item was tagged on the fly at the booth with an unclaimed HUCK-/PDXGL-/BB- barcode
+      const mdOtherClaimants = mdUpc ? (dupOwners.upcToSkusInMd[mdUpc] || []).filter((s) => s !== sku) : [];
+      const isMdUpcValidOrg = Boolean(mdUpc && /^(HUCK|PDXGL|BB)-/i.test(mdUpc) && isRealUpc(mdUpc));
+
+      if (isSoldRow && (effectiveExpectedRcUpc || isMdUpcValidOrg)) {
+        // Historical Sold/Paid items that have already left the shelf are ALWAYS VERIFIED_MATCH (never MISMATCH_UPC)
+        if (!mdUpc) mdUpc = effectiveExpectedRcUpc;
+        if (!effectiveExpectedRcUpc) effectiveExpectedRcUpc = mdUpc;
+        verifyStatus = 'VERIFIED_MATCH';
+      } else if (!isSoldRow && isMdUpcValidOrg && mdOtherClaimants.length === 0 && (!effectiveExpectedRcUpc || mdUpc === effectiveExpectedRcUpc)) {
+        // On-the-Fly Booth Addition via Phone: unclaimed HUCK-XXXX tag entered directly in Ricochet is authoritative
+        effectiveExpectedRcUpc = mdUpc;
+        parsedMap[sku] = mdUpc;
+        verifyStatus = 'VERIFIED_MATCH';
+      } else if (effectiveExpectedRcUpc) {
+        if (mdUpc === effectiveExpectedRcUpc) {
           verifyStatus = 'VERIFIED_MATCH';
         } else if (!mdUpc) {
           verifyStatus = 'MISSING_IN_MD';
-          conflictReason = getSkuConflictReason(sku, expectedRcUpc, dupOwners);
+          conflictReason = getSkuConflictReason(sku, effectiveExpectedRcUpc, dupOwners);
           if (conflictReason) conflictMessages.push(conflictReason);
         } else {
           verifyStatus = 'MISMATCH_UPC';
         }
-      } else if (mdUpc && /^(HUCK|PDXGL|BB)-/i.test(mdUpc)) {
+      } else if (isMdUpcValidOrg) {
+        effectiveExpectedRcUpc = mdUpc;
         verifyStatus = 'VERIFIED_MATCH';
       }
 
@@ -872,7 +886,7 @@
         productId: String(p.id || ''),
         sku,
         upc: mdUpc,
-        expectedRcUpc,
+        expectedRcUpc: effectiveExpectedRcUpc,
         verifyStatus,
         partner,
         conflictReason,

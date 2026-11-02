@@ -302,8 +302,32 @@ for (const file of vueFiles) {
     }
 }
 
+// =========================================================================
+// 5. VALIDATE SCRIPTS/ DIRECTORY ALLOWLIST (NO ONE-OFF SCRIPTS IN SCRIPTS/)
+// =========================================================================
+const ALLOWED_PERMANENT_SCRIPTS = new Set([
+    'inspect_schema.js',
+    'audit_schema.mjs',
+    'sync-ai-context.mjs',
+    'validate-templates.mjs',
+]);
+
+const scriptsDir = path.join(process.cwd(), 'scripts');
+if (fs.existsSync(scriptsDir)) {
+    const scriptEntries = fs.readdirSync(scriptsDir, { withFileTypes: true });
+    for (const entry of scriptEntries) {
+        if (!entry.isFile()) continue;
+        if (!ALLOWED_PERMANENT_SCRIPTS.has(entry.name)) {
+            console.error(
+                `❌ Forbidden one-off script in scripts/${entry.name}: Only permanent scripts (${Array.from(ALLOWED_PERMANENT_SCRIPTS).join(', ')}) are allowed in scripts/. Put temporary scripts in git-ignored scratch/ and delete them before committing!`
+            );
+            hasErrors = true;
+        }
+    }
+}
+
 if (!hasErrors) {
-    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, and price-parsing invariants passed with ZERO errors!`);
+    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, and price-parsing invariants passed with ZERO errors!`);
 } else {
     process.exit(1);
 }
