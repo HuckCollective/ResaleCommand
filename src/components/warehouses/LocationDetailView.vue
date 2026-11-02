@@ -27,7 +27,7 @@
 
         <a 
           v-if="warehouse" 
-          :href="'/warehouse/sync?location=' + encodeURIComponent(warehouse.name)" 
+          :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : warehouse.name))" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />

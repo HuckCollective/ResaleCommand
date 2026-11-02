@@ -10,7 +10,7 @@
         <p class="text-xs opacity-70 mt-0.5">Manage physical booths, storage warehouses, and two-way sync sales &amp; inventory per location.</p>
       </div>
       <div class="flex items-center gap-2.5 w-full sm:w-auto">
-        <a href="/warehouse/sync" class="btn btn-secondary btn-sm gap-2 font-bold shadow-sm flex-1 sm:flex-initial">
+        <a href="/warehouse/sync/MD" class="btn btn-secondary btn-sm gap-2 font-bold shadow-sm flex-1 sm:flex-initial">
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
           <span>Location Sync Hub</span>
         </a>
@@ -149,7 +149,7 @@
 
               <!-- Secondary Action: Import & Sync Sales -->
               <a 
-                :href="'/warehouse/sync?location=' + encodeURIComponent(warehouse.name)" 
+                :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : warehouse.name))" 
                 class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs col-span-2 sm:col-span-1"
                 title="Upload sales payout CSV or product list from this booth"
               >

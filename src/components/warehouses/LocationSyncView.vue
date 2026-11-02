@@ -2054,6 +2054,10 @@ import {
 // =========================================================================
 // 1. ALL COMPOSABLES & REACTIVE REFS (Strictly at top to prevent TDZ errors)
 // =========================================================================
+const props = defineProps<{
+  initialLocation?: string;
+}>();
+
 const { user, currentTeam: team } = useAuth();
 const { inventoryItems, fetchInventory, getNextUpc } = useInventory();
 const { showLoader, hideLoader } = useLoader();
@@ -5148,10 +5152,9 @@ const normalizeLocationUrlParam = (locObjOrId: any) => {
   const code = resolveCanonicalLocationCode(locObjOrId);
   if (!code) return;
   try {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('location') !== code) {
-      url.searchParams.set('location', code);
-      window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
+    const targetPath = `/warehouse/sync/${encodeURIComponent(code)}`;
+    if (window.location.pathname !== targetPath || window.location.search) {
+      window.history.replaceState({}, '', targetPath);
     }
   } catch {}
 };
@@ -5188,21 +5191,33 @@ const loadData = async () => {
       }
     }
 
-    if (typeof window !== 'undefined' && window.location?.search) {
-      const p = new URLSearchParams(window.location.search);
-      const locParam = p.get('location');
-      if (locParam) {
-        const targetCode = resolveCanonicalLocationCode(locParam);
-        const cleanTarget = locParam.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const found = locations.value.find((w) => {
-          if (w.$id === locParam) return true;
-          if (targetCode && resolveCanonicalLocationCode(w) === targetCode) return true;
-          return w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget;
-        });
-        if (found) {
-          selectedLocationId.value = found.$id;
-          normalizeLocationUrlParam(found);
+    let rawTargetLocation = String(props.initialLocation || '').trim();
+    if (!rawTargetLocation && typeof window !== 'undefined') {
+      const pathMatch = window.location.pathname.match(/\/warehouse\/sync\/([^/?#]+)/i);
+      if (pathMatch && pathMatch[1]) {
+        try {
+          rawTargetLocation = decodeURIComponent(pathMatch[1]).trim();
+        } catch {
+          rawTargetLocation = pathMatch[1].trim();
         }
+      }
+      if (!rawTargetLocation && window.location?.search) {
+        const p = new URLSearchParams(window.location.search);
+        rawTargetLocation = (p.get('location') || '').trim();
+      }
+    }
+
+    if (rawTargetLocation) {
+      const targetCode = resolveCanonicalLocationCode(rawTargetLocation);
+      const cleanTarget = rawTargetLocation.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const found = locations.value.find((w) => {
+        if (w.$id === rawTargetLocation) return true;
+        if (targetCode && resolveCanonicalLocationCode(w) === targetCode) return true;
+        return w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget;
+      });
+      if (found) {
+        selectedLocationId.value = found.$id;
+        normalizeLocationUrlParam(found);
       }
     }
 
