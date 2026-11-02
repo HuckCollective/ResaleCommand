@@ -485,28 +485,33 @@
   }
 
   let rcBroadcastChannel = null;
+  let lastCloudFetchAt = 0;
+  const CLOUD_FETCH_COOLDOWN_MS = 60000;
+
   function setupLiveTabConnection() {
+    if (window.__RC_LIVE_TAB_LISTENER_BOUND__) return;
+    window.__RC_LIVE_TAB_LISTENER_BOUND__ = true;
+
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         rcBroadcastChannel = new BroadcastChannel('resale_command_sync');
         rcBroadcastChannel.onmessage = (ev) => {
           if (ev?.data?.type === 'RC_BARCODES_UPDATED' && !isRunning) {
-            fetchLivePayloadFromCloud(false);
+            fetchLivePayloadFromCloud(false, true);
           }
         };
       }
     } catch (e) {}
 
-    window.addEventListener('focus', () => {
-      if (isOpen && !isRunning) {
-        fetchLivePayloadFromCloud(false);
-      }
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && isOpen && !isRunning) {
-        fetchLivePayloadFromCloud(false);
-      }
-    });
+    const onWindowOrTabWake = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (!isOpen || isRunning || isFetchingCloudPayload) return;
+      if (Date.now() - lastCloudFetchAt < CLOUD_FETCH_COOLDOWN_MS) return;
+      fetchLivePayloadFromCloud(false, false);
+    };
+
+    window.addEventListener('focus', onWindowOrTabWake);
+    document.addEventListener('visibilitychange', onWindowOrTabWake);
   }
 
   // Sanitize a barcode map to strip any test/demo UPCs and enforce strict 1-to-1 SKU <-> UPC uniqueness dynamically
@@ -528,9 +533,13 @@
   }
 
   // Evergreen Live Cloud Fetch from /api/md-verify-report?mode=payload
-  async function fetchLivePayloadFromCloud(manualTrigger = false) {
+  async function fetchLivePayloadFromCloud(manualTrigger = false, forceBypassCooldown = false) {
     if (isFetchingCloudPayload) return false;
+    if (!manualTrigger && !forceBypassCooldown && lastCloudFetchAt > 0 && Date.now() - lastCloudFetchAt < CLOUD_FETCH_COOLDOWN_MS) {
+      return true;
+    }
     isFetchingCloudPayload = true;
+    lastCloudFetchAt = Date.now();
     const cloudBadge = document.getElementById('rc-cloud-badge');
     if (cloudBadge) {
       cloudBadge.textContent = '⏳ Syncing Live Cloud...';
@@ -548,6 +557,7 @@
             const liveMap = sanitizeBarcodeMap(data.skuToUpcMap);
             const liveCount = Object.keys(liveMap).length;
             if (liveCount > 0) {
+              const prevCount = cloudLiveSyncedCount;
               // Single source of truth: replace parsedMap directly with live cloud map and clear stale conflicts
               runtime422Conflicts = {};
               parsedMap = liveMap;
@@ -569,7 +579,9 @@
                 cloudBadge.style.background = '#065f46';
                 cloudBadge.style.color = '#6ee7b7';
               }
-              addLog(`☁️ Live-fetched ${cloudLiveSyncedCount} active barcodes from Resale Command!`, '#38bdf8');
+              if (manualTrigger || prevCount !== cloudLiveSyncedCount) {
+                addLog(`☁️ Live-fetched ${cloudLiveSyncedCount} active barcodes from Resale Command!`, '#38bdf8');
+              }
               if (manualTrigger) {
                 setStatusBanner(
                   'success',

@@ -93,7 +93,7 @@ function getAppwriteConfig() {
   const project =
     (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID) ||
     process.env.PUBLIC_APPWRITE_PROJECT_ID ||
-    '';
+    '69714b35003a8adab6bb';
   const apiKey =
     (typeof import.meta !== 'undefined' && import.meta.env?.APPWRITE_API_KEY) ||
     process.env.APPWRITE_API_KEY ||
@@ -116,11 +116,35 @@ function getAppwriteConfig() {
   return { endpoint, project, apiKey, dbId, itemsCol, databases };
 }
 
-async function loadPersistedReportFromAppwrite(): Promise<MdVerifyReportPayload | null> {
-  const { databases, dbId } = getAppwriteConfig();
-  if (!databases) return getStoredReport();
+async function fetchAppwriteDocFallback(colId: string, docId: string): Promise<any | null> {
+  const { endpoint, project, apiKey, dbId, databases } = getAppwriteConfig();
+  if (databases) {
+    try {
+      return await databases.getDocument(dbId, colId, docId);
+    } catch {
+      // Fall through to direct REST fetch
+    }
+  }
   try {
-    const doc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID);
+    const headers: Record<string, string> = {
+      'X-Appwrite-Project': project,
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+    const res = await fetch(
+      `${endpoint}/databases/${dbId}/collections/${colId}/documents/${docId}`,
+      { method: 'GET', headers }
+    );
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {}
+  return null;
+}
+
+async function loadPersistedReportFromAppwrite(): Promise<MdVerifyReportPayload | null> {
+  try {
+    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID);
     if (doc?.itemsSnapshot) {
       const parsed =
         typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
@@ -145,6 +169,12 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
   const { databases, dbId } = getAppwriteConfig();
   if (!databases) return;
 
+  const docPerms = [
+    NodePermission.read(NodeRole.any()),
+    NodePermission.update(NodeRole.any()),
+    NodePermission.delete(NodeRole.any()),
+  ];
+
   const docPayload: Record<string, any> = {
     name: 'Memory Den Live Barcode Verification Report',
     tenantId: 'system',
@@ -160,7 +190,7 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
   };
 
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID, docPayload);
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID, docPayload, docPerms);
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
@@ -169,11 +199,7 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
           MANIFESTS_COL_ID,
           PERSISTED_REPORT_DOC_ID,
           docPayload,
-          [
-            NodePermission.read(NodeRole.any()),
-            NodePermission.update(NodeRole.any()),
-            NodePermission.delete(NodeRole.any()),
-          ]
+          docPerms
         );
       } catch (createErr) {
         console.warn('[/api/md-verify-report] Could not create persisted report doc:', (createErr as any)?.message);
@@ -188,18 +214,27 @@ async function loadPersistedLivePayloadFromAppwrite(): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
 } | null> {
-  const { databases, dbId } = getAppwriteConfig();
-  if (!databases) return getStoredLivePayload();
   try {
-    const doc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID);
+    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID);
     if (doc?.itemsSnapshot) {
       const parsed =
         typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
       if (parsed && parsed.skuToUpcMap && typeof parsed.skuToUpcMap === 'object') {
-        const result = {
-          skuToUpcMap: parsed.skuToUpcMap || {},
-          skuToMetaMap: parsed.skuToMetaMap || {},
-        };
+        const skuToUpcMap: Record<string, string> = parsed.skuToUpcMap || {};
+        const skuToMetaMap: Record<string, MdSkuMeta> = parsed.skuToMetaMap || {};
+        const soldSet = new Set<string>(Array.isArray(parsed.soldSkus) ? parsed.soldSkus : []);
+        for (const [sku, upc] of Object.entries(skuToUpcMap)) {
+          if (!skuToMetaMap[sku]) {
+            skuToMetaMap[sku] = {
+              upc,
+              partner: detectPartnerFromUpcOrTitle(upc, ''),
+              title: '',
+              price: 0,
+              status: soldSet.has(sku) ? 'sold' : 'placed',
+            };
+          }
+        }
+        const result = { skuToUpcMap, skuToMetaMap };
         setStoredLivePayload(result);
         return result;
       }
@@ -221,6 +256,20 @@ async function savePersistedLivePayloadToAppwrite(payload: {
   const count = Object.keys(payload.skuToUpcMap || {}).length;
   if (count === 0) return;
 
+  const soldSkus: string[] = [];
+  for (const [sku, meta] of Object.entries(payload.skuToMetaMap || {})) {
+    if (String(meta?.status || '').toLowerCase() === 'sold') {
+      soldSkus.push(sku);
+    }
+  }
+
+  const docPerms = [
+    NodePermission.read(NodeRole.any()),
+    NodePermission.update(NodeRole.any()),
+    NodePermission.delete(NodeRole.any()),
+  ];
+
+  // Compact ~20KB snapshot so it never exceeds Appwrite's string attribute limit
   const docPayload: Record<string, any> = {
     name: 'Memory Den Live SKU-to-UPC Payload Map',
     tenantId: 'system',
@@ -232,7 +281,7 @@ async function savePersistedLivePayloadToAppwrite(payload: {
       timestamp: new Date().toISOString(),
       count,
       skuToUpcMap: payload.skuToUpcMap,
-      skuToMetaMap: payload.skuToMetaMap,
+      soldSkus,
     }),
     notes: JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -241,7 +290,7 @@ async function savePersistedLivePayloadToAppwrite(payload: {
   };
 
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID, docPayload);
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID, docPayload, docPerms);
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
@@ -250,11 +299,7 @@ async function savePersistedLivePayloadToAppwrite(payload: {
           MANIFESTS_COL_ID,
           PERSISTED_PAYLOAD_DOC_ID,
           docPayload,
-          [
-            NodePermission.read(NodeRole.any()),
-            NodePermission.update(NodeRole.any()),
-            NodePermission.delete(NodeRole.any()),
-          ]
+          docPerms
         );
       } catch (createErr) {
         console.warn('[/api/md-verify-report] Could not create persisted payload doc:', (createErr as any)?.message);
