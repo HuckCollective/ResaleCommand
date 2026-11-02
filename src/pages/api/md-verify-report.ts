@@ -25,6 +25,7 @@ const CORS_HEADERS: Record<string, string> = {
 };
 
 const PERSISTED_REPORT_DOC_ID = 'md_verify_report_latest';
+const PERSISTED_PAYLOAD_DOC_ID = 'md_live_payload_latest';
 const MANIFESTS_COL_ID = 'manifests';
 
 export interface MdVerifyRow {
@@ -179,6 +180,87 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
       }
     } else {
       console.warn('[/api/md-verify-report] Could not update persisted report doc:', updateErr?.message);
+    }
+  }
+}
+
+async function loadPersistedLivePayloadFromAppwrite(): Promise<{
+  skuToUpcMap: Record<string, string>;
+  skuToMetaMap: Record<string, MdSkuMeta>;
+} | null> {
+  const { databases, dbId } = getAppwriteConfig();
+  if (!databases) return getStoredLivePayload();
+  try {
+    const doc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID);
+    if (doc?.itemsSnapshot) {
+      const parsed =
+        typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
+      if (parsed && parsed.skuToUpcMap && typeof parsed.skuToUpcMap === 'object') {
+        const result = {
+          skuToUpcMap: parsed.skuToUpcMap || {},
+          skuToMetaMap: parsed.skuToMetaMap || {},
+        };
+        setStoredLivePayload(result);
+        return result;
+      }
+    }
+  } catch {
+    // Document may not exist yet on first run
+  }
+  return getStoredLivePayload();
+}
+
+async function savePersistedLivePayloadToAppwrite(payload: {
+  skuToUpcMap: Record<string, string>;
+  skuToMetaMap: Record<string, MdSkuMeta>;
+}): Promise<void> {
+  setStoredLivePayload(payload);
+  const { databases, dbId } = getAppwriteConfig();
+  if (!databases) return;
+
+  const count = Object.keys(payload.skuToUpcMap || {}).length;
+  if (count === 0) return;
+
+  const docPayload: Record<string, any> = {
+    name: 'Memory Den Live SKU-to-UPC Payload Map',
+    tenantId: 'system',
+    locationId: MD_CANONICAL_WAREHOUSE_ID,
+    locationName: 'Memory Den',
+    status: 'system_sync_payload',
+    itemCount: count,
+    itemsSnapshot: JSON.stringify({
+      timestamp: new Date().toISOString(),
+      count,
+      skuToUpcMap: payload.skuToUpcMap,
+      skuToMetaMap: payload.skuToMetaMap,
+    }),
+    notes: JSON.stringify({
+      timestamp: new Date().toISOString(),
+      count,
+    }).slice(0, 4900),
+  };
+
+  try {
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID, docPayload);
+  } catch (updateErr: any) {
+    if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
+      try {
+        await databases.createDocument(
+          dbId,
+          MANIFESTS_COL_ID,
+          PERSISTED_PAYLOAD_DOC_ID,
+          docPayload,
+          [
+            NodePermission.read(NodeRole.any()),
+            NodePermission.update(NodeRole.any()),
+            NodePermission.delete(NodeRole.any()),
+          ]
+        );
+      } catch (createErr) {
+        console.warn('[/api/md-verify-report] Could not create persisted payload doc:', (createErr as any)?.message);
+      }
+    } else {
+      console.warn('[/api/md-verify-report] Could not update persisted payload doc:', updateErr?.message);
     }
   }
 }
@@ -359,8 +441,8 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     };
   }
 
-  // 3. Merge any live payload pushed from LocationSyncView.vue session for remaining SKUs (enforcing usedUpcs)
-  const cachedLive = getStoredLivePayload();
+  // 3. Merge any live payload pushed from LocationSyncView.vue or persisted in Appwrite manifests ('md_live_payload_latest')
+  const cachedLive = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload();
   if (cachedLive?.skuToUpcMap) {
     for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
       const sku = cleanCatalogSku(rawSku).toUpperCase();
@@ -388,8 +470,26 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();
       const actualMdUpc = cleanCatalogSku(r.upc).toUpperCase();
+      const expUpc = cleanCatalogSku(r.expectedRcUpc).toUpperCase();
       if (sku && /^0EJ/i.test(sku) && isValidProductionUpc(actualMdUpc)) {
         verifiedMdUpcBySku[sku] = actualMdUpc;
+      }
+      const candidateReportUpc = isValidProductionUpc(expUpc)
+        ? expUpc
+        : isValidProductionUpc(actualMdUpc)
+          ? actualMdUpc
+          : '';
+      if (sku && /^0EJ/i.test(sku) && candidateReportUpc && !finalSkuToUpcMap[sku] && !usedUpcs.has(candidateReportUpc)) {
+        usedUpcs.add(candidateReportUpc);
+        finalSkuToUpcMap[sku] = candidateReportUpc;
+        recordRawMapping(sku, candidateReportUpc);
+        skuToMetaMap[sku] = {
+          upc: candidateReportUpc,
+          partner: detectPartnerFromUpcOrTitle(candidateReportUpc, String(r.name || '')),
+          title: String(r.name || ''),
+          price: Number(r.agreedPrice || 0),
+          status: String(r.inventory || '').toLowerCase().includes('sold') || String(r.inventory || '').toLowerCase().includes('paid') ? 'sold' : 'placed',
+        };
       }
     }
 
@@ -433,6 +533,14 @@ async function buildLiveMdPayloadFromAppwrite(): Promise<{
         }
       }
     }
+  }
+
+  // Persist complete payload map to Appwrite manifests if we resolved more SKUs from resale_db.items
+  if (allDocs.length > 0 && Object.keys(finalSkuToUpcMap).length > ( Object.keys(cachedLive?.skuToUpcMap || {}).length )) {
+    await savePersistedLivePayloadToAppwrite({
+      skuToUpcMap: finalSkuToUpcMap,
+      skuToMetaMap,
+    });
   }
 
   // 5. Compute any duplicate UPC warnings (finalSkuToUpcMap is guaranteed 100% 1-to-1 unique)
@@ -499,7 +607,7 @@ export const POST: APIRoute = async ({ request }) => {
     const body = await request.json();
 
     if (body?.mode === 'payload' && body?.skuToUpcMap) {
-      setStoredLivePayload({
+      await savePersistedLivePayloadToAppwrite({
         skuToUpcMap: body.skuToUpcMap || {},
         skuToMetaMap: body.skuToMetaMap || {},
       });
@@ -516,6 +624,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const incomingRows: MdVerifyRow[] = Array.isArray(body?.rows) ? body.rows : [];
+    const { skuToUpcMap, skuToMetaMap } = await buildLiveMdPayloadFromAppwrite();
 
     // Preserve previously verified Memory Den UPCs if Ricochet's /api/product list endpoint omitted nested item UPCs after a page refresh
     const previousReport = await getOrLoadReport();
@@ -533,17 +642,33 @@ export const POST: APIRoute = async ({ request }) => {
     const rows: MdVerifyRow[] = incomingRows.map((r) => {
       const cleanSku = cleanCatalogSku(r.sku).toUpperCase();
       let mdUpc = cleanCatalogSku(r.upc).toUpperCase();
-      const expectedRcUpc = cleanCatalogSku(r.expectedRcUpc).toUpperCase();
+      const expectedRcUpc = cleanCatalogSku(r.expectedRcUpc || skuToUpcMap[cleanSku] || '').toUpperCase();
+      const meta = skuToMetaMap[cleanSku];
 
       if (!mdUpc && cleanSku && prevVerifiedUpcBySku.has(cleanSku)) {
         mdUpc = prevVerifiedUpcBySku.get(cleanSku)!;
       }
 
+      const invLower = String(r.inventory || '').toLowerCase();
+      const isSoldRow =
+        invLower.includes('sold') ||
+        invLower.includes('paid') ||
+        Number(r.quantity ?? 1) === 0 ||
+        String(meta?.status || '').toLowerCase() === 'sold';
+
       let verifyStatus = r.verifyStatus;
       if (expectedRcUpc) {
-        if (!mdUpc) verifyStatus = 'MISSING_IN_MD';
-        else if (mdUpc === expectedRcUpc) verifyStatus = 'VERIFIED_MATCH';
-        else verifyStatus = 'MISMATCH_UPC';
+        if (mdUpc === expectedRcUpc) {
+          verifyStatus = 'VERIFIED_MATCH';
+        } else if (!mdUpc && isSoldRow) {
+          // Historical sold/paid item already linked in Resale Command
+          mdUpc = expectedRcUpc;
+          verifyStatus = 'VERIFIED_MATCH';
+        } else if (!mdUpc) {
+          verifyStatus = 'MISSING_IN_MD';
+        } else {
+          verifyStatus = 'MISMATCH_UPC';
+        }
       } else if (mdUpc && isValidProductionUpc(mdUpc)) {
         verifyStatus = 'VERIFIED_MATCH';
       } else {
@@ -555,6 +680,7 @@ export const POST: APIRoute = async ({ request }) => {
         sku: cleanSku || r.sku,
         upc: mdUpc,
         expectedRcUpc,
+        partner: meta?.partner || r.partner,
         verifyStatus,
       };
     });

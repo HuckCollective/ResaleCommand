@@ -688,6 +688,9 @@
         statusEl.textContent = `Loaded ${catalogProducts.length} booth items (Consignor #${consignorId || 'Auto'})`;
       }
       addLog(`✅ Loaded ${catalogProducts.length} booth items from Memory Den.`, '#10b981');
+      if (Object.keys(parsedMap).length === 0 && !isFetchingCloudPayload) {
+        await fetchLivePayloadFromCloud(false);
+      }
       updateUI();
     } catch (err) {
       addLog(`❌ Error loading catalog: ${err.message}`, '#f87171');
@@ -751,7 +754,7 @@
 
     for (const p of catalogProducts) {
       const sku = extractRicochetSku(p);
-      const mdUpc = extractRicochetUpc(p);
+      let mdUpc = extractRicochetUpc(p);
       const expectedRcUpc = cleanStr(parsedMap[sku] || '').toUpperCase();
       const itemTitle = cleanStr(p.name || p.title || p.description || sku);
       const partner = resolvePartnerBucket(sku, expectedRcUpc, mdUpc, itemTitle);
@@ -759,31 +762,6 @@
       partnerCounts.ALL++;
       if (partnerCounts[partner] !== undefined) {
         partnerCounts[partner]++;
-      }
-
-      let verifyStatus = 'UNLINKED_IN_RC';
-      let conflictReason = '';
-      if (expectedRcUpc) {
-        if (!mdUpc) {
-          verifyStatus = 'MISSING_IN_MD';
-          conflictReason = getSkuConflictReason(sku, expectedRcUpc, dupOwners);
-          if (conflictReason) conflictMessages.push(conflictReason);
-        } else if (mdUpc === expectedRcUpc) {
-          verifyStatus = 'VERIFIED_MATCH';
-        } else {
-          verifyStatus = 'MISMATCH_UPC';
-        }
-      } else if (mdUpc && /^(HUCK|PDXGL|BB)-/i.test(mdUpc)) {
-        verifyStatus = 'VERIFIED_MATCH';
-      }
-
-      // Filter scorecard counts by selected Partner Bucket
-      const matchesBucket = activePartnerBucket === 'ALL' || partner === activePartnerBucket;
-      if (matchesBucket) {
-        if (verifyStatus === 'VERIFIED_MATCH') verifiedMatch++;
-        else if (verifyStatus === 'MISSING_IN_MD') missingInMd++;
-        else if (verifyStatus === 'MISMATCH_UPC') mismatchUpc++;
-        else unlinkedInRc++;
       }
 
       // Extract real Price, Quantity, and Inventory Status (`In Stock` | `Sold` | `Paid`) across top-level and nested `items[0]`
@@ -828,6 +806,39 @@
         inventoryStatus = 'Paid';
       } else if (isSoldOrPaidFlag || parsedQty === 0) {
         inventoryStatus = 'Sold';
+      }
+
+      const isSoldRow =
+        inventoryStatus === 'Sold' ||
+        inventoryStatus === 'Paid' ||
+        String(skuMetaMap[sku]?.status || '').toLowerCase() === 'sold';
+
+      let verifyStatus = 'UNLINKED_IN_RC';
+      let conflictReason = '';
+      if (expectedRcUpc) {
+        if (mdUpc === expectedRcUpc) {
+          verifyStatus = 'VERIFIED_MATCH';
+        } else if (!mdUpc && isSoldRow) {
+          mdUpc = expectedRcUpc;
+          verifyStatus = 'VERIFIED_MATCH';
+        } else if (!mdUpc) {
+          verifyStatus = 'MISSING_IN_MD';
+          conflictReason = getSkuConflictReason(sku, expectedRcUpc, dupOwners);
+          if (conflictReason) conflictMessages.push(conflictReason);
+        } else {
+          verifyStatus = 'MISMATCH_UPC';
+        }
+      } else if (mdUpc && /^(HUCK|PDXGL|BB)-/i.test(mdUpc)) {
+        verifyStatus = 'VERIFIED_MATCH';
+      }
+
+      // Filter scorecard counts by selected Partner Bucket
+      const matchesBucket = activePartnerBucket === 'ALL' || partner === activePartnerBucket;
+      if (matchesBucket) {
+        if (verifyStatus === 'VERIFIED_MATCH') verifiedMatch++;
+        else if (verifyStatus === 'MISSING_IN_MD') missingInMd++;
+        else if (verifyStatus === 'MISMATCH_UPC') mismatchUpc++;
+        else unlinkedInRc++;
       }
 
       rows.push({
