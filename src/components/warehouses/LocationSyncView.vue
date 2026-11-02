@@ -930,6 +930,9 @@
                         <span v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" title="Missing UPC in Memory Den — click Assign Unique Barcode if this barcode is shared with another 0EJ SKU">
                           🟡 Missing UPC in MD
                         </span>
+                        <span v-else-if="row.verifyStatus === 'MISMATCH_UPC'" class="badge badge-xs bg-orange-500 text-white font-black gap-0.5 whitespace-nowrap shrink-0" title="Ricochet already has a physical barcode attached to this item — never overwritten by Fill Missing">
+                          🟠 Physical Tag Mismatch (MD: {{ row.extractedUpc }})
+                        </span>
                         <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-black gap-0.5 whitespace-nowrap shrink-0" :title="row.aiReason || 'Matched by Gemini AI'">
                           ✨ AI
                         </span>
@@ -941,6 +944,20 @@
                         <span class="badge badge-sm badge-success text-success-content font-bold gap-1 py-2.5 px-2.5 shadow-2xs">
                           ✅ Unique Barcode Assigned ({{ row.mappedItem.upc || row.extractedUpc }}) — Push in MD Widget
                         </span>
+                      </div>
+                      <div v-else-if="row.verifyStatus === 'MISMATCH_UPC' && row.extractedUpc" class="pt-1 flex items-center gap-2 flex-wrap">
+                        <span class="text-[11px] text-orange-400 font-semibold font-mono">
+                          🏷️ Booth Tag: <b>{{ row.extractedUpc }}</b> vs RC DB: <b>{{ row.mappedItem.upc }}</b> (Protected from overwrite)
+                        </span>
+                        <button
+                          type="button"
+                          class="btn btn-xs bg-orange-500 hover:bg-orange-600 text-white border-none font-black gap-1 shadow-2xs"
+                          :disabled="row.isAdoptingBoothUpc"
+                          @click="adoptBoothTagForRow(row)"
+                        >
+                          <span v-if="row.isAdoptingBoothUpc" class="loading loading-spinner loading-xs"></span>
+                          <span>🏷️ Adopt Booth Tag ({{ row.extractedUpc }})</span>
+                        </button>
                       </div>
                       <div v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="pt-1 flex items-center gap-2 flex-wrap">
                         <span class="text-[11px] text-warning font-semibold">
@@ -2919,6 +2936,76 @@ const assignUniqueUpcToRow = async (row: any) => {
     });
   } finally {
     row.isAssigningUniqueUpc = false;
+  }
+};
+
+const adoptBoothTagForRow = async (row: any) => {
+  if (!row || row.isAdoptingBoothUpc) return;
+  const cleanSku = cleanCatalogSku(row.extractedSku || row.mappedItem?.locationSku || '').toUpperCase();
+  const boothUpc = cleanCatalogSku(row.extractedUpc || '').toUpperCase();
+  if (!cleanSku || !boothUpc) {
+    addToast({ type: 'warning', message: 'Missing 0EJ SKU or Ricochet Booth Tag UPC.' });
+    return;
+  }
+
+  row.isAdoptingBoothUpc = true;
+  try {
+    // Check if another active 0EJ item in inventory already claims boothUpc
+    const conflictingDoc = (inventoryItems.value || []).find((i: any) => {
+      const iSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
+      const iUpc = cleanCatalogSku(i?.upc).toUpperCase();
+      return iUpc === boothUpc && iSku && /^0EJ/i.test(iSku) && iSku !== cleanSku;
+    });
+    if (conflictingDoc) {
+      addToast({
+        type: 'error',
+        message: `Cannot adopt ${boothUpc} for ${cleanSku}: ${boothUpc} is already assigned to booth SKU ${cleanCatalogSku(conflictingDoc.locationSku || conflictingDoc.sku).toUpperCase()} ("${conflictingDoc.title}").`,
+      });
+      return;
+    }
+
+    if (row.mappedItem?.$id && !String(row.mappedItem.$id).startsWith('subclient_')) {
+      await updateInventoryItem(row.mappedItem.$id, {
+        upc: boothUpc,
+        locationSku: cleanSku,
+        storageLocation: 'MD',
+        warehouseId: MD_CANONICAL_WAREHOUSE_ID,
+      });
+      row.mappedItem.upc = boothUpc;
+      row.mappedItem.locationSku = cleanSku;
+      row.mappedItem.storageLocation = 'MD';
+    }
+
+    const res = await fetch('/api/md-verify-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'adopt_md_upc',
+        sku: cleanSku,
+        mdUpc: boothUpc,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || 'Could not update cloud verification report');
+    }
+
+    row.expectedRcUpc = boothUpc;
+    row.verifyStatus = 'VERIFIED_MATCH';
+    row.isSavedToMd = true;
+    broadcastBarcodesUpdated();
+    void fetchMdVerifyReport(false);
+    addToast({
+      type: 'success',
+      message: `🏷️ Adopted Booth Tag ${boothUpc} for ${cleanSku}! Resale Command now matches the physical tag on the shelf.`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Could not adopt booth tag: ${err?.message || 'Unknown error'}`,
+    });
+  } finally {
+    row.isAdoptingBoothUpc = false;
   }
 };
 

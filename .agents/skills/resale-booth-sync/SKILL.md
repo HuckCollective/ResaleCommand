@@ -1,15 +1,36 @@
 ---
 name: resale-booth-sync
-description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, High-Confidence UX Pro Reconciliation (Inline #1 Preview, Multi-Piece Lot Split, 1-Call AI Stager, Live Tab Auto-Refresh), multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails.
+description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, Physical Retail Tag Safety Laws (Zero Overwrite of Existing Booth Barcodes, Pre-Flight Queue Preview, 1-Click Adopt Booth Tag), High-Confidence UX Pro Reconciliation, multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails.
 ---
 
 # Resale Booth Sync & UX/IA Empathy Guardrails (`resale-booth-sync`)
 
-This skill governs all 2-way catalog & barcode synchronization between **Resale Command** (`resalecmd.com`) and retail booth POS systems (specifically **Memory Den Booth `#0EJ`** on `memoryden.ricoconsign.com`), along with mandatory UX & Information Architecture Empathy Guardrails.
+This skill governs all 2-way catalog & barcode synchronization between **Resale Command** (`resalecmd.com`) and retail booth POS systems (specifically **Memory Den Booth `#0EJ`** on `memoryden.ricoconsign.com`), along with mandatory UX & Information Architecture Empathy Guardrails and **Physical Retail Tag Safety Laws**.
 
 ---
 
-## 1. UX & Information Architecture Empathy Guardrails
+## 1. Physical Booth Tag & Production Safety Guardrails (The 3 Physical Retail Tag Laws)
+
+In physical retail booth operations, a barcode (`HUCK-XXXX`, `PDXGL-XXXX`, `BB-XXXX`) is **NOT** a disposable virtual database ID—it is a **physical thermal sticker printed and attached to a price tag on a shelf at Memory Den**. Treating physical booth barcodes like virtual IDs breaks register scanning at the mall! Every AI agent, script, and sync tool MUST obey these 3 laws without exception:
+
+1. **Law #1 — Never Auto-Overwrite an Existing Barcode in Ricochet (`MISSING_IN_MD` Only, Never `MISMATCH_UPC`)**:
+   - The `🚀 Fill Missing` batch action in [`public/ricochet-upc-sync.user.js`](file:///c:/Users/15034/Projects/ResaleCommand/public/ricochet-upc-sync.user.js) must **STRICTLY** filter to items where Ricochet's current UPC is genuinely blank (`verifyStatus === 'MISSING_IN_MD'`, i.e., `!mdUpc`).
+   - It must **NEVER** count or overwrite an item that already has a non-blank barcode in Ricochet (`verifyStatus === 'MISMATCH_UPC'`), and must also perform a deep variant guard after `GET /api/product/show/{id}` so that if `targetItem.upc_code` is already populated in Ricochet, the `PUT /api/product/items` overwrite is aborted and logged as protected.
+   - If `14` items are `Missing UPC` and `1` item is `Mismatch`, the button MUST say `🚀 Fill Missing (14)` — **never** `(15)`.
+
+2. **Law #2 — Mandatory Visible Pre-Flight Queue Preview Before Any Production Sync**:
+   - Never ask the user to click a blind batch button in production.
+   - Whenever `missingInMd > 0`, the Memory Den widget (`#rc-preflight-details`) must render a visible, scrollable **Pre-Flight Queue Preview** listing the exact `N` items queued (`0EJ... | Blank ➔ HUCK-XXXX | Title | In Stock/Sold`) and explicitly badging each target barcode's physical origin:
+     - `🏷️ Pre-Tagged` (`HUCK-0001..9739`, `PDXGL-`, `BB-`): Existing inventory barcode from your collection.
+     - `🆕 Virtual (9740+)`: Newly minted virtual barcode from database reconciliation (safe to write to Ricochet if the booth tag has no HUCK barcode sticker; if the item at the booth already has a physical `HUCK-XXXX` sticker attached, adopt that physical sticker instead).
+
+3. **Law #3 — Physical Sticker Wins (`🏷️ Adopt Booth Tag ([mdUpc]) in RC`)**:
+   - Whenever an item has `verifyStatus === 'MISMATCH_UPC'` (Ricochet has `mdUpc` on the booth tag while Resale Command DB has `expectedRcUpc`), the physical tag at the booth is the source of truth unless proven to be a duplicate collision.
+   - Both the Memory Den widget (`#rc-mismatch-box` in `public/ricochet-upc-sync.user.js`) and [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue) provide a 1-click **`🏷️ Adopt Booth Tag ([mdUpc])`** button (`POST /api/md-verify-report` with `{ mode: 'adopt_md_upc', sku, mdUpc }`) that updates `resale_db.items`, `md_live_payload_latest`, and `md_verify_report_latest` to match Ricochet's existing physical barcode so no tag at the booth ever needs to be reprinted or re-stickered.
+
+---
+
+## 2. UX & Information Architecture Empathy Guardrails
 
 1. **Never Ask User for Manual Browser Plumbing**:
    - Always wire solutions directly into the native Resale Command UI (such as the Drag-and-Drop Permanent Live-Loader Bookmarklet `⚡ Memory Den Sync` in [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue)) rather than asking the user to manually edit bookmark URLs, paste raw payloads, or configure external browser extensions.

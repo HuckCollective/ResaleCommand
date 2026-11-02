@@ -190,3 +190,12 @@ Every dollar added to a Booth Bin's (multi-qty SKU) cost basis MUST be backed by
    * Bookmarklets and sync tools must be thin live-loaders (`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()`) that fetch fresh code and fresh `locationSku` (`0EJ...`) ➔ `HUCK-XXXX` mappings from the cloud (`/api/md-verify-report?mode=payload`) on open, showing `"✅ Live Auto-Updated Script"`. Never bake static JSON snapshots into bookmarklet `href`s.
 3. **Booth Operations & Bin SKU Awareness**:
    * Always link Memory Den `0EJ...` SKUs in `locationSku` on the backend and respect physical booth workflows (distinguishing legitimate multi-qty Booth Bin SKUs from true duplicate barcode collision pairs).
+
+## 13. Physical Booth Tag & Production Safety Guardrails (The 3 Physical Retail Tag Laws)
+In physical retail booth operations, a barcode (`HUCK-XXXX`, `PDXGL-XXXX`, `BB-XXXX`) is a **physical thermal sticker printed and attached to a price tag on a shelf at Memory Den**—never treat it as a disposable virtual database ID!
+1. **Law #1 — Never Auto-Overwrite an Existing Barcode in Ricochet (`MISSING_IN_MD` Only, Never `MISMATCH_UPC`)**:
+   * `🚀 Fill Missing` in `public/ricochet-upc-sync.user.js` must ONLY count and write to items where Ricochet's current UPC is genuinely blank (`verifyStatus === 'MISSING_IN_MD'`). It must NEVER include or overwrite an item that already has a non-blank UPC in Ricochet (`verifyStatus === 'MISMATCH_UPC'`), and must abort any `PUT /api/product/items` if `GET /api/product/show/{id}` reveals `targetItem.upc_code` is already populated.
+2. **Law #2 — Mandatory Visible Pre-Flight Queue Preview**:
+   * Never ask the user to click a blind batch button in production. Always render a visible Pre-Flight Queue Preview (`#rc-preflight-details`) of the exact `N` blank items (`0EJ... | Blank ➔ HUCK-XXXX | 🏷️ Pre-Tagged vs 🆕 Virtual (9740+)`) before running `🚀 Fill Missing (N)`.
+3. **Law #3 — Physical Sticker Wins (`🏷️ Adopt Booth Tag ([mdUpc]) in RC`)**:
+   * When an item has `verifyStatus === 'MISMATCH_UPC'` (Ricochet has `mdUpc` on the physical booth tag while RC DB has `expectedRcUpc`), provide a 1-click **`🏷️ Adopt Booth Tag ([mdUpc])`** button in both the Memory Den widget and `LocationSyncView.vue` (`POST /api/md-verify-report` with `mode: 'adopt_md_upc'`) that updates `resale_db.items` to match Ricochet's physical barcode instead of overwriting the booth tag.

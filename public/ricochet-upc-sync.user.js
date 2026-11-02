@@ -352,6 +352,21 @@
             <!-- Duplicate / Conflict Diagnostic Warning Box -->
             <div id="rc-conflict-box" style="display:none; margin-top: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); color: #fde68a; font-size: 10.5px; line-height: 1.4;"></div>
 
+            <!-- Physical Sticker Protection: Mismatch Alert & 1-Click Adopt Booth Tag Box -->
+            <div id="rc-mismatch-box" style="display:none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(249,115,22,0.16); border: 1px solid rgba(249,115,22,0.5); color: #ffedd5; font-size: 11px; line-height: 1.4;"></div>
+
+            <!-- Pre-Flight Queue Preview (Visible Audit Before Clicking Fill Missing) -->
+            <details id="rc-preflight-details" open style="display:none; margin-top: 8px; background: #0f172a; border: 1px solid rgba(245,158,11,0.4); border-radius: 8px; padding: 7px 9px;">
+              <summary id="rc-preflight-summary" style="font-size: 11px; font-weight: 800; color: #fbbf24; cursor: pointer;">
+                📋 Pre-Flight Queue Preview (0 Missing in MD — 0 Overwrites)
+              </summary>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; margin-bottom: 6px; line-height: 1.35;">
+                🛡️ <b>Physical Tag Guardrail:</b> Only items with a <b>BLANK</b> UPC in Ricochet are queued below. Existing Ricochet barcodes are never overwritten.<br/>
+                <span style="color:#34d399;">🏷️ Pre-Tagged</span> = Existing RC tag &nbsp;|&nbsp; <span style="color:#38bdf8;">🆕 Virtual (9740+)</span> = Created today
+              </div>
+              <div id="rc-preflight-list" style="max-height: 135px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;"></div>
+            </details>
+
             <!-- 2-Way Report Actions -->
             <div style="display: flex; gap: 6px; margin-top: 8px;">
               <button id="rc-send-report-btn" style="
@@ -974,13 +989,95 @@
       }
     }
 
-    const actionableCount = missingInMd + mismatchUpc;
+    // PHYSICAL RETAIL TAG SAFETY LAW #3: Dedicated Mismatch Box with 1-Click "Adopt Booth Tag"
+    const mismatchBox = document.getElementById('rc-mismatch-box');
+    const mismatchRows = (report.rows || []).filter(
+      (r) =>
+        r.verifyStatus === 'MISMATCH_UPC' &&
+        (activePartnerBucket === 'ALL' || r.partner === activePartnerBucket)
+    );
+    if (mismatchBox) {
+      if (mismatchRows.length > 0) {
+        mismatchBox.style.display = 'block';
+        mismatchBox.innerHTML =
+          `<div style="font-weight:800;color:#fb923c;margin-bottom:4px;">🟠 Physical Tag Mismatch (${mismatchRows.length}) — Never Overwritten by Fill Missing:</div>` +
+          mismatchRows
+            .map(
+              (r) => `
+              <div style="background:rgba(15,23,42,0.75);border:1px solid rgba(249,115,22,0.4);border-radius:6px;padding:6px 8px;margin-top:4px;">
+                <div style="font-weight:800;color:#f8fafc;">${r.sku} — ${r.name} <span style="opacity:0.75;">(${r.inventory})</span></div>
+                <div style="font-family:monospace;font-size:10.5px;margin-top:2px;">
+                  🏷️ Ricochet Booth Tag: <b style="color:#34d399;">${r.upc}</b> &nbsp;vs&nbsp; 💻 RC DB: <b style="color:#fbbf24;">${r.expectedRcUpc}</b>
+                </div>
+                <div style="margin-top:5px;display:flex;gap:6px;align-items:center;">
+                  <button type="button" class="rc-adopt-md-upc-btn" data-adopt-sku="${r.sku}" data-adopt-upc="${r.upc}" style="background:#f97316;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-weight:800;font-size:10.5px;cursor:pointer;">
+                    🏷️ Adopt Booth Tag (${r.upc}) in RC
+                  </button>
+                  <span style="font-size:10px;color:#cbd5e1;">Keeps physical tag on shelf</span>
+                </div>
+              </div>`
+            )
+            .join('');
+        const adoptBtns = mismatchBox.querySelectorAll('.rc-adopt-md-upc-btn');
+        adoptBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const sku = btn.getAttribute('data-adopt-sku');
+            const mdUpc = btn.getAttribute('data-adopt-upc');
+            if (sku && mdUpc) adoptBoothTagInRc(sku, mdUpc, btn);
+          });
+        });
+      } else {
+        mismatchBox.style.display = 'none';
+        mismatchBox.innerHTML = '';
+      }
+    }
+
+    // PHYSICAL RETAIL TAG SAFETY LAW #2: Visible Pre-Flight Queue Preview (ONLY MISSING_IN_MD)
+    const preflightDetails = document.getElementById('rc-preflight-details');
+    const preflightSummary = document.getElementById('rc-preflight-summary');
+    const preflightList = document.getElementById('rc-preflight-list');
+    const missingQueueRows = (report.rows || []).filter(
+      (r) =>
+        r.verifyStatus === 'MISSING_IN_MD' &&
+        (activePartnerBucket === 'ALL' || r.partner === activePartnerBucket)
+    );
+    if (preflightDetails && preflightSummary && preflightList) {
+      if (missingQueueRows.length > 0) {
+        preflightDetails.style.display = 'block';
+        preflightSummary.textContent = `📋 Pre-Flight Queue Preview (${missingQueueRows.length} Blank in MD — 0 Overwrites)`;
+        preflightList.innerHTML = missingQueueRows
+          .map((r, idx) => {
+            const upcNumMatch = String(r.expectedRcUpc || '').match(/^HUCK-(\d+)$/i);
+            const upcNum = upcNumMatch ? parseInt(upcNumMatch[1], 10) : 0;
+            const isVirtualNew = upcNum >= 9740;
+            const badgeHtml = isVirtualNew
+              ? `<span style="color:#38bdf8;font-weight:800;" title="Newly created virtual barcode during today's reconciliation">🆕 Virtual</span>`
+              : `<span style="color:#34d399;font-weight:800;" title="Existing inventory barcode in Resale Command">🏷️ Pre-Tagged</span>`;
+            return `<div style="padding:4px 6px;border-radius:5px;background:#1e293b;border:1px solid #334155;display:flex;flex-direction:column;gap:1px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span><b>${idx + 1}. ${r.sku}</b>: Blank ➔ <b style="color:#fbbf24;">${r.expectedRcUpc}</b></span>
+                ${badgeHtml}
+              </div>
+              <div style="color:#94a3b8;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${r.name} (${r.inventory}, $${Number(r.agreedPrice || 0).toFixed(2)})
+              </div>
+            </div>`;
+          })
+          .join('');
+      } else {
+        preflightDetails.style.display = 'none';
+        preflightList.innerHTML = '';
+      }
+    }
+
+    // PHYSICAL RETAIL TAG SAFETY LAW #1: Fill Missing ONLY counts missingInMd (NEVER mismatchUpc!)
+    const actionableCount = missingInMd;
     const partnerSuffix = activePartnerBucket === 'ALL' ? '' : ` [${activePartnerBucket}]`;
     if (startBtn && !isRunning) {
       startBtn.textContent =
         actionableCount > 0
           ? `🚀 Fill Missing${partnerSuffix} (${actionableCount})`
-          : `✅ ${activePartnerBucket === 'ALL' ? 'All' : activePartnerBucket} Verified (${verifiedMatch})`;
+          : `✅ ${activePartnerBucket === 'ALL' ? 'All' : activePartnerBucket} Blank Filled (${verifiedMatch} Verified)`;
     }
     if (testBtn && !isRunning) {
       testBtn.textContent = `🧪 Test 1${partnerSuffix}`;
@@ -988,6 +1085,63 @@
     if (fabBadge) {
       fabBadge.textContent =
         catalogProducts.length > 0 ? `${verifiedMatch}/${totalCatalog} Verified` : `${totalMapped} Ready`;
+    }
+  }
+
+  // Physical Sticker Wins: 1-Click Adopt Ricochet's Existing Physical Barcode into Resale Command
+  async function adoptBoothTagInRc(sku, mdUpc, btnEl) {
+    const cleanSku = cleanStr(sku).toUpperCase();
+    const cleanUpc = cleanStr(mdUpc).toUpperCase();
+    if (!cleanSku || !cleanUpc) return;
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = `⏳ Adopting ${cleanUpc}...`;
+    }
+    let adoptedOk = false;
+    let errMsg = '';
+    for (const endpoint of RC_REPORT_ENDPOINTS) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'adopt_md_upc',
+            sku: cleanSku,
+            mdUpc: cleanUpc,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.ok) {
+          adoptedOk = true;
+          break;
+        } else if (data?.error) {
+          errMsg = data.error;
+        }
+      } catch (e) {}
+    }
+
+    if (adoptedOk) {
+      parsedMap[cleanSku] = cleanUpc;
+      recordVerifiedMdUpc(cleanSku, cleanUpc);
+      if (skuMetaMap[cleanSku]) {
+        skuMetaMap[cleanSku].upc = cleanUpc;
+      }
+      const textarea = document.getElementById('rc-sync-textarea');
+      if (textarea) textarea.value = JSON.stringify(parsedMap, null, 2);
+      addLog(`🏷️ Adopted existing physical booth tag ${cleanUpc} for ${cleanSku} in Resale Command!`, '#10b981');
+      setStatusBanner(
+        'success',
+        `🏷️ Adopted Booth Tag ${cleanUpc} for ${cleanSku}! Resale Command now matches the physical tag on the shelf.`
+      );
+      updateUI();
+      await sendReportToResaleCommand(true);
+    } else {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = `🏷️ Adopt Booth Tag (${cleanUpc}) in RC`;
+      }
+      addLog(`❌ Could not adopt ${cleanUpc} for ${cleanSku}: ${errMsg || 'Network error'}`, '#ef4444');
+      setStatusBanner('error', errMsg || `Could not adopt ${cleanUpc} for ${cleanSku}.`);
     }
   }
 
@@ -1103,31 +1257,30 @@
     }
 
     const dupOwners = buildDuplicateUpcOwners();
-
-    // Build queue of items that actually need an update in Memory Den AND match activePartnerBucket
-    const queue = [];
+    const report = buildVerificationReport();
+    const productBySku = new Map();
     for (const p of catalogProducts) {
-      const sku = extractRicochetSku(p);
-      const targetUpc = cleanStr(parsedMap[sku] || '').toUpperCase();
-      if (!sku || !targetUpc || !isRealUpc(targetUpc)) continue;
+      const s = extractRicochetSku(p);
+      if (s) productBySku.set(s, p);
+    }
 
-      const currentMdUpc = extractRicochetUpc(p);
-      const itemTitle = cleanStr(p.name || p.title || sku);
-      const partner = resolvePartnerBucket(sku, targetUpc, currentMdUpc, itemTitle);
-
-      // Strictly enforce Partner Bucket filter!
-      if (activePartnerBucket !== 'ALL' && partner !== activePartnerBucket) {
-        continue;
-      }
-
-      if (currentMdUpc === targetUpc) continue; // Already verified in Memory Den!
-      queue.push({ product: p, sku, targetUpc, partner });
+    // PHYSICAL RETAIL TAG SAFETY LAW #1:
+    // Build queue STRICTLY from MISSING_IN_MD rows (where Ricochet's current UPC is genuinely blank).
+    // NEVER include MISMATCH_UPC items (where Ricochet already has a physical barcode attached to the item)!
+    const queue = [];
+    for (const r of report.rows || []) {
+      if (r.verifyStatus !== 'MISSING_IN_MD') continue;
+      if (activePartnerBucket !== 'ALL' && r.partner !== activePartnerBucket) continue;
+      const p = productBySku.get(r.sku);
+      const targetUpc = cleanStr(r.expectedRcUpc || parsedMap[r.sku] || '').toUpperCase();
+      if (!p || !r.sku || !targetUpc || !isRealUpc(targetUpc)) continue;
+      queue.push({ product: p, sku: r.sku, targetUpc, partner: r.partner });
     }
 
     if (queue.length === 0) {
       setStatusBanner(
         'success',
-        `🎉 All matched ${activePartnerBucket === 'ALL' ? '' : activePartnerBucket + ' '}items already have their barcodes verified in Memory Den!`
+        `🎉 All blank ${activePartnerBucket === 'ALL' ? '' : activePartnerBucket + ' '}barcodes are filled! (Any Mismatch items are safely protected above — click "🏷️ Adopt Booth Tag" to sync RC).`
       );
       await sendReportToResaleCommand(true);
       return;
@@ -1185,6 +1338,22 @@
           recordVerifiedMdUpc(sku, targetUpc);
           addLog(`✓ [${sku}] Already set to ${targetUpc}`, '#94a3b8');
           successCount++;
+          continue;
+        }
+
+        // PHYSICAL RETAIL TAG SAFETY LAW #1 (Deep Variant Check):
+        // If GET /api/product/show/{id} reveals targetItem ALREADY has a non-blank barcode in Ricochet,
+        // NEVER overwrite it! Record it so it surfaces in the Mismatch "Adopt Booth Tag" box instead.
+        if (existingItemUpc && isRealUpc(existingItemUpc) && existingItemUpc !== targetUpc) {
+          product.upc_code = existingItemUpc;
+          if (Array.isArray(product.items) && product.items[0]) {
+            product.items[0].upc_code = existingItemUpc;
+          }
+          recordVerifiedMdUpc(sku, existingItemUpc);
+          addLog(
+            `🛡️ [${sku}] Protected existing Ricochet physical tag ${existingItemUpc} (did NOT overwrite with ${targetUpc}). Click "🏷️ Adopt Booth Tag" above!`,
+            '#fb923c'
+          );
           continue;
         }
 

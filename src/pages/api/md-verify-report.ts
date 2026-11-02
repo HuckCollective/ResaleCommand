@@ -668,6 +668,117 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
+    // Physical Sticker Wins ("Adopt Booth Tag"): Update RC DB + Live Payload to adopt Ricochet's existing physical UPC
+    if (body?.mode === 'adopt_md_upc') {
+      const targetSku = cleanCatalogSku(body?.sku).toUpperCase();
+      const adoptedUpc = cleanCatalogSku(body?.mdUpc).toUpperCase();
+      if (!targetSku || !/^0EJ/i.test(targetSku) || !isValidProductionUpc(adoptedUpc)) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: `Invalid SKU (${targetSku}) or Booth UPC (${adoptedUpc}).`,
+          }),
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      const { databases, dbId, itemsCol } = getAppwriteConfig();
+      let updatedDocId: string | null = null;
+      let conflictingSku: string | null = null;
+
+      if (databases) {
+        try {
+          let cursor: string | null = null;
+          let targetDoc: any = null;
+          for (let page = 0; page < 25; page++) {
+            const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
+            if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
+            const res = await databases.listDocuments(dbId, itemsCol, queries);
+            const docs = res.documents || [];
+            for (const d of docs as any[]) {
+              const dSku = cleanCatalogSku(d?.locationSku || d?.sku).toUpperCase();
+              const dUpc = cleanCatalogSku(d?.upc).toUpperCase();
+              if (dSku === targetSku && !targetDoc) {
+                targetDoc = d;
+              } else if (dUpc === adoptedUpc && dSku && /^0EJ/i.test(dSku) && dSku !== targetSku) {
+                conflictingSku = dSku;
+              }
+            }
+            if (docs.length < 100) break;
+            cursor = docs[docs.length - 1].$id;
+          }
+
+          if (conflictingSku) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: `Cannot adopt ${adoptedUpc} for ${targetSku} because ${adoptedUpc} is already assigned to active booth SKU ${conflictingSku}.`,
+              }),
+              { status: 409, headers: CORS_HEADERS }
+            );
+          }
+
+          if (targetDoc?.$id) {
+            await databases.updateDocument(dbId, itemsCol, targetDoc.$id, {
+              upc: adoptedUpc,
+              locationSku: targetSku,
+              storageLocation: 'MD',
+            });
+            updatedDocId = targetDoc.$id;
+          }
+        } catch (dbErr: any) {
+          console.warn('[/api/md-verify-report] adopt_md_upc items update warning:', dbErr?.message);
+        }
+      }
+
+      // Update persisted live payload map ('md_live_payload_latest')
+      const cachedPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
+        skuToUpcMap: {},
+        skuToMetaMap: {},
+      };
+      cachedPayload.skuToUpcMap[targetSku] = adoptedUpc;
+      if (cachedPayload.skuToMetaMap[targetSku]) {
+        cachedPayload.skuToMetaMap[targetSku].upc = adoptedUpc;
+        cachedPayload.skuToMetaMap[targetSku].partner = detectPartnerFromUpcOrTitle(
+          adoptedUpc,
+          cachedPayload.skuToMetaMap[targetSku].title || ''
+        );
+      }
+      await savePersistedLivePayloadToAppwrite(cachedPayload);
+
+      // Update persisted verification report ('md_verify_report_latest') so both tabs reflect VERIFIED_MATCH immediately
+      const currentReport = await getOrLoadReport();
+      if (currentReport?.rows?.length) {
+        for (const r of currentReport.rows) {
+          if (cleanCatalogSku(r.sku).toUpperCase() === targetSku) {
+            r.upc = adoptedUpc;
+            r.expectedRcUpc = adoptedUpc;
+            r.verifyStatus = 'VERIFIED_MATCH';
+          }
+        }
+        currentReport.summary = {
+          totalCatalog: currentReport.rows.length,
+          verifiedMatch: currentReport.rows.filter((r) => r.verifyStatus === 'VERIFIED_MATCH').length,
+          missingInMd: currentReport.rows.filter((r) => r.verifyStatus === 'MISSING_IN_MD').length,
+          mismatchUpc: currentReport.rows.filter((r) => r.verifyStatus === 'MISMATCH_UPC').length,
+          unlinkedInRc: currentReport.rows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length,
+        };
+        currentReport.timestamp = new Date().toISOString();
+        await savePersistedReportToAppwrite(currentReport);
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          sku: targetSku,
+          adoptedUpc,
+          updatedDocId,
+          summary: currentReport?.summary || null,
+        }),
+        { status: 200, headers: CORS_HEADERS }
+      );
+    }
+
     const incomingRows: MdVerifyRow[] = Array.isArray(body?.rows) ? body.rows : [];
     const { skuToUpcMap, skuToMetaMap } = await buildLiveMdPayloadFromAppwrite();
 
