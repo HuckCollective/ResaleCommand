@@ -12,11 +12,11 @@
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
-        <a href="/sales/import" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-md shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]" title="Upload & Reconcile Memory Den / POS Payout CSV">
+        <a href="/sales/import/MD" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-md shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]" title="Upload & Reconcile Memory Den / POS Payout CSV">
           <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Upload Payout CSV</span>
         </a>
-        <a href="/warehouse/sync" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]">
+        <a href="/warehouse/sync/MD" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]">
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Location Sync</span>
         </a>

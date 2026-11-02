@@ -136,25 +136,35 @@
 
           <!-- Location Actions: Dedicated Cockpit + Two-Way Sync -->
           <div class="space-y-2 pt-3 border-t border-base-200">
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <!-- Primary Action: Dedicated Cockpit Hub -->
               <a 
                 :href="'/warehouse/' + (warehouse.code || warehouse.$id)"
-                class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs col-span-2 sm:col-span-1"
+                class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs"
                 title="Open location drops, in-stock catalog & settings"
               >
                 <Icon icon="solar:shop-2-bold" class="w-4 h-4" />
-                <span>Manage Booth ➔</span>
+                <span>Manage ➔</span>
               </a>
 
-              <!-- Secondary Action: Import & Sync Sales -->
+              <!-- Secondary Action: Inventory Sync -->
               <a 
-                :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : warehouse.name))" 
-                class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs col-span-2 sm:col-span-1"
-                title="Upload sales payout CSV or product list from this booth"
+                :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+                class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
+                title="Open Location Inventory & Barcode Sync pre-locked to this location"
               >
                 <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" /> 
-                <span>Import &amp; Sync</span>
+                <span>Inventory Sync</span>
+              </a>
+
+              <!-- Tertiary Action: Sales Importer -->
+              <a 
+                :href="'/sales/import/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+                class="btn btn-sm btn-outline btn-success gap-1.5 font-bold shadow-xs"
+                title="Open Sales Payout Importer pre-locked to this location"
+              >
+                <Icon icon="solar:import-bold-duotone" class="w-4 h-4" /> 
+                <span>Sales Importer</span>
               </a>
             </div>
 

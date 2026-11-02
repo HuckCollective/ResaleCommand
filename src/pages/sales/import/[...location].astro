@@ -1,6 +1,9 @@
 ---
-import Layout from '../../layouts/Layout.astro';
-import SalesImporter from '../../components/sales/SalesImporter.vue';
+import Layout from '../../../layouts/Layout.astro';
+import SalesImporter from '../../../components/sales/SalesImporter.vue';
+
+const rawLocation = Astro.params.location || '';
+const initialLocation = rawLocation.split('/').filter(Boolean)[0] || '';
 ---
 
 <Layout title="Import Sales | Resale Command" hideFooter={true}>
@@ -11,7 +14,8 @@ import SalesImporter from '../../components/sales/SalesImporter.vue';
         Back to Sales
       </a>
     </div>
-    
-    <SalesImporter client:only="vue" />
+
+    <SalesImporter initialLocation={initialLocation} client:only="vue" />
   </div>
 </Layout>
+

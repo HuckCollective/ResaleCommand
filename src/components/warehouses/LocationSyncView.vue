@@ -19,25 +19,51 @@
         </p>
       </div>
 
-      <!-- Location Selector, History Button & Commission Badge -->
-      <div class="flex items-end gap-2 w-full md:w-auto flex-wrap">
-        <div class="form-control flex-1 min-w-[18rem] sm:min-w-[23rem] md:w-96">
-          <label class="label py-1 flex justify-between items-center">
-            <span class="label-text text-xs font-bold uppercase opacity-60">Target Location</span>
-            <button @click="showNewLocationModal = true" class="text-[11px] text-primary hover:underline font-bold">+ New</button>
-          </label>
-          <select v-model="selectedLocationId" class="select select-bordered select-sm w-full pr-9 font-bold truncate">
-            <option value="" disabled>Select a location...</option>
-            <option v-for="loc in locations" :key="loc.$id" :value="loc.$id">
-              {{ loc.name }} ({{ loc.type || 'Booth' }})
-            </option>
-          </select>
+      <!-- Locked Location Header Badge, History Button & Ricochet Sync Guide -->
+      <div class="flex items-center gap-2 w-full md:w-auto flex-wrap">
+        <!-- Hidden Input Preserving Exact DOM ID & Value for Scripts -->
+        <input type="hidden" id="rc-sync-location-select" :value="selectedLocationId" />
+        <input type="hidden" id="rc-sync-location-code" :value="activeLocationCode" />
+
+        <!-- Locked Location Header Badge (Replaces Error-Prone <select> Dropdown) -->
+        <div
+          v-if="isLocationLocked && activeCanonicalLocationMeta"
+          class="flex items-center gap-2.5 bg-base-200/80 px-3.5 py-2 rounded-xl border border-primary/30 shadow-2xs flex-1 sm:flex-initial"
+        >
+          <span class="badge badge-primary font-mono font-black text-xs px-2.5 py-2.5 gap-1 shrink-0">
+            <span>{{ activeCanonicalLocationMeta.icon }}</span>
+            <span>{{ activeCanonicalLocationMeta.code }}</span>
+          </span>
+          <div class="text-left min-w-0">
+            <div class="text-[10px] uppercase font-bold opacity-60 leading-none flex items-center gap-1">
+              <span>🔒 Locked Target Location</span>
+            </div>
+            <div class="text-xs sm:text-sm font-black text-base-content truncate max-w-[16rem] sm:max-w-[22rem]">
+              {{ activeCanonicalLocationMeta.fullName }}
+            </div>
+          </div>
+          <div class="bg-base-100 px-2.5 py-1 rounded-lg border border-base-300 text-center shrink-0">
+            <div class="text-[9px] uppercase font-bold opacity-60 leading-none">Booth Fee</div>
+            <div class="text-xs font-extrabold text-primary font-mono leading-tight">{{ activeCanonicalLocationMeta.feePct }}%</div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1 shrink-0"
+            @click="isLocationLocked = false"
+            title="Switch target location"
+          >
+            <span>← Switch Location</span>
+          </button>
         </div>
 
-        <div v-if="currentLocation" class="bg-base-200 p-2.5 rounded-xl border border-base-300 text-center shrink-0">
-          <div class="text-[10px] uppercase font-bold opacity-60">Booth Fee</div>
-          <div class="text-sm font-extrabold text-primary font-mono">{{ currentLocation.commissionRate || 0 }}%</div>
-        </div>
+        <button
+          v-else
+          type="button"
+          class="btn btn-sm btn-outline btn-primary font-bold gap-1.5"
+          @click="isLocationLocked = false"
+        >
+          <span>📍 Select Target Location</span>
+        </button>
 
         <button 
           type="button" 
@@ -56,6 +82,64 @@
           title="Open Ricochet In-Browser Barcode Sync Guide"
         >
           <span>⚡ Ricochet Sync Guide</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
+    <div
+      v-if="!isLocationLocked"
+      class="card bg-base-100 border-2 border-primary/30 shadow-md p-5 sm:p-6 rounded-2xl space-y-4"
+    >
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 class="text-lg font-black text-base-content flex items-center gap-2">
+            <span>📍 Select &amp; Lock Target Location</span>
+          </h2>
+          <p class="text-xs opacity-70">
+            Choose one of the 4 canonical locations below to lock this sync workspace and prevent accidental cross-location imports.
+          </p>
+        </div>
+        <button
+          v-if="selectedLocationId"
+          type="button"
+          class="btn btn-xs btn-ghost"
+          @click="isLocationLocked = true"
+        >
+          Keep {{ activeCanonicalLocationMeta?.code || 'Current' }} Locked ✕
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <button
+          v-for="card in CANONICAL_LOCATION_CARDS"
+          :key="card.code"
+          type="button"
+          class="card bg-base-200/60 hover:bg-primary/10 border-2 transition-all p-4 rounded-2xl text-left cursor-pointer flex flex-col justify-between gap-3"
+          :class="activeLocationCode === card.code ? 'border-primary bg-primary/10 shadow-sm' : 'border-base-300'"
+          @click="selectAndLockCanonicalLocation(card.code)"
+        >
+          <div class="space-y-1.5 w-full">
+            <div class="flex items-center justify-between gap-2">
+              <span class="badge badge-primary font-mono font-black text-xs px-2.5 py-2.5 gap-1">
+                <span>{{ card.icon }}</span>
+                <span>{{ card.code }}</span>
+              </span>
+              <span class="badge badge-outline font-mono font-bold text-xs">
+                {{ card.feePct }}% Fee
+              </span>
+            </div>
+            <div class="font-black text-sm text-base-content leading-snug pt-1">
+              {{ card.fullName }}
+            </div>
+            <div class="text-[11px] opacity-70">
+              {{ card.subtitle }}
+            </div>
+          </div>
+          <div class="pt-2 border-t border-base-300/70 flex items-center justify-between text-xs font-bold text-primary w-full">
+            <span>Lock {{ card.code }} Workspace</span>
+            <span>➔</span>
+          </div>
         </button>
       </div>
     </div>
@@ -348,7 +432,7 @@
             Drop Ricochet's <strong>Inventory Export</strong> (with Product ID, SKU, UPC) to permanently link your booth SKUs (<code class="text-xs">0EJ...</code>) to your <code class="text-xs">HUCK-</code> barcodes.
           </p>
           <div class="alert alert-info py-2 px-3 text-xs mb-4 rounded-xl flex items-center justify-between text-left">
-            <span>Looking to reconcile monthly sales &amp; payout checks? Use the <a href="/sales/import" class="link font-bold underline">Sales Importer</a> with your Payout CSV!</span>
+            <span>Looking to reconcile monthly sales &amp; payout checks? Use the <a :href="'/sales/import/' + (activeLocationCode || 'MD')" class="link font-bold underline">Sales Importer ({{ activeLocationCode || 'MD' }})</a> with your Payout CSV!</span>
           </div>
 
           <!-- Org Prefix Guard Selector -->
@@ -2102,6 +2186,46 @@ const newLocationForm = ref({
 
 const locations = ref<any[]>([]);
 const selectedLocationId = ref<string>('');
+const isLocationLocked = ref<boolean>(Boolean(props.initialLocation));
+
+const CANONICAL_LOCATION_CARDS = [
+  {
+    code: 'MD',
+    id: '6a7e70050009db0e1857',
+    icon: '🔮',
+    fullName: "Memory Den - Huck's Adventures Outfitters (On-Site)",
+    subtitle: 'Booth #0EJ • Ricochet POS • $382.50/mo Rent',
+    feePct: 15,
+    type: 'On-Site',
+  },
+  {
+    code: 'DT',
+    id: '6a7e71eb001f53734a86',
+    icon: '🐯',
+    fullName: 'Dusty Tiger (Consignment Booth)',
+    subtitle: 'Small Collectibles, Jewelry, Pins & Wands <8"',
+    feePct: 10,
+    type: 'Consignment Booth',
+  },
+  {
+    code: 'HG',
+    id: '6a7e6f73003a5a2a7c34',
+    icon: '🏠',
+    fullName: "Huck's Garage (Warehouse / Backstock)",
+    subtitle: 'Primary Backstock Facility • Hardgoods & Bulk',
+    feePct: 0,
+    type: 'Warehouse',
+  },
+  {
+    code: 'HH',
+    id: '6ae3afbd0030a7eb8a9c',
+    icon: '🏡',
+    fullName: "Huck's Hideout (Warehouse / Backstock)",
+    subtitle: 'Climate-Controlled Backstock • Apparel, Books & Media',
+    feePct: 0,
+    type: 'Warehouse',
+  },
+] as const;
 const syncRows = ref<any[]>([]);
 // Ricochet Product Catalog export (Products-*.csv): items-only sync, NEVER creates sales
 const isCatalogExport = ref(false);
@@ -2302,6 +2426,17 @@ function resolveCanonicalLocationCode(locOrStr: any): string {
 
 const currentLocation = computed(() => {
   return (locations.value || []).find((l) => l.$id === selectedLocationId.value) || null;
+});
+
+const activeLocationCode = computed(() => {
+  const code = resolveCanonicalLocationCode(currentLocation.value || selectedLocationId.value || props.initialLocation);
+  if (code === 'MD' || code === 'DT' || code === 'HG' || code === 'HH') return code;
+  return 'MD';
+});
+
+const activeCanonicalLocationMeta = computed(() => {
+  const code = activeLocationCode.value;
+  return CANONICAL_LOCATION_CARDS.find((c) => c.code === code) || CANONICAL_LOCATION_CARDS[0];
 });
 
 const locationHistory = computed(() => {
@@ -2653,13 +2788,13 @@ const ricochetSkuMetaMap = computed(() => {
 
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
-// Permanent Live-Loader Bookmarklet (`⚡ Memory Den Sync`) — Zero baked-in snapshot, 100% live script + live cloud fetch on every open!
+// Permanent Live-Loader Bookmarklet (`⚡ Memory Den Sync`) — Loads /scripts/rico-bookmarklet.js?t= with CORS + no-store!
 const bookmarkletHref = computed(() => {
   const origin =
     typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
       ? window.location.origin
       : 'https://resalecmd.com';
-  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/ricochet-upc-sync.user.js?v='+Date.now();document.body.appendChild(s);})();`;
+  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/scripts/rico-bookmarklet.js?t='+Date.now();document.body.appendChild(s);})();`;
 });
 
 // =========================================================================
@@ -5159,10 +5294,21 @@ const normalizeLocationUrlParam = (locObjOrId: any) => {
   } catch {}
 };
 
+const selectAndLockCanonicalLocation = (code: string) => {
+  const card = CANONICAL_LOCATION_CARDS.find((c) => c.code === code) || CANONICAL_LOCATION_CARDS[0];
+  const found = (locations.value || []).find(
+    (w) => w.$id === card.id || resolveCanonicalLocationCode(w) === card.code
+  );
+  selectedLocationId.value = found ? found.$id : card.id;
+  isLocationLocked.value = true;
+  normalizeLocationUrlParam(card.code);
+  refreshSyncHistory();
+};
+
 watch(selectedLocationId, (newId) => {
   if (!newId) return;
   const loc = (locations.value || []).find((l) => l.$id === newId);
-  if (loc) {
+  if (loc && isLocationLocked.value) {
     normalizeLocationUrlParam(loc);
   }
 });
@@ -5217,16 +5363,24 @@ const loadData = async () => {
       });
       if (found) {
         selectedLocationId.value = found.$id;
+        isLocationLocked.value = true;
         normalizeLocationUrlParam(found);
+      } else if (targetCode) {
+        const card = CANONICAL_LOCATION_CARDS.find((c) => c.code === targetCode);
+        if (card) {
+          selectedLocationId.value = card.id;
+          isLocationLocked.value = true;
+          normalizeLocationUrlParam(card.code);
+        }
       }
-    }
-
-    // Default to Memory Den if available, otherwise first location
-    if (!selectedLocationId.value && locations.value.length > 0) {
-      const memDen = locations.value.find(l => resolveCanonicalLocationCode(l) === 'MD');
-      const fallbackLoc = memDen || locations.value[0];
-      selectedLocationId.value = fallbackLoc.$id;
-      normalizeLocationUrlParam(fallbackLoc);
+    } else {
+      // Visited without a location in the URL: show the 4-Location Card Picker while keeping hidden input populated
+      isLocationLocked.value = false;
+      if (!selectedLocationId.value && locations.value.length > 0) {
+        const memDen = locations.value.find(l => resolveCanonicalLocationCode(l) === 'MD');
+        const fallbackLoc = memDen || locations.value[0];
+        selectedLocationId.value = fallbackLoc.$id;
+      }
     }
 
     refreshSyncHistory();

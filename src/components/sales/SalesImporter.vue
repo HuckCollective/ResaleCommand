@@ -12,7 +12,51 @@
           </p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Hidden Inputs Preserving Exact DOM ID & Value for Scripts -->
+          <input type="hidden" id="rc-sales-location-select" :value="activeLocationCode" />
+          <input type="hidden" id="rc-sales-platform-select" :value="platform" />
+
+          <!-- Locked Location Header Badge (Replaces Error-Prone <select> Dropdown) -->
+          <div
+            v-if="isLocationLocked && activeCanonicalLocationMeta"
+            class="flex items-center gap-2.5 bg-base-200/80 px-3.5 py-2 rounded-xl border border-primary/30 shadow-2xs"
+          >
+            <span class="badge badge-primary font-mono font-black text-xs px-2.5 py-2.5 gap-1 shrink-0">
+              <span>{{ activeCanonicalLocationMeta.icon }}</span>
+              <span>{{ activeCanonicalLocationMeta.code }}</span>
+            </span>
+            <div class="text-left min-w-0">
+              <div class="text-[10px] uppercase font-bold opacity-60 leading-none">
+                🔒 Locked Target Location
+              </div>
+              <div class="text-xs sm:text-sm font-black text-base-content truncate max-w-[16rem] sm:max-w-[20rem]">
+                {{ activeCanonicalLocationMeta.fullName }}
+              </div>
+            </div>
+            <div class="bg-base-100 px-2.5 py-1 rounded-lg border border-base-300 text-center shrink-0">
+              <div class="text-[9px] uppercase font-bold opacity-60 leading-none">Booth Fee</div>
+              <div class="text-xs font-extrabold text-primary font-mono leading-tight">{{ activeCanonicalLocationMeta.feePct }}%</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1 shrink-0"
+              @click="isLocationLocked = false"
+              title="Switch target location"
+            >
+              <span>← Switch Location</span>
+            </button>
+          </div>
+
+          <button
+            v-else
+            type="button"
+            class="btn btn-sm btn-outline btn-primary font-bold gap-1.5"
+            @click="isLocationLocked = false"
+          >
+            <span>📍 Select Target Location</span>
+          </button>
+
           <button 
             v-if="reconciliationHistory.length > 0"
             class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold"
@@ -20,6 +64,64 @@
           >
             <Icon icon="solar:history-bold" class="w-4 h-4 text-primary" />
             <span>Past Reconciliations ({{ reconciliationHistory.length }})</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
+      <div
+        v-if="!isLocationLocked"
+        class="card bg-base-100 border-2 border-primary/30 shadow-md p-5 sm:p-6 rounded-2xl space-y-4 mb-6"
+      >
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 class="text-lg font-black text-base-content flex items-center gap-2">
+              <span>📍 Select &amp; Lock Target Location</span>
+            </h3>
+            <p class="text-xs opacity-70">
+              Choose one of the 4 canonical locations below to lock this Sales Importer and prevent accidental cross-location payout imports.
+            </p>
+          </div>
+          <button
+            v-if="activeLocationCode"
+            type="button"
+            class="btn btn-xs btn-ghost"
+            @click="isLocationLocked = true"
+          >
+            Keep {{ activeCanonicalLocationMeta?.code || 'Current' }} Locked ✕
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            v-for="card in CANONICAL_LOCATION_CARDS"
+            :key="card.code"
+            type="button"
+            class="card bg-base-200/60 hover:bg-primary/10 border-2 transition-all p-4 rounded-2xl text-left cursor-pointer flex flex-col justify-between gap-3"
+            :class="activeLocationCode === card.code ? 'border-primary bg-primary/10 shadow-sm' : 'border-base-300'"
+            @click="selectAndLockSalesLocation(card.code)"
+          >
+            <div class="space-y-1.5 w-full">
+              <div class="flex items-center justify-between gap-2">
+                <span class="badge badge-primary font-mono font-black text-xs px-2.5 py-2.5 gap-1">
+                  <span>{{ card.icon }}</span>
+                  <span>{{ card.code }}</span>
+                </span>
+                <span class="badge badge-outline font-mono font-bold text-xs">
+                  {{ card.feePct }}% Fee
+                </span>
+              </div>
+              <div class="font-black text-sm text-base-content leading-snug pt-1">
+                {{ card.fullName }}
+              </div>
+              <div class="text-[11px] opacity-70">
+                {{ card.subtitle }}
+              </div>
+            </div>
+            <div class="pt-2 border-t border-base-300/70 flex items-center justify-between text-xs font-bold text-primary w-full">
+              <span>Lock {{ card.code }} Payouts</span>
+              <span>➔</span>
+            </div>
           </button>
         </div>
       </div>
@@ -271,7 +373,7 @@
                 <span>Location Sync (Barcode Link)</span>
               </div>
               <p class="text-base-content/70 text-[11px] leading-relaxed">
-                Ricochet creates booth SKUs (<code class="text-xs">0EJ...</code>). Upload Ricochet's <em>Inventory Export</em> to <a href="/warehouse/sync" class="link link-primary font-bold">Location Sync</a> to permanently bind them to your <code class="text-xs">HUCK-</code> barcodes.
+                Ricochet creates booth SKUs (<code class="text-xs">0EJ...</code>). Upload Ricochet's <em>Inventory Export</em> to <a :href="'/warehouse/sync/' + (activeLocationCode || 'MD')" class="link link-primary font-bold">Location Sync ({{ activeLocationCode || 'MD' }})</a> to permanently bind them to your <code class="text-xs">HUCK-</code> barcodes.
               </p>
             </div>
 
@@ -303,13 +405,18 @@
             Upload the payout summary exported from Ricochet (Consignors &rarr; Payouts) to reconcile your check.
           </p>
           
-          <div class="form-control w-full max-w-xs mb-4">
-            <label class="label py-1"><span class="label-text text-xs font-bold">Select Platform</span></label>
-            <select class="select select-bordered select-sm rounded-xl font-bold" v-model="platform">
-              <option value="memoryden">Memory Den Payout (Ricochet)</option>
-              <option value="ebay">eBay Orders (Soon)</option>
-              <option value="generic">Generic CSV (Soon)</option>
-            </select>
+          <div class="w-full max-w-xs mb-4 bg-base-100 border border-primary/30 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 shadow-2xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="badge badge-primary font-mono font-black text-xs px-2 py-2 gap-1 shrink-0">
+                <span>{{ activeCanonicalLocationMeta.icon }}</span>
+                <span>{{ activeCanonicalLocationMeta.code }}</span>
+              </span>
+              <div class="text-left min-w-0">
+                <div class="text-[10px] uppercase font-bold opacity-60 leading-none">Locked Payout Venue</div>
+                <div class="text-xs font-black text-base-content truncate">{{ activeCanonicalLocationMeta.fullName }}</div>
+              </div>
+            </div>
+            <span class="badge badge-xs badge-outline font-mono font-bold shrink-0">{{ activeCanonicalLocationMeta.feePct }}%</span>
           </div>
 
           <input 
@@ -317,7 +424,7 @@
             accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
             class="file-input file-input-bordered file-input-primary file-input-sm w-full max-w-xs rounded-xl" 
             @change="handleFileUpload" 
-            :disabled="isProcessing || platform !== 'memoryden'"
+            :disabled="isProcessing"
           />
 
           <div v-if="catalogFileDetected" class="alert alert-warning py-2.5 px-4 rounded-xl text-xs w-full max-w-md mt-3 shadow-sm">
@@ -1587,12 +1694,88 @@ import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import { generateNextUpc } from '../../lib/upcAuthority';
 
+const props = defineProps<{
+  initialLocation?: string;
+}>();
+
 const { user, currentTeam: team } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
 const { showLoader, updateLoader, hideLoader } = useLoader();
 const isProcessing = ref(false);
 const isImporting = ref(false);
 const platform = ref('memoryden');
+
+const CANONICAL_LOCATION_CARDS = [
+  {
+    code: 'MD',
+    id: '6a7e70050009db0e1857',
+    icon: '🔮',
+    fullName: "Memory Den - Huck's Adventures Outfitters (On-Site)",
+    subtitle: 'Booth #0EJ • Ricochet POS • $382.50/mo Rent',
+    feePct: 15,
+    type: 'On-Site',
+  },
+  {
+    code: 'DT',
+    id: '6a7e71eb001f53734a86',
+    icon: '🐯',
+    fullName: 'Dusty Tiger (Consignment Booth)',
+    subtitle: 'Small Collectibles, Jewelry, Pins & Wands <8"',
+    feePct: 10,
+    type: 'Consignment Booth',
+  },
+  {
+    code: 'HG',
+    id: '6a7e6f73003a5a2a7c34',
+    icon: '🏠',
+    fullName: "Huck's Garage (Warehouse / Backstock)",
+    subtitle: 'Primary Backstock Facility • Hardgoods & Bulk',
+    feePct: 0,
+    type: 'Warehouse',
+  },
+  {
+    code: 'HH',
+    id: '6ae3afbd0030a7eb8a9c',
+    icon: '🏡',
+    fullName: "Huck's Hideout (Warehouse / Backstock)",
+    subtitle: 'Climate-Controlled Backstock • Apparel, Books & Media',
+    feePct: 0,
+    type: 'Warehouse',
+  },
+] as const;
+
+const resolveSalesCanonicalCode = (raw: string): 'MD' | 'DT' | 'HG' | 'HH' => {
+  const c = String(raw || '').trim().toUpperCase();
+  if (c === 'DT' || c.includes('DUSTY')) return 'DT';
+  if (c === 'HG' || c.includes('GARAGE')) return 'HG';
+  if (c === 'HH' || c.includes('HIDEOUT')) return 'HH';
+  return 'MD';
+};
+
+const activeLocationCode = ref<'MD' | 'DT' | 'HG' | 'HH'>(
+  props.initialLocation ? resolveSalesCanonicalCode(props.initialLocation) : 'MD'
+);
+const isLocationLocked = ref<boolean>(Boolean(props.initialLocation));
+
+const activeCanonicalLocationMeta = computed(() => {
+  return CANONICAL_LOCATION_CARDS.find((c) => c.code === activeLocationCode.value) || CANONICAL_LOCATION_CARDS[0];
+});
+
+const normalizeSalesLocationUrlParam = (code: string) => {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  try {
+    const targetPath = `/sales/import/${encodeURIComponent(code)}`;
+    if (window.location.pathname !== targetPath || window.location.search) {
+      window.history.replaceState({}, '', targetPath);
+    }
+  } catch {}
+};
+
+const selectAndLockSalesLocation = (code: 'MD' | 'DT' | 'HG' | 'HH') => {
+  activeLocationCode.value = code;
+  isLocationLocked.value = true;
+  normalizeSalesLocationUrlParam(code);
+};
 const activeView = ref('matching'); // 'matching' | 'settlement'
 const filterTab = ref('all'); // 'all' | 'matched' | 'unmatched'
 const parsedRows = ref<any[]>([]);
@@ -2275,6 +2458,31 @@ const loadDefaultPayoutFile = async () => {
 };
 
 onMounted(async () => {
+  let rawTargetLocation = String(props.initialLocation || '').trim();
+  if (!rawTargetLocation && typeof window !== 'undefined') {
+    const pathMatch = window.location.pathname.match(/\/sales\/import\/([^/?#]+)/i);
+    if (pathMatch && pathMatch[1]) {
+      try {
+        rawTargetLocation = decodeURIComponent(pathMatch[1]).trim();
+      } catch {
+        rawTargetLocation = pathMatch[1].trim();
+      }
+    }
+    if (!rawTargetLocation && window.location?.search) {
+      const p = new URLSearchParams(window.location.search);
+      rawTargetLocation = (p.get('location') || '').trim();
+    }
+  }
+
+  if (rawTargetLocation) {
+    const resolved = resolveSalesCanonicalCode(rawTargetLocation);
+    activeLocationCode.value = resolved;
+    isLocationLocked.value = true;
+    normalizeSalesLocationUrlParam(resolved);
+  } else {
+    isLocationLocked.value = false;
+  }
+
   if (inventoryItems.value.length === 0) {
     fetchInventory(activeTeamId.value || undefined);
   }

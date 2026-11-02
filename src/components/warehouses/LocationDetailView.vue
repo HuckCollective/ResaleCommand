@@ -27,11 +27,20 @@
 
         <a 
           v-if="warehouse" 
-          :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : warehouse.name))" 
+          :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
-          <span>Sales Sync Hub</span>
+          <span>Inventory Sync</span>
+        </a>
+
+        <a 
+          v-if="warehouse" 
+          :href="'/sales/import/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+          class="btn btn-sm btn-outline btn-success gap-1.5 font-bold shadow-xs"
+        >
+          <Icon icon="solar:import-bold-duotone" class="w-4 h-4" />
+          <span>Sales Importer</span>
         </a>
       </div>
     </div>
