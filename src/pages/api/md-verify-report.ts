@@ -14,6 +14,11 @@ import {
   matchMemoryDenInventoryItem,
   MD_CANONICAL_WAREHOUSE_ID,
 } from '../../lib/salesBucketing';
+import {
+  getLocationManifestDocIds,
+  getLocationSettingMeta,
+  resolveCanonicalLocationCode,
+} from '../../lib/warehouses';
 
 export const prerender = false;
 
@@ -24,8 +29,6 @@ const CORS_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
 };
 
-const PERSISTED_REPORT_DOC_ID = 'md_verify_report_latest';
-const PERSISTED_PAYLOAD_DOC_ID = 'md_live_payload_latest';
 const MANIFESTS_COL_ID = 'manifests';
 
 export interface MdVerifyRow {
@@ -63,26 +66,47 @@ export interface MdSkuMeta {
   status: string;
 }
 
-const getStoredReport = (): MdVerifyReportPayload | null => {
-  return (globalThis as any).__LATEST_MD_VERIFY_REPORT__ || null;
+const getStoredReport = (locCode = 'MD'): MdVerifyReportPayload | null => {
+  const code = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
+  const map = (globalThis as any).__LATEST_LOCATION_VERIFY_REPORTS__ || {};
+  return map[code] || (code === 'MD' ? (globalThis as any).__LATEST_MD_VERIFY_REPORT__ || null : null);
 };
 
-const setStoredReport = (report: MdVerifyReportPayload) => {
-  (globalThis as any).__LATEST_MD_VERIFY_REPORT__ = report;
+const setStoredReport = (report: MdVerifyReportPayload, locCode = 'MD') => {
+  const code = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
+  if (!(globalThis as any).__LATEST_LOCATION_VERIFY_REPORTS__) {
+    (globalThis as any).__LATEST_LOCATION_VERIFY_REPORTS__ = {};
+  }
+  (globalThis as any).__LATEST_LOCATION_VERIFY_REPORTS__[code] = report;
+  if (code === 'MD') {
+    (globalThis as any).__LATEST_MD_VERIFY_REPORT__ = report;
+  }
 };
 
-const getStoredLivePayload = (): {
+const getStoredLivePayload = (locCode = 'MD'): {
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
 } | null => {
-  return (globalThis as any).__LATEST_MD_LIVE_PAYLOAD__ || null;
+  const code = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
+  const map = (globalThis as any).__LATEST_LOCATION_LIVE_PAYLOADS__ || {};
+  return map[code] || (code === 'MD' ? (globalThis as any).__LATEST_MD_LIVE_PAYLOAD__ || null : null);
 };
 
-const setStoredLivePayload = (payload: {
-  skuToUpcMap: Record<string, string>;
-  skuToMetaMap: Record<string, MdSkuMeta>;
-}) => {
-  (globalThis as any).__LATEST_MD_LIVE_PAYLOAD__ = payload;
+const setStoredLivePayload = (
+  payload: {
+    skuToUpcMap: Record<string, string>;
+    skuToMetaMap: Record<string, MdSkuMeta>;
+  },
+  locCode = 'MD'
+) => {
+  const code = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
+  if (!(globalThis as any).__LATEST_LOCATION_LIVE_PAYLOADS__) {
+    (globalThis as any).__LATEST_LOCATION_LIVE_PAYLOADS__ = {};
+  }
+  (globalThis as any).__LATEST_LOCATION_LIVE_PAYLOADS__[code] = payload;
+  if (code === 'MD') {
+    (globalThis as any).__LATEST_MD_LIVE_PAYLOAD__ = payload;
+  }
 };
 
 function getAppwriteConfig() {
@@ -142,30 +166,34 @@ async function fetchAppwriteDocFallback(colId: string, docId: string): Promise<a
   return null;
 }
 
-async function loadPersistedReportFromAppwrite(): Promise<MdVerifyReportPayload | null> {
+async function loadPersistedReportFromAppwrite(locCode = 'MD'): Promise<MdVerifyReportPayload | null> {
+  const { code, reportDocId } = getLocationManifestDocIds(locCode);
   try {
-    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID);
+    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, reportDocId);
     if (doc?.itemsSnapshot) {
       const parsed =
         typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
       if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
-        setStoredReport(parsed);
+        setStoredReport(parsed, code);
         return parsed as MdVerifyReportPayload;
       }
     }
   } catch {
     // Document may not exist yet on first run
   }
-  return getStoredReport();
+  return getStoredReport(code);
 }
 
-async function getOrLoadReport(): Promise<MdVerifyReportPayload | null> {
-  const loaded = await loadPersistedReportFromAppwrite();
-  return loaded || getStoredReport();
+async function getOrLoadReport(locCode = 'MD'): Promise<MdVerifyReportPayload | null> {
+  const code = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
+  const loaded = await loadPersistedReportFromAppwrite(code);
+  return loaded || getStoredReport(code);
 }
 
-async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Promise<void> {
-  setStoredReport(report);
+async function savePersistedReportToAppwrite(report: MdVerifyReportPayload, locCode = 'MD'): Promise<void> {
+  const locMeta = getLocationSettingMeta(locCode);
+  const { reportDocId } = getLocationManifestDocIds(locMeta.code);
+  setStoredReport(report, locMeta.code);
   const { databases, dbId } = getAppwriteConfig();
   if (!databases) return;
 
@@ -176,10 +204,10 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
   ];
 
   const docPayload: Record<string, any> = {
-    name: 'Memory Den Live Barcode Verification Report',
+    name: `${locMeta.shortName} Live Barcode Verification Report`,
     tenantId: 'system',
-    locationId: MD_CANONICAL_WAREHOUSE_ID,
-    locationName: 'Memory Den',
+    locationId: locMeta.id || MD_CANONICAL_WAREHOUSE_ID,
+    locationName: locMeta.shortName,
     status: 'system_sync_report',
     itemCount: Number(report.summary?.totalCatalog || report.rows?.length || 0),
     itemsSnapshot: JSON.stringify(report),
@@ -190,14 +218,14 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
   };
 
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_REPORT_DOC_ID, docPayload, docPerms);
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, reportDocId, docPayload, docPerms);
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
         await databases.createDocument(
           dbId,
           MANIFESTS_COL_ID,
-          PERSISTED_REPORT_DOC_ID,
+          reportDocId,
           docPayload,
           docPerms
         );
@@ -210,12 +238,13 @@ async function savePersistedReportToAppwrite(report: MdVerifyReportPayload): Pro
   }
 }
 
-async function loadPersistedLivePayloadFromAppwrite(): Promise<{
+async function loadPersistedLivePayloadFromAppwrite(locCode = 'MD'): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
 } | null> {
+  const { code, payloadDocId } = getLocationManifestDocIds(locCode);
   try {
-    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID);
+    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, payloadDocId);
     if (doc?.itemsSnapshot) {
       const parsed =
         typeof doc.itemsSnapshot === 'string' ? JSON.parse(doc.itemsSnapshot) : doc.itemsSnapshot;
@@ -235,21 +264,26 @@ async function loadPersistedLivePayloadFromAppwrite(): Promise<{
           }
         }
         const result = { skuToUpcMap, skuToMetaMap };
-        setStoredLivePayload(result);
+        setStoredLivePayload(result, code);
         return result;
       }
     }
   } catch {
     // Document may not exist yet on first run
   }
-  return getStoredLivePayload();
+  return getStoredLivePayload(code);
 }
 
-async function savePersistedLivePayloadToAppwrite(payload: {
-  skuToUpcMap: Record<string, string>;
-  skuToMetaMap: Record<string, MdSkuMeta>;
-}): Promise<void> {
-  setStoredLivePayload(payload);
+async function savePersistedLivePayloadToAppwrite(
+  payload: {
+    skuToUpcMap: Record<string, string>;
+    skuToMetaMap: Record<string, MdSkuMeta>;
+  },
+  locCode = 'MD'
+): Promise<void> {
+  const locMeta = getLocationSettingMeta(locCode);
+  const { payloadDocId } = getLocationManifestDocIds(locMeta.code);
+  setStoredLivePayload(payload, locMeta.code);
   const { databases, dbId } = getAppwriteConfig();
   if (!databases) return;
 
@@ -271,10 +305,10 @@ async function savePersistedLivePayloadToAppwrite(payload: {
 
   // Compact ~20KB snapshot so it never exceeds Appwrite's string attribute limit
   const docPayload: Record<string, any> = {
-    name: 'Memory Den Live SKU-to-UPC Payload Map',
+    name: `${locMeta.shortName} Live SKU-to-UPC Payload Map`,
     tenantId: 'system',
-    locationId: MD_CANONICAL_WAREHOUSE_ID,
-    locationName: 'Memory Den',
+    locationId: locMeta.id || MD_CANONICAL_WAREHOUSE_ID,
+    locationName: locMeta.shortName,
     status: 'system_sync_payload',
     itemCount: count,
     itemsSnapshot: JSON.stringify({
@@ -290,14 +324,14 @@ async function savePersistedLivePayloadToAppwrite(payload: {
   };
 
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, PERSISTED_PAYLOAD_DOC_ID, docPayload, docPerms);
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, payloadDocId, docPayload, docPerms);
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
         await databases.createDocument(
           dbId,
           MANIFESTS_COL_ID,
-          PERSISTED_PAYLOAD_DOC_ID,
+          payloadDocId,
           docPayload,
           docPerms
         );
@@ -324,12 +358,13 @@ function isValidProductionUpc(upc: string): boolean {
   return true;
 }
 
-export async function buildLiveMdPayloadFromAppwrite(): Promise<{
+export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
   skuToUpcMap: Record<string, string>;
   skuToMetaMap: Record<string, MdSkuMeta>;
   verifiedMdUpcBySku: Record<string, string>;
   duplicateUpcWarnings: Array<{ upc: string; skus: string[] }>;
 }> {
+  const activeLocCode = (resolveCanonicalLocationCode(locCode) || 'MD').toUpperCase();
   const skuToMetaMap: Record<string, MdSkuMeta> = {};
   const usedUpcs = new Set<string>();
   const rawUpcToSkus = new Map<string, Set<string>>();
@@ -450,9 +485,9 @@ export async function buildLiveMdPayloadFromAppwrite(): Promise<{
     };
   }
 
-  // 2. Merge live payload persisted in Appwrite manifests ('md_live_payload_latest') BEFORE static baseline
+  // 2. Merge live payload persisted in Appwrite manifests BEFORE static baseline
   // so adopted booth tags (adopt_md_upc) and soldSkus status are NEVER reverted by PREVERIFIED_MD_SKU_TO_UPC_OR_ID!
-  const cachedLive = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload();
+  const cachedLive = (await loadPersistedLivePayloadFromAppwrite(activeLocCode)) || getStoredLivePayload(activeLocCode);
   if (cachedLive?.skuToUpcMap) {
     for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
       const sku = cleanCatalogSku(rawSku).toUpperCase();
@@ -477,8 +512,8 @@ export async function buildLiveMdPayloadFromAppwrite(): Promise<{
     }
   }
 
-  // 3. Load persisted Verification Report from Appwrite ('md_verify_report_latest') and extract verifiedMdUpcBySku + sold status
-  const storedReport = await getOrLoadReport();
+  // 3. Load persisted Verification Report from Appwrite and extract verifiedMdUpcBySku + sold status
+  const storedReport = await getOrLoadReport(activeLocCode);
   if (storedReport?.rows?.length) {
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();
@@ -602,10 +637,13 @@ export async function buildLiveMdPayloadFromAppwrite(): Promise<{
 
   // Persist complete payload map to Appwrite manifests if we resolved more SKUs from resale_db.items
   if (allDocs.length > 0 && Object.keys(finalSkuToUpcMap).length > ( Object.keys(cachedLive?.skuToUpcMap || {}).length )) {
-    await savePersistedLivePayloadToAppwrite({
-      skuToUpcMap: finalSkuToUpcMap,
-      skuToMetaMap,
-    });
+    await savePersistedLivePayloadToAppwrite(
+      {
+        skuToUpcMap: finalSkuToUpcMap,
+        skuToMetaMap,
+      },
+      activeLocCode
+    );
   }
 
   // 5. Compute any duplicate UPC warnings (finalSkuToUpcMap is guaranteed 100% 1-to-1 unique)
@@ -633,12 +671,14 @@ export const OPTIONS: APIRoute = async () => {
 
 export const GET: APIRoute = async ({ url }) => {
   const mode = url.searchParams.get('mode');
+  const locCode = (resolveCanonicalLocationCode(url.searchParams.get('location') || 'MD') || 'MD').toUpperCase();
   if (mode === 'payload') {
     const { skuToUpcMap, skuToMetaMap, verifiedMdUpcBySku, duplicateUpcWarnings } =
-      await buildLiveMdPayloadFromAppwrite();
+      await buildLiveMdPayloadFromAppwrite(locCode);
     return new Response(
       JSON.stringify({
         ok: true,
+        location: locCode,
         timestamp: new Date().toISOString(),
         count: Object.keys(skuToUpcMap).length,
         skuToUpcMap,
@@ -653,10 +693,11 @@ export const GET: APIRoute = async ({ url }) => {
     );
   }
 
-  const report = await getOrLoadReport();
+  const report = await getOrLoadReport(locCode);
   return new Response(
     JSON.stringify({
       ok: true,
+      location: locCode,
       hasReport: Boolean(report),
       report,
     }),
@@ -667,14 +708,17 @@ export const GET: APIRoute = async ({ url }) => {
   );
 };
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, url }) => {
   try {
     const body = await request.json();
+    const locCode = (
+      resolveCanonicalLocationCode(body?.location || url.searchParams.get('location') || 'MD') || 'MD'
+    ).toUpperCase();
 
     if (body?.mode === 'payload' && body?.skuToUpcMap) {
       // Merge incoming client payload into existing cloud payload so partial browser maps (e.g. 498 items)
       // NEVER wipe out the full 808-item cloud map or strip soldSkus status!
-      const existingPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
+      const existingPayload = (await loadPersistedLivePayloadFromAppwrite(locCode)) || getStoredLivePayload(locCode) || {
         skuToUpcMap: {},
         skuToMetaMap: {},
       };
@@ -702,13 +746,17 @@ export const POST: APIRoute = async ({ request }) => {
         };
       }
 
-      await savePersistedLivePayloadToAppwrite({
-        skuToUpcMap: mergedSkuToUpcMap,
-        skuToMetaMap: mergedSkuToMetaMap,
-      });
+      await savePersistedLivePayloadToAppwrite(
+        {
+          skuToUpcMap: mergedSkuToUpcMap,
+          skuToMetaMap: mergedSkuToMetaMap,
+        },
+        locCode
+      );
       return new Response(
         JSON.stringify({
           ok: true,
+          location: locCode,
           count: Object.keys(mergedSkuToUpcMap).length,
         }),
         {
@@ -733,7 +781,7 @@ export const POST: APIRoute = async ({ request }) => {
         );
       }
 
-      const cachedPayload = (await loadPersistedLivePayloadFromAppwrite()) || getStoredLivePayload() || {
+      const cachedPayload = (await loadPersistedLivePayloadFromAppwrite(locCode)) || getStoredLivePayload(locCode) || {
         skuToUpcMap: {},
         skuToMetaMap: {},
       };
@@ -840,7 +888,7 @@ export const POST: APIRoute = async ({ request }) => {
         }
       }
 
-      // Update persisted live payload map ('md_live_payload_latest')
+      // Update persisted live payload map
       cachedPayload.skuToUpcMap[targetSku] = adoptedUpc;
       if (cachedPayload.skuToMetaMap[targetSku]) {
         cachedPayload.skuToMetaMap[targetSku].upc = adoptedUpc;
@@ -849,10 +897,10 @@ export const POST: APIRoute = async ({ request }) => {
           cachedPayload.skuToMetaMap[targetSku].title || ''
         );
       }
-      await savePersistedLivePayloadToAppwrite(cachedPayload);
+      await savePersistedLivePayloadToAppwrite(cachedPayload, locCode);
 
-      // Update persisted verification report ('md_verify_report_latest') so both tabs reflect VERIFIED_MATCH immediately
-      const currentReport = await getOrLoadReport();
+      // Update persisted verification report so both tabs reflect VERIFIED_MATCH immediately
+      const currentReport = await getOrLoadReport(locCode);
       if (currentReport?.rows?.length) {
         for (const r of currentReport.rows) {
           const rSku = cleanCatalogSku(r.sku).toUpperCase();
@@ -876,12 +924,13 @@ export const POST: APIRoute = async ({ request }) => {
           unlinkedInRc: currentReport.rows.filter((r) => r.verifyStatus === 'UNLINKED_IN_RC').length,
         };
         currentReport.timestamp = new Date().toISOString();
-        await savePersistedReportToAppwrite(currentReport);
+        await savePersistedReportToAppwrite(currentReport, locCode);
       }
 
       return new Response(
         JSON.stringify({
           ok: true,
+          location: locCode,
           sku: targetSku,
           adoptedUpc,
           swappedSku: conflictingSku,
@@ -894,10 +943,10 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const incomingRows: MdVerifyRow[] = Array.isArray(body?.rows) ? body.rows : [];
-    const { skuToUpcMap, skuToMetaMap } = await buildLiveMdPayloadFromAppwrite();
+    const { skuToUpcMap, skuToMetaMap } = await buildLiveMdPayloadFromAppwrite(locCode);
 
     // Preserve previously verified Memory Den UPCs if Ricochet's /api/product list endpoint omitted nested item UPCs after a page refresh
-    const previousReport = await getOrLoadReport();
+    const previousReport = await getOrLoadReport(locCode);
     const prevVerifiedUpcBySku = new Map<string, string>();
     if (previousReport?.rows?.length && !body?.forceResetVerified) {
       for (const pr of previousReport.rows) {
@@ -1000,12 +1049,15 @@ export const POST: APIRoute = async ({ request }) => {
       };
     });
 
-    // Persist any on-the-fly booth additions / adopted phone tags to resale_db.items and md_live_payload_latest
+    // Persist any on-the-fly booth additions / adopted phone tags to resale_db.items and live payload doc
     if (onTheFlyAdoptedPairs.length > 0) {
-      await savePersistedLivePayloadToAppwrite({
-        skuToUpcMap,
-        skuToMetaMap,
-      });
+      await savePersistedLivePayloadToAppwrite(
+        {
+          skuToUpcMap,
+          skuToMetaMap,
+        },
+        locCode
+      );
       const { databases, dbId, itemsCol } = getAppwriteConfig();
       if (databases) {
         for (const pair of onTheFlyAdoptedPairs) {
@@ -1060,11 +1112,12 @@ export const POST: APIRoute = async ({ request }) => {
       rows,
     };
 
-    await savePersistedReportToAppwrite(payload);
+    await savePersistedReportToAppwrite(payload, locCode);
 
     return new Response(
       JSON.stringify({
         ok: true,
+        location: locCode,
         summary: payload.summary,
         timestamp: payload.timestamp,
       }),

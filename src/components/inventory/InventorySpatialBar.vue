@@ -212,6 +212,7 @@ import {
     type SpatialLocationId,
     type PartnerPrefixId
 } from '../../lib/inventoryVibes';
+import { getAllLocationSettingMetas } from '../../lib/warehouses';
 
 const props = defineProps<{
     inventoryItems: any[];
@@ -234,12 +235,7 @@ const emit = defineEmits<{
     (e: 'quick-assign-location', code: string): void;
 }>();
 
-const TRIAGE_TARGETS = [
-    { code: 'HG', icon: '🏠', name: "Huck's Garage" },
-    { code: 'HH', icon: '🏡', name: "Huck's Hideout" },
-    { code: 'MD', icon: '🔮', name: 'Memory Den Booth #0EJ' },
-    { code: 'DT', icon: '🐯', name: 'Dusty Tiger' }
-] as const;
+const TRIAGE_TARGETS = getAllLocationSettingMetas();
 
 const currentSortValue = computed(() => {
     const col = props.sortColumn || '$createdAt';

@@ -149,7 +149,7 @@
 
               <!-- Secondary Action: Inventory Sync -->
               <a 
-                :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+                :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
                 class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
                 title="Open Location Inventory & Barcode Sync pre-locked to this location"
               >
@@ -159,7 +159,7 @@
 
               <!-- Tertiary Action: Sales Importer -->
               <a 
-                :href="'/sales/import/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+                :href="'/sales/import/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
                 class="btn btn-sm btn-outline btn-success gap-1.5 font-bold shadow-xs"
                 title="Open Sales Payout Importer pre-locked to this location"
               >
@@ -412,7 +412,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, matchesLocationFilter, getDefaultStorageLocation } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, getDefaultStorageLocation, resolveCanonicalLocationCode } from '../../lib/warehouses';
 import { generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { addToast } from '../../stores/toast';
 import type { WarehouseDocument, WarehouseData } from '../../lib/warehouses';

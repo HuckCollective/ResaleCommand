@@ -94,7 +94,7 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button
-            v-for="card in CANONICAL_LOCATION_CARDS"
+            v-for="card in locationCards"
             :key="card.code"
             type="button"
             class="card bg-base-200/60 hover:bg-primary/10 border-2 transition-all p-4 rounded-2xl text-left cursor-pointer flex flex-col justify-between gap-3"
@@ -154,7 +154,7 @@
                   {{ lastCommittedReceipt.itemCount }} Sales Recorded to Inventory &amp; Ledger
                 </h3>
                 <p class="text-xs text-base-content/70">
-                  Memory Den (Booth 0EJ) &bull; Items marked as <strong class="text-success">Sold</strong>, stock updated, and co-op payouts reconciled.
+                  {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) &bull; Items marked as <strong class="text-success">Sold</strong>, stock updated, and co-op payouts reconciled.
                 </p>
               </div>
             </div>
@@ -185,9 +185,9 @@
           </div>
 
           <div class="card bg-base-100 border border-base-300 p-4 shadow-xs">
-            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">Mall Commission (15%)</div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">Venue Commission ({{ activeCanonicalLocationMeta.feePct }}%)</div>
             <div class="text-2xl font-black font-mono text-error mt-1">-${{ lastCommittedReceipt.mallFee.toFixed(2) }}</div>
-            <div class="text-[11px] text-base-content/60 mt-0.5">Retained by Memory Den</div>
+            <div class="text-[11px] text-base-content/60 mt-0.5">Retained by {{ activeCanonicalLocationMeta.shortName }}</div>
           </div>
 
           <div class="card bg-base-100 border border-base-300 p-4 shadow-xs">
@@ -214,7 +214,7 @@
                 <span>Booth Solvency &amp; Overhead Settlement</span>
               </h4>
               <p class="text-xs text-base-content/60">
-                How fixed booth rent ($382.50) was covered between members and consignors.
+                How fixed booth rent (${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }}) was covered between members and consignors.
               </p>
             </div>
             <div>
@@ -234,7 +234,7 @@
             <div class="bg-base-100 p-3.5 rounded-xl border border-base-300/70">
               <span class="text-xs text-base-content/60 block font-medium">Net Rent Absorbed by Co-op</span>
               <span class="font-mono text-lg font-black text-warning">-${{ (lastCommittedReceipt.settlementSummary.netBoothRentForCoop || 0).toFixed(2) }}</span>
-              <span class="text-[10px] opacity-60 block mt-0.5">$382.50 minus B&amp;B offset</span>
+              <span class="text-[10px] opacity-60 block mt-0.5">${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }} minus B&amp;B offset</span>
             </div>
 
             <div class="bg-base-100 p-3.5 rounded-xl border border-base-300/70">
@@ -444,7 +444,7 @@
             @click="loadDefaultPayoutFile"
           >
             <Icon icon="solar:folder-with-files-bold" class="w-4 h-4 text-primary" />
-            <span>Load Memory Den Full Payout (Multi-Month Demo)</span>
+            <span>Load {{ activeCanonicalLocationMeta.shortName }} Full Payout (Multi-Month Demo)</span>
           </button>
         </div>
       </div>
@@ -501,7 +501,7 @@
               <span class="font-bold font-mono text-lg text-base-content">${{ selectedCycleFinancials.gross.toFixed(2) }}</span>
             </div>
             <div class="bg-base-100 p-3 rounded-xl border border-base-300/50">
-              <span class="text-[11px] opacity-60 block uppercase font-medium">2. Venue Fee (15%)</span>
+              <span class="text-[11px] opacity-60 block uppercase font-medium">2. Venue Fee ({{ activeCanonicalLocationMeta.feePct }}%)</span>
               <span class="font-mono text-lg text-error font-semibold">-${{ selectedCycleFinancials.mallFee.toFixed(2) }}</span>
             </div>
             <div class="bg-base-100 p-3 rounded-xl border border-base-300/50">
@@ -796,16 +796,16 @@
             </div>
           </div>
 
-          <!-- Memory Den Mall Reconciliation Hero Banner -->
+          <!-- Venue Reconciliation Hero Banner -->
           <div class="card bg-gradient-to-br from-base-200/90 to-base-300/80 border border-base-300 shadow-md p-5">
             <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-base-content/10 pb-4 mb-4">
               <div>
                 <div class="flex items-center gap-2">
-                  <span class="badge badge-primary font-bold">Booth 0EJ</span>
-                  <h3 class="font-black text-xl text-base-content">Memory Den Statement — {{ currentCycleInfo.label }}</h3>
+                  <span class="badge badge-primary font-bold">{{ activeCanonicalLocationMeta.code }}</span>
+                  <h3 class="font-black text-xl text-base-content">{{ activeCanonicalLocationMeta.shortName }} Statement — {{ currentCycleInfo.label }}</h3>
                 </div>
                 <p class="text-xs text-base-content/70 mt-1">
-                  Reconciled against Memory Den monthly register payout statements and physical checks.
+                  Reconciled against {{ activeCanonicalLocationMeta.shortName }} monthly register payout statements and physical checks.
                 </p>
               </div>
               <div class="text-left md:text-right">
@@ -822,7 +822,7 @@
                 <span class="font-bold font-mono text-base text-base-content">${{ settlementSummary.totalGross.toFixed(2) }}</span>
               </div>
               <div class="bg-base-100/70 p-3 rounded-xl border border-base-300/50">
-                <span class="opacity-60 block">2. Mall Commission (15%):</span>
+                <span class="opacity-60 block">2. Venue Commission ({{ activeCanonicalLocationMeta.feePct }}%):</span>
                 <span class="font-mono text-base text-error">-${{ settlementSummary.totalVenueFee.toFixed(2) }}</span>
               </div>
               <div class="bg-base-100/70 p-3 rounded-xl border border-base-300/50">
@@ -1689,7 +1689,12 @@ import {
   getUnclaimedMatchCandidatesForRow,
   getPrimaryItemImageId,
 } from '../../lib/salesBucketing';
-import { warehousesApi } from '../../lib/warehouses';
+import {
+  warehousesApi,
+  resolveCanonicalLocationCode,
+  getLocationSettingMeta,
+  getAllLocationSettingMetas,
+} from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import { generateNextUpc } from '../../lib/upcAuthority';
@@ -1704,61 +1709,19 @@ const { showLoader, updateLoader, hideLoader } = useLoader();
 const isProcessing = ref(false);
 const isImporting = ref(false);
 const platform = ref('memoryden');
+const locations = ref<any[]>([]);
 
-const CANONICAL_LOCATION_CARDS = [
-  {
-    code: 'MD',
-    id: '6a7e70050009db0e1857',
-    icon: '🔮',
-    fullName: "Memory Den - Huck's Adventures Outfitters (On-Site)",
-    subtitle: 'Booth #0EJ • Ricochet POS • $382.50/mo Rent',
-    feePct: 15,
-    type: 'On-Site',
-  },
-  {
-    code: 'DT',
-    id: '6a7e71eb001f53734a86',
-    icon: '🐯',
-    fullName: 'Dusty Tiger (Consignment Booth)',
-    subtitle: 'Small Collectibles, Jewelry, Pins & Wands <8"',
-    feePct: 10,
-    type: 'Consignment Booth',
-  },
-  {
-    code: 'HG',
-    id: '6a7e6f73003a5a2a7c34',
-    icon: '🏠',
-    fullName: "Huck's Garage (Warehouse / Backstock)",
-    subtitle: 'Primary Backstock Facility • Hardgoods & Bulk',
-    feePct: 0,
-    type: 'Warehouse',
-  },
-  {
-    code: 'HH',
-    id: '6ae3afbd0030a7eb8a9c',
-    icon: '🏡',
-    fullName: "Huck's Hideout (Warehouse / Backstock)",
-    subtitle: 'Climate-Controlled Backstock • Apparel, Books & Media',
-    feePct: 0,
-    type: 'Warehouse',
-  },
-] as const;
-
-const resolveSalesCanonicalCode = (raw: string): 'MD' | 'DT' | 'HG' | 'HH' => {
-  const c = String(raw || '').trim().toUpperCase();
-  if (c === 'DT' || c.includes('DUSTY')) return 'DT';
-  if (c === 'HG' || c.includes('GARAGE')) return 'HG';
-  if (c === 'HH' || c.includes('HIDEOUT')) return 'HH';
-  return 'MD';
-};
-
-const activeLocationCode = ref<'MD' | 'DT' | 'HG' | 'HH'>(
-  props.initialLocation ? resolveSalesCanonicalCode(props.initialLocation) : 'MD'
+const activeLocationCode = ref<string>(
+  props.initialLocation ? (resolveCanonicalLocationCode(props.initialLocation) || 'MD') : 'MD'
 );
 const isLocationLocked = ref<boolean>(Boolean(props.initialLocation));
 
+const locationCards = computed(() => {
+  return getAllLocationSettingMetas(locations.value);
+});
+
 const activeCanonicalLocationMeta = computed(() => {
-  return CANONICAL_LOCATION_CARDS.find((c) => c.code === activeLocationCode.value) || CANONICAL_LOCATION_CARDS[0];
+  return getLocationSettingMeta(activeLocationCode.value, locations.value);
 });
 
 const normalizeSalesLocationUrlParam = (code: string) => {
@@ -1771,10 +1734,11 @@ const normalizeSalesLocationUrlParam = (code: string) => {
   } catch {}
 };
 
-const selectAndLockSalesLocation = (code: 'MD' | 'DT' | 'HG' | 'HH') => {
-  activeLocationCode.value = code;
+const selectAndLockSalesLocation = (code: string) => {
+  const resolved = resolveCanonicalLocationCode(code, locations.value) || 'MD';
+  activeLocationCode.value = resolved;
   isLocationLocked.value = true;
-  normalizeSalesLocationUrlParam(code);
+  normalizeSalesLocationUrlParam(resolved);
 };
 const activeView = ref('matching'); // 'matching' | 'settlement'
 const filterTab = ref('all'); // 'all' | 'matched' | 'unmatched'
@@ -2458,6 +2422,12 @@ const loadDefaultPayoutFile = async () => {
 };
 
 onMounted(async () => {
+  if (activeTeamId.value) {
+    try {
+      locations.value = await warehousesApi.listWarehouses(activeTeamId.value);
+    } catch {}
+  }
+
   let rawTargetLocation = String(props.initialLocation || '').trim();
   if (!rawTargetLocation && typeof window !== 'undefined') {
     const pathMatch = window.location.pathname.match(/\/sales\/import\/([^/?#]+)/i);
@@ -2475,7 +2445,7 @@ onMounted(async () => {
   }
 
   if (rawTargetLocation) {
-    const resolved = resolveSalesCanonicalCode(rawTargetLocation);
+    const resolved = resolveCanonicalLocationCode(rawTargetLocation, locations.value) || 'MD';
     activeLocationCode.value = resolved;
     isLocationLocked.value = true;
     normalizeSalesLocationUrlParam(resolved);
@@ -2846,7 +2816,7 @@ const downloadPartnerPdf = (partner) => {
     totalNetSurplus: partner.totalNetSurplus,
     totalCuratorProfit: partner.totalCuratorProfit,
     totalPayoutCheck: partner.totalPayoutCheck,
-    boothLocation: 'Memory Den (Booth 0EJ)',
+    boothLocation: `${activeCanonicalLocationMeta.value.shortName} (${activeCanonicalLocationMeta.value.code})`,
     rentDeduction: partner.isConsignor ? (partner.rentDeduction || 0) : undefined
   });
   const filename = `Settlement_${partner.prefix.replace(/[-_]$/, '')}_${new Date().toISOString().slice(0, 10)}.pdf`;

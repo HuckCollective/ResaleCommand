@@ -128,10 +128,10 @@ In secondhand, antique, vintage, and booth inventory:
 
 ---
 
-## 6. Multi-Venue Configuration & Software-Agnostic Payout Architecture
+## 6. Multi-Venue Configuration & Zero-Hardcoded-Locations Architecture
 
-### The Anti-Hardcoding Invariant:
-Never hardcode venue-specific file paths, hardcoded venue names, or static booth rents into API routes or backend services. Different antique malls, flea markets, and consignment locations use different POS software, charge different commissions, and deduct different booth rents.
+### Golden Rule #2 — Zero Hardcoded Locations (100% Driven by Location Settings):
+Never hardcode venue-specific file paths, location names (`"Memory Den"`, `"Dusty Tiger"`), commission fees (`15%`), static location metadata arrays (`CANONICAL_LOCATION_CARDS`, `KNOWN_CODES`), or `'md_'` manifest document IDs (`'md_verify_report_latest'`) into UI components or API routes. Every Sync, Sales, and Inventory component MUST read dynamically from central Location Settings in `src/lib/warehouses.ts` (`getAllLocationSettingMetas`, `getLocationSettingMeta`, `resolveCanonicalLocationCode`, `getLocationManifestDocIds`, `KNOWN_FACILITY_CODES`) merged with live `resale_db.warehouses` documents (enforced in `scripts/validate-templates.mjs`).
 
 ### The Configurable Venue Entity (`warehouses` Collection):
 All venue-specific ingestion and settlement logic must be driven dynamically by the venue's record in the `warehouses` collection:

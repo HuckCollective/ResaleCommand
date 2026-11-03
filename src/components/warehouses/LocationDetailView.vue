@@ -27,7 +27,7 @@
 
         <a 
           v-if="warehouse" 
-          :href="'/warehouse/sync/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+          :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
@@ -36,7 +36,7 @@
 
         <a 
           v-if="warehouse" 
-          :href="'/sales/import/' + encodeURIComponent(warehouse.code || (warehouse.name?.toLowerCase().includes('memory') ? 'MD' : warehouse.name?.toLowerCase().includes('dusty') ? 'DT' : warehouse.name?.toLowerCase().includes('garage') ? 'HG' : warehouse.name?.toLowerCase().includes('hideout') ? 'HH' : 'MD'))" 
+          :href="'/sales/import/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
           class="btn btn-sm btn-outline btn-success gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:import-bold-duotone" class="w-4 h-4" />
@@ -1169,7 +1169,7 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, type WarehouseDocument, matchesLocationFilter } from '../../lib/warehouses';
+import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode } from '../../lib/warehouses';
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';

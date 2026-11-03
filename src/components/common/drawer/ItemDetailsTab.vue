@@ -1137,12 +1137,12 @@
             <select
               v-model="selectedFacility"
               class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100">
-              <option value="HG">🏠 Huck's Garage (HG)</option>
-              <option value="HH">🏡 Huck's Hideout (HH)</option>
-              <option value="MD">
-                🔮 Memory Den - Huck's Adventures Outfitters (MD)
+              <option
+                v-for="fac in facilityOptions"
+                :key="fac.code"
+                :value="fac.code">
+                {{ fac.icon }} {{ fac.name }} ({{ fac.code }})
               </option>
-              <option value="DT">🐯 Dusty Tiger (DT)</option>
               <option value="__custom__">Custom / Other Location...</option>
             </select>
           </div>
@@ -1819,6 +1819,7 @@ import {
 import { deriveLotExitPlaybook } from '../../../lib/lot-strategy';
 import { isItemAcquired } from '../../../lib/inventory';
 import { resolveMultiQtyCost } from '../../../composables/useItemDrawerForm';
+import { KNOWN_FACILITY_CODES, getAllLocationSettingMetas } from '../../../lib/warehouses';
 
 const props = defineProps({
     editForm: {
@@ -1950,7 +1951,7 @@ const emit = defineEmits([
     'open-restock'
 ]);
 
-const KNOWN_CODES = ['HG', 'HH', 'MD', 'DT'];
+const facilityOptions = computed(() => getAllLocationSettingMetas());
 
 const isSold = computed(() => {
     return (props.editForm?.status || props.item?.status) === 'sold';
@@ -2183,7 +2184,7 @@ const syncFromStorageLocation = (loc) => {
         facilityBin.value = '';
         customFacilityText.value = '';
     } else {
-        const matchedCode = KNOWN_CODES.find(code => raw === code || raw.startsWith(`${code}-`));
+        const matchedCode = KNOWN_FACILITY_CODES.find(code => raw === code || raw.startsWith(`${code}-`));
         if (matchedCode) {
             selectedFacility.value = matchedCode;
             facilityBin.value = raw === matchedCode ? '' : raw.slice(matchedCode.length + 1).trim();

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PREVERIFIED_MD_SKU_TO_UPC_OR_ID } from '../../lib/salesBucketing';
+import { resolveCanonicalLocationCode } from '../../lib/warehouses';
 import { buildLiveMdPayloadFromAppwrite } from '../api/md-verify-report';
 
 export const prerender = false;
@@ -20,29 +21,35 @@ export const OPTIONS: APIRoute = async () => {
   return new Response(null, { status: 204, headers: CORS_NO_STORE_HEADERS });
 };
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ url }) => {
   try {
+    const locCode = (resolveCanonicalLocationCode(url.searchParams.get('location') || 'MD') || 'MD').toUpperCase();
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
 
-    // Server-inject the merged 808-item baseline (md_live_payload_latest + md_verify_report_latest + PREVERIFIED_MD_SKU_TO_UPC_OR_ID)
+    // Server-inject the merged baseline (live payload + verify report + preverified map) for the requested location
     // so the bookmarklet immediately knows all 808 In-Stock, Sold/Historical, and Partner items on load!
     let injectedBootstrap = '';
     try {
-      const livePayload = await buildLiveMdPayloadFromAppwrite();
-      const mergedMap: Record<string, string> = {
-        ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
-        ...(livePayload.skuToUpcMap || {}),
-      };
+      const livePayload = await buildLiveMdPayloadFromAppwrite(locCode);
+      const mergedMap: Record<string, string> =
+        locCode === 'MD'
+          ? {
+              ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+              ...(livePayload.skuToUpcMap || {}),
+            }
+          : { ...(livePayload.skuToUpcMap || {}) };
       const bootData = {
+        location: locCode,
         skuToUpcMap: mergedMap,
         skuToMetaMap: livePayload.skuToMetaMap || {},
         verifiedMdUpcBySku: livePayload.verifiedMdUpcBySku || {},
       };
-      injectedBootstrap = `window.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify(bootData)};\n`;
+      injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify(bootData)};\n`;
     } catch {
-      injectedBootstrap = `window.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify({
-        skuToUpcMap: PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+      injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify({
+        location: locCode,
+        skuToUpcMap: locCode === 'MD' ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID : {},
         skuToMetaMap: {},
         verifiedMdUpcBySku: {},
       })};\n`;

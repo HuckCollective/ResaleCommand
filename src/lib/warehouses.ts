@@ -79,41 +79,187 @@ export const warehousesApi = {
 };
 
 export interface FacilityDefinition {
+    id: string;
     code: string;
+    icon: string;
     name: string;
+    shortName: string;
+    fullName: string;
     displayName: string;
+    subtitle: string;
+    type: string;
+    commissionRate: number;
+    feePct: number;
+    monthlyRent: number;
+    skuPrefix: string;
+    posName: string;
     aliases: string[];
     channelName?: string;
 }
 
+export type LocationSettingMeta = FacilityDefinition;
+
 export const KNOWN_FACILITIES: FacilityDefinition[] = [
     {
-        code: 'HG',
-        name: "Huck's Garage",
-        displayName: "Huck's Garage (HG)",
-        aliases: ['hg', 'backstock', "huck's garage", 'hucks garage', 'hucksgarage'],
-    },
-    {
-        code: 'HH',
-        name: "Huck's Hideout",
-        displayName: "Huck's Hideout (HH)",
-        aliases: ['hh', 'hd', 'hideout', "huck's hideout", 'hucks hideout', 'huckshideout', "huck's house", 'hucks house'],
-    },
-    {
+        id: '6a7e70050009db0e1857',
         code: 'MD',
+        icon: '🔮',
         name: "Memory Den - Huck's Adventures Outfitters",
+        shortName: 'Memory Den',
+        fullName: "Memory Den - Huck's Adventures Outfitters",
         displayName: 'Memory Den (MD)',
-        aliases: ['md', 'memory den', 'memoryden', 'memory_den', 'hao', "huck's adventures outfitters", "memory den - huck's adventures outfitters"],
+        subtitle: "Huck's Adventures Outfitters (#0EJ)",
+        type: 'Consignment Booth',
+        commissionRate: 15,
+        feePct: 15,
+        monthlyRent: 382.5,
+        skuPrefix: '0EJ',
+        posName: 'Ricochet POS',
+        aliases: ['md', 'memory den', 'memoryden', 'memory_den', '0ej', 'hao', "huck's adventures outfitters", "memory den - huck's adventures outfitters"],
         channelName: 'Memory Den',
     },
     {
+        id: '6a7e71eb001f53734a86',
         code: 'DT',
+        icon: '🐯',
         name: 'Dusty Tiger',
+        shortName: 'Dusty Tiger',
+        fullName: 'Dusty Tiger Consignment Booth',
         displayName: 'Dusty Tiger (DT)',
+        subtitle: 'Small Collectibles, Jewelry & Wands <8"',
+        type: 'Consignment Booth',
+        commissionRate: 10,
+        feePct: 10,
+        monthlyRent: 75,
+        skuPrefix: 'DT-',
+        posName: 'Booth POS',
         aliases: ['dt', 'dusty tiger', 'dustytiger', 'dusty_tiger', 'tiger'],
         channelName: 'Dusty Tiger',
+    },
+    {
+        id: '6a7e6f73003a5a2a7c34',
+        code: 'HG',
+        icon: '🏠',
+        name: "Huck's Garage",
+        shortName: "Huck's Garage",
+        fullName: "Huck's Garage Warehouse",
+        displayName: "Huck's Garage (HG)",
+        subtitle: 'Primary Backstock & Hardgoods',
+        type: 'Warehouse / Backstock',
+        commissionRate: 0,
+        feePct: 0,
+        monthlyRent: 0,
+        skuPrefix: 'HG-',
+        posName: 'Warehouse CSV',
+        aliases: ['hg', 'backstock', "huck's garage", 'hucks garage', 'hucksgarage', 'garage'],
+    },
+    {
+        id: '6ae3afbd0030a7eb8a9c',
+        code: 'HH',
+        icon: '🏡',
+        name: "Huck's Hideout",
+        shortName: "Huck's Hideout",
+        fullName: "Huck's Hideout Backstock",
+        displayName: "Huck's Hideout (HH)",
+        subtitle: 'Climate-Controlled Backstock & Staging',
+        type: 'Warehouse / Backstock',
+        commissionRate: 0,
+        feePct: 0,
+        monthlyRent: 0,
+        skuPrefix: 'HH-',
+        posName: 'Warehouse CSV',
+        aliases: ['hh', 'hd', 'hideout', "huck's hideout", 'hucks hideout', 'huckshideout', "huck's house", 'hucks house'],
     }
 ];
+
+export const KNOWN_FACILITY_CODES: string[] = KNOWN_FACILITIES.map(f => f.code);
+
+export function resolveCanonicalLocationCode(locOrStr: any, liveWarehouses?: any[]): string {
+    if (!locOrStr) return '';
+    if (typeof locOrStr === 'string') {
+        const s = locOrStr.trim();
+        const u = s.toUpperCase();
+        const byDirect = KNOWN_FACILITIES.find(f => f.code === u || f.id === s);
+        if (byDirect) return byDirect.code;
+        if (liveWarehouses && Array.isArray(liveWarehouses)) {
+            const matchedLive = liveWarehouses.find(w => w?.$id === s || String(w?.code || '').trim().toUpperCase() === u);
+            if (matchedLive) {
+                return resolveCanonicalLocationCode(matchedLive);
+            }
+        }
+        const byFac = findFacility(s);
+        if (byFac) return byFac.code;
+        const l = s.toLowerCase();
+        if (l.includes('memory') || l.includes('0ej')) return 'MD';
+        if (l.includes('dusty') || l.includes('tiger')) return 'DT';
+        if (l.includes('garage')) return 'HG';
+        if (l.includes('hideout') || l.includes('house')) return 'HH';
+        return '';
+    }
+    const id = String(locOrStr.$id || locOrStr.id || '').trim();
+    const byId = KNOWN_FACILITIES.find(f => f.id === id);
+    if (byId) return byId.code;
+    const c = String(locOrStr.code || '').trim().toUpperCase();
+    const byCode = KNOWN_FACILITIES.find(f => f.code === c);
+    if (byCode) return byCode.code;
+    const n = String(locOrStr.name || locOrStr.displayName || '').trim();
+    const byName = findFacility(n);
+    if (byName) return byName.code;
+    return resolveCanonicalLocationCode(n);
+}
+
+export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): LocationSettingMeta {
+    const code = resolveCanonicalLocationCode(locOrStr, liveWarehouses) || 'MD';
+    const base = KNOWN_FACILITIES.find(f => f.code === code) || KNOWN_FACILITIES[0];
+    const liveDoc =
+        (typeof locOrStr === 'object' && locOrStr && (locOrStr.$id || locOrStr.name) ? locOrStr : null) ||
+        (Array.isArray(liveWarehouses)
+            ? liveWarehouses.find(w => w?.$id === base.id || resolveCanonicalLocationCode(w) === base.code)
+            : null);
+
+    if (!liveDoc) return { ...base };
+
+    const fee =
+        liveDoc.commissionRate !== undefined && liveDoc.commissionRate !== null && !isNaN(Number(liveDoc.commissionRate))
+            ? Number(liveDoc.commissionRate)
+            : base.commissionRate;
+    const rent =
+        liveDoc.monthlyRent !== undefined && liveDoc.monthlyRent !== null && !isNaN(Number(liveDoc.monthlyRent))
+            ? Number(liveDoc.monthlyRent)
+            : base.monthlyRent;
+    const liveName = String(liveDoc.name || base.name).trim();
+
+    return {
+        ...base,
+        id: String(liveDoc.$id || base.id),
+        name: liveName,
+        shortName: base.shortName || liveName,
+        fullName: liveName,
+        displayName: `${ base.shortName || liveName } (${ base.code })`,
+        type: String(liveDoc.type || base.type),
+        commissionRate: fee,
+        feePct: fee,
+        monthlyRent: rent,
+    };
+}
+
+export function getAllLocationSettingMetas(liveWarehouses?: any[]): LocationSettingMeta[] {
+    return KNOWN_FACILITIES.map(f => getLocationSettingMeta(f.code, liveWarehouses));
+}
+
+export function getLocationManifestDocIds(locOrStr: any, liveWarehouses?: any[]): {
+    code: string;
+    reportDocId: string;
+    payloadDocId: string;
+} {
+    const code = (resolveCanonicalLocationCode(locOrStr, liveWarehouses) || 'MD').toUpperCase();
+    const prefix = code.toLowerCase();
+    return {
+        code,
+        reportDocId: `${ prefix }_verify_report_latest`,
+        payloadDocId: `${ prefix }_live_payload_latest`,
+    };
+}
 
 export function findFacility(search: string): FacilityDefinition | undefined {
     if (!search) return undefined;

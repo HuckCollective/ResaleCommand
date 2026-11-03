@@ -326,8 +326,41 @@ if (fs.existsSync(scriptsDir)) {
     }
 }
 
+// =========================================================================
+// 6. VALIDATE GOLDEN RULE #2: ZERO HARDCODED LOCATIONS IN UI COMPONENTS
+// =========================================================================
+const locationDrivenFiles = [
+    'src/components/warehouses/LocationSyncView.vue',
+    'src/components/sales/SalesImporter.vue',
+    'src/components/common/drawer/ItemDetailsTab.vue',
+    'src/components/inventory/InventorySpatialBar.vue',
+];
+
+const forbiddenHardcodedLocationPatterns = [
+    { pattern: /CANONICAL_LOCATION_CARDS\s*=\s*\[/, reason: 'Do not define static CANONICAL_LOCATION_CARDS in components; use getAllLocationSettingMetas() from src/lib/warehouses.ts' },
+    { pattern: /KNOWN_CODES\s*=\s*\[/, reason: 'Do not define static KNOWN_CODES in components; use KNOWN_FACILITY_CODES from src/lib/warehouses.ts' },
+    { pattern: /['"]md_verify_report_latest['"]/, reason: 'Do not hardcode "md_verify_report_latest" in components; use getLocationManifestDocIds(code).reportDocId from src/lib/warehouses.ts' },
+    { pattern: /['"]md_live_payload_latest['"]/, reason: 'Do not hardcode "md_live_payload_latest" in components; use getLocationManifestDocIds(code).payloadDocId from src/lib/warehouses.ts' },
+    { pattern: /Memory Den Barcode Verification Report/, reason: 'Use dynamic {{ activeCanonicalLocationMeta.shortName }} Barcode Verification Report instead of hardcoded "Memory Den"' },
+    { pattern: /Load Memory Den Full Payout/, reason: 'Use dynamic {{ activeCanonicalLocationMeta.shortName }} instead of hardcoded "Load Memory Den Full Payout"' },
+];
+
+for (const relPath of locationDrivenFiles) {
+    const fullPath = path.resolve(relPath);
+    if (!fs.existsSync(fullPath)) continue;
+    const fileContent = fs.readFileSync(fullPath, 'utf8');
+    for (const check of forbiddenHardcodedLocationPatterns) {
+        const match = check.pattern.exec(fileContent);
+        if (match) {
+            const line = fileContent.slice(0, match.index).split('\n').length;
+            console.error(`❌ Golden Rule #2 (Zero Hardcoded Locations) Violation in ${relPath}:${line}: ${check.reason}`);
+            hasErrors = true;
+        }
+    }
+}
+
 if (!hasErrors) {
-    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, and price-parsing invariants passed with ZERO errors!`);
+    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
 } else {
     process.exit(1);
 }

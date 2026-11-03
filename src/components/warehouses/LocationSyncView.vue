@@ -15,7 +15,7 @@
           Location Inventory & Sales Sync
         </h1>
         <p class="text-xs opacity-70 mt-1">
-          Upload products or payout reports from Memory Den / external booths to reconcile sales, link SKUs, and inject UPCs.
+          Upload products or payout reports from {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) to reconcile sales, link SKUs, and inject UPCs.
         </p>
       </div>
 
@@ -112,7 +112,7 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button
-          v-for="card in CANONICAL_LOCATION_CARDS"
+          v-for="card in locationCards"
           :key="card.code"
           type="button"
           class="card bg-base-200/60 hover:bg-primary/10 border-2 transition-all p-4 rounded-2xl text-left cursor-pointer flex flex-col justify-between gap-3"
@@ -286,7 +286,7 @@
       </div>
     </div>
 
-    <!-- Live Memory Den Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
+    <!-- Live Location Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
     <div
       v-if="mdVerifyReport"
       class="card bg-base-100 border border-success/30 shadow-sm p-4 space-y-3"
@@ -299,7 +299,7 @@
           <div>
             <div class="flex items-center gap-2 flex-wrap">
               <h3 class="font-black text-sm text-base-content">
-                Memory Den Barcode Verification Report
+                {{ activeCanonicalLocationMeta.shortName }} Barcode Verification Report
               </h3>
               <span class="badge badge-xs badge-success text-success-content font-mono font-bold">
                 {{ mdVerifyReport.summary.totalCatalog }} Booth Items Audited
@@ -351,9 +351,9 @@
           class="p-2.5 rounded-xl bg-success/10 hover:bg-success/20 border border-success/30 flex items-center justify-between text-left transition-all cursor-pointer"
           :class="verifyStatusFilter === 'VERIFIED_MATCH' ? 'ring-2 ring-success ring-offset-1 bg-success/20' : ''"
           @click="applyVerificationPillFilter('VERIFIED_MATCH')"
-          title="Click to filter table to Verified items in Memory Den"
+          :title="'Click to filter table to Verified items in ' + activeCanonicalLocationMeta.shortName"
         >
-          <span class="text-xs font-bold text-success">🟢 Verified in MD</span>
+          <span class="text-xs font-bold text-success">🟢 Verified in {{ activeCanonicalLocationMeta.code }}</span>
           <span class="font-mono font-black text-sm text-success">{{ mdVerifyReport.summary.verifiedMatch }}</span>
         </button>
 
@@ -362,9 +362,9 @@
           class="p-2.5 rounded-xl bg-warning/10 hover:bg-warning/20 border border-warning/30 flex items-center justify-between text-left transition-all cursor-pointer"
           :class="verifyStatusFilter === 'MISSING_IN_MD' ? 'ring-2 ring-warning ring-offset-1 bg-warning/20' : ''"
           @click="applyVerificationPillFilter('MISSING_IN_MD')"
-          title="Click to inspect the items still missing a UPC in Memory Den"
+          :title="'Click to inspect the items still missing a UPC in ' + activeCanonicalLocationMeta.shortName"
         >
-          <span class="text-xs font-bold text-warning">🟡 Missing UPC in MD</span>
+          <span class="text-xs font-bold text-warning">🟡 Missing UPC in {{ activeCanonicalLocationMeta.code }}</span>
           <span class="font-mono font-black text-sm text-warning">{{ mdVerifyReport.summary.missingInMd }}</span>
         </button>
 
@@ -373,7 +373,7 @@
           class="p-2.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 flex items-center justify-between text-left transition-all cursor-pointer"
           :class="verifyStatusFilter === 'MISMATCH_UPC' ? 'ring-2 ring-orange-500 ring-offset-1 bg-orange-500/20' : ''"
           @click="applyVerificationPillFilter('MISMATCH_UPC')"
-          title="Click to inspect items whose Memory Den UPC differs from Resale Command"
+          :title="'Click to inspect items whose ' + activeCanonicalLocationMeta.shortName + ' UPC differs from Resale Command'"
         >
           <span class="text-xs font-bold text-orange-500">🟠 Mismatched UPC</span>
           <span class="font-mono font-black text-sm text-orange-500">{{ mdVerifyReport.summary.mismatchUpc }}</span>
@@ -384,24 +384,24 @@
           class="p-2.5 rounded-xl bg-base-200/70 hover:bg-base-300/70 border border-base-300 flex items-center justify-between text-left transition-all cursor-pointer"
           :class="verifyStatusFilter === 'UNLINKED_IN_RC' ? 'ring-2 ring-primary ring-offset-1 bg-primary/10' : ''"
           @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
-          title="Click to load & match unlinked Memory Den items (shows In-Stock first)"
+          :title="'Click to load & match unlinked ' + activeCanonicalLocationMeta.shortName + ' items (shows In-Stock first)'"
         >
           <span class="text-xs font-bold opacity-80">⚪ Unlinked in RC</span>
           <span class="font-mono font-black text-sm text-base-content">{{ mdVerifyReport.summary.unlinkedInRc }}</span>
         </button>
       </div>
 
-      <!-- Diagnostic Banner When Viewing "🟡 Missing UPC in MD" -->
+      <!-- Diagnostic Banner When Viewing "🟡 Missing UPC" -->
       <div
         v-if="verifyStatusFilter === 'MISSING_IN_MD'"
         class="p-3 rounded-xl bg-warning/15 border border-warning/40 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
       >
         <div class="space-y-0.5">
           <div class="font-black text-warning-content flex items-center gap-1.5">
-            <span>🔎 Why these {{ displayedRows.length }} item(s) didn't accept their UPC in Memory Den:</span>
+            <span>🔎 Why these {{ displayedRows.length }} item(s) didn't accept their UPC in {{ activeCanonicalLocationMeta.shortName }}:</span>
           </div>
           <p class="opacity-85 leading-relaxed">
-            Memory Den's POS rejects a barcode if that exact <code>HUCK-XXXX</code> is <strong>already used on another <code>0EJ...</code> SKU</strong> (for example, two separate booth tags linked to the same DB item). Click <strong>🔧 Assign Unique Barcode</strong> on any row below to give it its own unique <code>HUCK-</code> barcode, then re-run the Bookmarklet!
+            {{ activeCanonicalLocationMeta.shortName }}'s POS rejects a barcode if that exact <code>HUCK-XXXX</code> is <strong>already used on another <code>{{ activeCanonicalLocationMeta.skuPrefix }}...</code> SKU</strong> (for example, two separate booth tags linked to the same DB item). Click <strong>🔧 Assign Unique Barcode</strong> on any row below to give it its own unique <code>HUCK-</code> barcode, then re-run the Bookmarklet!
           </p>
         </div>
         <button
@@ -560,7 +560,7 @@
               Found {{ detectedRentDeductions.length }} Space Rental Deductions (${{ totalRentDetected.toFixed(2) }} total)
             </div>
             <div class="text-[11px] opacity-75">
-              Memory Den deducted booth rent from these payouts. These are 100% tax-deductible operating expenses (Schedule C Line 20b).
+              {{ activeCanonicalLocationMeta.shortName }} deducted booth rent from these payouts. These are 100% tax-deductible operating expenses (Schedule C Line 20b).
             </div>
           </div>
         </div>
@@ -1006,16 +1006,16 @@
                           {{ row.mappedItem.status || 'received' }} @ {{ row.mappedItem.storageLocation || 'HG' }}
                         </span>
                         <span v-if="row.isSavedToMd" class="badge badge-xs badge-success text-success-content font-black gap-0.5 whitespace-nowrap shrink-0">
-                          ✓ Saved to MD
+                          ✓ Saved to {{ activeCanonicalLocationMeta.code }}
                         </span>
                         <span v-if="row.uniqueBarcodeAssigned" class="badge badge-xs badge-success text-success-content font-black gap-0.5 whitespace-nowrap shrink-0">
-                          ✅ Unique Barcode Assigned (Push in MD Widget)
+                          ✅ Unique Barcode Assigned (Push in {{ activeCanonicalLocationMeta.code }} Widget)
                         </span>
-                        <span v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" title="Missing UPC in Memory Den — click Assign Unique Barcode if this barcode is shared with another 0EJ SKU">
-                          🟡 Missing UPC in MD
+                        <span v-else-if="row.verifyStatus === 'MISSING_IN_MD'" class="badge badge-xs badge-warning text-warning-content font-black gap-0.5 whitespace-nowrap shrink-0" :title="'Missing UPC in ' + activeCanonicalLocationMeta.shortName + ' — click Assign Unique Barcode if this barcode is shared with another SKU'">
+                          🟡 Missing UPC in {{ activeCanonicalLocationMeta.code }}
                         </span>
                         <span v-else-if="row.verifyStatus === 'MISMATCH_UPC'" class="badge badge-xs bg-orange-500 text-white font-black gap-0.5 whitespace-nowrap shrink-0" title="Ricochet already has a physical barcode attached to this item — never overwritten by Fill Missing">
-                          🟠 Physical Tag Mismatch (MD: {{ row.extractedUpc }})
+                          🟠 Physical Tag Mismatch ({{ activeCanonicalLocationMeta.code }}: {{ row.extractedUpc }})
                         </span>
                         <span v-if="row.aiMatched" class="badge badge-xs bg-purple-600 text-white font-black gap-0.5 whitespace-nowrap shrink-0" :title="row.aiReason || 'Matched by Gemini AI'">
                           ✨ AI
@@ -1026,7 +1026,7 @@
                       </div>
                       <div v-if="row.uniqueBarcodeAssigned" class="pt-1 flex items-center gap-2 flex-wrap">
                         <span class="badge badge-sm badge-success text-success-content font-bold gap-1 py-2.5 px-2.5 shadow-2xs">
-                          ✅ Unique Barcode Assigned ({{ row.mappedItem.upc || row.extractedUpc }}) — Push in MD Widget
+                          ✅ Unique Barcode Assigned ({{ row.mappedItem.upc || row.extractedUpc }}) — Push in {{ activeCanonicalLocationMeta.code }} Widget
                         </span>
                       </div>
                       <div v-else-if="row.verifyStatus === 'MISMATCH_UPC' && row.extractedUpc" class="pt-1 flex items-center gap-2 flex-wrap">
@@ -1486,7 +1486,7 @@
                   <span class="font-semibold">{{ activeMatchRow.mappedItem.title }}</span>
                 </div>
                 <div v-else class="text-[11px] opacity-65">
-                  Select a candidate below to link &amp; save to Memory Den (<code>MD</code>), or create a new item:
+                  Select a candidate below to link &amp; save to {{ activeCanonicalLocationMeta.shortName }} (<code>{{ activeCanonicalLocationMeta.code }}</code>), or create a new item:
                 </div>
                 <button
                   type="button"
@@ -1544,7 +1544,7 @@
                   :class="matchDrawerFilter === 'backstock' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-100 border border-base-300'"
                   @click="matchDrawerFilter = 'backstock'"
                 >
-                  📦 Backstock (HG / HH / HD)
+                  📦 Backstock (HG / HH)
                 </button>
                 <button
                   type="button"
@@ -1566,7 +1566,7 @@
                 {{ matchDrawerSearch ? `No unclaimed items matched "${matchDrawerSearch}"` : 'No close unclaimed matches suggested automatically' }}
               </div>
               <p class="text-xs opacity-65 max-w-md mx-auto">
-                Items already assigned to a different <code>0EJ</code> Memory Den SKU or claimed by another CSV row are automatically ruled out. Try typing a keyword above, switching to <strong>📋 All Unclaimed</strong>, or click <strong>+ Add as New Item ({{ getRowPreviewUpc(activeMatchRow) }})</strong>.
+                Items already assigned to a different <code>{{ activeCanonicalLocationMeta.skuPrefix }}</code> {{ activeCanonicalLocationMeta.shortName }} SKU or claimed by another CSV row are automatically ruled out. Try typing a keyword above, switching to <strong>📋 All Unclaimed</strong>, or click <strong>+ Add as New Item ({{ getRowPreviewUpc(activeMatchRow) }})</strong>.
               </p>
               <div class="flex justify-center gap-2 pt-1">
                 <button
@@ -1669,7 +1669,7 @@
                   </div>
                 </div>
 
-                <!-- Right: 1-Click Link & Save to MD OR Split from Lot & Link to MD -->
+                <!-- Right: 1-Click Link & Save OR Split from Lot & Link -->
                 <div class="flex sm:flex-col items-center sm:items-end justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-base-200">
                   <button
                     v-if="cand.isParentLot"
@@ -1679,7 +1679,7 @@
                     @click="splitLotPieceAndLinkToMd(activeMatchRow, cand.item, cand.estimatedLotCount, true)"
                   >
                     <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
-                    <span v-else>✂️ Split from Lot &amp; Link to MD</span>
+                    <span v-else>✂️ Split from Lot &amp; Link to {{ activeCanonicalLocationMeta.code }}</span>
                   </button>
                   <button
                     type="button"
@@ -1689,7 +1689,7 @@
                     @click="linkAndSaveCandidateToMd(cand.item)"
                   >
                     <span v-if="isSavingDrawerLink === cand.item.$id" class="loading loading-spinner loading-xs"></span>
-                    <span v-else>🔗 {{ cand.isParentLot ? 'Link Whole Lot' : 'Link & Save to MD' }}</span>
+                    <span v-else>🔗 {{ cand.isParentLot ? 'Link Whole Lot' : 'Link & Save to ' + activeCanonicalLocationMeta.code }}</span>
                   </button>
                 </div>
               </div>
@@ -1778,14 +1778,14 @@
               <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 class="font-black text-base sm:text-lg leading-tight">
-                    Fill In Missing HUCK- Barcodes Inside Memory Den
+                    Fill In Missing HUCK- Barcodes Inside {{ activeCanonicalLocationMeta.shortName }}
                   </h3>
                   <span class="badge badge-sm badge-success text-success-content font-mono font-black whitespace-nowrap shrink-0">
                     {{ ricochetSyncableItems.length }} Items Ready
                   </span>
                 </div>
                 <p class="text-xs opacity-70 mt-0.5">
-                  Automatically copies your <code>HUCK-</code>, <code>PDXGL-</code>, and <code>BB-</code> barcodes onto your <code>0EJ...</code> items on <code>memoryden.ricoconsign.com</code>
+                  Automatically copies your <code>HUCK-</code>, <code>PDXGL-</code>, and <code>BB-</code> barcodes onto your <code>{{ activeCanonicalLocationMeta.skuPrefix }}...</code> items on <code>memoryden.ricoconsign.com</code>
                 </p>
               </div>
             </div>
@@ -1797,7 +1797,7 @@
             <!-- 1. Plain-English Top Banner ("Why & What This Does") -->
             <div class="p-4 rounded-2xl bg-primary/10 border border-primary/25 text-xs sm:text-sm leading-relaxed text-base-content shadow-2xs">
               <p class="font-medium">
-                <strong>Why this exists:</strong> Memory Den's website doesn't let you re-upload a CSV to add barcodes to existing items. Instead of typing <strong>{{ ricochetSyncableItems.length }}</strong> <code>HUCK-</code> barcodes one by one on <code>memoryden.ricoconsign.com</code>, pick <strong>Method A</strong> or <strong>Method B</strong> below to fill them in automatically while you're logged into Memory Den.
+                <strong>Why this exists:</strong> {{ activeCanonicalLocationMeta.shortName }}'s website doesn't let you re-upload a CSV to add barcodes to existing items. Instead of typing <strong>{{ ricochetSyncableItems.length }}</strong> <code>HUCK-</code> barcodes one by one on <code>memoryden.ricoconsign.com</code>, pick <strong>Method A</strong> or <strong>Method B</strong> below to fill them in automatically while you're logged into {{ activeCanonicalLocationMeta.shortName }}.
               </p>
             </div>
 
@@ -1828,7 +1828,7 @@
                         title="Drag me once to your Chrome Bookmarks Bar — auto-updates live from Resale Command!"
                         @click.prevent="copyBookmarkletCode"
                       >
-                        <span>⚡ Memory Den Sync</span>
+                        <span>⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span>
                       </a>
                     </div>
                     <div>
@@ -1846,7 +1846,7 @@
                   <div class="text-xs space-y-2 bg-base-100 p-3.5 rounded-xl border border-base-300">
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-                      <span>Drag the yellow <strong>⚡ Memory Den Sync</strong> button above up to your Chrome Bookmarks Bar once (you never need to re-drag it when new items are added!).</span>
+                      <span>Drag the yellow <strong>⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</strong> button above up to your Chrome Bookmarks Bar once (you never need to re-drag it when new items are added!).</span>
                     </div>
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
@@ -1854,7 +1854,7 @@
                     </div>
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-warning/20 text-warning-content font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-                      <span>Click <strong>⚡ Memory Den Sync</strong> on your Bookmarks Bar — it automatically fetches all <strong>{{ ricochetSyncableItems.length }}</strong> live barcodes from Resale Command and lets you filter by <strong>⭐ HUCK</strong>, <strong>🎲 PDXGL</strong>, or <strong>💛 B&amp;B</strong>!</span>
+                      <span>Click <strong>⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</strong> on your Bookmarks Bar — it automatically fetches all <strong>{{ ricochetSyncableItems.length }}</strong> live barcodes from Resale Command and lets you filter by <strong>⭐ HUCK</strong>, <strong>🎲 PDXGL</strong>, or <strong>💛 B&amp;B</strong>!</span>
                     </div>
                   </div>
                 </div>
@@ -1889,7 +1889,7 @@
                     </div>
                     <div class="flex items-start gap-2">
                       <span class="w-5 h-5 rounded-full bg-success/20 text-success font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">4</span>
-                      <span>Watch the live progress counter update your Memory Den UPC barcodes automatically!</span>
+                      <span>Watch the live progress counter update your {{ activeCanonicalLocationMeta.shortName }} UPC barcodes automatically!</span>
                     </div>
                   </div>
                 </div>
@@ -1901,7 +1901,7 @@
                     class="btn btn-sm sm:btn-md btn-outline border-success/60 hover:bg-success/10 text-base-content font-bold gap-1.5 w-full justify-center"
                     :disabled="ricochetSyncableItems.length === 0"
                     @click="copyPreloadedConsoleScript('single')"
-                    title="Safely test 1 single item first on your live Memory Den store"
+                    :title="'Safely test 1 single item first on your live ' + activeCanonicalLocationMeta.shortName + ' store'"
                   >
                     <span>🧪 Test 1 Item First ({{ firstTestSyncItem ? `${firstTestSyncItem.sku} → ${firstTestSyncItem.upc}` : '1 Item' }})</span>
                   </button>
@@ -1924,14 +1924,14 @@
                   <span class="text-base leading-none">📊</span>
                   <div>
                     <h4 class="font-black text-xs sm:text-sm text-base-content">
-                      Memory Den Barcode Verification Scorecard
+                      {{ activeCanonicalLocationMeta.shortName }} Barcode Verification Scorecard
                     </h4>
                     <p class="text-[11px] opacity-70">
                       <span v-if="mdVerifyReport">
-                        Last verified {{ formatDate(mdVerifyReport.timestamp) }} • {{ mdVerifyReport.summary.totalCatalog }} live Memory Den items audited
+                        Last verified {{ formatDate(mdVerifyReport.timestamp) }} • {{ mdVerifyReport.summary.totalCatalog }} live {{ activeCanonicalLocationMeta.shortName }} items audited
                       </span>
                       <span v-else>
-                        Click <strong>📡 Send Report to RC</strong> or <strong>📥 Download CSV</strong> inside the Memory Den widget to verify all ~808 booth items.
+                        Click <strong>📡 Send Report to RC</strong> or <strong>📥 Download CSV</strong> inside the {{ activeCanonicalLocationMeta.shortName }} widget to verify all ~808 booth items.
                       </span>
                     </p>
                   </div>
@@ -1962,7 +1962,7 @@
                   @click="applyVerificationPillFilter('VERIFIED_MATCH')"
                 >
                   <div class="text-[11px] font-bold text-success flex items-center gap-1">
-                    <span>🟢 Verified in MD</span>
+                    <span>🟢 Verified in {{ activeCanonicalLocationMeta.code }}</span>
                   </div>
                   <div class="text-lg font-black font-mono text-success mt-0.5">
                     {{ mdVerifyReport.summary.verifiedMatch }}
@@ -1976,7 +1976,7 @@
                   @click="applyVerificationPillFilter('MISSING_IN_MD')"
                 >
                   <div class="text-[11px] font-bold text-warning flex items-center gap-1">
-                    <span>🟡 Missing UPC in MD</span>
+                    <span>🟡 Missing UPC in {{ activeCanonicalLocationMeta.code }}</span>
                   </div>
                   <div class="text-lg font-black font-mono text-warning mt-0.5">
                     {{ mdVerifyReport.summary.missingInMd }}
@@ -2016,7 +2016,7 @@
               <!-- 1-Click Action to Load Unlinked Items into Slide-Over Match Drawer Table -->
               <div v-if="mdVerifyReport && (mdVerifyReport.summary.unlinkedInRc > 0 || mdVerifyReport.rows?.length > 0)" class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-300/70">
                 <span class="text-[11px] opacity-75">
-                  Want to link the <strong>{{ mdVerifyReport.summary.unlinkedInRc }}</strong> unlinked Memory Den items in the Slide-Over Match Drawer?
+                  Want to link the <strong>{{ mdVerifyReport.summary.unlinkedInRc }}</strong> unlinked {{ activeCanonicalLocationMeta.shortName }} items in the Slide-Over Match Drawer?
                 </span>
                 <div class="flex items-center gap-2 flex-wrap">
                   <button
@@ -2088,7 +2088,13 @@ import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
-import { warehousesApi } from '../../lib/warehouses';
+import {
+  warehousesApi,
+  resolveCanonicalLocationCode,
+  getLocationSettingMeta,
+  getAllLocationSettingMetas,
+  getLocationManifestDocIds,
+} from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
 import { client, databases, ID } from '../../lib/appwrite';
 import {
@@ -2188,44 +2194,6 @@ const locations = ref<any[]>([]);
 const selectedLocationId = ref<string>('');
 const isLocationLocked = ref<boolean>(Boolean(props.initialLocation));
 
-const CANONICAL_LOCATION_CARDS = [
-  {
-    code: 'MD',
-    id: '6a7e70050009db0e1857',
-    icon: '🔮',
-    fullName: "Memory Den - Huck's Adventures Outfitters (On-Site)",
-    subtitle: 'Booth #0EJ • Ricochet POS • $382.50/mo Rent',
-    feePct: 15,
-    type: 'On-Site',
-  },
-  {
-    code: 'DT',
-    id: '6a7e71eb001f53734a86',
-    icon: '🐯',
-    fullName: 'Dusty Tiger (Consignment Booth)',
-    subtitle: 'Small Collectibles, Jewelry, Pins & Wands <8"',
-    feePct: 10,
-    type: 'Consignment Booth',
-  },
-  {
-    code: 'HG',
-    id: '6a7e6f73003a5a2a7c34',
-    icon: '🏠',
-    fullName: "Huck's Garage (Warehouse / Backstock)",
-    subtitle: 'Primary Backstock Facility • Hardgoods & Bulk',
-    feePct: 0,
-    type: 'Warehouse',
-  },
-  {
-    code: 'HH',
-    id: '6ae3afbd0030a7eb8a9c',
-    icon: '🏡',
-    fullName: "Huck's Hideout (Warehouse / Backstock)",
-    subtitle: 'Climate-Controlled Backstock • Apparel, Books & Media',
-    feePct: 0,
-    type: 'Warehouse',
-  },
-] as const;
 const syncRows = ref<any[]>([]);
 // Ricochet Product Catalog export (Products-*.csv): items-only sync, NEVER creates sales
 const isCatalogExport = ref(false);
@@ -2378,65 +2346,28 @@ const totalRentDetected = computed(() => {
   return (detectedRentDeductions.value || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 });
 
-function resolveCanonicalLocationCode(locOrStr: any): string {
-  if (!locOrStr) return '';
-  const idStr = typeof locOrStr === 'object' ? String(locOrStr.$id || '') : String(locOrStr);
-  const codeStr = typeof locOrStr === 'object' ? String(locOrStr.code || '') : '';
-  const nameStr = typeof locOrStr === 'object' ? String(locOrStr.name || '') : String(locOrStr);
-  const combined = `${idStr} ${codeStr} ${nameStr}`.toLowerCase();
-
-  if (
-    idStr === MD_CANONICAL_WAREHOUSE_ID ||
-    codeStr.toUpperCase() === 'MD' ||
-    nameStr.trim().toUpperCase() === 'MD' ||
-    combined.includes('memory den') ||
-    combined.includes('memoryden') ||
-    combined.includes('adventures outfitters') ||
-    combined.includes('0ej')
-  ) {
-    return 'MD';
-  }
-  if (
-    idStr === '6a7e71eb001f53734a86' ||
-    codeStr.toUpperCase() === 'DT' ||
-    nameStr.trim().toUpperCase() === 'DT' ||
-    combined.includes('dusty tiger') ||
-    combined.includes('dustytiger')
-  ) {
-    return 'DT';
-  }
-  if (
-    idStr === '6a7e6f73003a5a2a7c34' ||
-    codeStr.toUpperCase() === 'HG' ||
-    nameStr.trim().toUpperCase() === 'HG' ||
-    combined.includes('garage')
-  ) {
-    return 'HG';
-  }
-  if (
-    idStr === '6ae3afbd0030a7eb8a9c' ||
-    codeStr.toUpperCase() === 'HH' ||
-    nameStr.trim().toUpperCase() === 'HH' ||
-    combined.includes('hideout')
-  ) {
-    return 'HH';
-  }
-  return codeStr.toUpperCase() || nameStr.trim();
-}
+const locationCards = computed(() => {
+  return getAllLocationSettingMetas(locations.value);
+});
 
 const currentLocation = computed(() => {
   return (locations.value || []).find((l) => l.$id === selectedLocationId.value) || null;
 });
 
 const activeLocationCode = computed(() => {
-  const code = resolveCanonicalLocationCode(currentLocation.value || selectedLocationId.value || props.initialLocation);
-  if (code === 'MD' || code === 'DT' || code === 'HG' || code === 'HH') return code;
-  return 'MD';
+  const code = resolveCanonicalLocationCode(
+    currentLocation.value || selectedLocationId.value || props.initialLocation,
+    locations.value
+  );
+  return code || 'MD';
 });
 
 const activeCanonicalLocationMeta = computed(() => {
-  const code = activeLocationCode.value;
-  return CANONICAL_LOCATION_CARDS.find((c) => c.code === code) || CANONICAL_LOCATION_CARDS[0];
+  return getLocationSettingMeta(currentLocation.value || activeLocationCode.value, locations.value);
+});
+
+const activeLocationManifestIds = computed(() => {
+  return getLocationManifestDocIds(activeLocationCode.value, locations.value);
 });
 
 const locationHistory = computed(() => {
@@ -2788,13 +2719,14 @@ const ricochetSkuMetaMap = computed(() => {
 
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
-// Permanent Live-Loader Bookmarklet (`⚡ Memory Den Sync`) — Loads /scripts/rico-bookmarklet.js?t= with CORS + no-store!
+// Permanent Live-Loader Bookmarklet (`⚡ Sync`) — Loads /scripts/rico-bookmarklet.js?location=...&t= with CORS + no-store!
 const bookmarkletHref = computed(() => {
   const origin =
     typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
       ? window.location.origin
       : 'https://resalecmd.com';
-  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/scripts/rico-bookmarklet.js?t='+Date.now();document.body.appendChild(s);})();`;
+  const locCode = encodeURIComponent(activeLocationCode.value || 'MD');
+  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();document.body.appendChild(s);})();`;
 });
 
 // =========================================================================
@@ -2804,11 +2736,12 @@ const syncLivePayloadToCloudEndpoint = async () => {
   const map = ricochetBarcodePayloadMap.value;
   if (!map || Object.keys(map).length === 0) return;
   try {
-    await fetch('/api/md-verify-report', {
+    await fetch(`/api/md-verify-report?location=${encodeURIComponent(activeLocationCode.value)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'payload',
+        location: activeLocationCode.value,
         skuToUpcMap: map,
         skuToMetaMap: ricochetSkuMetaMap.value,
       }),
@@ -2822,8 +2755,10 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
   isCheckingVerifyReport.value = true;
   try {
     let loadedReport: any = null;
+    const locCode = activeLocationCode.value || 'MD';
+    const reportDocId = activeLocationManifestIds.value.reportDocId;
     try {
-      const res = await fetch(`/api/md-verify-report?t=${Date.now()}`);
+      const res = await fetch(`/api/md-verify-report?location=${encodeURIComponent(locCode)}&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data?.hasReport && data?.report) {
@@ -2835,7 +2770,7 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
     // Direct Appwrite fallback in case serverless memory is cold
     if (!loadedReport) {
       try {
-        const doc: any = await databases.getDocument(DB_ID, 'manifests', 'md_verify_report_latest');
+        const doc: any = await databases.getDocument(DB_ID, 'manifests', reportDocId);
         const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
         if (rawSnap) {
           const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
@@ -2852,13 +2787,13 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
       if (showManualToast || isNewer) {
         addToast({
           type: 'success',
-          message: `📊 Loaded Memory Den Verification Report: ${loadedReport.summary.verifiedMatch} Verified, ${loadedReport.summary.missingInMd} Missing, ${loadedReport.summary.unlinkedInRc} Unlinked!`,
+          message: `📊 Loaded ${activeCanonicalLocationMeta.value.shortName} Verification Report: ${loadedReport.summary.verifiedMatch} Verified, ${loadedReport.summary.missingInMd} Missing, ${loadedReport.summary.unlinkedInRc} Unlinked!`,
         });
       }
     } else if (showManualToast) {
       addToast({
         type: 'info',
-        message: 'No live report received yet. Click "📡 Send Report to RC" or "📥 Download CSV" inside the Memory Den widget!',
+        message: `No live report received for ${activeCanonicalLocationMeta.value.shortName} yet. Click "📡 Send Report to RC" or "📥 Download CSV" inside the sync widget!`,
       });
     }
   } catch (e) {
@@ -3173,11 +3108,12 @@ const adoptBoothTagForRow = async (row: any) => {
       row.mappedItem.storageLocation = 'MD';
     }
 
-    const res = await fetch('/api/md-verify-report', {
+    const res = await fetch(`/api/md-verify-report?location=${encodeURIComponent(activeLocationCode.value)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'adopt_md_upc',
+        location: activeLocationCode.value,
         sku: cleanSku,
         mdUpc: boothUpc,
       }),
@@ -5295,9 +5231,9 @@ const normalizeLocationUrlParam = (locObjOrId: any) => {
 };
 
 const selectAndLockCanonicalLocation = (code: string) => {
-  const card = CANONICAL_LOCATION_CARDS.find((c) => c.code === code) || CANONICAL_LOCATION_CARDS[0];
+  const card = locationCards.value.find((c) => c.code === code) || locationCards.value[0];
   const found = (locations.value || []).find(
-    (w) => w.$id === card.id || resolveCanonicalLocationCode(w) === card.code
+    (w) => w.$id === card.id || resolveCanonicalLocationCode(w, locations.value) === card.code
   );
   selectedLocationId.value = found ? found.$id : card.id;
   isLocationLocked.value = true;
@@ -5313,6 +5249,13 @@ watch(selectedLocationId, (newId) => {
   }
 });
 
+watch(activeLocationCode, (newCode, oldCode) => {
+  if (newCode && newCode !== oldCode) {
+    mdVerifyReport.value = null;
+    void fetchMdVerifyReport(false);
+  }
+});
+
 const loadData = async () => {
   if (!team.value) return;
   try {
@@ -5320,20 +5263,21 @@ const loadData = async () => {
     await fetchInventory(team.value.$id);
     void healZeroEj0CqParentLotIfNeeded();
 
-    // If team has no locations created yet, auto-provision Memory Den
+    // If team has no locations created yet, auto-provision primary location from central Location Settings
     if (locations.value.length === 0) {
       try {
+        const defaultMeta = getLocationSettingMeta('MD');
         const defaultDen = await warehousesApi.createWarehouse({
-          name: 'Memory Den',
-          type: 'Consignment Booth',
-          commissionRate: 15,
-          monthlyRent: 0,
+          name: defaultMeta.name,
+          type: defaultMeta.type,
+          commissionRate: defaultMeta.commissionRate,
+          monthlyRent: defaultMeta.monthlyRent,
           tenantId: team.value.$id
         });
         locations.value = [defaultDen];
         selectedLocationId.value = defaultDen.$id;
       } catch (e) {
-        console.warn('Auto-create Memory Den skipped:', e);
+        console.warn('Auto-create primary location skipped:', e);
       }
     }
 
@@ -5354,11 +5298,11 @@ const loadData = async () => {
     }
 
     if (rawTargetLocation) {
-      const targetCode = resolveCanonicalLocationCode(rawTargetLocation);
+      const targetCode = resolveCanonicalLocationCode(rawTargetLocation, locations.value);
       const cleanTarget = rawTargetLocation.toLowerCase().replace(/[^a-z0-9]/g, '');
       const found = locations.value.find((w) => {
         if (w.$id === rawTargetLocation) return true;
-        if (targetCode && resolveCanonicalLocationCode(w) === targetCode) return true;
+        if (targetCode && resolveCanonicalLocationCode(w, locations.value) === targetCode) return true;
         return w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget;
       });
       if (found) {
@@ -5366,7 +5310,7 @@ const loadData = async () => {
         isLocationLocked.value = true;
         normalizeLocationUrlParam(found);
       } else if (targetCode) {
-        const card = CANONICAL_LOCATION_CARDS.find((c) => c.code === targetCode);
+        const card = locationCards.value.find((c) => c.code === targetCode);
         if (card) {
           selectedLocationId.value = card.id;
           isLocationLocked.value = true;
@@ -5374,10 +5318,10 @@ const loadData = async () => {
         }
       }
     } else {
-      // Visited without a location in the URL: show the 4-Location Card Picker while keeping hidden input populated
+      // Visited without a location in the URL: show the Location Card Picker while keeping hidden input populated
       isLocationLocked.value = false;
       if (!selectedLocationId.value && locations.value.length > 0) {
-        const memDen = locations.value.find(l => resolveCanonicalLocationCode(l) === 'MD');
+        const memDen = locations.value.find(l => resolveCanonicalLocationCode(l, locations.value) === 'MD');
         const fallbackLoc = memDen || locations.value[0];
         selectedLocationId.value = fallbackLoc.$id;
       }
@@ -5400,7 +5344,7 @@ onMounted(() => {
         mdVerifyReport.value = ev.data.report;
         addToast({
           type: 'success',
-          message: `📡 Received Live Memory Den Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
+          message: `📡 Received Live ${activeCanonicalLocationMeta.value.shortName} Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
         });
       }
     });
@@ -5413,7 +5357,7 @@ onMounted(() => {
             mdVerifyReport.value = ev.data.report;
             addToast({
               type: 'success',
-              message: `📡 Auto-Refreshed Live Memory Den Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
+              message: `📡 Auto-Refreshed Live ${activeCanonicalLocationMeta.value.shortName} Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
             });
           }
         };
@@ -5421,8 +5365,9 @@ onMounted(() => {
     } catch {}
 
     try {
+      const reportDocId = activeLocationManifestIds.value.reportDocId;
       unsubscribeMdRealtime = client.subscribe(
-        `databases.${DB_ID}.collections.manifests.documents.md_verify_report_latest`,
+        `databases.${DB_ID}.collections.manifests.documents.${reportDocId}`,
         (response: any) => {
           const doc = response?.payload;
           const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
@@ -5435,7 +5380,7 @@ onMounted(() => {
                 if (isNewer) {
                   addToast({
                     type: 'success',
-                    message: `📡 Live Appwrite Realtime: Memory Den Verification Report updated (${parsed.summary.verifiedMatch || 0} Verified)!`,
+                    message: `📡 Live Appwrite Realtime: ${activeCanonicalLocationMeta.value.shortName} Verification Report updated (${parsed.summary.verifiedMatch || 0} Verified)!`,
                   });
                 }
               }
