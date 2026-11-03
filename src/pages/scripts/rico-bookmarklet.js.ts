@@ -1,13 +1,11 @@
 import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PREVERIFIED_MD_SKU_TO_UPC_OR_ID } from '../../lib/salesBucketing';
 import {
   getLocationSettingMeta,
   resolveCanonicalLocationCode,
   resolveDefaultRicochetLocationMeta,
 } from '../../lib/warehouses';
-import { buildLiveMdPayloadFromAppwrite } from '../api/md-verify-report';
 
 export const prerender = false;
 
@@ -25,6 +23,12 @@ export const OPTIONS: APIRoute = async () => {
   return new Response(null, { status: 204, headers: CORS_NO_STORE_HEADERS });
 };
 
+/**
+ * Thin live-loader: serves `public/ricochet-upc-sync.user.js` fresh on every open with only the active
+ * location identity/settings (read from central Location Settings in `src/lib/warehouses.ts`).
+ * No SKU/UPC dictionaries and no static JSON snapshots are baked into the script —
+ * the userscript fetches live SKU/UPC data from `/api/md-verify-report` and captures Ricochet's native Export CSVs itself.
+ */
 export const GET: APIRoute = async ({ url }) => {
   try {
     const defaultRicoMeta = resolveDefaultRicochetLocationMeta();
@@ -35,74 +39,17 @@ export const GET: APIRoute = async ({ url }) => {
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
 
-    // Server-inject the merged baseline (live payload + verify report + preverified map) for the requested location
-    // so the bookmarklet immediately knows all 808 In-Stock, Sold/Historical, and Partner items on load!
-    let injectedBootstrap = '';
-    try {
-      const livePayload = await buildLiveMdPayloadFromAppwrite(locCode);
-      const mergedMap: Record<string, string> = locMeta.usesRicochet
-        ? {
-            ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
-            ...(livePayload.skuToUpcMap || {}),
-          }
-        : { ...(livePayload.skuToUpcMap || {}) };
-      const verifiedSkuSet = Array.from(
-        new Set([
-          ...Object.keys(mergedMap),
-          ...Object.keys(livePayload.verifiedMdUpcBySku || {}),
-          ...(locMeta.usesRicochet ? Object.keys(PREVERIFIED_MD_SKU_TO_UPC_OR_ID) : []),
-        ])
-      );
-      const bootData = {
-        location: locCode,
-        locationName: locMeta.shortName,
-        skuPrefix: locMeta.skuPrefix,
-        usesRicochet: locMeta.usesRicochet,
-        commissionRate: locMeta.commissionRate,
-        feePct: locMeta.feePct,
-        monthlyRent: locMeta.monthlyRent,
-        skuToUpcMap: mergedMap,
-        skuToMetaMap: livePayload.skuToMetaMap || {},
-        verifiedMdUpcBySku: livePayload.verifiedMdUpcBySku || {},
-        verifiedSkuSet,
-      };
-      injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
-        code: locMeta.code,
-        name: locMeta.shortName,
-        fullName: locMeta.name,
-        icon: locMeta.icon,
-        skuPrefix: locMeta.skuPrefix,
-        usesRicochet: locMeta.usesRicochet,
-        commissionRate: locMeta.commissionRate,
-        feePct: locMeta.feePct,
-        monthlyRent: locMeta.monthlyRent,
-      })};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify(bootData)};\n`;
-    } catch {
-      const fallbackMap = locMeta.usesRicochet ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID : {};
-      injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
-        code: locMeta.code,
-        name: locMeta.shortName,
-        fullName: locMeta.name,
-        icon: locMeta.icon,
-        skuPrefix: locMeta.skuPrefix,
-        usesRicochet: locMeta.usesRicochet,
-        commissionRate: locMeta.commissionRate,
-        feePct: locMeta.feePct,
-        monthlyRent: locMeta.monthlyRent,
-      })};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify({
-        location: locCode,
-        locationName: locMeta.shortName,
-        skuPrefix: locMeta.skuPrefix,
-        usesRicochet: locMeta.usesRicochet,
-        commissionRate: locMeta.commissionRate,
-        feePct: locMeta.feePct,
-        monthlyRent: locMeta.monthlyRent,
-        skuToUpcMap: fallbackMap,
-        skuToMetaMap: {},
-        verifiedMdUpcBySku: {},
-        verifiedSkuSet: Object.keys(fallbackMap),
-      })};\n`;
-    }
+    const injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
+      code: locMeta.code,
+      name: locMeta.shortName,
+      fullName: locMeta.name,
+      icon: locMeta.icon,
+      skuPrefix: locMeta.skuPrefix,
+      usesRicochet: locMeta.usesRicochet,
+      commissionRate: locMeta.commissionRate,
+      feePct: locMeta.feePct,
+      monthlyRent: locMeta.monthlyRent,
+    })};\n`;
 
     return new Response(injectedBootstrap + source, {
       status: 200,
@@ -116,5 +63,3 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 };
-
-

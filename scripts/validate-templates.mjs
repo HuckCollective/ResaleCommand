@@ -471,6 +471,30 @@ function assertNoHardcodedSkuMaps() {
 
 assertNoHardcodedSkuMaps();
 
+// =========================================================================
+// 10. BOOKMARKLET CLEANLINESS: NO BOOTSTRAP PAYLOAD / BAKED SKU MAPS / LITERAL FEE+RENT FALLBACKS
+// =========================================================================
+const bookmarkletFiles = ['src/pages/scripts/rico-bookmarklet.js.ts', 'public/ricochet-upc-sync.user.js'];
+const forbiddenBookmarkletPatterns = [
+    { pattern: /__RC_BOOTSTRAP_PAYLOAD__/, reason: 'window.__RC_BOOTSTRAP_PAYLOAD__ / baked skuToUpcMap snapshots are forbidden; fetch live data from /api/md-verify-report instead' },
+    { pattern: /PREVERIFIED_MD_SKU_TO_UPC_OR_ID/, reason: 'Bookmarklet must not import or inject static SKU dictionaries' },
+    { pattern: /(?:monthlyRent|commissionRate|feePct)\s*:\s*(?:382\.5|15)\b/, reason: 'Do not hardcode monthlyRent 382.5 / commissionRate 15 / feePct 15; read from central Location Settings' },
+    { pattern: /activeCommissionRate\s*\|\|\s*15\b/, reason: 'Do not fall back to a literal 15% commission rate' },
+];
+for (const relPath of bookmarkletFiles) {
+    const fullPath = path.resolve(relPath);
+    if (!fs.existsSync(fullPath)) continue;
+    const content = fs.readFileSync(fullPath, 'utf8');
+    for (const check of forbiddenBookmarkletPatterns) {
+        const m = check.pattern.exec(content);
+        if (m) {
+            const line = content.slice(0, m.index).split('\n').length;
+            console.error(`❌ Bookmarklet Cleanliness Violation in ${relPath}:${line}: ${check.reason}`);
+            hasErrors = true;
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
 } else {

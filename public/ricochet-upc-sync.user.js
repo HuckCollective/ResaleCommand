@@ -25,17 +25,11 @@
 
   // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
-  const bootPayload = window.__RC_BOOTSTRAP_PAYLOAD__ || {};
-  const activeLocationCode = String(
-    window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || bootPayload.location || ''
-  ).toUpperCase();
-  const activeLocationName = String(
-    activeLocMeta.name || bootPayload.locationName || activeLocMeta.fullName || 'Ricochet Booth'
-  );
-  const activeCommissionRate = Number(
-    activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? bootPayload.commissionRate ?? bootPayload.feePct ?? 15
-  );
-  const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? bootPayload.monthlyRent ?? 0);
+  const activeLocationCode = String(window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || '').toUpperCase();
+  const activeLocationName = String(activeLocMeta.name || activeLocMeta.fullName || 'Ricochet Booth');
+  // Fee / rent come ONLY from central Location Settings (injected as __RC_ACTIVE_LOCATION_META__) — no literal fallbacks
+  const activeCommissionRate = Number(activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? 0) || 0;
+  const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? 0) || 0;
   let activeModalTab = 'inventory'; // 'inventory' | 'sales'
   let activeSalesSubFilter = 'all'; // 'all' | 'pending_payout' | 'paid' | 'space_rental'
   let isPushingSales = false;
@@ -862,54 +856,6 @@
     return clean;
   }
 
-  // Hydrate server-injected 808-item bootstrap payload if present on window.__RC_BOOTSTRAP_PAYLOAD__
-  function applyBootstrapPayloadIfPresent() {
-    try {
-      const boot = window.__RC_BOOTSTRAP_PAYLOAD__;
-      if (boot && typeof boot === 'object') {
-        if (Array.isArray(boot.verifiedSkuSet)) {
-          for (const s of boot.verifiedSkuSet) {
-            const cleanSku = cleanStr(s).toUpperCase();
-            if (cleanSku) verifiedSkuSet.add(cleanSku);
-          }
-        }
-        if (boot.skuToUpcMap && typeof boot.skuToUpcMap === 'object') {
-          for (const [rawK, rawV] of Object.entries(boot.skuToUpcMap)) {
-            const cleanK = cleanStr(rawK).toUpperCase();
-            const cleanV = cleanStr(rawV).toUpperCase();
-            if (cleanK) verifiedSkuSet.add(cleanK);
-            if (cleanK && cleanV && isRealUpc(cleanV)) {
-              recordVerifiedMdUpc(cleanK, cleanV);
-            }
-          }
-          const merged = { ...boot.skuToUpcMap, ...parsedMap };
-          parsedMap = sanitizeBarcodeMap(merged);
-          cloudLiveSyncedCount = Math.max(Object.keys(parsedMap).length, verifiedSkuSet.size);
-        }
-        if (boot.skuToMetaMap && typeof boot.skuToMetaMap === 'object') {
-          skuMetaMap = { ...boot.skuToMetaMap, ...skuMetaMap };
-          for (const k of Object.keys(boot.skuToMetaMap)) {
-            const cleanK = cleanStr(k).toUpperCase();
-            if (cleanK) verifiedSkuSet.add(cleanK);
-          }
-        }
-        if (boot.verifiedMdUpcBySku && typeof boot.verifiedMdUpcBySku === 'object') {
-          for (const [vSku, vUpc] of Object.entries(boot.verifiedMdUpcBySku)) {
-            const cleanK = cleanStr(vSku).toUpperCase();
-            if (cleanK) verifiedSkuSet.add(cleanK);
-            recordVerifiedMdUpc(vSku, vUpc);
-          }
-        }
-        for (const [bSku, bUpc] of Object.entries(parsedMap)) {
-          verifiedSkuSet.add(bSku);
-          recordVerifiedMdUpc(bSku, bUpc);
-        }
-      }
-    } catch (e) {}
-  }
-
-  applyBootstrapPayloadIfPresent();
-
   // Evergreen Live Cloud Fetch from /api/md-verify-report?mode=payload
   async function fetchLivePayloadFromCloud(manualTrigger = false, forceBypassCooldown = false) {
     if (isFetchingCloudPayload) return false;
@@ -1021,15 +967,9 @@
       }
     }
 
-    const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
     const combinedPrioritized = {};
     for (const [k, v] of Object.entries(mergedCloudSkuToUpc)) {
       combinedPrioritized[k] = v;
-    }
-    for (const [k, v] of Object.entries(bootMap)) {
-      if (!(k in combinedPrioritized)) {
-        combinedPrioritized[k] = v;
-      }
     }
     for (const [k, v] of Object.entries(parsedMap)) {
       if (!(k in combinedPrioritized)) {
@@ -1276,9 +1216,8 @@
     for (const p of catalogProducts) {
       const sku = extractRicochetSku(p);
       let mdUpc = extractRicochetUpc(p);
-      const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
       const expectedRcUpc = cleanStr(
-        parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku] || verifiedMdUpcMap[sku] || ''
+        parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || verifiedMdUpcMap[sku] || ''
       ).toUpperCase();
       if (!mdUpc && expectedRcUpc && isRealUpc(expectedRcUpc) && verifiedMdUpcMap[sku]) {
         mdUpc = verifiedMdUpcMap[sku];
@@ -2152,6 +2091,29 @@
     return { rows, adjustments, totalPayout };
   }
 
+  // Persist the RAW captured Export CSV text plus harvested payout table rows into localStorage (keyed per canonical location)
+  // so the Resale Command import flow can ingest the unmodified Ricochet data.
+  function persistRicochetCaptureToLocalStorage(kind, rawCsv, tableRows) {
+    try {
+      const storageKey = `rc_ricochet_export_capture_v1_${activeLocationCode || 'LOC'}`;
+      let store = {};
+      try {
+        store = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+      } catch (e) {
+        store = {};
+      }
+      store.locationCode = activeLocationCode;
+      store.capturedAt = new Date().toISOString();
+      store[kind] = {
+        rawCsv: typeof rawCsv === 'string' && rawCsv ? rawCsv : (store[kind] && store[kind].rawCsv) || '',
+        rows: Array.isArray(tableRows) && tableRows.length > 0 ? tableRows : (store[kind] && store[kind].rows) || [],
+      };
+      localStorage.setItem(storageKey, JSON.stringify(store));
+    } catch (e) {
+      // localStorage may be full or unavailable; harvesting continues in memory
+    }
+  }
+
   // Safely capture Ricochet's native "Export" / "[Export]" CSV button in memory (hooking Blob, URL.createObjectURL, and HTMLAnchorElement.prototype.click so no browser download dialog triggers)
   async function captureSpaExportCsvInMemory(defaultStatus = 'pending_payout') {
     const candidates = Array.from(document.querySelectorAll('button, a, input[type="button"]')).filter((el) => {
@@ -2252,7 +2214,9 @@
 
     if (!capturedCsvText || !/item\s*,/i.test(capturedCsvText)) return null;
     const parsed = parseRicochetExportCsvText(capturedCsvText, defaultStatus);
-    return parsed.rows.length > 0 ? parsed : null;
+    if (parsed.rows.length === 0) return null;
+    parsed.rawCsv = capturedCsvText;
+    return parsed;
   }
 
   // Safely step through multi-page Payout History ("1 out of 2" -> "2 out of 2") so all 300 Paid History rows are harvested with their real `- 0EJxxx` SKU, 6-digit Sale #, Paid date, and Sold date
@@ -2489,6 +2453,7 @@
             harvestedPendingPayoutRows = bestPendingRows;
             cachedPayoutDomRows = bestPendingRows;
           }
+          persistRicochetCaptureToLocalStorage('payout', exportedPayouts && exportedPayouts.rawCsv, bestPendingRows);
           if (parsedPayouts.totalPayout !== 0) {
             harvestedPendingTotalPayout = parsedPayouts.totalPayout;
           }
@@ -2526,6 +2491,7 @@
           if (parsedHistory.rows.length > 0) {
             harvestedPaidHistoryRows = parsedHistory.rows;
             cachedPayoutHistoryDomRows = parsedHistory.rows;
+            persistRicochetCaptureToLocalStorage('payout_history', exportedHistory && exportedHistory.rawCsv, parsedHistory.rows);
             addLog(`💰 Paid History: ${parsedHistory.rows.length} rows`, '#10b981');
           } else {
             addLog('⚠️ Paid History returned 0 rows after retry', '#f59e0b');
@@ -2572,8 +2538,7 @@
 
   // Build 4-tier lookup & cross-link `0EJ...` SKU <-> Custom UPC <-> Booth Item, reusing Tab 1's `buildVerificationReport()` map and merging `/payouts`, `/payout_history`, and `/api/product`
   function extractRicochetSoldLines() {
-    const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
-    const feeRate = Number(activeCommissionRate || 15) / 100;
+    const feeRate = Number(activeCommissionRate || 0) / 100;
 
     // Reuse Tab 1 (`📦 Inventory & UPC Audit`) canonical verification report & SKU/UPC resolution map (Golden Rule #3)
     const tab1AuditReport = buildVerificationReport();
@@ -2820,7 +2785,6 @@
           (candidateSku &&
             (parsedMap[candidateSku] ||
               (skuMetaMap[candidateSku] && skuMetaMap[candidateSku].upc) ||
-              bootMap[candidateSku] ||
               verifiedMdUpcMap[candidateSku])) ||
           ''
       ).toUpperCase();
@@ -2832,7 +2796,6 @@
           (tab1Row ||
             parsedMap[candidateSku] ||
             skuMetaMap[candidateSku] ||
-            bootMap[candidateSku] ||
             verifiedSkuSet.has(candidateSku) ||
             productBySku.has(candidateSku) ||
             (/^0EJ[A-Z0-9]+$/i.test(candidateSku) && hasValidSaleTicket))
