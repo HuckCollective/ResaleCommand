@@ -13,6 +13,7 @@ export interface WarehouseData {
     monthlyRent?: number;
     categories?: string;
     niche?: string;
+    usesRicochet?: boolean;
     tenantId: string;
 }
 
@@ -93,6 +94,7 @@ export interface FacilityDefinition {
     monthlyRent: number;
     skuPrefix: string;
     posName: string;
+    usesRicochet: boolean;
     aliases: string[];
     channelName?: string;
 }
@@ -115,6 +117,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         monthlyRent: 382.5,
         skuPrefix: '0EJ',
         posName: 'Ricochet POS',
+        usesRicochet: true,
         aliases: ['md', 'memory den', 'memoryden', 'memory_den', '0ej', 'hao', "huck's adventures outfitters", "memory den - huck's adventures outfitters"],
         channelName: 'Memory Den',
     },
@@ -133,6 +136,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         monthlyRent: 75,
         skuPrefix: 'DT-',
         posName: 'Booth POS',
+        usesRicochet: false,
         aliases: ['dt', 'dusty tiger', 'dustytiger', 'dusty_tiger', 'tiger'],
         channelName: 'Dusty Tiger',
     },
@@ -151,6 +155,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         monthlyRent: 0,
         skuPrefix: 'HG-',
         posName: 'Warehouse CSV',
+        usesRicochet: false,
         aliases: ['hg', 'backstock', "huck's garage", 'hucks garage', 'hucksgarage', 'garage'],
     },
     {
@@ -168,6 +173,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         monthlyRent: 0,
         skuPrefix: 'HH-',
         posName: 'Warehouse CSV',
+        usesRicochet: false,
         aliases: ['hh', 'hd', 'hideout', "huck's hideout", 'hucks hideout', 'huckshideout', "huck's house", 'hucks house'],
     }
 ];
@@ -228,6 +234,8 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
             ? Number(liveDoc.monthlyRent)
             : base.monthlyRent;
     const liveName = String(liveDoc.name || base.name).trim();
+    const usesRicochet =
+        typeof liveDoc.usesRicochet === 'boolean' ? liveDoc.usesRicochet : base.usesRicochet;
 
     return {
         ...base,
@@ -240,6 +248,7 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
         commissionRate: fee,
         feePct: fee,
         monthlyRent: rent,
+        usesRicochet,
     };
 }
 

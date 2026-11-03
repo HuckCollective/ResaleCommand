@@ -136,7 +136,7 @@
 
           <!-- Location Actions: Dedicated Cockpit + Two-Way Sync -->
           <div class="space-y-2 pt-3 border-t border-base-200">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="grid grid-cols-1 gap-2" :class="warehouseUsesRicochet(warehouse) ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
               <!-- Primary Action: Dedicated Cockpit Hub -->
               <a 
                 :href="'/warehouse/' + (warehouse.code || warehouse.$id)"
@@ -147,8 +147,9 @@
                 <span>Manage ➔</span>
               </a>
 
-              <!-- Secondary Action: Inventory Sync -->
+              <!-- Secondary Action: Inventory Sync (Only for POS Sync Locations where usesRicochet is true) -->
               <a 
+                v-if="warehouseUsesRicochet(warehouse)"
                 :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
                 class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
                 title="Open Location Inventory & Barcode Sync pre-locked to this location"
@@ -412,7 +413,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, matchesLocationFilter, getDefaultStorageLocation, resolveCanonicalLocationCode } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, getDefaultStorageLocation, resolveCanonicalLocationCode, getLocationSettingMeta } from '../../lib/warehouses';
 import { generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { addToast } from '../../stores/toast';
 import type { WarehouseDocument, WarehouseData } from '../../lib/warehouses';
@@ -434,6 +435,10 @@ const isWarehouseDefault = (warehouse: WarehouseDocument) => {
   const code = (warehouse.code || '').trim().toUpperCase();
   const name = (warehouse.name || '').trim().toUpperCase();
   return (code && def === code) || (name && def === name);
+};
+
+const warehouseUsesRicochet = (warehouse: WarehouseDocument): boolean => {
+  return getLocationSettingMeta(warehouse, warehouses.value).usesRicochet;
 };
 
 const setAsDefaultBackstock = async (warehouse: WarehouseDocument) => {

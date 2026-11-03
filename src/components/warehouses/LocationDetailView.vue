@@ -26,7 +26,7 @@
         </button>
 
         <a 
-          v-if="warehouse" 
+          v-if="warehouse && activeLocationMeta.usesRicochet" 
           :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
@@ -79,13 +79,13 @@
           </div>
 
           <!-- Quick Telemetry Stats Strip -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
+          <div class="grid grid-cols-2 gap-2 w-full lg:w-auto" :class="activeLocationMeta.usesRicochet ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
             <div class="bg-base-200/70 p-2.5 rounded-2xl border border-base-300/70 text-center min-w-[110px]">
               <div class="text-[10px] uppercase font-bold opacity-60">In-Stock Stock</div>
               <div class="font-mono font-black text-sm text-primary">{{ inStockItems.length }} items</div>
               <div class="text-[10px] opacity-60 font-mono">${{ inStockValue.toFixed(2) }}</div>
             </div>
-            <div class="bg-base-200/70 p-2.5 rounded-2xl border border-base-300/70 text-center min-w-[110px]">
+            <div v-if="activeLocationMeta.usesRicochet" class="bg-base-200/70 p-2.5 rounded-2xl border border-base-300/70 text-center min-w-[110px]">
               <div class="text-[10px] uppercase font-bold opacity-60">POS Synced</div>
               <div class="font-mono font-black text-sm text-success">{{ syncedItemsCount }} synced</div>
               <div class="text-[10px] opacity-60 font-mono">{{ pendingExportCount }} pending</div>
@@ -352,6 +352,7 @@
                     </a>
 
                     <button 
+                      v-if="activeLocationMeta.usesRicochet"
                       type="button" 
                       @click="exportSingleDropCsv(drop)" 
                       class="btn btn-xs btn-outline border-base-300 hover:border-base-content/40 font-bold gap-1 rounded-btn"
@@ -416,6 +417,7 @@
                     </button>
 
                     <button 
+                      v-if="activeLocationMeta.usesRicochet"
                       type="button" 
                       @click="exportSingleDropCsv(drop)" 
                       class="btn btn-xs btn-outline border-base-300 hover:border-base-content/40 font-bold gap-1 rounded-btn"
@@ -579,7 +581,7 @@
                   <th>UPC / SKU</th>
                   <th>Category</th>
                   <th class="text-right">Price</th>
-                  <th class="text-center">POS Sync</th>
+                  <th v-if="activeLocationMeta.usesRicochet" class="text-center">POS Sync</th>
                   <th class="text-right">Actions</th>
                 </tr>
               </thead>
@@ -604,7 +606,7 @@
                   <td class="font-mono font-bold text-secondary text-right text-xs">
                     ${{ (Number(item.boutiquePrice || item.resalePrice || item.price || item.listPrice) || 0).toFixed(2) }}
                   </td>
-                  <td class="text-center">
+                  <td v-if="activeLocationMeta.usesRicochet" class="text-center">
                     <span v-if="isItemSynced(item)" class="badge badge-xs badge-success gap-1 font-bold">
                       <Icon icon="solar:check-circle-bold" class="w-3 h-3" /> Synced
                     </span>
@@ -625,7 +627,7 @@
                   </td>
                 </tr>
                 <tr v-if="filteredCatalogItems.length === 0">
-                  <td colspan="6" class="text-center py-12 opacity-60 text-xs">
+                  <td :colspan="activeLocationMeta.usesRicochet ? 6 : 5" class="text-center py-12 opacity-60 text-xs">
                     No items found matching criteria in this location.
                   </td>
                 </tr>
@@ -892,7 +894,7 @@
             </div>
             <div class="flex items-center gap-2">
               <a 
-                :href="'/warehouse/sync?location=' + encodeURIComponent(warehouse.name)" 
+                :href="'/sales/import/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
                 class="btn btn-xs sm:btn-sm btn-outline border-base-300 gap-1.5 font-bold"
                 title="Import from Mall Settlement Report"
               >
@@ -1169,7 +1171,7 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode } from '../../lib/warehouses';
+import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta } from '../../lib/warehouses';
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
@@ -1303,6 +1305,7 @@ const handleUnverifyDrop = async (drop: ManifestDocument) => {
 };
 
 const warehouse = ref<WarehouseDocument | null>(null);
+const activeLocationMeta = computed(() => getLocationSettingMeta(warehouse.value || props.locationId));
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
 const error = ref('');

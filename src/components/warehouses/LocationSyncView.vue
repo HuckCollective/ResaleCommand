@@ -76,6 +76,7 @@
         </button>
 
         <button 
+          v-if="activeCanonicalLocationMeta.usesRicochet"
           type="button" 
           class="btn btn-sm btn-outline btn-warning gap-1.5 font-bold"
           @click="showBrowserSyncModal = true"
@@ -134,6 +135,20 @@
             </div>
             <div class="text-[11px] opacity-70">
               {{ card.subtitle }}
+            </div>
+            <div class="pt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span
+                v-if="card.usesRicochet"
+                class="badge badge-xs badge-warning text-warning-content font-bold gap-1"
+              >
+                <span>⚡ POS Sync Enabled</span>
+              </span>
+              <span
+                v-else
+                class="badge badge-xs badge-ghost border border-base-300 font-semibold opacity-75"
+              >
+                <span>📋 CSV / Manual Sync</span>
+              </span>
             </div>
           </div>
           <div class="pt-2 border-t border-base-300/70 flex items-center justify-between text-xs font-bold text-primary w-full">
@@ -288,7 +303,7 @@
 
     <!-- Live Location Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
     <div
-      v-if="mdVerifyReport"
+      v-if="mdVerifyReport && activeCanonicalLocationMeta.usesRicochet"
       class="card bg-base-100 border border-success/30 shadow-sm p-4 space-y-3"
     >
       <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -428,8 +443,11 @@
             <Icon icon="solar:upload-track-linear" class="w-12 h-12" />
           </div>
           <h2 class="text-xl font-bold mb-1">Upload Location Inventory Export</h2>
-          <p class="text-xs opacity-70 mb-3 max-w-sm">
+          <p v-if="activeCanonicalLocationMeta.usesRicochet" class="text-xs opacity-70 mb-3 max-w-sm">
             Drop Ricochet's <strong>Inventory Export</strong> (with Product ID, SKU, UPC) to permanently link your booth SKUs (<code class="text-xs">0EJ...</code>) to your <code class="text-xs">HUCK-</code> barcodes.
+          </p>
+          <p v-else class="text-xs opacity-70 mb-3 max-w-sm">
+            Drop a CSV inventory report for <strong>{{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }})</strong> to reconcile stock levels and link items to your <code class="text-xs">HUCK-</code> barcodes.
           </p>
           <div class="alert alert-info py-2 px-3 text-xs mb-4 rounded-xl flex items-center justify-between text-left">
             <span>Looking to reconcile monthly sales &amp; payout checks? Use the <a :href="'/sales/import/' + (activeLocationCode || 'MD')" class="link font-bold underline">Sales Importer ({{ activeLocationCode || 'MD' }})</a> with your Payout CSV!</span>
@@ -1287,6 +1305,7 @@
 
             <!-- Deep Drawer Trigger for Full Guide -->
             <button 
+              v-if="activeCanonicalLocationMeta.usesRicochet"
               type="button" 
               class="btn btn-ghost btn-xs gap-1 font-bold text-base-content/80 hover:text-primary transition-colors shrink-0"
               @click="showBrowserSyncModal = true"
@@ -1349,7 +1368,7 @@
             </div>
 
             <!-- Center: CONTEXTUAL PRIMARY ACTION (Solid Elevated Tactile Pill) & Safe Test Pill -->
-            <div class="flex items-center gap-1.5 shrink-0">
+            <div v-if="activeCanonicalLocationMeta.usesRicochet" class="flex items-center gap-1.5 shrink-0">
               <button 
                 type="button" 
                 class="btn btn-sm btn-outline btn-primary font-bold shadow-xs active:scale-95 gap-1.5 min-h-[44px] text-xs px-3"
@@ -1410,7 +1429,7 @@
                 <div>
                   <h3 class="font-black text-base leading-tight">Inventory Match Drawer</h3>
                   <p class="text-[11px] opacity-65">
-                    🛡️ Ruling out items with other <code>0EJ</code> SKUs, claimed items, &amp; cross-org items
+                    🛡️ Ruling out items with other <code>{{ activeCanonicalLocationMeta.skuPrefix }}</code> SKUs, claimed items, &amp; cross-org items
                   </p>
                 </div>
               </div>
@@ -1757,7 +1776,7 @@
     <!-- ========================================================================= -->
     <Teleport to="body">
       <div 
-        v-if="showBrowserSyncModal" 
+        v-if="showBrowserSyncModal && activeCanonicalLocationMeta.usesRicochet" 
         class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300"
         @click.self="showBrowserSyncModal = false"
       >
@@ -2752,6 +2771,11 @@ const syncLivePayloadToCloudEndpoint = async () => {
 };
 
 const fetchMdVerifyReport = async (showManualToast = false) => {
+  if (!activeCanonicalLocationMeta.value.usesRicochet) {
+    mdVerifyReport.value = null;
+    isCheckingVerifyReport.value = false;
+    return;
+  }
   isCheckingVerifyReport.value = true;
   try {
     let loadedReport: any = null;
@@ -5252,7 +5276,11 @@ watch(selectedLocationId, (newId) => {
 watch(activeLocationCode, (newCode, oldCode) => {
   if (newCode && newCode !== oldCode) {
     mdVerifyReport.value = null;
-    void fetchMdVerifyReport(false);
+    if (!activeCanonicalLocationMeta.value.usesRicochet) {
+      showBrowserSyncModal.value = false;
+    } else {
+      void fetchMdVerifyReport(false);
+    }
   }
 });
 
