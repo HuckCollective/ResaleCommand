@@ -1,6 +1,6 @@
 <template>
   <div class="card bg-base-100 shadow-sm border border-base-200 w-full">
-    <div class="card-body p-4 sm:p-6 lg:p-8">
+    <div class="card-body p-4 sm:p-6 lg:p-8 pb-36 sm:pb-44 lg:pb-44">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h2 class="card-title text-2xl font-bold flex items-center gap-2">
@@ -64,6 +64,16 @@
           >
             <Icon icon="solar:history-bold" class="w-4 h-4 text-primary" />
             <span>Past Reconciliations ({{ reconciliationHistory.length }})</span>
+          </button>
+
+          <!-- Slide-over tray trigger: manual CSV upload + multi-month demo live in the tray, not the page body -->
+          <button
+            v-if="!lastCommittedReceipt"
+            type="button"
+            class="btn btn-sm btn-outline btn-primary gap-1.5 rounded-xl font-bold"
+            @click="isImportTrayOpen = true"
+          >
+            <span>📂 Manual CSV &amp; Demo</span>
           </button>
         </div>
       </div>
@@ -389,6 +399,10 @@
         :dry-run-result="ricochetDryRunResult"
         v-model:is-paste-drawer-open="isPasteRicochetDrawerOpen"
         v-model:pasted-text="pastedRicochetSyncText"
+        :commit-progress="ricochetCommitProgress"
+        :manifest-status="ricochetManifestStatus"
+        :manifest-committed-count="ricochetManifestCommittedCount"
+        :manifest-committed-at="ricochetManifestCommittedAt"
         @refresh="fetchStagedRicochetSales(true)"
         @simulate="simulateStagedRicochetSales"
         @commit="commitStagedRicochetSales"
@@ -403,7 +417,7 @@
       <!-- 📸 PAPER SALES SHEET & HANDS-ON RECONCILER WORKSPACE                      -->
       <!-- Driven 100% by activeCanonicalLocationMeta.supportsPaperSalesSheet / tab   -->
       <!-- ========================================================================= -->
-      <div v-if="!lastCommittedReceipt" class="mb-6 space-y-4">
+      <div v-if="!lastCommittedReceipt && !activeCanonicalLocationMeta.usesRicochet" class="mb-6 space-y-4">
         <!-- Intake Mode Switcher Strip (Paper Sales Sheet vs POS Payout CSV) -->
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-base-200/70 p-2.5 rounded-2xl border border-base-300">
           <div class="flex items-center gap-2 flex-wrap">
@@ -773,109 +787,29 @@
         </div>
       </div>
 
-      <!-- Step 1: Upload (shown only when no receipt AND no parsed rows AND in pos_csv mode) -->
-      <div v-if="!lastCommittedReceipt && !parsedRows.length && salesIntakeTab === 'pos_csv'" class="space-y-6">
-        <!-- Visual Workflow Explainer Card -->
-        <div class="card bg-base-100 border border-base-300 p-5 rounded-2xl shadow-xs text-left">
-          <div class="flex items-center gap-2 mb-3">
-            <Icon icon="solar:route-bold" class="w-5 h-5 text-primary" />
-            <h4 class="font-bold text-sm text-base-content">Consignment Mall Lifecycle &amp; Reconciliation Workflow</h4>
-          </div>
-          
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-            <!-- Step 1 -->
-            <div class="p-3.5 bg-base-200/50 rounded-xl border border-base-300/60 space-y-1.5">
-              <div class="flex items-center gap-1.5 font-bold text-primary">
-                <span class="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-black">1</span>
-                <span>Drop Export (Stocking)</span>
-              </div>
-              <p class="text-base-content/70 text-[11px] leading-relaxed">
-                Export items from a Drop Manifest to Ricochet. This tells the mall what inventory is physically stocked in your booth.
-              </p>
-            </div>
-
-            <!-- Step 2 -->
-            <div class="p-3.5 bg-base-200/50 rounded-xl border border-base-300/60 space-y-1.5">
-              <div class="flex items-center gap-1.5 font-bold text-secondary">
-                <span class="w-5 h-5 rounded-full bg-secondary/10 text-secondary flex items-center justify-center text-[11px] font-black">2</span>
-                <span>Location Sync (Barcode Link)</span>
-              </div>
-              <p class="text-base-content/70 text-[11px] leading-relaxed">
-                Ricochet creates booth SKUs (<code class="text-xs">0EJ...</code>). Upload Ricochet's <em>Inventory Export</em> to <a :href="'/warehouse/sync/' + (activeLocationCode || 'MD')" class="link link-primary font-bold">Location Sync ({{ activeLocationCode || 'MD' }})</a> to permanently bind them to your <code class="text-xs">HUCK-</code> barcodes.
-              </p>
-            </div>
-
-            <!-- Step 3 -->
-            <div class="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/30 space-y-1.5">
-              <div class="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
-                <span class="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[11px] font-black">3</span>
-                <span>Payout Import (Here)</span>
-              </div>
-              <p class="text-base-content/70 text-[11px] leading-relaxed">
-                Upload your month-end <em>Payout CSV</em> here. It records register sales, decrements multi-qty lots, deducts space rent, and calculates partner payouts.
-              </p>
-            </div>
-          </div>
-
-          <div class="mt-3.5 pt-3 border-t border-base-200 text-[11px] text-base-content/80 flex items-start gap-2 bg-base-200/30 p-2.5 rounded-xl">
-            <Icon icon="solar:question-circle-bold" class="w-4 h-4 text-warning shrink-0 mt-0.5" />
-            <div>
-              <strong>Why isn't Drop Export enough?</strong> 
-              When you drop inventory off, Ricochet assigns new booth SKUs, but does <em>not</em> send live register sale notifications back to your system. The month-end Payout CSV is the register receipt that proves what actually sold, when it sold, and how much cash was cleared!
-            </div>
-          </div>
-        </div>
-
-        <div class="flex flex-col items-center justify-center p-10 border-2 border-dashed border-base-300 rounded-2xl bg-base-200/50 hover:bg-base-200 transition-colors">
-          <Icon icon="solar:upload-minimalistic-linear" class="w-12 h-12 opacity-50 mb-3 text-primary" />
-          <h3 class="font-bold text-lg mb-1">Upload Month-End Payout CSV</h3>
-          <p class="text-xs opacity-70 mb-4 text-center max-w-sm">
-            Upload the payout summary exported from Ricochet (Consignors &rarr; Payouts) to reconcile your check.
-          </p>
-          
-          <div class="w-full max-w-xs mb-4 bg-base-100 border border-primary/30 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 shadow-2xs">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="badge badge-primary font-mono font-black text-xs px-2 py-2 gap-1 shrink-0">
-                <span>{{ activeCanonicalLocationMeta.icon }}</span>
-                <span>{{ activeCanonicalLocationMeta.code }}</span>
-              </span>
-              <div class="text-left min-w-0">
-                <div class="text-[10px] uppercase font-bold opacity-60 leading-none">Locked Payout Venue</div>
-                <div class="text-xs font-black text-base-content truncate">{{ activeCanonicalLocationMeta.fullName }}</div>
-              </div>
-            </div>
-            <span class="badge badge-xs badge-outline font-mono font-bold shrink-0">{{ activeCanonicalLocationMeta.feePct }}%</span>
-          </div>
-
-          <input 
-            type="file" 
-            accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
-            class="file-input file-input-bordered file-input-primary file-input-sm w-full max-w-xs rounded-xl" 
-            @change="handleFileUpload" 
-            :disabled="isProcessing"
-          />
-
-          <div v-if="catalogFileDetected" class="alert alert-warning py-2.5 px-4 rounded-xl text-xs w-full max-w-md mt-3 shadow-sm">
-            <span>
-              <strong>📦 That's a Product Catalog export (<code>Products-*.csv</code>).</strong>
-              It has no Sale # or Sold Date, so no sales were created. To record sales upload a <strong>Payouts-*.csv</strong> here;
-              to refresh booth stock &amp; quantities use <strong>Location Sync</strong> with this catalog file.
-            </span>
-          </div>
-
-          <div class="divider text-xs opacity-60 my-3 w-full max-w-xs">OR</div>
-
-          <button 
-            type="button"
-            class="btn btn-outline btn-sm gap-2 rounded-xl" 
-            :disabled="isProcessing"
-            @click="loadDefaultPayoutFile"
-          >
-            <Icon icon="solar:folder-with-files-bold" class="w-4 h-4 text-primary" />
-            <span>Load {{ activeCanonicalLocationMeta.shortName }} Full Payout (Multi-Month Demo)</span>
-          </button>
-        </div>
+      <!-- Empty canvas state: manual CSV upload + multi-month demo live in the right-edge slide-over tray -->
+      <div
+        v-if="!lastCommittedReceipt && !parsedRows.length && salesIntakeTab === 'pos_csv' && !activeCanonicalLocationMeta.usesRicochet"
+        class="flex flex-col items-center justify-center text-center gap-3 py-16 border-2 border-dashed border-base-300 rounded-2xl bg-base-200/40"
+      >
+        <Icon icon="solar:upload-minimalistic-linear" class="w-10 h-10 opacity-50 text-primary" />
+        <div class="font-bold text-base-content">No payout rows staged for {{ activeCanonicalLocationMeta.shortName }} yet</div>
+        <p class="text-xs opacity-70 max-w-sm">Open the tray to upload a month-end payout CSV or load the multi-month demo.</p>
+        <button type="button" class="btn btn-sm btn-primary gap-1.5 rounded-xl font-bold" @click="isImportTrayOpen = true">
+          <span>📂 Manual CSV &amp; Demo</span>
+        </button>
       </div>
+
+      <!-- Slide-Over Tray: Upload Month-End Payout CSV dropzone + Load Multi-Month Demo -->
+      <SalesImportTray
+        :is-open="isImportTrayOpen"
+        :is-processing="isProcessing"
+        :catalog-file-detected="catalogFileDetected"
+        :location-meta="activeCanonicalLocationMeta"
+        @close="isImportTrayOpen = false"
+        @file-selected="handleFileUpload"
+        @load-demo="loadDefaultPayoutFile"
+      />
 
       <!-- Step 2: Reconciliation & Settlement UI -->
       <div v-if="!lastCommittedReceipt && parsedRows.length > 0">
@@ -2127,6 +2061,7 @@ import {
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import RicochetLiveSalesPanel from './RicochetLiveSalesPanel.vue';
+import SalesImportTray from './SalesImportTray.vue';
 import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { generateNextUpc } from '../../lib/upcAuthority';
 
@@ -2138,6 +2073,7 @@ const { user, currentTeam: team } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
 const { showLoader, updateLoader, hideLoader } = useLoader();
 const isProcessing = ref(false);
+const isImportTrayOpen = ref(false);
 const isImporting = ref(false);
 const platform = ref('memoryden');
 const locations = ref<any[]>([]);
@@ -2188,6 +2124,10 @@ const {
   filteredRicochetStagedRows,
   ricochetSummary,
   ricochetActionableNewCount,
+  ricochetCommitProgress,
+  ricochetManifestStatus,
+  ricochetManifestCommittedCount,
+  ricochetManifestCommittedAt,
   fetchStagedRicochetSales,
   applyPastedRicochetSyncPayload,
   simulateStagedRicochetSales,

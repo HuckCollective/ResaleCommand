@@ -7,7 +7,7 @@ import {
   Role as NodeRole,
   Query as NodeQuery,
 } from 'node-appwrite';
-import { PREVERIFIED_MD_MULTI_QTY_BINS, cleanCatalogSku } from '../../../lib/salesBucketing';
+import { PREVERIFIED_MD_MULTI_QTY_BINS, canonicalTicketNumber, cleanCatalogSku } from '../../../lib/salesBucketing';
 import {
   type RicochetSalesSyncPayload,
   type RicochetSyncSaleLine,
@@ -159,6 +159,10 @@ export interface StagedRawCsv {
   payoutHistory?: string;
   payoutHistoryPageCount?: number;
   capturedAt?: string;
+  /** Layer 2 state lock: 'staged' until a full live commit succeeds, then 'committed'. */
+  status?: 'staged' | 'committed';
+  committed_at?: string;
+  committed_count?: number;
 }
 
 const MAX_RAW_CSV_CHARS = 600_000;
@@ -182,7 +186,7 @@ async function loadPersistedRawCsv(locCode: string): Promise<StagedRawCsv | null
     const rawSnap = doc?.itemsSnapshot;
     if (rawSnap) {
       const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
-      if (parsed && (parsed.payout || parsed.payoutHistory)) {
+      if (parsed && (parsed.payout || parsed.payoutHistory || parsed.status)) {
         if (!(globalThis as any).__LATEST_RICOCHET_RAW_CSV__) (globalThis as any).__LATEST_RICOCHET_RAW_CSV__ = {};
         (globalThis as any).__LATEST_RICOCHET_RAW_CSV__[code] = parsed;
         return parsed as StagedRawCsv;
@@ -192,9 +196,13 @@ async function loadPersistedRawCsv(locCode: string): Promise<StagedRawCsv | null
   return getStoredRawCsv(code);
 }
 
-/** Persists the RAW Export CSV text to a `manifests` staging doc (Dry-Run staging only — never touches items/sales). */
-async function savePersistedRawCsv(rawCsv: StagedRawCsv, locCode: string): Promise<void> {
-  if (!rawCsv.payout && !rawCsv.payoutHistory) return;
+/** Persists the RAW Export CSV text + commit-state lock to a `manifests` staging doc (never touches items/sales). */
+async function savePersistedRawCsv(
+  rawCsv: StagedRawCsv,
+  locCode: string,
+  opts?: { force?: boolean }
+): Promise<void> {
+  if (!opts?.force && !rawCsv.payout && !rawCsv.payoutHistory) return;
   const locMeta = resolveRicochetLocation(locCode);
   const { code, rawCsvDocId } = getLocationManifestDocIds(locMeta.code);
   const stored: StagedRawCsv = { ...rawCsv, capturedAt: rawCsv.capturedAt || new Date().toISOString() };
@@ -227,6 +235,19 @@ async function savePersistedRawCsv(rawCsv: StagedRawCsv, locCode: string): Promi
       } catch {}
     }
   }
+}
+
+/** Layer 2: stamps the staging manifest `status: 'committed'`, `committed_at`, `committed_count`. */
+async function markRawCsvManifestCommitted(locCode: string, committedCount: number): Promise<StagedRawCsv> {
+  const prev = (await loadPersistedRawCsv(locCode)) || {};
+  const next: StagedRawCsv = {
+    ...prev,
+    status: 'committed',
+    committed_at: new Date().toISOString(),
+    committed_count: committedCount,
+  };
+  await savePersistedRawCsv(next, locCode, { force: true });
+  return next;
 }
 
 /**
@@ -269,15 +290,21 @@ function ingestRawCsvAndPages(
   return { rows, adjustments, rawCsv };
 }
 
-async function fetchAllItemsAndSales() {
+async function fetchAllItemsAndSales(opts?: { salesOnly?: boolean }) {
   const { endpoint, project, apiKey, dbId, itemsCol, salesCol, databases } = getAppwriteConfig();
   const allItems: any[] = [];
   const allSales: any[] = [];
 
-  for (const [col, target] of [
-    [itemsCol, allItems],
-    [salesCol, allSales],
-  ] as const) {
+  const targets = (
+    opts?.salesOnly
+      ? [[salesCol, allSales]]
+      : [
+          [itemsCol, allItems],
+          [salesCol, allSales],
+        ]
+  ) as Array<readonly [string, any[]]>;
+
+  for (const [col, target] of targets) {
     if (databases) {
       try {
         let cursor: string | null = null;
@@ -440,8 +467,41 @@ export const POST: APIRoute = async ({ request, url }) => {
     const isDryRunRequest =
       mode === 'dry_run' || mode === 'simulate' || Boolean(body?.dryRun && mode !== 'commit');
 
+    // Layer 2 (Staging Manifest State Lock): after every batch succeeded, refresh the ledger flags and stamp the manifest `committed`
+    if (mode === 'finalize') {
+      const failedCount = Number(body?.failedCount || 0);
+      const committedCount = Math.max(0, Number(body?.committedCount || 0));
+      const persisted = await loadPersistedSalesSync(locMeta.code);
+      let refreshedPayload: RicochetSalesSyncPayload | null = null;
+      if (persisted && Array.isArray(persisted.rows) && persisted.rows.length > 0) {
+        refreshedPayload = await enrichAndMatchSalesRows(persisted.rows, locMeta.code, {
+          spaceRentalAdjustments: persisted.spaceRentalAdjustments,
+          dryRun: false,
+        });
+        refreshedPayload.syncedAt = new Date().toISOString();
+        await savePersistedSalesSync(refreshedPayload, locMeta.code);
+      }
+      const manifest =
+        failedCount === 0
+          ? await markRawCsvManifestCommitted(locMeta.code, committedCount)
+          : ((await loadPersistedRawCsv(locMeta.code)) || null);
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          mode: 'finalize',
+          dryRun: false,
+          locked: failedCount === 0,
+          failedCount,
+          manifest,
+          payload: refreshedPayload,
+        }),
+        { status: 200, headers: CORS_HEADERS }
+      );
+    }
+
     if (mode === 'commit' || mode === 'dry_run' || mode === 'simulate') {
       const { databases, dbId, itemsCol, salesCol } = getAppwriteConfig();
+      const isBatchedCommit = mode === 'commit' && Boolean(body?.batch);
       const persisted = await loadPersistedSalesSync(locMeta.code);
       const sourceRows =
         Array.isArray(body?.rows) && body.rows.length > 0
@@ -499,7 +559,21 @@ export const POST: APIRoute = async ({ request, url }) => {
 
       let committedCount = 0;
       let skippedAlreadySynced = 0;
+      let skippedDuplicateTickets = 0;
+      let failedCount = 0;
       const tenantId = String(body?.tenantId || '').trim();
+
+      // Layer 3 (Database Idempotency Shield): ticket number + sale date + location must be unique in `sales`
+      const saleShieldKey = (warehouseId: string, orderRef: string, saleIso: string) =>
+        `${String(warehouseId || '').trim()}|${String(orderRef || '').trim().toUpperCase()}|${String(saleIso || '').slice(0, 10)}`;
+      const existingSaleKeys = new Set<string>();
+      if (databases) {
+        const { allSales: existingSales } = await fetchAllItemsAndSales({ salesOnly: true });
+        for (const s of existingSales) {
+          if (s?.status === 'Cancelled') continue;
+          existingSaleKeys.add(saleShieldKey(s?.warehouseId, s?.orderId, s?.saleDate));
+        }
+      }
 
       if (databases) {
         for (const row of currentPayload.rows) {
@@ -513,6 +587,13 @@ export const POST: APIRoute = async ({ request, url }) => {
           const fee = Number(row.expectedFee ?? row.ricoCommission ?? 0);
           const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
           const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
+          const hasRealTicket = Boolean(canonicalTicketNumber(row.payoutId || row.saleNumber));
+          const shieldKey = saleShieldKey(locMeta.id, orderRef, saleIso);
+          if (hasRealTicket && existingSaleKeys.has(shieldKey)) {
+            skippedDuplicateTickets++;
+            row.alreadySynced = true;
+            continue;
+          }
 
           try {
             const createdSale = await databases.createDocument(dbId, salesCol, NodeID.unique(), {
@@ -546,8 +627,28 @@ export const POST: APIRoute = async ({ request, url }) => {
 
             row.alreadySynced = true;
             committedCount++;
-          } catch {}
+            if (hasRealTicket) existingSaleKeys.add(shieldKey);
+          } catch {
+            failedCount++;
+          }
         }
+      }
+
+      // Batched commits (Layer 1 chunking) return a slim response and never overwrite the full staged payload
+      if (isBatchedCommit) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode: 'commit',
+            dryRun: false,
+            batch: body.batch,
+            committedCount,
+            skippedAlreadySynced,
+            skippedDuplicateTickets,
+            failedCount,
+          }),
+          { status: 200, headers: CORS_HEADERS }
+        );
       }
 
       currentPayload.syncedAt = new Date().toISOString();
@@ -565,6 +666,8 @@ export const POST: APIRoute = async ({ request, url }) => {
           dryRun: false,
           committedCount,
           skippedAlreadySynced,
+          skippedDuplicateTickets,
+          failedCount,
           payload: refreshed,
         }),
         { status: 200, headers: CORS_HEADERS }
@@ -585,7 +688,13 @@ export const POST: APIRoute = async ({ request, url }) => {
       dryRun: true,
     });
     await savePersistedSalesSync(stagedPayload, locMeta.code);
-    await savePersistedRawCsv(ingested.rawCsv, locMeta.code);
+    // A fresh stage re-opens the manifest lock (status back to 'staged'); only rewrite when there's CSV text or a lock to clear
+    const priorRawCsv = await loadPersistedRawCsv(locMeta.code);
+    const hasNewCsvText = Boolean(ingested.rawCsv.payout || ingested.rawCsv.payoutHistory);
+    ingested.rawCsv.status = 'staged';
+    if (hasNewCsvText || priorRawCsv?.status === 'committed') {
+      await savePersistedRawCsv(ingested.rawCsv, locMeta.code, { force: true });
+    }
 
     return new Response(
       JSON.stringify({

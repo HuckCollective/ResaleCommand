@@ -529,6 +529,50 @@ const transportContracts = [
             { pattern: /\bloadLiveWarehouseDocs\s*\(/, label: 'Bookmarklet fee / rent resolved from live Appwrite location document' },
         ],
     },
+    {
+        file: 'src/components/sales/SalesImportTray.vue',
+        mustContain: [
+            { pattern: /Upload Month-End Payout CSV/, label: 'Month-End Payout CSV dropzone inside the slide-over tray' },
+            { pattern: /Multi-Month Demo/, label: 'Multi-Month Demo button inside the slide-over tray' },
+            { pattern: /emit\(\s*['"]close['"]\s*\)/, label: 'Auto-close of the tray on file selection / demo load' },
+        ],
+    },
+    {
+        file: 'src/components/sales/SalesImporter.vue',
+        mustContain: [
+            { pattern: /<SalesImportTray\b/, label: 'Slide-over tray mounted in the Sales Importer' },
+            { pattern: /Manual CSV &amp; Demo/, label: '"📂 Manual CSV & Demo" toolbar trigger' },
+        ],
+        mustNotContain: [
+            { pattern: /Consignment Mall Lifecycle/, label: 'redundant workflow explainer card in the main page body' },
+            { pattern: /<h3 class="font-bold text-lg mb-1">Upload Month-End Payout CSV<\/h3>/, label: 'inline Upload Month-End Payout CSV dropzone (belongs in the tray)' },
+        ],
+    },
+    {
+        file: 'src/components/sales/RicochetLiveSalesPanel.vue',
+        mustContain: [
+            { pattern: /<BottomActionDock\b/, label: 'Sticky bottom action bar (BottomActionDock)' },
+            { pattern: /Unlock Live Commit/, label: 'Unlock Live Commit checkbox in the bottom bar' },
+            { pattern: /Committing to Appwrite\.\.\./, label: 'Live batch progress text in the bottom bar' },
+            { pattern: /Already Synced \(\{\{\s*lockedItemCount\s*\}\} items committed\)/, label: 'Permanent Already Synced badge' },
+        ],
+    },
+    {
+        file: 'src/composables/useRicochetSalesSync.ts',
+        mustContain: [
+            { pattern: /COMMIT_BATCH_SIZE\s*=\s*(?:2[5-9]|[34]\d|50)\b/, label: 'Chunked commits of 25-50 rows' },
+            { pattern: /mode:\s*['"]finalize['"]/, label: 'Manifest finalize call after all batches' },
+        ],
+    },
+    {
+        file: 'src/pages/api/sales/ricochet-sync.ts',
+        mustContain: [
+            { pattern: /\bskippedDuplicateTickets\b/, label: 'Layer 3 ticket + date + location idempotency shield' },
+            { pattern: /\bmarkRawCsvManifestCommitted\s*\(/, label: 'Layer 2 manifest commit state lock' },
+            { pattern: /committed_at/, label: 'committed_at timestamp on the staging manifest' },
+            { pattern: /committed_count/, label: 'committed_count on the staging manifest' },
+        ],
+    },
 ];
 for (const contract of transportContracts) {
     const fullPath = path.resolve(contract.file);

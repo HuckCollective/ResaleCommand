@@ -60,43 +60,7 @@
           <span>📋 Paste Sync JSON / CSV</span>
         </button>
 
-        <button
-          v-if="stagedRows.length > 0"
-          type="button"
-          class="btn btn-sm btn-info text-info-content font-black gap-1.5 shadow-sm"
-          :disabled="isSimulating"
-          @click="emit('simulate')"
-        >
-          <span v-if="isSimulating" class="loading loading-spinner loading-xs"></span>
-          <span v-else>🧪</span>
-          <span>Dry-Run / Simulate Commit ({{ actionableNewCount }})</span>
-        </button>
-
-        <label
-          v-if="actionableNewCount > 0"
-          class="label cursor-pointer gap-1.5 bg-base-200 px-2.5 py-1 rounded-lg border border-base-300 text-xs font-bold"
-          title="Unlock Live Commit when ready to write sales & mark booth inventory sold"
-        >
-          <input
-            :checked="isLiveCommitUnlocked"
-            type="checkbox"
-            class="checkbox checkbox-xs checkbox-warning"
-            @change="emit('update:isLiveCommitUnlocked', ($event.target as HTMLInputElement).checked)"
-          />
-          <span>🔓 Unlock Live Commit</span>
-        </label>
-
-        <button
-          v-if="actionableNewCount > 0 && isLiveCommitUnlocked"
-          type="button"
-          class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm"
-          :disabled="isCommitting"
-          @click="emit('commit')"
-        >
-          <span v-if="isCommitting" class="loading loading-spinner loading-xs"></span>
-          <span v-else>✅</span>
-          <span>Live Commit Verified Sales ({{ actionableNewCount }})</span>
-        </button>
+        <!-- Dry-Run / Unlock Live Commit / Commit now live in the sticky bottom action bar -->
       </div>
     </div>
 
@@ -411,7 +375,7 @@
     <!-- 2. Reconciliation Staging Table -->
     <div
       v-else-if="displayedRows.length > 0"
-      class="overflow-x-auto border border-base-300 rounded-xl max-h-80"
+      class="overflow-x-auto border border-base-300 rounded-xl"
     >
       <table class="table table-xs sm:table-sm table-pin-rows w-full">
         <thead>
@@ -550,6 +514,96 @@
         No staged live Ricochet sales batch yet for <span class="font-bold">{{ locationMeta.shortName }}</span>. Open the <span class="font-mono font-bold">⚡ {{ locationMeta.shortName }} Sync</span> bookmarklet on Ricochet and click <span class="font-bold">🧪 Stage Sales to Resale Core (Dry-Run)</span> in the <span class="font-bold">💰 Sales &amp; Payout Sync</span> tab, or paste JSON above.
       </div>
     </div>
+
+    <!-- ===================================================================== -->
+    <!-- STICKY BOTTOM ACTION BAR (Contextual Command Dock)                    -->
+    <!-- Left: staged count / net payout / partner splits                      -->
+    <!-- Right: 🔓 Unlock Live Commit + Commit (or permanent Already Synced)   -->
+    <!-- ===================================================================== -->
+    <BottomActionDock v-if="showDock" placement="viewport" z-index="z-50">
+      <template v-if="isCommitting && commitProgress" #top>
+        <div class="flex items-center gap-3 w-full max-w-3xl">
+          <span class="loading loading-spinner loading-xs text-success"></span>
+          <span class="font-black font-mono text-xs">
+            Committing to Appwrite... {{ commitProgress.done }} / {{ commitProgress.total }}
+          </span>
+          <progress
+            class="progress progress-success flex-1 h-2"
+            :value="commitProgress.done"
+            :max="Math.max(1, commitProgress.total)"
+          ></progress>
+        </div>
+      </template>
+
+      <template #left>
+        <div class="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs font-mono">
+          <span class="flex items-baseline gap-1" title="Matched rows / total staged rows">
+            <span class="opacity-60 uppercase text-[10px] font-bold">Staged</span>
+            <strong class="text-base">{{ summary.matchedInBooth }}/{{ stagedRows.length }}</strong>
+          </span>
+          <span class="flex items-baseline gap-1">
+            <span class="opacity-60 uppercase text-[10px] font-bold">Net Payout</span>
+            <strong class="text-base text-success">${{ Number(summary.netPayout || 0).toFixed(2) }}</strong>
+          </span>
+          <span class="flex items-center gap-1.5 flex-wrap">
+            <span class="badge badge-sm badge-primary font-bold">⭐ HUCK {{ stagedPartnerTotals.HUCK.count }} • ${{ stagedPartnerTotals.HUCK.net.toFixed(2) }}</span>
+            <span class="badge badge-sm badge-secondary font-bold">🎲 PDXGL {{ stagedPartnerTotals.PDXGL.count }} • ${{ stagedPartnerTotals.PDXGL.net.toFixed(2) }}</span>
+            <span class="badge badge-sm badge-warning font-bold">💛 B&amp;B {{ stagedPartnerTotals.BB.count }} • ${{ stagedPartnerTotals.BB.net.toFixed(2) }}</span>
+          </span>
+        </div>
+      </template>
+
+      <template #right>
+        <!-- Layer 2: permanent lock once the manifest is committed -->
+        <template v-if="isCommittedLock">
+          <span class="badge badge-success text-success-content font-black py-3 px-3 gap-1 whitespace-nowrap">
+            ✅ Already Synced ({{ lockedItemCount }} items committed)
+          </span>
+          <a href="/sales" class="btn btn-sm btn-ghost border border-base-300 font-bold whitespace-nowrap">
+            ↗ View in Payouts Dashboard
+          </a>
+        </template>
+
+        <template v-else>
+          <button
+            v-if="stagedRows.length > 0"
+            type="button"
+            class="btn btn-sm btn-info text-info-content font-black gap-1.5 whitespace-nowrap"
+            :disabled="isSimulating || isCommitting"
+            @click="emit('simulate')"
+          >
+            <span v-if="isSimulating" class="loading loading-spinner loading-xs"></span>
+            <span v-else>🧪</span>
+            <span>Dry-Run</span>
+          </button>
+
+          <label
+            class="label cursor-pointer gap-1.5 bg-base-200 px-2.5 py-1 rounded-lg border border-base-300 text-xs font-bold whitespace-nowrap"
+            title="Unlock Live Commit when ready to write sales & mark booth inventory sold"
+          >
+            <input
+              :checked="isLiveCommitUnlocked"
+              :disabled="isCommitting"
+              type="checkbox"
+              class="checkbox checkbox-xs checkbox-warning"
+              @change="emit('update:isLiveCommitUnlocked', ($event.target as HTMLInputElement).checked)"
+            />
+            <span>🔓 Unlock Live Commit</span>
+          </label>
+
+          <button
+            type="button"
+            class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-md whitespace-nowrap"
+            :disabled="isCommitting || !isLiveCommitUnlocked || actionableNewCount === 0"
+            @click="emit('commit')"
+          >
+            <span v-if="isCommitting" class="loading loading-spinner loading-xs"></span>
+            <span v-else>✅</span>
+            <span>{{ isCommitting ? 'Committing…' : `Commit (${actionableNewCount})` }}</span>
+          </button>
+        </template>
+      </template>
+    </BottomActionDock>
   </div>
 </template>
 
@@ -557,6 +611,7 @@
 import { computed, ref } from 'vue';
 import { resolvePartnerBucketForSaleRow } from '../../lib/salesBucketing';
 import type { LocationSettingMeta } from '../../lib/warehouses';
+import BottomActionDock from '../common/BottomActionDock.vue';
 
 const props = defineProps<{
   locationMeta: LocationSettingMeta;
@@ -591,6 +646,12 @@ const props = defineProps<{
   dryRunResult: any | null;
   isPasteDrawerOpen: boolean;
   pastedText: string;
+  /** Layer 1: live chunked-commit progress (`null` when idle). */
+  commitProgress?: { done: number; total: number } | null;
+  /** Layer 2: staging manifest state (`'committed'` permanently locks the Commit button). */
+  manifestStatus?: string;
+  manifestCommittedCount?: number;
+  manifestCommittedAt?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -662,6 +723,42 @@ const partnerTotals = computed(() => {
   totals.BB.net = Number(totals.BB.net.toFixed(2));
   return totals;
 });
+
+/** Unfiltered per-partner totals for the sticky bottom bar (never changes with table filters). */
+const stagedPartnerTotals = computed(() => {
+  const totals = {
+    HUCK: { count: 0, net: 0 },
+    PDXGL: { count: 0, net: 0 },
+    BB: { count: 0, net: 0 },
+  };
+  for (const r of props.stagedRows) {
+    const p = getRowPartner(r);
+    totals[p].count++;
+    totals[p].net += Number(r?.ricoNetPayout ?? r?.expectedNetPayout ?? 0);
+  }
+  totals.HUCK.net = Number(totals.HUCK.net.toFixed(2));
+  totals.PDXGL.net = Number(totals.PDXGL.net.toFixed(2));
+  totals.BB.net = Number(totals.BB.net.toFixed(2));
+  return totals;
+});
+
+/**
+ * Permanent "Already Synced" lock: the staging manifest says `committed`, OR every staged row is already in the ledger
+ * (covers a later re-stage of the same month that reset the manifest status).
+ */
+const isCommittedLock = computed(
+  () =>
+    props.manifestStatus === 'committed' ||
+    (props.stagedRows.length > 0 &&
+      props.actionableNewCount === 0 &&
+      props.summary.alreadySynced >= props.stagedRows.length)
+);
+const lockedItemCount = computed(() =>
+  props.manifestStatus === 'committed' && Number(props.manifestCommittedCount || 0) > 0
+    ? Number(props.manifestCommittedCount)
+    : props.stagedRows.length
+);
+const showDock = computed(() => props.stagedRows.length > 0 || props.manifestStatus === 'committed');
 
 const displayedRows = computed<any[]>(() => {
   let list = props.filteredRows;

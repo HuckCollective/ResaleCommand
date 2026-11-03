@@ -4,6 +4,8 @@ import { parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
 
 const DB_ID = import.meta.env?.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const ITEMS_COLLECTION_ID = import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || 'items';
+/** Safe Appwrite write batch size for chunked Live Commits (25-50 rows per request). */
+const COMMIT_BATCH_SIZE = 40;
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
@@ -39,7 +41,20 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
 
   const ricochetSyncPayload = ref<any | null>(null);
   /** RAW Ricochet Export CSV text (Payout + Payout History) staged by the bookmarklet via POST /api/sales/ricochet-sync. */
-  const ricochetRawCsv = ref<{ payout?: string; payoutHistory?: string; payoutHistoryPageCount?: number; capturedAt?: string } | null>(null);
+  const ricochetRawCsv = ref<{
+    payout?: string;
+    payoutHistory?: string;
+    payoutHistoryPageCount?: number;
+    capturedAt?: string;
+    status?: 'staged' | 'committed';
+    committed_at?: string;
+    committed_count?: number;
+  } | null>(null);
+  /** Layer 1 progress: `{ done, total }` while a chunked Live Commit is in flight, otherwise null. */
+  const ricochetCommitProgress = ref<{ done: number; total: number } | null>(null);
+  const ricochetManifestStatus = computed(() => ricochetRawCsv.value?.status || '');
+  const ricochetManifestCommittedCount = computed(() => Number(ricochetRawCsv.value?.committed_count || 0));
+  const ricochetManifestCommittedAt = computed(() => ricochetRawCsv.value?.committed_at || null);
   const dynamicAppwriteItems = ref<any[]>([]);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
@@ -546,41 +561,76 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     ) {
       return;
     }
+    // Layer 1: lock the UI synchronously so a double-click can never start a second commit
     isCommittingRicochetSync.value = true;
+    const rowsToCommit = ricochetStagedRows.value;
+    const totalRows = rowsToCommit.length;
+    ricochetCommitProgress.value = { done: 0, total: totalRows };
+    const locationCode = activeCanonicalLocationMeta.value.code;
+    let committedTotal = 0;
+    let skippedTotal = 0;
+    let failedTotal = 0;
     try {
-      const res = await fetch('/api/sales/ricochet-sync', {
+      for (let start = 0; start < totalRows; start += COMMIT_BATCH_SIZE) {
+        const chunk = rowsToCommit.slice(start, start + COMMIT_BATCH_SIZE);
+        const res = await fetch('/api/sales/ricochet-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'commit',
+            dryRun: false,
+            locationCode,
+            batch: { index: Math.floor(start / COMMIT_BATCH_SIZE), size: COMMIT_BATCH_SIZE, total: totalRows },
+            rows: chunk,
+            spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!(res.ok && data?.ok)) {
+          throw new Error(data?.error || `Commit batch ${Math.floor(start / COMMIT_BATCH_SIZE) + 1} failed`);
+        }
+        committedTotal += Number(data.committedCount || 0);
+        skippedTotal += Number(data.skippedAlreadySynced || 0) + Number(data.skippedDuplicateTickets || 0);
+        failedTotal += Number(data.failedCount || 0);
+        ricochetCommitProgress.value = { done: Math.min(totalRows, start + chunk.length), total: totalRows };
+      }
+
+      // Layer 2: stamp the staging manifest as committed (only when every row landed)
+      const finRes = await fetch('/api/sales/ricochet-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'commit',
+          mode: 'finalize',
           dryRun: false,
-          locationCode: activeCanonicalLocationMeta.value.code,
-          rows: ricochetStagedRows.value,
-          spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
+          locationCode,
+          committedCount: committedTotal + skippedTotal,
+          failedCount: failedTotal,
         }),
       });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.ok) {
-        if (data.payload) {
-          ricochetSyncPayload.value = data.payload;
-        }
-        ricochetDryRunResult.value = null;
-        isRicochetLiveCommitUnlocked.value = false;
-        addToast({
-          type: 'success',
-          message: `✅ Committed ${data.committedCount || 0} verified Ricochet sales (${data.skippedAlreadySynced || 0} already synced)!`,
-        });
-        onAfterLiveCommit?.();
-      } else {
-        throw new Error(data?.error || 'Commit request failed');
+      const finData = await finRes.json().catch(() => null);
+      if (finRes.ok && finData?.ok) {
+        if (finData.payload) ricochetSyncPayload.value = finData.payload;
+        if (finData.manifest) ricochetRawCsv.value = { ...(ricochetRawCsv.value || {}), ...finData.manifest };
       }
+
+      ricochetDryRunResult.value = null;
+      isRicochetLiveCommitUnlocked.value = false;
+      addToast({
+        type: failedTotal > 0 ? 'warning' : 'success',
+        message:
+          failedTotal > 0
+            ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed — re-run Commit to retry (duplicates are skipped automatically).`
+            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} already synced).`,
+      });
+      onAfterLiveCommit?.();
     } catch (err: any) {
       addToast({
         type: 'error',
-        message: `Failed to commit Ricochet sales: ${err?.message || 'Unknown error'}`,
+        message: `Failed to commit Ricochet sales: ${err?.message || 'Unknown error'} — re-run Commit to resume (already-written tickets are skipped).`,
       });
     } finally {
       isCommittingRicochetSync.value = false;
+      ricochetCommitProgress.value = null;
     }
   };
 
@@ -613,6 +663,10 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   return {
     ricochetSyncPayload,
     ricochetRawCsv,
+    ricochetCommitProgress,
+    ricochetManifestStatus,
+    ricochetManifestCommittedCount,
+    ricochetManifestCommittedAt,
     isLoadingRicochetSync,
     isSimulatingRicochetSync,
     isCommittingRicochetSync,
