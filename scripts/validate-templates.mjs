@@ -308,6 +308,7 @@ for (const file of vueFiles) {
 const ALLOWED_PERMANENT_SCRIPTS = new Set([
     'inspect_schema.js',
     'audit_schema.mjs',
+    'seed-md-booth-skus.mjs',
     'sync-ai-context.mjs',
     'validate-templates.mjs',
 ]);
@@ -442,6 +443,33 @@ for (const relPath of noHardcodedFallbackDateFiles) {
         hasErrors = true;
     }
 }
+
+// =========================================================================
+// 9. AUTOMATED ARCHITECTURE CIRCUIT BREAKER: ZERO HARDCODED SKU DICTIONARIES
+// =========================================================================
+function assertNoHardcodedSkuMaps() {
+    const scanDirs = ['src', 'public'];
+    const targetExts = ['.ts', '.js', '.mjs', '.vue', '.astro'];
+    const hardcodedSkuRegex = /0EJ[0-9A-Z]{3}["']?\s*:\s*["'](HUCK|PDXGL)/g;
+
+    for (const dir of scanDirs) {
+        if (!fs.existsSync(dir)) continue;
+        const filesToScan = getFiles(dir, targetExts);
+        for (const filePath of filesToScan) {
+            const relFile = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+            const content = fs.readFileSync(filePath, 'utf8');
+            const matches = content.match(hardcodedSkuRegex);
+            if (matches && matches.length > 2) {
+                console.error(
+                    `❌ Fatal Architecture Error in ${relFile}: Found ${matches.length} hardcoded 0EJxxx -> HUCK/PDXGL dictionary mappings (> 2 max allowed). Populate Appwrite documents via scripts/seed-md-booth-skus.mjs and build lookup maps dynamically at runtime!`
+                );
+                process.exit(1);
+            }
+        }
+    }
+}
+
+assertNoHardcodedSkuMaps();
 
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);

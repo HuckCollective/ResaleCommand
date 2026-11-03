@@ -60,8 +60,8 @@
   let cloudLiveSyncedCount = 0;
   let consignorId = null;
   let catalogProducts = []; // Full product objects from /api/product
-  let parsedMap = {}; // { "0EJ08G": "HUCK-1024", ... }
-  let skuMetaMap = {}; // { "0EJ08G": { upc, partner, title }, ... }
+  let parsedMap = {}; // Runtime cloud SKU -> UPC map
+  let skuMetaMap = {}; // Runtime cloud SKU -> metadata map
   let verifiedMdUpcMap = {}; // Persisted verified MD UPCs by SKU across page refreshes (localStorage + Appwrite cloud)
   let verifiedSkuSet = new Set(); // Full verified 808 SKU set from Location Settings / Bootstrap / Cloud
   let activePartnerBucket = 'ALL'; // 'ALL' | 'HUCK' | 'PDXGL' | 'BB'

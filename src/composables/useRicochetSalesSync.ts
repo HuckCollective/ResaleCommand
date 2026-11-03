@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
+import { databases, DB_ID, COLLECTIONS, Query } from '../lib/appwrite';
 import { parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
@@ -34,6 +35,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit } = options;
 
   const ricochetSyncPayload = ref<any | null>(null);
+  const dynamicAppwriteItems = ref<any[]>([]);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
   const isCommittingRicochetSync = ref(false);
@@ -44,9 +46,37 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const pastedRicochetSyncText = ref('');
   let lastAutoFocusFetchAt = 0;
 
+  const fetchDynamicAppwriteInventoryItems = async () => {
+    try {
+      const collected: any[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
+        if (cursor) queries.push(Query.cursorAfter(cursor));
+        const res = await databases.listDocuments(DB_ID, COLLECTIONS.ITEMS, queries);
+        const docs = res.documents || [];
+        for (const doc of docs as any[]) {
+          const hasSku = Boolean(doc?.external_sku || doc?.locationSku || doc?.sku);
+          const hasBarcode = Boolean(doc?.barcode || doc?.upc);
+          if (hasSku || hasBarcode) {
+            collected.push(doc);
+          }
+        }
+        if (docs.length < 100) break;
+        cursor = docs[docs.length - 1].$id;
+      }
+      if (collected.length > 0) {
+        dynamicAppwriteItems.value = collected;
+      }
+    } catch {
+      // Fall back to passed inventoryItems prop when client query is unavailable
+    }
+  };
+
   const ricochetStagedRows = computed<any[]>(() => {
     const rawList = Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
-    const activeItems = Array.isArray(inventoryItems?.value) ? inventoryItems!.value : [];
+    const propItems = Array.isArray(inventoryItems?.value) ? inventoryItems!.value : [];
+    const activeItems = propItems.length > 0 ? propItems : dynamicAppwriteItems.value;
     const claimedItemIdToSku = new Map<string, string>();
     const multiBinResolvedBySku =
       activeItems.length > 0 ? buildLockedMultiBinMap(activeItems, claimedItemIdToSku) : new Map<string, any>();
@@ -532,6 +562,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
 
   onMounted(() => {
     if (typeof window !== 'undefined') {
+      if (!Array.isArray(inventoryItems?.value) || inventoryItems!.value.length === 0) {
+        void fetchDynamicAppwriteInventoryItems();
+      }
       window.addEventListener('focus', handleTabWakeOrFocus);
       document.addEventListener('visibilitychange', handleTabWakeOrFocus);
     }
