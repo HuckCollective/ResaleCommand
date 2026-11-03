@@ -393,6 +393,13 @@ const requiredArchitectureContracts = [
             { pattern: /\bflagAlreadyRecordedRows\s*\(/, label: 'Delegation of ledger deduplication to flagAlreadyRecordedRows from salesBucketing.ts' },
         ],
     },
+    {
+        file: 'src/composables/useRicochetSalesSync.ts',
+        mustContain: [
+            { pattern: /\bmatchMemoryDenInventoryItem\s*\(/, label: 'Delegation of inventory matching to matchMemoryDenInventoryItem from salesBucketing.ts' },
+            { pattern: /\bbuildLockedMultiBinMap\s*\(/, label: 'Delegation of multi-bin lot map building to buildLockedMultiBinMap from salesBucketing.ts' },
+        ],
+    },
 ];
 
 for (const contract of requiredArchitectureContracts) {

@@ -776,7 +776,7 @@
     });
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
-    document.getElementById('rc-push-sales-btn').addEventListener('click', pushSalesToResaleCore);
+    document.getElementById('rc-push-sales-btn').addEventListener('click', () => pushSalesToResaleCore({ silent: false }));
     document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
     const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
     if (harvestBtn) {
@@ -1392,6 +1392,23 @@
         else unlinkedInRc++;
       }
 
+      const rawSoldDate = cleanStr(
+        p.sold_date ||
+          p.sold_at ||
+          p.paid_date ||
+          firstItem?.sold_date ||
+          firstItem?.sold_at ||
+          firstItem?.paid_date ||
+          p.updated_at ||
+          firstItem?.updated_at ||
+          p.in_stock ||
+          p.created_at ||
+          ''
+      ).slice(0, 10);
+      const rawPaidDate = cleanStr(
+        p.paid_date || firstItem?.paid_date || (inventoryStatus === 'Paid' ? rawSoldDate : '') || ''
+      ).slice(0, 10);
+
       rows.push({
         productId: String(p.id || ''),
         sku,
@@ -1404,6 +1421,8 @@
         agreedPrice,
         quantity: parsedQty,
         inventory: inventoryStatus,
+        soldDate: rawSoldDate,
+        paidDate: rawPaidDate || null,
       });
     }
 
@@ -1866,10 +1885,10 @@
           if (/^(item|total)\b/i.test(rawItemCell) && /sale|agreed/i.test(cells[1] + ' ' + cells[2])) continue;
           if (/^total\b/i.test(rawItemCell)) continue;
 
-          // Parse `Item` using `/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i` so `"Cartographers Heros - 0EJ03C"` yields `title: "Cartographers Heros"` and `ricoSku: "0EJ03C"`
+          // Parse `Item` using `/^(.*?)\s+-\s+((?:0EJ|HUCK|PDXGL|BB)[A-Z0-9-]{2,14}|[A-Z0-9]{4,12})$/i` so `"Cartographers Heros - 0EJ03C"` yields `title: "Cartographers Heros"` and `ricoSku: "0EJ03C"`
           let parsedTitle = rawItemCell;
           let parsedSku = '';
-          const suffixMatch = rawItemCell.match(/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i);
+          const suffixMatch = rawItemCell.match(/^(.*?)\s+-\s+((?:0EJ|HUCK|PDXGL|BB)[A-Z0-9-]{2,14}|[A-Z0-9]{4,12})$/i);
           if (suffixMatch) {
             parsedTitle = cleanStr(suffixMatch[1]);
             parsedSku = cleanStr(suffixMatch[2]).toUpperCase();
@@ -1881,7 +1900,7 @@
           const agedPrice = Number(Math.abs(parseCurrencyFloat(cells[4])).toFixed(2));
           const discounts = cleanStr(cells[5] || '');
           const paidDate = cleanStr(cells[6] || '') || null;
-          const soldDate = cleanStr(cells[7] || '');
+          const soldDate = cleanStr(cells[7] || '') || paidDate || '';
           const ricoNetPayout = Number(parseCurrencyFloat(cells[8] ?? cells[cells.length - 1]).toFixed(2));
 
           if (!parsedTitle && !parsedSku && !rawSale) continue;
@@ -2093,6 +2112,8 @@
           '#10b981'
         );
       }
+      // Auto-stage Dry-Run sales batch to Resale Core in the background (0 production DB writes)
+      void pushSalesToResaleCore({ silent: !manualTrigger });
     } catch (e) {
       // ignore harvest error
     } finally {
@@ -2120,12 +2141,55 @@
     const tab1BySku = new Map();
     const tab1ByProductId = new Map();
 
+    const stripCoreTitle = (normStr) =>
+      String(normStr || '')
+        .replace(/^(?:the|vintage|vtg|board\s+game|card\s+game|rpg|ttrpg|d\s*&\s*d|ad\s*&\s*d|advanced\s+dungeons\s+(?:and\s+)?dragons|dungeons\s+(?:and\s+)?dragons)\s+/i, '')
+        .replace(/\s+(?:board\s+game|card\s+game|rpg|ttrpg|game|book|rulebook|hardcover|hc|softcover|sc|boxed\s+set|box\s+set)$/i, '')
+        .trim();
+
+    const tokenizeTitleWords = (rawStr) =>
+      cleanStr(rawStr)
+        .toLowerCase()
+        .replace(/\badvanced\s+dungeons\s*(?:&|and)?\s*dragons\b/g, ' add dnd dungeons dragons ')
+        .replace(/\bdungeons\s*(?:&|and)\s*dragons\b/g, ' dnd dungeons dragons ')
+        .replace(/\bad\s*&\s*d\b/g, ' add ')
+        .replace(/\bd\s*&\s*d\b/g, ' dnd ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length >= 2 && w !== 'the' && w !== 'and' && w !== 'with' && w !== 'for' && w !== 'from');
+
     // Build lookup indexes across Tab 1's `buildVerificationReport()`, `/api/product`, `/inventory`, and cloud metadata
     const skuByNumericId = new Map();
     const productBySku = new Map();
     const skuByTitlePrice = new Map();
     const skuByTitleOnly = new Map();
     const upcToSkuMap = new Map();
+    const candidateEntries = [];
+
+    const registerCandidateEntry = (skuVal, rawTitle, rawPrice, soldDateStr, isSoldOrPaid) => {
+      const s = cleanStr(skuVal).toUpperCase();
+      const tKey = normalizeTitleKey(rawTitle);
+      if (!s || !tKey) return;
+      const coreKey = stripCoreTitle(tKey);
+      const pNum = Number(rawPrice || 0);
+      const pVal = pNum.toFixed(2);
+      for (const k of [tKey, coreKey]) {
+        if (k && k.length >= 4) {
+          if (!skuByTitlePrice.has(`${k}|${pVal}`)) skuByTitlePrice.set(`${k}|${pVal}`, s);
+          if (!skuByTitleOnly.has(k)) skuByTitleOnly.set(k, s);
+        }
+      }
+      candidateEntries.push({
+        sku: s,
+        normTitle: tKey,
+        coreTitle: coreKey,
+        tokens: tokenizeTitleWords(rawTitle),
+        price: pNum,
+        soldDate: cleanStr(soldDateStr),
+        isSoldOrPaid: Boolean(isSoldOrPaid),
+      });
+    };
 
     for (const auditRow of tab1AuditRows) {
       const s = cleanStr(auditRow.sku).toUpperCase();
@@ -2140,12 +2204,13 @@
         if (u && isRealUpc(u)) {
           upcToSkuMap.set(u, s);
         }
-        const tKey = normalizeTitleKey(auditRow.name);
-        if (tKey) {
-          const pVal = Number(auditRow.agreedPrice || 0).toFixed(2);
-          skuByTitlePrice.set(`${tKey}|${pVal}`, s);
-          if (!skuByTitleOnly.has(tKey)) skuByTitleOnly.set(tKey, s);
-        }
+        registerCandidateEntry(
+          s,
+          auditRow.name,
+          auditRow.agreedPrice,
+          auditRow.soldDate || auditRow.paidDate || '',
+          auditRow.inventory === 'Sold' || auditRow.inventory === 'Paid'
+        );
       }
     }
 
@@ -2159,12 +2224,13 @@
       if (!s || !meta) continue;
       const u = cleanStr(meta.upc).toUpperCase();
       if (u) upcToSkuMap.set(u, s);
-      const tKey = normalizeTitleKey(meta.title);
-      if (tKey) {
-        if (!skuByTitleOnly.has(tKey)) skuByTitleOnly.set(tKey, s);
-        const pVal = Number(meta.price || 0).toFixed(2);
-        skuByTitlePrice.set(`${tKey}|${pVal}`, s);
-      }
+      registerCandidateEntry(
+        s,
+        meta.title,
+        meta.price,
+        meta.soldDate || '',
+        String(meta.status || '').toLowerCase() === 'sold'
+      );
     }
 
     for (const p of catalogProducts) {
@@ -2180,7 +2246,7 @@
         productBySku.set(s, p);
         if (numId) skuByNumericId.set(numId, s);
         if (itemNumId) skuByNumericId.set(itemNumId, s);
-        const pTitle = normalizeTitleKey(p.name || p.title || p.description || '');
+        const pTitle = p.name || p.title || p.description || '';
         const rawPrice =
           p.price ??
           p.agreed_price ??
@@ -2189,17 +2255,27 @@
           firstItem?.price ??
           firstItem?.agreed_price ??
           0;
-        const pPrice = (parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2);
-        if (pTitle) {
-          skuByTitlePrice.set(`${pTitle}|${pPrice}`, s);
-          if (!skuByTitleOnly.has(pTitle)) skuByTitleOnly.set(pTitle, s);
-        }
+        const pPrice = parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0;
+        const pSoldDate = cleanStr(
+          p.sold_date || p.sold_at || p.paid_date || firstItem?.sold_date || p.updated_at || ''
+        ).slice(0, 10);
+        registerCandidateEntry(s, pTitle, pPrice, pSoldDate, Boolean(p.sold || p.paid));
       }
     }
 
-    // Helper: 4-tier resolution of `ricoSku` (`0EJ...`) and `upc` (`HUCK-XXXX` / `PDXGL-` / `BB-`), reusing Tab 1's audit rows
+    // Helper: 4-tier resolution of `ricoSku` (`0EJ...`), `upc` (`HUCK-XXXX` / `PDXGL-` / `BB-`), and `soldDate`, reusing Tab 1's audit rows
     const resolveCrossLinkedIdentity = (rawRow) => {
-      let candidateSku = cleanStr(rawRow.ricoSku || rawRow.sku || '').toUpperCase();
+      const rawTitleInput = cleanStr(rawRow.title || '');
+      const suffixMatch = rawTitleInput.match(/^(.*?)\s+-\s+((?:0EJ|HUCK|PDXGL|BB)[A-Z0-9-]{2,14}|[A-Z0-9]{4,12})$/i);
+      const strippedTitle = suffixMatch ? cleanStr(suffixMatch[1]) : rawTitleInput;
+      const trailingCode = suffixMatch ? cleanStr(suffixMatch[2]).toUpperCase() : '';
+
+      let candidateSku = cleanStr(rawRow.ricoSku || rawRow.sku || trailingCode || '').toUpperCase();
+      let candidateUpc = cleanStr(rawRow.upc || '').toUpperCase();
+      if (/^(?:HUCK|PDXGL|BB)-/i.test(candidateSku)) {
+        if (!candidateUpc) candidateUpc = candidateSku;
+        candidateSku = upcToSkuMap.get(candidateUpc) || '';
+      }
       if (candidateSku === 'UNLINKED-SKU' || /^\d+$/.test(candidateSku)) {
         candidateSku = skuByNumericId.get(candidateSku) || '';
       }
@@ -2207,22 +2283,74 @@
       if (!candidateSku && rawIdStr && skuByNumericId.has(rawIdStr)) {
         candidateSku = skuByNumericId.get(rawIdStr) || '';
       }
-
-      let candidateUpc = cleanStr(rawRow.upc || '').toUpperCase();
       if (!candidateSku && candidateUpc && upcToSkuMap.has(candidateUpc)) {
         candidateSku = upcToSkuMap.get(candidateUpc) || '';
       }
 
-      const normTitle = normalizeTitleKey(rawRow.title || '');
-      const agreedFixed = Number(rawRow.agreedPrice ?? rawRow.grossPrice ?? 0).toFixed(2);
+      const normTitle = normalizeTitleKey(strippedTitle);
+      const coreTitle = stripCoreTitle(normTitle);
+      const rowPriceNum = Number(rawRow.agreedPrice ?? rawRow.grossPrice ?? 0);
+      const agreedFixed = rowPriceNum.toFixed(2);
+      let matchedViaFuzzy = false;
 
-      // Tier 3: Normalized Item Title + Agreed Price
-      if (!candidateSku && normTitle && skuByTitlePrice.has(`${normTitle}|${agreedFixed}`)) {
-        candidateSku = skuByTitlePrice.get(`${normTitle}|${agreedFixed}`) || '';
+      // Tier 2: Normalized / Core Item Title + Agreed Price, or Exact Normalized / Core Title
+      if (!candidateSku && normTitle) {
+        candidateSku =
+          skuByTitlePrice.get(`${normTitle}|${agreedFixed}`) ||
+          (coreTitle ? skuByTitlePrice.get(`${coreTitle}|${agreedFixed}`) : '') ||
+          skuByTitleOnly.get(normTitle) ||
+          (coreTitle && coreTitle.length >= 5 ? skuByTitleOnly.get(coreTitle) : '') ||
+          '';
       }
-      // Tier 4: Normalized Item Title
-      if (!candidateSku && normTitle && skuByTitleOnly.has(normTitle)) {
-        candidateSku = skuByTitleOnly.get(normTitle) || '';
+
+      // Tier 3: Token / Prefix / Fuzzy Title + Gross Price match for Paid History rows missing a SKU (e.g. Blackbeard, Board Game Stop Thief, Castles of Burgundy, Advanced Dungeons & Dragons)
+      if (!candidateSku && normTitle && normTitle.length >= 5) {
+        const rowWords = tokenizeTitleWords(strippedTitle);
+        let bestEntry = null;
+        let bestScore = 0;
+
+        for (const entry of candidateEntries) {
+          const priceDiff = rowPriceNum > 0 && entry.price > 0 ? Math.abs(entry.price - rowPriceNum) : 0;
+          if (rowPriceNum > 0 && entry.price > 0 && priceDiff > 5.01) continue;
+          const isExactPrice = rowPriceNum > 0 && entry.price > 0 && priceDiff < 0.05;
+
+          const isPrefix =
+            (normTitle.length >= 8 &&
+              entry.normTitle.length >= 8 &&
+              (entry.normTitle.startsWith(normTitle) || normTitle.startsWith(entry.normTitle))) ||
+            (coreTitle.length >= 6 &&
+              entry.coreTitle.length >= 6 &&
+              (entry.coreTitle.startsWith(coreTitle) || coreTitle.startsWith(entry.coreTitle)));
+
+          let tokenScore = 0;
+          if (rowWords.length > 0 && entry.tokens.length > 0) {
+            const candSet = new Set(entry.tokens);
+            const matched = rowWords.filter((w) => candSet.has(w));
+            const rowCov = matched.length / rowWords.length;
+            const minCov = matched.length / Math.min(rowWords.length, entry.tokens.length);
+            if (rowCov === 1 && (isExactPrice || minCov >= 0.6)) {
+              tokenScore = isExactPrice ? 0.94 : 0.88;
+            } else if (rowCov >= 0.75 && minCov >= 0.75 && isExactPrice && matched.length >= 2) {
+              tokenScore = 0.89;
+            }
+          }
+
+          if (isPrefix || tokenScore >= 0.85) {
+            const score =
+              (isPrefix ? 0.9 : tokenScore) +
+              (isExactPrice ? 0.06 : 0) +
+              (entry.isSoldOrPaid ? 0.03 : 0);
+            if (score > bestScore) {
+              bestScore = score;
+              bestEntry = entry;
+            }
+          }
+        }
+
+        if (bestEntry) {
+          candidateSku = bestEntry.sku;
+          matchedViaFuzzy = true;
+        }
       }
 
       const tab1Row =
@@ -2263,24 +2391,33 @@
         matchTier = 'sku';
       } else if (normTitle && skuByTitlePrice.has(`${normTitle}|${agreedFixed}`)) {
         matchTier = 'title_price';
-      } else if (normTitle && skuByTitleOnly.has(normTitle)) {
+      } else if ((normTitle && skuByTitleOnly.has(normTitle)) || matchedViaFuzzy) {
         matchTier = 'title';
       }
 
       const isMatchedInBooth = matchTier !== 'unmatched';
       const resolvedTitle =
-        cleanStr(rawRow.title) ||
+        strippedTitle ||
         (tab1Row && cleanStr(tab1Row.name)) ||
         (candidateSku && skuMetaMap[candidateSku] && skuMetaMap[candidateSku].title) ||
         (prod && cleanStr(prod.name || prod.title)) ||
         candidateSku ||
         'Booth Sale Item';
 
+      const inheritedSoldDate = cleanStr(
+        rawRow.soldDate ||
+          rawRow.paidDate ||
+          (tab1Row && (tab1Row.soldDate || tab1Row.paidDate)) ||
+          (candidateSku && skuMetaMap[candidateSku] && skuMetaMap[candidateSku].soldDate) ||
+          ''
+      );
+
       return {
         ricoSku: candidateSku,
         sku: candidateSku,
         upc: mappedUpc,
         title: resolvedTitle,
+        soldDate: inheritedSoldDate,
         matchTier,
         isMatchedInBooth,
         matchedInBooth: isMatchedInBooth,
@@ -2300,8 +2437,8 @@
       const ricoSku = linked.ricoSku || '';
       const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');
       const cleanTicket = saleNumber.replace(/^#/, '').trim();
-      const soldDate = cleanStr(raw.soldDate || '');
       const paidDate = raw.paidDate ? cleanStr(raw.paidDate) : null;
+      const soldDate = cleanStr(raw.soldDate || linked.soldDate || paidDate || '');
       const agreedPrice = Number(Number(raw.agreedPrice ?? raw.grossPrice ?? 0).toFixed(2));
       const agedPrice = Number(Number(raw.agedPrice ?? agreedPrice).toFixed(2));
       const grossPrice = Number(Number(raw.grossPrice ?? (agedPrice > 0 ? agedPrice : agreedPrice)).toFixed(2));
@@ -2658,19 +2795,21 @@
     }
   }
 
-  async function pushSalesToResaleCore() {
+  async function pushSalesToResaleCore(options = {}) {
+    const silent = Boolean(options && options.silent);
     if (isPushingSales) return;
     if (catalogProducts.length === 0) {
       await loadConsignorCatalog();
     }
-    if (!hasHarvestedPayoutPages) {
+    if (!hasHarvestedPayoutPages && !isHarvestingPayoutPages) {
       await harvestRicochetPayoutPages(false);
     }
     const rows = getPartnerScopedSalesRows(extractRicochetSoldLines());
+    if (rows.length === 0 && silent) return;
     const pushBtn = document.getElementById('rc-push-sales-btn');
     const syncBanner = document.getElementById('rc-sales-sync-banner');
     isPushingSales = true;
-    if (pushBtn) {
+    if (pushBtn && !silent) {
       pushBtn.disabled = true;
       pushBtn.textContent = `⏳ Staging ${rows.length} Sales (Dry-Run)...`;
     }

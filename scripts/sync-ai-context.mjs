@@ -16,15 +16,28 @@ const HUCKS_CORE_SKILL_PATH = path.join(SKILLS_SRC_DIR, 'hucks-resale-core', 'SK
 const SKILLS_DIST_DIR = path.join(ROOT_DIR, 'dist-gemini-skills');
 const MANIFEST_PATH = path.join(SKILLS_DIST_DIR, '.sync-manifest.json');
 
+const WORKFLOW_AND_ANTI_GLITCH_RULES = `### Antigravity IDE Workflow & Gemini Web Anti-Glitch Rules
+1. **Exact Antigravity IDE Model + Level Lock:** Every IDE prompt must specify one of the exact Antigravity IDE dropdown choices + thinking level:
+   - \`Gemini 3.8 Flash\` -> Level: \`Low\` or \`Medium\` (fast reads, doc/session syncs, single-file edits)
+   - \`Gemini 4 Argon\` -> Level: \`Medium\` or \`High\` (default daily driver for multi-file Vue/TS features & refactors)
+   - \`Claude Sonnet 5.5\` -> Level: \`Medium\` or \`High\` (isolated 5-10% specialist turns only)
+   - \`Claude Opus 5.5\` -> Level: \`High\` (isolated deep architecture escalation only)
+   - \`GPT-OSS 120B\` -> Level: \`Medium\`
+2. **Mandatory Turn-1 Self-Check Gatekeeper:** Every Gemini-locked IDE prompt must instruct the agent to verify its own model identity before making any tool call. If \`Claude Sonnet 5.5\` or \`Claude Opus 5.5\` is active on a Gemini-locked prompt, abort immediately with 0 tool calls and output: \`WRONG MODEL ACTIVE: Switch the IDE dropdown from Claude to Gemini 4 Argon (Level: High/Medium) and re-run.\` Otherwise, begin Line 1 of the reply with \`Executed by: [Your Model Identity]\`.
+3. **Exact File Paths Only Rule (Zero Terminal Approvals & Zero Directory Searches):** Never invoke \`run_command\` (0 terminal calls) and never search directories. Use ONLY \`read_file\`, \`edit_file\`, and \`write_file\` on explicit file paths listed in the prompt, and output ONE single PowerShell command block at the bottom for the user to run manually.
+4. **Clean Single Code Block Rule (Anti-Splice-Glitch in Gemini Web):** Whenever Gemini Web outputs a copy-paste prompt for Antigravity IDE, output ONE single fenced code block (\` \`\`\`text ... \`\`\` \`) and zero inline backticks, emojis, or horizontal dividers anywhere outside the code block so the Gemini Web streaming parser never splices or truncates the message.
+`;
+
 const GOLDEN_RULES_AND_WAREHOUSES = `---
 
-## The 3 Golden Rules & Canonical Warehouse IDs (\`resale_db.warehouses\`)
+## The 3 Golden Rules, Workflow Guardrails & Canonical Warehouse IDs (\`resale_db.warehouses\`)
 
 ### The 3 Golden Rules
 1. **\`storageLocation\` must NEVER be blank/unassigned & 4 Canonical Locations Only:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit canonical location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified), and never create duplicate warehouse records.
 2. **Zero Hardcoded Locations (100% Driven by Central Location Settings):** Never hardcode location codes, names, fees, or static manifest keys in UI components, API routes, or bookmarklets—always read dynamically from \`src/lib/warehouses.ts\` (\`usesRicochet\`, \`supportsPaperSalesSheet\`, \`salesIntakeMode\`, \`commissionRate\`, \`monthlyRent\`).
 3. **Reuse Canonical Pipelines (\`src/lib/salesBucketing.ts\`), Break Down Monoliths, & Keep Read-Only Audits Clean:** Never reinvent duplicate matching/deduplication pipelines or bloat giant monolithic files—always delegate to \`src/lib/salesBucketing.ts\` (\`splitTrailingBoothSku\`, \`isPayoutSummaryRow\`, \`assignOccurrenceFingerprints\`, \`flagAlreadyRecordedRows\`, \`matchMemoryDenInventoryItem\`, \`buildLockedMultiBinMap\`), extract focused composables/panels (\`src/lib/ricochetPayoutParser.ts\`, \`src/composables/useRicochetSalesSync.ts\`, \`src/components/sales/RicochetLiveSalesPanel.vue\`), and never modify \`.vue\` files or run local builds on read-only tasks.
 
+${WORKFLOW_AND_ANTI_GLITCH_RULES}
 ### Canonical Warehouse & Location IDs
 | Code | Name | Document \`$id\` | Type | Commission | Monthly Rent | Notes / Vibes & Exclusions |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -299,7 +312,7 @@ function syncBundledSkills() {
           ].join('\n')
         : '';
 
-    const fullContent = `${frontmatter}${bundleHeader}${sections.join('\n\n---\n\n')}\n`;
+    const fullContent = `${frontmatter}${bundleHeader}${sections.join('\n\n---\n\n')}\n\n---\n\n${WORKFLOW_AND_ANTI_GLITCH_RULES}\n`;
 
     const targetDir = path.join(SKILLS_DIST_DIR, bundle.id);
     fs.mkdirSync(targetDir, { recursive: true });

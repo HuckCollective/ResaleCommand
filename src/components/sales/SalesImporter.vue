@@ -384,6 +384,7 @@
         :is-loading="isLoadingRicochetSync"
         :is-simulating="isSimulatingRicochetSync"
         :is-committing="isCommittingRicochetSync"
+        :is-auto-creating-unmatched="isAutoCreatingAll"
         v-model:is-live-commit-unlocked="isRicochetLiveCommitUnlocked"
         :dry-run-result="ricochetDryRunResult"
         v-model:is-paste-drawer-open="isPasteRicochetDrawerOpen"
@@ -394,6 +395,8 @@
         @dismiss-dry-run="ricochetDryRunResult = null"
         @apply-pasted="applyPastedRicochetSyncPayload"
         @assign-row="stageSingleRicochetRowIntoHandsOnMatcher"
+        @quick-create-row="quickCreateRicochetStagedRow"
+        @auto-create-all-unmatched="autoCreateAllUnmatchedRicochetRows"
       />
 
       <!-- ========================================================================= -->
@@ -2191,6 +2194,7 @@ const {
   commitStagedRicochetSales,
 } = useRicochetSalesSync({
   activeCanonicalLocationMeta,
+  inventoryItems,
   addToast,
   onCsvFallbackPaste: (rawCsv: string) => handleRicochetCsvFallback(rawCsv),
   onAfterLiveCommit: () => {
@@ -2877,19 +2881,155 @@ const openMatcherDrawer = (row: any) => {
   isMatcherDrawerOpen.value = true;
 };
 
+const activeRicochetSourceRow = ref<any | null>(null);
+
+const applyMatchedItemToRicochetPayloadRow = (targetRicoRow: any, item: any) => {
+  if (!targetRicoRow || !item || !Array.isArray(ricochetSyncPayload.value?.rows)) return;
+  const itemSku = cleanCatalogSku(item.locationSku || item.sku || targetRicoRow.sku || '').toUpperCase();
+  const itemUpc = cleanCatalogSku(item.upc || targetRicoRow.upc || '').toUpperCase();
+  const rawMatch = ricochetSyncPayload.value.rows.find(
+    (r: any) =>
+      r === targetRicoRow ||
+      (r.saleNumber && r.saleNumber === targetRicoRow.saleNumber && (r.title === targetRicoRow.title || r.sku === targetRicoRow.sku)) ||
+      (r.ricoItemId && r.ricoItemId === targetRicoRow.ricoItemId && r.title === targetRicoRow.title)
+  );
+  const rowToMutate = rawMatch || targetRicoRow;
+  rowToMutate.matchedItemId = item.$id;
+  rowToMutate.matchedItemUpc = itemUpc || item.upc;
+  rowToMutate.matchedItemTitle = item.title;
+  rowToMutate.matchedItemCost = Number(item.cost || 0);
+  if (!rowToMutate.sku && itemSku) rowToMutate.sku = itemSku;
+  if (!rowToMutate.ricoSku && itemSku) rowToMutate.ricoSku = itemSku;
+  if (!rowToMutate.upc && itemUpc) rowToMutate.upc = itemUpc;
+  rowToMutate.matchTier = itemUpc ? 'upc' : itemSku ? 'sku' : 'title';
+  rowToMutate.matchStatus = 'matched';
+  ricochetSyncPayload.value = {
+    ...ricochetSyncPayload.value,
+    rows: [...ricochetSyncPayload.value.rows],
+  };
+};
+
 const stageSingleRicochetRowIntoHandsOnMatcher = (rRow: any) => {
   if (!rRow) return;
+  activeRicochetSourceRow.value = rRow;
+  const existingMapped = rRow.matchedItemId
+    ? (inventoryItems.value || []).find((i: any) => i.$id === rRow.matchedItemId) || null
+    : null;
   addManualSoldLine({
-    date: rRow.soldDate || new Date().toISOString().slice(0, 10),
-    sku: rRow.sku || rRow.upc || rRow.ricoItemId || '',
+    date: rRow.soldDate || rRow.paidDate || new Date().toISOString().slice(0, 10),
+    sku: rRow.sku || rRow.ricoSku || rRow.upc || rRow.ricoItemId || '',
     title: rRow.title || 'Sold Booth Item',
-    gross: Number(rRow.grossPrice || 0),
+    gross: Number(rRow.grossPrice || rRow.agreedPrice || 0),
     qty: 1,
-    ticketNumber: rRow.payoutId || rRow.ricoItemId || '',
+    mappedItem: existingMapped,
+    ticketNumber: rRow.payoutId || rRow.saleNumber || rRow.ricoItemId || '',
   });
   const newestRow = parsedRows.value[parsedRows.value.length - 1];
   if (newestRow) {
+    newestRow._ricochetSourceRow = rRow;
     openMatcherDrawer(newestRow);
+  }
+};
+
+const createSoldItemDocForRicochetRow = async (rRow: any) => {
+  const ITEMS_COL = getCollectionId();
+  const sku = cleanCatalogSku(rRow.ricoSku || rRow.sku || '').toUpperCase();
+  const existingItem = sku
+    ? (inventoryItems.value || []).find(
+        (i: any) =>
+          cleanCatalogSku(i.locationSku || i.sku).toUpperCase() === sku ||
+          cleanCatalogSku(i.upc).toUpperCase() === sku
+      )
+    : null;
+  if (existingItem) {
+    applyMatchedItemToRicochetPayloadRow(rRow, existingItem);
+    return existingItem;
+  }
+
+  let prefix = 'HUCK';
+  if (rRow.partnerBucket === 'BB' || isBbConsignorRow({ sku, upc: rRow.upc, title: rRow.title })) {
+    prefix = 'BB';
+  } else if (rRow.partnerBucket === 'PDXGL' || sku.startsWith('PDXGL')) {
+    prefix = 'PDXGL';
+  }
+
+  const nextUpc = await generateNextUpc(prefix);
+  const gross = Number(rRow.grossPrice || rRow.agreedPrice || 0);
+  const net = Number(rRow.ricoNetPayout ?? rRow.expectedNetPayout ?? gross);
+  const activeCode = activeCanonicalLocationMeta.value.code;
+  const activeWhId = activeCanonicalLocationMeta.value.id || MD_CANONICAL_WAREHOUSE_ID;
+
+  const doc: Record<string, any> = {
+    title: rRow.title || sku || 'Sold Booth Item',
+    status: 'sold',
+    cost: 0,
+    resalePrice: gross,
+    soldPrice: net,
+    upc: nextUpc,
+    locationSku: sku || undefined,
+    storageLocation: activeCode,
+    warehouseId: activeWhId,
+    quantity: 1,
+  };
+  if (activeTeamId.value) doc.tenantId = activeTeamId.value;
+
+  const createdDoc = await databases.createDocument(DB_ID, ITEMS_COL, ID.unique(), doc);
+  inventoryItems.value.push(createdDoc);
+  applyMatchedItemToRicochetPayloadRow(rRow, createdDoc);
+  return createdDoc;
+};
+
+const quickCreateRicochetStagedRow = async (rRow: any) => {
+  if (!rRow) return;
+  try {
+    const created = await createSoldItemDocForRicochetRow(rRow);
+    addToast({
+      type: 'success',
+      message: `✅ Auto-created & linked [${created.upc}] ${created.title}!`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Failed to auto-create item: ${err?.message || 'Unknown error'}`,
+    });
+  }
+};
+
+const autoCreateAllUnmatchedRicochetRows = async () => {
+  const unmatched = ricochetStagedRows.value.filter(
+    (r: any) => !r.matchedItemId && (!r.matchTier || r.matchTier === 'unmatched') && r.matchStatus !== 'matched'
+  );
+  if (unmatched.length === 0) {
+    addToast({ type: 'info', message: 'All staged Ricochet rows are already matched!' });
+    return;
+  }
+  isAutoCreatingAll.value = true;
+  showLoader('Auto-Creating Unmatched Ricochet Items...', {
+    step: `Generating barcodes for ${unmatched.length} items...`,
+    progress: 5,
+    cancelable: false,
+  });
+  try {
+    let count = 0;
+    for (let i = 0; i < unmatched.length; i++) {
+      const rRow = unmatched[i];
+      const pct = Math.round(((i + 1) / unmatched.length) * 100);
+      updateLoader(undefined, `Creating ${i + 1}/${unmatched.length}: ${(rRow.title || '').slice(0, 30)}...`, pct);
+      await createSoldItemDocForRicochetRow(rRow);
+      count++;
+    }
+    addToast({
+      type: 'success',
+      message: `✨ Auto-created & linked ${count} sold booth items!`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Auto-create failed: ${err?.message || 'Unknown error'}`,
+    });
+  } finally {
+    isAutoCreatingAll.value = false;
+    hideLoader();
   }
 };
 
@@ -2980,6 +3120,10 @@ const linkAndSaveItemToActiveRow = async (item: any) => {
     if (isMultiBin) {
       row.isMultiQty = true;
     }
+    if (row._ricochetSourceRow || activeRicochetSourceRow.value) {
+      applyMatchedItemToRicochetPayloadRow(row._ricochetSourceRow || activeRicochetSourceRow.value, target);
+      activeRicochetSourceRow.value = null;
+    }
     saveStagingSession();
     addToast({
       type: 'success',
@@ -3034,6 +3178,10 @@ const saveAndLinkNewItem = async (autoAdvance: boolean = false) => {
     row.mappedItem = createdDoc;
     row.isMultiQty = isMulti;
     inventoryItems.value.push(createdDoc);
+    if (row._ricochetSourceRow || activeRicochetSourceRow.value) {
+      applyMatchedItemToRicochetPayloadRow(row._ricochetSourceRow || activeRicochetSourceRow.value, createdDoc);
+      activeRicochetSourceRow.value = null;
+    }
 
     // If multi-quantity SKU, auto-map any other staged rows sharing this exact SKU
     if (row.extractedSku && isMulti) {
@@ -3098,6 +3246,10 @@ const quickAddRow = async (row: any) => {
     row.mappedItem = createdDoc;
     row.isMultiQty = isMulti;
     inventoryItems.value.push(createdDoc);
+    if (row._ricochetSourceRow || activeRicochetSourceRow.value) {
+      applyMatchedItemToRicochetPayloadRow(row._ricochetSourceRow || activeRicochetSourceRow.value, createdDoc);
+      activeRicochetSourceRow.value = null;
+    }
 
     // Auto-link any other rows that share this exact SKU
     if (row.extractedSku && isMulti) {

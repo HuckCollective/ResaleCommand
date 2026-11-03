@@ -1861,13 +1861,21 @@ export function buildLockedMultiBinMap(
     return multiBinResolvedBySku;
 }
 
+function stripGenericTitleAffixes(normTitle: string): string {
+    return String(normTitle || '')
+        .replace(/^(?:the|vintage|vtg|board\s+game|card\s+game|rpg|ttrpg|d\s*&\s*d|ad\s*&\s*d|advanced\s+dungeons\s+(?:and\s+)?dragons|dungeons\s+(?:and\s+)?dragons)\s+/i, '')
+        .replace(/\s+(?:board\s+game|card\s+game|rpg|ttrpg|game|book|rulebook|hardcover|hc|softcover|sc|boxed\s+set|box\s+set)$/i, '')
+        .trim();
+}
+
 /**
- * Matches a Memory Den Products-*.csv or Payouts *.csv row against resale_db.items
- * enforcing all verified invariants:
- * - Multi-Qty Booth Bin priority & lock (0EJ0FR -> HUCK-1309, 0EJ0H5 -> HUCK-1425/HUCK-1380)
- * - Trap guards (0EJ0NY -> HUCK-9459 sold; 0EJ0O0 -> HUCK-9458 placed)
- * - Strict B&B (BB-) vs HUCK-/PDXGL- namespace isolation
- * - Anti-fuzzy guardrails (blocks <15 char generic titles, requires >=85% similarity & price within $5)
+ * Matches a Memory Den Products-*.csv, Payouts *.csv, or Ricochet Live Sync row against resale_db.items
+ * enforcing all verified 4-tier invariants:
+ * - Tier 1: Exact SKU / UPC / trailing SKU via `splitTrailingBoothSku` + trap guards + pre-verified maps
+ * - Tier 2: Normalized title / `tagTitle` match (including stripped core title for `"Board Game Stop Thief"`, `"Castles of Burgundy"`, etc.)
+ * - Tier 3: Token / fuzzy title + gross price match for rows missing a SKU (supports short titles >= 5 chars like `"Blackbeard"`, `"Advanced Dungeons & Dragons"`)
+ * - Tier 4: Multi-Qty Booth Bin priority & lock (`buildLockedMultiBinMap`: `0EJ0FR -> HUCK-1309`, `0EJ0H5 -> HUCK-1425/HUCK-1380`)
+ * - Strict B&B (`BB-`) vs `HUCK-`/`PDXGL-` namespace isolation
  */
 export function matchMemoryDenInventoryItem(params: {
     sku?: string;
@@ -1880,13 +1888,26 @@ export function matchMemoryDenInventoryItem(params: {
     claimedItemIdToSku?: Map<string, string>;
     multiBinResolvedBySku?: Map<string, any>;
 }): any | null {
-    const normSku = cleanCatalogSku(params.sku).toUpperCase();
-    const normUpc = cleanCatalogSku(params.upc).toUpperCase();
+    const trailingFromTitle = splitTrailingBoothSku(String(params.title || ''));
+    const effectiveRawTitle = trailingFromTitle.sku ? trailingFromTitle.title : String(params.title || '');
+    let normSku = cleanCatalogSku(params.sku || trailingFromTitle.sku).toUpperCase();
+    let normUpc = cleanCatalogSku(params.upc).toUpperCase();
+    if (/^(?:HUCK|PDXGL|BB)-/i.test(normSku)) {
+        if (!normUpc) normUpc = normSku;
+        normSku = '';
+    }
     const price = Number(params.price ?? 0);
+    if (!normSku && effectiveRawTitle) {
+        normSku = resolveMemoryDenSkuFromPayoutRow({
+            extractedSku: '',
+            itemName: effectiveRawTitle,
+            grossPrice: price,
+        });
+    }
     const activeItems = params.activeItems || [];
     const claimed = params.claimedItemIdToSku || new Map<string, string>();
     const multiBins = params.multiBinResolvedBySku || buildLockedMultiBinMap(activeItems, claimed);
-    const rowIsBb = isBbConsignorRow({ sku: normSku, upc: normUpc, title: params.title, extraText: params.extraText });
+    const rowIsBb = isBbConsignorRow({ sku: normSku, upc: normUpc, title: effectiveRawTitle, extraText: params.extraText });
     const isSoldUnitSplitChild = (it: any) => /\(sold unit\)/i.test(String(it?.title || ''));
 
     const dereferenceParent = (itm: any): any => {
@@ -1899,7 +1920,21 @@ export function matchMemoryDenInventoryItem(params: {
         return itm;
     };
 
-    const rowClaimKey = normSku || normalizeTitleForMdMatch(params.title);
+    const rowClaimKey = normSku || normUpc || `${normalizeTitleForMdMatch(effectiveRawTitle)}|${price.toFixed(2)}`;
+
+    const finalizeHit = (cand: any): any => {
+        const resolved = dereferenceParent(cand);
+        if (!resolved) return null;
+        const isReusableMulti =
+            Boolean(normSku && PREVERIFIED_MD_MULTI_QTY_BINS[normSku]) ||
+            Boolean(resolved.isMultiQty) ||
+            Number(resolved.quantity ?? 1) > 1 ||
+            isParentLotCandidate(resolved);
+        if (resolved.$id && !isReusableMulti && rowClaimKey) {
+            claimed.set(resolved.$id, rowClaimKey);
+        }
+        return resolved;
+    };
 
     const canUseCandidate = (cand: any): boolean => {
         if (!cand) return false;
@@ -1920,22 +1955,22 @@ export function matchMemoryDenInventoryItem(params: {
         return true;
     };
 
-    // 0. Pre-resolved Multi-Qty Booth Bins
+    // Tier 4a: Pre-resolved Multi-Qty Booth Bins (`buildLockedMultiBinMap`)
     if (normSku && multiBins.has(normSku)) {
         return multiBins.get(normSku);
     }
 
-    // 1. Explicit Trap Guards: 0EJ0NY -> HUCK-9459 (smaller rounded bag); 0EJ0O0 -> HUCK-9458 (larger gothic backpack)
+    // Tier 1a: Explicit Trap Guards: 0EJ0NY -> HUCK-9459 (smaller rounded bag); 0EJ0O0 -> HUCK-9458 (larger gothic backpack)
     if (normSku === '0EJ0NY') {
         const huck9459 = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-9459');
-        if (huck9459) return dereferenceParent(huck9459);
+        if (huck9459) return finalizeHit(huck9459);
     }
     if (normSku === '0EJ0O0') {
         const huck9458 = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-9458');
-        if (huck9458) return dereferenceParent(huck9458);
+        if (huck9458) return finalizeHit(huck9458);
     }
 
-    // 2. Direct locationSku + UPC or Direct locationSku match (live Appwrite links always take priority over static baseline)
+    // Tier 1b: Direct locationSku + UPC or Direct locationSku match (live Appwrite links always take priority over static baseline)
     if (normSku) {
         const skuHits = activeItems.filter(i => {
             const iLocSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
@@ -1948,43 +1983,44 @@ export function matchMemoryDenInventoryItem(params: {
                 || skuHits.find(it => it.status === 'placed' && Number(it.quantity ?? 1) > 1)
                 || skuHits.find(it => String(it.status || '').toLowerCase() !== 'sold')
                 || skuHits[0];
-            return dereferenceParent(chosen);
+            return finalizeHit(chosen);
         }
     }
 
-    // 3. Direct UPC match
+    // Tier 1c: Direct UPC match
     if (normUpc) {
         const byUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === normUpc && canUseCandidate(i));
-        if (byUpc) return dereferenceParent(byUpc);
+        if (byUpc) return finalizeHit(byUpc);
     }
 
-    // 4. Pre-verified SKU -> UPC/ID override map (PREVERIFIED_MD_SKU_TO_UPC_OR_ID + PREVERIFIED_MD_SINGLE_UPC_BY_SKU)
+    // Tier 1d: Pre-verified SKU -> UPC/ID override map (PREVERIFIED_MD_SKU_TO_UPC_OR_ID + PREVERIFIED_MD_SINGLE_UPC_BY_SKU)
     const preMappedTarget = normSku ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID[normSku] : '';
     if (preMappedTarget) {
         const upperTarget = preMappedTarget.toUpperCase();
         const byMapped = activeItems.find(
             i => (cleanCatalogSku(i?.upc).toUpperCase() === upperTarget || String(i?.$id || '') === preMappedTarget) && canUseCandidate(i)
         );
-        if (byMapped) return dereferenceParent(byMapped);
+        if (byMapped) return finalizeHit(byMapped);
     }
 
     const preSingle = PREVERIFIED_MD_SINGLE_UPC_BY_SKU[normSku];
     if (preSingle && preSingle.upc) {
         const targetPreUpc = preSingle.upc.toUpperCase();
         const byPreUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === targetPreUpc && canUseCandidate(i));
-        if (byPreUpc) return dereferenceParent(byPreUpc);
+        if (byPreUpc) return finalizeHit(byPreUpc);
         if (preSingle.altUpc) {
             const altPreUpc = preSingle.altUpc.toUpperCase();
             const byAltUpc = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === altPreUpc && canUseCandidate(i));
-            if (byAltUpc) return dereferenceParent(byAltUpc);
+            if (byAltUpc) return finalizeHit(byAltUpc);
         }
     }
 
-    // 5. Strict Title Matching (Checks tagTitle and title; blocks <15 char fuzzy match while allowing exact tagTitle/title match >= 6 chars)
-    const normTitle = normalizeTitleForMdMatch(params.title);
-    if (!normTitle || normTitle.length < 6) {
+    // Tier 2 & Tier 3: Normalized Title & Token/Fuzzy Title + Gross Price Matching
+    const normTitle = normalizeTitleForMdMatch(effectiveRawTitle);
+    if (!normTitle || normTitle.length < 4) {
         return null;
     }
+    const coreRowTitle = stripGenericTitleAffixes(normTitle);
 
     const titleEligible = activeItems.filter(i => {
         const s = String(i?.status || '').toLowerCase().trim();
@@ -1992,38 +2028,120 @@ export function matchMemoryDenInventoryItem(params: {
         return canUseCandidate(i);
     });
 
-    // 5a. Exact normalized title or tagTitle match
-    const exactMatch = titleEligible.find(c => {
+    const isPriceCompatible = (c: any, maxDiff: number = 5.01): boolean => {
+        const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? c.soldPrice ?? 0);
+        if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > maxDiff) return false;
+        return true;
+    };
+
+    // Tier 2a: Exact normalized title or tagTitle match (prefers exact price match first)
+    const exactMatches = titleEligible.filter(c => {
         const candTitle = normalizeTitleForMdMatch(c.title || c.identity);
         const candTag = normalizeTitleForMdMatch(c.tagTitle);
         if (candTitle !== normTitle && candTag !== normTitle) return false;
-        const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0);
-        if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > 5.01) return false;
-        return true;
+        return isPriceCompatible(c, 5.01);
     });
-    if (exactMatch) return dereferenceParent(exactMatch);
-
-    if (normTitle.length < 15) {
-        return null;
+    if (exactMatches.length > 0) {
+        const exactPriceHit = exactMatches.find(
+            c => Math.abs(Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0) - price) < 0.05
+        );
+        return finalizeHit(exactPriceHit || exactMatches[0]);
     }
 
-    // 5b. High-similarity (>= 85%) or Payouts prefix match across title and tagTitle
+    // Tier 2b: Core title match (e.g. "Board Game Stop Thief" <-> "Stop Thief", "Castles of Burgundy" <-> "The Castles of Burgundy")
+    if (coreRowTitle && coreRowTitle.length >= 5) {
+        const coreMatches = titleEligible.filter(c => {
+            const candTitle = normalizeTitleForMdMatch(c.title || c.identity);
+            const candTag = normalizeTitleForMdMatch(c.tagTitle);
+            const coreCand = stripGenericTitleAffixes(candTitle);
+            const coreTag = stripGenericTitleAffixes(candTag);
+            const matchesCore =
+                (coreCand && coreCand === coreRowTitle) ||
+                (coreTag && coreTag === coreRowTitle) ||
+                (candTitle && candTitle === coreRowTitle) ||
+                (candTag && candTag === coreRowTitle);
+            if (!matchesCore) return false;
+            return isPriceCompatible(c, 5.01);
+        });
+        if (coreMatches.length > 0) {
+            const exactPriceHit = coreMatches.find(
+                c => Math.abs(Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0) - price) < 0.05
+            );
+            return finalizeHit(exactPriceHit || coreMatches[0]);
+        }
+    }
+
+    // Tier 3: Token / Prefix / Fuzzy Title + Gross Price Match for rows missing a SKU
+    // Supports short distinctive titles (`normTitle.length >= 5`, e.g. "Blackbeard", "Stop Thief", "Castles of Burgundy", "Advanced Dungeons & Dragons")
+    const rowTokens = tokenizeForCandidateMatch(effectiveRawTitle).filter(t => !MATCH_STOP_WORDS.has(t));
+    const specificRowTokens = rowTokens.filter(t => !GENERIC_CATEGORY_FORM_TOKENS.has(t));
+
     let bestCand: any = null;
     let bestScore = 0;
+
     for (const c of titleEligible) {
+        const rawCandStr = String(c.title || c.identity || '');
+        const rawTagStr = String(c.tagTitle || '');
         const candTitles = [
-            normalizeTitleForMdMatch(c.title || c.identity),
-            normalizeTitleForMdMatch(c.tagTitle),
-        ].filter(t => t && t.length >= 12);
+            normalizeTitleForMdMatch(rawCandStr),
+            normalizeTitleForMdMatch(rawTagStr),
+        ].filter(t => t && t.length >= 5);
+
+        const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? c.soldPrice ?? 0);
+        const priceDiff = price > 0 && dbPrice > 0 ? Math.abs(dbPrice - price) : 0;
+        const isExactPrice = price > 0 && dbPrice > 0 && priceDiff < 0.05;
+        const isClosePrice = price === 0 || dbPrice === 0 || priceDiff <= 5.01;
+        if (!isClosePrice && !preSingle) continue;
+
+        const candTokens = tokenizeForCandidateMatch(`${rawCandStr} ${rawTagStr}`).filter(t => !MATCH_STOP_WORDS.has(t));
+        const candTokenSet = new Set(candTokens);
+
         for (const candTitle of candTitles) {
             const sim = computeMdTitleSimilarity(normTitle, candTitle);
-            const isPayoutPrefix = Boolean(params.allowPrefixForPayout) && normTitle.length >= 15 &&
-                (candTitle.startsWith(normTitle) || normTitle.startsWith(candTitle));
+            const coreCand = stripGenericTitleAffixes(candTitle);
+            const coreSim = coreRowTitle && coreCand ? computeMdTitleSimilarity(coreRowTitle, coreCand) : 0;
 
-            if (sim >= 0.85 || isPayoutPrefix) {
-                const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0);
-                if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > 5.01) continue;
-                const score = isPayoutPrefix ? Math.max(sim, 0.86) : sim;
+            const isPayoutPrefix =
+                Boolean(params.allowPrefixForPayout) &&
+                normTitle.length >= 8 &&
+                candTitle.length >= 8 &&
+                (candTitle.startsWith(normTitle) ||
+                    normTitle.startsWith(candTitle) ||
+                    (coreRowTitle.length >= 6 &&
+                        coreCand.length >= 6 &&
+                        (coreCand.startsWith(coreRowTitle) || coreRowTitle.startsWith(coreCand))));
+
+            let tokenOverlapScore = 0;
+            if (rowTokens.length > 0 && candTokens.length > 0) {
+                const matchedRowTokens = rowTokens.filter(t => candTokenSet.has(t));
+                const matchedSpecific = specificRowTokens.filter(t => candTokenSet.has(t));
+                const rowCoverage = matchedRowTokens.length / rowTokens.length;
+                const minCoverage = matchedRowTokens.length / Math.min(rowTokens.length, candTokens.length);
+
+                // Distinctive single-word or short-title match with exact price (e.g. "Blackbeard", "Stop Thief", "Castles of Burgundy")
+                if (
+                    specificRowTokens.length > 0 &&
+                    matchedSpecific.length === specificRowTokens.length &&
+                    (isExactPrice || rowCoverage >= 0.75)
+                ) {
+                    tokenOverlapScore = isExactPrice ? 0.91 : 0.86;
+                } else if (
+                    // "Advanced Dungeons & Dragons" or RPG/Board Game titles with exact price match
+                    rowCoverage >= 0.75 &&
+                    minCoverage >= 0.75 &&
+                    isExactPrice &&
+                    matchedRowTokens.length >= 2
+                ) {
+                    tokenOverlapScore = 0.88;
+                }
+            }
+
+            const effectiveSim = Math.max(sim, coreSim, tokenOverlapScore);
+            if (effectiveSim >= 0.85 || isPayoutPrefix) {
+                const baseScore = isPayoutPrefix ? Math.max(effectiveSim, 0.86) : effectiveSim;
+                const priceBonus = isExactPrice ? 0.05 : 0;
+                const multiBonus = Number(c.quantity ?? 1) > 1 ? 0.02 : 0;
+                const score = baseScore + priceBonus + multiBonus;
                 if (score > bestScore) {
                     bestScore = score;
                     bestCand = c;
@@ -2032,7 +2150,7 @@ export function matchMemoryDenInventoryItem(params: {
         }
     }
 
-    return bestCand ? dereferenceParent(bestCand) : null;
+    return bestCand ? finalizeHit(bestCand) : null;
 }
 
 /**
@@ -2234,6 +2352,8 @@ const GARMENT_TYPE_CONFLICT_TOKENS = new Set([
 function tokenizeForCandidateMatch(raw: string): string[] {
     const preNormalized = String(raw || '')
         .toLowerCase()
+        .replace(/\badvanced\s+dungeons\s*(?:&|and)?\s*dragons\b/g, ' add dnd dungeons dragons ')
+        .replace(/\bdungeons\s*(?:&|and)\s*dragons\b/g, ' dnd dungeons dragons ')
         .replace(/\bad\s*&\s*d\b/g, ' add ')
         .replace(/\bd\s*&\s*d\b/g, ' dnd ')
         .replace(/\b3\.5\s*e?\b/g, ' 35e ')

@@ -1,8 +1,12 @@
-import { computed, ref, type ComputedRef } from 'vue';
+import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
 import {
+  PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+  buildLockedMultiBinMap,
   cleanCatalogSku,
   isLeakedInventoryDomRow,
   isPayoutSummaryRow,
+  matchMemoryDenInventoryItem,
+  resolveMemoryDenSkuFromPayoutRow,
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
 } from '../lib/salesBucketing';
@@ -10,6 +14,7 @@ import type { LocationSettingMeta } from '../lib/warehouses';
 
 export interface UseRicochetSalesSyncOptions {
   activeCanonicalLocationMeta: ComputedRef<LocationSettingMeta>;
+  inventoryItems?: ComputedRef<any[]> | Ref<any[]>;
   addToast: (toast: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
   onCsvFallbackPaste: (rawCsvText: string) => void;
   onAfterLiveCommit?: () => void;
@@ -25,7 +30,7 @@ function hasRealPaidDate(rawPaidDate: any): boolean {
 }
 
 export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
-  const { activeCanonicalLocationMeta, addToast, onCsvFallbackPaste, onAfterLiveCommit } = options;
+  const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit } = options;
 
   const ricochetSyncPayload = ref<any | null>(null);
   const isLoadingRicochetSync = ref(false);
@@ -36,9 +41,15 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const ricochetSubFilter = ref<'all' | 'pending_payout' | 'paid' | 'space_rental'>('all');
   const isPasteRicochetDrawerOpen = ref(false);
   const pastedRicochetSyncText = ref('');
+  let lastAutoFocusFetchAt = 0;
 
   const ricochetStagedRows = computed<any[]>(() => {
     const rawList = Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
+    const activeItems = Array.isArray(inventoryItems?.value) ? inventoryItems!.value : [];
+    const claimedItemIdToSku = new Map<string, string>();
+    const multiBinResolvedBySku =
+      activeItems.length > 0 ? buildLockedMultiBinMap(activeItems, claimedItemIdToSku) : new Map<string, any>();
+
     return rawList
       .filter((r: any) => {
         const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
@@ -49,7 +60,46 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
         const trailing = splitTrailingBoothSku(rawTitle);
         const cleanTitle = trailing.sku ? trailing.title : rawTitle;
-        const resolvedSku = cleanCatalogSku(r?.ricoSku || r?.sku || trailing.sku || '').toUpperCase();
+        const grossPrice = Number(r?.grossPrice ?? r?.agreedPrice ?? 0);
+        let resolvedSku = cleanCatalogSku(r?.ricoSku || r?.sku || trailing.sku || '').toUpperCase();
+        if (/^\d+$/.test(resolvedSku)) resolvedSku = '';
+        if (!resolvedSku && cleanTitle) {
+          resolvedSku = resolveMemoryDenSkuFromPayoutRow({
+            extractedSku: '',
+            itemName: cleanTitle,
+            ticketNumber: String(r?.payoutId || r?.saleNumber || ''),
+            grossPrice,
+          });
+        }
+        let resolvedUpc = cleanCatalogSku(
+          r?.matchedItemUpc || r?.upc || (resolvedSku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[resolvedSku]) || ''
+        ).toUpperCase();
+
+        // Delegate 4-tier matching to `matchMemoryDenInventoryItem` + `buildLockedMultiBinMap` from `src/lib/salesBucketing.ts`
+        let matchedItem: any = null;
+        if (activeItems.length > 0 && (!resolvedSku || !resolvedUpc || !r?.matchedItemId)) {
+          matchedItem = matchMemoryDenInventoryItem({
+            sku: resolvedSku,
+            upc: resolvedUpc,
+            title: cleanTitle || rawTitle,
+            price: grossPrice,
+            allowPrefixForPayout: true,
+            activeItems,
+            claimedItemIdToSku,
+            multiBinResolvedBySku,
+          });
+        }
+
+        if (matchedItem) {
+          const itemLocSku = cleanCatalogSku(matchedItem.locationSku || matchedItem.sku).toUpperCase();
+          const itemUpc = cleanCatalogSku(matchedItem.upc).toUpperCase();
+          if (!resolvedSku) resolvedSku = itemLocSku || itemUpc;
+          if (!resolvedUpc && itemUpc) resolvedUpc = itemUpc;
+        }
+        if (!resolvedUpc && resolvedSku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[resolvedSku]) {
+          resolvedUpc = PREVERIFIED_MD_SKU_TO_UPC_OR_ID[resolvedSku];
+        }
+
         const rawPayoutStatus = String(r?.payoutStatus || '').toLowerCase().trim();
         const rawStatus = String(r?.status || '').toLowerCase().trim();
         const payoutStatus: 'pending_payout' | 'paid' =
@@ -58,25 +108,66 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             : rawPayoutStatus === 'paid' || hasRealPaidDate(r?.paidDate) || rawStatus === 'paid'
               ? 'paid'
               : 'pending_payout';
+
+        const rawSoldDate = String(r?.soldDate || r?.date || '').trim();
+        const fallbackPaidOrItemDate = String(
+          (hasRealPaidDate(r?.paidDate) ? r.paidDate : '') ||
+            matchedItem?.soldDate ||
+            (matchedItem?.$updatedAt ? String(matchedItem.$updatedAt).slice(0, 10) : '') ||
+            ''
+        ).trim();
+        const resolvedSoldDate =
+          payoutStatus === 'paid' && rawSoldDate === '2026-11-03' && fallbackPaidOrItemDate
+            ? fallbackPaidOrItemDate
+            : rawSoldDate || fallbackPaidOrItemDate;
+
         const isSynced = Boolean(r?.alreadySynced || r?.alreadyRecorded || r?.isAlreadyRecorded);
+        let matchTier = r?.matchTier || 'unmatched';
+        if (matchedItem && (!matchTier || matchTier === 'unmatched')) {
+          matchTier =
+            resolvedUpc && cleanCatalogSku(matchedItem.upc).toUpperCase() === resolvedUpc
+              ? 'upc'
+              : resolvedSku && cleanCatalogSku(matchedItem.locationSku).toUpperCase() === resolvedSku
+                ? 'sku'
+                : Math.abs(Number(matchedItem.boutiquePrice ?? matchedItem.resalePrice ?? matchedItem.price ?? 0) - grossPrice) < 0.05
+                  ? 'title_price'
+                  : 'title';
+        } else if (matchTier === 'unmatched' && resolvedUpc) {
+          matchTier = 'upc';
+        } else if (matchTier === 'unmatched' && resolvedSku) {
+          matchTier = 'sku';
+        }
+
         const isMatched = Boolean(
-          r?.matchStatus === 'matched' ||
+          matchedItem?.$id ||
+            r?.matchStatus === 'matched' ||
             r?.matchedItemId ||
-            (r?.matchTier && r.matchTier !== 'unmatched')
+            (matchTier && matchTier !== 'unmatched')
         );
         const partnerBucket = resolvePartnerBucketForSaleRow({
           ...r,
           sku: resolvedSku || r?.sku,
+          upc: resolvedUpc || r?.upc,
+          matchedItemUpc: matchedItem?.upc || r?.matchedItemUpc || resolvedUpc,
           title: cleanTitle || rawTitle,
+          matchedItemTitle: matchedItem?.title || r?.matchedItemTitle,
         });
         return {
           ...r,
           title: cleanTitle || rawTitle,
           sku: resolvedSku || r?.sku || '',
           ricoSku: resolvedSku || r?.ricoSku || r?.sku || '',
+          upc: resolvedUpc || r?.upc || '',
+          soldDate: resolvedSoldDate,
+          matchedItemId: matchedItem?.$id || r?.matchedItemId,
+          matchedItemUpc: matchedItem?.upc || r?.matchedItemUpc || resolvedUpc || undefined,
+          matchedItemTitle: matchedItem?.title || r?.matchedItemTitle,
+          matchedItemCost:
+            matchedItem?.cost !== undefined ? Number(matchedItem.cost || 0) : r?.matchedItemCost,
           payoutStatus,
           alreadySynced: isSynced,
           alreadyRecorded: isSynced,
+          matchTier,
           matchStatus: isMatched ? 'matched' : 'unmatched',
           partnerBucket,
         };
@@ -362,6 +453,29 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       isCommittingRicochetSync.value = false;
     }
   };
+
+  const handleTabWakeOrFocus = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (!activeCanonicalLocationMeta.value.usesRicochet || isLoadingRicochetSync.value) return;
+    const now = Date.now();
+    if (now - lastAutoFocusFetchAt < 4000) return;
+    lastAutoFocusFetchAt = now;
+    void fetchStagedRicochetSales(false);
+  };
+
+  onMounted(() => {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleTabWakeOrFocus);
+      document.addEventListener('visibilitychange', handleTabWakeOrFocus);
+    }
+  });
+
+  onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', handleTabWakeOrFocus);
+      document.removeEventListener('visibilitychange', handleTabWakeOrFocus);
+    }
+  });
 
   return {
     ricochetSyncPayload,

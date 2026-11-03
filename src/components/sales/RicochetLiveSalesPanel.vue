@@ -321,41 +321,55 @@
       </div>
 
       <!-- Partner Payout Split Pills (⭐ HUCK | 🎲 PDXGL | 💛 B&B) -->
-      <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-base-200/80">
-        <span class="text-[10px] font-black uppercase tracking-wider opacity-60 mr-1">
-          Partner Payout Split:
-        </span>
+      <div class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-200/80">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-[10px] font-black uppercase tracking-wider opacity-60 mr-1">
+            Partner Payout Split:
+          </span>
+          <button
+            type="button"
+            class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
+            :class="partnerFilter === 'all' ? 'btn-neutral' : 'btn-ghost border border-base-300'"
+            @click="partnerFilter = 'all'"
+          >
+            All Booth ({{ baseRowsForCounts.length }} • ${{ partnerTotals.ALL.net.toFixed(2) }})
+          </button>
+          <button
+            type="button"
+            class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
+            :class="partnerFilter === 'HUCK' ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
+            @click="togglePartnerFilter('HUCK')"
+          >
+            ⭐ HUCK ({{ partnerTotals.HUCK.count }} • ${{ partnerTotals.HUCK.net.toFixed(2) }} Net)
+          </button>
+          <button
+            type="button"
+            class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
+            :class="partnerFilter === 'PDXGL' ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
+            @click="togglePartnerFilter('PDXGL')"
+          >
+            🎲 PDXGL ({{ partnerTotals.PDXGL.count }} • ${{ partnerTotals.PDXGL.net.toFixed(2) }} Net)
+          </button>
+          <button
+            type="button"
+            class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
+            :class="partnerFilter === 'BB' ? 'btn-warning text-warning-content' : 'btn-ghost border border-base-300'"
+            @click="togglePartnerFilter('BB')"
+          >
+            💛 B&amp;B ({{ partnerTotals.BB.count }} • ${{ partnerTotals.BB.net.toFixed(2) }} Net)
+          </button>
+        </div>
+
         <button
+          v-if="unmatchedRowsCount > 0"
           type="button"
-          class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
-          :class="partnerFilter === 'all' ? 'btn-neutral' : 'btn-ghost border border-base-300'"
-          @click="partnerFilter = 'all'"
+          class="btn btn-xs btn-secondary font-black gap-1 shadow-xs"
+          :disabled="isAutoCreatingUnmatched"
+          @click="emit('autoCreateAllUnmatched')"
         >
-          All Booth ({{ baseRowsForCounts.length }} • ${{ partnerTotals.ALL.net.toFixed(2) }})
-        </button>
-        <button
-          type="button"
-          class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
-          :class="partnerFilter === 'HUCK' ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
-          @click="togglePartnerFilter('HUCK')"
-        >
-          ⭐ HUCK ({{ partnerTotals.HUCK.count }} • ${{ partnerTotals.HUCK.net.toFixed(2) }} Net)
-        </button>
-        <button
-          type="button"
-          class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
-          :class="partnerFilter === 'PDXGL' ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
-          @click="togglePartnerFilter('PDXGL')"
-        >
-          🎲 PDXGL ({{ partnerTotals.PDXGL.count }} • ${{ partnerTotals.PDXGL.net.toFixed(2) }} Net)
-        </button>
-        <button
-          type="button"
-          class="btn btn-2xs sm:btn-xs font-bold rounded-full font-mono"
-          :class="partnerFilter === 'BB' ? 'btn-warning text-warning-content' : 'btn-ghost border border-base-300'"
-          @click="togglePartnerFilter('BB')"
-        >
-          💛 B&amp;B ({{ partnerTotals.BB.count }} • ${{ partnerTotals.BB.net.toFixed(2) }} Net)
+          <span v-if="isAutoCreatingUnmatched" class="loading loading-spinner loading-2xs"></span>
+          <span v-else>✨</span>
+          <span>Auto-Create All {{ unmatchedRowsCount }} as Sold</span>
         </button>
       </div>
     </div>
@@ -481,20 +495,39 @@
                 >
                   ✅ Already Synced
                 </span>
-                <span
-                  v-if="isRowMatched(rRow)"
-                  class="badge badge-xs badge-success text-success-content font-bold gap-1"
-                >
-                  🔗 Matched ({{ rRow.matchTier || 'upc' }})
-                </span>
-                <button
-                  v-else
-                  type="button"
-                  class="btn btn-2xs btn-warning text-warning-content font-black"
-                  @click="emit('assignRow', rRow)"
-                >
-                  ⚪ Unmatched — Assign Booth Item
-                </button>
+                <template v-if="isRowMatched(rRow)">
+                  <span
+                    class="badge badge-xs badge-success text-success-content font-bold gap-1"
+                  >
+                    🔗 Matched ({{ rRow.matchTier || 'upc' }})
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-2xs btn-ghost border border-base-300 font-bold"
+                    title="Change linked inventory item in Match Drawer"
+                    @click="emit('assignRow', rRow)"
+                  >
+                    🔄 Change
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    type="button"
+                    class="btn btn-2xs btn-warning text-warning-content font-black"
+                    title="Open Match Drawer to search & link inventory item"
+                    @click="emit('assignRow', rRow)"
+                  >
+                    🔍 Match
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-2xs btn-secondary text-secondary-content font-black"
+                    title="Auto-create this unmatched row as a Sold item with sequential barcode"
+                    @click="emit('quickCreateRow', rRow)"
+                  >
+                    + Add
+                  </button>
+                </template>
               </div>
             </td>
           </tr>
@@ -553,6 +586,7 @@ const props = defineProps<{
   isLoading: boolean;
   isSimulating: boolean;
   isCommitting: boolean;
+  isAutoCreatingUnmatched?: boolean;
   isLiveCommitUnlocked: boolean;
   dryRunResult: any | null;
   isPasteDrawerOpen: boolean;
@@ -566,6 +600,8 @@ const emit = defineEmits<{
   (e: 'dismissDryRun'): void;
   (e: 'applyPasted'): void;
   (e: 'assignRow', row: any): void;
+  (e: 'quickCreateRow', row: any): void;
+  (e: 'autoCreateAllUnmatched'): void;
   (e: 'update:subFilter', val: 'all' | 'pending_payout' | 'paid' | 'space_rental'): void;
   (e: 'update:isLiveCommitUnlocked', val: boolean): void;
   (e: 'update:isPasteDrawerOpen', val: boolean): void;
