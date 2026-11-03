@@ -43,6 +43,9 @@
   let harvestedPendingTotalPayout = 0;
   let harvestedPaidHistoryTotalPayout = 0;
   let lastExtractedSalesRows = [];
+  let capturedRawPayoutCsv = ''; // RAW Export CSV text captured in memory from the Payout tab
+  let capturedRawPayoutHistoryCsv = ''; // RAW Export CSV text captured in memory from the Payout History tab
+  let harvestedPaidHistoryPages = []; // [{ page, rows }] one entry per traversed "N out of M" Payout History page
   let alreadySyncedRicoKeys = new Set();
   let salesPushSuccessUrl = '';
   let isOpen = false;
@@ -2224,16 +2227,22 @@
     const mergedRows = [];
     const mergedAdjustments = [];
     let totalPayout = 0;
+    const pages = [];
     const seenRowKeys = new Set();
 
     const mergeParsedPage = (parsed) => {
       if (!parsed) return;
+      const newRowsThisPage = [];
       for (const r of parsed.rows || []) {
         const key = `${r.payoutId || r.saleNumber}|${r.ricoSku || r.sku}|${r.title}|${r.paidDate || ''}|${r.soldDate || ''}|${Number(r.ricoNetPayout || 0).toFixed(2)}`;
         if (!seenRowKeys.has(key)) {
           seenRowKeys.add(key);
           mergedRows.push(r);
+          newRowsThisPage.push(r);
         }
+      }
+      if (newRowsThisPage.length > 0) {
+        pages.push({ page: pages.length + 1, rows: newRowsThisPage });
       }
       for (const a of parsed.adjustments || []) {
         mergedAdjustments.push(a);
@@ -2311,7 +2320,7 @@
       }
     }
 
-    return { rows: mergedRows, adjustments: mergedAdjustments, totalPayout };
+    return { rows: mergedRows, adjustments: mergedAdjustments, totalPayout, pages };
   }
 
   // Safely Auto-Click ONLY Top-Nav `<a href="#">Payout</a>`, `<a href="#">Payout History</a>`, and `<a href="#">Inventory</a>` Tabs (Plus In-Memory Export CSV Capture & Multi-Page "1 out of 2" Traversal)
@@ -2454,6 +2463,7 @@
             cachedPayoutDomRows = bestPendingRows;
           }
           persistRicochetCaptureToLocalStorage('payout', exportedPayouts && exportedPayouts.rawCsv, bestPendingRows);
+          if (exportedPayouts && exportedPayouts.rawCsv) capturedRawPayoutCsv = exportedPayouts.rawCsv;
           if (parsedPayouts.totalPayout !== 0) {
             harvestedPendingTotalPayout = parsedPayouts.totalPayout;
           }
@@ -2492,6 +2502,10 @@
             harvestedPaidHistoryRows = parsedHistory.rows;
             cachedPayoutHistoryDomRows = parsedHistory.rows;
             persistRicochetCaptureToLocalStorage('payout_history', exportedHistory && exportedHistory.rawCsv, parsedHistory.rows);
+            if (exportedHistory && exportedHistory.rawCsv) capturedRawPayoutHistoryCsv = exportedHistory.rawCsv;
+            if (Array.isArray(parsedHistory.pages) && parsedHistory.pages.length > 0) {
+              harvestedPaidHistoryPages = parsedHistory.pages;
+            }
             addLog(`💰 Paid History: ${parsedHistory.rows.length} rows`, '#10b981');
           } else {
             addLog('⚠️ Paid History returned 0 rows after retry', '#f59e0b');
@@ -3263,6 +3277,13 @@
             partnerScope: activeSalesPartnerBucket,
             pendingTotalPayout: harvestedPendingTotalPayout,
             paidHistoryTotalPayout: harvestedPaidHistoryTotalPayout,
+            // Cross-origin transport: RAW Export CSV text + every harvested Payout History page ride along in the POST
+            // (only for the unscoped "All Booth" view so partner-filtered pushes never re-add other partners' rows)
+            rawCsv:
+              activeSalesPartnerBucket === 'ALL' && (capturedRawPayoutCsv || capturedRawPayoutHistoryCsv)
+                ? { payout: capturedRawPayoutCsv, payoutHistory: capturedRawPayoutHistoryCsv }
+                : undefined,
+            payoutHistoryPages: activeSalesPartnerBucket === 'ALL' ? harvestedPaidHistoryPages : undefined,
             rows,
           }),
         });
@@ -3353,6 +3374,11 @@
         spaceRentalAdjustments,
         pendingTotalPayout: harvestedPendingTotalPayout,
         paidHistoryTotalPayout: harvestedPaidHistoryTotalPayout,
+        rawCsv:
+          capturedRawPayoutCsv || capturedRawPayoutHistoryCsv
+            ? { payout: capturedRawPayoutCsv, payoutHistory: capturedRawPayoutHistoryCsv }
+            : undefined,
+        payoutHistoryPages: harvestedPaidHistoryPages,
         rows,
       },
       null,

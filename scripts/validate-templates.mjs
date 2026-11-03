@@ -495,6 +495,63 @@ for (const relPath of bookmarkletFiles) {
     }
 }
 
+// =========================================================================
+// 11. RAW CSV TRANSPORT + LIVE APPWRITE LOCATION SETTINGS GUARDRAIL
+// =========================================================================
+const transportContracts = [
+    {
+        file: 'public/ricochet-upc-sync.user.js',
+        mustContain: [
+            { pattern: /rawCsv\s*:/, label: 'rawCsv in the POST payload to /api/sales/ricochet-sync' },
+            { pattern: /payoutHistoryPages\s*:/, label: 'payoutHistoryPages (all harvested "N out of M" pages) in the POST payload' },
+        ],
+    },
+    {
+        file: 'src/pages/api/sales/ricochet-sync.ts',
+        mustContain: [
+            { pattern: /\bingestRawCsvAndPages\s*\(/, label: 'Server-side ingestion of body.rawCsv + payoutHistoryPages' },
+            { pattern: /\bparseRicochetExportCsv\s*\(/, label: 'Dual-schema Export CSV parsing of the staged rawCsv' },
+            { pattern: /\bloadLiveWarehouseDocs\s*\(/, label: 'Live Appwrite location settings (fee / rent) for sales sync' },
+        ],
+    },
+    {
+        file: 'src/composables/useRicochetSalesSync.ts',
+        mustContain: [
+            { pattern: /\bricochetRawCsv\b/, label: 'Ingestion of rawCsv from the staged API payload' },
+        ],
+        mustNotContain: [
+            { pattern: /localStorage\.getItem\(\s*['"`]rc_ricochet_export_capture/, label: 'cross-origin localStorage lookup of Ricochet captures' },
+        ],
+    },
+    {
+        file: 'src/pages/scripts/rico-bookmarklet.js.ts',
+        mustContain: [
+            { pattern: /\bloadLiveWarehouseDocs\s*\(/, label: 'Bookmarklet fee / rent resolved from live Appwrite location document' },
+        ],
+    },
+];
+for (const contract of transportContracts) {
+    const fullPath = path.resolve(contract.file);
+    if (!fs.existsSync(fullPath)) {
+        console.error(`❌ Transport Contract Violation: missing ${contract.file}`);
+        hasErrors = true;
+        continue;
+    }
+    const content = fs.readFileSync(fullPath, 'utf8');
+    for (const req of contract.mustContain || []) {
+        if (!req.pattern.test(content)) {
+            console.error(`❌ Transport Contract Violation in ${contract.file}: Missing ${req.label}`);
+            hasErrors = true;
+        }
+    }
+    for (const ban of contract.mustNotContain || []) {
+        if (ban.pattern.test(content)) {
+            console.error(`❌ Transport Contract Violation in ${contract.file}: Forbidden ${ban.label}`);
+            hasErrors = true;
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
 } else {

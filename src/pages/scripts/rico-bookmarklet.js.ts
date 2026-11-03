@@ -6,6 +6,7 @@ import {
   resolveCanonicalLocationCode,
   resolveDefaultRicochetLocationMeta,
 } from '../../lib/warehouses';
+import { loadLiveWarehouseDocs } from '../../lib/locationSettingsServer';
 
 export const prerender = false;
 
@@ -31,11 +32,13 @@ export const OPTIONS: APIRoute = async () => {
  */
 export const GET: APIRoute = async ({ url }) => {
   try {
-    const defaultRicoMeta = resolveDefaultRicochetLocationMeta();
+    // Fee / rent resolve from the live Appwrite `warehouses` document for this location code (not static code)
+    const liveWarehouses = await loadLiveWarehouseDocs();
+    const defaultRicoMeta = resolveDefaultRicochetLocationMeta(liveWarehouses);
     const rawLocParam = url.searchParams.get('location');
-    const resolvedParam = rawLocParam ? resolveCanonicalLocationCode(rawLocParam) : '';
+    const resolvedParam = rawLocParam ? resolveCanonicalLocationCode(rawLocParam, liveWarehouses) : '';
     const locCode = (resolvedParam || defaultRicoMeta.code).toUpperCase();
-    const locMeta = getLocationSettingMeta(locCode);
+    const locMeta = getLocationSettingMeta(locCode, liveWarehouses);
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
 

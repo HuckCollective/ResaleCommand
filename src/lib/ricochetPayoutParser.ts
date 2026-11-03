@@ -86,14 +86,62 @@ export interface RicochetSalesSyncPayload {
   rows: RicochetSyncSaleLine[];
 }
 
-export function resolveRicochetLocation(rawLoc?: string | null) {
-  const defaultMeta = resolveDefaultRicochetLocationMeta();
+export function resolveRicochetLocation(rawLoc?: string | null, liveWarehouses?: any[]) {
+  const defaultMeta = resolveDefaultRicochetLocationMeta(liveWarehouses);
   if (!rawLoc || !String(rawLoc).trim()) {
     return defaultMeta;
   }
-  const code = resolveCanonicalLocationCode(rawLoc) || defaultMeta.code;
-  const meta = getLocationSettingMeta(code);
+  const code = resolveCanonicalLocationCode(rawLoc, liveWarehouses) || defaultMeta.code;
+  const meta = getLocationSettingMeta(code, liveWarehouses);
   return meta.usesRicochet ? meta : defaultMeta;
+}
+
+/**
+ * Merges rows parsed from raw Ricochet Export CSVs / harvested table pages into the bookmarklet's staged rows
+ * without ever double-counting a sale: rows are matched 1-for-1 (multiset) on ticket + status + gross + net.
+ * Matched rows only get blank SKU / paid date / sold date backfilled; unmatched ticketed CSV rows are PREPENDED
+ * so the later fallback de-duplication treats them as the authoritative explicit payout rows.
+ */
+export function mergeRicochetCsvRows(baseRows: any[], csvRows: any[]): any[] {
+  const base = Array.isArray(baseRows) ? baseRows.map((r) => ({ ...r })) : [];
+  const incoming = Array.isArray(csvRows) ? csvRows : [];
+  if (incoming.length === 0) return base;
+
+  const keyOf = (r: any): string => {
+    const ticket = canonicalTicketNumber(r?.payoutId || r?.saleNumber);
+    if (!ticket) return '';
+    const status = String(r?.payoutStatus || '').toLowerCase() === 'paid' ? 'paid' : 'pending';
+    const gross = Number(r?.grossPrice ?? r?.agreedPrice ?? 0).toFixed(2);
+    const net = Number(r?.ricoNetPayout ?? 0).toFixed(2);
+    return `${ticket}|${status}|${gross}|${net}`;
+  };
+
+  const baseIdxByKey = new Map<string, number[]>();
+  base.forEach((r, i) => {
+    const k = keyOf(r);
+    if (!k) return;
+    if (!baseIdxByKey.has(k)) baseIdxByKey.set(k, []);
+    baseIdxByKey.get(k)!.push(i);
+  });
+
+  const prepended: any[] = [];
+  for (const csvRow of incoming) {
+    const k = keyOf(csvRow);
+    if (!k) continue;
+    const bucket = baseIdxByKey.get(k);
+    if (bucket && bucket.length > 0) {
+      const target = base[bucket.shift() as number];
+      if (!String(target.sku || target.ricoSku || '').trim() && (csvRow.sku || csvRow.ricoSku)) {
+        target.sku = csvRow.sku || csvRow.ricoSku;
+        target.ricoSku = csvRow.ricoSku || csvRow.sku;
+      }
+      if (!String(target.paidDate || '').trim() && csvRow.paidDate) target.paidDate = csvRow.paidDate;
+      if (!String(target.soldDate || '').trim() && csvRow.soldDate) target.soldDate = csvRow.soldDate;
+    } else {
+      prepended.push({ ...csvRow });
+    }
+  }
+  return [...prepended, ...base];
 }
 
 function resolveEffectiveRicoId(r: any, effectiveSku: string, cleanPayoutId: string, idx: number): string {
@@ -320,9 +368,10 @@ export function buildEnrichedRicochetSalesPayload(params: {
   allSales: any[];
   catalogReportRows?: any[];
   spaceRentalAdjustments?: SpaceRentalAdjustment[];
+  liveWarehouses?: any[];
   dryRun?: boolean;
 }): RicochetSalesSyncPayload {
-  const locMeta = resolveRicochetLocation(params.locCode);
+  const locMeta = resolveRicochetLocation(params.locCode, params.liveWarehouses);
   const feePct = Number(locMeta.commissionRate ?? locMeta.feePct ?? 0);
   const monthlyRent = Number(locMeta.monthlyRent ?? 0);
   const allItems = params.allItems || [];

@@ -14,9 +14,12 @@ import {
   type SpaceRentalAdjustment,
   buildEnrichedRicochetSalesPayload,
   buildSaleOrderReference,
+  mergeRicochetCsvRows,
+  parseRicochetExportCsv,
   resolveRicochetLocation,
 } from '../../../lib/ricochetPayoutParser';
 import { getLocationManifestDocIds } from '../../../lib/warehouses';
+import { loadLiveWarehouseDocs } from '../../../lib/locationSettingsServer';
 
 export type { RicochetSalesSyncPayload, RicochetSyncSaleLine, SpaceRentalAdjustment };
 export const prerender = false;
@@ -151,6 +154,121 @@ async function savePersistedSalesSync(payload: RicochetSalesSyncPayload, locCode
   }
 }
 
+export interface StagedRawCsv {
+  payout?: string;
+  payoutHistory?: string;
+  payoutHistoryPageCount?: number;
+  capturedAt?: string;
+}
+
+const MAX_RAW_CSV_CHARS = 600_000;
+
+function normalizeRawCsvBody(raw: any): StagedRawCsv {
+  const clip = (v: any) => (typeof v === 'string' ? v.slice(0, MAX_RAW_CSV_CHARS) : '');
+  if (typeof raw === 'string') return { payout: clip(raw) };
+  if (!raw || typeof raw !== 'object') return {};
+  return { payout: clip(raw.payout), payoutHistory: clip(raw.payoutHistory) };
+}
+
+const getStoredRawCsv = (locCode: string): StagedRawCsv | null => {
+  const map = (globalThis as any).__LATEST_RICOCHET_RAW_CSV__ || {};
+  return map[locCode] || null;
+};
+
+async function loadPersistedRawCsv(locCode: string): Promise<StagedRawCsv | null> {
+  const { code, rawCsvDocId } = getLocationManifestDocIds(locCode);
+  try {
+    const doc: any = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, rawCsvDocId);
+    const rawSnap = doc?.itemsSnapshot;
+    if (rawSnap) {
+      const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
+      if (parsed && (parsed.payout || parsed.payoutHistory)) {
+        if (!(globalThis as any).__LATEST_RICOCHET_RAW_CSV__) (globalThis as any).__LATEST_RICOCHET_RAW_CSV__ = {};
+        (globalThis as any).__LATEST_RICOCHET_RAW_CSV__[code] = parsed;
+        return parsed as StagedRawCsv;
+      }
+    }
+  } catch {}
+  return getStoredRawCsv(code);
+}
+
+/** Persists the RAW Export CSV text to a `manifests` staging doc (Dry-Run staging only — never touches items/sales). */
+async function savePersistedRawCsv(rawCsv: StagedRawCsv, locCode: string): Promise<void> {
+  if (!rawCsv.payout && !rawCsv.payoutHistory) return;
+  const locMeta = resolveRicochetLocation(locCode);
+  const { code, rawCsvDocId } = getLocationManifestDocIds(locMeta.code);
+  const stored: StagedRawCsv = { ...rawCsv, capturedAt: rawCsv.capturedAt || new Date().toISOString() };
+  if (!(globalThis as any).__LATEST_RICOCHET_RAW_CSV__) (globalThis as any).__LATEST_RICOCHET_RAW_CSV__ = {};
+  (globalThis as any).__LATEST_RICOCHET_RAW_CSV__[code] = stored;
+
+  const { databases, dbId } = getAppwriteConfig();
+  if (!databases) return;
+  const docPerms = [
+    NodePermission.read(NodeRole.any()),
+    NodePermission.update(NodeRole.any()),
+    NodePermission.delete(NodeRole.any()),
+  ];
+  const docPayload: Record<string, any> = {
+    name: `${locMeta.shortName} Raw Ricochet Export CSVs`,
+    tenantId: 'system',
+    locationId: locMeta.id,
+    locationName: locMeta.shortName,
+    status: 'system_sales_sync_raw_csv',
+    itemCount: 0,
+    itemsSnapshot: JSON.stringify(stored),
+    notes: JSON.stringify({ capturedAt: stored.capturedAt }).slice(0, 4900),
+  };
+  try {
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, rawCsvDocId, docPayload, docPerms);
+  } catch (updateErr: any) {
+    if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
+      try {
+        await databases.createDocument(dbId, MANIFESTS_COL_ID, rawCsvDocId, docPayload, docPerms);
+      } catch {}
+    }
+  }
+}
+
+/**
+ * Ingests `body.rawCsv` (Payout + Payout History Export CSVs) and `body.payoutHistoryPages` (every harvested
+ * "N out of M" page) on top of the bookmarklet's staged rows, without double counting any sale.
+ */
+function ingestRawCsvAndPages(
+  body: any,
+  baseRows: any[],
+  baseAdjustments: SpaceRentalAdjustment[] | undefined
+): { rows: any[]; adjustments: SpaceRentalAdjustment[]; rawCsv: StagedRawCsv } {
+  const rawCsv = normalizeRawCsvBody(body?.rawCsv);
+  const csvRows: any[] = [];
+  const csvAdjustments: SpaceRentalAdjustment[] = [];
+  for (const text of [rawCsv.payout, rawCsv.payoutHistory]) {
+    if (!text) continue;
+    const parsed = parseRicochetExportCsv(text);
+    csvRows.push(...parsed.rows);
+    csvAdjustments.push(...parsed.spaceRentalAdjustments);
+  }
+
+  const pages: any[] = Array.isArray(body?.payoutHistoryPages) ? body.payoutHistoryPages : [];
+  const pageRows: any[] = [];
+  for (const p of pages) {
+    if (p && Array.isArray(p.rows)) pageRows.push(...p.rows);
+  }
+  rawCsv.payoutHistoryPageCount = pages.length;
+
+  let rows = mergeRicochetCsvRows(baseRows, pageRows);
+  rows = mergeRicochetCsvRows(rows, csvRows);
+
+  const seen = new Set<string>();
+  const adjustments: SpaceRentalAdjustment[] = [];
+  for (const a of [...(baseAdjustments || []), ...csvAdjustments]) {
+    const key = `${a.label}|${a.date}|${Number(a.amount || 0).toFixed(2)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    adjustments.push(a);
+  }
+  return { rows, adjustments, rawCsv };
+}
+
 async function fetchAllItemsAndSales() {
   const { endpoint, project, apiKey, dbId, itemsCol, salesCol, databases } = getAppwriteConfig();
   const allItems: any[] = [];
@@ -225,9 +343,10 @@ async function enrichAndMatchSalesRows(
   locCode: string,
   extraOptions?: { spaceRentalAdjustments?: SpaceRentalAdjustment[]; dryRun?: boolean }
 ): Promise<RicochetSalesSyncPayload> {
-  const [{ allItems, allSales }, catalogReportRows] = await Promise.all([
+  const [{ allItems, allSales }, catalogReportRows, liveWarehouses] = await Promise.all([
     fetchAllItemsAndSales(),
     fetchLocationVerifyCatalogRows(locCode),
+    loadLiveWarehouseDocs(),
   ]);
   return buildEnrichedRicochetSalesPayload({
     rawRows,
@@ -235,6 +354,7 @@ async function enrichAndMatchSalesRows(
     allItems,
     allSales,
     catalogReportRows,
+    liveWarehouses,
     spaceRentalAdjustments: extraOptions?.spaceRentalAdjustments,
     dryRun: extraOptions?.dryRun,
   });
@@ -244,8 +364,10 @@ export const OPTIONS: APIRoute = async () => new Response(null, { status: 204, h
 
 export const GET: APIRoute = async ({ url }) => {
   try {
-    const locMeta = resolveRicochetLocation(url.searchParams.get('location'));
+    const liveWarehouses = await loadLiveWarehouseDocs();
+    const locMeta = resolveRicochetLocation(url.searchParams.get('location'), liveWarehouses);
     let payload = await loadPersistedSalesSync(locMeta.code);
+    const stagedRawCsv = await loadPersistedRawCsv(locMeta.code);
 
     if (!payload || !Array.isArray(payload.rows) || payload.rows.length === 0) {
       const { reportDocId } = getLocationManifestDocIds(locMeta.code);
@@ -295,6 +417,7 @@ export const GET: APIRoute = async ({ url }) => {
           commissionRate: locMeta.commissionRate,
           monthlyRent: locMeta.monthlyRent,
         },
+        rawCsv: stagedRawCsv || null,
         payload: payload || null,
       }),
       { status: 200, headers: CORS_HEADERS }
@@ -311,7 +434,8 @@ export const POST: APIRoute = async ({ request, url }) => {
   try {
     const body = await request.json().catch(() => ({}));
     const rawLoc = body?.locationCode || body?.location || url.searchParams.get('location');
-    const locMeta = resolveRicochetLocation(rawLoc);
+    const liveWarehouses = await loadLiveWarehouseDocs();
+    const locMeta = resolveRicochetLocation(rawLoc, liveWarehouses);
     const mode = String(body?.mode || 'stage').toLowerCase();
     const isDryRunRequest =
       mode === 'dry_run' || mode === 'simulate' || Boolean(body?.dryRun && mode !== 'commit');
@@ -447,19 +571,21 @@ export const POST: APIRoute = async ({ request, url }) => {
       );
     }
 
-    const rawRows = Array.isArray(body?.rows)
+    const bodyRows = Array.isArray(body?.rows)
       ? body.rows
       : Array.isArray(body?.sales)
         ? body.sales
         : [];
-    const rawAdjustments = Array.isArray(body?.spaceRentalAdjustments)
+    const bodyAdjustments = Array.isArray(body?.spaceRentalAdjustments)
       ? body.spaceRentalAdjustments
       : [];
-    const stagedPayload = await enrichAndMatchSalesRows(rawRows, locMeta.code, {
-      spaceRentalAdjustments: rawAdjustments,
+    const ingested = ingestRawCsvAndPages(body, bodyRows, bodyAdjustments);
+    const stagedPayload = await enrichAndMatchSalesRows(ingested.rows, locMeta.code, {
+      spaceRentalAdjustments: ingested.adjustments,
       dryRun: true,
     });
     await savePersistedSalesSync(stagedPayload, locMeta.code);
+    await savePersistedRawCsv(ingested.rawCsv, locMeta.code);
 
     return new Response(
       JSON.stringify({
@@ -469,6 +595,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         locationCode: locMeta.code,
         reconcilerPath: `/sales/import/${locMeta.code}`,
         summary: stagedPayload.summary,
+        rawCsv: ingested.rawCsv.payout || ingested.rawCsv.payoutHistory ? ingested.rawCsv : null,
         payload: stagedPayload,
       }),
       { status: 200, headers: CORS_HEADERS }

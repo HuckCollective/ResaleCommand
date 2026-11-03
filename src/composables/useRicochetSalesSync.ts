@@ -35,6 +35,8 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit } = options;
 
   const ricochetSyncPayload = ref<any | null>(null);
+  /** RAW Ricochet Export CSV text (Payout + Payout History) staged by the bookmarklet via POST /api/sales/ricochet-sync. */
+  const ricochetRawCsv = ref<{ payout?: string; payoutHistory?: string; payoutHistoryPageCount?: number; capturedAt?: string } | null>(null);
   const dynamicAppwriteItems = ref<any[]>([]);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
@@ -338,6 +340,31 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.ok && data?.payload) {
         ricochetSyncPayload.value = data.payload;
+        ricochetRawCsv.value = data?.rawCsv || null;
+        // Ingest the staged RAW Export CSVs (from the API payload — never cross-origin localStorage) when no rows were staged yet
+        const stagedRowCount = Array.isArray(data.payload?.rows) ? data.payload.rows.length : 0;
+        if (stagedRowCount === 0 && (data?.rawCsv?.payout || data?.rawCsv?.payoutHistory)) {
+          const parsedStagedCsv = parseRicochetExportCsv(
+            [data.rawCsv.payout, data.rawCsv.payoutHistory].filter(Boolean).join('\n')
+          );
+          if (parsedStagedCsv.rows.length > 0) {
+            const stageRes = await fetch('/api/sales/ricochet-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'stage',
+                dryRun: true,
+                locationCode: activeCanonicalLocationMeta.value.code,
+                rows: [],
+                rawCsv: { payout: data.rawCsv.payout, payoutHistory: data.rawCsv.payoutHistory },
+              }),
+            });
+            const stageData = await stageRes.json().catch(() => null);
+            if (stageRes.ok && stageData?.ok && stageData?.payload) {
+              ricochetSyncPayload.value = stageData.payload;
+            }
+          }
+        }
         if (manualTrigger) {
           addToast({
             type: 'success',
@@ -378,11 +405,14 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             locationCode: activeCanonicalLocationMeta.value.code,
             rows,
             spaceRentalAdjustments,
+            rawCsv: parsed?.rawCsv,
+            payoutHistoryPages: Array.isArray(parsed?.payoutHistoryPages) ? parsed.payoutHistoryPages : undefined,
           }),
         });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.ok && data?.payload) {
           ricochetSyncPayload.value = data.payload;
+          ricochetRawCsv.value = data?.rawCsv || null;
           ricochetDryRunResult.value = null;
           pastedRicochetSyncText.value = '';
           isPasteRicochetDrawerOpen.value = false;
@@ -579,6 +609,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
 
   return {
     ricochetSyncPayload,
+    ricochetRawCsv,
     isLoadingRicochetSync,
     isSimulatingRicochetSync,
     isCommittingRicochetSync,
