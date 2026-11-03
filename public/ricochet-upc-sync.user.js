@@ -65,6 +65,7 @@
   let verifiedMdUpcMap = {}; // Persisted verified MD UPCs by SKU across page refreshes (localStorage + Appwrite cloud)
   let verifiedSkuSet = new Set(); // Full verified 808 SKU set from Location Settings / Bootstrap / Cloud
   let activePartnerBucket = 'ALL'; // 'ALL' | 'HUCK' | 'PDXGL' | 'BB'
+  let activeSalesPartnerBucket = 'ALL'; // Sales tab Partner Payout Split: 'ALL' | 'HUCK' | 'PDXGL' | 'BB'
   let runtime422Conflicts = {}; // { "0EJ09A": "⚠️ 0EJ09A: HUCK-0334 is already used on 0EJ0MQ" }
   let progressCurrent = 0;
   let progressTotal = 0;
@@ -643,6 +644,23 @@
               </div>
               <div id="rc-sales-xhr-subtitle" style="font-size: 9.5px; font-family: monospace; color: #94a3b8; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📡 XHR: /api/product • SPA Payout &amp; Payout History</div>
 
+              <!-- Partner Payout Split Pills (All Booth | ⭐ HUCK | 🎲 PDXGL | 💛 B&B) -->
+              <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Partner Payout Split</div>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 8px;">
+                <button type="button" data-rc-sales-bucket="ALL" class="rc-sales-bucket-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #38bdf8; background: rgba(56,189,248,0.16); color: #f8fafc; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left;">
+                  <div>All Booth</div><div id="rc-sbkt-ALL" style="font-family: monospace; font-size: 10px; opacity: 0.9;">0 • $0.00</div>
+                </button>
+                <button type="button" data-rc-sales-bucket="HUCK" class="rc-sales-bucket-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left;">
+                  <div>⭐ HUCK</div><div id="rc-sbkt-HUCK" style="font-family: monospace; font-size: 10px; opacity: 0.9;">0 • $0.00</div>
+                </button>
+                <button type="button" data-rc-sales-bucket="PDXGL" class="rc-sales-bucket-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left;">
+                  <div>🎲 PDXGL</div><div id="rc-sbkt-PDXGL" style="font-family: monospace; font-size: 10px; opacity: 0.9;">0 • $0.00</div>
+                </button>
+                <button type="button" data-rc-sales-bucket="BB" class="rc-sales-bucket-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left;">
+                  <div>💛 B&amp;B</div><div id="rc-sbkt-BB" style="font-family: monospace; font-size: 10px; opacity: 0.9;">0 • $0.00</div>
+                </button>
+              </div>
+
               <!-- Sub-Filter Pills Inside 💰 Sales & Payout Sync Modal Tab -->
               <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 8px;">
                 <button type="button" data-rc-sales-filter="all" class="rc-sales-filter-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #38bdf8; background: rgba(56,189,248,0.16); color: #f8fafc; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
@@ -769,6 +787,14 @@
     salesFilterBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
         activeSalesSubFilter = btn.getAttribute('data-rc-sales-filter') || 'all';
+        updateSalesSyncTabUI();
+      });
+    });
+
+    const salesBucketBtns = root.querySelectorAll('.rc-sales-bucket-btn');
+    salesBucketBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeSalesPartnerBucket = btn.getAttribute('data-rc-sales-bucket') || 'ALL';
         updateSalesSyncTabUI();
       });
     });
@@ -1899,26 +1925,69 @@
         return true;
       };
 
-      const waitForSpaTableRows = async (parseFn, maxMs = 2400) => {
+      // Set any `items / page` <select> (Ricochet defaults to 10) to the highest numeric / All option so every row renders (select change only — never a button click)
+      const expandPageSizeSelects = () => {
+        let changed = false;
+        try {
+          for (const sel of Array.from(document.querySelectorAll('select'))) {
+            if (sel.closest && sel.closest('#rc-ricochet-sync-root')) continue;
+            const opts = Array.from(sel.options || []);
+            const numericOpts = opts
+              .map((o) => ({ o, n: parseInt(String(o.value), 10) || parseInt(cleanStr(o.textContent), 10) || 0 }))
+              .filter((x) => x.n > 0);
+            const looksLikePageSize =
+              /item|page|show|entries|length/i.test(`${sel.name || ''} ${sel.id || ''} ${sel.className || ''} ${cleanStr(sel.parentElement && sel.parentElement.textContent)}`) ||
+              numericOpts.length >= 2;
+            if (!looksLikePageSize) continue;
+            const allOpt = opts.find((o) => String(o.value) === '-1' || /^all$/i.test(cleanStr(o.textContent)));
+            const maxNumeric = numericOpts.sort((a, b) => b.n - a.n)[0];
+            const target = allOpt || (maxNumeric && maxNumeric.o);
+            if (target && sel.value !== target.value) {
+              sel.value = target.value;
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+              sel.dispatchEvent(new Event('input', { bubbles: true }));
+              changed = true;
+            }
+          }
+        } catch (e) {}
+        return changed;
+      };
+
+      const documentHasPaidHeaderTable = () =>
+        Array.from(document.querySelectorAll('table')).some((t) => {
+          if (t.closest && t.closest('#rc-ricochet-sync-root')) return false;
+          return collectTableHeaders(document, t).some((h) => h === 'paid' || h.startsWith('paid'));
+        });
+
+      const waitForSpaTableRows = async (parseFn, maxMs = 4000, requirePaidHeader = false) => {
         const start = Date.now();
         let lastCount = -1;
         let stablePolls = 0;
         let bestParsed = { rows: [], adjustments: [], totalPayout: 0 };
 
         while (Date.now() - start < maxMs) {
+          if (expandPageSizeSelects()) {
+            lastCount = -1;
+            stablePolls = 0;
+            await new Promise((r) => setTimeout(r, 250));
+          }
           const candidate = parseFn(document);
           const count = (candidate.rows || []).length;
-          if (count > 0) {
+          const headerOk = !requirePaidHeader || documentHasPaidHeaderTable();
+          if (count > 0 && headerOk) {
             bestParsed = candidate;
             if (count === lastCount) {
               stablePolls++;
-              if (stablePolls >= 2) return bestParsed;
+              if (stablePolls >= 1) return bestParsed; // 2 consecutive identical 250ms checks
             } else {
               lastCount = count;
               stablePolls = 0;
             }
+          } else {
+            lastCount = -1;
+            stablePolls = 0;
           }
-          await new Promise((r) => setTimeout(r, 140));
+          await new Promise((r) => setTimeout(r, 250));
         }
 
         const finalPass = parseFn(document);
@@ -1929,10 +1998,10 @@
       const payoutHistoryLink = findSafeSpaNavLink('Payout History');
       const inventoryLink = findSafeSpaNavLink('Inventory');
 
-      // 1. Safely click `<a href="#">Payout</a>` and harvest `72` Pending Payout rows + Space Rental adjustments
+      // 1. Safely click `<a href="#">Payout</a>` and harvest Pending Payout rows + Space Rental adjustments
       if (safeClickSpaTab(payoutLink)) {
         try {
-          const parsedPayouts = await waitForSpaTableRows(parsePayoutsHtmlDocument, 2400);
+          const parsedPayouts = await waitForSpaTableRows(parsePayoutsHtmlDocument, 4000, false);
           if (parsedPayouts.rows.length > 0) {
             harvestedPendingPayoutRows = parsedPayouts.rows;
             cachedPayoutDomRows = parsedPayouts.rows;
@@ -1944,13 +2013,19 @@
         } catch (e) {}
       }
 
-      // 2. Safely click `<a href="#">Payout History</a>` and harvest `252` Paid History rows
+      // 2. Safely click `<a href="#">Payout History</a>`; wait for a table with a `Paid` header AND parsed rows stable across 2 checks (up to 6000ms), retry once
       if (safeClickSpaTab(payoutHistoryLink)) {
         try {
-          const parsedHistory = await waitForSpaTableRows(parsePayoutHistoryHtmlDocument, 2400);
+          let parsedHistory = await waitForSpaTableRows(parsePayoutHistoryHtmlDocument, 6000, true);
+          if (parsedHistory.rows.length === 0 && safeClickSpaTab(payoutHistoryLink)) {
+            parsedHistory = await waitForSpaTableRows(parsePayoutHistoryHtmlDocument, 4000, true);
+          }
           if (parsedHistory.rows.length > 0) {
             harvestedPaidHistoryRows = parsedHistory.rows;
             cachedPayoutHistoryDomRows = parsedHistory.rows;
+            addLog(`💰 Paid History: ${parsedHistory.rows.length} rows`, '#10b981');
+          } else {
+            addLog('⚠️ Paid History returned 0 rows after retry', '#f59e0b');
           }
           if (parsedHistory.totalPayout !== 0) {
             harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
@@ -1959,7 +2034,7 @@
         } catch (e) {}
       }
 
-      // 3. Safely restore `<a href="#">Inventory</a>` tab
+      // 3. Safely restore `<a href="#">Inventory</a>` tab ONLY after both waits finish
       safeClickSpaTab(inventoryLink);
 
       if (mergedAdjustments.length > 0) {
@@ -2215,8 +2290,14 @@
           (ricoSku && String(skuMetaMap[ricoSku]?.status || '').toLowerCase() === 'sold')
       );
 
+      const partnerBucket = resolvePartnerBucket(ricoSku, linked.upc, '', linked.title || raw.title);
+      const isPartnerBucketedZeroEj = Boolean(/^0EJ[A-Z0-9]+$/i.test(ricoSku) && partnerBucket);
+      const rowMatched = linked.isMatchedInBooth || isPartnerBucketedZeroEj;
+
       const fallbackInternalId = cleanStr(raw.ricoItemId || raw.productId || cleanTicket || `row-${soldRows.length + 1}`);
       soldRows.push({
+        partner: partnerBucket,
+        partnerBucket,
         ricoItemId: ricoSku || fallbackInternalId,
         ricoSku: ricoSku || '',
         sku: ricoSku || '',
@@ -2237,8 +2318,8 @@
         payoutStatus,
         status: payoutStatus === 'paid' ? 'Paid' : 'Sold',
         matchTier: linked.matchTier,
-        isMatchedInBooth: linked.isMatchedInBooth,
-        matchedInBooth: linked.isMatchedInBooth,
+        isMatchedInBooth: rowMatched,
+        matchedInBooth: rowMatched,
         alreadySynced: isAlreadySynced,
       });
     };
@@ -2341,8 +2422,38 @@
     return soldRows;
   }
 
+  function getPartnerScopedSalesRows(rows) {
+    if (activeSalesPartnerBucket === 'ALL') return rows;
+    return rows.filter((r) => (r.partnerBucket || r.partner) === activeSalesPartnerBucket);
+  }
+
   function updateSalesSyncTabUI() {
-    const allRows = extractRicochetSoldLines();
+    const unscopedRows = extractRicochetSoldLines();
+
+    // Partner Payout Split pills always show unfiltered per-bucket totals
+    const bucketTotals = { ALL: { n: 0, net: 0 }, HUCK: { n: 0, net: 0 }, PDXGL: { n: 0, net: 0 }, BB: { n: 0, net: 0 } };
+    for (const r of unscopedRows) {
+      const b = r.partnerBucket || r.partner || 'HUCK';
+      const net = Number(r.ricoNetPayout || 0);
+      bucketTotals.ALL.n++;
+      bucketTotals.ALL.net += net;
+      if (bucketTotals[b]) {
+        bucketTotals[b].n++;
+        bucketTotals[b].net += net;
+      }
+    }
+    for (const key of Object.keys(bucketTotals)) {
+      const el = document.getElementById(`rc-sbkt-${key}`);
+      if (el) el.textContent = `${bucketTotals[key].n} • $${bucketTotals[key].net.toFixed(2)}`;
+    }
+    document.querySelectorAll('.rc-sales-bucket-btn').forEach((btn) => {
+      const sel = btn.getAttribute('data-rc-sales-bucket') === activeSalesPartnerBucket;
+      btn.style.border = sel ? '1px solid #38bdf8' : '1px solid #334155';
+      btn.style.background = sel ? 'rgba(56,189,248,0.16)' : '#0f172a';
+      btn.style.color = sel ? '#f8fafc' : '#cbd5e1';
+    });
+
+    const allRows = getPartnerScopedSalesRows(unscopedRows);
     const tabBadge = document.getElementById('rc-tab-sales-badge');
     if (tabBadge) tabBadge.textContent = String(allRows.length);
 
@@ -2368,10 +2479,11 @@
     }
 
     let rentCreditsSum = 0;
-    for (const adj of spaceRentalAdjustments) {
+    const scopedRentalAdjustments = activeSalesPartnerBucket === 'ALL' ? spaceRentalAdjustments : [];
+    for (const adj of scopedRentalAdjustments) {
       rentCreditsSum += Number(adj.amount || 0);
     }
-    if (spaceRentalAdjustments.length === 0 && activeMonthlyRent > 0) {
+    if (scopedRentalAdjustments.length === 0 && activeSalesPartnerBucket === 'ALL' && activeMonthlyRent > 0) {
       rentCreditsSum = -Math.abs(activeMonthlyRent);
     }
 
@@ -2383,7 +2495,7 @@
     if (sfltAll) sfltAll.textContent = String(allRows.length);
     if (sfltPending) sfltPending.textContent = String(pendingRows.length);
     if (sfltPaid) sfltPaid.textContent = String(paidRows.length);
-    if (sfltRent) sfltRent.textContent = String(spaceRentalAdjustments.length);
+    if (sfltRent) sfltRent.textContent = String(activeSalesPartnerBucket === 'ALL' ? spaceRentalAdjustments.length : 0);
 
     const filterBtns = document.querySelectorAll('.rc-sales-filter-btn');
     filterBtns.forEach((btn) => {
@@ -2424,6 +2536,11 @@
     if (!previewListEl) return;
 
     if (activeSalesSubFilter === 'space_rental') {
+      if (activeSalesPartnerBucket !== 'ALL') {
+        if (previewCountEl) previewCountEl.textContent = '0 adjustments';
+        previewListEl.innerHTML = `<div style="color:#94a3b8;padding:6px;">Space Rental &amp; Credits are not partner items — select <b>All Booth</b> to view them.</div>`;
+        return;
+      }
       if (previewCountEl) previewCountEl.textContent = `${spaceRentalAdjustments.length} adjustments`;
       if (spaceRentalAdjustments.length === 0) {
         previewListEl.innerHTML = `<div style="color:#94a3b8;padding:6px;">Configured Monthly Booth Rent: <b>-$${activeMonthlyRent.toFixed(2)}/mo</b> (No extra credit rows on /payouts).</div>`;
@@ -2472,10 +2589,16 @@
           const matchBadge = r.isMatchedInBooth
             ? `<span style="color:#34d399;font-weight:800;" title="Matched via ${r.matchTier}">🔗 ${r.matchTier.toUpperCase()}</span>`
             : `<span style="color:#fbbf24;font-weight:800;">⚪ Unmatched</span>`;
+          const partnerBadge =
+            (r.partnerBucket || r.partner) === 'PDXGL'
+              ? '🎲 PDXGL'
+              : (r.partnerBucket || r.partner) === 'BB'
+              ? '💛 B&amp;B'
+              : '⭐ HUCK';
           return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:6px;">
             <div style="min-width:0;flex:1;">
               <div style="color:#f8fafc;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                <span style="color:#fbbf24;">${skuDisplay}</span> ${upcDisplay} — ${r.title}
+                <span style="color:#a5b4fc;font-size:9.5px;">${partnerBadge}</span> <span style="color:#fbbf24;">${skuDisplay}</span> ${upcDisplay} — ${r.title}
               </div>
               <div style="color:#94a3b8;font-size:10px;">
                 ${saleDisplay}Sold ${r.soldDate || '—'} • ${statusPill} • Agreed $${Number(r.agreedPrice || r.grossPrice || 0).toFixed(2)} ➔ Net <b>$${Number(r.ricoNetPayout || 0).toFixed(2)}</b>
@@ -2496,7 +2619,7 @@
     if (!hasHarvestedPayoutPages) {
       await harvestRicochetPayoutPages(false);
     }
-    const rows = extractRicochetSoldLines();
+    const rows = getPartnerScopedSalesRows(extractRicochetSoldLines());
     const pushBtn = document.getElementById('rc-push-sales-btn');
     const syncBanner = document.getElementById('rc-sales-sync-banner');
     isPushingSales = true;
@@ -2517,7 +2640,8 @@
             mode: 'stage',
             dryRun: true,
             locationCode: activeLocationCode,
-            spaceRentalAdjustments,
+            spaceRentalAdjustments: activeSalesPartnerBucket === 'ALL' ? spaceRentalAdjustments : [],
+            partnerScope: activeSalesPartnerBucket,
             pendingTotalPayout: harvestedPendingTotalPayout,
             paidHistoryTotalPayout: harvestedPaidHistoryTotalPayout,
             rows,
