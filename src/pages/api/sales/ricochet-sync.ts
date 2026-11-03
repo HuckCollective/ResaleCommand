@@ -152,30 +152,72 @@ async function savePersistedSalesSync(payload: RicochetSalesSyncPayload, locCode
 }
 
 async function fetchAllItemsAndSales() {
-  const { databases, dbId, itemsCol, salesCol } = getAppwriteConfig();
+  const { endpoint, project, apiKey, dbId, itemsCol, salesCol, databases } = getAppwriteConfig();
   const allItems: any[] = [];
   const allSales: any[] = [];
-  if (!databases) return { allItems, allSales };
 
   for (const [col, target] of [
     [itemsCol, allItems],
     [salesCol, allSales],
   ] as const) {
-    try {
-      let cursor: string | null = null;
-      for (let page = 0; page < 25; page++) {
-        const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
-        if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
-        const res = await databases.listDocuments(dbId, col, queries);
-        const docs = res.documents || [];
-        target.push(...docs);
-        if (docs.length < 100) break;
-        cursor = docs[docs.length - 1].$id;
-      }
-    } catch {}
+    if (databases) {
+      try {
+        let cursor: string | null = null;
+        for (let page = 0; page < 25; page++) {
+          const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
+          if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
+          const res = await databases.listDocuments(dbId, col, queries);
+          const docs = res.documents || [];
+          target.push(...docs);
+          if (docs.length < 100) break;
+          cursor = docs[docs.length - 1].$id;
+        }
+      } catch {}
+    }
+    if (target.length === 0 && endpoint && project) {
+      try {
+        const headers: Record<string, string> = {
+          'X-Appwrite-Project': project,
+          'Content-Type': 'application/json',
+        };
+        if (apiKey) headers['X-Appwrite-Key'] = apiKey;
+        let offset = 0;
+        for (let page = 0; page < 25; page++) {
+          const qLimit = encodeURIComponent(JSON.stringify({ method: 'limit', values: [100] }));
+          const qOffset = encodeURIComponent(JSON.stringify({ method: 'offset', values: [offset] }));
+          const qOrder = encodeURIComponent(JSON.stringify({ method: 'orderDesc', attribute: '$id' }));
+          const res = await fetch(
+            `${endpoint}/databases/${dbId}/collections/${col}/documents?queries[]=${qLimit}&queries[]=${qOffset}&queries[]=${qOrder}`,
+            { method: 'GET', headers }
+          );
+          if (!res.ok) break;
+          const data = await res.json();
+          const docs = data?.documents || [];
+          target.push(...docs);
+          if (docs.length < 100) break;
+          offset += docs.length;
+        }
+      } catch {}
+    }
   }
 
   return { allItems, allSales };
+}
+
+async function fetchLocationVerifyCatalogRows(locCode: string): Promise<any[]> {
+  try {
+    const { reportDocId } = getLocationManifestDocIds(locCode);
+    const reportDoc = await fetchAppwriteDocFallback(MANIFESTS_COL_ID, reportDocId);
+    const rawReport = reportDoc?.itemsSnapshot
+      ? typeof reportDoc.itemsSnapshot === 'string'
+        ? JSON.parse(reportDoc.itemsSnapshot)
+        : reportDoc.itemsSnapshot
+      : null;
+    if (rawReport && Array.isArray(rawReport.rows)) {
+      return rawReport.rows;
+    }
+  } catch {}
+  return [];
 }
 
 async function enrichAndMatchSalesRows(
@@ -183,12 +225,16 @@ async function enrichAndMatchSalesRows(
   locCode: string,
   extraOptions?: { spaceRentalAdjustments?: SpaceRentalAdjustment[]; dryRun?: boolean }
 ): Promise<RicochetSalesSyncPayload> {
-  const { allItems, allSales } = await fetchAllItemsAndSales();
+  const [{ allItems, allSales }, catalogReportRows] = await Promise.all([
+    fetchAllItemsAndSales(),
+    fetchLocationVerifyCatalogRows(locCode),
+  ]);
   return buildEnrichedRicochetSalesPayload({
     rawRows,
     locCode,
     allItems,
     allSales,
+    catalogReportRows,
     spaceRentalAdjustments: extraOptions?.spaceRentalAdjustments,
     dryRun: extraOptions?.dryRun,
   });
@@ -273,9 +319,15 @@ export const POST: APIRoute = async ({ request, url }) => {
     if (mode === 'commit' || mode === 'dry_run' || mode === 'simulate') {
       const { databases, dbId, itemsCol, salesCol } = getAppwriteConfig();
       const persisted = await loadPersistedSalesSync(locMeta.code);
-      const currentPayload =
+      const sourceRows =
         Array.isArray(body?.rows) && body.rows.length > 0
-          ? await enrichAndMatchSalesRows(body.rows, locMeta.code, {
+          ? body.rows
+          : Array.isArray(persisted?.rows)
+            ? persisted.rows
+            : [];
+      const currentPayload =
+        sourceRows.length > 0
+          ? await enrichAndMatchSalesRows(sourceRows, locMeta.code, {
               spaceRentalAdjustments: body?.spaceRentalAdjustments || persisted?.spaceRentalAdjustments,
               dryRun: isDryRunRequest,
             })
@@ -294,7 +346,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         let wouldGross = 0;
         let wouldNet = 0;
         for (const row of currentPayload.rows) {
-          if (row.alreadySynced) {
+          if (row.alreadySynced || row.alreadyRecorded) {
             skippedAlreadySynced++;
             continue;
           }
@@ -312,6 +364,7 @@ export const POST: APIRoute = async ({ request, url }) => {
             dryRun: true,
             wouldCommitCount,
             skippedAlreadySynced,
+            alreadySyncedCount: skippedAlreadySynced,
             wouldGross: Number(wouldGross.toFixed(2)),
             wouldNet: Number(wouldNet.toFixed(2)),
             payload: currentPayload,

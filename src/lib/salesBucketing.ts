@@ -338,19 +338,44 @@ export function toSaleIso(raw: any): string {
 /** True for payout summary / credit lines that must never become sales rows. */
 export function isPayoutSummaryRow(itemName: string): boolean {
     const n = String(itemName || '').trim().toLowerCase();
-    return n.startsWith('(credit) space rental') || n.startsWith('(credit)') || n.startsWith('total for payout') ||
-        n.startsWith('total paid') || n.startsWith('total:') || n.includes('space rental');
+    if (!n) return false;
+    return (
+        n.startsWith('(credit) space rental') ||
+        n.startsWith('(credit)') ||
+        n.startsWith('total for payout') ||
+        n.startsWith('total paid') ||
+        n.startsWith('total:') ||
+        n === 'total' ||
+        n.startsWith('subtotal') ||
+        n.startsWith('payout total') ||
+        n.startsWith('net payout') ||
+        n.includes('space rental') ||
+        /^payout\s*#\d+\s*total/i.test(n)
+    );
 }
 
 /**
- * Splits a Ricochet item cell like `Cartographers Heros  - 0EJ03C` into a clean display title and the booth SKU.
- * Only a trailing ` - [0-9A-Z]{5,8}` token counts as a SKU.
+ * Splits a Ricochet item cell like `Cartographers Heros  - 0EJ03C` or `Item - HUCK-1206` into a clean display title and the booth SKU.
+ * Supports `0EJ...` SKUs, partner UPCs (`HUCK-`, `PDXGL-`, `BB-`), and 5-8 char alphanumeric booth SKUs.
  */
 export function splitTrailingBoothSku(itemName: string): { title: string; sku: string } {
     const raw = String(itemName || '').trim();
-    const m = raw.match(/\s+-\s+([0-9A-Z]{5,8})\s*$/);
-    if (!m) return { title: raw.replace(/\s+/g, ' ').trim(), sku: '' };
-    return { title: raw.slice(0, m.index).replace(/\s+/g, ' ').trim(), sku: m[1] };
+    if (!raw) return { title: '', sku: '' };
+    const m = raw.match(/\s+[-–]\s*['"]?(0EJ[0-9A-Z]{3,5}|(?:HUCK|PDXGL|BB)-[0-9A-Z_-]{2,10}|[0-9A-Z]{5,8})['"]?\s*$/i);
+    if (m) {
+        return {
+            title: raw.slice(0, m.index).replace(/\s+/g, ' ').trim(),
+            sku: m[1].toUpperCase(),
+        };
+    }
+    const leadPair = raw.match(/^(0EJ[0-9A-Z]{3,5})\s+((?:HUCK|PDXGL|BB)-[0-9A-Z_-]{2,10})\b/i);
+    if (leadPair) {
+        return {
+            title: raw.replace(/\s+/g, ' ').trim(),
+            sku: leadPair[1].toUpperCase(),
+        };
+    }
+    return { title: raw.replace(/\s+/g, ' ').trim(), sku: '' };
 }
 
 /** Canonical numeric ticket id: `T-217301 • Title`, `Ticket #217301` and `217301` all become `217301`. */
@@ -379,8 +404,12 @@ export interface FingerprintAccessors<T = any> {
     getSaleNumber: (row: T) => any;
     getSoldDate: (row: T) => any;
     getGross: (row: T) => any;
-    /** Booth SKU (`0EJ08B`) when the row carries one. */
+    /** Optional net payout accessor for matching paid history rows where net is primary. */
+    getNet?: (row: T) => any;
+    /** Booth SKU (`0EJ08B`) or UPC (`HUCK-1440`) when the row carries one. */
     getSku?: (row: T) => any;
+    /** Optional secondary code (e.g. matchedItemUpc when getSku returns 0EJ SKU). */
+    getUpc?: (row: T) => any;
     /** Clean item title (used for the fingerprint's title/SKU component). */
     getTitle?: (row: T) => any;
 }
@@ -397,8 +426,8 @@ export function assignOccurrenceFingerprints<T extends Record<string, any>>(rows
         const rawSale = acc.getSaleNumber(row);
         const ticket = canonicalTicketNumber(rawSale) || String(rawSale ?? '').trim();
         const gross = Number(acc.getGross(row) || 0).toFixed(2);
-        const titleOrSku = slugKey(acc.getSku?.(row) || acc.getTitle?.(row) || '');
-        const groupKey = `${ticket}|${gross}`;
+        const titleOrSku = slugKey(acc.getSku?.(row) || acc.getUpc?.(row) || acc.getTitle?.(row) || '');
+        const groupKey = `${ticket || titleOrSku}|${gross}`;
         const idx = (seen.get(groupKey) || 0) + 1;
         seen.set(groupKey, idx);
         (row as any).canonicalTicket = ticket;
@@ -412,48 +441,131 @@ export function assignOccurrenceFingerprints<T extends Record<string, any>>(rows
 /**
  * Flags rows already recorded in the sales ledger (`isAlreadyRecorded = true`, shown as "✅ Already Recorded (Skipped)").
  * Every ticket reference is normalised the same way on both sides (`T-217301 • Title`, `Ticket #217301`, `217301` -> `217301`),
- * so a CSV upload never duplicates a legacy record. A row is recorded when the ledger holds at least `occurrenceIndex`
- * sales for its `canonicalTicket|gross`. Ticket-less legacy sales (SKU / payout-batch order ids) match on SKU + local day + gross,
- * or on exact instant + gross. Skipped rows must never create sales or touch multi-qty stock.
+ * so a CSV upload or live Ricochet sync never duplicates a legacy record. Also cross-indexes SKU/UPC (`0EJ...` <-> `HUCK-`/`PDXGL-`/`BB-`),
+ * sold date/month, and gross/net payout so paid history rows without a 6-digit ticket number still match recorded ledger sales.
  */
 export function flagAlreadyRecordedRows<T extends Record<string, any>>(rows: T[], existingSales: any[], acc: FingerprintAccessors<T>): { rows: T[]; recordedCount: number; newCount: number } {
     assignOccurrenceFingerprints(rows, acc);
     const byTicketGross = new Map<string, number>();
+    const byTicketNet = new Map<string, number>();
+    const byTicketOnly = new Map<string, number>();
     const bySkuDayGross = new Map<string, number>();
+    const bySkuDayNet = new Map<string, number>();
+    const bySkuMonthGross = new Map<string, number>();
+    const bySkuMonthNet = new Map<string, number>();
+    const bySkuGross = new Map<string, number>();
+    const bySkuNet = new Map<string, number>();
     const byInstantGross = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) || 0) + 1);
+
+    const upcToMdSku = new Map<string, string>();
+    for (const [mdSku, mdUpc] of Object.entries(PREVERIFIED_MD_SKU_TO_UPC_OR_ID)) {
+        if (mdUpc) upcToMdSku.set(slugKey(mdUpc), slugKey(mdSku));
+    }
+
+    const expandCodeKeys = (rawCodes: any[]): Set<string> => {
+        const out = new Set<string>();
+        for (const c of rawCodes) {
+            const rawClean = cleanCatalogSku(c).toUpperCase();
+            const k = slugKey(rawClean);
+            if (!k) continue;
+            out.add(k);
+            if (PREVERIFIED_MD_SKU_TO_UPC_OR_ID[rawClean]) {
+                out.add(slugKey(PREVERIFIED_MD_SKU_TO_UPC_OR_ID[rawClean]));
+            }
+            const revSku = upcToMdSku.get(k);
+            if (revSku) out.add(revSku);
+        }
+        return out;
+    };
 
     (existingSales || []).forEach(s => {
         if (s.status === 'Cancelled') return;
         const gross = Number(s.grossAmount || 0).toFixed(2);
+        const net = Number(s.netPayout ?? (Number(s.grossAmount || 0) - Number(s.commissionFee || 0))).toFixed(2);
         const iso = toSaleIso(s.saleDate);
-        const ticket = canonicalTicketNumber(s.orderId) || canonicalTicketNumber(s.soNumber);
+        const ticket = canonicalTicketNumber(s.orderId) || canonicalTicketNumber(s.soNumber) || canonicalTicketNumber(s.ricochetSaleId);
         if (ticket) {
             bump(byTicketGross, `${ticket}|${gross}`);
-            return;
+            bump(byTicketNet, `${ticket}|${net}`);
+            bump(byTicketOnly, ticket);
         }
-        if (!iso) return;
-        bump(byInstantGross, `${iso}|${gross}`);
-        [s.soNumber, s.orderId].forEach(k => {
-            const key = slugKey(k);
-            if (key) bump(bySkuDayGross, `${key}|${localDay(iso)}|${gross}`);
-        });
+        const day = iso ? localDay(iso) : '';
+        const month = pacificMonthKey(s.saleDate || iso);
+        if (iso) {
+            bump(byInstantGross, `${iso}|${gross}`);
+        }
+        const codeKeys = expandCodeKeys([s.soNumber, s.orderId, s.sku, s.upc, s.ricochetSaleId]);
+        for (const key of codeKeys) {
+            bump(bySkuGross, `${key}|${gross}`);
+            bump(bySkuNet, `${key}|${net}`);
+            if (day) {
+                bump(bySkuDayGross, `${key}|${day}|${gross}`);
+                bump(bySkuDayNet, `${key}|${day}|${net}`);
+            }
+            if (month) {
+                bump(bySkuMonthGross, `${key}|${month}|${gross}`);
+                bump(bySkuMonthNet, `${key}|${month}|${net}`);
+            }
+        }
     });
+
+    const consumedByCodeMonth = new Map<string, number>();
+    const consumedByCodeGross = new Map<string, number>();
 
     let recordedCount = 0;
     rows.forEach(row => {
         const ticket = (row as any).canonicalTicket as string;
         const gross = Number(acc.getGross(row) || 0).toFixed(2);
+        const netVal = acc.getNet ? Number(acc.getNet(row) || 0) : Number((row as any).ricoNetPayout ?? (row as any).expectedNetPayout ?? (row as any).salePrice ?? 0);
+        const net = netVal > 0 ? netVal.toFixed(2) : (Number(gross) * 0.85).toFixed(2);
         const k = (row as any).occurrenceIndex || 1;
-        const iso = toSaleIso(acc.getSoldDate(row));
+        const rawDate = acc.getSoldDate(row);
+        const iso = toSaleIso(rawDate);
+        const day = iso ? localDay(iso) : '';
+        const month = pacificMonthKey(rawDate || iso);
+        const rowCodes = expandCodeKeys([
+            acc.getSku?.(row),
+            acc.getUpc?.(row),
+            (row as any).sku,
+            (row as any).ricoSku,
+            (row as any).upc,
+            (row as any).matchedItemUpc,
+            (row as any).extractedSku,
+        ]);
+
         let recorded = false;
         if (ticket && /^\d{4,8}$/.test(ticket)) {
-            recorded = (byTicketGross.get(`${ticket}|${gross}`) || 0) >= k;
+            recorded =
+                (byTicketGross.get(`${ticket}|${gross}`) || 0) >= k ||
+                (byTicketNet.get(`${ticket}|${net}`) || 0) >= k;
         }
         if (!recorded && iso) {
             recorded = (byInstantGross.get(`${iso}|${gross}`) || 0) >= k;
-            const sku = slugKey(acc.getSku?.(row));
-            if (!recorded && sku) recorded = (bySkuDayGross.get(`${sku}|${localDay(iso)}|${gross}`) || 0) >= k;
+        }
+        if (!recorded && rowCodes.size > 0) {
+            for (const code of rowCodes) {
+                if (day && ((bySkuDayGross.get(`${code}|${day}|${gross}`) || 0) >= k || (bySkuDayNet.get(`${code}|${day}|${net}`) || 0) >= k)) {
+                    recorded = true;
+                    break;
+                }
+                if (month) {
+                    const mKeyGross = `${code}|${month}|${gross}`;
+                    const mKeyNet = `${code}|${month}|${net}`;
+                    const usedM = (consumedByCodeMonth.get(code) || 0) + 1;
+                    if ((bySkuMonthGross.get(mKeyGross) || 0) >= usedM || (bySkuMonthNet.get(mKeyNet) || 0) >= usedM) {
+                        recorded = true;
+                        consumedByCodeMonth.set(code, usedM);
+                        break;
+                    }
+                }
+                const usedG = (consumedByCodeGross.get(code) || 0) + 1;
+                if ((bySkuGross.get(`${code}|${gross}`) || 0) >= usedG || (bySkuNet.get(`${code}|${net}`) || 0) >= usedG) {
+                    recorded = true;
+                    consumedByCodeGross.set(code, usedG);
+                    break;
+                }
+            }
         }
         (row as any).isAlreadyRecorded = recorded;
         if (recorded) recordedCount++;
@@ -1819,9 +1931,9 @@ export function matchMemoryDenInventoryItem(params: {
         }
     }
 
-    // 5. Strict Title Matching (Never let short/generic <15 char titles fuzzy match!)
+    // 5. Strict Title Matching (Checks tagTitle and title; blocks <15 char fuzzy match while allowing exact tagTitle/title match >= 6 chars)
     const normTitle = normalizeTitleForMdMatch(params.title);
-    if (!normTitle || normTitle.length < 15) {
+    if (!normTitle || normTitle.length < 6) {
         return null;
     }
 
@@ -1831,38 +1943,71 @@ export function matchMemoryDenInventoryItem(params: {
         return canUseCandidate(i);
     });
 
-    // 5a. Exact normalized title match
+    // 5a. Exact normalized title or tagTitle match
     const exactMatch = titleEligible.find(c => {
         const candTitle = normalizeTitleForMdMatch(c.title || c.identity);
-        if (candTitle !== normTitle) return false;
-        const dbPrice = Number(c.resalePrice ?? 0);
+        const candTag = normalizeTitleForMdMatch(c.tagTitle);
+        if (candTitle !== normTitle && candTag !== normTitle) return false;
+        const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0);
         if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > 5.01) return false;
         return true;
     });
     if (exactMatch) return dereferenceParent(exactMatch);
 
-    // 5b. High-similarity (>= 85%) or Payouts 32-char prefix match
+    if (normTitle.length < 15) {
+        return null;
+    }
+
+    // 5b. High-similarity (>= 85%) or Payouts prefix match across title and tagTitle
     let bestCand: any = null;
     let bestScore = 0;
     for (const c of titleEligible) {
-        const candTitle = normalizeTitleForMdMatch(c.title || c.identity);
-        if (candTitle.length < 15) continue;
-        const sim = computeMdTitleSimilarity(normTitle, candTitle);
-        const isPayoutPrefix = Boolean(params.allowPrefixForPayout) && normTitle.length >= 18 &&
-            (candTitle.startsWith(normTitle) || normTitle.startsWith(candTitle));
+        const candTitles = [
+            normalizeTitleForMdMatch(c.title || c.identity),
+            normalizeTitleForMdMatch(c.tagTitle),
+        ].filter(t => t && t.length >= 12);
+        for (const candTitle of candTitles) {
+            const sim = computeMdTitleSimilarity(normTitle, candTitle);
+            const isPayoutPrefix = Boolean(params.allowPrefixForPayout) && normTitle.length >= 15 &&
+                (candTitle.startsWith(normTitle) || normTitle.startsWith(candTitle));
 
-        if (sim >= 0.85 || isPayoutPrefix) {
-            const dbPrice = Number(c.resalePrice ?? 0);
-            if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > 5.01) continue;
-            const score = isPayoutPrefix ? Math.max(sim, 0.86) : sim;
-            if (score > bestScore) {
-                bestScore = score;
-                bestCand = c;
+            if (sim >= 0.85 || isPayoutPrefix) {
+                const dbPrice = Number(c.resalePrice ?? c.boutiquePrice ?? c.price ?? 0);
+                if (price > 0 && dbPrice > 0 && !preSingle && Math.abs(dbPrice - price) > 5.01) continue;
+                const score = isPayoutPrefix ? Math.max(sim, 0.86) : sim;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCand = c;
+                }
             }
         }
     }
 
     return bestCand ? dereferenceParent(bestCand) : null;
+}
+
+/**
+ * Resolves the canonical partner bucket (`HUCK` | `PDXGL` | `BB`) for a Ricochet or CSV sale row.
+ */
+export function resolvePartnerBucketForSaleRow(row: any): 'HUCK' | 'PDXGL' | 'BB' {
+    if (!row) return 'HUCK';
+    const sku = cleanCatalogSku(row.ricoSku || row.sku || row.extractedSku).toUpperCase();
+    const mappedUpc = sku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[sku] ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID[sku].toUpperCase() : '';
+    const upc = cleanCatalogSku(row.matchedItemUpc || row.upc || mappedUpc).toUpperCase();
+    const title = String(row.matchedItemTitle || row.title || row.itemName || '').trim();
+
+    if (row.partnerBucket === 'BB' || isBbConsignorRow({ sku, upc, title })) {
+        return 'BB';
+    }
+    if (
+        row.partnerBucket === 'PDXGL' ||
+        upc.startsWith('PDXGL-') ||
+        sku.startsWith('PDXGL-') ||
+        /^PDXGL\b/i.test(title)
+    ) {
+        return 'PDXGL';
+    }
+    return 'HUCK';
 }
 
 /**

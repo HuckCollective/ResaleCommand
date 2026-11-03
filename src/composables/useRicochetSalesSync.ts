@@ -1,4 +1,10 @@
 import { computed, ref, type ComputedRef } from 'vue';
+import {
+  cleanCatalogSku,
+  isPayoutSummaryRow,
+  resolvePartnerBucketForSaleRow,
+  splitTrailingBoothSku,
+} from '../lib/salesBucketing';
 import type { LocationSettingMeta } from '../lib/warehouses';
 
 export interface UseRicochetSalesSyncOptions {
@@ -6,6 +12,15 @@ export interface UseRicochetSalesSyncOptions {
   addToast: (toast: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
   onCsvFallbackPaste: (rawCsvText: string) => void;
   onAfterLiveCommit?: () => void;
+}
+
+function hasRealPaidDate(rawPaidDate: any): boolean {
+  if (!rawPaidDate) return false;
+  const s = String(rawPaidDate).trim().toLowerCase();
+  if (!s || s === '—' || s === '-' || s === 'n/a' || s === 'null' || s === 'undefined' || s.includes('unpaid') || s.includes('pending')) {
+    return false;
+  }
+  return /\d{2,4}/.test(s);
 }
 
 export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
@@ -22,7 +37,49 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const pastedRicochetSyncText = ref('');
 
   const ricochetStagedRows = computed<any[]>(() => {
-    return Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
+    const rawList = Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
+    return rawList
+      .filter((r: any) => {
+        const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
+        const rawSku = String(r?.sku || r?.ricoSku || '').trim();
+        return !isPayoutSummaryRow(rawTitle) && !isPayoutSummaryRow(rawSku);
+      })
+      .map((r: any) => {
+        const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
+        const trailing = splitTrailingBoothSku(rawTitle);
+        const cleanTitle = trailing.sku ? trailing.title : rawTitle;
+        const resolvedSku = cleanCatalogSku(r?.ricoSku || r?.sku || trailing.sku || '').toUpperCase();
+        const rawPayoutStatus = String(r?.payoutStatus || '').toLowerCase().trim();
+        const rawStatus = String(r?.status || '').toLowerCase().trim();
+        const payoutStatus: 'pending_payout' | 'paid' =
+          rawPayoutStatus === 'pending_payout' || rawStatus === 'unpaid'
+            ? 'pending_payout'
+            : rawPayoutStatus === 'paid' || hasRealPaidDate(r?.paidDate) || rawStatus === 'paid'
+              ? 'paid'
+              : 'pending_payout';
+        const isSynced = Boolean(r?.alreadySynced || r?.alreadyRecorded || r?.isAlreadyRecorded);
+        const isMatched = Boolean(
+          r?.matchStatus === 'matched' ||
+            r?.matchedItemId ||
+            (r?.matchTier && r.matchTier !== 'unmatched')
+        );
+        const partnerBucket = resolvePartnerBucketForSaleRow({
+          ...r,
+          sku: resolvedSku || r?.sku,
+          title: cleanTitle || rawTitle,
+        });
+        return {
+          ...r,
+          title: cleanTitle || rawTitle,
+          sku: resolvedSku || r?.sku || '',
+          ricoSku: resolvedSku || r?.ricoSku || r?.sku || '',
+          payoutStatus,
+          alreadySynced: isSynced,
+          alreadyRecorded: isSynced,
+          matchStatus: isMatched ? 'matched' : 'unmatched',
+          partnerBucket,
+        };
+      });
   });
 
   const ricochetSpaceRentalAdjustments = computed<any[]>(() => {
@@ -76,28 +133,33 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       if (r.matchStatus === 'matched' || r.matchedItemId || (r.matchTier && r.matchTier !== 'unmatched')) {
         matchedInBooth++;
       }
-      if (r.alreadySynced) alreadySynced++;
+      if (r.alreadySynced || r.alreadyRecorded) alreadySynced++;
     }
     let spaceRentalTotal = 0;
     for (const adj of ricochetSpaceRentalAdjustments.value) {
       spaceRentalTotal += Number(adj.amount || 0);
     }
     const rent = Number(activeCanonicalLocationMeta.value.monthlyRent || 0);
+    if (spaceRentalTotal === 0 && rent > 0) {
+      spaceRentalTotal = s?.spaceRentalTotal ?? -Math.abs(rent);
+    }
+    const hasRows = rows.length > 0;
     return {
-      soldFound: s?.soldFound ?? rows.length,
-      grossSales: s?.grossSales ?? Number(grossSales.toFixed(2)),
-      expectedCommission: s?.expectedCommission ?? Number(expectedCommission.toFixed(2)),
-      netPayout: s?.expectedNetPayout ?? s?.netPayout ?? Number(netPayout.toFixed(2)),
-      pendingPayoutCount: s?.pendingPayoutCount ?? pendingPayoutCount,
-      pendingPayoutNet: s?.pendingPayoutNet ?? Number(pendingPayoutNet.toFixed(2)),
-      paidHistoryCount: s?.paidHistoryCount ?? paidHistoryCount,
-      paidHistoryNet: s?.paidHistoryNet ?? Number(paidHistoryNet.toFixed(2)),
-      spaceRentalTotal: s?.spaceRentalTotal ?? Number(spaceRentalTotal.toFixed(2)),
-      netAfterCommissionAndRent:
-        s?.netAfterRent ?? s?.netAfterCommissionAndRent ?? Number((netPayout - rent).toFixed(2)),
-      matchedInBooth: s?.matchedCount ?? s?.matchedInBooth ?? matchedInBooth,
-      alreadySynced: s?.alreadySyncedCount ?? s?.alreadySynced ?? alreadySynced,
-      unmatchedCount: s?.unmatchedCount ?? Math.max(0, rows.length - matchedInBooth),
+      soldFound: hasRows ? rows.length : (s?.soldFound ?? 0),
+      grossSales: hasRows ? Number(grossSales.toFixed(2)) : (s?.grossSales ?? 0),
+      expectedCommission: hasRows ? Number(expectedCommission.toFixed(2)) : (s?.expectedCommission ?? 0),
+      netPayout: hasRows ? Number(netPayout.toFixed(2)) : (s?.expectedNetPayout ?? s?.netPayout ?? 0),
+      pendingPayoutCount: hasRows ? pendingPayoutCount : (s?.pendingPayoutCount ?? 0),
+      pendingPayoutNet: hasRows ? Number(pendingPayoutNet.toFixed(2)) : (s?.pendingPayoutNet ?? 0),
+      paidHistoryCount: hasRows ? paidHistoryCount : (s?.paidHistoryCount ?? 0),
+      paidHistoryNet: hasRows ? Number(paidHistoryNet.toFixed(2)) : (s?.paidHistoryNet ?? 0),
+      spaceRentalTotal: Number(spaceRentalTotal.toFixed(2)),
+      netAfterCommissionAndRent: hasRows
+        ? Number((netPayout - rent).toFixed(2))
+        : (s?.netAfterRent ?? s?.netAfterCommissionAndRent ?? 0),
+      matchedInBooth: hasRows ? matchedInBooth : (s?.matchedCount ?? s?.matchedInBooth ?? 0),
+      alreadySynced: hasRows ? alreadySynced : (s?.alreadySyncedCount ?? s?.alreadySynced ?? 0),
+      unmatchedCount: hasRows ? Math.max(0, rows.length - matchedInBooth) : (s?.unmatchedCount ?? 0),
     };
   });
 
@@ -105,6 +167,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     return ricochetStagedRows.value.filter(
       (r: any) =>
         !r.alreadySynced &&
+        !r.alreadyRecorded &&
         (r.matchStatus === 'matched' ||
           r.matchedItemId ||
           (r.matchTier && r.matchTier !== 'unmatched') ||
@@ -214,13 +277,27 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.ok) {
         if (data.payload) {
-          ricochetSyncPayload.value = data.payload;
+          const updatedRows = Array.isArray(data.payload.rows)
+            ? data.payload.rows.map((r: any) => {
+                const isSynced = Boolean(r?.alreadySynced || r?.alreadyRecorded || r?.isAlreadyRecorded);
+                return {
+                  ...r,
+                  alreadySynced: isSynced,
+                  alreadyRecorded: isSynced,
+                };
+              })
+            : [];
+          ricochetSyncPayload.value = {
+            ...data.payload,
+            rows: updatedRows,
+          };
         }
         ricochetDryRunResult.value = {
           wouldCommitCount: data.wouldCommitCount ?? ricochetActionableNewCount.value,
           wouldGross: data.wouldGross ?? ricochetSummary.value.grossSales,
           wouldNet: data.wouldNet ?? ricochetSummary.value.netPayout,
-          skippedAlreadySynced: data.skippedAlreadySynced ?? ricochetSummary.value.alreadySynced,
+          skippedAlreadySynced:
+            data.skippedAlreadySynced ?? data.alreadySyncedCount ?? ricochetSummary.value.alreadySynced,
         };
         addToast({
           type: 'info',

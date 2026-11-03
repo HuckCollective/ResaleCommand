@@ -361,6 +361,45 @@ for (const relPath of locationDrivenFiles) {
     }
 }
 
+// =========================================================================
+// 7. VALIDATE GOLDEN RULE #3: RICOCHET LIVE SALES PANEL & PARSER DELEGATION
+// =========================================================================
+const requiredArchitectureContracts = [
+    {
+        file: 'src/components/sales/RicochetLiveSalesPanel.vue',
+        mustContain: [
+            { pattern: /toggleMatchFilter\(['"]matched['"]\)/, label: 'Clickable Matched filter control' },
+            { pattern: /toggleMatchFilter\(['"]unmatched['"]\)/, label: 'Clickable Unmatched filter control' },
+            { pattern: /toggleMatchFilter\(['"]already_synced['"]\)/, label: 'Clickable Already Synced / In DB filter control' },
+            { pattern: /toggleMatchFilter\(['"]ready_to_sync['"]\)/, label: 'Clickable New / Ready to Sync filter control' },
+            { pattern: /togglePartnerFilter\(['"]HUCK['"]\)/, label: 'Clickable ⭐ HUCK Partner filter pill' },
+            { pattern: /togglePartnerFilter\(['"]PDXGL['"]\)/, label: 'Clickable 🎲 PDXGL Partner filter pill' },
+            { pattern: /togglePartnerFilter\(['"]BB['"]\)/, label: 'Clickable 💛 B&B Partner filter pill' },
+        ],
+    },
+    {
+        file: 'src/lib/ricochetPayoutParser.ts',
+        mustContain: [
+            { pattern: /\bisPayoutSummaryRow\s*\(/, label: 'Delegation of summary-row filtering to isPayoutSummaryRow from salesBucketing.ts' },
+            { pattern: /\bsplitTrailingBoothSku\s*\(/, label: 'Delegation of trailing SKU extraction to splitTrailingBoothSku from salesBucketing.ts' },
+            { pattern: /\bmatchMemoryDenInventoryItem\s*\(/, label: 'Delegation of inventory matching to matchMemoryDenInventoryItem from salesBucketing.ts' },
+            { pattern: /\bflagAlreadyRecordedRows\s*\(/, label: 'Delegation of ledger deduplication to flagAlreadyRecordedRows from salesBucketing.ts' },
+        ],
+    },
+];
+
+for (const contract of requiredArchitectureContracts) {
+    const fullPath = path.resolve(contract.file);
+    if (!fs.existsSync(fullPath)) continue;
+    const content = fs.readFileSync(fullPath, 'utf8');
+    for (const req of contract.mustContain) {
+        if (!req.pattern.test(content)) {
+            console.error(`❌ Golden Rule #3 Architecture Contract Violation in ${contract.file}: Missing ${req.label}`);
+            hasErrors = true;
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
 } else {
