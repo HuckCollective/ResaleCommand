@@ -7,6 +7,7 @@ import {
   cleanCatalogSku,
   flagAlreadyRecordedRows,
   isBbConsignorRow,
+  isLeakedInventoryDomRow,
   isPayoutSummaryRow,
   matchMemoryDenInventoryItem,
   normalizeTitleForMdMatch,
@@ -220,7 +221,7 @@ export function buildEnrichedRicochetSalesPayload(params: {
   const filteredRawRows = (params.rawRows || []).filter((r) => {
     const rawTitle = String(r.title || r.itemName || r.name || '').trim();
     const rawSkuText = String(r.sku || r.ricoSku || '').trim();
-    if (isPayoutSummaryRow(rawTitle) || isPayoutSummaryRow(rawSkuText)) return false;
+    if (isPayoutSummaryRow(rawTitle) || isPayoutSummaryRow(rawSkuText) || isLeakedInventoryDomRow(r)) return false;
     return Boolean(rawTitle || rawSkuText);
   });
 

@@ -1,6 +1,7 @@
 import { computed, ref, type ComputedRef } from 'vue';
 import {
   cleanCatalogSku,
+  isLeakedInventoryDomRow,
   isPayoutSummaryRow,
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
@@ -42,7 +43,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       .filter((r: any) => {
         const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
         const rawSku = String(r?.sku || r?.ricoSku || '').trim();
-        return !isPayoutSummaryRow(rawTitle) && !isPayoutSummaryRow(rawSku);
+        return !isPayoutSummaryRow(rawTitle) && !isPayoutSummaryRow(rawSku) && !isLeakedInventoryDomRow(r);
       })
       .map((r: any) => {
         const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();

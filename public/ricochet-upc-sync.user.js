@@ -1669,13 +1669,55 @@
     const localThs = Array.from(table.querySelectorAll('thead th, tr:first-child th, tr:first-child td')).map((el) =>
       cleanStr(el.textContent).toLowerCase()
     );
-    if (localThs.some((h) => h === 'item' || h === 'sku' || h.includes('sale') || h.includes('paid'))) {
+    if (localThs.some((h) => h.length > 0)) {
       return localThs;
     }
-    const globalThs = Array.from(doc.querySelectorAll('thead th, .dataTables_scrollHead th')).map((el) =>
-      cleanStr(el.textContent).toLowerCase()
+    const wrapper = table.closest && table.closest('.dataTables_wrapper, .table-responsive, .card');
+    const scopedThs = wrapper
+      ? Array.from(wrapper.querySelectorAll('thead th, .dataTables_scrollHead th')).map((el) =>
+          cleanStr(el.textContent).toLowerCase()
+        )
+      : [];
+    return scopedThs;
+  }
+
+  // Guard against scraping Ricochet's `Inventory` DOM table (`Name`, `Category`, `Price`, `Qty`, `Consignor`, `Status`)
+  function isInventoryDomTable(thTexts) {
+    if (!Array.isArray(thTexts) || thTexts.length === 0) return false;
+    return thTexts.some(
+      (h) =>
+        h === 'name' ||
+        h === 'category' ||
+        h === 'qty' ||
+        h === 'quantity' ||
+        h === 'consignor' ||
+        h === 'status' ||
+        h.includes('in stock') ||
+        h.includes('upc') ||
+        h.includes('barcode')
     );
-    return globalThs;
+  }
+
+  // Guard against rows where the `Sale #` column is a non-numeric product name or Inventory Qty/Price columns leaked
+  function isBogusInventoryDomRow(rawTitle, rawSku, rawSale, grossPrice, splitPct) {
+    const cleanSale = cleanStr(rawSale).replace(/^#/, '').trim();
+    const titleStr = cleanStr(rawTitle);
+    const skuStr = cleanStr(rawSku).toUpperCase();
+    const isGenericTitle = !titleStr || /^booth\s+sale\s+item$/i.test(titleStr);
+    if (cleanSale && !/^\d{3,10}$/.test(cleanSale)) {
+      if (isGenericTitle || /[a-z]{3,}/i.test(cleanSale)) {
+        return true;
+      }
+    }
+    const splitStr = cleanStr(splitPct);
+    const splitNum = parseFloat(splitStr.replace(/[^0-9.]/g, '')) || 0;
+    const isWeirdSplit =
+      splitStr.startsWith('$') ||
+      (splitNum > 20 && Math.abs(splitNum - 85) > 0.5 && Math.abs(splitNum - 90) > 0.5 && Math.abs(splitNum - 70) > 0.5);
+    if ((grossPrice === 0 || grossPrice === 1) && !/^0EJ[A-Z0-9]+$/i.test(skuStr) && (isGenericTitle || isWeirdSplit)) {
+      return true;
+    }
+    return false;
   }
 
   // Parse `/payouts` (Current Unpaid Payout) 9-column HTML table:
@@ -1691,8 +1733,7 @@
       if (table.closest && table.closest('#rc-ricochet-sync-root')) continue;
       const thTexts = collectTableHeaders(doc, table);
       const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.startsWith('paid'));
-      const hasUpcHeader = thTexts.some((h) => h.includes('upc') || h.includes('quantity') || h.includes('in stock'));
-      if (hasPaidHeader || hasUpcHeader) continue;
+      if (hasPaidHeader || isInventoryDomTable(thTexts)) continue;
 
       const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
       for (const tr of trs) {
@@ -1744,6 +1785,8 @@
 
           const cleanSaleNum = rawSale.replace(/^#/, '').trim();
           const grossPrice = agedPrice > 0 ? agedPrice : agreedPrice;
+          if (isBogusInventoryDomRow(rawTitle, rawSku, rawSale, grossPrice, splitPct)) continue;
+
           const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
 
           rows.push({
@@ -1786,8 +1829,7 @@
       const thTexts = collectTableHeaders(doc, table);
       const hasSkuHeader = thTexts.some((h) => h === 'sku');
       const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.startsWith('paid'));
-      const hasUpcHeader = thTexts.some((h) => h.includes('upc') || h.includes('quantity') || h.includes('in stock'));
-      if ((hasSkuHeader && !hasPaidHeader) || hasUpcHeader) continue;
+      if ((hasSkuHeader && !hasPaidHeader) || isInventoryDomTable(thTexts)) continue;
 
       const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
       for (const tr of trs) {
@@ -1845,6 +1887,8 @@
           if (!parsedTitle && !parsedSku && !rawSale) continue;
           const cleanSaleNum = rawSale.replace(/^#/, '').trim();
           const grossPrice = agedPrice > 0 ? agedPrice : agreedPrice;
+          if (isBogusInventoryDomRow(parsedTitle, parsedSku, rawSale, grossPrice, splitPct)) continue;
+
           const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
 
           rows.push({
@@ -2249,6 +2293,9 @@
     const seenPayoutTitlePriceCounts = new Map();
 
     const pushNormalizedSoldRow = (raw, isFromPayoutTable = false) => {
+      if (isBogusInventoryDomRow(raw.title, raw.sku || raw.ricoSku, raw.saleNumber || raw.payoutId, Number(raw.grossPrice ?? raw.agreedPrice ?? 0), raw.splitPct)) {
+        return;
+      }
       const linked = resolveCrossLinkedIdentity(raw);
       const ricoSku = linked.ricoSku || '';
       const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');

@@ -378,9 +378,16 @@ const requiredArchitectureContracts = [
         ],
     },
     {
+        file: 'src/lib/salesBucketing.ts',
+        mustContain: [
+            { pattern: /\bexport\s+function\s+isLeakedInventoryDomRow\s*\(/, label: 'Exported isLeakedInventoryDomRow guard against leaked Ricochet Inventory DOM rows' },
+        ],
+    },
+    {
         file: 'src/lib/ricochetPayoutParser.ts',
         mustContain: [
             { pattern: /\bisPayoutSummaryRow\s*\(/, label: 'Delegation of summary-row filtering to isPayoutSummaryRow from salesBucketing.ts' },
+            { pattern: /\bisLeakedInventoryDomRow\s*\(/, label: 'Delegation of leaked Inventory DOM row filtering to isLeakedInventoryDomRow from salesBucketing.ts' },
             { pattern: /\bsplitTrailingBoothSku\s*\(/, label: 'Delegation of trailing SKU extraction to splitTrailingBoothSku from salesBucketing.ts' },
             { pattern: /\bmatchMemoryDenInventoryItem\s*\(/, label: 'Delegation of inventory matching to matchMemoryDenInventoryItem from salesBucketing.ts' },
             { pattern: /\bflagAlreadyRecordedRows\s*\(/, label: 'Delegation of ledger deduplication to flagAlreadyRecordedRows from salesBucketing.ts' },

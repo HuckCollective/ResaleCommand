@@ -355,6 +355,55 @@ export function isPayoutSummaryRow(itemName: string): boolean {
 }
 
 /**
+ * Detects bogus rows leaked from Ricochet's `Inventory (Active)` DOM table during SPA tab scraping:
+ * - `title === 'Booth Sale Item'` (or generic fallback) where `saleNumber`/`payoutId` is a non-numeric product title
+ *   (e.g. `#Levi's Faux Leather Moto Jacket (L)`, `#WWII US Sun Helmet Hawley 1944`), OR
+ * - `saleNumber` is a multi-word product title containing letters & spaces instead of a numeric POS ticket ID, OR
+ * - `grossPrice` is `0` or `1` (from the Inventory `Qty` column) while `splitPct`/`commissionRate` is `> 20%` (and not a real 85%/90% consignor split) with no valid Ricochet `0EJ...` SKU or `HUCK-`/`PDXGL-`/`BB-` UPC.
+ */
+export function isLeakedInventoryDomRow(row: any): boolean {
+    if (!row || typeof row !== 'object') return false;
+    const rawTitle = String(row.title || row.itemName || row.name || '').trim();
+    const rawSale = String(row.saleNumber || row.payoutId || row.saleId || row.ticketNumber || '').trim();
+    const cleanSale = rawSale.replace(/^#/, '').trim();
+    const rawSku = cleanCatalogSku(row.ricoSku || row.sku || row.extractedSku || '').toUpperCase();
+    const rawUpc = cleanCatalogSku(row.upc || row.matchedItemUpc || '').toUpperCase();
+    const hasValidBoothSku = /^0EJ[A-Z0-9]{2,6}$/i.test(rawSku);
+    const hasValidOrgUpc = /^(?:HUCK|PDXGL|BB)-[A-Z0-9_-]+$/i.test(rawUpc);
+
+    const isGenericTitle =
+        !rawTitle ||
+        rawTitle.toLowerCase() === 'booth sale item' ||
+        rawTitle.toLowerCase() === 'booth item';
+
+    // 1. Non-numeric product title leaked into saleNumber / payoutId (e.g. `#Levi's Faux Leather Moto Jacket (L)`)
+    if (cleanSale) {
+        const isKnownTicketOrRef =
+            /^\d{3,10}(?:\s*#\d+)?$/.test(cleanSale) ||
+            /^(?:ticket\s*#\d+|sale\s*#\d+|t-\d+|rico-|so-|row-\d+|sold-item-\d+|0ej[a-z0-9]+|(?:huck|pdxgl|bb)-[a-z0-9_-]+)$/i.test(cleanSale);
+        if (!isKnownTicketOrRef && (isGenericTitle || /[a-z]{3,}.*\s+[a-z]{2,}/i.test(cleanSale))) {
+            return true;
+        }
+    }
+
+    // 2. Inventory `Qty` (0 or 1) leaked into grossPrice while `Price` ($45, $75, $35 -> 45%, 75%, 35%) leaked into splitPct
+    const grossPrice = Number(row.grossPrice ?? row.agreedPrice ?? row.listedPrice ?? row.price ?? 0);
+    const rawSplitStr = String(row.splitPct ?? row.commissionRate ?? '').trim();
+    const splitNum = parseFloat(rawSplitStr.replace(/[^0-9.]/g, '')) || 0;
+    const isNonStandardSplit =
+        rawSplitStr.startsWith('$') ||
+        (splitNum > 20 && Math.abs(splitNum - 85) > 0.5 && Math.abs(splitNum - 90) > 0.5 && Math.abs(splitNum - 70) > 0.5);
+
+    if ((grossPrice === 0 || grossPrice === 1) && !hasValidBoothSku && !hasValidOrgUpc) {
+        if (isGenericTitle || isNonStandardSplit) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Splits a Ricochet item cell like `Cartographers Heros  - 0EJ03C` or `Item - HUCK-1206` into a clean display title and the booth SKU.
  * Supports `0EJ...` SKUs, partner UPCs (`HUCK-`, `PDXGL-`, `BB-`), and 5-8 char alphanumeric booth SKUs.
  */
