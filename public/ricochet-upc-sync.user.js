@@ -37,7 +37,15 @@
   );
   const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? bootPayload.monthlyRent ?? 0);
   let activeModalTab = 'inventory'; // 'inventory' | 'sales'
+  let activeSalesSubFilter = 'all'; // 'all' | 'pending_payout' | 'paid' | 'space_rental'
   let isPushingSales = false;
+  let isHarvestingPayoutPages = false;
+  let hasHarvestedPayoutPages = false;
+  let harvestedPendingPayoutRows = [];
+  let harvestedPaidHistoryRows = [];
+  let spaceRentalAdjustments = [];
+  let harvestedPendingTotalPayout = 0;
+  let harvestedPaidHistoryTotalPayout = 0;
   let lastExtractedSalesRows = [];
   let alreadySyncedRicoKeys = new Set();
   let salesPushSuccessUrl = '';
@@ -621,37 +629,69 @@
           <!-- TAB 2: 💰 SALES & PAYOUT SYNC -->
           <div id="rc-tab-view-sales" style="display: none; flex-direction: column; gap: 10px;">
             <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; flex-wrap: wrap;">
                 <span style="font-size: 11px; font-weight: 800; color: #cbd5e1;">💰 Live ${activeLocationName} Sales &amp; Payout Extractor</span>
-                <span style="font-size: 10px; font-family: monospace; color: #38bdf8; background: rgba(56,189,248,0.14); padding: 2px 6px; border-radius: 999px;">
-                  Fee: ${activeCommissionRate}% | Rent: $${activeMonthlyRent.toFixed(2)}
-                </span>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                  <span style="font-size: 10px; font-family: monospace; color: #38bdf8; background: rgba(56,189,248,0.14); padding: 2px 6px; border-radius: 999px;">
+                    Fee: ${activeCommissionRate}% | Rent: $${activeMonthlyRent.toFixed(2)}
+                  </span>
+                  <button id="rc-harvest-payouts-btn" type="button" title="Re-harvest /payouts & /payout_history" style="background:#334155;border:none;color:#e2e8f0;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;cursor:pointer;">🔄 Harvest</button>
+                </div>
               </div>
 
-              <!-- 5 Live Sales KPI Pills -->
+              <!-- Sub-Filter Pills Inside 💰 Sales & Payout Sync Modal Tab -->
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-bottom: 8px;">
+                <button type="button" data-rc-sales-filter="all" class="rc-sales-filter-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #38bdf8; background: rgba(56,189,248,0.16); color: #f8fafc; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                  <span>All Sold</span>
+                  <span id="rc-sflt-all" style="font-family: monospace; opacity: 0.9;">0</span>
+                </button>
+                <button type="button" data-rc-sales-filter="pending_payout" class="rc-sales-filter-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                  <span>⏳ Pending (/payouts)</span>
+                  <span id="rc-sflt-pending" style="font-family: monospace; opacity: 0.9;">0</span>
+                </button>
+                <button type="button" data-rc-sales-filter="paid" class="rc-sales-filter-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                  <span>✅ Paid (/payout_history)</span>
+                  <span id="rc-sflt-paid" style="font-family: monospace; opacity: 0.9;">0</span>
+                </button>
+                <button type="button" data-rc-sales-filter="space_rental" class="rc-sales-filter-btn" style="padding: 5px 6px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 10.5px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                  <span>🏢 Space Rental &amp; Credits</span>
+                  <span id="rc-sflt-rent" style="font-family: monospace; opacity: 0.9;">0</span>
+                </button>
+              </div>
+
+              <!-- 5 Live Sales KPI Pills (Pending Payout, Space Rental / Credits, Paid History, Matched in Booth, Unmatched) -->
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 10.5px; margin-bottom: 6px;">
-                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 6px 8px;">
-                  <div style="color: #7dd3fc; font-weight: 700;">Sold Found</div>
-                  <strong id="rc-sales-kpi-found" style="font-family: monospace; font-size: 13px; color: #f8fafc;">0</strong>
+                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 6px 8px;">
+                  <div style="color: #fbbf24; font-weight: 700;">Pending Payout ($)</div>
+                  <strong id="rc-sales-kpi-pending" style="font-family: monospace; font-size: 12.5px; color: #fde68a;">$0.00</strong>
+                </div>
+                <div style="background: rgba(244,63,94,0.12); border: 1px solid rgba(244,63,94,0.3); border-radius: 8px; padding: 6px 8px;">
+                  <div style="color: #fda4af; font-weight: 700;">Space Rental / Credits</div>
+                  <strong id="rc-sales-kpi-rent" style="font-family: monospace; font-size: 12.5px; color: #fecdd3;">$0.00</strong>
                 </div>
                 <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px;">
-                  <div style="color: #34d399; font-weight: 700;">Gross Sales</div>
-                  <strong id="rc-sales-kpi-gross" style="font-family: monospace; font-size: 13px; color: #34d399;">$0.00</strong>
-                </div>
-                <div style="background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 6px 8px;">
-                  <div style="color: #c084fc; font-weight: 700;">Net Payout</div>
-                  <strong id="rc-sales-kpi-net" style="font-family: monospace; font-size: 13px; color: #e9d5ff;">$0.00</strong>
+                  <div style="color: #34d399; font-weight: 700;">Paid History ($)</div>
+                  <strong id="rc-sales-kpi-paid" style="font-family: monospace; font-size: 12.5px; color: #6ee7b7;">$0.00</strong>
                 </div>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10.5px;">
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 10.5px;">
+                <div style="background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #7dd3fc; font-weight: 700;">Sold Found</span>
+                  <strong id="rc-sales-kpi-found" style="font-family: monospace; font-size: 12px; color: #f8fafc;">0</strong>
+                </div>
                 <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #6ee7b7; font-weight: 700;">🔗 Matched in Booth</span>
-                  <strong id="rc-sales-kpi-matched" style="font-family: monospace; font-size: 12.5px; color: #34d399;">0</strong>
+                  <span style="color: #6ee7b7; font-weight: 700;">🔗 Matched</span>
+                  <strong id="rc-sales-kpi-matched" style="font-family: monospace; font-size: 12px; color: #34d399;">0</strong>
                 </div>
-                <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #cbd5e1; font-weight: 700;">✅ Already Synced</span>
-                  <strong id="rc-sales-kpi-synced" style="font-family: monospace; font-size: 12.5px; color: #f8fafc;">0</strong>
+                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.28); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #fde68a; font-weight: 700;">⚪ Unmatched</span>
+                  <strong id="rc-sales-kpi-unmatched" style="font-family: monospace; font-size: 12px; color: #fbbf24;">0</strong>
                 </div>
+              </div>
+              <div style="display:none;">
+                <span id="rc-sales-kpi-gross">$0.00</span>
+                <span id="rc-sales-kpi-net">$0.00</span>
+                <span id="rc-sales-kpi-synced">0</span>
               </div>
             </div>
 
@@ -660,16 +700,16 @@
 
             <!-- Scrollable Sold Lines Preview -->
             <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 8px;">
-              <div style="font-size: 10.5px; font-weight: 800; color: #94a3b8; margin-bottom: 6px; display: flex; justify-content: space-between;">
-                <span>Extracted Sold &amp; Payout Lines</span>
+              <div style="font-size: 10.5px; font-weight: 800; color: #94a3b8; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <span id="rc-sales-preview-title">Extracted Sold &amp; Payout Lines (0EJ... SKU Cross-Linked)</span>
                 <span id="rc-sales-preview-count" style="font-family: monospace; color: #38bdf8;">0 lines</span>
               </div>
               <div id="rc-sales-preview-list" style="max-height: 175px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;">
-                <div style="color: #64748b; padding: 6px;">Scanning catalog &amp; page for sold items...</div>
+                <div style="color: #64748b; padding: 6px;">Harvesting /payouts, /payout_history &amp; /api/product...</div>
               </div>
             </div>
 
-            <!-- Primary Sales Sync Action Buttons -->
+            <!-- Primary Sales Sync Action Buttons (Default Dry-Run Stage) -->
             <div style="display: flex; gap: 8px;">
               <button id="rc-push-sales-btn" type="button" style="
                 flex: 2;
@@ -681,7 +721,7 @@
                 font-weight: 800;
                 font-size: 12px;
                 cursor: pointer;
-              ">🚀 Push Sales to Resale Core</button>
+              ">🧪 Stage Sales to Resale Core (Dry-Run)</button>
               <button id="rc-copy-sales-json-btn" type="button" style="
                 flex: 1;
                 background: #334155;
@@ -713,6 +753,18 @@
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
     document.getElementById('rc-push-sales-btn').addEventListener('click', pushSalesToResaleCore);
     document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
+    const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
+    if (harvestBtn) {
+      harvestBtn.addEventListener('click', () => harvestRicochetPayoutPages(true));
+    }
+
+    const salesFilterBtns = root.querySelectorAll('.rc-sales-filter-btn');
+    salesFilterBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeSalesSubFilter = btn.getAttribute('data-rc-sales-filter') || 'all';
+        updateSalesSyncTabUI();
+      });
+    });
 
     // Partner Bucket Selector Listeners
     const bucketBtns = root.querySelectorAll('.rc-bucket-btn');
@@ -1114,6 +1166,7 @@
       if (Object.keys(parsedMap).length === 0 && !isFetchingCloudPayload) {
         await fetchLivePayloadFromCloud(false, true);
       }
+      harvestRicochetPayoutPages(false);
       updateUI();
     } catch (err) {
       addLog(`❌ Error loading catalog: ${err.message}`, '#f87171');
@@ -1547,25 +1600,526 @@
     }
 
     if (activeModalTab === 'sales') {
+      if (!hasHarvestedPayoutPages && !isHarvestingPayoutPages) {
+        harvestRicochetPayoutPages(false);
+      }
       updateSalesSyncTabUI();
     }
   }
 
-  // Extract Sold Items & Payout lines from Ricochet catalog + visible DOM table rows
+  function normalizeTitleKey(str) {
+    return cleanStr(str)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  function parseCurrencyFloat(val) {
+    const raw = cleanStr(val);
+    if (!raw) return 0;
+    const isNeg = raw.includes('-') || /^\(.*\)$/.test(raw);
+    const num = parseFloat(raw.replace(/[^0-9.]/g, '')) || 0;
+    return isNeg ? -Math.abs(num) : num;
+  }
+
+  // Parse `/payouts` (Current Unpaid Payout) 9-column HTML table:
+  // [Item, SKU, Sale, Agreed, Cost/Split, Aged Price, Discounts, Sold, Amount]
+  function parsePayoutsHtmlDocument(doc) {
+    const rows = [];
+    const adjustments = [];
+    let totalPayout = 0;
+    if (!doc) return { rows, adjustments, totalPayout };
+
+    const tables = Array.from(doc.querySelectorAll('table'));
+    for (const table of tables) {
+      if (table.closest && table.closest('#rc-ricochet-sync-root')) continue;
+      const thTexts = Array.from(table.querySelectorAll('thead th, tr:first-child th')).map((th) =>
+        cleanStr(th.textContent).toLowerCase()
+      );
+      const hasSkuHeader = thTexts.some((h) => h === 'sku');
+      const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.includes('paid'));
+      const hasSaleHeader = thTexts.some((h) => h.includes('sale') || h.includes('sold'));
+      if (hasPaidHeader && !hasSkuHeader) continue;
+      if (thTexts.length > 0 && !hasSkuHeader && !hasSaleHeader) continue;
+
+      const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
+      for (const tr of trs) {
+        if (tr.querySelector('th')) continue;
+        const cells = Array.from(tr.querySelectorAll('td')).map((td) => cleanStr(td.textContent));
+        if (cells.length === 0) continue;
+        const joinedText = cells.join(' ').trim();
+        if (!joinedText) continue;
+
+        // Capture Total Payout summary row
+        if (/total\s+payout/i.test(joinedText)) {
+          const lastVal = parseCurrencyFloat(cells[cells.length - 1]);
+          if (lastVal !== 0) totalPayout = lastVal;
+          continue;
+        }
+
+        // Capture Space Rental / Credit adjustments e.g. `(Credit) Space Rental 10/31/2026 | -382.50`
+        if (/space\s+rental|\(credit\)/i.test(joinedText)) {
+          const amt = parseCurrencyFloat(cells[cells.length - 1]);
+          const dateMatch = joinedText.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/);
+          const label = cells.find((c) => /space\s+rental|\(credit\)/i.test(c)) || cells[0] || 'Space Rental';
+          adjustments.push({
+            label,
+            date: dateMatch ? dateMatch[1] : '',
+            amount: Number(amt.toFixed(2)),
+          });
+          continue;
+        }
+
+        if (cells.length >= 8) {
+          const rawTitle = cells[0] || '';
+          const rawSku = cleanStr(cells[1] || '').toUpperCase();
+          const rawSale = cleanStr(cells[2] || '');
+          const agreedPrice = Number(Math.abs(parseCurrencyFloat(cells[3])).toFixed(2));
+          const splitPct = cleanStr(cells[4] || '');
+          const agedPrice = Number(Math.abs(parseCurrencyFloat(cells[5])).toFixed(2));
+          const discounts = cleanStr(cells[6] || '');
+          const soldDate = cleanStr(cells[7] || '');
+          const ricoNetPayout = Number(parseCurrencyFloat(cells[8] ?? cells[cells.length - 1]).toFixed(2));
+
+          if (!rawTitle && !rawSku && !rawSale) continue;
+          if (/^total\b/i.test(rawTitle)) continue;
+
+          const cleanSaleNum = rawSale.replace(/^#/, '').trim();
+          const grossPrice = agedPrice > 0 ? agedPrice : agreedPrice;
+          const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
+
+          rows.push({
+            title: rawTitle || rawSku || 'Booth Sale Item',
+            ricoSku: rawSku,
+            sku: rawSku,
+            saleNumber: rawSale || (cleanSaleNum ? `#${cleanSaleNum}` : ''),
+            payoutId: cleanSaleNum || rawSale,
+            agreedPrice,
+            splitPct,
+            agedPrice,
+            discounts,
+            soldDate,
+            paidDate: null,
+            grossPrice,
+            ricoNetPayout,
+            ricoCommission,
+            payoutStatus: 'pending_payout',
+            status: 'Sold',
+          });
+        }
+      }
+    }
+
+    return { rows, adjustments, totalPayout };
+  }
+
+  // Parse `/payout_history` (Paid History) 9-column HTML table:
+  // [Item, Sale, Agreed, Cost/Split, Aged Price, Discounts, Paid, Sold, Amount]
+  // Where Item has ` - <SKU>` suffix e.g. `Cartographers Heros - 0EJ03C`
+  function parsePayoutHistoryHtmlDocument(doc) {
+    const rows = [];
+    const adjustments = [];
+    let totalPayout = 0;
+    if (!doc) return { rows, adjustments, totalPayout };
+
+    const tables = Array.from(doc.querySelectorAll('table'));
+    for (const table of tables) {
+      if (table.closest && table.closest('#rc-ricochet-sync-root')) continue;
+      const thTexts = Array.from(table.querySelectorAll('thead th, tr:first-child th')).map((th) =>
+        cleanStr(th.textContent).toLowerCase()
+      );
+      const hasSkuHeader = thTexts.some((h) => h === 'sku');
+      const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.includes('paid'));
+      if (hasSkuHeader && !hasPaidHeader) continue;
+
+      const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
+      for (const tr of trs) {
+        if (tr.querySelector('th')) continue;
+        const cells = Array.from(tr.querySelectorAll('td')).map((td) => cleanStr(td.textContent));
+        if (cells.length === 0) continue;
+        const joinedText = cells.join(' ').trim();
+        if (!joinedText) continue;
+
+        if (/total\s+payout/i.test(joinedText)) {
+          const lastVal = parseCurrencyFloat(cells[cells.length - 1]);
+          if (lastVal !== 0) totalPayout += lastVal;
+          continue;
+        }
+
+        if (/space\s+rental|\(credit\)/i.test(joinedText)) {
+          const amt = parseCurrencyFloat(cells[cells.length - 1]);
+          const dateMatch = joinedText.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/);
+          const label = cells.find((c) => /space\s+rental|\(credit\)/i.test(c)) || cells[0] || 'Space Rental';
+          adjustments.push({
+            label,
+            date: dateMatch ? dateMatch[1] : '',
+            amount: Number(amt.toFixed(2)),
+          });
+          continue;
+        }
+
+        if (cells.length >= 8) {
+          const rawItemCell = cells[0] || '';
+          if (/^total\b/i.test(rawItemCell)) continue;
+
+          // Parse `Item` using `/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i` so `"Cartographers Heros - 0EJ03C"` yields `title: "Cartographers Heros"` and `ricoSku: "0EJ03C"`
+          let parsedTitle = rawItemCell;
+          let parsedSku = '';
+          const suffixMatch = rawItemCell.match(/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i);
+          if (suffixMatch) {
+            parsedTitle = cleanStr(suffixMatch[1]);
+            parsedSku = cleanStr(suffixMatch[2]).toUpperCase();
+          }
+
+          const rawSale = cleanStr(cells[1] || '');
+          const agreedPrice = Number(Math.abs(parseCurrencyFloat(cells[2])).toFixed(2));
+          const splitPct = cleanStr(cells[3] || '');
+          const agedPrice = Number(Math.abs(parseCurrencyFloat(cells[4])).toFixed(2));
+          const discounts = cleanStr(cells[5] || '');
+          const paidDate = cleanStr(cells[6] || '') || null;
+          const soldDate = cleanStr(cells[7] || '');
+          const ricoNetPayout = Number(parseCurrencyFloat(cells[8] ?? cells[cells.length - 1]).toFixed(2));
+
+          if (!parsedTitle && !parsedSku && !rawSale) continue;
+          const cleanSaleNum = rawSale.replace(/^#/, '').trim();
+          const grossPrice = agedPrice > 0 ? agedPrice : agreedPrice;
+          const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
+
+          rows.push({
+            title: parsedTitle || parsedSku || 'Booth Sale Item',
+            ricoSku: parsedSku,
+            sku: parsedSku,
+            saleNumber: rawSale || cleanSaleNum,
+            payoutId: cleanSaleNum || rawSale,
+            agreedPrice,
+            splitPct,
+            agedPrice,
+            discounts,
+            paidDate,
+            soldDate,
+            grossPrice,
+            ricoNetPayout,
+            ricoCommission,
+            payoutStatus: 'paid',
+            status: 'Paid',
+          });
+        }
+      }
+    }
+
+    return { rows, adjustments, totalPayout };
+  }
+
+  // Background Fetch + DOM Parser for `/payouts` and `/payout_history` (Zero Manual Tab Clicking)
+  async function harvestRicochetPayoutPages(manualTrigger = false) {
+    if (isHarvestingPayoutPages) return;
+    isHarvestingPayoutPages = true;
+    const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
+    if (harvestBtn) {
+      harvestBtn.disabled = true;
+      harvestBtn.textContent = '⏳ Harvesting...';
+    }
+
+    try {
+      const fetchHtmlPage = async (pathUrl) => {
+        try {
+          const res = await fetch(pathUrl, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+          });
+          if (!res.ok) return null;
+          const text = await res.text();
+          if (!text || text.length < 30) return null;
+          return new DOMParser().parseFromString(text, 'text/html');
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const [payoutsDoc, historyDoc] = await Promise.all([
+        fetchHtmlPage('/payouts'),
+        fetchHtmlPage('/payout_history'),
+      ]);
+
+      const mergedAdjustments = [];
+      const seenAdjKeys = new Set();
+      const addAdj = (a) => {
+        const key = `${a.label}|${a.date}|${Number(a.amount || 0).toFixed(2)}`;
+        if (!seenAdjKeys.has(key)) {
+          seenAdjKeys.add(key);
+          mergedAdjustments.push(a);
+        }
+      };
+
+      if (payoutsDoc) {
+        const parsedPayouts = parsePayoutsHtmlDocument(payoutsDoc);
+        if (parsedPayouts.rows.length > 0) {
+          harvestedPendingPayoutRows = parsedPayouts.rows;
+        }
+        if (parsedPayouts.totalPayout !== 0) {
+          harvestedPendingTotalPayout = parsedPayouts.totalPayout;
+        }
+        parsedPayouts.adjustments.forEach(addAdj);
+      }
+
+      if (historyDoc) {
+        const parsedHistory = parsePayoutHistoryHtmlDocument(historyDoc);
+        if (parsedHistory.rows.length > 0) {
+          harvestedPaidHistoryRows = parsedHistory.rows;
+        }
+        if (parsedHistory.totalPayout !== 0) {
+          harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
+        }
+        parsedHistory.adjustments.forEach(addAdj);
+      }
+
+      // DOM Fallback if user is currently viewing `/payouts` or `/payout_history` (or SPA tab)
+      try {
+        const currentPath = String(window.location.pathname || '').toLowerCase();
+        const domPayouts = parsePayoutsHtmlDocument(document);
+        if (domPayouts.rows.length > 0 && (harvestedPendingPayoutRows.length === 0 || currentPath.includes('payout'))) {
+          harvestedPendingPayoutRows = domPayouts.rows;
+        }
+        domPayouts.adjustments.forEach(addAdj);
+
+        const domHistory = parsePayoutHistoryHtmlDocument(document);
+        if (domHistory.rows.length > 0 && (harvestedPaidHistoryRows.length === 0 || currentPath.includes('history'))) {
+          harvestedPaidHistoryRows = domHistory.rows;
+        }
+        domHistory.adjustments.forEach(addAdj);
+      } catch (e) {}
+
+      if (mergedAdjustments.length > 0) {
+        spaceRentalAdjustments = mergedAdjustments;
+      }
+
+      hasHarvestedPayoutPages = true;
+      if (manualTrigger) {
+        addLog(
+          `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows, and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
+          '#10b981'
+        );
+      }
+    } catch (e) {
+      // ignore harvest error
+    } finally {
+      isHarvestingPayoutPages = false;
+      if (harvestBtn) {
+        harvestBtn.disabled = false;
+        harvestBtn.textContent = '🔄 Harvest';
+      }
+      updateSalesSyncTabUI();
+    }
+  }
+
+  // Build 4-tier lookup & cross-link `0EJ...` SKU <-> Custom UPC <-> Booth Item, merging `/payouts`, `/payout_history`, and `/api/product`
   function extractRicochetSoldLines() {
-    const soldRows = [];
-    const seenKeys = new Set();
     const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
     const feeRate = Number(activeCommissionRate || 15) / 100;
 
-    // 1. Extract from authenticated /api/product catalogProducts where status is Sold / Paid or quantity === 0
+    // Build lookup indexes across `/api/product`, `/inventory`, and cloud metadata
+    const skuByNumericId = new Map();
+    const productBySku = new Map();
+    const skuByTitlePrice = new Map();
+    const skuByTitleOnly = new Map();
+    const upcToSkuMap = new Map();
+
+    for (const [kSku, kUpc] of Object.entries(parsedMap)) {
+      const s = cleanStr(kSku).toUpperCase();
+      const u = cleanStr(kUpc).toUpperCase();
+      if (s && u) upcToSkuMap.set(u, s);
+    }
+    for (const [kSku, meta] of Object.entries(skuMetaMap)) {
+      const s = cleanStr(kSku).toUpperCase();
+      if (!s || !meta) continue;
+      const u = cleanStr(meta.upc).toUpperCase();
+      if (u) upcToSkuMap.set(u, s);
+      const tKey = normalizeTitleKey(meta.title);
+      if (tKey) {
+        if (!skuByTitleOnly.has(tKey)) skuByTitleOnly.set(tKey, s);
+        const pVal = Number(meta.price || 0).toFixed(2);
+        skuByTitlePrice.set(`${tKey}|${pVal}`, s);
+      }
+    }
+
+    for (const p of catalogProducts) {
+      const s = extractRicochetSku(p);
+      const numId = cleanStr(p.id);
+      const firstItem = Array.isArray(p.items)
+        ? p.items[0]
+        : p.items && typeof p.items === 'object'
+        ? Object.values(p.items).flat()[0]
+        : null;
+      const itemNumId = cleanStr(firstItem?.id);
+      if (s) {
+        productBySku.set(s, p);
+        if (numId) skuByNumericId.set(numId, s);
+        if (itemNumId) skuByNumericId.set(itemNumId, s);
+        const pTitle = normalizeTitleKey(p.name || p.title || p.description || '');
+        const rawPrice =
+          p.price ??
+          p.agreed_price ??
+          p.retail_price ??
+          p.aged_price ??
+          firstItem?.price ??
+          firstItem?.agreed_price ??
+          0;
+        const pPrice = (parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2);
+        if (pTitle) {
+          skuByTitlePrice.set(`${pTitle}|${pPrice}`, s);
+          if (!skuByTitleOnly.has(pTitle)) skuByTitleOnly.set(pTitle, s);
+        }
+      }
+    }
+
+    // Helper: 4-tier resolution of `ricoSku` (`0EJ...`) and `upc` (`HUCK-XXXX` / `PDXGL-` / `BB-`)
+    const resolveCrossLinkedIdentity = (rawRow) => {
+      let candidateSku = cleanStr(rawRow.ricoSku || rawRow.sku || '').toUpperCase();
+      if (/^\d+$/.test(candidateSku)) {
+        candidateSku = skuByNumericId.get(candidateSku) || '';
+      }
+      const rawIdStr = cleanStr(rawRow.ricoItemId || rawRow.productId || '');
+      if (!candidateSku && rawIdStr && skuByNumericId.has(rawIdStr)) {
+        candidateSku = skuByNumericId.get(rawIdStr) || '';
+      }
+
+      let candidateUpc = cleanStr(rawRow.upc || '').toUpperCase();
+      if (!candidateSku && candidateUpc && upcToSkuMap.has(candidateUpc)) {
+        candidateSku = upcToSkuMap.get(candidateUpc) || '';
+      }
+
+      const normTitle = normalizeTitleKey(rawRow.title || '');
+      const agreedFixed = Number(rawRow.agreedPrice ?? rawRow.grossPrice ?? 0).toFixed(2);
+
+      // Tier 3: Normalized Item Title + Agreed Price
+      if (!candidateSku && normTitle && skuByTitlePrice.has(`${normTitle}|${agreedFixed}`)) {
+        candidateSku = skuByTitlePrice.get(`${normTitle}|${agreedFixed}`) || '';
+      }
+      // Tier 4: Normalized Item Title
+      if (!candidateSku && normTitle && skuByTitleOnly.has(normTitle)) {
+        candidateSku = skuByTitleOnly.get(normTitle) || '';
+      }
+
+      const prod = candidateSku ? productBySku.get(candidateSku) : null;
+      const prodUpc = prod ? extractRicochetUpc(prod) : '';
+      const mappedUpc = cleanStr(
+        candidateUpc ||
+          prodUpc ||
+          (candidateSku &&
+            (parsedMap[candidateSku] ||
+              (skuMetaMap[candidateSku] && skuMetaMap[candidateSku].upc) ||
+              bootMap[candidateSku] ||
+              verifiedMdUpcMap[candidateSku])) ||
+          ''
+      ).toUpperCase();
+
+      // Determine 4-tier match status against Booth Inventory
+      let matchTier = 'unmatched';
+      if (mappedUpc && isRealUpc(mappedUpc)) {
+        matchTier = 'upc';
+      } else if (
+        candidateSku &&
+        (parsedMap[candidateSku] || skuMetaMap[candidateSku] || bootMap[candidateSku] || verifiedSkuSet.has(candidateSku))
+      ) {
+        matchTier = 'sku';
+      } else if (normTitle && skuByTitlePrice.has(`${normTitle}|${agreedFixed}`)) {
+        matchTier = 'title_price';
+      } else if (normTitle && skuByTitleOnly.has(normTitle)) {
+        matchTier = 'title';
+      }
+
+      const isMatchedInBooth = matchTier !== 'unmatched';
+      const resolvedTitle =
+        cleanStr(rawRow.title) ||
+        (candidateSku && skuMetaMap[candidateSku] && skuMetaMap[candidateSku].title) ||
+        (prod && cleanStr(prod.name || prod.title)) ||
+        candidateSku ||
+        'Booth Sale Item';
+
+      return {
+        ricoSku: candidateSku,
+        sku: candidateSku,
+        upc: mappedUpc,
+        title: resolvedTitle,
+        matchTier,
+        isMatchedInBooth,
+      };
+    };
+
+    const soldRows = [];
+    const seenDedupKeys = new Set();
+    const seenSkuSetFromPayoutTables = new Set();
+
+    const pushNormalizedSoldRow = (raw) => {
+      const linked = resolveCrossLinkedIdentity(raw);
+      const ricoSku = linked.ricoSku;
+      const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');
+      const cleanTicket = saleNumber.replace(/^#/, '').trim();
+      const soldDate = cleanStr(raw.soldDate || '');
+      const paidDate = raw.paidDate ? cleanStr(raw.paidDate) : null;
+      const agreedPrice = Number(Number(raw.agreedPrice ?? raw.grossPrice ?? 0).toFixed(2));
+      const agedPrice = Number(Number(raw.agedPrice ?? agreedPrice).toFixed(2));
+      const grossPrice = Number(Number(raw.grossPrice ?? (agedPrice > 0 ? agedPrice : agreedPrice)).toFixed(2));
+      const ricoNetPayout = Number(
+        Number(raw.ricoNetPayout ?? Math.max(0, grossPrice - grossPrice * feeRate)).toFixed(2)
+      );
+      const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
+      const payoutStatus = raw.payoutStatus || (paidDate ? 'paid' : 'pending_payout');
+
+      // Deduplicate between `/payouts`, `/payout_history`, and `/api/product` by `(saleNumber, ricoSku, soldDate, ricoNetPayout)`
+      const dedupKey = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
+      if (seenDedupKeys.has(dedupKey)) return;
+      seenDedupKeys.add(dedupKey);
+      if (ricoSku) seenSkuSetFromPayoutTables.add(ricoSku);
+
+      const isAlreadySynced = Boolean(
+        alreadySyncedRicoKeys.has(dedupKey) ||
+          (ricoSku && String(skuMetaMap[ricoSku]?.status || '').toLowerCase() === 'sold')
+      );
+
+      soldRows.push({
+        ricoItemId: ricoSku || cleanTicket || linked.upc || `row-${soldRows.length + 1}`,
+        ricoSku,
+        sku: ricoSku,
+        upc: linked.upc,
+        title: linked.title,
+        saleNumber: saleNumber || (cleanTicket ? `#${cleanTicket}` : ''),
+        payoutId: cleanTicket || saleNumber,
+        agreedPrice,
+        splitPct: cleanStr(raw.splitPct || `${100 - activeCommissionRate}%`),
+        agedPrice,
+        discounts: cleanStr(raw.discounts || ''),
+        soldDate,
+        paidDate,
+        grossPrice,
+        ricoNetPayout,
+        ricoCommission,
+        payoutStatus,
+        status: payoutStatus === 'paid' ? 'Paid' : 'Sold',
+        matchTier: linked.matchTier,
+        isMatchedInBooth: linked.isMatchedInBooth,
+        alreadySynced: isAlreadySynced,
+      });
+    };
+
+    // 1. First push rows harvested from `/payouts` (Current Unpaid Payout)
+    for (const r of harvestedPendingPayoutRows) {
+      pushNormalizedSoldRow(r);
+    }
+
+    // 2. Next push rows harvested from `/payout_history` (Settled Paid History)
+    for (const r of harvestedPaidHistoryRows) {
+      pushNormalizedSoldRow(r);
+    }
+
+    // 3. Supplement with any sold/paid items in `/api/product` catalogProducts not already covered by `/payouts` or `/payout_history`
     for (const p of catalogProducts) {
       const sku = extractRicochetSku(p);
-      let mdUpc = extractRicochetUpc(p);
-      const expectedRcUpc = cleanStr(
-        parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku] || verifiedMdUpcMap[sku] || ''
-      ).toUpperCase();
-      const effectiveUpc = cleanStr(mdUpc || expectedRcUpc).toUpperCase();
+      if (sku && seenSkuSetFromPayoutTables.has(sku)) continue;
 
       const firstItem = Array.isArray(p.items)
         ? p.items[0]
@@ -1590,8 +2144,7 @@
         ? 0
         : parseInt(String(rawQty).replace(/[^0-9-]/g, ''), 10) || 0;
 
-      const isSoldRow = isSoldOrPaidFlag || parsedQty === 0;
-      if (!isSoldRow) continue;
+      if (!isSoldOrPaidFlag && parsedQty !== 0) continue;
 
       const rawPrice =
         p.price ??
@@ -1606,15 +2159,14 @@
         firstItem?.retail_price ??
         (skuMetaMap[sku] && skuMetaMap[sku].price) ??
         0;
-      const grossPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
-      const ricoCommission = Number((grossPrice * feeRate).toFixed(2));
+      const agreedPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
+      const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
       const ricoNetPayout = Number(
         (
           parseFloat(String(p.net ?? p.net_payout ?? p.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
-          Math.max(0, grossPrice - ricoCommission)
+          Math.max(0, agreedPrice - ricoCommission)
         ).toFixed(2)
       );
-
       const rawSoldDate = cleanStr(
         p.sold_date ||
           p.sold_at ||
@@ -1623,159 +2175,177 @@
           firstItem?.sold_date ||
           firstItem?.sold_at ||
           firstItem?.updated_at ||
-          new Date().toISOString().slice(0, 10)
+          ''
       ).slice(0, 10);
+      const isPaid = p.paid === true || rawStatusStr.includes('paid');
 
-      const ricoItemId = cleanStr(p.id || firstItem?.id || sku);
-      const payoutId = cleanStr(p.payout_id || p.sale_id || p.ticket_number || firstItem?.sale_id || '');
-      const title = cleanStr(p.name || p.title || p.description || (skuMetaMap[sku] && skuMetaMap[sku].title) || sku);
-      const status = p.paid === true || rawStatusStr.includes('paid') ? 'Paid' : 'Sold';
-
-      const dedupKey = `${sku || ricoItemId}::${payoutId || rawSoldDate}`;
-      if (seenKeys.has(dedupKey)) continue;
-      seenKeys.add(dedupKey);
-
-      const isMatchedInBooth = Boolean(
-        effectiveUpc || (sku && (parsedMap[sku] || skuMetaMap[sku] || verifiedSkuSet.has(sku)))
-      );
-      const isAlreadySynced = Boolean(
-        alreadySyncedRicoKeys.has(dedupKey) ||
-          (sku && String(skuMetaMap[sku]?.status || '').toLowerCase() === 'sold')
-      );
-
-      soldRows.push({
-        ricoItemId,
+      pushNormalizedSoldRow({
+        ricoItemId: sku || cleanStr(p.id),
+        ricoSku: sku,
         sku,
-        upc: effectiveUpc,
-        title,
+        upc: extractRicochetUpc(p),
+        title: cleanStr(p.name || p.title || p.description || (skuMetaMap[sku] && skuMetaMap[sku].title) || sku),
+        saleNumber: cleanStr(p.sale_id || p.ticket_number || firstItem?.sale_id || ''),
+        agreedPrice,
+        agedPrice: agreedPrice,
+        splitPct: `${100 - activeCommissionRate}.00%`,
         soldDate: rawSoldDate,
-        grossPrice,
+        paidDate: isPaid ? cleanStr(p.paid_date || rawSoldDate) : null,
+        grossPrice: agreedPrice,
         ricoNetPayout,
         ricoCommission,
-        payoutId,
-        status,
-        isMatchedInBooth,
-        alreadySynced: isAlreadySynced,
+        payoutStatus: isPaid ? 'paid' : 'pending_payout',
       });
     }
-
-    // 2. Also inspect visible Sales / Payouts DOM table rows if the user is on a Ricochet Payouts / Sales tab
-    try {
-      const domTrs = document.querySelectorAll('table tbody tr');
-      domTrs.forEach((tr, idx) => {
-        if (tr.closest('#rc-ricochet-sync-root')) return;
-        const cells = Array.from(tr.querySelectorAll('td')).map((td) => cleanStr(td.textContent));
-        if (cells.length < 3) return;
-        const rowText = cells.join(' | ');
-        const skuMatch = rowText.match(/\b(0EJ[A-Z0-9]{2,6})\b/i);
-        const ticketMatch = rowText.match(/\b(\d{6})\b/);
-        const priceMatches = rowText.match(/\$?\d+\.\d{2}/g);
-        if (!skuMatch && !ticketMatch) return;
-        const sku = skuMatch ? skuMatch[1].toUpperCase() : '';
-        if (sku && seenKeys.has(`${sku}::${ticketMatch ? ticketMatch[1] : ''}`)) return;
-        if (sku && Array.from(seenKeys).some((k) => k.startsWith(`${sku}::`))) return;
-
-        const grossVal = priceMatches && priceMatches[0]
-          ? parseFloat(priceMatches[0].replace(/[^0-9.-]/g, '')) || 0
-          : 0;
-        if (grossVal <= 0) return;
-
-        const netVal = priceMatches && priceMatches.length > 1
-          ? parseFloat(priceMatches[priceMatches.length - 1].replace(/[^0-9.-]/g, '')) || Number((grossVal * (1 - feeRate)).toFixed(2))
-          : Number((grossVal * (1 - feeRate)).toFixed(2));
-        const commVal = Math.max(0, Number((grossVal - netVal).toFixed(2)));
-        const dateMatch = rowText.match(/\b(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}-\d{2}-\d{2})\b/);
-        const soldDate = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
-        const expectedUpc = cleanStr(
-          (sku && (parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku])) || ''
-        ).toUpperCase();
-        const payoutId = ticketMatch ? ticketMatch[1] : '';
-        const dedupKey = `${sku || 'DOM-' + idx}::${payoutId || soldDate}`;
-        seenKeys.add(dedupKey);
-
-        soldRows.push({
-          ricoItemId: payoutId || sku || `dom-${idx}`,
-          sku,
-          upc: expectedUpc,
-          title: (sku && skuMetaMap[sku] && skuMetaMap[sku].title) || cells[1] || sku || 'Booth Sale',
-          soldDate,
-          grossPrice: Number(grossVal.toFixed(2)),
-          ricoNetPayout: Number(netVal.toFixed(2)),
-          ricoCommission: commVal,
-          payoutId,
-          status: 'Sold',
-          isMatchedInBooth: Boolean(expectedUpc || (sku && verifiedSkuSet.has(sku))),
-          alreadySynced: Boolean(sku && String(skuMetaMap[sku]?.status || '').toLowerCase() === 'sold'),
-        });
-      });
-    } catch (e) {}
 
     lastExtractedSalesRows = soldRows;
     return soldRows;
   }
 
   function updateSalesSyncTabUI() {
-    const rows = extractRicochetSoldLines();
+    const allRows = extractRicochetSoldLines();
     const tabBadge = document.getElementById('rc-tab-sales-badge');
-    if (tabBadge) tabBadge.textContent = String(rows.length);
+    if (tabBadge) tabBadge.textContent = String(allRows.length);
 
+    const pendingRows = allRows.filter((r) => r.payoutStatus === 'pending_payout');
+    const paidRows = allRows.filter((r) => r.payoutStatus === 'paid');
+
+    let pendingNetSum = 0;
+    let paidNetSum = 0;
     let grossSum = 0;
     let netSum = 0;
     let matchedCount = 0;
+    let unmatchedCount = 0;
     let syncedCount = 0;
 
-    for (const r of rows) {
+    for (const r of allRows) {
       grossSum += Number(r.grossPrice || 0);
       netSum += Number(r.ricoNetPayout || 0);
+      if (r.payoutStatus === 'pending_payout') pendingNetSum += Number(r.ricoNetPayout || 0);
+      else paidNetSum += Number(r.ricoNetPayout || 0);
       if (r.isMatchedInBooth) matchedCount++;
+      else unmatchedCount++;
       if (r.alreadySynced) syncedCount++;
     }
 
+    let rentCreditsSum = 0;
+    for (const adj of spaceRentalAdjustments) {
+      rentCreditsSum += Number(adj.amount || 0);
+    }
+    if (spaceRentalAdjustments.length === 0 && activeMonthlyRent > 0) {
+      rentCreditsSum = -Math.abs(activeMonthlyRent);
+    }
+
+    // Update Sub-Filter Pill Counts & Active Highlight
+    const sfltAll = document.getElementById('rc-sflt-all');
+    const sfltPending = document.getElementById('rc-sflt-pending');
+    const sfltPaid = document.getElementById('rc-sflt-paid');
+    const sfltRent = document.getElementById('rc-sflt-rent');
+    if (sfltAll) sfltAll.textContent = String(allRows.length);
+    if (sfltPending) sfltPending.textContent = String(pendingRows.length);
+    if (sfltPaid) sfltPaid.textContent = String(paidRows.length);
+    if (sfltRent) sfltRent.textContent = String(spaceRentalAdjustments.length);
+
+    const filterBtns = document.querySelectorAll('.rc-sales-filter-btn');
+    filterBtns.forEach((btn) => {
+      const f = btn.getAttribute('data-rc-sales-filter');
+      const isSelected = f === activeSalesSubFilter;
+      btn.style.border = isSelected ? '1px solid #38bdf8' : '1px solid #334155';
+      btn.style.background = isSelected ? 'rgba(56,189,248,0.16)' : '#0f172a';
+      btn.style.color = isSelected ? '#f8fafc' : '#cbd5e1';
+    });
+
+    // Update KPI Pills
+    const pendingEl = document.getElementById('rc-sales-kpi-pending');
+    const rentEl = document.getElementById('rc-sales-kpi-rent');
+    const paidEl = document.getElementById('rc-sales-kpi-paid');
     const foundEl = document.getElementById('rc-sales-kpi-found');
     const grossEl = document.getElementById('rc-sales-kpi-gross');
     const netEl = document.getElementById('rc-sales-kpi-net');
     const matchedEl = document.getElementById('rc-sales-kpi-matched');
+    const unmatchedEl = document.getElementById('rc-sales-kpi-unmatched');
     const syncedEl = document.getElementById('rc-sales-kpi-synced');
     const previewCountEl = document.getElementById('rc-sales-preview-count');
     const previewListEl = document.getElementById('rc-sales-preview-list');
     const pushBtn = document.getElementById('rc-push-sales-btn');
 
-    if (foundEl) foundEl.textContent = String(rows.length);
+    if (pendingEl) pendingEl.textContent = `$${pendingNetSum.toFixed(2)}`;
+    if (rentEl) rentEl.textContent = `${rentCreditsSum < 0 ? '-' : ''}$${Math.abs(rentCreditsSum).toFixed(2)}`;
+    if (paidEl) paidEl.textContent = `$${paidNetSum.toFixed(2)}`;
+    if (foundEl) foundEl.textContent = String(allRows.length);
     if (grossEl) grossEl.textContent = `$${grossSum.toFixed(2)}`;
     if (netEl) netEl.textContent = `$${netSum.toFixed(2)}`;
     if (matchedEl) matchedEl.textContent = String(matchedCount);
+    if (unmatchedEl) unmatchedEl.textContent = String(unmatchedCount);
     if (syncedEl) syncedEl.textContent = String(syncedCount);
-    if (previewCountEl) previewCountEl.textContent = `${rows.length} sold lines`;
     if (pushBtn && !isPushingSales) {
-      pushBtn.textContent = `🚀 Push Sales to Resale Core (${rows.length})`;
+      pushBtn.textContent = `🧪 Stage Sales to Resale Core (${allRows.length} Dry-Run)`;
     }
 
-    if (previewListEl) {
-      if (rows.length === 0) {
-        previewListEl.innerHTML = `<div style="color:#64748b;padding:6px;">No sold lines detected yet. Click 🔄 Live Fetch if needed.</div>`;
+    if (!previewListEl) return;
+
+    if (activeSalesSubFilter === 'space_rental') {
+      if (previewCountEl) previewCountEl.textContent = `${spaceRentalAdjustments.length} adjustments`;
+      if (spaceRentalAdjustments.length === 0) {
+        previewListEl.innerHTML = `<div style="color:#94a3b8;padding:6px;">Configured Monthly Booth Rent: <b>-$${activeMonthlyRent.toFixed(2)}/mo</b> (No extra credit rows on /payouts).</div>`;
       } else {
-        previewListEl.innerHTML = rows
-          .slice(0, 60)
-          .map((r) => {
-            const badge = r.alreadySynced
-              ? `<span style="color:#34d399;font-weight:800;">✅ Synced</span>`
-              : r.isMatchedInBooth
-              ? `<span style="color:#38bdf8;font-weight:800;">🔗 Matched</span>`
-              : `<span style="color:#fbbf24;font-weight:800;">⚪ Unmatched</span>`;
-            return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:6px;">
-              <div style="min-width:0;flex:1;">
-                <div style="color:#f8fafc;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  ${r.sku || r.ricoItemId} ${r.upc ? `(${r.upc})` : ''} — ${r.title}
-                </div>
-                <div style="color:#94a3b8;font-size:10px;">
-                  ${r.soldDate} • Gross $${Number(r.grossPrice || 0).toFixed(2)} • Net $${Number(r.ricoNetPayout || 0).toFixed(2)}
-                </div>
+        previewListEl.innerHTML = spaceRentalAdjustments
+          .map(
+            (adj) => `<div style="padding:6px 8px;border-radius:6px;background:#0f172a;border:1px solid rgba(244,63,94,0.35);display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="color:#fecdd3;font-weight:800;">🏢 ${adj.label}</div>
+                <div style="color:#94a3b8;font-size:10px;">Date: ${adj.date || 'Current Cycle'}</div>
               </div>
-              <div>${badge}</div>
-            </div>`;
-          })
+              <strong style="color:#fda4af;font-family:monospace;">${adj.amount < 0 ? '-' : ''}$${Math.abs(Number(adj.amount || 0)).toFixed(2)}</strong>
+            </div>`
+          )
           .join('');
       }
+      return;
+    }
+
+    const filteredRows =
+      activeSalesSubFilter === 'pending_payout'
+        ? pendingRows
+        : activeSalesSubFilter === 'paid'
+        ? paidRows
+        : allRows;
+
+    if (previewCountEl) previewCountEl.textContent = `${filteredRows.length} lines`;
+
+    if (filteredRows.length === 0) {
+      previewListEl.innerHTML = `<div style="color:#64748b;padding:6px;">${
+        isHarvestingPayoutPages
+          ? '⏳ Harvesting /payouts & /payout_history...'
+          : 'No sold lines in this filter. Click 🔄 Harvest to re-scan.'
+      }</div>`;
+    } else {
+      previewListEl.innerHTML = filteredRows
+        .slice(0, 80)
+        .map((r) => {
+          const skuDisplay = r.ricoSku || r.sku || 'UNLINKED-SKU';
+          const upcDisplay = r.upc ? `• <span style="color:#38bdf8;">${r.upc}</span>` : '';
+          const saleDisplay = r.saleNumber ? `<span style="color:#c084fc;">${r.saleNumber}</span> • ` : '';
+          const statusPill =
+            r.payoutStatus === 'pending_payout'
+              ? `<span style="color:#fbbf24;">⏳ Pending</span>`
+              : `<span style="color:#34d399;">✅ Paid ${r.paidDate || ''}</span>`;
+          const matchBadge = r.isMatchedInBooth
+            ? `<span style="color:#34d399;font-weight:800;" title="Matched via ${r.matchTier}">🔗 ${r.matchTier.toUpperCase()}</span>`
+            : `<span style="color:#fbbf24;font-weight:800;">⚪ Unmatched</span>`;
+          return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <div style="min-width:0;flex:1;">
+              <div style="color:#f8fafc;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span style="color:#fbbf24;">${skuDisplay}</span> ${upcDisplay} — ${r.title}
+              </div>
+              <div style="color:#94a3b8;font-size:10px;">
+                ${saleDisplay}Sold ${r.soldDate || '—'} • ${statusPill} • Agreed $${Number(r.agreedPrice || r.grossPrice || 0).toFixed(2)} ➔ Net <b>$${Number(r.ricoNetPayout || 0).toFixed(2)}</b>
+              </div>
+            </div>
+            <div>${matchBadge}</div>
+          </div>`;
+        })
+        .join('');
     }
   }
 
@@ -1784,13 +2354,16 @@
     if (catalogProducts.length === 0) {
       await loadConsignorCatalog();
     }
+    if (!hasHarvestedPayoutPages) {
+      await harvestRicochetPayoutPages(false);
+    }
     const rows = extractRicochetSoldLines();
     const pushBtn = document.getElementById('rc-push-sales-btn');
     const syncBanner = document.getElementById('rc-sales-sync-banner');
     isPushingSales = true;
     if (pushBtn) {
       pushBtn.disabled = true;
-      pushBtn.textContent = `⏳ Pushing ${rows.length} Sales...`;
+      pushBtn.textContent = `⏳ Staging ${rows.length} Sales (Dry-Run)...`;
     }
 
     let pushedData = null;
@@ -1803,7 +2376,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'stage',
+            dryRun: true,
             locationCode: activeLocationCode,
+            spaceRentalAdjustments,
+            pendingTotalPayout: harvestedPendingTotalPayout,
+            paidHistoryTotalPayout: harvestedPaidHistoryTotalPayout,
             rows,
           }),
         });
@@ -1821,7 +2398,7 @@
     isPushingSales = false;
     if (pushBtn) {
       pushBtn.disabled = false;
-      pushBtn.textContent = `🚀 Push Sales to Resale Core (${rows.length})`;
+      pushBtn.textContent = `🧪 Stage Sales to Resale Core (${rows.length} Dry-Run)`;
     }
 
     const resolvedCode = (pushedData && pushedData.locationCode) || activeLocationCode;
@@ -1832,7 +2409,10 @@
       if (Array.isArray(pushedData.rows)) {
         for (const pr of pushedData.rows) {
           if (pr.alreadySynced) {
-            alreadySyncedRicoKeys.add(`${pr.sku || pr.ricoItemId}::${pr.payoutId || pr.soldDate}`);
+            const cleanTkt = cleanStr(pr.saleNumber || pr.payoutId || '').replace(/^#/, '');
+            alreadySyncedRicoKeys.add(
+              `${cleanTkt.toUpperCase()}|${cleanStr(pr.ricoSku || pr.sku).toUpperCase()}|${pr.soldDate}|${Number(pr.ricoNetPayout || 0).toFixed(2)}`
+            );
           }
         }
       }
@@ -1851,17 +2431,17 @@
         syncBanner.style.display = 'block';
         syncBanner.innerHTML = `
           <div style="font-weight:800;color:#6ee7b7;margin-bottom:4px;">
-            ✅ Staged ${rows.length} sold lines to ${activeLocationName} Sales Reconciler!
+            🧪 Dry-Run Staged ${rows.length} sold lines to ${activeLocationName} Sales Reconciler (Zero DB writes until you approve)!
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span>Matched: <b>${pushedData.summary?.matchedInBooth ?? rows.length}</b> • Net After Fee: <b>$${Number(pushedData.summary?.netPayout ?? 0).toFixed(2)}</b></span>
+            <span>Matched: <b>${pushedData.summary?.matchedCount ?? pushedData.summary?.matchedInBooth ?? rows.length}</b> • Net Payout: <b>$${Number(pushedData.summary?.expectedNetPayout ?? pushedData.summary?.netPayout ?? 0).toFixed(2)}</b></span>
             <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:4px 10px;border-radius:6px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
               ↗ Open Sales Reconciler
             </a>
           </div>
         `;
       }
-      addLog(`💰 Pushed ${rows.length} sold lines to ${reconcilerUrl}`, '#10b981');
+      addLog(`🧪 Dry-Run Staged ${rows.length} sold lines to ${reconcilerUrl}`, '#10b981');
     } else {
       if (syncBanner) {
         syncBanner.style.display = 'block';
@@ -1878,12 +2458,19 @@
   }
 
   async function copySalesSyncJson() {
+    if (!hasHarvestedPayoutPages) {
+      await harvestRicochetPayoutPages(false);
+    }
     const rows = extractRicochetSoldLines();
     const payloadStr = JSON.stringify(
       {
         locationCode: activeLocationCode,
         locationName: activeLocationName,
         syncedAt: new Date().toISOString(),
+        dryRun: true,
+        spaceRentalAdjustments,
+        pendingTotalPayout: harvestedPendingTotalPayout,
+        paidHistoryTotalPayout: harvestedPaidHistoryTotalPayout,
         rows,
       },
       null,
@@ -1891,7 +2478,7 @@
     );
     try {
       await navigator.clipboard.writeText(payloadStr);
-      setStatusBanner('success', `📋 Copied ${rows.length} sold lines as JSON to clipboard!`);
+      setStatusBanner('success', `📋 Copied ${rows.length} sold lines + ${spaceRentalAdjustments.length} rental adjustments as JSON!`);
     } catch (e) {
       const ta = document.getElementById('rc-sync-textarea');
       if (ta) {

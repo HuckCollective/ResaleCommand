@@ -33,16 +33,30 @@ const CORS_HEADERS: Record<string, string> = {
 
 const MANIFESTS_COL_ID = 'manifests';
 
+export interface SpaceRentalAdjustment {
+  label: string;
+  date: string;
+  amount: number;
+}
+
 export interface RicochetSyncSaleLine {
   ricoItemId: string;
+  ricoSku?: string;
   sku: string;
   upc: string;
   title: string;
+  saleNumber?: string;
   soldDate: string;
+  paidDate?: string | null;
+  agreedPrice?: number;
+  splitPct?: string;
+  agedPrice?: number;
+  discounts?: string;
   grossPrice: number;
   ricoNetPayout: number;
   ricoCommission: number;
   payoutId: string;
+  payoutStatus?: 'pending_payout' | 'paid';
   status: string;
   expectedFee?: number;
   expectedNetPayout?: number;
@@ -50,7 +64,7 @@ export interface RicochetSyncSaleLine {
   matchedItemUpc?: string;
   matchedItemTitle?: string;
   matchedItemCost?: number;
-  matchTier?: 'upc' | 'sku' | 'title' | 'unmatched';
+  matchTier?: 'upc' | 'sku' | 'title_price' | 'title' | 'unmatched';
   alreadySynced?: boolean;
   ticketOccurrence?: number;
 }
@@ -61,9 +75,16 @@ export interface RicochetSalesSyncPayload {
   locationName: string;
   commissionRate: number;
   monthlyRent: number;
+  dryRun?: boolean;
   syncedAt?: string;
+  spaceRentalAdjustments?: SpaceRentalAdjustment[];
   summary: {
     soldFound: number;
+    pendingPayoutCount: number;
+    pendingPayoutNet: number;
+    paidHistoryCount: number;
+    paidHistoryNet: number;
+    spaceRentalTotal: number;
     grossSales: number;
     expectedCommission: number;
     expectedNetPayout: number;
@@ -255,7 +276,11 @@ function normalizeTitleSlug(str: string): string {
 
 async function enrichAndMatchSalesRows(
   rawRows: any[],
-  locCode: string
+  locCode: string,
+  extraOptions?: {
+    spaceRentalAdjustments?: SpaceRentalAdjustment[];
+    dryRun?: boolean;
+  }
 ): Promise<RicochetSalesSyncPayload> {
   const locMeta = resolveRicochetLocation(locCode);
   const feePct = Number(locMeta.commissionRate ?? locMeta.feePct ?? 0);
@@ -269,15 +294,20 @@ async function enrichAndMatchSalesRows(
 
   const byUpc = new Map<string, any>();
   const bySku = new Map<string, any>();
+  const byTitlePrice = new Map<string, any>();
   const byTitle = new Map<string, any>();
 
   for (const item of eligibleItems) {
     const u = cleanCatalogSku(item.upc).toUpperCase();
     const s = cleanCatalogSku(item.locationSku || item.sku).toUpperCase();
     const t = normalizeTitleSlug(item.title || item.identity || '');
+    const pFixed = Number(item.boutiquePrice ?? item.resalePrice ?? item.price ?? 0).toFixed(2);
     if (u && !byUpc.has(u)) byUpc.set(u, item);
     if (s && !bySku.has(s)) bySku.set(s, item);
-    if (t && t.length >= 4 && !byTitle.has(t)) byTitle.set(t, item);
+    if (t && t.length >= 4) {
+      if (!byTitlePrice.has(`${t}|${pFixed}`)) byTitlePrice.set(`${t}|${pFixed}`, item);
+      if (!byTitle.has(t)) byTitle.set(t, item);
+    }
   }
 
   const claimedItemIdToSku = new Map<string, string>();
@@ -296,11 +326,33 @@ async function enrichAndMatchSalesRows(
   }
 
   const normalizedRows: RicochetSyncSaleLine[] = rawRows.map((r, idx) => {
-    const sku = cleanCatalogSku(r.sku || r.extractedSku || '').toUpperCase();
+    let rawTitle = String(r.title || r.itemName || r.name || '').trim();
+    let rawSku = cleanCatalogSku(r.ricoSku || r.sku || r.extractedSku || '').toUpperCase();
+
+    // Parse ` - <SKU>` suffix if present on Payout History title e.g. `"Cartographers Heros - 0EJ03C"`
+    const suffixMatch = rawTitle.match(/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i);
+    if (suffixMatch) {
+      rawTitle = String(suffixMatch[1] || '').trim();
+      if (!rawSku) rawSku = cleanCatalogSku(suffixMatch[2]).toUpperCase();
+    }
+    if (/^\d+$/.test(rawSku)) {
+      rawSku = '';
+    }
+
     const upc = cleanCatalogSku(r.upc || r.expectedRcUpc || '').toUpperCase();
-    const title = String(r.title || r.itemName || r.name || sku || 'Booth Sale Item').trim();
     const soldDate = String(r.soldDate || r.date || new Date().toISOString().slice(0, 10)).trim();
-    const grossPrice = Math.max(0, Number(Number(r.grossPrice ?? r.agreedPrice ?? r.listedPrice ?? r.price ?? 0).toFixed(2)));
+    const paidDate = r.paidDate ? String(r.paidDate).trim() : null;
+    const agreedPrice = Math.max(
+      0,
+      Number(Number(r.agreedPrice ?? r.grossPrice ?? r.listedPrice ?? r.price ?? 0).toFixed(2))
+    );
+    const agedPrice = Math.max(0, Number(Number(r.agedPrice ?? agreedPrice).toFixed(2)));
+    const grossPrice = Math.max(
+      0,
+      Number(Number(r.grossPrice ?? (agedPrice > 0 ? agedPrice : agreedPrice)).toFixed(2))
+    );
+    const splitPct = String(r.splitPct || `${100 - feePct}.00%`).trim();
+    const discounts = String(r.discounts || '').trim();
     const expectedFee = Number((grossPrice * (feePct / 100)).toFixed(2));
     const expectedNetPayout = Number((grossPrice - expectedFee).toFixed(2));
     const ricoCommission =
@@ -311,64 +363,91 @@ async function enrichAndMatchSalesRows(
       r.ricoNetPayout !== undefined && r.ricoNetPayout !== null && !isNaN(Number(r.ricoNetPayout)) && Number(r.ricoNetPayout) > 0
         ? Number(Number(r.ricoNetPayout).toFixed(2))
         : expectedNetPayout;
-    const payoutId = String(r.payoutId || r.ticketNumber || r.saleNumber || '').trim();
-    const status = String(r.status || r.inventory || 'Sold').trim();
+    const rawSaleNum = String(r.saleNumber || r.payoutId || r.ticketNumber || '').trim();
+    const cleanPayoutId = rawSaleNum.replace(/^#/, '').trim();
+    const saleNumber = rawSaleNum || (cleanPayoutId ? `#${cleanPayoutId}` : '');
+    const payoutStatus: 'pending_payout' | 'paid' =
+      r.payoutStatus === 'paid' || Boolean(paidDate) || String(r.status || '').toLowerCase() === 'paid'
+        ? 'paid'
+        : 'pending_payout';
+    const status = payoutStatus === 'paid' ? 'Paid' : 'Sold';
 
-    // 3-Tier Matching: 1) Exact UPC, 2) Normalized SKU, 3) Normalized Title / Memory Den Matcher
+    // 4-Tier Matching: 1) Mapped Custom UPC, 2) Exact Ricochet `0EJ...` SKU, 3) Normalized Title + Agreed Price, 4) Normalized Title
     let matchedItem: any = null;
-    let matchTier: 'upc' | 'sku' | 'title' | 'unmatched' = 'unmatched';
+    let matchTier: 'upc' | 'sku' | 'title_price' | 'title' | 'unmatched' = 'unmatched';
+    const titleSlug = normalizeTitleSlug(rawTitle);
+    const agreedKey = agreedPrice.toFixed(2);
 
     if (upc && byUpc.has(upc)) {
       matchedItem = byUpc.get(upc);
       matchTier = 'upc';
-    } else if (sku && bySku.has(sku)) {
-      matchedItem = bySku.get(sku);
+    } else if (rawSku && bySku.has(rawSku)) {
+      matchedItem = bySku.get(rawSku);
       matchTier = 'sku';
-    } else {
-      const titleSlug = normalizeTitleSlug(title);
-      if (titleSlug && byTitle.has(titleSlug)) {
-        matchedItem = byTitle.get(titleSlug);
-        matchTier = 'title';
-      } else if (eligibleItems.length > 0) {
-        const fuzzy = matchMemoryDenInventoryItem({
-          sku,
-          upc,
-          title,
-          price: grossPrice,
-          extraText: '',
-          allowPrefixForPayout: true,
-          activeItems: eligibleItems,
-          claimedItemIdToSku,
-          multiBinResolvedBySku,
-        });
-        if (fuzzy) {
-          matchedItem = fuzzy;
-          matchTier = sku && cleanCatalogSku(fuzzy.locationSku).toUpperCase() === sku ? 'sku' : 'title';
-        }
+    } else if (titleSlug && byTitlePrice.has(`${titleSlug}|${agreedKey}`)) {
+      matchedItem = byTitlePrice.get(`${titleSlug}|${agreedKey}`);
+      matchTier = 'title_price';
+    } else if (titleSlug && byTitle.has(titleSlug)) {
+      matchedItem = byTitle.get(titleSlug);
+      matchTier = 'title';
+    } else if (eligibleItems.length > 0) {
+      const fuzzy = matchMemoryDenInventoryItem({
+        sku: rawSku,
+        upc,
+        title: rawTitle,
+        price: grossPrice,
+        extraText: '',
+        allowPrefixForPayout: true,
+        activeItems: eligibleItems,
+        claimedItemIdToSku,
+        multiBinResolvedBySku,
+      });
+      if (fuzzy) {
+        matchedItem = fuzzy;
+        matchTier =
+          rawSku && cleanCatalogSku(fuzzy.locationSku).toUpperCase() === rawSku
+            ? 'sku'
+            : Number(fuzzy.boutiquePrice ?? fuzzy.resalePrice ?? fuzzy.price ?? 0).toFixed(2) === agreedKey
+              ? 'title_price'
+              : 'title';
       }
     }
+
+    const effectiveSku =
+      rawSku || cleanCatalogSku(matchedItem?.locationSku || '').toUpperCase();
+    const effectiveUpc =
+      upc || cleanCatalogSku(matchedItem?.upc || '').toUpperCase();
+    const effectiveTitle = rawTitle || matchedItem?.title || effectiveSku || 'Booth Sale Item';
 
     const grossKey = grossPrice.toFixed(2);
     const isItemAlreadySoldInDb =
       matchedItem &&
       String(matchedItem.status || '').toLowerCase() === 'sold' &&
-      !PREVERIFIED_MD_MULTI_QTY_BINS[sku];
+      !PREVERIFIED_MD_MULTI_QTY_BINS[effectiveSku];
     const isSaleInLedger =
-      (payoutId && existingOrderIds.has(`${payoutId.toUpperCase()}|${grossKey}`)) ||
-      (sku && existingSkuGrossSet.add && existingSkuGrossSet.has(`${sku}|${grossKey}`)) ||
-      (upc && existingSkuGrossSet.has(`${upc}|${grossKey}`)) ||
-      (matchedItem?.upc && existingSkuGrossSet.has(`${String(matchedItem.upc).toUpperCase()}|${grossKey}`));
+      (cleanPayoutId && existingOrderIds.has(`${cleanPayoutId.toUpperCase()}|${grossKey}`)) ||
+      (cleanPayoutId && existingOrderIds.has(`TICKET #${cleanPayoutId.toUpperCase()}|${grossKey}`)) ||
+      (effectiveSku && existingSkuGrossSet.has(`${effectiveSku}|${grossKey}`)) ||
+      (effectiveUpc && existingSkuGrossSet.has(`${effectiveUpc}|${grossKey}`));
 
     return {
-      ricoItemId: String(r.ricoItemId || r.productId || r.id || `${ idx + 1 }`),
-      sku,
-      upc: upc || cleanCatalogSku(matchedItem?.upc || '').toUpperCase(),
-      title,
+      ricoItemId: String(EffectiveRicoId(r, effectiveSku, cleanPayoutId, idx)),
+      ricoSku: effectiveSku,
+      sku: effectiveSku,
+      upc: effectiveUpc,
+      title: effectiveTitle,
+      saleNumber,
       soldDate,
+      paidDate,
+      agreedPrice,
+      splitPct,
+      agedPrice,
+      discounts,
       grossPrice,
       ricoNetPayout,
       ricoCommission,
-      payoutId,
+      payoutId: cleanPayoutId || saleNumber,
+      payoutStatus,
       status,
       expectedFee,
       expectedNetPayout,
@@ -400,22 +479,49 @@ async function enrichAndMatchSalesRows(
   let grossSales = 0;
   let expectedCommission = 0;
   let expectedNetPayout = 0;
+  let pendingPayoutCount = 0;
+  let pendingPayoutNet = 0;
+  let paidHistoryCount = 0;
+  let paidHistoryNet = 0;
   let matchedCount = 0;
   let alreadySyncedCount = 0;
   let unmatchedCount = 0;
 
   for (const r of normalizedRows) {
+    const netVal = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
     grossSales += Number(r.grossPrice || 0);
     expectedCommission += Number(r.expectedFee ?? r.ricoCommission ?? 0);
-    expectedNetPayout += Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
+    expectedNetPayout += netVal;
+    if (r.payoutStatus === 'paid') {
+      paidHistoryCount++;
+      paidHistoryNet += netVal;
+    } else {
+      pendingPayoutCount++;
+      pendingPayoutNet += netVal;
+    }
     if (r.alreadySynced) alreadySyncedCount++;
     if (r.matchedItemId || r.matchTier !== 'unmatched') matchedCount++;
     else unmatchedCount++;
   }
 
+  const adjustments: SpaceRentalAdjustment[] = Array.isArray(extraOptions?.spaceRentalAdjustments)
+    ? extraOptions!.spaceRentalAdjustments!
+    : [];
+  let spaceRentalTotal = 0;
+  if (adjustments.length > 0) {
+    for (const adj of adjustments) {
+      spaceRentalTotal += Number(adj.amount || 0);
+    }
+  } else if (monthlyRent > 0) {
+    spaceRentalTotal = -Math.abs(monthlyRent);
+  }
+
   grossSales = Number(grossSales.toFixed(2));
   expectedCommission = Number(expectedCommission.toFixed(2));
   expectedNetPayout = Number(expectedNetPayout.toFixed(2));
+  pendingPayoutNet = Number(pendingPayoutNet.toFixed(2));
+  paidHistoryNet = Number(paidHistoryNet.toFixed(2));
+  spaceRentalTotal = Number(spaceRentalTotal.toFixed(2));
   const netAfterRent = Number((expectedNetPayout - monthlyRent).toFixed(2));
 
   return {
@@ -424,8 +530,15 @@ async function enrichAndMatchSalesRows(
     locationName: locMeta.shortName,
     commissionRate: feePct,
     monthlyRent,
+    dryRun: extraOptions?.dryRun ?? true,
+    spaceRentalAdjustments: adjustments,
     summary: {
       soldFound: normalizedRows.length,
+      pendingPayoutCount,
+      pendingPayoutNet,
+      paidHistoryCount,
+      paidHistoryNet,
+      spaceRentalTotal,
       grossSales,
       expectedCommission,
       expectedNetPayout,
@@ -436,6 +549,14 @@ async function enrichAndMatchSalesRows(
     },
     rows: normalizedRows,
   };
+}
+
+function EffectiveRicoId(r: any, effectiveSku: string, cleanPayoutId: string, idx: number): string {
+  if (effectiveSku) return effectiveSku;
+  if (cleanPayoutId) return cleanPayoutId;
+  const rawId = String(r.ricoItemId || r.productId || r.id || '').trim();
+  if (rawId && !/^\d+$/.test(rawId)) return rawId;
+  return `ROW-${idx + 1}`;
 }
 
 export const OPTIONS: APIRoute = async () => {
@@ -472,12 +593,15 @@ export const GET: APIRoute = async ({ url }) => {
             status: String(r.inventory || 'Sold'),
           }));
         if (soldFromVerify.length > 0) {
-          payload = await enrichAndMatchSalesRows(soldFromVerify, locMeta.code);
+          payload = await enrichAndMatchSalesRows(soldFromVerify, locMeta.code, { dryRun: true });
           await savePersistedSalesSync(payload, locMeta.code);
         }
       }
     } else {
-      payload = await enrichAndMatchSalesRows(payload.rows, locMeta.code);
+      payload = await enrichAndMatchSalesRows(payload.rows, locMeta.code, {
+        spaceRentalAdjustments: payload.spaceRentalAdjustments,
+        dryRun: payload.dryRun ?? true,
+      });
     }
 
     return new Response(
@@ -511,18 +635,57 @@ export const POST: APIRoute = async ({ request, url }) => {
     const rawLoc = body?.locationCode || body?.location || url.searchParams.get('location');
     const locMeta = resolveRicochetLocation(rawLoc);
     const mode = String(body?.mode || 'stage').toLowerCase();
+    const isDryRunRequest =
+      mode === 'dry_run' || mode === 'simulate' || Boolean(body?.dryRun && mode !== 'commit');
 
-    if (mode === 'commit') {
+    if (mode === 'commit' || mode === 'dry_run' || mode === 'simulate') {
       const { databases, dbId, itemsCol, salesCol } = getAppwriteConfig();
+      const persisted = await loadPersistedSalesSync(locMeta.code);
       const currentPayload =
         Array.isArray(body?.rows) && body.rows.length > 0
-          ? await enrichAndMatchSalesRows(body.rows, locMeta.code)
-          : await loadPersistedSalesSync(locMeta.code);
+          ? await enrichAndMatchSalesRows(body.rows, locMeta.code, {
+              spaceRentalAdjustments: body?.spaceRentalAdjustments || persisted?.spaceRentalAdjustments,
+              dryRun: isDryRunRequest,
+            })
+          : persisted;
 
       if (!currentPayload || !Array.isArray(currentPayload.rows) || currentPayload.rows.length === 0) {
         return new Response(
           JSON.stringify({ ok: false, error: 'No staged Ricochet sales rows to commit.' }),
           { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      // Dry-Run / Simulate Commit Preview (zero production DB writes)
+      if (isDryRunRequest) {
+        let wouldCommitCount = 0;
+        let skippedAlreadySynced = 0;
+        let wouldGross = 0;
+        let wouldNet = 0;
+        for (const row of currentPayload.rows) {
+          if (row.alreadySynced) {
+            skippedAlreadySynced++;
+            continue;
+          }
+          if (!row.matchedItemId && !row.sku && !row.title) continue;
+          wouldCommitCount++;
+          wouldGross += Number(row.grossPrice || 0);
+          wouldNet += Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
+        }
+
+        await savePersistedSalesSync(currentPayload, locMeta.code);
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode: 'dry_run',
+            dryRun: true,
+            wouldCommitCount,
+            skippedAlreadySynced,
+            wouldGross: Number(wouldGross.toFixed(2)),
+            wouldNet: Number(wouldNet.toFixed(2)),
+            payload: currentPayload,
+          }),
+          { status: 200, headers: CORS_HEADERS }
         );
       }
 
@@ -584,7 +747,10 @@ export const POST: APIRoute = async ({ request, url }) => {
       }
 
       currentPayload.syncedAt = new Date().toISOString();
-      const refreshed = await enrichAndMatchSalesRows(currentPayload.rows, locMeta.code);
+      const refreshed = await enrichAndMatchSalesRows(currentPayload.rows, locMeta.code, {
+        spaceRentalAdjustments: currentPayload.spaceRentalAdjustments,
+        dryRun: false,
+      });
       refreshed.syncedAt = currentPayload.syncedAt;
       await savePersistedSalesSync(refreshed, locMeta.code);
 
@@ -592,6 +758,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         JSON.stringify({
           ok: true,
           mode: 'commit',
+          dryRun: false,
           committedCount,
           skippedAlreadySynced,
           payload: refreshed,
@@ -600,19 +767,26 @@ export const POST: APIRoute = async ({ request, url }) => {
       );
     }
 
-    // Default mode: 'stage' incoming bookmarklet sales payload
+    // Default mode: 'stage' incoming bookmarklet sales payload (always Dry-Run preview, zero DB writes to items/sales)
     const rawRows = Array.isArray(body?.rows)
       ? body.rows
       : Array.isArray(body?.sales)
         ? body.sales
         : [];
-    const stagedPayload = await enrichAndMatchSalesRows(rawRows, locMeta.code);
+    const rawAdjustments = Array.isArray(body?.spaceRentalAdjustments)
+      ? body.spaceRentalAdjustments
+      : [];
+    const stagedPayload = await enrichAndMatchSalesRows(rawRows, locMeta.code, {
+      spaceRentalAdjustments: rawAdjustments,
+      dryRun: true,
+    });
     await savePersistedSalesSync(stagedPayload, locMeta.code);
 
     return new Response(
       JSON.stringify({
         ok: true,
         mode: 'stage',
+        dryRun: true,
         locationCode: locMeta.code,
         reconcilerPath: `/sales/import/${locMeta.code}`,
         summary: stagedPayload.summary,
