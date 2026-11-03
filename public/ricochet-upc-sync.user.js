@@ -43,6 +43,8 @@
   let hasHarvestedPayoutPages = false;
   let harvestedPendingPayoutRows = [];
   let harvestedPaidHistoryRows = [];
+  let cachedPayoutDomRows = [];
+  let cachedPayoutHistoryDomRows = [];
   let spaceRentalAdjustments = [];
   let harvestedPendingTotalPayout = 0;
   let harvestedPaidHistoryTotalPayout = 0;
@@ -1817,7 +1819,7 @@
     return { rows, adjustments, totalPayout };
   }
 
-  // Auto-Click Live SPA `<a href="#">Payout</a>` & `<a href="#">Payout History</a>` Tabs + DOM Parser
+  // Auto-Click Live SPA `<a href="#">Payout</a>` & `<a href="#">Payout History</a>` Tabs + Multi-Page Pagination Harvester (`1 out of 2 ▶`)
   async function harvestLiveSpaPayoutTables(manualTrigger = false) {
     if (isHarvestingPayoutPages) return;
     isHarvestingPayoutPages = true;
@@ -1859,7 +1861,7 @@
               opts.find((o) => String(o.value) === '-1' || /all/i.test(cleanStr(o.textContent))) ||
               opts.find((o) => parseInt(String(o.value), 10) >= 1000) ||
               opts.find((o) => parseInt(String(o.value), 10) >= 500) ||
-              opts.find((o) => parseInt(String(o.value), 10) >= 100);
+              opts.find((o) => parseInt(String(o.value), 10) >= 250);
             if (maxOpt && sel.value !== maxOpt.value) {
               sel.value = maxOpt.value;
               sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1904,39 +1906,206 @@
         return hasMatchingTableInDom(requiredHeaders, forbiddenHeaders);
       };
 
+      // Detect `1 out of 2 ▶` pagination state & next-page button in the live Ricochet DOM
+      const inspectDomPagination = () => {
+        let currentPage = 1;
+        let totalPages = 1;
+        let outOfElement = null;
+
+        const allNodes = Array.from(document.querySelectorAll('div, span, p, td, li, nav'));
+        for (const el of allNodes) {
+          if (el.closest && el.closest('#rc-ricochet-sync-root')) continue;
+          if (el.children && el.children.length > 5) continue;
+          const txt = cleanStr(el.textContent);
+          const m = txt.match(/\b(\d+)\s+out\s+of\s+(\d+)\b/i);
+          if (m) {
+            currentPage = parseInt(m[1], 10) || 1;
+            totalPages = parseInt(m[2], 10) || 1;
+            outOfElement = el;
+            break;
+          }
+        }
+
+        const isClickableDisabled = (el) => {
+          if (!el) return true;
+          if (el.disabled) return true;
+          const cls = String(el.className || '').toLowerCase();
+          const parentCls = String((el.parentElement && el.parentElement.className) || '').toLowerCase();
+          if (cls.includes('disabled') || parentCls.includes('disabled')) return true;
+          if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') return true;
+          return false;
+        };
+
+        let nextBtn = null;
+
+        // 1. Check sibling/nearby buttons right after `1 out of N`
+        if (outOfElement) {
+          const scopes = [
+            outOfElement.parentElement,
+            outOfElement.parentElement && outOfElement.parentElement.parentElement,
+          ].filter(Boolean);
+          for (const scope of scopes) {
+            const candidates = Array.from(scope.querySelectorAll('button, a, i, span[role="button"]'));
+            for (const c of candidates) {
+              if (c.closest && c.closest('#rc-ricochet-sync-root')) continue;
+              if (isClickableDisabled(c)) continue;
+              const cTxt = cleanStr(c.textContent);
+              const cCls = String(c.className || '').toLowerCase();
+              const aria = String((c.getAttribute && c.getAttribute('aria-label')) || '').toLowerCase();
+              if (
+                /^(▶|►|>|›|»|next|next\s*page)$/i.test(cTxt) ||
+                cCls.includes('right') ||
+                cCls.includes('next') ||
+                cCls.includes('chevron-right') ||
+                cCls.includes('caret-right') ||
+                cCls.includes('arrow-right') ||
+                aria.includes('next')
+              ) {
+                nextBtn = c.tagName === 'I' && c.parentElement ? c.parentElement : c;
+                break;
+              }
+            }
+            if (nextBtn) break;
+          }
+        }
+
+        // 2. Fallback: global pagination next button (`li.next:not(.disabled) a`, `▶`, `>`, `next`)
+        if (!nextBtn) {
+          const stdNext = document.querySelector(
+            'li.next:not(.disabled) a, li.pagination-next:not(.disabled) a, button[aria-label*="Next"]:not([disabled]), a[aria-label*="Next"]'
+          );
+          if (stdNext && !(stdNext.closest && stdNext.closest('#rc-ricochet-sync-root')) && !isClickableDisabled(stdNext)) {
+            nextBtn = stdNext;
+          }
+        }
+
+        if (!nextBtn) {
+          const allBtns = Array.from(document.querySelectorAll('button, a'));
+          for (const b of allBtns) {
+            if (b.closest && b.closest('#rc-ricochet-sync-root')) continue;
+            if (isClickableDisabled(b)) continue;
+            const bTxt = cleanStr(b.textContent);
+            const iconChild = b.querySelector('i[class*="right"], i[class*="next"], svg[class*="right"]');
+            if (/^(▶|►|>|›|»|next)$/i.test(bTxt) || iconChild) {
+              nextBtn = b;
+              break;
+            }
+          }
+        }
+
+        return { currentPage, totalPages, nextBtn };
+      };
+
+      // Harvest all pages (`page 1 .. totalPages`) for the active SPA table, deduplicating by `saleNumber|sku|soldDate|amount`
+      const harvestAllPagesFromCurrentSpaTab = async (parseFn) => {
+        const accumulatedRows = [];
+        const seenRowKeys = new Set();
+        let accumulatedTotalPayout = 0;
+
+        const makePageRowKey = (r) => {
+          const tkt = cleanStr(r.saleNumber || r.payoutId || '').replace(/^#/, '').toUpperCase();
+          const sku = cleanStr(r.ricoSku || r.sku || '').toUpperCase();
+          const sDate = cleanStr(r.soldDate || '');
+          const amt = Number(r.ricoNetPayout ?? r.grossPrice ?? 0).toFixed(2);
+          const ttl = normalizeTitleKey(r.title || '');
+          return `${tkt}|${sku}|${sDate}|${amt}|${ttl}`;
+        };
+
+        const appendParsedPage = (parsedPage) => {
+          if (!parsedPage) return 0;
+          let added = 0;
+          for (const r of parsedPage.rows || []) {
+            const k = makePageRowKey(r);
+            if (!seenRowKeys.has(k)) {
+              seenRowKeys.add(k);
+              accumulatedRows.push(r);
+              added++;
+            }
+          }
+          if (parsedPage.totalPayout !== 0 && accumulatedTotalPayout === 0) {
+            accumulatedTotalPayout = parsedPage.totalPayout;
+          }
+          (parsedPage.adjustments || []).forEach(addAdj);
+          return added;
+        };
+
+        const page1 = parseFn(document);
+        appendParsedPage(page1);
+        let prevFirstSig =
+          page1.rows && page1.rows.length > 0 ? makePageRowKey(page1.rows[0]) : '';
+
+        const initialPag = inspectDomPagination();
+        const maxPages = Math.min(15, Math.max(initialPag.totalPages || 1, initialPag.nextBtn ? 10 : 1));
+
+        for (let pageNum = 2; pageNum <= maxPages; pageNum++) {
+          const pag = inspectDomPagination();
+          if (pag.totalPages > 1 && pag.currentPage >= pag.totalPages) break;
+          if (!pag.nextBtn || typeof pag.nextBtn.click !== 'function') break;
+
+          pag.nextBtn.click();
+
+          // Poll every 120ms up to 2000ms until the first row's signature or page indicator changes
+          const pollStart = Date.now();
+          let nextParsed = null;
+          while (Date.now() - pollStart < 2000) {
+            await new Promise((r) => setTimeout(r, 120));
+            const candidate = parseFn(document);
+            const candFirstSig =
+              candidate.rows && candidate.rows.length > 0 ? makePageRowKey(candidate.rows[0]) : '';
+            const nowPag = inspectDomPagination();
+            if (
+              (candFirstSig && candFirstSig !== prevFirstSig) ||
+              (nowPag.currentPage >= pageNum && candidate.rows.length > 0)
+            ) {
+              nextParsed = candidate;
+              prevFirstSig = candFirstSig;
+              break;
+            }
+          }
+
+          if (!nextParsed) {
+            nextParsed = parseFn(document);
+          }
+          const newlyAdded = appendParsedPage(nextParsed);
+          if (newlyAdded === 0) break;
+        }
+
+        return { rows: accumulatedRows, totalPayout: accumulatedTotalPayout };
+      };
+
       const payoutLink = findSpaNavLink('Payout');
       const payoutHistoryLink = findSpaNavLink('Payout History');
       const inventoryLink = findSpaNavLink('Inventory');
 
-      // 1. Auto-click SPA 'Payout' tab (`[Item, SKU, Sale, Agreed, ..., Sold, Amount]`)
+      // 1. Auto-click SPA 'Payout' tab (`[Item, SKU, Sale, Agreed, ..., Sold, Amount]`) & paginate all pages
       if (payoutLink && typeof payoutLink.click === 'function') {
         try {
           payoutLink.click();
           await pollForSpaTable(['item', 'sku', 'sale', 'agreed', 'sold', 'amount'], ['paid'], 2000);
-          const domPayouts = parsePayoutsHtmlDocument(document);
-          if (domPayouts.rows.length > 0) {
-            harvestedPendingPayoutRows = domPayouts.rows;
+          const allPayoutPages = await harvestAllPagesFromCurrentSpaTab(parsePayoutsHtmlDocument);
+          if (allPayoutPages.rows.length > 0) {
+            harvestedPendingPayoutRows = allPayoutPages.rows;
+            cachedPayoutDomRows = allPayoutPages.rows;
           }
-          if (domPayouts.totalPayout !== 0) {
-            harvestedPendingTotalPayout = domPayouts.totalPayout;
+          if (allPayoutPages.totalPayout !== 0) {
+            harvestedPendingTotalPayout = allPayoutPages.totalPayout;
           }
-          domPayouts.adjustments.forEach(addAdj);
         } catch (e) {}
       }
 
-      // 2. Auto-click SPA 'Payout History' tab (`[Item, Sale, Agreed, ..., Paid, Sold, Amount]`)
+      // 2. Auto-click SPA 'Payout History' tab (`[Item, Sale, Agreed, ..., Paid, Sold, Amount]`) & paginate (`1 out of 2 ▶`)
       if (payoutHistoryLink && typeof payoutHistoryLink.click === 'function') {
         try {
           payoutHistoryLink.click();
           await pollForSpaTable(['item', 'sale', 'agreed', 'paid', 'sold', 'amount'], ['sku'], 2000);
-          const domHistory = parsePayoutHistoryHtmlDocument(document);
-          if (domHistory.rows.length > 0) {
-            harvestedPaidHistoryRows = domHistory.rows;
+          const allHistoryPages = await harvestAllPagesFromCurrentSpaTab(parsePayoutHistoryHtmlDocument);
+          if (allHistoryPages.rows.length > 0) {
+            harvestedPaidHistoryRows = allHistoryPages.rows;
+            cachedPayoutHistoryDomRows = allHistoryPages.rows;
           }
-          if (domHistory.totalPayout !== 0) {
-            harvestedPaidHistoryTotalPayout = domHistory.totalPayout;
+          if (allHistoryPages.totalPayout !== 0) {
+            harvestedPaidHistoryTotalPayout = allHistoryPages.totalPayout;
           }
-          domHistory.adjustments.forEach(addAdj);
         } catch (e) {}
       }
 
@@ -1977,6 +2146,7 @@
           const parsedPayouts = parsePayoutsHtmlDocument(payoutsDoc);
           if (parsedPayouts.rows.length > 0 && harvestedPendingPayoutRows.length === 0) {
             harvestedPendingPayoutRows = parsedPayouts.rows;
+            cachedPayoutDomRows = parsedPayouts.rows;
           }
           if (parsedPayouts.totalPayout !== 0 && harvestedPendingTotalPayout === 0) {
             harvestedPendingTotalPayout = parsedPayouts.totalPayout;
@@ -1988,6 +2158,7 @@
           const parsedHistory = parsePayoutHistoryHtmlDocument(historyDoc);
           if (parsedHistory.rows.length > 0 && harvestedPaidHistoryRows.length === 0) {
             harvestedPaidHistoryRows = parsedHistory.rows;
+            cachedPayoutHistoryDomRows = parsedHistory.rows;
           }
           if (parsedHistory.totalPayout !== 0 && harvestedPaidHistoryTotalPayout === 0) {
             harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
@@ -2004,7 +2175,7 @@
       extractRicochetSoldLines();
       if (manualTrigger || harvestedPendingPayoutRows.length > 0 || harvestedPaidHistoryRows.length > 0) {
         addLog(
-          `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows, and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
+          `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows (all pages), and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
           '#10b981'
         );
       }
@@ -2125,14 +2296,22 @@
           ''
       ).toUpperCase();
 
-      // Determine 4-tier match status against Booth Inventory
+      // Determine 4-tier match status against all 808 Ricochet Catalog SKUs + HUCK-/PDXGL-/BB- UPCs + Booth Inventory
+      const hasValidSaleTicket = Boolean(cleanStr(rawRow.saleNumber || rawRow.payoutId || ''));
+      const isCatalogZeroEjSku = Boolean(
+        candidateSku &&
+          (parsedMap[candidateSku] ||
+            skuMetaMap[candidateSku] ||
+            bootMap[candidateSku] ||
+            verifiedSkuSet.has(candidateSku) ||
+            productBySku.has(candidateSku) ||
+            (/^0EJ[A-Z0-9]+$/i.test(candidateSku) && hasValidSaleTicket))
+      );
+
       let matchTier = 'unmatched';
       if (mappedUpc && isRealUpc(mappedUpc)) {
         matchTier = 'upc';
-      } else if (
-        candidateSku &&
-        (parsedMap[candidateSku] || skuMetaMap[candidateSku] || bootMap[candidateSku] || verifiedSkuSet.has(candidateSku))
-      ) {
+      } else if (isCatalogZeroEjSku) {
         matchTier = 'sku';
       } else if (normTitle && skuByTitlePrice.has(`${normTitle}|${agreedFixed}`)) {
         matchTier = 'title_price';
@@ -2155,6 +2334,7 @@
         title: resolvedTitle,
         matchTier,
         isMatchedInBooth,
+        matchedInBooth: isMatchedInBooth,
       };
     };
 
@@ -2180,7 +2360,7 @@
       const payoutStatus = raw.payoutStatus || (paidDate ? 'paid' : 'pending_payout');
       const normTitle = normalizeTitleKey(linked.title || raw.title || '');
 
-      const baseSig = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${ normTitle }|${soldDate}|${ricoNetPayout.toFixed(2)}`;
+      const baseSig = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${normTitle}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
       const occIdx = (seenPayoutSignatureCounts.get(baseSig) || 0) + 1;
       seenPayoutSignatureCounts.set(baseSig, occIdx);
 
@@ -2228,143 +2408,153 @@
         status: payoutStatus === 'paid' ? 'Paid' : 'Sold',
         matchTier: linked.matchTier,
         isMatchedInBooth: linked.isMatchedInBooth,
+        matchedInBooth: linked.isMatchedInBooth,
         alreadySynced: isAlreadySynced,
       });
     };
 
+    const pendingSourceRows =
+      cachedPayoutDomRows.length > 0 ? cachedPayoutDomRows : harvestedPendingPayoutRows;
+    const paidHistorySourceRows =
+      cachedPayoutHistoryDomRows.length > 0 ? cachedPayoutHistoryDomRows : harvestedPaidHistoryRows;
+
     // 1. Keep 100% of rows harvested from `Payout` (Current Unpaid Payout)
-    for (const r of harvestedPendingPayoutRows) {
+    for (const r of pendingSourceRows) {
       pushNormalizedSoldRow(r, true);
     }
 
-    // 2. Keep 100% of rows harvested from `Payout History` (Settled Paid History)
-    for (const r of harvestedPaidHistoryRows) {
+    // 2. Keep 100% of rows harvested from `Payout History` (Settled Paid History across all paginated pages)
+    for (const r of paidHistorySourceRows) {
       pushNormalizedSoldRow(r, true);
     }
 
-    // 3. Supplement with any sold/paid items in `/api/product` catalogProducts using 1-for-1 counter multiset consumption
-    for (const p of catalogProducts) {
-      const rawSkuFromProd = extractRicochetSku(p);
+    // 3. Once `cachedPayoutDomRows` + `cachedPayoutHistoryDomRows` have been harvested across all pages,
+    // treat `'Payout'` + `'Payout History'` as the 100% authoritative sold ledger and do NOT append `/api/product` fallback sold items on top of them!
+    const hasAuthoritativePayoutDomLedger =
+      pendingSourceRows.length > 0 || paidHistorySourceRows.length > 0;
 
-      const firstItem = Array.isArray(p.items)
-        ? p.items[0]
-        : p.items && typeof p.items === 'object'
-        ? Object.values(p.items).flat()[0]
-        : null;
+    if (!hasAuthoritativePayoutDomLedger) {
+      for (const p of catalogProducts) {
+        const rawSkuFromProd = extractRicochetSku(p);
 
-      const rawStatusStr = cleanStr(
-        p.status ?? p.inventory ?? p.Inventory ?? p.state ?? firstItem?.status ?? firstItem?.state ?? ''
-      ).toLowerCase();
-      const isSoldOrPaidFlag =
-        p.sold === true ||
-        p.paid === true ||
-        rawStatusStr === 'sold' ||
-        rawStatusStr === 'paid' ||
-        rawStatusStr.includes('sold') ||
-        rawStatusStr.includes('paid');
+        const firstItem = Array.isArray(p.items)
+          ? p.items[0]
+          : p.items && typeof p.items === 'object'
+          ? Object.values(p.items).flat()[0]
+          : null;
 
-      const rawQty =
-        p.quantity ?? p.qty ?? p.in_stock ?? p.stock ?? p.Quantity ?? firstItem?.quantity ?? firstItem?.qty ?? 1;
-      const parsedQty = isSoldOrPaidFlag
-        ? 0
-        : parseInt(String(rawQty).replace(/[^0-9-]/g, ''), 10) || 0;
+        const rawStatusStr = cleanStr(
+          p.status ?? p.inventory ?? p.Inventory ?? p.state ?? firstItem?.status ?? firstItem?.state ?? ''
+        ).toLowerCase();
+        const isSoldOrPaidFlag =
+          p.sold === true ||
+          p.paid === true ||
+          rawStatusStr === 'sold' ||
+          rawStatusStr === 'paid' ||
+          rawStatusStr.includes('sold') ||
+          rawStatusStr.includes('paid');
 
-      if (!isSoldOrPaidFlag && parsedQty !== 0) continue;
+        const rawQty =
+          p.quantity ?? p.qty ?? p.in_stock ?? p.stock ?? p.Quantity ?? firstItem?.quantity ?? firstItem?.qty ?? 1;
+        const parsedQty = isSoldOrPaidFlag
+          ? 0
+          : parseInt(String(rawQty).replace(/[^0-9-]/g, ''), 10) || 0;
 
-      const rawPrice =
-        p.price ??
-        p.agreed_price ??
-        p.retail_price ??
-        p.aged_price ??
-        p['Agreed Price'] ??
-        p.cost ??
-        p.amount ??
-        firstItem?.price ??
-        firstItem?.agreed_price ??
-        firstItem?.retail_price ??
-        (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].price) ??
-        0;
-      const agreedPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
-      const prodTitle = cleanStr(
-        p.name || p.title || p.description || (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].title) || ''
-      );
-      const prodUpc = extractRicochetUpc(p);
-      const rawProdId = cleanStr(p.id || firstItem?.id || '');
+        if (!isSoldOrPaidFlag && parsedQty !== 0) continue;
 
-      // Cross-link BEFORE Step 3 deduplication so blank `p.sku` items resolve their `0EJ...` SKU first (never `'UNLINKED-SKU'`)
-      const preLinked = resolveCrossLinkedIdentity({
-        ricoItemId: rawProdId,
-        ricoSku: rawSkuFromProd,
-        sku: rawSkuFromProd,
-        upc: prodUpc,
-        title: prodTitle,
-        agreedPrice,
-        grossPrice: agreedPrice,
-      });
+        const rawPrice =
+          p.price ??
+          p.agreed_price ??
+          p.retail_price ??
+          p.aged_price ??
+          p['Agreed Price'] ??
+          p.cost ??
+          p.amount ??
+          firstItem?.price ??
+          firstItem?.agreed_price ??
+          firstItem?.retail_price ??
+          (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].price) ??
+          0;
+        const agreedPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
+        const prodTitle = cleanStr(
+          p.name || p.title || p.description || (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].title) || ''
+        );
+        const prodUpc = extractRicochetUpc(p);
+        const rawProdId = cleanStr(p.id || firstItem?.id || '');
 
-      const resolvedSku = preLinked.ricoSku || rawSkuFromProd || '';
+        const preLinked = resolveCrossLinkedIdentity({
+          ricoItemId: rawProdId,
+          ricoSku: rawSkuFromProd,
+          sku: rawSkuFromProd,
+          upc: prodUpc,
+          title: prodTitle,
+          agreedPrice,
+          grossPrice: agreedPrice,
+        });
 
-      // 1-for-1 counter map (multiset) consumption: decrement by 1 per matched SKU or `normalizedTitle|price`
-      if (resolvedSku) {
-        const remSkuCount = seenPayoutSkuCounts.get(resolvedSku) || 0;
-        if (remSkuCount > 0) {
-          seenPayoutSkuCounts.set(resolvedSku, remSkuCount - 1);
-          const normT = normalizeTitleKey(preLinked.title || prodTitle);
-          if (normT) {
-            const tpKey = `${normT}|${agreedPrice.toFixed(2)}`;
-            const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
-            if (remTp > 0) seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+        const resolvedSku = preLinked.ricoSku || rawSkuFromProd || '';
+
+        if (resolvedSku) {
+          const remSkuCount = seenPayoutSkuCounts.get(resolvedSku) || 0;
+          if (remSkuCount > 0) {
+            seenPayoutSkuCounts.set(resolvedSku, remSkuCount - 1);
+            const normT = normalizeTitleKey(preLinked.title || prodTitle);
+            if (normT) {
+              const tpKey = `${normT}|${agreedPrice.toFixed(2)}`;
+              const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+              if (remTp > 0) seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+            }
+            continue;
           }
-          continue;
         }
-      }
 
-      const normProdTitle = normalizeTitleKey(preLinked.title || prodTitle);
-      if (normProdTitle) {
-        const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
-        const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
-        if (remTp > 0) {
-          seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
-          continue;
+        const normProdTitle = normalizeTitleKey(preLinked.title || prodTitle);
+        if (normProdTitle) {
+          const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
+          const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+          if (remTp > 0) {
+            seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+            continue;
+          }
         }
+
+        const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
+        const ricoNetPayout = Number(
+          (
+            parseFloat(String(p.net ?? p.net_payout ?? p.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
+            Math.max(0, agreedPrice - ricoCommission)
+          ).toFixed(2)
+        );
+        const rawSoldDate = cleanStr(
+          p.sold_date ||
+            p.sold_at ||
+            p.paid_date ||
+            p.updated_at ||
+            firstItem?.sold_date ||
+            firstItem?.sold_at ||
+            firstItem?.updated_at ||
+            ''
+        ).slice(0, 10);
+        const isPaid = p.paid === true || rawStatusStr.includes('paid');
+
+        pushNormalizedSoldRow({
+          ricoItemId: rawProdId || `sold-item-${soldRows.length + 1}`,
+          ricoSku: resolvedSku,
+          sku: resolvedSku,
+          upc: preLinked.upc || prodUpc,
+          title: preLinked.title || prodTitle || resolvedSku || 'Booth Sale Item',
+          saleNumber: cleanStr(p.sale_id || p.ticket_number || firstItem?.sale_id || ''),
+          agreedPrice,
+          agedPrice: agreedPrice,
+          splitPct: `${100 - activeCommissionRate}.00%`,
+          soldDate: rawSoldDate,
+          paidDate: isPaid ? cleanStr(p.paid_date || rawSoldDate) : null,
+          grossPrice: agreedPrice,
+          ricoNetPayout,
+          ricoCommission,
+          payoutStatus: isPaid ? 'paid' : 'pending_payout',
+        }, false);
       }
-
-      const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
-      const ricoNetPayout = Number(
-        (
-          parseFloat(String(p.net ?? p.net_payout ?? p.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
-          Math.max(0, agreedPrice - ricoCommission)
-        ).toFixed(2)
-      );
-      const rawSoldDate = cleanStr(
-        p.sold_date ||
-          p.sold_at ||
-          p.paid_date ||
-          p.updated_at ||
-          firstItem?.sold_date ||
-          firstItem?.sold_at ||
-          firstItem?.updated_at ||
-          ''
-      ).slice(0, 10);
-      const isPaid = p.paid === true || rawStatusStr.includes('paid');
-
-      pushNormalizedSoldRow({
-        ricoItemId: rawProdId || `sold-item-${soldRows.length + 1}`,
-        ricoSku: resolvedSku,
-        sku: resolvedSku,
-        upc: preLinked.upc || prodUpc,
-        title: preLinked.title || prodTitle || resolvedSku || 'Booth Sale Item',
-        saleNumber: cleanStr(p.sale_id || p.ticket_number || firstItem?.sale_id || ''),
-        agreedPrice,
-        agedPrice: agreedPrice,
-        splitPct: `${100 - activeCommissionRate}.00%`,
-        soldDate: rawSoldDate,
-        paidDate: isPaid ? cleanStr(p.paid_date || rawSoldDate) : null,
-        grossPrice: agreedPrice,
-        ricoNetPayout,
-        ricoCommission,
-        payoutStatus: isPaid ? 'paid' : 'pending_payout',
-      }, false);
     }
 
     lastExtractedSalesRows = soldRows;

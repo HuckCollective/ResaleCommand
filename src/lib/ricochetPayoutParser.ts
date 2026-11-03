@@ -320,10 +320,18 @@ export function buildEnrichedRicochetSalesPayload(params: {
       cleanCatalogSku(matchedItem?.upc || '').toUpperCase() ||
       (effectiveSku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[effectiveSku]) ||
       '';
+    const isZeroEjCatalogSku = Boolean(
+      effectiveSku &&
+        (PREVERIFIED_MD_SKU_TO_UPC_OR_ID[effectiveSku] ||
+          bySku.has(effectiveSku) ||
+          (/^0EJ[A-Z0-9]+$/i.test(effectiveSku) && Boolean(cleanPayoutId || saleNumber)))
+    );
     if (matchTier === 'unmatched' && effectiveUpc) {
       matchTier = 'upc';
-    } else if (matchTier === 'unmatched' && effectiveSku) {
+    } else if (matchTier === 'unmatched' && (effectiveSku || isZeroEjCatalogSku)) {
       matchTier = 'sku';
+    } else if (matchTier === 'unmatched' && r.isMatchedInBooth) {
+      matchTier = (r.matchTier && r.matchTier !== 'unmatched' ? r.matchTier : 'sku') as any;
     }
 
     const effectiveTitle = rawTitle || matchedItem?.title || effectiveSku || 'Booth Sale Item';
