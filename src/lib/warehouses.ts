@@ -14,6 +14,8 @@ export interface WarehouseData {
     categories?: string;
     niche?: string;
     usesRicochet?: boolean;
+    supportsPaperSalesSheet?: boolean;
+    salesIntakeMode?: 'paper_sheet' | 'pos_csv';
     tenantId: string;
 }
 
@@ -95,6 +97,8 @@ export interface FacilityDefinition {
     skuPrefix: string;
     posName: string;
     usesRicochet: boolean;
+    supportsPaperSalesSheet: boolean;
+    salesIntakeMode: 'paper_sheet' | 'pos_csv';
     aliases: string[];
     channelName?: string;
 }
@@ -118,6 +122,8 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         skuPrefix: '0EJ',
         posName: 'Ricochet POS',
         usesRicochet: true,
+        supportsPaperSalesSheet: false,
+        salesIntakeMode: 'pos_csv',
         aliases: ['md', 'memory den', 'memoryden', 'memory_den', '0ej', 'hao', "huck's adventures outfitters", "memory den - huck's adventures outfitters"],
         channelName: 'Memory Den',
     },
@@ -135,8 +141,10 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         feePct: 10,
         monthlyRent: 75,
         skuPrefix: 'DT-',
-        posName: 'Booth POS',
+        posName: 'Paper Sales Sheet',
         usesRicochet: false,
+        supportsPaperSalesSheet: true,
+        salesIntakeMode: 'paper_sheet',
         aliases: ['dt', 'dusty tiger', 'dustytiger', 'dusty_tiger', 'tiger'],
         channelName: 'Dusty Tiger',
     },
@@ -156,6 +164,8 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         skuPrefix: 'HG-',
         posName: 'Warehouse CSV',
         usesRicochet: false,
+        supportsPaperSalesSheet: false,
+        salesIntakeMode: 'pos_csv',
         aliases: ['hg', 'backstock', "huck's garage", 'hucks garage', 'hucksgarage', 'garage'],
     },
     {
@@ -174,6 +184,8 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         skuPrefix: 'HH-',
         posName: 'Warehouse CSV',
         usesRicochet: false,
+        supportsPaperSalesSheet: false,
+        salesIntakeMode: 'pos_csv',
         aliases: ['hh', 'hd', 'hideout', "huck's hideout", 'hucks hideout', 'huckshideout', "huck's house", 'hucks house'],
     }
 ];
@@ -236,6 +248,16 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
     const liveName = String(liveDoc.name || base.name).trim();
     const usesRicochet =
         typeof liveDoc.usesRicochet === 'boolean' ? liveDoc.usesRicochet : base.usesRicochet;
+    const supportsPaperSalesSheet =
+        typeof liveDoc.supportsPaperSalesSheet === 'boolean'
+            ? liveDoc.supportsPaperSalesSheet
+            : base.supportsPaperSalesSheet;
+    const salesIntakeMode: 'paper_sheet' | 'pos_csv' =
+        liveDoc.salesIntakeMode === 'paper_sheet' || liveDoc.salesIntakeMode === 'pos_csv'
+            ? liveDoc.salesIntakeMode
+            : supportsPaperSalesSheet
+              ? 'paper_sheet'
+              : base.salesIntakeMode;
 
     return {
         ...base,
@@ -249,6 +271,8 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
         feePct: fee,
         monthlyRent: rent,
         usesRicochet,
+        supportsPaperSalesSheet,
+        salesIntakeMode,
     };
 }
 

@@ -84,6 +84,15 @@
         >
           <span>⚡ Ricochet Sync Guide</span>
         </button>
+
+        <a
+          v-else-if="activeCanonicalLocationMeta.supportsPaperSalesSheet"
+          :href="'/sales/import/' + encodeURIComponent(activeCanonicalLocationMeta.code)"
+          class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs"
+          :title="'Open Paper Sales Sheet & Hands-On Entry for ' + activeCanonicalLocationMeta.shortName"
+        >
+          <span>📸 Paper Sales Sheet ({{ activeCanonicalLocationMeta.code }}) ➔</span>
+        </a>
       </div>
     </div>
 
@@ -142,6 +151,12 @@
                 class="badge badge-xs badge-warning text-warning-content font-bold gap-1"
               >
                 <span>⚡ POS Sync Enabled</span>
+              </span>
+              <span
+                v-else-if="card.supportsPaperSalesSheet"
+                class="badge badge-xs badge-secondary text-secondary-content font-bold gap-1"
+              >
+                <span>📸 Paper Sales Sheet</span>
               </span>
               <span
                 v-else
@@ -431,6 +446,41 @@
 
     <!-- Step 1: Upload Dropzone (if no CSV is loaded) -->
     <div v-if="syncRows.length === 0" class="space-y-6">
+      <!-- Prominent Paper Sales Sheet & Hands-On Entry Callout Card when activeLocation.supportsPaperSalesSheet is true -->
+      <div
+        v-if="activeCanonicalLocationMeta.supportsPaperSalesSheet"
+        class="card bg-linear-to-r from-secondary/15 via-base-100 to-primary/10 border-2 border-secondary/40 shadow-md p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+      >
+        <div class="flex items-start sm:items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-secondary/20 text-secondary flex items-center justify-center text-2xl shrink-0">
+            📸
+          </div>
+          <div class="space-y-1 text-left">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="badge badge-xs badge-secondary text-secondary-content font-black uppercase tracking-wider">
+                Paper Sales Sheet Mode
+              </span>
+              <span class="badge badge-xs badge-outline font-mono font-bold">
+                {{ activeCanonicalLocationMeta.feePct }}% Booth Fee • ${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }}/mo Rent
+              </span>
+            </div>
+            <h3 class="text-base sm:text-lg font-black text-base-content leading-snug">
+              {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) Uses Paper Sales Sheets &amp; Hands-On Entry
+            </h3>
+            <p class="text-xs opacity-75 max-w-2xl">
+              Snap a photo of your monthly paper sales sheet for Gemini Vision OCR extraction, type sold lines by hand, or 1-click pick from active {{ activeCanonicalLocationMeta.shortName }} booth inventory.
+            </p>
+          </div>
+        </div>
+
+        <a
+          :href="'/sales/import/' + encodeURIComponent(activeCanonicalLocationMeta.code)"
+          class="btn btn-secondary text-secondary-content font-black gap-2 shadow-md shrink-0 w-full md:w-auto"
+        >
+          <span>📸 Open Paper Sales Sheet &amp; Hands-On Entry ({{ activeCanonicalLocationMeta.code }}) ➔</span>
+        </a>
+      </div>
+
       <div 
         class="card bg-base-100 border-2 border-dashed shadow-sm p-12 text-center transition-all"
         :class="isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-base-300'"

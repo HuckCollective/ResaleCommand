@@ -117,6 +117,26 @@
               <div class="text-[11px] opacity-70">
                 {{ card.subtitle }}
               </div>
+              <div class="pt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span
+                  v-if="card.supportsPaperSalesSheet"
+                  class="badge badge-xs badge-secondary text-secondary-content font-bold gap-1"
+                >
+                  <span>📸 Paper Sales Sheet</span>
+                </span>
+                <span
+                  v-else-if="card.usesRicochet"
+                  class="badge badge-xs badge-warning text-warning-content font-bold gap-1"
+                >
+                  <span>⚡ POS Payout CSV</span>
+                </span>
+                <span
+                  v-else
+                  class="badge badge-xs badge-ghost border border-base-300 font-semibold opacity-75"
+                >
+                  <span>📋 Standard CSV</span>
+                </span>
+              </div>
             </div>
             <div class="pt-2 border-t border-base-300/70 flex items-center justify-between text-xs font-bold text-primary w-full">
               <span>Lock {{ card.code }} Payouts</span>
@@ -345,8 +365,382 @@
         </div>
       </div>
 
-      <!-- Step 1: Upload (shown only when no receipt AND no parsed rows) -->
-      <div v-else-if="!parsedRows.length" class="space-y-6">
+      <!-- ========================================================================= -->
+      <!-- 📸 PAPER SALES SHEET & HANDS-ON RECONCILER WORKSPACE                      -->
+      <!-- Driven 100% by activeCanonicalLocationMeta.supportsPaperSalesSheet / tab   -->
+      <!-- ========================================================================= -->
+      <div v-if="!lastCommittedReceipt" class="mb-6 space-y-4">
+        <!-- Intake Mode Switcher Strip (Paper Sales Sheet vs POS Payout CSV) -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-base-200/70 p-2.5 rounded-2xl border border-base-300">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-black uppercase tracking-wider px-2 text-base-content/75 flex items-center gap-1.5">
+              <span>{{ activeCanonicalLocationMeta.icon }}</span>
+              <span>{{ activeCanonicalLocationMeta.shortName }} Intake Mode:</span>
+            </span>
+            <div class="join bg-base-100 p-0.5 rounded-xl border border-base-300 shadow-2xs">
+              <button
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item gap-1.5 font-bold"
+                :class="salesIntakeTab === 'paper_sheet' ? 'btn-secondary text-secondary-content shadow-xs font-black' : 'btn-ghost'"
+                @click="salesIntakeTab = 'paper_sheet'"
+              >
+                <span>📸 Paper Sales Sheet &amp; Hands-On Entry</span>
+                <span v-if="activeCanonicalLocationMeta.supportsPaperSalesSheet" class="badge badge-xs badge-warning text-warning-content font-mono font-bold">Default</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item gap-1.5 font-bold"
+                :class="salesIntakeTab === 'pos_csv' ? 'btn-primary text-primary-content shadow-xs font-black' : 'btn-ghost'"
+                @click="salesIntakeTab = 'pos_csv'"
+              >
+                <span>📄 POS Payout CSV Upload</span>
+                <span v-if="!activeCanonicalLocationMeta.supportsPaperSalesSheet" class="badge badge-xs badge-primary text-primary-content font-mono font-bold">Default</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 text-xs font-mono px-2">
+            <span class="badge badge-sm badge-outline font-bold">
+              Fee: {{ activeCanonicalLocationMeta.feePct }}%
+            </span>
+            <span class="badge badge-sm badge-outline font-bold">
+              Rent: ${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }}/mo
+            </span>
+          </div>
+        </div>
+
+        <!-- PAPER SALES SHEET & HANDS-ON ENTRY PANEL -->
+        <div
+          v-if="salesIntakeTab === 'paper_sheet'"
+          class="card bg-base-100 border-2 border-secondary/35 shadow-md p-4 sm:p-6 rounded-2xl space-y-5"
+        >
+          <!-- Top Header + Camera / Upload Trigger + + Add Sold Line by Hand -->
+          <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-base-200 pb-4">
+            <div class="flex items-start gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center text-2xl shrink-0">
+                📸
+              </div>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 class="text-lg sm:text-xl font-black text-base-content">
+                    {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) Paper Sales Sheet &amp; Hands-On Reconciler
+                  </h3>
+                  <span class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold">
+                    {{ activeCanonicalLocationMeta.feePct }}% Booth Fee Auto-Calculated
+                  </span>
+                </div>
+                <p class="text-xs opacity-75 mt-0.5">
+                  Snap or upload a photo of your handwritten/printed booth sales sheet for Gemini Vision OCR extraction, add lines by hand, or 1-click pick from active {{ activeCanonicalLocationMeta.shortName }} booth stock below.
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
+              <!-- Snap or Upload Sales Sheet Photo (Camera / File Input) -->
+              <label
+                class="btn btn-sm sm:btn-md btn-secondary text-secondary-content font-black gap-2 shadow-md cursor-pointer"
+                :class="{ 'btn-disabled opacity-60': isParsingSheetPhoto }"
+              >
+                <span v-if="isParsingSheetPhoto" class="loading loading-spinner loading-xs"></span>
+                <span v-else>📸</span>
+                <span>{{ isParsingSheetPhoto ? 'AI Reading Sales Sheet...' : 'Snap / Upload Sales Sheet Photo' }}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  class="hidden"
+                  :disabled="isParsingSheetPhoto"
+                  @change="handleSalesSheetPhotoUpload"
+                />
+              </label>
+
+              <!-- + Add Sold Line by Hand -->
+              <button
+                type="button"
+                class="btn btn-sm sm:btn-md btn-primary font-black gap-1.5 shadow-sm"
+                @click="addManualSoldLine()"
+              >
+                <span>✍️ + Add Sold Line by Hand</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sheet Photo Preview Strip (When a Sales Sheet Photo was Snapped/Uploaded) -->
+          <div
+            v-if="sheetPhotoPreviewUrl"
+            class="p-3 rounded-xl bg-base-200/70 border border-base-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+          >
+            <div class="flex items-center gap-3">
+              <img
+                :src="sheetPhotoPreviewUrl"
+                alt="Sales Sheet Preview"
+                class="w-14 h-14 rounded-lg object-cover border border-base-300 shrink-0"
+              />
+              <div class="text-xs space-y-0.5">
+                <div class="font-black text-base-content flex items-center gap-1.5">
+                  <span>✅ Sales Sheet Photo Processed</span>
+                  <span v-if="lastParsedSheetTitle" class="badge badge-xs badge-secondary font-mono">{{ lastParsedSheetTitle }}</span>
+                </div>
+                <p class="opacity-70">
+                  Review and edit the extracted sold lines below, or snap another page to append more rows.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost text-error"
+              @click="sheetPhotoPreviewUrl = ''; lastParsedSheetTitle = ''"
+            >
+              Clear Photo Preview ✕
+            </button>
+          </div>
+
+          <!-- ✍️ HANDS-ON EDITABLE SALES TABLE (Inline Date, Title, Tag/UPC, Qty, Gross, Auto-Fee, Auto-Net) -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div class="flex items-center gap-2">
+                <h4 class="font-black text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                  <span>✍️ Hands-On Editable Sold Lines ({{ parsedRows.length }})</span>
+                </h4>
+                <span class="text-xs opacity-65">
+                  Edits update Booth Fee ({{ activeCanonicalLocationMeta.feePct }}%) &amp; Net Payout live
+                </span>
+              </div>
+
+              <div v-if="parsedRows.length > 0" class="flex items-center gap-3 text-xs font-mono">
+                <span>Gross: <strong class="text-base-content">${{ handsOnTotals.gross.toFixed(2) }}</strong></span>
+                <span>Fee ({{ activeCanonicalLocationMeta.feePct }}%): <strong class="text-error">-${{ handsOnTotals.fee.toFixed(2) }}</strong></span>
+                <span>Net After Fee: <strong class="text-emerald-600 dark:text-emerald-400">+${{ handsOnTotals.net.toFixed(2) }}</strong></span>
+              </div>
+            </div>
+
+            <div
+              v-if="parsedRows.length === 0"
+              class="p-6 rounded-2xl bg-base-200/40 border border-dashed border-base-300 text-center space-y-2"
+            >
+              <div class="text-2xl">📝</div>
+              <div class="font-bold text-sm text-base-content">
+                No sold lines staged for {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) yet
+              </div>
+              <p class="text-xs opacity-65 max-w-md mx-auto">
+                Click <strong>📸 Snap / Upload Sales Sheet Photo</strong> above to extract lines with AI Vision, click <strong>✍️ + Add Sold Line by Hand</strong>, or click any item in the <strong>📦 Active Booth Inventory Pick-List</strong> below!
+              </p>
+            </div>
+
+            <div v-else class="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+              <table class="table table-xs sm:table-sm w-full">
+                <thead>
+                  <tr class="bg-base-200/80 text-[11px] uppercase tracking-wider font-black text-base-content/75">
+                    <th class="w-32">Sold Date</th>
+                    <th class="w-28">Tag / UPC</th>
+                    <th class="min-w-48">Item Description</th>
+                    <th class="w-16 text-center">Qty</th>
+                    <th class="w-28 text-right">Gross ($)</th>
+                    <th class="w-24 text-right">Fee ({{ activeCanonicalLocationMeta.feePct }}%)</th>
+                    <th class="w-24 text-right">Net ($)</th>
+                    <th class="min-w-44">Linked Booth Item</th>
+                    <th class="w-16 text-center">Remove</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-base-200">
+                  <tr
+                    v-for="(row, rIdx) in parsedRows"
+                    :key="rIdx"
+                    class="hover:bg-base-200/40 transition-colors"
+                  >
+                    <!-- Editable Date -->
+                    <td>
+                      <input
+                        type="date"
+                        :value="normalizeRowDateForInput(row.date)"
+                        class="input input-xs input-bordered font-mono w-full"
+                        @input="onHandsOnDateChange(row, ($event.target as HTMLInputElement).value)"
+                      />
+                    </td>
+
+                    <!-- Editable Tag / UPC -->
+                    <td>
+                      <input
+                        type="text"
+                        v-model="row.extractedSku"
+                        placeholder="HUCK-..."
+                        class="input input-xs input-bordered font-mono font-bold uppercase w-full"
+                        @change="onHandsOnSkuOrTitleEdit(row)"
+                      />
+                    </td>
+
+                    <!-- Editable Description / Title -->
+                    <td>
+                      <input
+                        type="text"
+                        v-model="row.itemName"
+                        placeholder="Item sold description..."
+                        class="input input-xs input-bordered font-semibold w-full"
+                        @change="onHandsOnSkuOrTitleEdit(row)"
+                      />
+                    </td>
+
+                    <!-- Editable Quantity -->
+                    <td class="text-center">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        :value="row.repeatCount || 1"
+                        class="input input-xs input-bordered font-mono text-center w-14"
+                        @input="onHandsOnQtyChange(row, Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </td>
+
+                    <!-- Editable Gross Sold Price -->
+                    <td class="text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        :value="row.listedPrice"
+                        class="input input-xs input-bordered font-mono font-bold text-right w-24"
+                        @input="onHandsOnGrossChange(row, Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </td>
+
+                    <!-- Auto-Computed Venue Fee -->
+                    <td class="text-right font-mono text-xs text-error font-semibold">
+                      -${{ Number((Number(row.listedPrice || 0) - Number(row.salePrice || 0)).toFixed(2)).toFixed(2) }}
+                    </td>
+
+                    <!-- Auto-Computed Net Payout -->
+                    <td class="text-right font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
+                      +${{ Number(row.salePrice || 0).toFixed(2) }}
+                    </td>
+
+                    <!-- Linked Booth Item or 1-Click Match Trigger -->
+                    <td>
+                      <div v-if="row.mappedItem" class="flex items-center justify-between gap-1.5 bg-success/10 border border-success/30 px-2 py-1 rounded-lg">
+                        <div class="truncate text-xs">
+                          <span class="badge badge-xs badge-primary font-mono font-bold mr-1">{{ row.mappedItem.upc || 'ITEM' }}</span>
+                          <span class="font-semibold">{{ row.mappedItem.title }}</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ghost btn-circle text-error shrink-0"
+                          title="Unlink item"
+                          @click="row.mappedItem = null; saveStagingSession()"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div v-else class="flex items-center gap-1">
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-outline border-base-300 hover:border-primary font-bold gap-1"
+                          @click="openMatcherDrawer(row)"
+                        >
+                          <span>🔍 Match</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ghost border border-base-300 font-bold"
+                          :disabled="row.isQuickAdding"
+                          @click="quickAddRow(row)"
+                          title="Create new sold item with next barcode"
+                        >
+                          + New
+                        </button>
+                      </div>
+                    </td>
+
+                    <!-- Remove Row -->
+                    <td class="text-center">
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-ghost text-error btn-circle"
+                        title="Remove line"
+                        @click="removeHandsOnRow(rIdx)"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 📦 ACTIVE BOOTH INVENTORY PICK-LIST (Items Currently Placed at activeCanonicalLocationMeta.code) -->
+          <div class="pt-3 border-t border-base-200 space-y-3">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div>
+                <h4 class="font-black text-sm flex items-center gap-1.5 text-base-content">
+                  <span>📦 Active {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}) Booth Inventory Pick-List</span>
+                  <span class="badge badge-xs badge-primary font-mono font-bold">{{ activeBoothInventoryForLocation.length }} in booth</span>
+                </h4>
+                <p class="text-[11px] opacity-70">
+                  Click <strong>+ Add as Sold Line</strong> on any active {{ activeCanonicalLocationMeta.shortName }} item below to drop it straight into your sales sheet with its barcode, price, and {{ activeCanonicalLocationMeta.feePct }}% fee!
+                </p>
+              </div>
+
+              <div class="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  v-model="boothPickListSearch"
+                  :placeholder="'Search ' + activeCanonicalLocationMeta.shortName + ' stock (HUCK-..., title)...'"
+                  class="input input-xs sm:input-sm input-bordered w-full font-mono"
+                />
+              </div>
+            </div>
+
+            <div
+              v-if="filteredBoothPickList.length === 0"
+              class="p-4 rounded-xl bg-base-200/40 border border-base-300 text-xs opacity-70 text-center"
+            >
+              No active inventory items matched in {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }}). You can still add any sold line by hand above!
+            </div>
+
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
+              <div
+                v-for="bItem in filteredBoothPickList"
+                :key="bItem.$id"
+                class="p-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-300 flex items-center justify-between gap-2.5 transition-all"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-9 h-9 rounded-lg bg-base-300 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img
+                      v-if="getItemThumbUrl(bItem)"
+                      :src="getItemThumbUrl(bItem)"
+                      :alt="bItem.title"
+                      class="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    <Icon v-else icon="solar:tag-bold" class="w-4 h-4 opacity-40" />
+                  </div>
+                  <div class="min-w-0 text-xs">
+                    <div class="font-bold truncate text-base-content" :title="bItem.title">{{ bItem.title }}</div>
+                    <div class="font-mono text-[10px] opacity-75 flex items-center gap-1.5">
+                      <span class="text-primary font-black">{{ bItem.upc || bItem.locationSku || 'NO UPC' }}</span>
+                      <span>•</span>
+                      <span class="text-secondary font-bold">${{ Number(bItem.boutiquePrice || bItem.resalePrice || bItem.price || 0).toFixed(2) }}</span>
+                      <span v-if="Number(bItem.quantity || 1) > 1" class="badge badge-xs badge-outline">Qty {{ bItem.quantity }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  class="btn btn-xs btn-secondary text-secondary-content font-black shrink-0 gap-1 shadow-2xs"
+                  @click="addActiveBoothItemAsSoldLine(bItem)"
+                  title="Add this active booth item directly as a sold line"
+                >
+                  <span>+ Sold</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 1: Upload (shown only when no receipt AND no parsed rows AND in pos_csv mode) -->
+      <div v-if="!lastCommittedReceipt && !parsedRows.length && salesIntakeTab === 'pos_csv'" class="space-y-6">
         <!-- Visual Workflow Explainer Card -->
         <div class="card bg-base-100 border border-base-300 p-5 rounded-2xl shadow-xs text-left">
           <div class="flex items-center gap-2 mb-3">
@@ -450,7 +844,7 @@
       </div>
 
       <!-- Step 2: Reconciliation & Settlement UI -->
-      <div v-else>
+      <div v-if="!lastCommittedReceipt && parsedRows.length > 0">
         <!-- Monthly Payout Cycle Tabs & Statement Banner -->
         <div v-if="payoutCycles.length > 0" class="bg-base-200/70 p-4 rounded-2xl border border-base-300 mb-5 shadow-sm space-y-3">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
@@ -1694,6 +2088,7 @@ import {
   resolveCanonicalLocationCode,
   getLocationSettingMeta,
   getAllLocationSettingMetas,
+  matchesLocationFilter,
 } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -1724,6 +2119,15 @@ const activeCanonicalLocationMeta = computed(() => {
   return getLocationSettingMeta(activeLocationCode.value, locations.value);
 });
 
+const salesIntakeTab = ref<'paper_sheet' | 'pos_csv'>(
+  activeCanonicalLocationMeta.value.salesIntakeMode ||
+    (activeCanonicalLocationMeta.value.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv')
+);
+const isParsingSheetPhoto = ref(false);
+const sheetPhotoPreviewUrl = ref('');
+const lastParsedSheetTitle = ref('');
+const boothPickListSearch = ref('');
+
 const normalizeSalesLocationUrlParam = (code: string) => {
   if (typeof window === 'undefined' || !window.history?.replaceState) return;
   try {
@@ -1739,6 +2143,8 @@ const selectAndLockSalesLocation = (code: string) => {
   activeLocationCode.value = resolved;
   isLocationLocked.value = true;
   normalizeSalesLocationUrlParam(resolved);
+  const meta = getLocationSettingMeta(resolved, locations.value);
+  salesIntakeTab.value = meta.salesIntakeMode || (meta.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv');
 };
 const activeView = ref('matching'); // 'matching' | 'settlement'
 const filterTab = ref('all'); // 'all' | 'matched' | 'unmatched'
@@ -1807,6 +2213,7 @@ const saveStagingSession = () => {
 };
 
 const recomputePayoutCycles = () => {
+  const defaultRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
   const cycleMap = new Map<string, PayoutCycle>();
   for (const r of parsedRows.value) {
     if (!cycleMap.has(r.cycleId)) {
@@ -1817,7 +2224,7 @@ const recomputePayoutCycles = () => {
         gross: 0,
         netStore: 0,
         itemCount: 0,
-        spaceRental: detectedRentMap.value[r.cycleId] || 382.50,
+        spaceRental: detectedRentMap.value[r.cycleId] !== undefined ? detectedRentMap.value[r.cycleId] : defaultRent,
         expectedCheck: 0
       });
     }
@@ -1950,6 +2357,314 @@ watch(activeView, () => {
   saveStagingSession();
 });
 
+watch(activeLocationCode, (newCode) => {
+  const meta = getLocationSettingMeta(newCode, locations.value);
+  salesIntakeTab.value = meta.salesIntakeMode || (meta.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv');
+  recomputePayoutCycles();
+});
+
+const handsOnTotals = computed(() => {
+  let gross = 0;
+  let net = 0;
+  for (const r of parsedRows.value) {
+    gross += Number(r.listedPrice || r.salePrice || 0);
+    net += Number(r.salePrice || 0);
+  }
+  const grossRounded = Number(gross.toFixed(2));
+  const netRounded = Number(net.toFixed(2));
+  const feeRounded = Math.max(0, Number((grossRounded - netRounded).toFixed(2)));
+  return {
+    gross: grossRounded,
+    net: netRounded,
+    fee: feeRounded,
+  };
+});
+
+const activeBoothInventoryForLocation = computed(() => {
+  const locCode = activeCanonicalLocationMeta.value.code;
+  return (inventoryItems.value || []).filter((item: any) => {
+    const s = String(item.status || '').toLowerCase().trim();
+    if (s === 'sold' || s === 'combined' || s === 'deconstructed' || s === 'draft' || s === 'tracked' || s === 'scouted') {
+      return false;
+    }
+    return matchesLocationFilter(item, locCode);
+  });
+});
+
+const filteredBoothPickList = computed(() => {
+  const list = activeBoothInventoryForLocation.value;
+  const q = boothPickListSearch.value.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((item: any) => {
+    const title = String(item.title || '').toLowerCase();
+    const upc = String(item.upc || '').toLowerCase();
+    const sku = String(item.locationSku || '').toLowerCase();
+    return title.includes(q) || upc.includes(q) || sku.includes(q);
+  });
+});
+
+const normalizeRowDateForInput = (dateStr: string): string => {
+  const raw = String(dateStr || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    return raw.slice(0, 10);
+  }
+  const parts = raw.split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+    if (parts[2].length === 4) {
+      return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+  }
+  return new Date().toISOString().slice(0, 10);
+};
+
+const matchSingleHandsOnRow = (skuOrUpc: string, title: string, grossPrice: number): any => {
+  const cleanCode = String(skuOrUpc || '').trim().toUpperCase();
+  if (cleanCode) {
+    const exact = (inventoryItems.value || []).find((item: any) => {
+      const s = String(item.status || '').toLowerCase().trim();
+      if (s === 'combined' || s === 'deconstructed') return false;
+      const itemUpc = String(item.upc || '').trim().toUpperCase();
+      const itemSku = cleanCatalogSku(item.locationSku).toUpperCase();
+      return itemUpc === cleanCode || itemSku === cleanCode;
+    });
+    if (exact) return dereferenceParentLot(exact);
+  }
+  if (title && title.trim().length >= 3) {
+    const candidates = getUnclaimedMatchCandidatesForRow({
+      rowSku: cleanCode,
+      rowTitle: title,
+      rowPrice: grossPrice,
+      rowIsInStock: false,
+      rowIsBb: isBbConsignorRow({ sku: cleanCode, title }),
+      searchQuery: '',
+      filterMode: 'suggested',
+      allItems: inventoryItems.value || [],
+      claimedItemIds: claimedItemIdsForRow(),
+      allowMultiQtyReuse: true,
+      limit: 3,
+    });
+    if (candidates.length > 0 && candidates[0].confidence >= 85) {
+      return dereferenceParentLot(candidates[0].item);
+    }
+  }
+  return null;
+};
+
+const recalculateRowFinancials = (row: any) => {
+  if (!row) return;
+  const gross = Math.max(0, Number(Number(row.listedPrice || 0).toFixed(2)));
+  const feePct = Number(activeCanonicalLocationMeta.value.feePct || 0);
+  const fee = Number((gross * (feePct / 100)).toFixed(2));
+  const net = Number((gross - fee).toFixed(2));
+  row.listedPrice = gross;
+  row.venueFee = fee;
+  row.salePrice = net;
+  row.netSoldPrice = net;
+  const cycle = getCycleInfo('', row.date || row.soldDate || '');
+  row.cycleId = cycle.id;
+  row.cycleLabel = cycle.label;
+  recomputePayoutCycles();
+  saveStagingSession();
+};
+
+const addManualSoldLine = (prefill?: Partial<{
+  date: string;
+  sku: string;
+  title: string;
+  gross: number;
+  qty: number;
+  mappedItem: any;
+  ticketNumber: string;
+}>) => {
+  const isoDate = normalizeRowDateForInput(prefill?.date || new Date().toISOString().slice(0, 10));
+  const qty = Math.max(1, Number(prefill?.qty || 1));
+  const gross = Math.max(0, Number(Number(prefill?.gross ?? 0).toFixed(2)));
+  const feePct = Number(activeCanonicalLocationMeta.value.feePct || 0);
+  const fee = Number((gross * (feePct / 100)).toFixed(2));
+  const net = Number((gross - fee).toFixed(2));
+  const sku = String(prefill?.sku || '').trim();
+  const title = String(prefill?.title || '').trim() || (prefill?.mappedItem?.title || '');
+  const matched = prefill?.mappedItem || matchSingleHandsOnRow(sku, title, gross);
+  const isBB = isBbConsignorRow({ sku, title }) || Boolean(matched?.isSubClient);
+  const cycle = getCycleInfo('', isoDate);
+
+  const newRow: any = {
+    date: isoDate,
+    soldDate: isoDate,
+    paidDate: isoDate,
+    cycleId: cycle.id,
+    cycleLabel: cycle.label,
+    itemName: title || 'Booth Sale Item',
+    extractedSku: sku || matched?.upc || matched?.locationSku || '',
+    ticketNumber: prefill?.ticketNumber || `${activeCanonicalLocationMeta.value.code}-${isoDate.replace(/-/g, '')}-${parsedRows.value.length + 1}`,
+    ticketOccurrence: 1,
+    customerName: '',
+    status: 'sold',
+    qty,
+    listedPrice: gross,
+    venueFee: fee,
+    salePrice: net,
+    netSoldPrice: net,
+    mappedItem: matched || null,
+    isSubClient: isBB,
+    subClientName: isBB ? 'B&B Consignment' : (matched?.subClientName || null),
+    parentPartner: isBB ? 'PDXGL-' : (matched?.parentPartner || null),
+    isMultiQtyCandidate: qty > 1,
+    repeatCount: qty,
+    isMultiQty: qty > 1 || Boolean(matched?.isMultiQty || (matched?.quantity && matched.quantity > 1)),
+  };
+
+  parsedRows.value.push(newRow);
+  if (!activeFileName.value) {
+    activeFileName.value = `${activeCanonicalLocationMeta.value.name} Sales Sheet (${isoDate})`;
+  }
+  recomputePayoutCycles();
+  saveStagingSession();
+};
+
+const addActiveBoothItemAsSoldLine = (bItem: any) => {
+  if (!bItem) return;
+  const unitPrice = Number(bItem.boutiquePrice || bItem.resalePrice || bItem.price || 0);
+  addManualSoldLine({
+    date: new Date().toISOString().slice(0, 10),
+    sku: bItem.upc || bItem.locationSku || '',
+    title: bItem.title || 'Booth Item',
+    gross: unitPrice,
+    qty: 1,
+    mappedItem: bItem,
+  });
+  addToast({
+    type: 'success',
+    message: `Added [${bItem.upc || 'ITEM'}] ${(bItem.title || '').slice(0, 32)} to Sold Lines!`,
+  });
+};
+
+const onHandsOnDateChange = (row: any, newDate: string) => {
+  if (!row) return;
+  const cleanDate = normalizeRowDateForInput(newDate);
+  row.date = cleanDate;
+  row.soldDate = cleanDate;
+  row.paidDate = cleanDate;
+  recalculateRowFinancials(row);
+};
+
+const onHandsOnSkuOrTitleEdit = (row: any) => {
+  if (!row) return;
+  const matched = matchSingleHandsOnRow(row.extractedSku, row.itemName, Number(row.listedPrice || 0));
+  if (matched) {
+    row.mappedItem = matched;
+    if (!row.itemName || row.itemName === 'Booth Sale Item') {
+      row.itemName = matched.title || row.itemName;
+    }
+    if ((!row.listedPrice || Number(row.listedPrice) === 0) && (matched.boutiquePrice || matched.resalePrice || matched.price)) {
+      row.listedPrice = Number(matched.boutiquePrice || matched.resalePrice || matched.price || 0);
+    }
+  }
+  recalculateRowFinancials(row);
+};
+
+const onHandsOnQtyChange = (row: any, newQty: number) => {
+  if (!row) return;
+  const q = Math.max(1, Number(newQty || 1));
+  row.qty = q;
+  row.repeatCount = q;
+  row.isMultiQtyCandidate = q > 1;
+  if (q > 1) row.isMultiQty = true;
+  saveStagingSession();
+};
+
+const onHandsOnGrossChange = (row: any, newGross: number) => {
+  if (!row) return;
+  row.listedPrice = Math.max(0, Number(newGross || 0));
+  recalculateRowFinancials(row);
+};
+
+const removeHandsOnRow = (idx: number) => {
+  if (idx < 0 || idx >= parsedRows.value.length) return;
+  parsedRows.value.splice(idx, 1);
+  recomputePayoutCycles();
+  saveStagingSession();
+};
+
+const handleSalesSheetPhotoUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  isParsingSheetPhoto.value = true;
+  try {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read image file'));
+      reader.readAsDataURL(file);
+    });
+    sheetPhotoPreviewUrl.value = dataUrl;
+
+    const res = await fetch('/api/sales/parse-sheet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64: dataUrl,
+        mimeType: file.type || 'image/jpeg',
+        locationCode: activeCanonicalLocationMeta.value.code,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `Vision parser error (${res.status})`);
+    }
+
+    lastParsedSheetTitle.value = data.sheetTitle || file.name || `${activeCanonicalLocationMeta.value.name} Paper Sales Sheet`;
+    activeFileName.value = lastParsedSheetTitle.value;
+
+    const extractedRows = Array.isArray(data.rows) ? data.rows : [];
+    if (extractedRows.length === 0) {
+      addToast({
+        type: 'warning',
+        message: 'No sold lines were detected on the photo. You can add lines by hand below!',
+      });
+      return;
+    }
+
+    for (const r of extractedRows) {
+      const qty = Math.max(1, Number(r.qty || 1));
+      const gross = Math.max(0, Number(r.soldPrice || 0));
+      addManualSoldLine({
+        date: r.date || new Date().toISOString().slice(0, 10),
+        sku: r.upc || '',
+        title: r.title || 'Sold Booth Item',
+        gross,
+        qty,
+        ticketNumber: r.ticketNumber || '',
+      });
+    }
+
+    if (typeof data.detectedRent === 'number' && data.detectedRent > 0 && payoutCycles.value.length > 0) {
+      const topCycleId = payoutCycles.value[0].id;
+      detectedRentMap.value[topCycleId] = Number(data.detectedRent);
+      recomputePayoutCycles();
+    }
+
+    addToast({
+      type: 'success',
+      message: `📸 Extracted ${extractedRows.length} sold line(s) from ${lastParsedSheetTitle.value}! Review & verify below.`,
+    });
+  } catch (err: any) {
+    console.error('[SalesImporter] Failed to parse sales sheet photo:', err);
+    addToast({
+      type: 'error',
+      message: `Could not read sales sheet photo: ${err?.message || 'Unknown error'}`,
+    });
+  } finally {
+    isParsingSheetPhoto.value = false;
+    if (input) input.value = '';
+  }
+};
+
 // Slide-Over Item Matcher Drawer State
 const isMatcherDrawerOpen = ref(false);
 const activeDrawerRowIndex = ref<number>(-1);
@@ -1964,7 +2679,7 @@ const drawerForm = ref({
   cost: 0,
   resalePrice: 0,
   soldPrice: 0,
-  storageLocation: 'MD',
+  storageLocation: activeCanonicalLocationMeta.value.code,
   isMultiQty: false
 });
 
@@ -2026,7 +2741,7 @@ const populateDrawerForm = (row: any) => {
     cost: row.mappedItem ? getItemCost(row.mappedItem) : 0,
     resalePrice: Number(row.listedPrice || row.salePrice || 0),
     soldPrice: Number(row.salePrice || 0),
-    storageLocation: 'MD',
+    storageLocation: activeCanonicalLocationMeta.value.code,
     isMultiQty: !!(row.isMultiQty || row.isMultiQtyCandidate || row.mappedItem?.isMultiQty || (row.mappedItem?.quantity && row.mappedItem.quantity > 1))
   };
   drawerSearchQuery.value = '';
@@ -2104,10 +2819,12 @@ const linkAndSaveItemToActiveRow = async (item: any) => {
       ? Math.max(1, binConfig.expectedRemainingQty)
       : Math.max(1, Number(target.quantity || 1));
 
+    const activeCode = activeCanonicalLocationMeta.value.code;
+    const activeWhId = activeCanonicalLocationMeta.value.id || MD_CANONICAL_WAREHOUSE_ID;
     const updatePayload: any = {
       status: targetStatus,
-      storageLocation: 'MD',
-      warehouseId: MD_CANONICAL_WAREHOUSE_ID,
+      storageLocation: activeCode,
+      warehouseId: activeWhId,
       quantity: targetQty,
     };
     if (cleanSku) {
@@ -2117,8 +2834,8 @@ const linkAndSaveItemToActiveRow = async (item: any) => {
     await updateInventoryItem(target.$id, updatePayload);
 
     target.status = targetStatus;
-    target.storageLocation = 'MD';
-    target.warehouseId = MD_CANONICAL_WAREHOUSE_ID;
+    target.storageLocation = activeCode;
+    target.warehouseId = activeWhId;
     target.quantity = targetQty;
     if (cleanSku) target.locationSku = cleanSku;
 
@@ -2130,7 +2847,7 @@ const linkAndSaveItemToActiveRow = async (item: any) => {
     saveStagingSession();
     addToast({
       type: 'success',
-      message: `✅ Linked & Saved [${target.upc || 'ITEM'}] ➔ ${cleanSku || 'MD'} (${targetStatus} @ MD)!`,
+      message: `✅ Linked & Saved [${target.upc || 'ITEM'}] ➔ ${cleanSku || activeCode} (${targetStatus} @ ${activeCode})!`,
     });
     closeMatcherDrawer();
   } catch (err: any) {
@@ -2169,7 +2886,8 @@ const saveAndLinkNewItem = async (autoAdvance: boolean = false) => {
       soldPrice: net,
       upc: nextUpc,
       locationSku: row.extractedSku || undefined,
-      storageLocation: drawerForm.value.storageLocation || 'MD',
+      storageLocation: drawerForm.value.storageLocation || activeCanonicalLocationMeta.value.code,
+      warehouseId: activeCanonicalLocationMeta.value.id || MD_CANONICAL_WAREHOUSE_ID,
       quantity: isMulti ? Math.max(2, row.repeatCount || 2) : 1
     };
     if (activeTeamId.value) doc.tenantId = activeTeamId.value;
@@ -2236,7 +2954,8 @@ const quickAddRow = async (row: any) => {
       soldPrice: net,
       upc: nextUpc,
       locationSku: row.extractedSku || undefined,
-      storageLocation: 'MD',
+      storageLocation: activeCanonicalLocationMeta.value.code,
+      warehouseId: activeCanonicalLocationMeta.value.id || MD_CANONICAL_WAREHOUSE_ID,
       quantity: isMulti ? Math.max(2, row.repeatCount || 2) : 1
     };
     if (activeTeamId.value) doc.tenantId = activeTeamId.value;
@@ -2449,6 +3168,8 @@ onMounted(async () => {
     activeLocationCode.value = resolved;
     isLocationLocked.value = true;
     normalizeSalesLocationUrlParam(resolved);
+    const meta = getLocationSettingMeta(resolved, locations.value);
+    salesIntakeTab.value = meta.salesIntakeMode || (meta.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv');
   } else {
     isLocationLocked.value = false;
   }
@@ -2459,8 +3180,8 @@ onMounted(async () => {
   loadReceiptHistory();
   restoreStagingSession();
 
-  // If no session in localStorage, auto-load stored multi-month payout CSV so the user is never stuck on blank screen
-  if (parsedRows.value.length === 0) {
+  // If no session in localStorage, auto-load stored multi-month payout CSV for POS CSV booths
+  if (parsedRows.value.length === 0 && !activeCanonicalLocationMeta.value.supportsPaperSalesSheet) {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STAGING_STORAGE_KEY) : null;
     if (!raw) {
       await loadDefaultPayoutFile();
@@ -2544,8 +3265,9 @@ const matchedCount = computed(() => cycleFilteredRows.value.filter(r => r.mapped
 const unmatchedCount = computed(() => cycleFilteredRows.value.filter(r => !r.mappedItem).length);
 
 const currentCycleInfo = computed(() => {
+  const defaultRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
   if (selectedCycle.value === 'ALL') {
-    const totalRent = payoutCycles.value.reduce((sum, c) => sum + (c.spaceRental || 382.50), 0) || (382.50 * Math.max(1, payoutCycles.value.length));
+    const totalRent = payoutCycles.value.reduce((sum, c) => sum + (c.spaceRental ?? defaultRent), 0) || (defaultRent * Math.max(1, payoutCycles.value.length));
     const totalCheck = payoutCycles.value.reduce((sum, c) => sum + c.expectedCheck, 0);
     return {
       id: 'ALL',
@@ -2560,7 +3282,7 @@ const currentCycleInfo = computed(() => {
   return {
     id: selectedCycle.value,
     label: c?.label || selectedCycle.value,
-    spaceRental: c?.spaceRental || 382.50,
+    spaceRental: c?.spaceRental ?? defaultRent,
     checkCount: 1,
     isMultiCycle: false,
     paidDate: c?.paidDate,
@@ -3515,23 +4237,17 @@ const executeImport = async () => {
 
   try {
     const ITEMS_COL = getCollectionId();
-    const batchId = 'MD-PAYOUT-' + new Date().toISOString().slice(0, 10);
+    const activeCode = activeCanonicalLocationMeta.value.code;
+    const activeWhId = activeCanonicalLocationMeta.value.id || MD_CANONICAL_WAREHOUSE_ID;
+    const batchId = `${activeCode}-PAYOUT-` + new Date().toISOString().slice(0, 10);
 
-    // Look up Memory Den warehouse for platform attribution with strict matching (no silent fallback to Dusty Tiger)
-    let mdWarehouseId = '';
+    // Resolve active warehouse ID dynamically from Location Settings
+    let mdWarehouseId = activeWhId;
     try {
       if (activeTeamId.value) {
         const warehouses = await warehousesApi.listWarehouses(activeTeamId.value);
-        const mdWh = warehouses.find(w => 
-          w.code?.toUpperCase() === 'MD' || 
-          w.name.toLowerCase().includes('memory den') ||
-          w.displayName?.toLowerCase().includes('memory den') ||
-          (w as any).channelName?.toLowerCase().includes('memory den')
-        );
-        mdWarehouseId = mdWh?.$id || '';
-        if (!mdWarehouseId) {
-          console.warn("[SalesImporter] Memory Den warehouse not found among team facilities, proceeding without fallback.");
-        }
+        const matchedMeta = getLocationSettingMeta(activeCode, warehouses);
+        mdWarehouseId = matchedMeta?.id || activeWhId;
       }
     } catch (whErr) {
       console.warn("[SalesImporter] Could not list warehouses:", whErr);
@@ -3633,8 +4349,8 @@ const executeImport = async () => {
                 status: 'sold',
                 cost: 0,
                 quantity: 1,
-                storageLocation: 'MD',
-                warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+                storageLocation: activeCode,
+                warehouseId: mdWarehouseId || activeWhId,
                 resalePrice: Number(row.listedPrice || row.salePrice || 0),
                 soldPrice: Number(row.salePrice || 0)
               };
@@ -3718,12 +4434,12 @@ const executeImport = async () => {
 
           if (binConfig) {
             // Verified Active Multi-Qty Booth Bin (e.g. 0EJ0H5 Frank Frazetta qty=3, 0EJ0FR HMM Reader qty=12):
-            // Always stay `status: 'placed'` at `MD` with `quantity >= 1`, never overwrite parent Booth Bin `saleId` or mark `sold`!
+            // Always stay `status: 'placed'` at active booth with `quantity >= 1`, never overwrite parent Booth Bin `saleId` or mark `sold`!
             const targetQty = Math.max(1, binConfig.expectedRemainingQty);
             const lotPayload: Record<string, any> = {
               status: 'placed',
-              storageLocation: 'MD',
-              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              storageLocation: activeCode,
+              warehouseId: mdWarehouseId || activeWhId,
               quantity: targetQty
             };
             if (row.extractedSku || item.locationSku) {
@@ -3731,8 +4447,8 @@ const executeImport = async () => {
             }
             await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
             item.status = 'placed';
-            item.storageLocation = 'MD';
-            item.warehouseId = mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID;
+            item.storageLocation = activeCode;
+            item.warehouseId = mdWarehouseId || activeWhId;
             item.quantity = targetQty;
           } else if (isMulti && K < N) {
             // Partial Depletion Law (K < N):
@@ -3746,8 +4462,8 @@ const executeImport = async () => {
               quantity: remainingQty,
               cost: remainingCost,
               status: item.status === 'placed' ? 'placed' : 'in-stock',
-              storageLocation: 'MD',
-              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID
+              storageLocation: activeCode,
+              warehouseId: mdWarehouseId || activeWhId
             };
             if (row.extractedSku || item.locationSku) {
               lotPayload.locationSku = cleanCatalogSku(row.extractedSku || item.locationSku);
@@ -3759,8 +4475,8 @@ const executeImport = async () => {
             // Full Depletion Law (K >= N or single-unit item):
             const lotPayload: Record<string, any> = {
               status: 'sold',
-              storageLocation: 'MD',
-              warehouseId: mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID,
+              storageLocation: activeCode,
+              warehouseId: mdWarehouseId || activeWhId,
               quantity: 1, // Appwrite constraint: quantity >= 1 (never 0)
               resalePrice: Number(row.listedPrice || row.salePrice || 0),
               soldPrice: Number(row.salePrice || 0),
@@ -3771,8 +4487,8 @@ const executeImport = async () => {
             }
             await databases.updateDocument(DB_ID, ITEMS_COL, item.$id, lotPayload);
             item.status = 'sold';
-            item.storageLocation = 'MD';
-            item.warehouseId = mdWarehouseId || MD_CANONICAL_WAREHOUSE_ID;
+            item.storageLocation = activeCode;
+            item.warehouseId = mdWarehouseId || activeWhId;
             item.quantity = 1;
             item.soldPrice = Number(row.salePrice || 0);
           }
