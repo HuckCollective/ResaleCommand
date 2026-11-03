@@ -1,6 +1,9 @@
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
-import { databases, DB_ID, COLLECTIONS, Query } from '../lib/appwrite';
+import { databases, Query } from '../lib/appwrite';
 import { parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
+
+const DB_ID = import.meta.env?.PUBLIC_APPWRITE_DB_ID || 'resale_db';
+const ITEMS_COLLECTION_ID = import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || 'items';
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
@@ -55,7 +58,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       for (let page = 0; page < 20; page++) {
         const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
         if (cursor) queries.push(Query.cursorAfter(cursor));
-        const res = await databases.listDocuments(DB_ID, COLLECTIONS.ITEMS, queries);
+        const res = await databases.listDocuments(DB_ID, ITEMS_COLLECTION_ID, queries);
         const docs = res.documents || [];
         for (const doc of docs as any[]) {
           const hasSku = Boolean(doc?.external_sku || doc?.locationSku || doc?.sku);
