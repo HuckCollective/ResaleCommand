@@ -21,9 +21,9 @@ const GOLDEN_RULES_AND_WAREHOUSES = `---
 ## The 3 Golden Rules & Canonical Warehouse IDs (\`resale_db.warehouses\`)
 
 ### The 3 Golden Rules
-1. **\`storageLocation\` must NEVER be blank/unassigned:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified).
-2. **Never create duplicate warehouse records:** Always query or reference the canonical \`resale_db.warehouses\` document IDs below instead of creating new warehouse documents.
-3. **Never modify \`.vue\` files or run local builds on read-only tasks:** When running inspections, pull lists, database audits, or documentation syncs, keep \`.vue\` files untouched and never invoke \`astro build\` or \`npm run build\`.
+1. **\`storageLocation\` must NEVER be blank/unassigned & 4 Canonical Locations Only:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit canonical location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified), and never create duplicate warehouse records.
+2. **Zero Hardcoded Locations (100% Driven by Central Location Settings):** Never hardcode location codes, names, fees, or static manifest keys in UI components, API routes, or bookmarklets—always read dynamically from \`src/lib/warehouses.ts\` (\`usesRicochet\`, \`supportsPaperSalesSheet\`, \`salesIntakeMode\`, \`commissionRate\`, \`monthlyRent\`).
+3. **Reuse Canonical Pipelines (\`src/lib/salesBucketing.ts\`), Break Down Monoliths, & Keep Read-Only Audits Clean:** Never reinvent duplicate matching/deduplication pipelines or bloat giant monolithic files—always delegate to \`src/lib/salesBucketing.ts\` (\`splitTrailingBoothSku\`, \`isPayoutSummaryRow\`, \`assignOccurrenceFingerprints\`, \`flagAlreadyRecordedRows\`, \`matchMemoryDenInventoryItem\`, \`buildLockedMultiBinMap\`), extract focused composables/panels (\`src/lib/ricochetPayoutParser.ts\`, \`src/composables/useRicochetSalesSync.ts\`, \`src/components/sales/RicochetLiveSalesPanel.vue\`), and never modify \`.vue\` files or run local builds on read-only tasks.
 
 ### Canonical Warehouse & Location IDs
 | Code | Name | Document \`$id\` | Type | Commission | Monthly Rent | Notes / Vibes & Exclusions |
@@ -83,9 +83,9 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 
 ## 2. The 3 Golden Rules
 
-1. **\`storageLocation\` must NEVER be blank/unassigned:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified).
-2. **Never create duplicate warehouse records:** Always query or reference the canonical \`resale_db.warehouses\` document IDs below instead of creating new warehouse documents.
-3. **Never modify \`.vue\` files or run local builds on read-only tasks:** When running inspections, pull lists, database audits, or documentation syncs, keep \`.vue\` files untouched and never invoke \`astro build\` or \`npm run build\`.
+1. **\`storageLocation\` must NEVER be blank/unassigned & 4 Canonical Locations Only:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit canonical location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified), and never create duplicate warehouse records.
+2. **Zero Hardcoded Locations (100% Driven by Central Location Settings):** Never hardcode location codes, names, fees, or static manifest keys in UI components, API routes, or bookmarklets—always read dynamically from \`src/lib/warehouses.ts\` (\`usesRicochet\`, \`supportsPaperSalesSheet\`, \`salesIntakeMode\`, \`commissionRate\`, \`monthlyRent\`).
+3. **Reuse Canonical Pipelines (\`src/lib/salesBucketing.ts\`), Break Down Monoliths, & Keep Read-Only Audits Clean:** Never reinvent duplicate matching/deduplication pipelines or bloat giant monolithic files—always delegate to \`src/lib/salesBucketing.ts\` (\`splitTrailingBoothSku\`, \`isPayoutSummaryRow\`, \`assignOccurrenceFingerprints\`, \`flagAlreadyRecordedRows\`, \`matchMemoryDenInventoryItem\`, \`buildLockedMultiBinMap\`), extract focused composables/panels (\`src/lib/ricochetPayoutParser.ts\`, \`src/composables/useRicochetSalesSync.ts\`, \`src/components/sales/RicochetLiveSalesPanel.vue\`), and never modify \`.vue\` files or run local builds on read-only tasks.
 
 ---
 

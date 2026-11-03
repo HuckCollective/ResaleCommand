@@ -366,382 +366,35 @@
       </div>
 
       <!-- ========================================================================= -->
-      <!-- ⚡ RICOCHET LIVE SALES & PAYOUT SYNC PANEL                                 -->
+      <!-- ⚡ RICOCHET LIVE SALES & PAYOUT SYNC PANEL (MODULARIZED SUB-COMPONENT)    -->
       <!-- Driven 100% by activeCanonicalLocationMeta.usesRicochet                   -->
       <!-- ========================================================================= -->
-      <div
+      <RicochetLiveSalesPanel
         v-if="!lastCommittedReceipt && activeCanonicalLocationMeta.usesRicochet"
-        class="card bg-base-100 border-2 border-primary/35 shadow-md p-4 sm:p-6 rounded-2xl mb-6 space-y-4"
-      >
-        <!-- 1. Sync Status & Controls Bar -->
-        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-base-200 pb-4">
-          <div class="flex items-start gap-3">
-            <div class="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-2xl shrink-0">
-              ⚡
-            </div>
-            <div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="text-lg sm:text-xl font-black text-base-content">
-                  Ricochet Live Sales &amp; Payout Sync — {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }})
-                </h3>
-                <span class="badge badge-xs badge-primary text-primary-content font-mono font-bold">
-                  Fee: {{ activeCanonicalLocationMeta.commissionRate }}% | Rent: ${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }}/mo
-                </span>
-                <span
-                  class="badge badge-xs font-mono font-bold"
-                  :class="isRicochetLiveCommitUnlocked ? 'badge-warning text-warning-content' : 'badge-info text-info-content'"
-                >
-                  {{ isRicochetLiveCommitUnlocked ? '🔓 Live Commit Unlocked' : '🧪 Dry-Run Sandbox Mode (Safe Default)' }}
-                </span>
-                <span
-                  v-if="ricochetSyncPayload?.syncedAt"
-                  class="badge badge-xs badge-success text-success-content font-mono font-bold"
-                >
-                  Last Synced: {{ new Date(ricochetSyncPayload.syncedAt).toLocaleString() }}
-                </span>
-              </div>
-              <p class="text-xs opacity-75 mt-0.5">
-                Auto-harvests <span class="font-mono font-bold">/payouts</span> (Unpaid) + <span class="font-mono font-bold">/payout_history</span> (Paid) from your <span class="font-bold">⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span> bookmarklet with 4-tier SKU/UPC cross-linking. Defaults to <span class="font-bold">🧪 Dry-Run Preview Mode</span> so zero production items are marked sold until you unlock Live Commit.
-              </p>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
-            <button
-              type="button"
-              class="btn btn-sm btn-outline btn-primary font-bold gap-1.5"
-              :disabled="isLoadingRicochetSync"
-              @click="fetchStagedRicochetSales(true)"
-            >
-              <span v-if="isLoadingRicochetSync" class="loading loading-spinner loading-xs"></span>
-              <span v-else>🔄</span>
-              <span>Refresh Staged Sales</span>
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-sm btn-ghost border border-base-300 font-bold gap-1.5"
-              @click="isPasteRicochetDrawerOpen = !isPasteRicochetDrawerOpen"
-            >
-              <span>📋 Paste Sync JSON / CSV</span>
-            </button>
-
-            <button
-              v-if="ricochetStagedRows.length > 0"
-              type="button"
-              class="btn btn-sm btn-info text-info-content font-black gap-1.5 shadow-sm"
-              :disabled="isSimulatingRicochetSync"
-              @click="simulateStagedRicochetSales"
-            >
-              <span v-if="isSimulatingRicochetSync" class="loading loading-spinner loading-xs"></span>
-              <span v-else>🧪</span>
-              <span>Dry-Run / Simulate Commit ({{ ricochetActionableNewCount }})</span>
-            </button>
-
-            <label
-              v-if="ricochetActionableNewCount > 0"
-              class="label cursor-pointer gap-1.5 bg-base-200 px-2.5 py-1 rounded-lg border border-base-300 text-xs font-bold"
-              title="Unlock Live Commit when ready to write sales & mark booth inventory sold"
-            >
-              <input
-                v-model="isRicochetLiveCommitUnlocked"
-                type="checkbox"
-                class="checkbox checkbox-xs checkbox-warning"
-              />
-              <span>🔓 Unlock Live Commit</span>
-            </label>
-
-            <button
-              v-if="ricochetActionableNewCount > 0 && isRicochetLiveCommitUnlocked"
-              type="button"
-              class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm"
-              :disabled="isCommittingRicochetSync"
-              @click="commitStagedRicochetSales"
-            >
-              <span v-if="isCommittingRicochetSync" class="loading loading-spinner loading-xs"></span>
-              <span v-else>✅</span>
-              <span>Live Commit Verified Sales ({{ ricochetActionableNewCount }})</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Dry-Run Simulation Banner -->
-        <div
-          v-if="ricochetDryRunResult"
-          class="bg-info/15 border border-info/40 rounded-xl p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-        >
-          <div class="space-y-1">
-            <div class="font-black text-info-content flex items-center gap-2">
-              <span>🧪 Dry-Run Simulation Complete (Zero Production DB Writes Performed)</span>
-              <span class="badge badge-xs badge-info font-mono">Safe Sandbox</span>
-            </div>
-            <div class="opacity-85 font-mono">
-              Would Commit: <span class="font-black">{{ ricochetDryRunResult.wouldCommitCount }}</span> new sales |
-              Would Gross: <span class="font-black text-success">${{ Number(ricochetDryRunResult.wouldGross || 0).toFixed(2) }}</span> |
-              Would Net: <span class="font-black text-primary">${{ Number(ricochetDryRunResult.wouldNet || 0).toFixed(2) }}</span> |
-              Skipped (Already Synced): <span class="font-black">{{ ricochetDryRunResult.skippedAlreadySynced || 0 }}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="btn btn-xs btn-ghost"
-            @click="ricochetDryRunResult = null"
-          >
-            ✕ Dismiss
-          </button>
-        </div>
-
-        <!-- Collapsible Paste Ricochet Sync JSON / CSV Fallback Drawer -->
-        <div
-          v-if="isPasteRicochetDrawerOpen"
-          class="bg-base-200/70 border border-base-300 rounded-xl p-3.5 space-y-2.5"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-black uppercase tracking-wider opacity-80">
-              📋 Paste Bookmarklet Sales Sync JSON or Ricochet Payout CSV
-            </span>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost"
-              @click="isPasteRicochetDrawerOpen = false"
-            >
-              ✕ Close
-            </button>
-          </div>
-          <textarea
-            v-model="pastedRicochetSyncText"
-            rows="4"
-            placeholder='Paste JSON copied from "📋 Copy Sales Sync JSON" in the bookmarklet or raw Ricochet CSV rows...'
-            class="textarea textarea-bordered w-full font-mono text-xs bg-base-100"
-          ></textarea>
-          <div class="flex justify-end gap-2">
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm btn-primary font-black"
-              :disabled="!pastedRicochetSyncText.trim() || isLoadingRicochetSync"
-              @click="applyPastedRicochetSyncPayload"
-            >
-              Stage Pasted Sales Payload (Dry-Run)
-            </button>
-          </div>
-        </div>
-
-        <!-- Summary KPI Strip for Staged Ricochet Sales -->
-        <div
-          v-if="ricochetStagedRows.length > 0 || ricochetSpaceRentalAdjustments.length > 0"
-          class="grid grid-cols-2 sm:grid-cols-6 gap-2.5 bg-base-200/50 p-3 rounded-xl border border-base-300 text-xs"
-        >
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">⏳ Pending Payout (/payouts)</div>
-            <div class="text-base font-black font-mono text-warning mt-0.5">
-              ${{ Number(ricochetSummary.pendingPayoutNet || 0).toFixed(2) }}
-              <span class="text-[10px] opacity-70">({{ ricochetSummary.pendingPayoutCount || 0 }})</span>
-            </div>
-          </div>
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">🏢 Space Rental / Credits</div>
-            <div class="text-base font-black font-mono text-error mt-0.5">
-              ${{ Number(ricochetSummary.spaceRentalTotal || 0).toFixed(2) }}
-              <span class="text-[10px] opacity-70">({{ ricochetSpaceRentalAdjustments.length }})</span>
-            </div>
-          </div>
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">✅ Paid History (/payout_history)</div>
-            <div class="text-base font-black font-mono text-success mt-0.5">
-              ${{ Number(ricochetSummary.paidHistoryNet || 0).toFixed(2) }}
-              <span class="text-[10px] opacity-70">({{ ricochetSummary.paidHistoryCount || 0 }})</span>
-            </div>
-          </div>
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">Gross Sales ({{ ricochetSummary.soldFound }})</div>
-            <div class="text-base font-black font-mono text-primary mt-0.5">${{ Number(ricochetSummary.grossSales || 0).toFixed(2) }}</div>
-          </div>
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">🔗 Matched in Booth</div>
-            <div class="text-base font-black font-mono text-success mt-0.5">
-              {{ ricochetSummary.matchedInBooth }}
-              <span class="text-[10px] text-info font-bold">/ {{ ricochetSummary.alreadySynced }} Synced</span>
-            </div>
-          </div>
-          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
-            <div class="opacity-65 font-bold uppercase text-[10px]">⚪ Unmatched</div>
-            <div class="text-base font-black font-mono mt-0.5" :class="ricochetSummary.unmatchedCount > 0 ? 'text-warning' : 'text-success'">
-              {{ ricochetSummary.unmatchedCount }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Sub-Filter Pills (All Sold | Pending Payout | Paid History | Space Rental) -->
-        <div
-          v-if="ricochetStagedRows.length > 0 || ricochetSpaceRentalAdjustments.length > 0"
-          class="flex items-center gap-2 flex-wrap"
-        >
-          <button
-            type="button"
-            class="btn btn-xs font-bold rounded-full"
-            :class="ricochetSubFilter === 'all' ? 'btn-primary' : 'btn-ghost border border-base-300'"
-            @click="ricochetSubFilter = 'all'"
-          >
-            All Sold ({{ ricochetStagedRows.length }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs font-bold rounded-full"
-            :class="ricochetSubFilter === 'pending_payout' ? 'btn-warning text-warning-content' : 'btn-ghost border border-base-300'"
-            @click="ricochetSubFilter = 'pending_payout'"
-          >
-            ⏳ Pending Payout /payouts ({{ ricochetPendingRowsCount }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs font-bold rounded-full"
-            :class="ricochetSubFilter === 'paid' ? 'btn-success text-success-content' : 'btn-ghost border border-base-300'"
-            @click="ricochetSubFilter = 'paid'"
-          >
-            ✅ Paid History /payout_history ({{ ricochetPaidRowsCount }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs font-bold rounded-full"
-            :class="ricochetSubFilter === 'space_rental' ? 'btn-error text-error-content' : 'btn-ghost border border-base-300'"
-            @click="ricochetSubFilter = 'space_rental'"
-          >
-            🏢 Space Rental &amp; Adjustments ({{ ricochetSpaceRentalAdjustments.length }})
-          </button>
-        </div>
-
-        <!-- Space Rental & Adjustments Table View -->
-        <div
-          v-if="ricochetSubFilter === 'space_rental'"
-          class="overflow-x-auto border border-base-300 rounded-xl max-h-60"
-        >
-          <table class="table table-xs sm:table-sm w-full">
-            <thead>
-              <tr class="bg-base-200 text-[11px] uppercase tracking-wider font-black">
-                <th>Adjustment / Deduction Label</th>
-                <th>Date</th>
-                <th class="text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(adj, adjIdx) in ricochetSpaceRentalAdjustments"
-                :key="adjIdx"
-                class="hover:bg-base-200/40"
-              >
-                <td class="font-bold text-xs">{{ adj.label }}</td>
-                <td class="font-mono text-xs">{{ adj.date || '—' }}</td>
-                <td class="font-mono text-xs text-right font-black text-error">
-                  ${{ Number(adj.amount || 0).toFixed(2) }}
-                </td>
-              </tr>
-              <tr v-if="ricochetSpaceRentalAdjustments.length === 0">
-                <td colspan="3" class="text-center text-xs opacity-60 py-4">
-                  No space rental or credit adjustments in this staged batch.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 2. Reconciliation Staging Table -->
-        <div
-          v-else-if="filteredRicochetStagedRows.length > 0"
-          class="overflow-x-auto border border-base-300 rounded-xl max-h-80"
-        >
-          <table class="table table-xs sm:table-sm table-pin-rows w-full">
-            <thead>
-              <tr class="bg-base-200 text-[11px] uppercase tracking-wider font-black">
-                <th>Ricochet SKU / UPC</th>
-                <th>Sale #</th>
-                <th>Title</th>
-                <th>Sold / Paid Date</th>
-                <th class="text-right">Agreed / Split</th>
-                <th class="text-right">Expected Fee ({{ activeCanonicalLocationMeta.commissionRate }}%)</th>
-                <th class="text-right">Net Payout</th>
-                <th>4-Tier Match Badge</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(rRow, rIdx) in filteredRicochetStagedRows"
-                :key="`${rRow.saleNumber || ''}_${rRow.ricoSku || rRow.sku || rIdx}`"
-                class="hover:bg-base-200/40"
-              >
-                <td class="font-mono text-xs whitespace-nowrap">
-                  <div class="font-black text-primary">{{ rRow.ricoSku || rRow.sku || '—' }}</div>
-                  <div v-if="rRow.upc || rRow.matchedUpc" class="text-[10px] opacity-80 font-bold">
-                    {{ rRow.matchedUpc || rRow.upc }}
-                  </div>
-                </td>
-                <td class="font-mono text-xs whitespace-nowrap">
-                  <span v-if="rRow.saleNumber" class="badge badge-xs badge-ghost font-mono font-bold">
-                    #{{ rRow.saleNumber }}
-                  </span>
-                  <span v-else class="opacity-40">—</span>
-                </td>
-                <td class="max-w-xs">
-                  <div class="font-bold text-xs truncate" :title="rRow.title">{{ rRow.title }}</div>
-                  <div v-if="rRow.matchedItemTitle && rRow.matchedItemTitle !== rRow.title" class="text-[10px] opacity-70 truncate">
-                    ↳ Booth Item: {{ rRow.matchedItemTitle }}
-                  </div>
-                </td>
-                <td class="font-mono text-xs whitespace-nowrap">
-                  <div>{{ rRow.soldDate || '—' }}</div>
-                  <div class="mt-0.5">
-                    <span
-                      v-if="rRow.payoutStatus === 'pending_payout'"
-                      class="badge badge-2xs badge-warning text-warning-content font-bold"
-                    >
-                      ⏳ Unpaid (/payouts)
-                    </span>
-                    <span
-                      v-else
-                      class="badge badge-2xs badge-success text-success-content font-bold"
-                    >
-                      ✅ Paid {{ rRow.paidDate ? `(${rRow.paidDate})` : '' }}
-                    </span>
-                  </div>
-                </td>
-                <td class="font-mono text-xs text-right whitespace-nowrap">
-                  <div class="font-bold">${{ Number(rRow.grossPrice || rRow.agreedPrice || 0).toFixed(2) }}</div>
-                  <div v-if="rRow.splitPct" class="text-[10px] opacity-65">Split: {{ Number(rRow.splitPct).toFixed(0) }}%</div>
-                </td>
-                <td class="font-mono text-xs text-right text-warning">-${{ Number(rRow.expectedCommission ?? rRow.ricoCommission ?? 0).toFixed(2) }}</td>
-                <td class="font-mono text-xs text-right font-black text-success">${{ Number(rRow.ricoNetPayout ?? rRow.expectedNetPayout ?? 0).toFixed(2) }}</td>
-                <td class="whitespace-nowrap">
-                  <span
-                    v-if="rRow.alreadySynced"
-                    class="badge badge-xs badge-neutral font-bold gap-1"
-                  >
-                    ✅ Already Synced
-                  </span>
-                  <span
-                    v-else-if="rRow.matchStatus === 'matched' || rRow.matchedItemId"
-                    class="badge badge-xs badge-success text-success-content font-bold gap-1"
-                  >
-                    🔗 Matched ({{ rRow.matchTier || 'upc' }})
-                  </span>
-                  <button
-                    v-else
-                    type="button"
-                    class="btn btn-2xs btn-warning text-warning-content font-black"
-                    @click="stageSingleRicochetRowIntoHandsOnMatcher(rRow)"
-                  >
-                    ⚪ Unmatched — Assign Booth Item
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div v-else class="text-xs opacity-75 bg-base-200/40 border border-dashed border-base-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <div>
-            No staged live Ricochet sales batch yet for <span class="font-bold">{{ activeCanonicalLocationMeta.shortName }}</span>. Open the <span class="font-mono font-bold">⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span> bookmarklet on Ricochet and click <span class="font-bold">🧪 Stage Sales to Resale Core (Dry-Run)</span> in the <span class="font-bold">💰 Sales &amp; Payout Sync</span> tab, or paste JSON above.
-          </div>
-        </div>
-      </div>
+        :location-meta="activeCanonicalLocationMeta"
+        :synced-at="ricochetSyncPayload?.syncedAt || null"
+        :staged-rows="ricochetStagedRows"
+        :filtered-rows="filteredRicochetStagedRows"
+        :space-rental-adjustments="ricochetSpaceRentalAdjustments"
+        :pending-rows-count="ricochetPendingRowsCount"
+        :paid-rows-count="ricochetPaidRowsCount"
+        :summary="ricochetSummary"
+        :actionable-new-count="ricochetActionableNewCount"
+        v-model:sub-filter="ricochetSubFilter"
+        :is-loading="isLoadingRicochetSync"
+        :is-simulating="isSimulatingRicochetSync"
+        :is-committing="isCommittingRicochetSync"
+        v-model:is-live-commit-unlocked="isRicochetLiveCommitUnlocked"
+        :dry-run-result="ricochetDryRunResult"
+        v-model:is-paste-drawer-open="isPasteRicochetDrawerOpen"
+        v-model:pasted-text="pastedRicochetSyncText"
+        @refresh="fetchStagedRicochetSales(true)"
+        @simulate="simulateStagedRicochetSales"
+        @commit="commitStagedRicochetSales"
+        @dismiss-dry-run="ricochetDryRunResult = null"
+        @apply-pasted="applyPastedRicochetSyncPayload"
+        @assign-row="stageSingleRicochetRowIntoHandsOnMatcher"
+      />
 
       <!-- ========================================================================= -->
       <!-- 📸 PAPER SALES SHEET & HANDS-ON RECONCILER WORKSPACE                      -->
@@ -2470,6 +2123,8 @@ import {
 } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
+import RicochetLiveSalesPanel from './RicochetLiveSalesPanel.vue';
+import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { generateNextUpc } from '../../lib/upcAuthority';
 
 const props = defineProps<{
@@ -2506,270 +2161,44 @@ const sheetPhotoPreviewUrl = ref('');
 const lastParsedSheetTitle = ref('');
 const boothPickListSearch = ref('');
 
-// Ricochet Live Sales & Payout Sync State (driven by activeCanonicalLocationMeta.usesRicochet)
-const ricochetSyncPayload = ref<any | null>(null);
-const isLoadingRicochetSync = ref(false);
-const isSimulatingRicochetSync = ref(false);
-const isCommittingRicochetSync = ref(false);
-const isRicochetLiveCommitUnlocked = ref(false);
-const ricochetDryRunResult = ref<any | null>(null);
-const ricochetSubFilter = ref<'all' | 'pending_payout' | 'paid' | 'space_rental'>('all');
-const isPasteRicochetDrawerOpen = ref(false);
-const pastedRicochetSyncText = ref('');
-
-const ricochetStagedRows = computed<any[]>(() => {
-  return Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
+const activeTeamId = computed(() => {
+  return team.value?.$id || (typeof window !== 'undefined' ? localStorage.getItem('activeTeamId') : '') || '';
 });
 
-const ricochetSpaceRentalAdjustments = computed<any[]>(() => {
-  return Array.isArray(ricochetSyncPayload.value?.spaceRentalAdjustments)
-    ? ricochetSyncPayload.value.spaceRentalAdjustments
-    : [];
-});
+let handleRicochetCsvFallback: (rawCsv: string) => void = () => {};
 
-const ricochetPendingRowsCount = computed(() => {
-  return ricochetStagedRows.value.filter((r: any) => r.payoutStatus === 'pending_payout').length;
-});
-
-const ricochetPaidRowsCount = computed(() => {
-  return ricochetStagedRows.value.filter((r: any) => r.payoutStatus !== 'pending_payout').length;
-});
-
-const filteredRicochetStagedRows = computed<any[]>(() => {
-  if (ricochetSubFilter.value === 'pending_payout') {
-    return ricochetStagedRows.value.filter((r: any) => r.payoutStatus === 'pending_payout');
-  }
-  if (ricochetSubFilter.value === 'paid') {
-    return ricochetStagedRows.value.filter((r: any) => r.payoutStatus !== 'pending_payout');
-  }
-  return ricochetStagedRows.value;
-});
-
-const ricochetSummary = computed(() => {
-  const s = ricochetSyncPayload.value?.summary;
-  const rows = ricochetStagedRows.value;
-  let grossSales = 0;
-  let expectedCommission = 0;
-  let netPayout = 0;
-  let pendingPayoutCount = 0;
-  let pendingPayoutNet = 0;
-  let paidHistoryCount = 0;
-  let paidHistoryNet = 0;
-  let matchedInBooth = 0;
-  let alreadySynced = 0;
-  for (const r of rows) {
-    const net = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
-    grossSales += Number(r.grossPrice || 0);
-    expectedCommission += Number(r.expectedCommission ?? r.ricoCommission ?? 0);
-    netPayout += net;
-    if (r.payoutStatus === 'pending_payout') {
-      pendingPayoutCount++;
-      pendingPayoutNet += net;
-    } else {
-      paidHistoryCount++;
-      paidHistoryNet += net;
+// Ricochet Live Sales & Payout Sync State (modularized into useRicochetSalesSync)
+const {
+  ricochetSyncPayload,
+  isLoadingRicochetSync,
+  isSimulatingRicochetSync,
+  isCommittingRicochetSync,
+  isRicochetLiveCommitUnlocked,
+  ricochetDryRunResult,
+  ricochetSubFilter,
+  isPasteRicochetDrawerOpen,
+  pastedRicochetSyncText,
+  ricochetStagedRows,
+  ricochetSpaceRentalAdjustments,
+  ricochetPendingRowsCount,
+  ricochetPaidRowsCount,
+  filteredRicochetStagedRows,
+  ricochetSummary,
+  ricochetActionableNewCount,
+  fetchStagedRicochetSales,
+  applyPastedRicochetSyncPayload,
+  simulateStagedRicochetSales,
+  commitStagedRicochetSales,
+} = useRicochetSalesSync({
+  activeCanonicalLocationMeta,
+  addToast,
+  onCsvFallbackPaste: (rawCsv: string) => handleRicochetCsvFallback(rawCsv),
+  onAfterLiveCommit: () => {
+    if (activeTeamId.value) {
+      fetchInventory(activeTeamId.value);
     }
-    if (r.matchStatus === 'matched' || r.matchedItemId) matchedInBooth++;
-    if (r.alreadySynced) alreadySynced++;
-  }
-  let spaceRentalTotal = 0;
-  for (const adj of ricochetSpaceRentalAdjustments.value) {
-    spaceRentalTotal += Number(adj.amount || 0);
-  }
-  const rent = Number(activeCanonicalLocationMeta.value.monthlyRent || 0);
-  return {
-    soldFound: s?.soldFound ?? rows.length,
-    grossSales: s?.grossSales ?? Number(grossSales.toFixed(2)),
-    expectedCommission: s?.expectedCommission ?? Number(expectedCommission.toFixed(2)),
-    netPayout: s?.netPayout ?? Number(netPayout.toFixed(2)),
-    pendingPayoutCount: s?.pendingPayoutCount ?? pendingPayoutCount,
-    pendingPayoutNet: s?.pendingPayoutNet ?? Number(pendingPayoutNet.toFixed(2)),
-    paidHistoryCount: s?.paidHistoryCount ?? paidHistoryCount,
-    paidHistoryNet: s?.paidHistoryNet ?? Number(paidHistoryNet.toFixed(2)),
-    spaceRentalTotal: s?.spaceRentalTotal ?? Number(spaceRentalTotal.toFixed(2)),
-    netAfterCommissionAndRent: s?.netAfterCommissionAndRent ?? Number((netPayout - rent).toFixed(2)),
-    matchedInBooth: s?.matchedInBooth ?? matchedInBooth,
-    alreadySynced: s?.alreadySynced ?? alreadySynced,
-    unmatchedCount: s?.unmatchedCount ?? Math.max(0, rows.length - matchedInBooth),
-  };
+  },
 });
-
-const ricochetActionableNewCount = computed(() => {
-  return ricochetStagedRows.value.filter(
-    (r: any) => !r.alreadySynced && (r.matchStatus === 'matched' || r.matchedItemId || Number(r.grossPrice || 0) > 0)
-  ).length;
-});
-
-const fetchStagedRicochetSales = async (manualTrigger: boolean = false) => {
-  if (!activeCanonicalLocationMeta.value.usesRicochet) return;
-  isLoadingRicochetSync.value = true;
-  try {
-    const code = encodeURIComponent(activeCanonicalLocationMeta.value.code);
-    const res = await fetch(`/api/sales/ricochet-sync?location=${code}&t=${Date.now()}`);
-    const data = await res.json().catch(() => null);
-    if (res.ok && data?.ok && data?.payload) {
-      ricochetSyncPayload.value = data.payload;
-      if (manualTrigger) {
-        addToast({
-          type: 'success',
-          message: `🔄 Loaded ${ricochetStagedRows.value.length} staged Ricochet sales for ${activeCanonicalLocationMeta.value.shortName} (Dry-Run Preview)!`,
-        });
-      }
-    }
-  } catch (err: any) {
-    if (manualTrigger) {
-      addToast({
-        type: 'warning',
-        message: `Could not fetch staged Ricochet sales: ${err?.message || 'Network error'}`,
-      });
-    }
-  } finally {
-    isLoadingRicochetSync.value = false;
-  }
-};
-
-const applyPastedRicochetSyncPayload = async () => {
-  const raw = pastedRicochetSyncText.value.trim();
-  if (!raw) return;
-
-  // Check if pasted content is JSON from the bookmarklet
-  if (raw.startsWith('{') || raw.startsWith('[')) {
-    isLoadingRicochetSync.value = true;
-    try {
-      const parsed = JSON.parse(raw);
-      const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed.rows) ? parsed.rows : [];
-      const spaceRentalAdjustments = Array.isArray(parsed?.spaceRentalAdjustments)
-        ? parsed.spaceRentalAdjustments
-        : [];
-      const res = await fetch('/api/sales/ricochet-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'stage',
-          dryRun: true,
-          locationCode: activeCanonicalLocationMeta.value.code,
-          rows,
-          spaceRentalAdjustments,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.ok && data?.payload) {
-        ricochetSyncPayload.value = data.payload;
-        ricochetDryRunResult.value = null;
-        pastedRicochetSyncText.value = '';
-        isPasteRicochetDrawerOpen.value = false;
-        addToast({
-          type: 'success',
-          message: `🧪 Staged ${rows.length} Ricochet sold lines in Dry-Run Sandbox Mode for ${activeCanonicalLocationMeta.value.shortName}!`,
-        });
-      } else {
-        throw new Error(data?.error || 'Failed to stage pasted JSON');
-      }
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        message: `Invalid Ricochet Sync JSON: ${err?.message || 'Parse error'}`,
-      });
-    } finally {
-      isLoadingRicochetSync.value = false;
-    }
-    return;
-  }
-
-  // Otherwise parse as Ricochet Payout CSV text
-  pastedRicochetSyncText.value = '';
-  isPasteRicochetDrawerOpen.value = false;
-  parseMemoryDenPayout(raw);
-  addToast({
-    type: 'success',
-    message: `📄 Parsed pasted CSV into ${activeCanonicalLocationMeta.value.shortName} staging table!`,
-  });
-};
-
-const simulateStagedRicochetSales = async () => {
-  if (isSimulatingRicochetSync.value || ricochetStagedRows.value.length === 0) return;
-  isSimulatingRicochetSync.value = true;
-  try {
-    const res = await fetch('/api/sales/ricochet-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'dry_run',
-        dryRun: true,
-        locationCode: activeCanonicalLocationMeta.value.code,
-        rows: ricochetStagedRows.value,
-        spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
-      }),
-    });
-    const data = await res.json().catch(() => null);
-    if (res.ok && data?.ok) {
-      if (data.payload) {
-        ricochetSyncPayload.value = data.payload;
-      }
-      ricochetDryRunResult.value = data.simulation || {
-        wouldCommitCount: ricochetActionableNewCount.value,
-        wouldGross: ricochetSummary.value.grossSales,
-        wouldNet: ricochetSummary.value.netPayout,
-        skippedAlreadySynced: ricochetSummary.value.alreadySynced,
-      };
-      addToast({
-        type: 'info',
-        message: `🧪 Dry-Run Simulation: Would commit ${ricochetDryRunResult.value.wouldCommitCount} sales ($${Number(ricochetDryRunResult.value.wouldNet || 0).toFixed(2)} net) with 0 DB writes!`,
-      });
-    } else {
-      throw new Error(data?.error || 'Dry-run simulation failed');
-    }
-  } catch (err: any) {
-    addToast({
-      type: 'error',
-      message: `Dry-Run failed: ${err?.message || 'Unknown error'}`,
-    });
-  } finally {
-    isSimulatingRicochetSync.value = false;
-  }
-};
-
-const commitStagedRicochetSales = async () => {
-  if (isCommittingRicochetSync.value || ricochetActionableNewCount.value === 0 || !isRicochetLiveCommitUnlocked.value) return;
-  isCommittingRicochetSync.value = true;
-  try {
-    const res = await fetch('/api/sales/ricochet-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'commit',
-        dryRun: false,
-        locationCode: activeCanonicalLocationMeta.value.code,
-        rows: ricochetStagedRows.value,
-        spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
-      }),
-    });
-    const data = await res.json().catch(() => null);
-    if (res.ok && data?.ok) {
-      if (data.payload) {
-        ricochetSyncPayload.value = data.payload;
-      }
-      ricochetDryRunResult.value = null;
-      isRicochetLiveCommitUnlocked.value = false;
-      addToast({
-        type: 'success',
-        message: `✅ Committed ${data.committedCount || 0} verified Ricochet sales (${data.skippedCount || 0} already synced)!`,
-      });
-      if (activeTeamId.value) {
-        fetchInventory(activeTeamId.value);
-      }
-    } else {
-      throw new Error(data?.error || 'Commit request failed');
-    }
-  } catch (err: any) {
-    addToast({
-      type: 'error',
-      message: `Failed to commit Ricochet sales: ${err?.message || 'Unknown error'}`,
-    });
-  } finally {
-    isCommittingRicochetSync.value = false;
-  }
-};
 
 const normalizeSalesLocationUrlParam = (code: string) => {
   if (typeof window === 'undefined' || !window.history?.replaceState) return;
@@ -3585,10 +3014,6 @@ const saveAndLinkNewItem = async (autoAdvance: boolean = false) => {
     isDrawerSaving.value = false;
   }
 };
-
-const activeTeamId = computed(() => {
-  return team.value?.$id || (typeof window !== 'undefined' ? localStorage.getItem('activeTeamId') : '') || '';
-});
 
 const quickAddRow = async (row: any) => {
   row.isQuickAdding = true;
@@ -4870,6 +4295,7 @@ const parseMemoryDenPayout = (csvText: string) => {
   // Cumulative CSV idempotency: flag rows already recorded in the sales ledger (non-blocking)
   void refreshAlreadyRecordedFlags();
 };
+handleRicochetCsvFallback = parseMemoryDenPayout;
 
 // Occurrence-indexed fingerprint guard (`saleNumber|soldDateIso|gross#occurrence`) against resale_db.sales.
 // Rows already recorded are flagged `isAlreadyRecorded` and are never committed or used to decrement stock again.

@@ -1639,8 +1639,7 @@
       const hasSkuHeader = thTexts.some((h) => h === 'sku');
       const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.includes('paid'));
       const hasSaleHeader = thTexts.some((h) => h.includes('sale') || h.includes('sold'));
-      if (hasPaidHeader && !hasSkuHeader) continue;
-      if (thTexts.length > 0 && !hasSkuHeader && !hasSaleHeader) continue;
+      if (!hasSkuHeader || hasPaidHeader || !hasSaleHeader) continue;
 
       const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
       for (const tr of trs) {
@@ -1730,7 +1729,8 @@
       );
       const hasSkuHeader = thTexts.some((h) => h === 'sku');
       const hasPaidHeader = thTexts.some((h) => h === 'paid' || h.includes('paid'));
-      if (hasSkuHeader && !hasPaidHeader) continue;
+      const hasSaleHeader = thTexts.some((h) => h.includes('sale') || h.includes('sold'));
+      if (!hasPaidHeader || hasSkuHeader || !hasSaleHeader) continue;
 
       const trs = Array.from(table.querySelectorAll('tbody tr, tr'));
       for (const tr of trs) {
@@ -2053,8 +2053,10 @@
     const soldRows = [];
     const seenDedupKeys = new Set();
     const seenSkuSetFromPayoutTables = new Set();
+    const seenPayoutTitlePriceCounts = new Map();
+    const seenPayoutTitleOnlyCounts = new Map();
 
-    const pushNormalizedSoldRow = (raw) => {
+    const pushNormalizedSoldRow = (raw, isFromPayoutTable = false) => {
       const linked = resolveCrossLinkedIdentity(raw);
       const ricoSku = linked.ricoSku;
       const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');
@@ -2074,7 +2076,20 @@
       const dedupKey = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
       if (seenDedupKeys.has(dedupKey)) return;
       seenDedupKeys.add(dedupKey);
-      if (ricoSku) seenSkuSetFromPayoutTables.add(ricoSku);
+
+      if (isFromPayoutTable) {
+        if (ricoSku) seenSkuSetFromPayoutTables.add(ricoSku);
+        const normTitle = normalizeTitleKey(linked.title || raw.title || '');
+        if (normTitle) {
+          seenPayoutTitleOnlyCounts.set(normTitle, (seenPayoutTitleOnlyCounts.get(normTitle) || 0) + 1);
+          const tpKey = `${normTitle}|${agreedPrice.toFixed(2)}`;
+          seenPayoutTitlePriceCounts.set(tpKey, (seenPayoutTitlePriceCounts.get(tpKey) || 0) + 1);
+          if (grossPrice !== agreedPrice) {
+            const gpKey = `${normTitle}|${grossPrice.toFixed(2)}`;
+            seenPayoutTitlePriceCounts.set(gpKey, (seenPayoutTitlePriceCounts.get(gpKey) || 0) + 1);
+          }
+        }
+      }
 
       const isAlreadySynced = Boolean(
         alreadySyncedRicoKeys.has(dedupKey) ||
@@ -2108,18 +2123,18 @@
 
     // 1. First push rows harvested from `/payouts` (Current Unpaid Payout)
     for (const r of harvestedPendingPayoutRows) {
-      pushNormalizedSoldRow(r);
+      pushNormalizedSoldRow(r, true);
     }
 
     // 2. Next push rows harvested from `/payout_history` (Settled Paid History)
     for (const r of harvestedPaidHistoryRows) {
-      pushNormalizedSoldRow(r);
+      pushNormalizedSoldRow(r, true);
     }
 
     // 3. Supplement with any sold/paid items in `/api/product` catalogProducts not already covered by `/payouts` or `/payout_history`
     for (const p of catalogProducts) {
-      const sku = extractRicochetSku(p);
-      if (sku && seenSkuSetFromPayoutTables.has(sku)) continue;
+      const rawSkuFromProd = extractRicochetSku(p);
+      if (rawSkuFromProd && seenSkuSetFromPayoutTables.has(rawSkuFromProd)) continue;
 
       const firstItem = Array.isArray(p.items)
         ? p.items[0]
@@ -2157,9 +2172,46 @@
         firstItem?.price ??
         firstItem?.agreed_price ??
         firstItem?.retail_price ??
-        (skuMetaMap[sku] && skuMetaMap[sku].price) ??
+        (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].price) ??
         0;
       const agreedPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
+      const prodTitle = cleanStr(
+        p.name || p.title || p.description || (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].title) || ''
+      );
+      const prodUpc = extractRicochetUpc(p);
+
+      // Cross-link BEFORE Step 3 deduplication so blank `p.sku` items resolve their `0EJ...` SKU first
+      const preLinked = resolveCrossLinkedIdentity({
+        ricoItemId: rawSkuFromProd || cleanStr(p.id),
+        ricoSku: rawSkuFromProd,
+        sku: rawSkuFromProd,
+        upc: prodUpc,
+        title: prodTitle,
+        agreedPrice,
+        grossPrice: agreedPrice,
+      });
+
+      const resolvedSku = preLinked.ricoSku || rawSkuFromProd;
+      if (resolvedSku && seenSkuSetFromPayoutTables.has(resolvedSku)) continue;
+
+      // Consume 1-to-1 against harvested `/payouts` + `/payout_history` rows when `p.sku` was blank in `/api/product`
+      const normProdTitle = normalizeTitleKey(preLinked.title || prodTitle);
+      if (normProdTitle) {
+        const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
+        const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+        if (remTp > 0) {
+          seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+          const remTo = seenPayoutTitleOnlyCounts.get(normProdTitle) || 0;
+          if (remTo > 0) seenPayoutTitleOnlyCounts.set(normProdTitle, remTo - 1);
+          continue;
+        }
+        const remTo = seenPayoutTitleOnlyCounts.get(normProdTitle) || 0;
+        if (remTo > 0) {
+          seenPayoutTitleOnlyCounts.set(normProdTitle, remTo - 1);
+          continue;
+        }
+      }
+
       const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
       const ricoNetPayout = Number(
         (
@@ -2180,11 +2232,11 @@
       const isPaid = p.paid === true || rawStatusStr.includes('paid');
 
       pushNormalizedSoldRow({
-        ricoItemId: sku || cleanStr(p.id),
-        ricoSku: sku,
-        sku,
-        upc: extractRicochetUpc(p),
-        title: cleanStr(p.name || p.title || p.description || (skuMetaMap[sku] && skuMetaMap[sku].title) || sku),
+        ricoItemId: resolvedSku || preLinked.upc || `sold-item-${soldRows.length + 1}`,
+        ricoSku: resolvedSku,
+        sku: resolvedSku,
+        upc: preLinked.upc || prodUpc,
+        title: preLinked.title || prodTitle || resolvedSku || 'Booth Sale Item',
         saleNumber: cleanStr(p.sale_id || p.ticket_number || firstItem?.sale_id || ''),
         agreedPrice,
         agedPrice: agreedPrice,
@@ -2195,7 +2247,7 @@
         ricoNetPayout,
         ricoCommission,
         payoutStatus: isPaid ? 'paid' : 'pending_payout',
-      });
+      }, false);
     }
 
     lastExtractedSalesRows = soldRows;
