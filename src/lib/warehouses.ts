@@ -284,14 +284,22 @@ export function getLocationManifestDocIds(locOrStr: any, liveWarehouses?: any[])
     code: string;
     reportDocId: string;
     payloadDocId: string;
+    salesSyncDocId: string;
 } {
-    const code = (resolveCanonicalLocationCode(locOrStr, liveWarehouses) || 'MD').toUpperCase();
+    const defaultRicochetFac = KNOWN_FACILITIES.find(f => f.usesRicochet) || KNOWN_FACILITIES[0];
+    const code = (resolveCanonicalLocationCode(locOrStr, liveWarehouses) || defaultRicochetFac.code).toUpperCase();
     const prefix = code.toLowerCase();
     return {
         code,
         reportDocId: `${ prefix }_verify_report_latest`,
         payloadDocId: `${ prefix }_live_payload_latest`,
+        salesSyncDocId: `${ prefix }_ricochet_sales_sync_latest`,
     };
+}
+
+export function resolveDefaultRicochetLocationMeta(liveWarehouses?: any[]): LocationSettingMeta {
+    const allMetas = getAllLocationSettingMetas(liveWarehouses);
+    return allMetas.find(m => m.usesRicochet) || allMetas[0];
 }
 
 export function findFacility(search: string): FacilityDefinition | undefined {

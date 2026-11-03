@@ -2,7 +2,11 @@ import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PREVERIFIED_MD_SKU_TO_UPC_OR_ID } from '../../lib/salesBucketing';
-import { getLocationSettingMeta, resolveCanonicalLocationCode } from '../../lib/warehouses';
+import {
+  getLocationSettingMeta,
+  resolveCanonicalLocationCode,
+  resolveDefaultRicochetLocationMeta,
+} from '../../lib/warehouses';
 import { buildLiveMdPayloadFromAppwrite } from '../api/md-verify-report';
 
 export const prerender = false;
@@ -23,7 +27,10 @@ export const OPTIONS: APIRoute = async () => {
 
 export const GET: APIRoute = async ({ url }) => {
   try {
-    const locCode = (resolveCanonicalLocationCode(url.searchParams.get('location') || 'MD') || 'MD').toUpperCase();
+    const defaultRicoMeta = resolveDefaultRicochetLocationMeta();
+    const rawLocParam = url.searchParams.get('location');
+    const resolvedParam = rawLocParam ? resolveCanonicalLocationCode(rawLocParam) : '';
+    const locCode = (resolvedParam || defaultRicoMeta.code).toUpperCase();
     const locMeta = getLocationSettingMeta(locCode);
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
@@ -33,24 +40,27 @@ export const GET: APIRoute = async ({ url }) => {
     let injectedBootstrap = '';
     try {
       const livePayload = await buildLiveMdPayloadFromAppwrite(locCode);
-      const mergedMap: Record<string, string> =
-        locCode === 'MD'
-          ? {
-              ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
-              ...(livePayload.skuToUpcMap || {}),
-            }
-          : { ...(livePayload.skuToUpcMap || {}) };
+      const mergedMap: Record<string, string> = locMeta.usesRicochet
+        ? {
+            ...PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+            ...(livePayload.skuToUpcMap || {}),
+          }
+        : { ...(livePayload.skuToUpcMap || {}) };
       const verifiedSkuSet = Array.from(
         new Set([
           ...Object.keys(mergedMap),
           ...Object.keys(livePayload.verifiedMdUpcBySku || {}),
-          ...(locCode === 'MD' ? Object.keys(PREVERIFIED_MD_SKU_TO_UPC_OR_ID) : []),
+          ...(locMeta.usesRicochet ? Object.keys(PREVERIFIED_MD_SKU_TO_UPC_OR_ID) : []),
         ])
       );
       const bootData = {
         location: locCode,
         locationName: locMeta.shortName,
         skuPrefix: locMeta.skuPrefix,
+        usesRicochet: locMeta.usesRicochet,
+        commissionRate: locMeta.commissionRate,
+        feePct: locMeta.feePct,
+        monthlyRent: locMeta.monthlyRent,
         skuToUpcMap: mergedMap,
         skuToMetaMap: livePayload.skuToMetaMap || {},
         verifiedMdUpcBySku: livePayload.verifiedMdUpcBySku || {},
@@ -62,19 +72,31 @@ export const GET: APIRoute = async ({ url }) => {
         fullName: locMeta.name,
         icon: locMeta.icon,
         skuPrefix: locMeta.skuPrefix,
+        usesRicochet: locMeta.usesRicochet,
+        commissionRate: locMeta.commissionRate,
+        feePct: locMeta.feePct,
+        monthlyRent: locMeta.monthlyRent,
       })};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify(bootData)};\n`;
     } catch {
-      const fallbackMap = locCode === 'MD' ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID : {};
+      const fallbackMap = locMeta.usesRicochet ? PREVERIFIED_MD_SKU_TO_UPC_OR_ID : {};
       injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
         code: locMeta.code,
         name: locMeta.shortName,
         fullName: locMeta.name,
         icon: locMeta.icon,
         skuPrefix: locMeta.skuPrefix,
+        usesRicochet: locMeta.usesRicochet,
+        commissionRate: locMeta.commissionRate,
+        feePct: locMeta.feePct,
+        monthlyRent: locMeta.monthlyRent,
       })};\nwindow.__RC_BOOTSTRAP_PAYLOAD__ = ${JSON.stringify({
         location: locCode,
         locationName: locMeta.shortName,
         skuPrefix: locMeta.skuPrefix,
+        usesRicochet: locMeta.usesRicochet,
+        commissionRate: locMeta.commissionRate,
+        feePct: locMeta.feePct,
+        monthlyRent: locMeta.monthlyRent,
         skuToUpcMap: fallbackMap,
         skuToMetaMap: {},
         verifiedMdUpcBySku: {},

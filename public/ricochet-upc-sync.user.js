@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Resale Command ➔ Ricochet POS Auto-UPC Sync & 2-Way Verifier
+// @name         Resale Command ➔ Ricochet POS Auto-UPC Sync & Live Sales Reconciler
 // @namespace    https://resalecmd.com/
-// @version      4.0
-// @description  Evergreen Live-Fetch Bookmarklet & Multi-Partner (HUCK / PDXGL / B&B) Barcode Verifier for Memory Den (memoryden.ricoconsign.com).
+// @version      4.2
+// @description  Evergreen Live-Fetch Bookmarklet, Multi-Partner (HUCK / PDXGL / B&B) Barcode Verifier & Live Sales/Payout Sync for Ricochet POS Booths.
 // @author       Huckleberry Collective
 // @match        *://*.ricoconsign.com/*
 // @grant        none
@@ -17,14 +17,30 @@
     'http://localhost:4321/api/md-verify-report',
   ];
 
-  // State
+  const RC_SALES_SYNC_ENDPOINTS = [
+    'https://www.resalecmd.com/api/sales/ricochet-sync',
+    'https://resalecmd.com/api/sales/ricochet-sync',
+    'http://localhost:4321/api/sales/ricochet-sync',
+  ];
+
+  // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
-  const activeLocationCode = String(window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || 'MD').toUpperCase();
+  const bootPayload = window.__RC_BOOTSTRAP_PAYLOAD__ || {};
+  const activeLocationCode = String(
+    window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || bootPayload.location || ''
+  ).toUpperCase();
   const activeLocationName = String(
-    activeLocMeta.name ||
-      (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.locationName) ||
-      activeLocationCode
+    activeLocMeta.name || bootPayload.locationName || activeLocMeta.fullName || 'Ricochet Booth'
   );
+  const activeCommissionRate = Number(
+    activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? bootPayload.commissionRate ?? bootPayload.feePct ?? 15
+  );
+  const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? bootPayload.monthlyRent ?? 0);
+  let activeModalTab = 'inventory'; // 'inventory' | 'sales'
+  let isPushingSales = false;
+  let lastExtractedSalesRows = [];
+  let alreadySyncedRicoKeys = new Set();
+  let salesPushSuccessUrl = '';
   let isOpen = false;
   let isRunning = false;
   let isLoadingCatalog = false;
@@ -353,6 +369,43 @@
           </div>
         </div>
 
+        <!-- 2-Tab Mode Switcher (📦 Inventory & UPC Audit | 💰 Sales & Payout Sync) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155;">
+          <button id="rc-tab-btn-inventory" type="button" style="
+            padding: 7px 10px;
+            border-radius: 8px;
+            border: 1px solid #38bdf8;
+            background: rgba(56, 189, 248, 0.18);
+            color: #f8fafc;
+            font-weight: 800;
+            font-size: 11.5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+          ">
+            <span>📦 Inventory &amp; UPC Audit</span>
+          </button>
+          <button id="rc-tab-btn-sales" type="button" style="
+            padding: 7px 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #1e293b;
+            color: #cbd5e1;
+            font-weight: 800;
+            font-size: 11.5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+          ">
+            <span>💰 Sales &amp; Payout Sync</span>
+            <span id="rc-tab-sales-badge" style="background: rgba(16, 185, 129, 0.25); color: #6ee7b7; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>
+          </button>
+        </div>
+
         <!-- Body (position: relative so #rc-booth-modal-loader covers the modal content) -->
         <div style="position: relative; padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; flex: 1;">
           <!-- Visual Modal Content Loader Overlay -->
@@ -390,176 +443,257 @@
           <!-- Inline Status Banner -->
           <div id="rc-status-banner" style="display:none; padding: 9px 11px; border-radius: 8px; font-size: 11px; font-weight: 700; line-height: 1.4;"></div>
 
-          <!-- Partner Bucket Selector Bar (All Booth | ⭐ HUCK | 🎲 PDXGL | 💛 B&B) -->
-          <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 8px;">
-            <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; display: flex; justify-content: space-between;">
-              <span>Filter &amp; Sync by Partner Bucket</span>
-              <span id="rc-active-partner-label" style="color: #38bdf8;">All Booth</span>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
-              <button data-rc-bucket="ALL" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #38bdf8; background: rgba(56,189,248,0.15); color: #f8fafc; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
-                <div>All Booth</div>
-                <div id="rc-bkt-all" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
-              </button>
-              <button data-rc-bucket="HUCK" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
-                <div>⭐ HUCK</div>
-                <div id="rc-bkt-huck" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
-              </button>
-              <button data-rc-bucket="PDXGL" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
-                <div>🎲 PDXGL</div>
-                <div id="rc-bkt-pdxgl" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
-              </button>
-              <button data-rc-bucket="BB" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
-                <div>💛 B&amp;B</div>
-                <div id="rc-bkt-bb" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
-              </button>
-            </div>
-          </div>
-
-          <!-- 4-State Live Verification Scorecard -->
-          <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px;">
-            <div style="font-size: 11px; font-weight: 800; color: #cbd5e1; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-              <span>📊 Live ${activeLocationName} Barcode Audit</span>
-              <span id="rc-audit-total" style="font-family: monospace; color: #94a3b8;">0 items</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-              <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #34d399; font-weight: 700;">🟢 Verified</span>
-                <strong id="rc-pill-verified" style="font-family: monospace; font-size: 13px; color: #34d399;">0</strong>
+          <!-- TAB 1: 📦 INVENTORY & UPC AUDIT -->
+          <div id="rc-tab-view-inventory" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Partner Bucket Selector Bar (All Booth | ⭐ HUCK | 🎲 PDXGL | 💛 B&B) -->
+            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 8px;">
+              <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                <span>Filter &amp; Sync by Partner Bucket</span>
+                <span id="rc-active-partner-label" style="color: #38bdf8;">All Booth</span>
               </div>
-              <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #fbbf24; font-weight: 700;">🟡 Missing UPC</span>
-                <strong id="rc-pill-missing" style="font-family: monospace; font-size: 13px; color: #fbbf24;">0</strong>
-              </div>
-              <div style="background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #fb923c; font-weight: 700;">🟠 Mismatch</span>
-                <strong id="rc-pill-mismatch" style="font-family: monospace; font-size: 13px; color: #fb923c;">0</strong>
-              </div>
-              <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #cbd5e1; font-weight: 700;">⚪ Unlinked</span>
-                <strong id="rc-pill-unlinked" style="font-family: monospace; font-size: 13px; color: #f8fafc;">0</strong>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+                <button data-rc-bucket="ALL" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #38bdf8; background: rgba(56,189,248,0.15); color: #f8fafc; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
+                  <div>All Booth</div>
+                  <div id="rc-bkt-all" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
+                </button>
+                <button data-rc-bucket="HUCK" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
+                  <div>⭐ HUCK</div>
+                  <div id="rc-bkt-huck" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
+                </button>
+                <button data-rc-bucket="PDXGL" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
+                  <div>🎲 PDXGL</div>
+                  <div id="rc-bkt-pdxgl" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
+                </button>
+                <button data-rc-bucket="BB" class="rc-bucket-btn" style="padding: 6px 4px; border-radius: 7px; border: 1px solid #334155; background: #0f172a; color: #cbd5e1; font-weight: 800; font-size: 11px; cursor: pointer; text-align: center;">
+                  <div>💛 B&amp;B</div>
+                  <div id="rc-bkt-bb" style="font-size: 10px; opacity: 0.85; font-family: monospace;">0</div>
+                </button>
               </div>
             </div>
 
-            <!-- Duplicate / Conflict Diagnostic Warning Box -->
-            <div id="rc-conflict-box" style="display:none; margin-top: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); color: #fde68a; font-size: 10.5px; line-height: 1.4;"></div>
+            <!-- 4-State Live Verification Scorecard -->
+            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px;">
+              <div style="font-size: 11px; font-weight: 800; color: #cbd5e1; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                <span>📊 Live ${activeLocationName} Barcode Audit</span>
+                <span id="rc-audit-total" style="font-family: monospace; color: #94a3b8;">0 items</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #34d399; font-weight: 700;">🟢 Verified</span>
+                  <strong id="rc-pill-verified" style="font-family: monospace; font-size: 13px; color: #34d399;">0</strong>
+                </div>
+                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #fbbf24; font-weight: 700;">🟡 Missing UPC</span>
+                  <strong id="rc-pill-missing" style="font-family: monospace; font-size: 13px; color: #fbbf24;">0</strong>
+                </div>
+                <div style="background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #fb923c; font-weight: 700;">🟠 Mismatch</span>
+                  <strong id="rc-pill-mismatch" style="font-family: monospace; font-size: 13px; color: #fb923c;">0</strong>
+                </div>
+                <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #cbd5e1; font-weight: 700;">⚪ Unlinked</span>
+                  <strong id="rc-pill-unlinked" style="font-family: monospace; font-size: 13px; color: #f8fafc;">0</strong>
+                </div>
+              </div>
 
-            <!-- Physical Sticker Protection: Mismatch Alert & 1-Click Adopt Booth Tag Box -->
-            <div id="rc-mismatch-box" style="display:none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(249,115,22,0.16); border: 1px solid rgba(249,115,22,0.5); color: #ffedd5; font-size: 11px; line-height: 1.4;"></div>
+              <!-- Duplicate / Conflict Diagnostic Warning Box -->
+              <div id="rc-conflict-box" style="display:none; margin-top: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); color: #fde68a; font-size: 10.5px; line-height: 1.4;"></div>
 
-            <!-- Pre-Flight Queue Preview (Visible Audit Before Clicking Fill Missing) -->
-            <details id="rc-preflight-details" open style="display:none; margin-top: 8px; background: #0f172a; border: 1px solid rgba(245,158,11,0.4); border-radius: 8px; padding: 7px 9px;">
-              <summary id="rc-preflight-summary" style="font-size: 11px; font-weight: 800; color: #fbbf24; cursor: pointer;">
-                📋 Pre-Flight Queue Preview (0 Missing in MD — 0 Overwrites)
+              <!-- Physical Sticker Protection: Mismatch Alert & 1-Click Adopt Booth Tag Box -->
+              <div id="rc-mismatch-box" style="display:none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(249,115,22,0.16); border: 1px solid rgba(249,115,22,0.5); color: #ffedd5; font-size: 11px; line-height: 1.4;"></div>
+
+              <!-- Pre-Flight Queue Preview (Visible Audit Before Clicking Fill Missing) -->
+              <details id="rc-preflight-details" open style="display:none; margin-top: 8px; background: #0f172a; border: 1px solid rgba(245,158,11,0.4); border-radius: 8px; padding: 7px 9px;">
+                <summary id="rc-preflight-summary" style="font-size: 11px; font-weight: 800; color: #fbbf24; cursor: pointer;">
+                  📋 Pre-Flight Queue Preview (0 Missing — 0 Overwrites)
+                </summary>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; margin-bottom: 6px; line-height: 1.35;">
+                  🛡️ <b>Physical Tag Guardrail:</b> Only items with a <b>BLANK</b> UPC in Ricochet are queued below. Existing Ricochet barcodes are never overwritten.<br/>
+                  <span style="color:#34d399;">🏷️ Pre-Tagged</span> = Existing RC tag &nbsp;|&nbsp; <span style="color:#38bdf8;">🆕 Virtual (9740+)</span> = Created today
+                </div>
+                <div id="rc-preflight-list" style="max-height: 135px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;"></div>
+              </details>
+
+              <!-- 2-Way Report Actions -->
+              <div style="display: flex; gap: 6px; margin-top: 8px;">
+                <button id="rc-send-report-btn" style="
+                  flex: 1;
+                  background: #0284c7;
+                  color: #fff;
+                  border: none;
+                  border-radius: 7px;
+                  padding: 7px 8px;
+                  font-weight: 800;
+                  font-size: 11px;
+                  cursor: pointer;
+                ">📡 Send Report to RC</button>
+                <button id="rc-download-csv-btn" style="
+                  flex: 1;
+                  background: #334155;
+                  color: #f8fafc;
+                  border: 1px solid #475569;
+                  border-radius: 7px;
+                  padding: 7px 8px;
+                  font-weight: 700;
+                  font-size: 11px;
+                  cursor: pointer;
+                ">📥 Download CSV</button>
+              </div>
+            </div>
+
+            <!-- Collapsible Payload Editor -->
+            <details style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px;">
+              <summary style="font-size: 11px; font-weight: 700; color: #94a3b8; cursor: pointer;">
+                🔧 View / Edit Barcode Payload (<span id="rc-match-count">0 ready</span>)
               </summary>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; margin-bottom: 6px; line-height: 1.35;">
-                🛡️ <b>Physical Tag Guardrail:</b> Only items with a <b>BLANK</b> UPC in Ricochet are queued below. Existing Ricochet barcodes are never overwritten.<br/>
-                <span style="color:#34d399;">🏷️ Pre-Tagged</span> = Existing RC tag &nbsp;|&nbsp; <span style="color:#38bdf8;">🆕 Virtual (9740+)</span> = Created today
-              </div>
-              <div id="rc-preflight-list" style="max-height: 135px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;"></div>
+              <textarea id="rc-sync-textarea" placeholder='{"0EJ08G": "HUCK-1024"}' style="
+                width: 100%;
+                height: 68px;
+                margin-top: 6px;
+                background: #0f172a;
+                color: #38bdf8;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                padding: 6px;
+                font-family: monospace;
+                font-size: 11px;
+                resize: vertical;
+                box-sizing: border-box;
+              "></textarea>
             </details>
 
-            <!-- 2-Way Report Actions -->
-            <div style="display: flex; gap: 6px; margin-top: 8px;">
-              <button id="rc-send-report-btn" style="
-                flex: 1;
-                background: #0284c7;
-                color: #fff;
-                border: none;
-                border-radius: 7px;
-                padding: 7px 8px;
-                font-weight: 800;
-                font-size: 11px;
-                cursor: pointer;
-              ">📡 Send Report to RC</button>
-              <button id="rc-download-csv-btn" style="
+            <!-- Progress Bar -->
+            <div id="rc-progress-wrap" style="display:none; flex-direction: column; gap: 4px;">
+              <div style="display:flex;justify-content:space-between;font-size:11px;">
+                <span id="rc-progress-text">Syncing...</span>
+                <span id="rc-progress-pct">0%</span>
+              </div>
+              <div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;">
+                <div id="rc-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width 0.2s;"></div>
+              </div>
+            </div>
+
+            <!-- Log Output -->
+            <div id="rc-sync-logs" style="
+              background: #020617;
+              border: 1px solid #1e293b;
+              border-radius: 8px;
+              padding: 8px;
+              height: 95px;
+              overflow-y: auto;
+              font-family: monospace;
+              font-size: 11px;
+              color: #cbd5e1;
+              display: flex;
+              flex-direction: column;
+              gap: 3px;
+            ">
+              <div style="color:#64748b;">Waiting to start...</div>
+            </div>
+
+            <!-- Primary Sync Actions -->
+            <div style="display: flex; gap: 8px;">
+              <button id="rc-sync-test-btn" style="
                 flex: 1;
                 background: #334155;
                 color: #f8fafc;
                 border: 1px solid #475569;
-                border-radius: 7px;
-                padding: 7px 8px;
+                border-radius: 8px;
+                padding: 9px;
                 font-weight: 700;
-                font-size: 11px;
+                font-size: 12px;
                 cursor: pointer;
-              ">📥 Download CSV</button>
+              ">🧪 Test 1</button>
+              <button id="rc-sync-start-btn" style="
+                flex: 2;
+                background: #10b981;
+                color: #022c22;
+                border: none;
+                border-radius: 8px;
+                padding: 9px;
+                font-weight: 800;
+                font-size: 12px;
+                cursor: pointer;
+              ">🚀 Fill Missing (0)</button>
             </div>
           </div>
 
-          <!-- Collapsible Payload Editor -->
-          <details style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px;">
-            <summary style="font-size: 11px; font-weight: 700; color: #94a3b8; cursor: pointer;">
-              🔧 View / Edit Barcode Payload (<span id="rc-match-count">0 ready</span>)
-            </summary>
-            <textarea id="rc-sync-textarea" placeholder='{"0EJ08G": "HUCK-1024"}' style="
-              width: 100%;
-              height: 68px;
-              margin-top: 6px;
-              background: #0f172a;
-              color: #38bdf8;
-              border: 1px solid #334155;
-              border-radius: 6px;
-              padding: 6px;
-              font-family: monospace;
-              font-size: 11px;
-              resize: vertical;
-              box-sizing: border-box;
-            "></textarea>
-          </details>
+          <!-- TAB 2: 💰 SALES & PAYOUT SYNC -->
+          <div id="rc-tab-view-sales" style="display: none; flex-direction: column; gap: 10px;">
+            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 800; color: #cbd5e1;">💰 Live ${activeLocationName} Sales &amp; Payout Extractor</span>
+                <span style="font-size: 10px; font-family: monospace; color: #38bdf8; background: rgba(56,189,248,0.14); padding: 2px 6px; border-radius: 999px;">
+                  Fee: ${activeCommissionRate}% | Rent: $${activeMonthlyRent.toFixed(2)}
+                </span>
+              </div>
 
-          <!-- Progress Bar -->
-          <div id="rc-progress-wrap" style="display:none; flex-direction: column; gap: 4px;">
-            <div style="display:flex;justify-content:space-between;font-size:11px;">
-              <span id="rc-progress-text">Syncing...</span>
-              <span id="rc-progress-pct">0%</span>
+              <!-- 5 Live Sales KPI Pills -->
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 10.5px; margin-bottom: 6px;">
+                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 6px 8px;">
+                  <div style="color: #7dd3fc; font-weight: 700;">Sold Found</div>
+                  <strong id="rc-sales-kpi-found" style="font-family: monospace; font-size: 13px; color: #f8fafc;">0</strong>
+                </div>
+                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px;">
+                  <div style="color: #34d399; font-weight: 700;">Gross Sales</div>
+                  <strong id="rc-sales-kpi-gross" style="font-family: monospace; font-size: 13px; color: #34d399;">$0.00</strong>
+                </div>
+                <div style="background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 6px 8px;">
+                  <div style="color: #c084fc; font-weight: 700;">Net Payout</div>
+                  <strong id="rc-sales-kpi-net" style="font-family: monospace; font-size: 13px; color: #e9d5ff;">$0.00</strong>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10.5px;">
+                <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #6ee7b7; font-weight: 700;">🔗 Matched in Booth</span>
+                  <strong id="rc-sales-kpi-matched" style="font-family: monospace; font-size: 12.5px; color: #34d399;">0</strong>
+                </div>
+                <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #cbd5e1; font-weight: 700;">✅ Already Synced</span>
+                  <strong id="rc-sales-kpi-synced" style="font-family: monospace; font-size: 12.5px; color: #f8fafc;">0</strong>
+                </div>
+              </div>
             </div>
-            <div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;">
-              <div id="rc-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width 0.2s;"></div>
+
+            <!-- Success Banner with ↗ Open Sales Reconciler Link -->
+            <div id="rc-sales-sync-banner" style="display: none; padding: 10px 12px; border-radius: 9px; background: rgba(16,185,129,0.18); border: 1px solid #10b981; color: #ecfdf5; font-size: 11px; line-height: 1.45;"></div>
+
+            <!-- Scrollable Sold Lines Preview -->
+            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 8px;">
+              <div style="font-size: 10.5px; font-weight: 800; color: #94a3b8; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                <span>Extracted Sold &amp; Payout Lines</span>
+                <span id="rc-sales-preview-count" style="font-family: monospace; color: #38bdf8;">0 lines</span>
+              </div>
+              <div id="rc-sales-preview-list" style="max-height: 175px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;">
+                <div style="color: #64748b; padding: 6px;">Scanning catalog &amp; page for sold items...</div>
+              </div>
             </div>
-          </div>
 
-          <!-- Log Output -->
-          <div id="rc-sync-logs" style="
-            background: #020617;
-            border: 1px solid #1e293b;
-            border-radius: 8px;
-            padding: 8px;
-            height: 95px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 11px;
-            color: #cbd5e1;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-          ">
-            <div style="color:#64748b;">Waiting to start...</div>
-          </div>
-
-          <!-- Primary Sync Actions -->
-          <div style="display: flex; gap: 8px;">
-            <button id="rc-sync-test-btn" style="
-              flex: 1;
-              background: #334155;
-              color: #f8fafc;
-              border: 1px solid #475569;
-              border-radius: 8px;
-              padding: 9px;
-              font-weight: 700;
-              font-size: 12px;
-              cursor: pointer;
-            ">🧪 Test 1</button>
-            <button id="rc-sync-start-btn" style="
-              flex: 2;
-              background: #10b981;
-              color: #022c22;
-              border: none;
-              border-radius: 8px;
-              padding: 9px;
-              font-weight: 800;
-              font-size: 12px;
-              cursor: pointer;
-            ">🚀 Fill Missing (0)</button>
+            <!-- Primary Sales Sync Action Buttons -->
+            <div style="display: flex; gap: 8px;">
+              <button id="rc-push-sales-btn" type="button" style="
+                flex: 2;
+                background: linear-gradient(135deg, #10b981, #059669);
+                color: #022c22;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: 800;
+                font-size: 12px;
+                cursor: pointer;
+              ">🚀 Push Sales to Resale Core</button>
+              <button id="rc-copy-sales-json-btn" type="button" style="
+                flex: 1;
+                background: #334155;
+                color: #f8fafc;
+                border: 1px solid #475569;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: 700;
+                font-size: 11.5px;
+                cursor: pointer;
+              ">📋 Copy Sales Sync JSON</button>
+            </div>
           </div>
         </div>
       </div>
@@ -575,6 +709,10 @@
     document.getElementById('rc-send-report-btn').addEventListener('click', () => sendReportToResaleCommand(false));
     document.getElementById('rc-download-csv-btn').addEventListener('click', downloadVerificationCsv);
     document.getElementById('rc-refresh-cloud-btn').addEventListener('click', () => fetchLivePayloadFromCloud(true));
+    document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
+    document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
+    document.getElementById('rc-push-sales-btn').addEventListener('click', pushSalesToResaleCore);
+    document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
 
     // Partner Bucket Selector Listeners
     const bucketBtns = root.querySelectorAll('.rc-bucket-btn');
@@ -1382,6 +1520,387 @@
       fabBadge.textContent =
         catalogProducts.length > 0 ? `${verifiedMatch}/${totalCatalog} Verified` : `${totalMapped} Ready`;
     }
+
+    updateSalesSyncTabUI();
+  }
+
+  // Switch between Tab 1 (📦 Inventory & UPC Audit) and Tab 2 (💰 Sales & Payout Sync)
+  function switchModalTab(tabName) {
+    activeModalTab = tabName === 'sales' ? 'sales' : 'inventory';
+    const invView = document.getElementById('rc-tab-view-inventory');
+    const salesView = document.getElementById('rc-tab-view-sales');
+    const invBtn = document.getElementById('rc-tab-btn-inventory');
+    const salesBtn = document.getElementById('rc-tab-btn-sales');
+
+    if (invView) invView.style.display = activeModalTab === 'inventory' ? 'flex' : 'none';
+    if (salesView) salesView.style.display = activeModalTab === 'sales' ? 'flex' : 'none';
+
+    if (invBtn) {
+      invBtn.style.border = activeModalTab === 'inventory' ? '1px solid #38bdf8' : '1px solid #334155';
+      invBtn.style.background = activeModalTab === 'inventory' ? 'rgba(56, 189, 248, 0.18)' : '#1e293b';
+      invBtn.style.color = activeModalTab === 'inventory' ? '#f8fafc' : '#cbd5e1';
+    }
+    if (salesBtn) {
+      salesBtn.style.border = activeModalTab === 'sales' ? '1px solid #10b981' : '1px solid #334155';
+      salesBtn.style.background = activeModalTab === 'sales' ? 'rgba(16, 185, 129, 0.18)' : '#1e293b';
+      salesBtn.style.color = activeModalTab === 'sales' ? '#f8fafc' : '#cbd5e1';
+    }
+
+    if (activeModalTab === 'sales') {
+      updateSalesSyncTabUI();
+    }
+  }
+
+  // Extract Sold Items & Payout lines from Ricochet catalog + visible DOM table rows
+  function extractRicochetSoldLines() {
+    const soldRows = [];
+    const seenKeys = new Set();
+    const bootMap = (window.__RC_BOOTSTRAP_PAYLOAD__ && window.__RC_BOOTSTRAP_PAYLOAD__.skuToUpcMap) || {};
+    const feeRate = Number(activeCommissionRate || 15) / 100;
+
+    // 1. Extract from authenticated /api/product catalogProducts where status is Sold / Paid or quantity === 0
+    for (const p of catalogProducts) {
+      const sku = extractRicochetSku(p);
+      let mdUpc = extractRicochetUpc(p);
+      const expectedRcUpc = cleanStr(
+        parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku] || verifiedMdUpcMap[sku] || ''
+      ).toUpperCase();
+      const effectiveUpc = cleanStr(mdUpc || expectedRcUpc).toUpperCase();
+
+      const firstItem = Array.isArray(p.items)
+        ? p.items[0]
+        : p.items && typeof p.items === 'object'
+        ? Object.values(p.items).flat()[0]
+        : null;
+
+      const rawStatusStr = cleanStr(
+        p.status ?? p.inventory ?? p.Inventory ?? p.state ?? firstItem?.status ?? firstItem?.state ?? ''
+      ).toLowerCase();
+      const isSoldOrPaidFlag =
+        p.sold === true ||
+        p.paid === true ||
+        rawStatusStr === 'sold' ||
+        rawStatusStr === 'paid' ||
+        rawStatusStr.includes('sold') ||
+        rawStatusStr.includes('paid');
+
+      const rawQty =
+        p.quantity ?? p.qty ?? p.in_stock ?? p.stock ?? p.Quantity ?? firstItem?.quantity ?? firstItem?.qty ?? 1;
+      const parsedQty = isSoldOrPaidFlag
+        ? 0
+        : parseInt(String(rawQty).replace(/[^0-9-]/g, ''), 10) || 0;
+
+      const isSoldRow = isSoldOrPaidFlag || parsedQty === 0;
+      if (!isSoldRow) continue;
+
+      const rawPrice =
+        p.price ??
+        p.agreed_price ??
+        p.retail_price ??
+        p.aged_price ??
+        p['Agreed Price'] ??
+        p.cost ??
+        p.amount ??
+        firstItem?.price ??
+        firstItem?.agreed_price ??
+        firstItem?.retail_price ??
+        (skuMetaMap[sku] && skuMetaMap[sku].price) ??
+        0;
+      const grossPrice = Number((parseFloat(String(rawPrice).replace(/[^0-9.-]/g, '')) || 0).toFixed(2));
+      const ricoCommission = Number((grossPrice * feeRate).toFixed(2));
+      const ricoNetPayout = Number(
+        (
+          parseFloat(String(p.net ?? p.net_payout ?? p.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
+          Math.max(0, grossPrice - ricoCommission)
+        ).toFixed(2)
+      );
+
+      const rawSoldDate = cleanStr(
+        p.sold_date ||
+          p.sold_at ||
+          p.paid_date ||
+          p.updated_at ||
+          firstItem?.sold_date ||
+          firstItem?.sold_at ||
+          firstItem?.updated_at ||
+          new Date().toISOString().slice(0, 10)
+      ).slice(0, 10);
+
+      const ricoItemId = cleanStr(p.id || firstItem?.id || sku);
+      const payoutId = cleanStr(p.payout_id || p.sale_id || p.ticket_number || firstItem?.sale_id || '');
+      const title = cleanStr(p.name || p.title || p.description || (skuMetaMap[sku] && skuMetaMap[sku].title) || sku);
+      const status = p.paid === true || rawStatusStr.includes('paid') ? 'Paid' : 'Sold';
+
+      const dedupKey = `${sku || ricoItemId}::${payoutId || rawSoldDate}`;
+      if (seenKeys.has(dedupKey)) continue;
+      seenKeys.add(dedupKey);
+
+      const isMatchedInBooth = Boolean(
+        effectiveUpc || (sku && (parsedMap[sku] || skuMetaMap[sku] || verifiedSkuSet.has(sku)))
+      );
+      const isAlreadySynced = Boolean(
+        alreadySyncedRicoKeys.has(dedupKey) ||
+          (sku && String(skuMetaMap[sku]?.status || '').toLowerCase() === 'sold')
+      );
+
+      soldRows.push({
+        ricoItemId,
+        sku,
+        upc: effectiveUpc,
+        title,
+        soldDate: rawSoldDate,
+        grossPrice,
+        ricoNetPayout,
+        ricoCommission,
+        payoutId,
+        status,
+        isMatchedInBooth,
+        alreadySynced: isAlreadySynced,
+      });
+    }
+
+    // 2. Also inspect visible Sales / Payouts DOM table rows if the user is on a Ricochet Payouts / Sales tab
+    try {
+      const domTrs = document.querySelectorAll('table tbody tr');
+      domTrs.forEach((tr, idx) => {
+        if (tr.closest('#rc-ricochet-sync-root')) return;
+        const cells = Array.from(tr.querySelectorAll('td')).map((td) => cleanStr(td.textContent));
+        if (cells.length < 3) return;
+        const rowText = cells.join(' | ');
+        const skuMatch = rowText.match(/\b(0EJ[A-Z0-9]{2,6})\b/i);
+        const ticketMatch = rowText.match(/\b(\d{6})\b/);
+        const priceMatches = rowText.match(/\$?\d+\.\d{2}/g);
+        if (!skuMatch && !ticketMatch) return;
+        const sku = skuMatch ? skuMatch[1].toUpperCase() : '';
+        if (sku && seenKeys.has(`${sku}::${ticketMatch ? ticketMatch[1] : ''}`)) return;
+        if (sku && Array.from(seenKeys).some((k) => k.startsWith(`${sku}::`))) return;
+
+        const grossVal = priceMatches && priceMatches[0]
+          ? parseFloat(priceMatches[0].replace(/[^0-9.-]/g, '')) || 0
+          : 0;
+        if (grossVal <= 0) return;
+
+        const netVal = priceMatches && priceMatches.length > 1
+          ? parseFloat(priceMatches[priceMatches.length - 1].replace(/[^0-9.-]/g, '')) || Number((grossVal * (1 - feeRate)).toFixed(2))
+          : Number((grossVal * (1 - feeRate)).toFixed(2));
+        const commVal = Math.max(0, Number((grossVal - netVal).toFixed(2)));
+        const dateMatch = rowText.match(/\b(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}-\d{2}-\d{2})\b/);
+        const soldDate = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
+        const expectedUpc = cleanStr(
+          (sku && (parsedMap[sku] || (skuMetaMap[sku] && skuMetaMap[sku].upc) || bootMap[sku])) || ''
+        ).toUpperCase();
+        const payoutId = ticketMatch ? ticketMatch[1] : '';
+        const dedupKey = `${sku || 'DOM-' + idx}::${payoutId || soldDate}`;
+        seenKeys.add(dedupKey);
+
+        soldRows.push({
+          ricoItemId: payoutId || sku || `dom-${idx}`,
+          sku,
+          upc: expectedUpc,
+          title: (sku && skuMetaMap[sku] && skuMetaMap[sku].title) || cells[1] || sku || 'Booth Sale',
+          soldDate,
+          grossPrice: Number(grossVal.toFixed(2)),
+          ricoNetPayout: Number(netVal.toFixed(2)),
+          ricoCommission: commVal,
+          payoutId,
+          status: 'Sold',
+          isMatchedInBooth: Boolean(expectedUpc || (sku && verifiedSkuSet.has(sku))),
+          alreadySynced: Boolean(sku && String(skuMetaMap[sku]?.status || '').toLowerCase() === 'sold'),
+        });
+      });
+    } catch (e) {}
+
+    lastExtractedSalesRows = soldRows;
+    return soldRows;
+  }
+
+  function updateSalesSyncTabUI() {
+    const rows = extractRicochetSoldLines();
+    const tabBadge = document.getElementById('rc-tab-sales-badge');
+    if (tabBadge) tabBadge.textContent = String(rows.length);
+
+    let grossSum = 0;
+    let netSum = 0;
+    let matchedCount = 0;
+    let syncedCount = 0;
+
+    for (const r of rows) {
+      grossSum += Number(r.grossPrice || 0);
+      netSum += Number(r.ricoNetPayout || 0);
+      if (r.isMatchedInBooth) matchedCount++;
+      if (r.alreadySynced) syncedCount++;
+    }
+
+    const foundEl = document.getElementById('rc-sales-kpi-found');
+    const grossEl = document.getElementById('rc-sales-kpi-gross');
+    const netEl = document.getElementById('rc-sales-kpi-net');
+    const matchedEl = document.getElementById('rc-sales-kpi-matched');
+    const syncedEl = document.getElementById('rc-sales-kpi-synced');
+    const previewCountEl = document.getElementById('rc-sales-preview-count');
+    const previewListEl = document.getElementById('rc-sales-preview-list');
+    const pushBtn = document.getElementById('rc-push-sales-btn');
+
+    if (foundEl) foundEl.textContent = String(rows.length);
+    if (grossEl) grossEl.textContent = `$${grossSum.toFixed(2)}`;
+    if (netEl) netEl.textContent = `$${netSum.toFixed(2)}`;
+    if (matchedEl) matchedEl.textContent = String(matchedCount);
+    if (syncedEl) syncedEl.textContent = String(syncedCount);
+    if (previewCountEl) previewCountEl.textContent = `${rows.length} sold lines`;
+    if (pushBtn && !isPushingSales) {
+      pushBtn.textContent = `🚀 Push Sales to Resale Core (${rows.length})`;
+    }
+
+    if (previewListEl) {
+      if (rows.length === 0) {
+        previewListEl.innerHTML = `<div style="color:#64748b;padding:6px;">No sold lines detected yet. Click 🔄 Live Fetch if needed.</div>`;
+      } else {
+        previewListEl.innerHTML = rows
+          .slice(0, 60)
+          .map((r) => {
+            const badge = r.alreadySynced
+              ? `<span style="color:#34d399;font-weight:800;">✅ Synced</span>`
+              : r.isMatchedInBooth
+              ? `<span style="color:#38bdf8;font-weight:800;">🔗 Matched</span>`
+              : `<span style="color:#fbbf24;font-weight:800;">⚪ Unmatched</span>`;
+            return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:6px;">
+              <div style="min-width:0;flex:1;">
+                <div style="color:#f8fafc;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  ${r.sku || r.ricoItemId} ${r.upc ? `(${r.upc})` : ''} — ${r.title}
+                </div>
+                <div style="color:#94a3b8;font-size:10px;">
+                  ${r.soldDate} • Gross $${Number(r.grossPrice || 0).toFixed(2)} • Net $${Number(r.ricoNetPayout || 0).toFixed(2)}
+                </div>
+              </div>
+              <div>${badge}</div>
+            </div>`;
+          })
+          .join('');
+      }
+    }
+  }
+
+  async function pushSalesToResaleCore() {
+    if (isPushingSales) return;
+    if (catalogProducts.length === 0) {
+      await loadConsignorCatalog();
+    }
+    const rows = extractRicochetSoldLines();
+    const pushBtn = document.getElementById('rc-push-sales-btn');
+    const syncBanner = document.getElementById('rc-sales-sync-banner');
+    isPushingSales = true;
+    if (pushBtn) {
+      pushBtn.disabled = true;
+      pushBtn.textContent = `⏳ Pushing ${rows.length} Sales...`;
+    }
+
+    let pushedData = null;
+    let targetOrigin = 'https://resalecmd.com';
+    for (const endpoint of RC_SALES_SYNC_ENDPOINTS) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'stage',
+            locationCode: activeLocationCode,
+            rows,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok) {
+          pushedData = data.payload || data;
+          try {
+            targetOrigin = new URL(endpoint).origin;
+          } catch (e) {}
+          break;
+        }
+      } catch (e) {}
+    }
+
+    isPushingSales = false;
+    if (pushBtn) {
+      pushBtn.disabled = false;
+      pushBtn.textContent = `🚀 Push Sales to Resale Core (${rows.length})`;
+    }
+
+    const resolvedCode = (pushedData && pushedData.locationCode) || activeLocationCode;
+    const reconcilerUrl = `${targetOrigin}/sales/import/${encodeURIComponent(resolvedCode)}`;
+    salesPushSuccessUrl = reconcilerUrl;
+
+    if (pushedData) {
+      if (Array.isArray(pushedData.rows)) {
+        for (const pr of pushedData.rows) {
+          if (pr.alreadySynced) {
+            alreadySyncedRicoKeys.add(`${pr.sku || pr.ricoItemId}::${pr.payoutId || pr.soldDate}`);
+          }
+        }
+      }
+      if (rcBroadcastChannel) {
+        try {
+          rcBroadcastChannel.postMessage({
+            type: 'RC_RICOCHET_SALES_SYNCED',
+            locationCode: resolvedCode,
+            payload: pushedData,
+            timestamp: Date.now(),
+          });
+        } catch (e) {}
+      }
+      updateSalesSyncTabUI();
+      if (syncBanner) {
+        syncBanner.style.display = 'block';
+        syncBanner.innerHTML = `
+          <div style="font-weight:800;color:#6ee7b7;margin-bottom:4px;">
+            ✅ Staged ${rows.length} sold lines to ${activeLocationName} Sales Reconciler!
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span>Matched: <b>${pushedData.summary?.matchedInBooth ?? rows.length}</b> • Net After Fee: <b>$${Number(pushedData.summary?.netPayout ?? 0).toFixed(2)}</b></span>
+            <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:4px 10px;border-radius:6px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+              ↗ Open Sales Reconciler
+            </a>
+          </div>
+        `;
+      }
+      addLog(`💰 Pushed ${rows.length} sold lines to ${reconcilerUrl}`, '#10b981');
+    } else {
+      if (syncBanner) {
+        syncBanner.style.display = 'block';
+        syncBanner.innerHTML = `
+          <div style="font-weight:800;color:#fde68a;margin-bottom:4px;">
+            ⚠️ Cloud endpoint unreachable — click "📋 Copy Sales Sync JSON" below and paste into:
+          </div>
+          <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8;font-weight:800;text-decoration:underline;">
+            ↗ Open Sales Reconciler (${reconcilerUrl})
+          </a>
+        `;
+      }
+    }
+  }
+
+  async function copySalesSyncJson() {
+    const rows = extractRicochetSoldLines();
+    const payloadStr = JSON.stringify(
+      {
+        locationCode: activeLocationCode,
+        locationName: activeLocationName,
+        syncedAt: new Date().toISOString(),
+        rows,
+      },
+      null,
+      2
+    );
+    try {
+      await navigator.clipboard.writeText(payloadStr);
+      setStatusBanner('success', `📋 Copied ${rows.length} sold lines as JSON to clipboard!`);
+    } catch (e) {
+      const ta = document.getElementById('rc-sync-textarea');
+      if (ta) {
+        ta.value = payloadStr;
+        ta.select();
+        document.execCommand('copy');
+      }
+      setStatusBanner('success', `📋 Copied ${rows.length} sold lines as JSON!`);
+    }
   }
 
   // Physical Sticker Wins: 1-Click Adopt Ricochet's Existing Physical Barcode into Resale Command (Supports 2-Way Criss-Cross Swaps)
@@ -1564,11 +2083,11 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `MemoryDen_Barcode_Verification_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${activeLocationName.replace(/\s+/g, '')}_Barcode_Verification_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setStatusBanner('success', `📥 Downloaded Verification CSV (${report.rows.length} Memory Den items)!`);
+    setStatusBanner('success', `📥 Downloaded Verification CSV (${report.rows.length} ${activeLocationName} items)!`);
   }
 
   // Execute Safe Sequential Sync (`GET /api/product/show/{id}` ➔ `PUT /api/product/items`)
@@ -1621,7 +2140,7 @@
       'info',
       singleTestMode
         ? `🧪 Testing 1 ${batch[0].partner} item (${batch[0].sku} ➔ ${batch[0].targetUpc})...`
-        : `🚀 Filling in ${batch.length} missing ${activePartnerBucket === 'ALL' ? '' : activePartnerBucket + ' '}barcodes in Memory Den...`
+        : `🚀 Filling in ${batch.length} missing ${activePartnerBucket === 'ALL' ? '' : activePartnerBucket + ' '}barcodes in ${activeLocationName}...`
     );
 
     for (let i = 0; i < batch.length; i++) {
@@ -1721,7 +2240,7 @@
     const finalReport = await sendReportToResaleCommand(true);
     setStatusBanner(
       failCount === 0 ? 'success' : 'warning',
-      `🎉 ${singleTestMode ? 'Test Complete' : 'Sync Complete'}: ${successCount} updated, ${failCount} skipped/conflicts • ${finalReport.summary.verifiedMatch}/${finalReport.summary.totalCatalog} Verified in Memory Den!`
+      `🎉 ${singleTestMode ? 'Test Complete' : 'Sync Complete'}: ${successCount} updated, ${failCount} skipped/conflicts • ${finalReport.summary.verifiedMatch}/${finalReport.summary.totalCatalog} Verified in ${activeLocationName}!`
     );
   }
 

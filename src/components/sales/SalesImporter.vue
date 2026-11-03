@@ -366,6 +366,211 @@
       </div>
 
       <!-- ========================================================================= -->
+      <!-- ⚡ RICOCHET LIVE SALES & PAYOUT SYNC PANEL                                 -->
+      <!-- Driven 100% by activeCanonicalLocationMeta.usesRicochet                   -->
+      <!-- ========================================================================= -->
+      <div
+        v-if="!lastCommittedReceipt && activeCanonicalLocationMeta.usesRicochet"
+        class="card bg-base-100 border-2 border-primary/35 shadow-md p-4 sm:p-6 rounded-2xl mb-6 space-y-4"
+      >
+        <!-- 1. Sync Status & Controls Bar -->
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-base-200 pb-4">
+          <div class="flex items-start gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-2xl shrink-0">
+              ⚡
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-lg sm:text-xl font-black text-base-content">
+                  Ricochet Live Sales &amp; Payout Sync — {{ activeCanonicalLocationMeta.shortName }} ({{ activeCanonicalLocationMeta.code }})
+                </h3>
+                <span class="badge badge-xs badge-primary text-primary-content font-mono font-bold">
+                  Fee: {{ activeCanonicalLocationMeta.commissionRate }}% | Rent: ${{ Number(activeCanonicalLocationMeta.monthlyRent || 0).toFixed(2) }}/mo
+                </span>
+                <span
+                  v-if="ricochetSyncPayload?.syncedAt"
+                  class="badge badge-xs badge-success text-success-content font-mono font-bold"
+                >
+                  Last Synced: {{ new Date(ricochetSyncPayload.syncedAt).toLocaleString() }}
+                </span>
+              </div>
+              <p class="text-xs opacity-75 mt-0.5">
+                Live sales &amp; payout lines pushed from your <span class="font-bold">⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span> bookmarklet (`💰 Sales &amp; Payout Sync` tab), reconciled against active {{ activeCanonicalLocationMeta.shortName }} booth inventory.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline btn-primary font-bold gap-1.5"
+              :disabled="isLoadingRicochetSync"
+              @click="fetchStagedRicochetSales(true)"
+            >
+              <span v-if="isLoadingRicochetSync" class="loading loading-spinner loading-xs"></span>
+              <span v-else>🔄</span>
+              <span>Refresh Staged Ricochet Sales</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost border border-base-300 font-bold gap-1.5"
+              @click="isPasteRicochetDrawerOpen = !isPasteRicochetDrawerOpen"
+            >
+              <span>📋 Paste Ricochet Sync JSON / CSV</span>
+            </button>
+
+            <button
+              v-if="ricochetActionableNewCount > 0"
+              type="button"
+              class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm"
+              :disabled="isCommittingRicochetSync"
+              @click="commitStagedRicochetSales"
+            >
+              <span v-if="isCommittingRicochetSync" class="loading loading-spinner loading-xs"></span>
+              <span v-else>✅</span>
+              <span>Commit Verified Ricochet Sales ({{ ricochetActionableNewCount }})</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Collapsible Paste Ricochet Sync JSON / CSV Fallback Drawer -->
+        <div
+          v-if="isPasteRicochetDrawerOpen"
+          class="bg-base-200/70 border border-base-300 rounded-xl p-3.5 space-y-2.5"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-black uppercase tracking-wider opacity-80">
+              📋 Paste Bookmarklet Sales Sync JSON or Ricochet Payout CSV
+            </span>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost"
+              @click="isPasteRicochetDrawerOpen = false"
+            >
+              ✕ Close
+            </button>
+          </div>
+          <textarea
+            v-model="pastedRicochetSyncText"
+            rows="4"
+            placeholder='Paste JSON copied from "📋 Copy Sales Sync JSON" in the bookmarklet or raw Ricochet CSV rows...'
+            class="textarea textarea-bordered w-full font-mono text-xs bg-base-100"
+          ></textarea>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm btn-primary font-black"
+              :disabled="!pastedRicochetSyncText.trim() || isLoadingRicochetSync"
+              @click="applyPastedRicochetSyncPayload"
+            >
+              Stage Pasted Sales Payload
+            </button>
+          </div>
+        </div>
+
+        <!-- Summary KPI Strip for Staged Ricochet Sales -->
+        <div
+          v-if="ricochetStagedRows.length > 0"
+          class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 bg-base-200/50 p-3 rounded-xl border border-base-300 text-xs"
+        >
+          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
+            <div class="opacity-65 font-bold uppercase text-[10px]">Sold Found</div>
+            <div class="text-base font-black font-mono mt-0.5">{{ ricochetSummary.soldFound }}</div>
+          </div>
+          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
+            <div class="opacity-65 font-bold uppercase text-[10px]">Gross Sales</div>
+            <div class="text-base font-black font-mono text-success mt-0.5">${{ Number(ricochetSummary.grossSales || 0).toFixed(2) }}</div>
+          </div>
+          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
+            <div class="opacity-65 font-bold uppercase text-[10px]">Expected Fee ({{ activeCanonicalLocationMeta.commissionRate }}%)</div>
+            <div class="text-base font-black font-mono text-warning mt-0.5">-${{ Number(ricochetSummary.expectedCommission || 0).toFixed(2) }}</div>
+          </div>
+          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200">
+            <div class="opacity-65 font-bold uppercase text-[10px]">Net Payout</div>
+            <div class="text-base font-black font-mono text-primary mt-0.5">${{ Number(ricochetSummary.netPayout || 0).toFixed(2) }}</div>
+          </div>
+          <div class="bg-base-100 p-2.5 rounded-lg border border-base-200 col-span-2 sm:col-span-1">
+            <div class="opacity-65 font-bold uppercase text-[10px]">Matched / Synced</div>
+            <div class="text-base font-black font-mono mt-0.5">
+              <span class="text-success">{{ ricochetSummary.matchedInBooth }}</span>
+              <span class="opacity-50"> / </span>
+              <span class="text-info">{{ ricochetSummary.alreadySynced }} Synced</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Reconciliation Staging Table -->
+        <div v-if="ricochetStagedRows.length > 0" class="overflow-x-auto border border-base-300 rounded-xl max-h-80">
+          <table class="table table-xs sm:table-sm table-pin-rows w-full">
+            <thead>
+              <tr class="bg-base-200 text-[11px] uppercase tracking-wider font-black">
+                <th>SKU / UPC</th>
+                <th>Title</th>
+                <th>Sold Date</th>
+                <th class="text-right">Gross Sale</th>
+                <th class="text-right">Expected Fee ({{ activeCanonicalLocationMeta.commissionRate }}%)</th>
+                <th class="text-right">Net Payout</th>
+                <th>Match Status Badge</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(rRow, rIdx) in ricochetStagedRows"
+                :key="rRow.ricoItemId || rRow.sku || rIdx"
+                class="hover:bg-base-200/40"
+              >
+                <td class="font-mono text-xs whitespace-nowrap">
+                  <div class="font-black">{{ rRow.sku || rRow.ricoItemId || '—' }}</div>
+                  <div v-if="rRow.upc || rRow.matchedUpc" class="text-[10px] opacity-75 text-primary font-bold">
+                    {{ rRow.matchedUpc || rRow.upc }}
+                  </div>
+                </td>
+                <td class="max-w-xs">
+                  <div class="font-bold text-xs truncate" :title="rRow.title">{{ rRow.title }}</div>
+                  <div v-if="rRow.matchedItemTitle && rRow.matchedItemTitle !== rRow.title" class="text-[10px] opacity-70 truncate">
+                    ↳ Booth Item: {{ rRow.matchedItemTitle }}
+                  </div>
+                </td>
+                <td class="font-mono text-xs whitespace-nowrap">{{ rRow.soldDate || '—' }}</td>
+                <td class="font-mono text-xs text-right font-bold">${{ Number(rRow.grossPrice || 0).toFixed(2) }}</td>
+                <td class="font-mono text-xs text-right text-warning">-${{ Number(rRow.expectedCommission ?? rRow.ricoCommission ?? 0).toFixed(2) }}</td>
+                <td class="font-mono text-xs text-right font-black text-success">${{ Number(rRow.ricoNetPayout ?? rRow.expectedNetPayout ?? 0).toFixed(2) }}</td>
+                <td class="whitespace-nowrap">
+                  <span
+                    v-if="rRow.alreadySynced"
+                    class="badge badge-xs badge-neutral font-bold gap-1"
+                  >
+                    ✅ Already Synced
+                  </span>
+                  <span
+                    v-else-if="rRow.matchStatus === 'matched' || rRow.matchedItemId"
+                    class="badge badge-xs badge-success text-success-content font-bold gap-1"
+                  >
+                    🔗 Matched ({{ rRow.matchTier || 'upc' }})
+                  </span>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn btn-2xs btn-warning text-warning-content font-black"
+                    @click="stageSingleRicochetRowIntoHandsOnMatcher(rRow)"
+                  >
+                    ⚪ Unmatched — Assign Booth Item
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-else class="text-xs opacity-75 bg-base-200/40 border border-dashed border-base-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div>
+            No staged live Ricochet sales batch yet for <span class="font-bold">{{ activeCanonicalLocationMeta.shortName }}</span>. Open the <span class="font-mono font-bold">⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span> bookmarklet on Ricochet and click <span class="font-bold">🚀 Push Sales to Resale Core</span> in the <span class="font-bold">💰 Sales &amp; Payout Sync</span> tab, or paste JSON above.
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================================================= -->
       <!-- 📸 PAPER SALES SHEET & HANDS-ON RECONCILER WORKSPACE                      -->
       <!-- Driven 100% by activeCanonicalLocationMeta.supportsPaperSalesSheet / tab   -->
       <!-- ========================================================================= -->
@@ -2128,6 +2333,170 @@ const sheetPhotoPreviewUrl = ref('');
 const lastParsedSheetTitle = ref('');
 const boothPickListSearch = ref('');
 
+// Ricochet Live Sales & Payout Sync State (driven by activeCanonicalLocationMeta.usesRicochet)
+const ricochetSyncPayload = ref<any | null>(null);
+const isLoadingRicochetSync = ref(false);
+const isCommittingRicochetSync = ref(false);
+const isPasteRicochetDrawerOpen = ref(false);
+const pastedRicochetSyncText = ref('');
+
+const ricochetStagedRows = computed<any[]>(() => {
+  return Array.isArray(ricochetSyncPayload.value?.rows) ? ricochetSyncPayload.value.rows : [];
+});
+
+const ricochetSummary = computed(() => {
+  const s = ricochetSyncPayload.value?.summary;
+  if (s) return s;
+  const rows = ricochetStagedRows.value;
+  let grossSales = 0;
+  let expectedCommission = 0;
+  let netPayout = 0;
+  let matchedInBooth = 0;
+  let alreadySynced = 0;
+  for (const r of rows) {
+    grossSales += Number(r.grossPrice || 0);
+    expectedCommission += Number(r.expectedCommission ?? r.ricoCommission ?? 0);
+    netPayout += Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
+    if (r.matchStatus === 'matched' || r.matchedItemId) matchedInBooth++;
+    if (r.alreadySynced) alreadySynced++;
+  }
+  const rent = Number(activeCanonicalLocationMeta.value.monthlyRent || 0);
+  return {
+    soldFound: rows.length,
+    grossSales: Number(grossSales.toFixed(2)),
+    expectedCommission: Number(expectedCommission.toFixed(2)),
+    netPayout: Number(netPayout.toFixed(2)),
+    netAfterCommissionAndRent: Number((netPayout - rent).toFixed(2)),
+    matchedInBooth,
+    alreadySynced,
+    unmatchedCount: Math.max(0, rows.length - matchedInBooth),
+  };
+});
+
+const ricochetActionableNewCount = computed(() => {
+  return ricochetStagedRows.value.filter(
+    (r: any) => !r.alreadySynced && (r.matchStatus === 'matched' || r.matchedItemId || Number(r.grossPrice || 0) > 0)
+  ).length;
+});
+
+const fetchStagedRicochetSales = async (manualTrigger: boolean = false) => {
+  if (!activeCanonicalLocationMeta.value.usesRicochet) return;
+  isLoadingRicochetSync.value = true;
+  try {
+    const code = encodeURIComponent(activeCanonicalLocationMeta.value.code);
+    const res = await fetch(`/api/sales/ricochet-sync?location=${code}&t=${Date.now()}`);
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.ok && data?.payload) {
+      ricochetSyncPayload.value = data.payload;
+      if (manualTrigger) {
+        addToast({
+          type: 'success',
+          message: `🔄 Loaded ${ricochetStagedRows.value.length} staged Ricochet sales for ${activeCanonicalLocationMeta.value.shortName}!`,
+        });
+      }
+    }
+  } catch (err: any) {
+    if (manualTrigger) {
+      addToast({
+        type: 'warning',
+        message: `Could not fetch staged Ricochet sales: ${err?.message || 'Network error'}`,
+      });
+    }
+  } finally {
+    isLoadingRicochetSync.value = false;
+  }
+};
+
+const applyPastedRicochetSyncPayload = async () => {
+  const raw = pastedRicochetSyncText.value.trim();
+  if (!raw) return;
+
+  // Check if pasted content is JSON from the bookmarklet
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    isLoadingRicochetSync.value = true;
+    try {
+      const parsed = JSON.parse(raw);
+      const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed.rows) ? parsed.rows : [];
+      const res = await fetch('/api/sales/ricochet-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'stage',
+          locationCode: activeCanonicalLocationMeta.value.code,
+          rows,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data?.payload) {
+        ricochetSyncPayload.value = data.payload;
+        pastedRicochetSyncText.value = '';
+        isPasteRicochetDrawerOpen.value = false;
+        addToast({
+          type: 'success',
+          message: `✅ Staged ${rows.length} Ricochet sold lines for ${activeCanonicalLocationMeta.value.shortName}!`,
+        });
+      } else {
+        throw new Error(data?.error || 'Failed to stage pasted JSON');
+      }
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        message: `Invalid Ricochet Sync JSON: ${err?.message || 'Parse error'}`,
+      });
+    } finally {
+      isLoadingRicochetSync.value = false;
+    }
+    return;
+  }
+
+  // Otherwise parse as Ricochet Payout CSV text
+  pastedRicochetSyncText.value = '';
+  isPasteRicochetDrawerOpen.value = false;
+  parseMemoryDenPayout(raw);
+  addToast({
+    type: 'success',
+    message: `📄 Parsed pasted CSV into ${activeCanonicalLocationMeta.value.shortName} staging table!`,
+  });
+};
+
+const commitStagedRicochetSales = async () => {
+  if (isCommittingRicochetSync.value || ricochetActionableNewCount.value === 0) return;
+  isCommittingRicochetSync.value = true;
+  try {
+    const res = await fetch('/api/sales/ricochet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'commit',
+        locationCode: activeCanonicalLocationMeta.value.code,
+        rows: ricochetStagedRows.value,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.ok) {
+      if (data.payload) {
+        ricochetSyncPayload.value = data.payload;
+      }
+      addToast({
+        type: 'success',
+        message: `✅ Committed ${data.committedCount || 0} verified Ricochet sales (${data.skippedCount || 0} already synced)!`,
+      });
+      if (activeTeamId.value) {
+        fetchInventory(activeTeamId.value);
+      }
+    } else {
+      throw new Error(data?.error || 'Commit request failed');
+    }
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: `Failed to commit Ricochet sales: ${err?.message || 'Unknown error'}`,
+    });
+  } finally {
+    isCommittingRicochetSync.value = false;
+  }
+};
+
 const normalizeSalesLocationUrlParam = (code: string) => {
   if (typeof window === 'undefined' || !window.history?.replaceState) return;
   try {
@@ -2361,6 +2730,9 @@ watch(activeLocationCode, (newCode) => {
   const meta = getLocationSettingMeta(newCode, locations.value);
   salesIntakeTab.value = meta.salesIntakeMode || (meta.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv');
   recomputePayoutCycles();
+  if (meta.usesRicochet) {
+    fetchStagedRicochetSales(false);
+  }
 });
 
 const handsOnTotals = computed(() => {
@@ -2755,6 +3127,22 @@ const openMatcherDrawer = (row: any) => {
   activeDrawerRowIndex.value = idx >= 0 ? idx : 0;
   populateDrawerForm(row);
   isMatcherDrawerOpen.value = true;
+};
+
+const stageSingleRicochetRowIntoHandsOnMatcher = (rRow: any) => {
+  if (!rRow) return;
+  addManualSoldLine({
+    date: rRow.soldDate || new Date().toISOString().slice(0, 10),
+    sku: rRow.sku || rRow.upc || rRow.ricoItemId || '',
+    title: rRow.title || 'Sold Booth Item',
+    gross: Number(rRow.grossPrice || 0),
+    qty: 1,
+    ticketNumber: rRow.payoutId || rRow.ricoItemId || '',
+  });
+  const newestRow = parsedRows.value[parsedRows.value.length - 1];
+  if (newestRow) {
+    openMatcherDrawer(newestRow);
+  }
 };
 
 const closeMatcherDrawer = () => {
@@ -3179,6 +3567,20 @@ onMounted(async () => {
   }
   loadReceiptHistory();
   restoreStagingSession();
+
+  if (activeCanonicalLocationMeta.value.usesRicochet) {
+    fetchStagedRicochetSales(false);
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('resale_command_sync');
+        bc.onmessage = (ev) => {
+          if (ev?.data?.type === 'RC_RICOCHET_SALES_SYNCED' && ev?.data?.payload) {
+            ricochetSyncPayload.value = ev.data.payload;
+          }
+        };
+      }
+    } catch {}
+  }
 
   // If no session in localStorage, auto-load stored multi-month payout CSV for POS CSV booths
   if (parsedRows.value.length === 0 && !activeCanonicalLocationMeta.value.supportsPaperSalesSheet) {
