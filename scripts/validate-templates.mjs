@@ -386,6 +386,7 @@ const requiredArchitectureContracts = [
     {
         file: 'src/lib/ricochetPayoutParser.ts',
         mustContain: [
+            { pattern: /\bexport\s+function\s+parseRicochetExportCsv\s*\(/, label: 'Exported dual-schema parseRicochetExportCsv parser for Payout and Payout History Export CSVs' },
             { pattern: /\bisPayoutSummaryRow\s*\(/, label: 'Delegation of summary-row filtering to isPayoutSummaryRow from salesBucketing.ts' },
             { pattern: /\bisLeakedInventoryDomRow\s*\(/, label: 'Delegation of leaked Inventory DOM row filtering to isLeakedInventoryDomRow from salesBucketing.ts' },
             { pattern: /\bsplitTrailingBoothSku\s*\(/, label: 'Delegation of trailing SKU extraction to splitTrailingBoothSku from salesBucketing.ts' },
@@ -396,8 +397,17 @@ const requiredArchitectureContracts = [
     {
         file: 'src/composables/useRicochetSalesSync.ts',
         mustContain: [
+            { pattern: /\bparseRicochetExportCsv\s*\(/, label: 'Unified dual-schema Ricochet Export CSV parsing in useRicochetSalesSync.ts' },
             { pattern: /\bmatchMemoryDenInventoryItem\s*\(/, label: 'Delegation of inventory matching to matchMemoryDenInventoryItem from salesBucketing.ts' },
             { pattern: /\bbuildLockedMultiBinMap\s*\(/, label: 'Delegation of multi-bin lot map building to buildLockedMultiBinMap from salesBucketing.ts' },
+        ],
+    },
+    {
+        file: 'public/ricochet-upc-sync.user.js',
+        mustContain: [
+            { pattern: /\bcaptureSpaExportCsvInMemory\s*\(/, label: 'In-memory native Export CSV capture on Payout and Payout History tabs' },
+            { pattern: /\bparseRicochetExportCsvText\s*\(/, label: 'Dual-schema Ricochet Export CSV parser in userscript' },
+            { pattern: /out\\s\+of/, label: 'Multi-page ("1 out of 2" -> "2 out of 2") Payout History traversal' },
         ],
     },
 ];
@@ -411,6 +421,25 @@ for (const contract of requiredArchitectureContracts) {
             console.error(`❌ Golden Rule #3 Architecture Contract Violation in ${contract.file}: Missing ${req.label}`);
             hasErrors = true;
         }
+    }
+}
+
+// =========================================================================
+// 8. BAN HARDCODED '2026-10-15' FALLBACK DATE IN RICOCHET SYNC PIPELINE
+// =========================================================================
+const noHardcodedFallbackDateFiles = [
+    'src/lib/ricochetPayoutParser.ts',
+    'src/composables/useRicochetSalesSync.ts',
+    'public/ricochet-upc-sync.user.js',
+];
+
+for (const relPath of noHardcodedFallbackDateFiles) {
+    const fullPath = path.resolve(relPath);
+    if (!fs.existsSync(fullPath)) continue;
+    const content = fs.readFileSync(fullPath, 'utf8');
+    if (/['"]2026-10-15['"]/.test(content)) {
+        console.error(`❌ Hardcoded Date Violation in ${relPath}: Do not hardcode '2026-10-15' fallback dates; parse real Paid/Sold dates from Ricochet Export CSVs and Payout History pages.`);
+        hasErrors = true;
     }
 }
 
