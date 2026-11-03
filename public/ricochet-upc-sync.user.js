@@ -51,298 +51,6 @@
   let lastExtractedSalesRows = [];
   let alreadySyncedRicoKeys = new Set();
   let salesPushSuccessUrl = '';
-  let inFlightRicoRequestCount = 0;
-  let lastRicoNetworkActivityAt = 0;
-  let discoveredRicoEndpoints = new Set();
-  let capturedRicoApiResponses = [];
-
-  function recordDiscoveredRicoEndpoint(rawUrl, rawBodyText) {
-    try {
-      const strUrl = String(rawUrl || '').trim();
-      if (!strUrl) return;
-      if (strUrl.includes('resalecmd.com') || strUrl.includes('localhost:4321')) return;
-      let cleanPath = strUrl;
-      try {
-        const u = new URL(strUrl, window.location.origin);
-        if (u.origin !== window.location.origin && !u.hostname.includes('ricoconsign')) return;
-        cleanPath = u.pathname + (u.search || '');
-      } catch (e) {}
-      if (!cleanPath || /\.(js|css|png|jpg|jpeg|svg|woff2?|ico)(\?|$)/i.test(cleanPath)) return;
-
-      lastRicoNetworkActivityAt = Date.now();
-      const shortPath = cleanPath.length > 90 ? cleanPath.slice(0, 90) + '...' : cleanPath;
-      if (!discoveredRicoEndpoints.has(shortPath)) {
-        discoveredRicoEndpoints.add(shortPath);
-        updateDiscoveredEndpointsSubtitle();
-      }
-
-      if (rawBodyText && typeof rawBodyText === 'string' && rawBodyText.length > 10) {
-        capturedRicoApiResponses.push({
-          url: cleanPath,
-          timestamp: Date.now(),
-          bodyText: rawBodyText,
-        });
-        if (capturedRicoApiResponses.length > 25) {
-          capturedRicoApiResponses.shift();
-        }
-        tryParseCapturedRicoResponse(cleanPath, rawBodyText);
-      }
-    } catch (e) {}
-  }
-
-  function updateDiscoveredEndpointsSubtitle() {
-    const arr = Array.from(discoveredRicoEndpoints);
-    if (arr.length === 0) return;
-    const payoutRelated = arr.filter((p) => /payout|history|sale|product|inventory|consignor/i.test(p));
-    const displayList = (payoutRelated.length > 0 ? payoutRelated : arr).slice(-4);
-    const labelText = `📡 XHR: ${displayList.join(' • ')}`;
-    const subEl = document.getElementById('rc-sales-xhr-subtitle');
-    if (subEl) {
-      subEl.textContent = labelText;
-      subEl.style.display = 'block';
-    }
-    const statusEl = document.getElementById('rc-catalog-status');
-    if (statusEl && statusEl.textContent && !statusEl.textContent.includes('📡')) {
-      statusEl.title = labelText;
-    }
-  }
-
-  function tryParseCapturedRicoResponse(cleanPath, rawBodyText) {
-    try {
-      const trimmed = rawBodyText.trim();
-      const lowerUrl = cleanPath.toLowerCase();
-      if (trimmed.startsWith('<') && (lowerUrl.includes('payout') || trimmed.includes('<table'))) {
-        const doc = new DOMParser().parseFromString(trimmed, 'text/html');
-        if (lowerUrl.includes('history')) {
-          const parsedH = parsePayoutHistoryHtmlDocument(doc);
-          if (parsedH.rows.length > harvestedPaidHistoryRows.length) {
-            harvestedPaidHistoryRows = parsedH.rows;
-            cachedPayoutHistoryDomRows = parsedH.rows;
-          }
-        } else if (lowerUrl.includes('payout')) {
-          const parsedP = parsePayoutsHtmlDocument(doc);
-          if (parsedP.rows.length > harvestedPendingPayoutRows.length) {
-            harvestedPendingPayoutRows = parsedP.rows;
-            cachedPayoutDomRows = parsedP.rows;
-          }
-        }
-        return;
-      }
-
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        const json = JSON.parse(trimmed);
-        // 1. Check if JSON contains products array (from /api/product)
-        const prods = json?.products || (Array.isArray(json?.data) ? json.data : null);
-        if (Array.isArray(prods) && prods.length > 0 && (lowerUrl.includes('/api/product') || prods[0]?.sku)) {
-          const existingIds = new Set(catalogProducts.map((p) => p.id));
-          for (const p of prods) {
-            if (p && p.id && !existingIds.has(p.id)) {
-              existingIds.add(p.id);
-              catalogProducts.push(p);
-            }
-          }
-        }
-
-        // 2. Check if JSON contains Payout or Payout History arrays from Ricochet's internal API
-        const candidateArrays = [
-          json?.payouts,
-          json?.payout_history,
-          json?.history,
-          json?.items,
-          json?.sales,
-          json?.rows,
-          json?.records,
-          Array.isArray(json?.data) ? json.data : null,
-          Array.isArray(json) ? json : null,
-        ].filter((a) => Array.isArray(a) && a.length > 0);
-
-        for (const arr of candidateArrays) {
-          const sample = arr[0];
-          if (!sample || typeof sample !== 'object') continue;
-          const isPayoutLike =
-            lowerUrl.includes('payout') ||
-            'sale_id' in sample ||
-            'sale_number' in sample ||
-            'sold_date' in sample ||
-            'paid_date' in sample ||
-            'agreed_price' in sample;
-          if (!isPayoutLike) continue;
-
-          const isHistoryEndpoint =
-            lowerUrl.includes('history') || Boolean(sample.paid_date || sample.paid_at || sample.paid);
-          const parsedJsonRows = [];
-          for (const item of arr) {
-            if (!item || typeof item !== 'object') continue;
-            const rawName = cleanStr(item.name || item.title || item.item || item.product_name || '');
-            if (/space\s+rental|\(credit\)/i.test(rawName)) {
-              const amt = parseCurrencyFloat(item.amount ?? item.total ?? item.net ?? item.price ?? 0);
-              const dStr = cleanStr(item.date || item.sold_date || item.paid_date || item.created_at || '').slice(0, 10);
-              spaceRentalAdjustments.push({
-                label: rawName || 'Space Rental',
-                date: dStr,
-                amount: Number(amt.toFixed(2)),
-              });
-              continue;
-            }
-            let title = rawName;
-            let sku = cleanStr(item.sku || item.product_sku || item.SKU || '').toUpperCase();
-            if (!sku && rawName) {
-              const m = rawName.match(/^(.*?)\s+-\s+([A-Z0-9]{4,12})$/i);
-              if (m) {
-                title = cleanStr(m[1]);
-                sku = cleanStr(m[2]).toUpperCase();
-              }
-            }
-            const rawSale = cleanStr(item.sale_number || item.sale_id || item.sale || item.ticket || '');
-            const agreedPrice = Number(
-              Math.abs(parseCurrencyFloat(item.agreed_price ?? item.price ?? item.retail_price ?? 0)).toFixed(2)
-            );
-            const agedPrice = Number(
-              Math.abs(parseCurrencyFloat(item.aged_price ?? agreedPrice)).toFixed(2)
-            );
-            const grossPrice = agedPrice > 0 ? agedPrice : agreedPrice;
-            const netVal = parseCurrencyFloat(item.amount ?? item.net ?? item.payout ?? item.total ?? 0);
-            const ricoNetPayout = Number(
-              (netVal !== 0 ? netVal : Math.max(0, grossPrice * (1 - Number(activeCommissionRate || 15) / 100))).toFixed(2)
-            );
-            const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
-            const soldDate = cleanStr(item.sold_date || item.sold_at || item.sold || '').slice(0, 10);
-            const paidDate = cleanStr(item.paid_date || item.paid_at || item.paid || '').slice(0, 10) || null;
-            if (!title && !sku && !rawSale) continue;
-
-            parsedJsonRows.push({
-              title: title || sku || 'Booth Sale Item',
-              ricoSku: sku,
-              sku,
-              saleNumber: rawSale,
-              payoutId: rawSale.replace(/^#/, '').trim(),
-              agreedPrice,
-              splitPct: cleanStr(item.split || item.cost_split || `${100 - activeCommissionRate}%`),
-              agedPrice,
-              discounts: cleanStr(item.discounts || item.discount || ''),
-              soldDate,
-              paidDate: isHistoryEndpoint ? paidDate || soldDate : null,
-              grossPrice,
-              ricoNetPayout,
-              ricoCommission,
-              payoutStatus: isHistoryEndpoint ? 'paid' : 'pending_payout',
-              status: isHistoryEndpoint ? 'Paid' : 'Sold',
-            });
-          }
-
-          if (parsedJsonRows.length > 0) {
-            if (isHistoryEndpoint && parsedJsonRows.length > harvestedPaidHistoryRows.length) {
-              harvestedPaidHistoryRows = parsedJsonRows;
-              cachedPayoutHistoryDomRows = parsedJsonRows;
-            } else if (!isHistoryEndpoint && parsedJsonRows.length > harvestedPendingPayoutRows.length) {
-              harvestedPendingPayoutRows = parsedJsonRows;
-              cachedPayoutDomRows = parsedJsonRows;
-            }
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  function scanPerformanceResourceEntries() {
-    try {
-      if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') return;
-      const entries = performance.getEntriesByType('resource') || [];
-      for (const entry of entries) {
-        if (
-          entry.initiatorType === 'xmlhttprequest' ||
-          entry.initiatorType === 'fetch' ||
-          /\/api\/|payout|inventory|product/i.test(entry.name || '')
-        ) {
-          recordDiscoveredRicoEndpoint(entry.name, null);
-        }
-      }
-    } catch (e) {}
-  }
-
-  function installRicochetNetworkHooks() {
-    if (window.__RC_XHR_FETCH_HOOKED__) {
-      scanPerformanceResourceEntries();
-      return;
-    }
-    window.__RC_XHR_FETCH_HOOKED__ = true;
-
-    try {
-      const OrigXHR = window.XMLHttpRequest;
-      if (OrigXHR && OrigXHR.prototype) {
-        const origOpen = OrigXHR.prototype.open;
-        const origSend = OrigXHR.prototype.send;
-        OrigXHR.prototype.open = function (method, url) {
-          this.__rcUrl = url;
-          this.__rcMethod = method;
-          return origOpen.apply(this, arguments);
-        };
-        OrigXHR.prototype.send = function () {
-          const xhrUrl = String(this.__rcUrl || '');
-          const isRicoInternal =
-            xhrUrl && !xhrUrl.includes('resalecmd.com') && !xhrUrl.includes('localhost:4321');
-          if (isRicoInternal) {
-            inFlightRicoRequestCount++;
-            lastRicoNetworkActivityAt = Date.now();
-            this.addEventListener('loadend', () => {
-              inFlightRicoRequestCount = Math.max(0, inFlightRicoRequestCount - 1);
-              lastRicoNetworkActivityAt = Date.now();
-              let respText = '';
-              try {
-                if (!this.responseType || this.responseType === 'text') {
-                  respText = this.responseText || '';
-                } else if (this.responseType === 'json' && this.response) {
-                  respText = JSON.stringify(this.response);
-                }
-              } catch (e) {}
-              recordDiscoveredRicoEndpoint(xhrUrl, respText);
-            });
-          }
-          return origSend.apply(this, arguments);
-        };
-      }
-    } catch (e) {}
-
-    try {
-      const origFetch = window.fetch;
-      if (typeof origFetch === 'function') {
-        window.fetch = async function () {
-          const reqArg = arguments[0];
-          const urlStr = typeof reqArg === 'string' ? reqArg : (reqArg && reqArg.url) || '';
-          const isRicoInternal =
-            urlStr && !urlStr.includes('resalecmd.com') && !urlStr.includes('localhost:4321');
-          if (isRicoInternal) {
-            inFlightRicoRequestCount++;
-            lastRicoNetworkActivityAt = Date.now();
-          }
-          try {
-            const res = await origFetch.apply(this, arguments);
-            if (isRicoInternal) {
-              try {
-                const clone = res.clone();
-                clone
-                  .text()
-                  .then((txt) => recordDiscoveredRicoEndpoint(urlStr, txt))
-                  .catch(() => recordDiscoveredRicoEndpoint(urlStr, null));
-              } catch (e) {
-                recordDiscoveredRicoEndpoint(urlStr, null);
-              }
-            }
-            return res;
-          } finally {
-            if (isRicoInternal) {
-              inFlightRicoRequestCount = Math.max(0, inFlightRicoRequestCount - 1);
-              lastRicoNetworkActivityAt = Date.now();
-            }
-          }
-        };
-      }
-    } catch (e) {}
-
-    scanPerformanceResourceEntries();
-  }
-
-  installRicochetNetworkHooks();
   let isOpen = false;
   let isRunning = false;
   let isLoadingCatalog = false;
@@ -2138,7 +1846,7 @@
     return { rows, adjustments, totalPayout };
   }
 
-  // Auto-Click Live SPA `<a href="#">Payout</a>` & `<a href="#">Payout History</a>` Tabs + Multi-Page Pagination Harvester (`1 out of 2 ▶`)
+  // Safely Auto-Click ONLY Top-Nav `<a href="#">Payout</a>`, `<a href="#">Payout History</a>`, and `<a href="#">Inventory</a>` Tabs (Zero Pagination Clicks, Zero Non-API Fetches, Hard Logout Guard)
   async function harvestLiveSpaPayoutTables(manualTrigger = false) {
     if (isHarvestingPayoutPages) return;
     isHarvestingPayoutPages = true;
@@ -2159,343 +1867,100 @@
         }
       };
 
-      const findSpaNavLink = (exactLabel) => {
-        const target = exactLabel.trim().toLowerCase();
-        const links = Array.from(document.querySelectorAll('a, button, [role="tab"]'));
+      const ALLOWED_SPA_TAB_LABELS = new Set(['payout', 'payout history', 'inventory']);
+
+      const findSafeSpaNavLink = (exactLabel) => {
+        const target = cleanStr(exactLabel).toLowerCase();
+        if (!ALLOWED_SPA_TAB_LABELS.has(target)) return null;
+        const anchors = Array.from(document.querySelectorAll('a[href="#"]'));
         return (
-          links.find((el) => {
+          anchors.find((el) => {
+            if (!el || typeof el.getAttribute !== 'function') return false;
             if (el.closest && el.closest('#rc-ricochet-sync-root')) return false;
-            return cleanStr(el.textContent).toLowerCase() === target;
+            const rawHref = String(el.getAttribute('href') || '').trim();
+            if (rawHref !== '#') return false;
+            const text = cleanStr(el.textContent);
+            const checkBlob = `${text} ${el.className || ''} ${el.id || ''} ${el.getAttribute('aria-label') || ''}`;
+            if (/log\s*out|sign\s*out|exit|profile/i.test(checkBlob)) return false;
+            return text.toLowerCase() === target;
           }) || null
         );
       };
 
-      const expandPageLengthSelects = () => {
-        try {
-          const selects = Array.from(document.querySelectorAll('select'));
-          let changed = false;
-          for (const sel of selects) {
-            if (sel.closest && sel.closest('#rc-ricochet-sync-root')) continue;
-            const opts = Array.from(sel.options || []);
-            const maxOpt =
-              opts.find((o) => String(o.value) === '-1' || /all/i.test(cleanStr(o.textContent))) ||
-              opts.find((o) => parseInt(String(o.value), 10) >= 1000 || parseInt(cleanStr(o.textContent), 10) >= 1000) ||
-              opts.find((o) => parseInt(String(o.value), 10) >= 500 || parseInt(cleanStr(o.textContent), 10) >= 500) ||
-              opts.find((o) => parseInt(String(o.value), 10) >= 250 || parseInt(cleanStr(o.textContent), 10) >= 250) ||
-              opts.find((o) => parseInt(String(o.value), 10) >= 100 || parseInt(cleanStr(o.textContent), 10) >= 100);
-            if (maxOpt && sel.value !== maxOpt.value) {
-              sel.value = maxOpt.value;
-              sel.dispatchEvent(new Event('change', { bubbles: true }));
-              sel.dispatchEvent(new Event('input', { bubbles: true }));
-              changed = true;
-            }
-          }
-          return changed;
-        } catch (e) {
-          return false;
-        }
+      const safeClickSpaTab = (el) => {
+        if (!el || typeof el.click !== 'function') return false;
+        if (String(el.tagName || '').toUpperCase() !== 'A') return false;
+        if (String(el.getAttribute('href') || '').trim() !== '#') return false;
+        const text = cleanStr(el.textContent);
+        const checkBlob = `${text} ${el.className || ''} ${el.id || ''} ${el.getAttribute('aria-label') || ''}`;
+        if (/log\s*out|sign\s*out|exit|profile/i.test(checkBlob)) return false;
+        if (!ALLOWED_SPA_TAB_LABELS.has(text.toLowerCase())) return false;
+        el.click();
+        return true;
       };
 
-      // Wait until Ricochet XHRs finish AND `parseFn(document).rows.length > 0` AND row count stabilizes across 2 consecutive polls (up to 5000ms)
-      const waitForStabilizedPayoutTable = async (parseFn, prevFirstSig = '', maxMs = 5000) => {
+      const waitForSpaTableRows = async (parseFn, maxMs = 2400) => {
         const start = Date.now();
-        let lastRowCount = -1;
+        let lastCount = -1;
         let stablePolls = 0;
         let bestParsed = { rows: [], adjustments: [], totalPayout: 0 };
 
         while (Date.now() - start < maxMs) {
-          const selectChanged = expandPageLengthSelects();
-          if (selectChanged) {
-            stablePolls = 0;
-            lastRowCount = -1;
-            await new Promise((r) => setTimeout(r, 180));
-          }
-
           const candidate = parseFn(document);
           const count = (candidate.rows || []).length;
-          const firstSig =
-            count > 0
-              ? `${cleanStr(candidate.rows[0].saleNumber || candidate.rows[0].payoutId)}|${cleanStr(candidate.rows[0].ricoSku || candidate.rows[0].sku)}|${cleanStr(candidate.rows[0].title)}`
-              : '';
-
-          const isDifferentFromPrevPage = !prevFirstSig || (firstSig && firstSig !== prevFirstSig);
-          const isXhrIdle =
-            inFlightRicoRequestCount === 0 && Date.now() - lastRicoNetworkActivityAt >= 180;
-
-          if (count > 0 && isDifferentFromPrevPage) {
+          if (count > 0) {
             bestParsed = candidate;
-            if (count === lastRowCount && isXhrIdle) {
+            if (count === lastCount) {
               stablePolls++;
-              if (stablePolls >= 2) {
-                return bestParsed;
-              }
+              if (stablePolls >= 2) return bestParsed;
             } else {
-              lastRowCount = count;
+              lastCount = count;
               stablePolls = 0;
             }
-          } else {
-            stablePolls = 0;
           }
-
-          await new Promise((r) => setTimeout(r, 150));
+          await new Promise((r) => setTimeout(r, 140));
         }
 
         const finalPass = parseFn(document);
-        if ((finalPass.rows || []).length >= (bestParsed.rows || []).length) {
-          return finalPass;
-        }
-        return bestParsed;
+        return (finalPass.rows || []).length >= (bestParsed.rows || []).length ? finalPass : bestParsed;
       };
 
-      // Detect `1 out of 2 ▶` pagination state & next-page button in the live Ricochet DOM
-      const inspectDomPagination = () => {
-        let currentPage = 1;
-        let totalPages = 1;
-        let outOfElement = null;
+      const payoutLink = findSafeSpaNavLink('Payout');
+      const payoutHistoryLink = findSafeSpaNavLink('Payout History');
+      const inventoryLink = findSafeSpaNavLink('Inventory');
 
-        const allNodes = Array.from(document.querySelectorAll('div, span, p, td, li, nav'));
-        for (const el of allNodes) {
-          if (el.closest && el.closest('#rc-ricochet-sync-root')) continue;
-          if (el.children && el.children.length > 5) continue;
-          const txt = cleanStr(el.textContent);
-          const m = txt.match(/\b(\d+)\s+out\s+of\s+(\d+)\b/i);
-          if (m) {
-            currentPage = parseInt(m[1], 10) || 1;
-            totalPages = parseInt(m[2], 10) || 1;
-            outOfElement = el;
-            break;
-          }
-        }
-
-        const isClickableDisabled = (el) => {
-          if (!el) return true;
-          if (el.disabled) return true;
-          const cls = String(el.className || '').toLowerCase();
-          const parentCls = String((el.parentElement && el.parentElement.className) || '').toLowerCase();
-          if (cls.includes('disabled') || parentCls.includes('disabled')) return true;
-          if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') return true;
-          return false;
-        };
-
-        let nextBtn = null;
-
-        // 1. Check sibling/nearby buttons right after `1 out of N`
-        if (outOfElement) {
-          const scopes = [
-            outOfElement.parentElement,
-            outOfElement.parentElement && outOfElement.parentElement.parentElement,
-          ].filter(Boolean);
-          for (const scope of scopes) {
-            const candidates = Array.from(scope.querySelectorAll('button, a, i, span[role="button"]'));
-            for (const c of candidates) {
-              if (c.closest && c.closest('#rc-ricochet-sync-root')) continue;
-              if (isClickableDisabled(c)) continue;
-              const cTxt = cleanStr(c.textContent);
-              const cCls = String(c.className || '').toLowerCase();
-              const aria = String((c.getAttribute && c.getAttribute('aria-label')) || '').toLowerCase();
-              if (
-                /^(▶|►|>|›|»|next|next\s*page)$/i.test(cTxt) ||
-                cCls.includes('right') ||
-                cCls.includes('next') ||
-                cCls.includes('chevron-right') ||
-                cCls.includes('caret-right') ||
-                cCls.includes('arrow-right') ||
-                aria.includes('next')
-              ) {
-                nextBtn = c.tagName === 'I' && c.parentElement ? c.parentElement : c;
-                break;
-              }
-            }
-            if (nextBtn) break;
-          }
-        }
-
-        // 2. Fallback: global pagination next button (`li.next:not(.disabled) a`, `▶`, `>`, `next`)
-        if (!nextBtn) {
-          const stdNext = document.querySelector(
-            'li.next:not(.disabled) a, li.pagination-next:not(.disabled) a, button[aria-label*="Next"]:not([disabled]), a[aria-label*="Next"]'
-          );
-          if (stdNext && !(stdNext.closest && stdNext.closest('#rc-ricochet-sync-root')) && !isClickableDisabled(stdNext)) {
-            nextBtn = stdNext;
-          }
-        }
-
-        if (!nextBtn) {
-          const allBtns = Array.from(document.querySelectorAll('button, a'));
-          for (const b of allBtns) {
-            if (b.closest && b.closest('#rc-ricochet-sync-root')) continue;
-            if (isClickableDisabled(b)) continue;
-            const bTxt = cleanStr(b.textContent);
-            const iconChild = b.querySelector('i[class*="right"], i[class*="next"], svg[class*="right"]');
-            if (/^(▶|►|>|›|»|next)$/i.test(bTxt) || iconChild) {
-              nextBtn = b;
-              break;
-            }
-          }
-        }
-
-        return { currentPage, totalPages, nextBtn };
-      };
-
-      // Harvest all pages (`page 1 .. totalPages`) for the active SPA table, awaiting XHR & row count stabilization
-      const harvestAllPagesFromCurrentSpaTab = async (parseFn) => {
-        const accumulatedRows = [];
-        const seenRowCounts = new Map();
-        let accumulatedTotalPayout = 0;
-
-        const makePageRowKey = (r) => {
-          const tkt = cleanStr(r.saleNumber || r.payoutId || '').replace(/^#/, '').toUpperCase();
-          const sku = cleanStr(r.ricoSku || r.sku || '').toUpperCase();
-          const sDate = cleanStr(r.soldDate || '');
-          const amt = Number(r.ricoNetPayout ?? r.grossPrice ?? 0).toFixed(2);
-          const ttl = normalizeTitleKey(r.title || '');
-          return `${tkt}|${sku}|${sDate}|${amt}|${ttl}`;
-        };
-
-        const appendParsedPage = (parsedPage, pageIdx) => {
-          if (!parsedPage) return 0;
-          let added = 0;
-          const pageOccurrences = new Map();
-          for (const r of parsedPage.rows || []) {
-            const baseK = makePageRowKey(r);
-            const occ = (pageOccurrences.get(baseK) || 0) + 1;
-            pageOccurrences.set(baseK, occ);
-            const fullKey = `${baseK}#${occ}`;
-            if (!seenRowCounts.has(fullKey) || pageIdx > 1) {
-              if (!seenRowCounts.has(fullKey)) {
-                seenRowCounts.set(fullKey, true);
-                accumulatedRows.push(r);
-                added++;
-              }
-            }
-          }
-          if (parsedPage.totalPayout !== 0 && accumulatedTotalPayout === 0) {
-            accumulatedTotalPayout = parsedPage.totalPayout;
-          }
-          (parsedPage.adjustments || []).forEach(addAdj);
-          return added;
-        };
-
-        const page1 = await waitForStabilizedPayoutTable(parseFn, '', 5000);
-        appendParsedPage(page1, 1);
-        let prevFirstSig =
-          page1.rows && page1.rows.length > 0
-            ? `${cleanStr(page1.rows[0].saleNumber || page1.rows[0].payoutId)}|${cleanStr(page1.rows[0].ricoSku || page1.rows[0].sku)}|${cleanStr(page1.rows[0].title)}`
-            : '';
-
-        const initialPag = inspectDomPagination();
-        const maxPages = Math.min(15, Math.max(initialPag.totalPages || 1, initialPag.nextBtn ? 10 : 1));
-
-        for (let pageNum = 2; pageNum <= maxPages; pageNum++) {
-          const pag = inspectDomPagination();
-          if (pag.totalPages > 1 && pag.currentPage >= pag.totalPages) break;
-          if (!pag.nextBtn || typeof pag.nextBtn.click !== 'function') break;
-
-          pag.nextBtn.click();
-
-          // Wait up to 5000ms for Page `pageNum` XHR + DOM rows to differ from Page `pageNum - 1` and stabilize across 2 consecutive polls
-          const nextParsed = await waitForStabilizedPayoutTable(parseFn, prevFirstSig, 5000);
-          if (nextParsed.rows && nextParsed.rows.length > 0) {
-            prevFirstSig = `${cleanStr(nextParsed.rows[0].saleNumber || nextParsed.rows[0].payoutId)}|${cleanStr(nextParsed.rows[0].ricoSku || nextParsed.rows[0].sku)}|${cleanStr(nextParsed.rows[0].title)}`;
-          }
-          const newlyAdded = appendParsedPage(nextParsed, pageNum);
-          if (newlyAdded === 0) break;
-        }
-
-        return { rows: accumulatedRows, totalPayout: accumulatedTotalPayout };
-      };
-
-      const payoutLink = findSpaNavLink('Payout');
-      const payoutHistoryLink = findSpaNavLink('Payout History');
-      const inventoryLink = findSpaNavLink('Inventory');
-
-      // 1. Auto-click SPA 'Payout' tab (`[Item, SKU, Sale, Agreed, ..., Sold, Amount]`), await XHR stabilization & paginate all pages
-      if (payoutLink && typeof payoutLink.click === 'function') {
+      // 1. Safely click `<a href="#">Payout</a>` and harvest `72` Pending Payout rows + Space Rental adjustments
+      if (safeClickSpaTab(payoutLink)) {
         try {
-          payoutLink.click();
-          const allPayoutPages = await harvestAllPagesFromCurrentSpaTab(parsePayoutsHtmlDocument);
-          if (allPayoutPages.rows.length > 0) {
-            harvestedPendingPayoutRows = allPayoutPages.rows;
-            cachedPayoutDomRows = allPayoutPages.rows;
-          }
-          if (allPayoutPages.totalPayout !== 0) {
-            harvestedPendingTotalPayout = allPayoutPages.totalPayout;
-          }
-        } catch (e) {}
-      }
-
-      // 2. Auto-click SPA 'Payout History' tab (`[Item, Sale, Agreed, ..., Paid, Sold, Amount]`), await Page 1 (252 rows) & Page 2 (`1 out of 2 ▶`) stabilization
-      if (payoutHistoryLink && typeof payoutHistoryLink.click === 'function') {
-        try {
-          payoutHistoryLink.click();
-          const allHistoryPages = await harvestAllPagesFromCurrentSpaTab(parsePayoutHistoryHtmlDocument);
-          if (allHistoryPages.rows.length > 0) {
-            harvestedPaidHistoryRows = allHistoryPages.rows;
-            cachedPayoutHistoryDomRows = allHistoryPages.rows;
-          }
-          if (allHistoryPages.totalPayout !== 0) {
-            harvestedPaidHistoryTotalPayout = allHistoryPages.totalPayout;
-          }
-        } catch (e) {}
-      }
-
-      // 3. Restore default 'Inventory' tab
-      if (inventoryLink && typeof inventoryLink.click === 'function') {
-        try {
-          inventoryLink.click();
-        } catch (e) {}
-      }
-
-      // 4. Fallback background HTML fetch if SPA links were not on the current route
-      if (harvestedPendingPayoutRows.length === 0 || harvestedPaidHistoryRows.length === 0) {
-        const fetchHtmlPage = async (pathUrl) => {
-          try {
-            const res = await fetch(pathUrl, {
-              method: 'GET',
-              credentials: 'include',
-              headers: {
-                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'X-Requested-With': 'XMLHttpRequest',
-              },
-            });
-            if (!res.ok) return null;
-            const text = await res.text();
-            if (!text || text.length < 30) return null;
-            return new DOMParser().parseFromString(text, 'text/html');
-          } catch (e) {
-            return null;
-          }
-        };
-
-        const [payoutsDoc, historyDoc] = await Promise.all([
-          harvestedPendingPayoutRows.length === 0 ? fetchHtmlPage('/payouts') : Promise.resolve(null),
-          harvestedPaidHistoryRows.length === 0 ? fetchHtmlPage('/payout_history') : Promise.resolve(null),
-        ]);
-
-        if (payoutsDoc) {
-          const parsedPayouts = parsePayoutsHtmlDocument(payoutsDoc);
-          if (parsedPayouts.rows.length > 0 && harvestedPendingPayoutRows.length === 0) {
+          const parsedPayouts = await waitForSpaTableRows(parsePayoutsHtmlDocument, 2400);
+          if (parsedPayouts.rows.length > 0) {
             harvestedPendingPayoutRows = parsedPayouts.rows;
             cachedPayoutDomRows = parsedPayouts.rows;
           }
-          if (parsedPayouts.totalPayout !== 0 && harvestedPendingTotalPayout === 0) {
+          if (parsedPayouts.totalPayout !== 0) {
             harvestedPendingTotalPayout = parsedPayouts.totalPayout;
           }
-          parsedPayouts.adjustments.forEach(addAdj);
-        }
+          (parsedPayouts.adjustments || []).forEach(addAdj);
+        } catch (e) {}
+      }
 
-        if (historyDoc) {
-          const parsedHistory = parsePayoutHistoryHtmlDocument(historyDoc);
-          if (parsedHistory.rows.length > 0 && harvestedPaidHistoryRows.length === 0) {
+      // 2. Safely click `<a href="#">Payout History</a>` and harvest `252` Paid History rows
+      if (safeClickSpaTab(payoutHistoryLink)) {
+        try {
+          const parsedHistory = await waitForSpaTableRows(parsePayoutHistoryHtmlDocument, 2400);
+          if (parsedHistory.rows.length > 0) {
             harvestedPaidHistoryRows = parsedHistory.rows;
             cachedPayoutHistoryDomRows = parsedHistory.rows;
           }
-          if (parsedHistory.totalPayout !== 0 && harvestedPaidHistoryTotalPayout === 0) {
+          if (parsedHistory.totalPayout !== 0) {
             harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
           }
-          parsedHistory.adjustments.forEach(addAdj);
-        }
+          (parsedHistory.adjustments || []).forEach(addAdj);
+        } catch (e) {}
       }
+
+      // 3. Safely restore `<a href="#">Inventory</a>` tab
+      safeClickSpaTab(inventoryLink);
 
       if (mergedAdjustments.length > 0) {
         spaceRentalAdjustments = mergedAdjustments;
@@ -2505,7 +1970,7 @@
       extractRicochetSoldLines();
       if (manualTrigger || harvestedPendingPayoutRows.length > 0 || harvestedPaidHistoryRows.length > 0) {
         addLog(
-          `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows (all pages), and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
+          `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows, and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
           '#10b981'
         );
       }
@@ -2793,88 +2258,83 @@
       pushNormalizedSoldRow(r, true);
     }
 
-    // 3. Only suppress the `/api/product` fallback once BOTH `Payout` AND `Payout History` have been harvested (`pendingSourceRows.length > 0 && paidHistorySourceRows.length > 0`);
-    // otherwise merge any remaining sold items from Tab 1's `buildVerificationReport()` via 1-for-1 multiset counters so no sold items are ever lost!
-    const hasCompletePayoutDomLedger =
-      pendingSourceRows.length > 0 && paidHistorySourceRows.length > 0;
+    // 3. Merge any remaining sold items from Tab 1's `buildVerificationReport()` (`tab1AuditRows` / `/api/product`)
+    // via 1-for-1 multiset counters (`seenPayoutSkuCounts` + `seenPayoutTitlePriceCounts`) so all `~367` sold items resolve cleanly without touching pagination buttons!
+    for (const auditRow of tab1AuditRows) {
+      if (auditRow.inventory !== 'Sold' && auditRow.inventory !== 'Paid') continue;
 
-    if (!hasCompletePayoutDomLedger) {
-      for (const auditRow of tab1AuditRows) {
-        if (auditRow.inventory !== 'Sold' && auditRow.inventory !== 'Paid') continue;
+      const resolvedSku = cleanStr(auditRow.sku).toUpperCase();
+      const agreedPrice = Number(Number(auditRow.agreedPrice || 0).toFixed(2));
+      const prodTitle = cleanStr(auditRow.name || resolvedSku || 'Booth Sale Item');
+      const resolvedUpc = cleanStr(auditRow.expectedRcUpc || auditRow.upc).toUpperCase();
 
-        const resolvedSku = cleanStr(auditRow.sku).toUpperCase();
-        const agreedPrice = Number(Number(auditRow.agreedPrice || 0).toFixed(2));
-        const prodTitle = cleanStr(auditRow.name || resolvedSku || 'Booth Sale Item');
-        const resolvedUpc = cleanStr(auditRow.expectedRcUpc || auditRow.upc).toUpperCase();
-
-        if (resolvedSku) {
-          const remSkuCount = seenPayoutSkuCounts.get(resolvedSku) || 0;
-          if (remSkuCount > 0) {
-            seenPayoutSkuCounts.set(resolvedSku, remSkuCount - 1);
-            const normT = normalizeTitleKey(prodTitle);
-            if (normT) {
-              const tpKey = `${normT}|${agreedPrice.toFixed(2)}`;
-              const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
-              if (remTp > 0) seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
-            }
-            continue;
+      if (resolvedSku) {
+        const remSkuCount = seenPayoutSkuCounts.get(resolvedSku) || 0;
+        if (remSkuCount > 0) {
+          seenPayoutSkuCounts.set(resolvedSku, remSkuCount - 1);
+          const normT = normalizeTitleKey(prodTitle);
+          if (normT) {
+            const tpKey = `${normT}|${agreedPrice.toFixed(2)}`;
+            const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+            if (remTp > 0) seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
           }
+          continue;
         }
-
-        const normProdTitle = normalizeTitleKey(prodTitle);
-        if (normProdTitle) {
-          const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
-          const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
-          if (remTp > 0) {
-            seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
-            continue;
-          }
-        }
-
-        const p = resolvedSku ? productBySku.get(resolvedSku) : null;
-        const firstItem =
-          p && Array.isArray(p.items)
-            ? p.items[0]
-            : p && p.items && typeof p.items === 'object'
-            ? Object.values(p.items).flat()[0]
-            : null;
-        const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
-        const ricoNetPayout = Number(
-          (
-            parseFloat(String(p?.net ?? p?.net_payout ?? p?.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
-            Math.max(0, agreedPrice - ricoCommission)
-          ).toFixed(2)
-        );
-        const rawSoldDate = cleanStr(
-          p?.sold_date ||
-            p?.sold_at ||
-            p?.paid_date ||
-            p?.updated_at ||
-            firstItem?.sold_date ||
-            firstItem?.sold_at ||
-            firstItem?.updated_at ||
-            ''
-        ).slice(0, 10);
-        const isPaid = auditRow.inventory === 'Paid';
-
-        pushNormalizedSoldRow({
-          ricoItemId: resolvedSku || cleanStr(auditRow.productId) || `sold-item-${soldRows.length + 1}`,
-          ricoSku: resolvedSku,
-          sku: resolvedSku,
-          upc: resolvedUpc,
-          title: prodTitle,
-          saleNumber: cleanStr(p?.sale_id || p?.ticket_number || firstItem?.sale_id || ''),
-          agreedPrice,
-          agedPrice: agreedPrice,
-          splitPct: `${100 - activeCommissionRate}.00%`,
-          soldDate: rawSoldDate,
-          paidDate: isPaid ? cleanStr(p?.paid_date || rawSoldDate) : null,
-          grossPrice: agreedPrice,
-          ricoNetPayout,
-          ricoCommission,
-          payoutStatus: isPaid ? 'paid' : 'pending_payout',
-        }, false);
       }
+
+      const normProdTitle = normalizeTitleKey(prodTitle);
+      if (normProdTitle) {
+        const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
+        const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+        if (remTp > 0) {
+          seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+          continue;
+        }
+      }
+
+      const p = resolvedSku ? productBySku.get(resolvedSku) : null;
+      const firstItem =
+        p && Array.isArray(p.items)
+          ? p.items[0]
+          : p && p.items && typeof p.items === 'object'
+          ? Object.values(p.items).flat()[0]
+          : null;
+      const ricoCommission = Number((agreedPrice * feeRate).toFixed(2));
+      const ricoNetPayout = Number(
+        (
+          parseFloat(String(p?.net ?? p?.net_payout ?? p?.payout ?? firstItem?.net ?? '').replace(/[^0-9.-]/g, '')) ||
+          Math.max(0, agreedPrice - ricoCommission)
+        ).toFixed(2)
+      );
+      const rawSoldDate = cleanStr(
+        p?.sold_date ||
+          p?.sold_at ||
+          p?.paid_date ||
+          p?.updated_at ||
+          firstItem?.sold_date ||
+          firstItem?.sold_at ||
+          firstItem?.updated_at ||
+          ''
+      ).slice(0, 10);
+      const isPaid = auditRow.inventory === 'Paid';
+
+      pushNormalizedSoldRow({
+        ricoItemId: resolvedSku || cleanStr(auditRow.productId) || `sold-item-${soldRows.length + 1}`,
+        ricoSku: resolvedSku,
+        sku: resolvedSku,
+        upc: resolvedUpc,
+        title: prodTitle,
+        saleNumber: cleanStr(p?.sale_id || p?.ticket_number || firstItem?.sale_id || ''),
+        agreedPrice,
+        agedPrice: agreedPrice,
+        splitPct: `${100 - activeCommissionRate}.00%`,
+        soldDate: rawSoldDate,
+        paidDate: isPaid ? cleanStr(p?.paid_date || rawSoldDate) : null,
+        grossPrice: agreedPrice,
+        ricoNetPayout,
+        ricoCommission,
+        payoutStatus: isPaid ? 'paid' : 'pending_payout',
+      }, false);
     }
 
     lastExtractedSalesRows = soldRows;
