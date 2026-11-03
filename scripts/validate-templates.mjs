@@ -343,6 +343,8 @@ const forbiddenHardcodedLocationPatterns = [
     { pattern: /['"]md_live_payload_latest['"]/, reason: 'Do not hardcode "md_live_payload_latest" in components; use getLocationManifestDocIds(code).payloadDocId from src/lib/warehouses.ts' },
     { pattern: /Memory Den Barcode Verification Report/, reason: 'Use dynamic {{ activeCanonicalLocationMeta.shortName }} Barcode Verification Report instead of hardcoded "Memory Den"' },
     { pattern: /Load Memory Den Full Payout/, reason: 'Use dynamic {{ activeCanonicalLocationMeta.shortName }} instead of hardcoded "Load Memory Den Full Payout"' },
+    { pattern: /STAGING_STORAGE_KEY\s*=\s*['"]rc_sales_importer_staging_v1['"]/, reason: 'Do not use an unscoped global auto-save key; scope by canonical location code via getScopedStagingStorageKey(code)' },
+    { pattern: /(?:rentAmt\s*=\s*(?:75(?:\.00)?|382\.50)|spaceRental:\s*[^\n,;]*\b(?:75(?:\.00)?|382\.50)\b)/, reason: 'Do not hardcode 75 / 75.00 / 382.50 rent fallbacks; derive monthlyRent 100% from activeCanonicalLocationMeta' },
 ];
 
 for (const relPath of locationDrivenFiles) {

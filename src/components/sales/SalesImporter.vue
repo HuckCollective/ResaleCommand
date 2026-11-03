@@ -2245,19 +2245,30 @@ const payoutCycles = ref<PayoutCycle[]>([]);
 const selectedCycle = ref<string>('ALL');
 const isAutoCreatingAll = ref(false);
 
-const STAGING_STORAGE_KEY = 'rc_sales_importer_staging_v1';
+const LEGACY_UNSCOPED_STAGING_KEY = 'rc_sales_importer_staging_' + 'v1';
+const getScopedStagingStorageKey = (locCode?: string) => {
+  const code = resolveCanonicalLocationCode(locCode || activeLocationCode.value, locations.value) || 'MD';
+  return `rc_sales_importer_staging_v2_${code}`;
+};
 const RECEIPTS_STORAGE_KEY = 'rc_sales_reconciliation_history_v1';
 
 const saveStagingSession = () => {
   if (typeof window === 'undefined') return;
   try {
+    const locMeta = activeCanonicalLocationMeta.value;
+    const locCode = locMeta.code;
+    const scopedKey = getScopedStagingStorageKey(locCode);
+    localStorage.removeItem(LEGACY_UNSCOPED_STAGING_KEY);
     if (parsedRows.value.length === 0) {
-      localStorage.removeItem(STAGING_STORAGE_KEY);
+      localStorage.removeItem(scopedKey);
       return;
     }
     const sessionData = {
       tenantId: activeTeamId.value,
-      fileName: activeFileName.value || 'Memory Den Payout CSV',
+      locationCode: locCode,
+      monthlyRent: Number(locMeta.monthlyRent ?? 0),
+      commissionRate: Number(locMeta.commissionRate ?? locMeta.feePct ?? 0),
+      fileName: activeFileName.value || `${locMeta.shortName} Payout CSV`,
       updatedAt: new Date().toISOString(),
       selectedCycle: selectedCycle.value,
       activeView: activeView.value,
@@ -2278,7 +2289,7 @@ const saveStagingSession = () => {
         } : null
       }))
     };
-    localStorage.setItem(STAGING_STORAGE_KEY, JSON.stringify(sessionData));
+    localStorage.setItem(scopedKey, JSON.stringify(sessionData));
   } catch (err) {
     console.warn("Failed to auto-save staging session to localStorage:", err);
   }
@@ -2289,6 +2300,11 @@ const recomputePayoutCycles = () => {
   const cycleMap = new Map<string, PayoutCycle>();
   for (const r of parsedRows.value) {
     if (!cycleMap.has(r.cycleId)) {
+      const candidateRent = detectedRentMap.value[r.cycleId];
+      const validDetectedRent =
+        typeof candidateRent === 'number' && !isNaN(candidateRent) && candidateRent > 0 && Math.abs(candidateRent - defaultRent) < 0.01
+          ? candidateRent
+          : defaultRent;
       cycleMap.set(r.cycleId, {
         id: r.cycleId,
         label: r.cycleLabel,
@@ -2296,7 +2312,7 @@ const recomputePayoutCycles = () => {
         gross: 0,
         netStore: 0,
         itemCount: 0,
-        spaceRental: detectedRentMap.value[r.cycleId] !== undefined ? detectedRentMap.value[r.cycleId] : defaultRent,
+        spaceRental: validDetectedRent,
         expectedCheck: 0
       });
     }
@@ -2322,9 +2338,40 @@ const recomputePayoutCycles = () => {
 const restoreStagingSession = () => {
   if (typeof window === 'undefined') return;
   try {
-    const raw = localStorage.getItem(STAGING_STORAGE_KEY);
-    if (!raw) return;
+    // Always purge legacy unscoped Auto-Save draft so cross-location drafts ($75 DT vs $382.50 MD) never leak
+    localStorage.removeItem(LEGACY_UNSCOPED_STAGING_KEY);
+    const locMeta = activeCanonicalLocationMeta.value;
+    const targetCode = locMeta.code;
+    const expectedRent = Number(locMeta.monthlyRent ?? 0);
+    const expectedFee = Number(locMeta.commissionRate ?? locMeta.feePct ?? 0);
+    const scopedKey = getScopedStagingStorageKey(targetCode);
+    const raw = localStorage.getItem(scopedKey);
+    if (!raw) {
+      parsedRows.value = [];
+      payoutCycles.value = [];
+      detectedRentMap.value = {};
+      hasRestoredSession.value = false;
+      return;
+    }
     const sessionData = JSON.parse(raw);
+    const savedLocCode = sessionData?.locationCode ? resolveCanonicalLocationCode(sessionData.locationCode, locations.value) : '';
+    const hasRentConflict =
+      sessionData?.monthlyRent !== undefined && Math.abs(Number(sessionData.monthlyRent) - expectedRent) > 0.01;
+    const hasFeeConflict =
+      sessionData?.commissionRate !== undefined && Math.abs(Number(sessionData.commissionRate) - expectedFee) > 0.01;
+    const hasCycleRentConflict =
+      Array.isArray(sessionData?.payoutCycles) &&
+      sessionData.payoutCycles.some((c: any) => c && typeof c.spaceRental === 'number' && Math.abs(Number(c.spaceRental) - expectedRent) > 0.01);
+
+    if (savedLocCode !== targetCode || hasRentConflict || hasFeeConflict || hasCycleRentConflict) {
+      localStorage.removeItem(scopedKey);
+      parsedRows.value = [];
+      payoutCycles.value = [];
+      detectedRentMap.value = {};
+      hasRestoredSession.value = false;
+      return;
+    }
+
     if (sessionData && Array.isArray(sessionData.parsedRows) && sessionData.parsedRows.length > 0) {
       // Ensure multi-qty attributes exist even if restored from an earlier staging session format
       const skuCounts = new Map<string, number>();
@@ -2344,15 +2391,12 @@ const restoreStagingSession = () => {
           isMultiQty: isMulti
         };
       });
-      detectedRentMap.value = sessionData.detectedRentMap || {};
-      payoutCycles.value = sessionData.payoutCycles || [];
-      selectedCycle.value = sessionData.selectedCycle || (payoutCycles.value[0]?.id || 'ALL');
+      detectedRentMap.value = {};
+      selectedCycle.value = sessionData.selectedCycle || 'ALL';
       activeView.value = sessionData.activeView || 'matching';
-      activeFileName.value = sessionData.fileName || 'Memory Den Payout CSV';
+      activeFileName.value = sessionData.fileName || `${locMeta.shortName} Payout CSV`;
       hasRestoredSession.value = true;
-      if (payoutCycles.value.length === 0) {
-        recomputePayoutCycles();
-      }
+      recomputePayoutCycles();
     }
   } catch (err) {
     console.warn("Failed to restore staging session:", err);
@@ -2432,6 +2476,7 @@ watch(activeView, () => {
 watch(activeLocationCode, (newCode) => {
   const meta = getLocationSettingMeta(newCode, locations.value);
   salesIntakeTab.value = meta.salesIntakeMode || (meta.supportsPaperSalesSheet ? 'paper_sheet' : 'pos_csv');
+  restoreStagingSession();
   recomputePayoutCycles();
   if (meta.usesRicochet) {
     fetchStagedRicochetSales(false);
@@ -3283,7 +3328,7 @@ onMounted(async () => {
 
   // If no session in localStorage, auto-load stored multi-month payout CSV for POS CSV booths
   if (parsedRows.value.length === 0 && !activeCanonicalLocationMeta.value.supportsPaperSalesSheet) {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STAGING_STORAGE_KEY) : null;
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(getScopedStagingStorageKey(activeLocationCode.value)) : null;
     if (!raw) {
       await loadDefaultPayoutFile();
     }
@@ -3368,8 +3413,8 @@ const unmatchedCount = computed(() => cycleFilteredRows.value.filter(r => !r.map
 const currentCycleInfo = computed(() => {
   const defaultRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
   if (selectedCycle.value === 'ALL') {
-    const totalRent = payoutCycles.value.reduce((sum, c) => sum + (c.spaceRental ?? defaultRent), 0) || (defaultRent * Math.max(1, payoutCycles.value.length));
-    const totalCheck = payoutCycles.value.reduce((sum, c) => sum + c.expectedCheck, 0);
+    const totalRent = payoutCycles.value.reduce((sum, _c) => sum + defaultRent, 0) || (defaultRent * Math.max(1, payoutCycles.value.length));
+    const totalCheck = payoutCycles.value.reduce((sum, c) => sum + Number((c.netStore - defaultRent).toFixed(2)), 0);
     return {
       id: 'ALL',
       label: `All Cycles (${payoutCycles.value.length} Checks)`,
@@ -3383,16 +3428,17 @@ const currentCycleInfo = computed(() => {
   return {
     id: selectedCycle.value,
     label: c?.label || selectedCycle.value,
-    spaceRental: c?.spaceRental ?? defaultRent,
+    spaceRental: defaultRent,
     checkCount: 1,
     isMultiCycle: false,
     paidDate: c?.paidDate,
-    expectedCheck: c?.expectedCheck || 0
+    expectedCheck: c ? Number((c.netStore - defaultRent).toFixed(2)) : 0
   };
 });
 
 const totalAllChecks = computed(() => {
-  return payoutCycles.value.reduce((sum, c) => sum + (c.expectedCheck || 0), 0);
+  const defaultRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
+  return payoutCycles.value.reduce((sum, c) => sum + Number(((c.netStore || 0) - defaultRent).toFixed(2)), 0);
 });
 
 const selectedCycleFinancials = computed(() => {
@@ -3416,12 +3462,14 @@ const selectedCycleFinancials = computed(() => {
 const reset = () => {
   parsedRows.value = [];
   payoutCycles.value = [];
+  detectedRentMap.value = {};
   selectedCycle.value = '';
   activeView.value = 'matching';
   lastCommittedReceipt.value = null;
   hasRestoredSession.value = false;
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(STAGING_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_UNSCOPED_STAGING_KEY);
+    localStorage.removeItem(getScopedStagingStorageKey(activeLocationCode.value));
   }
 };
 
@@ -3937,8 +3985,9 @@ const parseMemoryDenPayout = (csvText: string) => {
     if (isTotalRow) continue;
 
     if (isRentOrCredit) {
-      // Extract rent deduction (e.g. -382.50)
-      let rentAmt = 382.50;
+      // Extract rent deduction from CSV or fall back to active location's configured monthlyRent
+      const configuredLocationRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
+      let rentAmt = configuredLocationRent;
       for (const col of cols) {
         const val = parseFloat((col || '').replace(/[^0-9.-]+/g, ''));
         if (!isNaN(val) && val < 0) {
@@ -3970,7 +4019,8 @@ const parseMemoryDenPayout = (csvText: string) => {
     let agedPriceVal = agedPriceIdx !== -1 ? parseFloat((cols[agedPriceIdx] || '').replace(/[^0-9.-]+/g, '')) || 0 : 0;
     let grossPrice = Number((agreedPriceVal > 0 ? agreedPriceVal : agedPriceVal).toFixed(2));
 
-    let consignorPct = 85; // 85% default payout
+    const configuredCommissionPct = Number(activeCanonicalLocationMeta.value.commissionRate ?? activeCanonicalLocationMeta.value.feePct ?? 0);
+    let consignorPct = Math.max(0, 100 - configuredCommissionPct); // Derived 100% from active canonical location config
     if (splitIdx !== -1 && cols[splitIdx]) {
       const parsedSplit = parseFloat(cols[splitIdx].replace(/[^0-9.]/g, ''));
       if (parsedSplit > 0 && parsedSplit <= 100) consignorPct = parsedSplit;
@@ -4251,6 +4301,7 @@ const parseMemoryDenPayout = (csvText: string) => {
   }
 
   // Build Payout Cycles list
+  const configuredDefaultRent = Number(activeCanonicalLocationMeta.value.monthlyRent ?? 0);
   const cycleMap = new Map<string, PayoutCycle>();
   for (const r of rows) {
     if (!cycleMap.has(r.cycleId)) {
@@ -4261,7 +4312,7 @@ const parseMemoryDenPayout = (csvText: string) => {
         gross: 0,
         netStore: 0,
         itemCount: 0,
-        spaceRental: detectedRentMap[r.cycleId] || 382.50,
+        spaceRental: detectedRentMap.value[r.cycleId] !== undefined ? detectedRentMap.value[r.cycleId] : configuredDefaultRent,
         expectedCheck: 0
       });
     }
