@@ -748,14 +748,17 @@
     document.getElementById('rc-sync-start-btn').addEventListener('click', () => runBatchSync(false));
     document.getElementById('rc-send-report-btn').addEventListener('click', () => sendReportToResaleCommand(false));
     document.getElementById('rc-download-csv-btn').addEventListener('click', downloadVerificationCsv);
-    document.getElementById('rc-refresh-cloud-btn').addEventListener('click', () => fetchLivePayloadFromCloud(true));
+    document.getElementById('rc-refresh-cloud-btn').addEventListener('click', () => {
+      fetchLivePayloadFromCloud(true);
+      harvestLiveSpaPayoutTables(true);
+    });
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
     document.getElementById('rc-push-sales-btn').addEventListener('click', pushSalesToResaleCore);
     document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
     const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
     if (harvestBtn) {
-      harvestBtn.addEventListener('click', () => harvestRicochetPayoutPages(true));
+      harvestBtn.addEventListener('click', () => harvestLiveSpaPayoutTables(true));
     }
 
     const salesFilterBtns = root.querySelectorAll('.rc-sales-filter-btn');
@@ -1082,6 +1085,7 @@
     if (!isOpen) togglePanel();
     showModalLoader(`⏳ Auditing ${activeLocationName} Catalog...`);
     fetchLivePayloadFromCloud(true, true);
+    harvestLiveSpaPayoutTables(false);
     if (catalogProducts.length === 0 && !isLoadingCatalog) {
       loadConsignorCatalog();
     } else {
@@ -1101,6 +1105,9 @@
       if (catalogProducts.length === 0 && !isLoadingCatalog) {
         loadConsignorCatalog();
       } else {
+        if (!hasHarvestedPayoutPages && !isHarvestingPayoutPages) {
+          harvestLiveSpaPayoutTables(false);
+        }
         hideModalLoaderAfterMinDuration();
       }
     }
@@ -1166,7 +1173,7 @@
       if (Object.keys(parsedMap).length === 0 && !isFetchingCloudPayload) {
         await fetchLivePayloadFromCloud(false, true);
       }
-      harvestRicochetPayoutPages(false);
+      await harvestLiveSpaPayoutTables(false);
       updateUI();
     } catch (err) {
       addLog(`❌ Error loading catalog: ${err.message}`, '#f87171');
@@ -1601,7 +1608,7 @@
 
     if (activeModalTab === 'sales') {
       if (!hasHarvestedPayoutPages && !isHarvestingPayoutPages) {
-        harvestRicochetPayoutPages(false);
+        harvestLiveSpaPayoutTables(false);
       }
       updateSalesSyncTabUI();
     }
@@ -1810,8 +1817,8 @@
     return { rows, adjustments, totalPayout };
   }
 
-  // Background Fetch + DOM Parser for `/payouts` and `/payout_history` (Zero Manual Tab Clicking)
-  async function harvestRicochetPayoutPages(manualTrigger = false) {
+  // Auto-Click Live SPA `<a href="#">Payout</a>` & `<a href="#">Payout History</a>` Tabs + DOM Parser
+  async function harvestLiveSpaPayoutTables(manualTrigger = false) {
     if (isHarvestingPayoutPages) return;
     isHarvestingPayoutPages = true;
     const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
@@ -1821,30 +1828,6 @@
     }
 
     try {
-      const fetchHtmlPage = async (pathUrl) => {
-        try {
-          const res = await fetch(pathUrl, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-              'X-Requested-With': 'XMLHttpRequest',
-            },
-          });
-          if (!res.ok) return null;
-          const text = await res.text();
-          if (!text || text.length < 30) return null;
-          return new DOMParser().parseFromString(text, 'text/html');
-        } catch (e) {
-          return null;
-        }
-      };
-
-      const [payoutsDoc, historyDoc] = await Promise.all([
-        fetchHtmlPage('/payouts'),
-        fetchHtmlPage('/payout_history'),
-      ]);
-
       const mergedAdjustments = [];
       const seenAdjKeys = new Set();
       const addAdj = (a) => {
@@ -1855,50 +1838,171 @@
         }
       };
 
-      if (payoutsDoc) {
-        const parsedPayouts = parsePayoutsHtmlDocument(payoutsDoc);
-        if (parsedPayouts.rows.length > 0) {
-          harvestedPendingPayoutRows = parsedPayouts.rows;
+      const findSpaNavLink = (exactLabel) => {
+        const target = exactLabel.trim().toLowerCase();
+        const links = Array.from(document.querySelectorAll('a, button, [role="tab"]'));
+        return (
+          links.find((el) => {
+            if (el.closest && el.closest('#rc-ricochet-sync-root')) return false;
+            return cleanStr(el.textContent).toLowerCase() === target;
+          }) || null
+        );
+      };
+
+      const expandPageLengthSelects = () => {
+        try {
+          const selects = Array.from(document.querySelectorAll('select'));
+          for (const sel of selects) {
+            if (sel.closest && sel.closest('#rc-ricochet-sync-root')) continue;
+            const opts = Array.from(sel.options || []);
+            const maxOpt =
+              opts.find((o) => String(o.value) === '-1' || /all/i.test(cleanStr(o.textContent))) ||
+              opts.find((o) => parseInt(String(o.value), 10) >= 1000) ||
+              opts.find((o) => parseInt(String(o.value), 10) >= 500) ||
+              opts.find((o) => parseInt(String(o.value), 10) >= 100);
+            if (maxOpt && sel.value !== maxOpt.value) {
+              sel.value = maxOpt.value;
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+              sel.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        } catch (e) {}
+      };
+
+      const hasMatchingTableInDom = (requiredHeaders, forbiddenHeaders = []) => {
+        const tables = Array.from(document.querySelectorAll('table'));
+        for (const table of tables) {
+          if (table.closest && table.closest('#rc-ricochet-sync-root')) continue;
+          const thTexts = Array.from(table.querySelectorAll('thead th, tr:first-child th')).map((th) =>
+            cleanStr(th.textContent).toLowerCase()
+          );
+          if (thTexts.length === 0) continue;
+          const allReqPresent = requiredHeaders.every((req) =>
+            thTexts.some((th) => th === req || th.includes(req))
+          );
+          const anyForbidden = forbiddenHeaders.some((forb) =>
+            thTexts.some((th) => th === forb || th.includes(forb))
+          );
+          if (allReqPresent && !anyForbidden) {
+            return true;
+          }
         }
-        if (parsedPayouts.totalPayout !== 0) {
-          harvestedPendingTotalPayout = parsedPayouts.totalPayout;
+        return false;
+      };
+
+      const pollForSpaTable = async (requiredHeaders, forbiddenHeaders = [], maxMs = 2000) => {
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          expandPageLengthSelects();
+          if (hasMatchingTableInDom(requiredHeaders, forbiddenHeaders)) {
+            await new Promise((r) => setTimeout(r, 80));
+            expandPageLengthSelects();
+            return true;
+          }
+          await new Promise((r) => setTimeout(r, 120));
         }
-        parsedPayouts.adjustments.forEach(addAdj);
+        return hasMatchingTableInDom(requiredHeaders, forbiddenHeaders);
+      };
+
+      const payoutLink = findSpaNavLink('Payout');
+      const payoutHistoryLink = findSpaNavLink('Payout History');
+      const inventoryLink = findSpaNavLink('Inventory');
+
+      // 1. Auto-click SPA 'Payout' tab (`[Item, SKU, Sale, Agreed, ..., Sold, Amount]`)
+      if (payoutLink && typeof payoutLink.click === 'function') {
+        try {
+          payoutLink.click();
+          await pollForSpaTable(['item', 'sku', 'sale', 'agreed', 'sold', 'amount'], ['paid'], 2000);
+          const domPayouts = parsePayoutsHtmlDocument(document);
+          if (domPayouts.rows.length > 0) {
+            harvestedPendingPayoutRows = domPayouts.rows;
+          }
+          if (domPayouts.totalPayout !== 0) {
+            harvestedPendingTotalPayout = domPayouts.totalPayout;
+          }
+          domPayouts.adjustments.forEach(addAdj);
+        } catch (e) {}
       }
 
-      if (historyDoc) {
-        const parsedHistory = parsePayoutHistoryHtmlDocument(historyDoc);
-        if (parsedHistory.rows.length > 0) {
-          harvestedPaidHistoryRows = parsedHistory.rows;
-        }
-        if (parsedHistory.totalPayout !== 0) {
-          harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
-        }
-        parsedHistory.adjustments.forEach(addAdj);
+      // 2. Auto-click SPA 'Payout History' tab (`[Item, Sale, Agreed, ..., Paid, Sold, Amount]`)
+      if (payoutHistoryLink && typeof payoutHistoryLink.click === 'function') {
+        try {
+          payoutHistoryLink.click();
+          await pollForSpaTable(['item', 'sale', 'agreed', 'paid', 'sold', 'amount'], ['sku'], 2000);
+          const domHistory = parsePayoutHistoryHtmlDocument(document);
+          if (domHistory.rows.length > 0) {
+            harvestedPaidHistoryRows = domHistory.rows;
+          }
+          if (domHistory.totalPayout !== 0) {
+            harvestedPaidHistoryTotalPayout = domHistory.totalPayout;
+          }
+          domHistory.adjustments.forEach(addAdj);
+        } catch (e) {}
       }
 
-      // DOM Fallback if user is currently viewing `/payouts` or `/payout_history` (or SPA tab)
-      try {
-        const currentPath = String(window.location.pathname || '').toLowerCase();
-        const domPayouts = parsePayoutsHtmlDocument(document);
-        if (domPayouts.rows.length > 0 && (harvestedPendingPayoutRows.length === 0 || currentPath.includes('payout'))) {
-          harvestedPendingPayoutRows = domPayouts.rows;
-        }
-        domPayouts.adjustments.forEach(addAdj);
+      // 3. Restore default 'Inventory' tab
+      if (inventoryLink && typeof inventoryLink.click === 'function') {
+        try {
+          inventoryLink.click();
+        } catch (e) {}
+      }
 
-        const domHistory = parsePayoutHistoryHtmlDocument(document);
-        if (domHistory.rows.length > 0 && (harvestedPaidHistoryRows.length === 0 || currentPath.includes('history'))) {
-          harvestedPaidHistoryRows = domHistory.rows;
+      // 4. Fallback background HTML fetch if SPA links were not on the current route
+      if (harvestedPendingPayoutRows.length === 0 || harvestedPaidHistoryRows.length === 0) {
+        const fetchHtmlPage = async (pathUrl) => {
+          try {
+            const res = await fetch(pathUrl, {
+              method: 'GET',
+              credentials: 'include',
+              headers: {
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+            });
+            if (!res.ok) return null;
+            const text = await res.text();
+            if (!text || text.length < 30) return null;
+            return new DOMParser().parseFromString(text, 'text/html');
+          } catch (e) {
+            return null;
+          }
+        };
+
+        const [payoutsDoc, historyDoc] = await Promise.all([
+          harvestedPendingPayoutRows.length === 0 ? fetchHtmlPage('/payouts') : Promise.resolve(null),
+          harvestedPaidHistoryRows.length === 0 ? fetchHtmlPage('/payout_history') : Promise.resolve(null),
+        ]);
+
+        if (payoutsDoc) {
+          const parsedPayouts = parsePayoutsHtmlDocument(payoutsDoc);
+          if (parsedPayouts.rows.length > 0 && harvestedPendingPayoutRows.length === 0) {
+            harvestedPendingPayoutRows = parsedPayouts.rows;
+          }
+          if (parsedPayouts.totalPayout !== 0 && harvestedPendingTotalPayout === 0) {
+            harvestedPendingTotalPayout = parsedPayouts.totalPayout;
+          }
+          parsedPayouts.adjustments.forEach(addAdj);
         }
-        domHistory.adjustments.forEach(addAdj);
-      } catch (e) {}
+
+        if (historyDoc) {
+          const parsedHistory = parsePayoutHistoryHtmlDocument(historyDoc);
+          if (parsedHistory.rows.length > 0 && harvestedPaidHistoryRows.length === 0) {
+            harvestedPaidHistoryRows = parsedHistory.rows;
+          }
+          if (parsedHistory.totalPayout !== 0 && harvestedPaidHistoryTotalPayout === 0) {
+            harvestedPaidHistoryTotalPayout = parsedHistory.totalPayout;
+          }
+          parsedHistory.adjustments.forEach(addAdj);
+        }
+      }
 
       if (mergedAdjustments.length > 0) {
         spaceRentalAdjustments = mergedAdjustments;
       }
 
       hasHarvestedPayoutPages = true;
-      if (manualTrigger) {
+      extractRicochetSoldLines();
+      if (manualTrigger || harvestedPendingPayoutRows.length > 0 || harvestedPaidHistoryRows.length > 0) {
         addLog(
           `💰 Harvested ${harvestedPendingPayoutRows.length} Pending Payout rows, ${harvestedPaidHistoryRows.length} Paid History rows, and ${spaceRentalAdjustments.length} Space Rental adjustments.`,
           '#10b981'
@@ -1914,6 +2018,10 @@
       }
       updateSalesSyncTabUI();
     }
+  }
+
+  async function harvestRicochetPayoutPages(manualTrigger = false) {
+    return harvestLiveSpaPayoutTables(manualTrigger);
   }
 
   // Build 4-tier lookup & cross-link `0EJ...` SKU <-> Custom UPC <-> Booth Item, merging `/payouts`, `/payout_history`, and `/api/product`
@@ -1979,7 +2087,7 @@
     // Helper: 4-tier resolution of `ricoSku` (`0EJ...`) and `upc` (`HUCK-XXXX` / `PDXGL-` / `BB-`)
     const resolveCrossLinkedIdentity = (rawRow) => {
       let candidateSku = cleanStr(rawRow.ricoSku || rawRow.sku || '').toUpperCase();
-      if (/^\d+$/.test(candidateSku)) {
+      if (candidateSku === 'UNLINKED-SKU' || /^\d+$/.test(candidateSku)) {
         candidateSku = skuByNumericId.get(candidateSku) || '';
       }
       const rawIdStr = cleanStr(rawRow.ricoItemId || rawRow.productId || '');
@@ -2051,14 +2159,13 @@
     };
 
     const soldRows = [];
-    const seenDedupKeys = new Set();
-    const seenSkuSetFromPayoutTables = new Set();
+    const seenPayoutSignatureCounts = new Map();
+    const seenPayoutSkuCounts = new Map();
     const seenPayoutTitlePriceCounts = new Map();
-    const seenPayoutTitleOnlyCounts = new Map();
 
     const pushNormalizedSoldRow = (raw, isFromPayoutTable = false) => {
       const linked = resolveCrossLinkedIdentity(raw);
-      const ricoSku = linked.ricoSku;
+      const ricoSku = linked.ricoSku || '';
       const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');
       const cleanTicket = saleNumber.replace(/^#/, '').trim();
       const soldDate = cleanStr(raw.soldDate || '');
@@ -2071,17 +2178,18 @@
       );
       const ricoCommission = Math.max(0, Number((grossPrice - ricoNetPayout).toFixed(2)));
       const payoutStatus = raw.payoutStatus || (paidDate ? 'paid' : 'pending_payout');
+      const normTitle = normalizeTitleKey(linked.title || raw.title || '');
 
-      // Deduplicate between `/payouts`, `/payout_history`, and `/api/product` by `(saleNumber, ricoSku, soldDate, ricoNetPayout)`
-      const dedupKey = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
-      if (seenDedupKeys.has(dedupKey)) return;
-      seenDedupKeys.add(dedupKey);
+      const baseSig = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${ normTitle }|${soldDate}|${ricoNetPayout.toFixed(2)}`;
+      const occIdx = (seenPayoutSignatureCounts.get(baseSig) || 0) + 1;
+      seenPayoutSignatureCounts.set(baseSig, occIdx);
 
+      // Multiset 1-for-1 counters for `/api/product` fallback deduplication (never collapse repeat sales!)
       if (isFromPayoutTable) {
-        if (ricoSku) seenSkuSetFromPayoutTables.add(ricoSku);
-        const normTitle = normalizeTitleKey(linked.title || raw.title || '');
+        if (ricoSku) {
+          seenPayoutSkuCounts.set(ricoSku, (seenPayoutSkuCounts.get(ricoSku) || 0) + 1);
+        }
         if (normTitle) {
-          seenPayoutTitleOnlyCounts.set(normTitle, (seenPayoutTitleOnlyCounts.get(normTitle) || 0) + 1);
           const tpKey = `${normTitle}|${agreedPrice.toFixed(2)}`;
           seenPayoutTitlePriceCounts.set(tpKey, (seenPayoutTitlePriceCounts.get(tpKey) || 0) + 1);
           if (grossPrice !== agreedPrice) {
@@ -2091,19 +2199,22 @@
         }
       }
 
+      const syncLookupKey = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
       const isAlreadySynced = Boolean(
-        alreadySyncedRicoKeys.has(dedupKey) ||
+        alreadySyncedRicoKeys.has(syncLookupKey) ||
           (ricoSku && String(skuMetaMap[ricoSku]?.status || '').toLowerCase() === 'sold')
       );
 
+      const fallbackInternalId = cleanStr(raw.ricoItemId || raw.productId || cleanTicket || `row-${soldRows.length + 1}`);
       soldRows.push({
-        ricoItemId: ricoSku || cleanTicket || linked.upc || `row-${soldRows.length + 1}`,
-        ricoSku,
-        sku: ricoSku,
-        upc: linked.upc,
+        ricoItemId: ricoSku || fallbackInternalId,
+        ricoSku: ricoSku || '',
+        sku: ricoSku || '',
+        upc: linked.upc || '',
         title: linked.title,
         saleNumber: saleNumber || (cleanTicket ? `#${cleanTicket}` : ''),
         payoutId: cleanTicket || saleNumber,
+        occurrenceIndex: occIdx,
         agreedPrice,
         splitPct: cleanStr(raw.splitPct || `${100 - activeCommissionRate}%`),
         agedPrice,
@@ -2121,20 +2232,19 @@
       });
     };
 
-    // 1. First push rows harvested from `/payouts` (Current Unpaid Payout)
+    // 1. Keep 100% of rows harvested from `Payout` (Current Unpaid Payout)
     for (const r of harvestedPendingPayoutRows) {
       pushNormalizedSoldRow(r, true);
     }
 
-    // 2. Next push rows harvested from `/payout_history` (Settled Paid History)
+    // 2. Keep 100% of rows harvested from `Payout History` (Settled Paid History)
     for (const r of harvestedPaidHistoryRows) {
       pushNormalizedSoldRow(r, true);
     }
 
-    // 3. Supplement with any sold/paid items in `/api/product` catalogProducts not already covered by `/payouts` or `/payout_history`
+    // 3. Supplement with any sold/paid items in `/api/product` catalogProducts using 1-for-1 counter multiset consumption
     for (const p of catalogProducts) {
       const rawSkuFromProd = extractRicochetSku(p);
-      if (rawSkuFromProd && seenSkuSetFromPayoutTables.has(rawSkuFromProd)) continue;
 
       const firstItem = Array.isArray(p.items)
         ? p.items[0]
@@ -2179,10 +2289,11 @@
         p.name || p.title || p.description || (rawSkuFromProd && skuMetaMap[rawSkuFromProd] && skuMetaMap[rawSkuFromProd].title) || ''
       );
       const prodUpc = extractRicochetUpc(p);
+      const rawProdId = cleanStr(p.id || firstItem?.id || '');
 
-      // Cross-link BEFORE Step 3 deduplication so blank `p.sku` items resolve their `0EJ...` SKU first
+      // Cross-link BEFORE Step 3 deduplication so blank `p.sku` items resolve their `0EJ...` SKU first (never `'UNLINKED-SKU'`)
       const preLinked = resolveCrossLinkedIdentity({
-        ricoItemId: rawSkuFromProd || cleanStr(p.id),
+        ricoItemId: rawProdId,
         ricoSku: rawSkuFromProd,
         sku: rawSkuFromProd,
         upc: prodUpc,
@@ -2191,23 +2302,29 @@
         grossPrice: agreedPrice,
       });
 
-      const resolvedSku = preLinked.ricoSku || rawSkuFromProd;
-      if (resolvedSku && seenSkuSetFromPayoutTables.has(resolvedSku)) continue;
+      const resolvedSku = preLinked.ricoSku || rawSkuFromProd || '';
 
-      // Consume 1-to-1 against harvested `/payouts` + `/payout_history` rows when `p.sku` was blank in `/api/product`
+      // 1-for-1 counter map (multiset) consumption: decrement by 1 per matched SKU or `normalizedTitle|price`
+      if (resolvedSku) {
+        const remSkuCount = seenPayoutSkuCounts.get(resolvedSku) || 0;
+        if (remSkuCount > 0) {
+          seenPayoutSkuCounts.set(resolvedSku, remSkuCount - 1);
+          const normT = normalizeTitleKey(preLinked.title || prodTitle);
+          if (normT) {
+            const tpKey = `${normT}|${agreedPrice.toFixed(2)}`;
+            const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
+            if (remTp > 0) seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
+          }
+          continue;
+        }
+      }
+
       const normProdTitle = normalizeTitleKey(preLinked.title || prodTitle);
       if (normProdTitle) {
         const tpKey = `${normProdTitle}|${agreedPrice.toFixed(2)}`;
         const remTp = seenPayoutTitlePriceCounts.get(tpKey) || 0;
         if (remTp > 0) {
           seenPayoutTitlePriceCounts.set(tpKey, remTp - 1);
-          const remTo = seenPayoutTitleOnlyCounts.get(normProdTitle) || 0;
-          if (remTo > 0) seenPayoutTitleOnlyCounts.set(normProdTitle, remTo - 1);
-          continue;
-        }
-        const remTo = seenPayoutTitleOnlyCounts.get(normProdTitle) || 0;
-        if (remTo > 0) {
-          seenPayoutTitleOnlyCounts.set(normProdTitle, remTo - 1);
           continue;
         }
       }
@@ -2232,7 +2349,7 @@
       const isPaid = p.paid === true || rawStatusStr.includes('paid');
 
       pushNormalizedSoldRow({
-        ricoItemId: resolvedSku || preLinked.upc || `sold-item-${soldRows.length + 1}`,
+        ricoItemId: rawProdId || `sold-item-${soldRows.length + 1}`,
         ricoSku: resolvedSku,
         sku: resolvedSku,
         upc: preLinked.upc || prodUpc,
@@ -2375,7 +2492,7 @@
       previewListEl.innerHTML = filteredRows
         .slice(0, 80)
         .map((r) => {
-          const skuDisplay = r.ricoSku || r.sku || 'UNLINKED-SKU';
+          const skuDisplay = r.sku || r.ricoSku || `#${r.ricoItemId}`;
           const upcDisplay = r.upc ? `• <span style="color:#38bdf8;">${r.upc}</span>` : '';
           const saleDisplay = r.saleNumber ? `<span style="color:#c084fc;">${r.saleNumber}</span> • ` : '';
           const statusPill =
