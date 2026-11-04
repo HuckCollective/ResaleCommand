@@ -214,3 +214,17 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 1. **`📦 2-Way Bookmarklet Outbound Drop Manifest Sync`** (Replace Stage 4 CSV Export/Upload/Confirmation CSV loop with 1-click live Bookmarklet push & real-time `0EJ...` SKU auto-binding in `LocationManifestTray.vue`).
 2. **`🎯 Theme Puller & Location-Vibe Drop Builder`** (Grouping unplaced `HH` and `HG` items by Location Vibe & Season: `🎃 Witchy/Halloween` -> `🎁 Nov 1 Holiday Rush`).
 3. **Simplify `✂️ Split Lot` Tray (4 Steps -> 2 Steps)**.
+
+
+## 2026-11-04 — 2-Way Bookmarklet Outbound Drop Sync (pushed, UNTESTED)
+
+**Done**
+- New `src/pages/api/manifests/ricochet-drop-sync.ts` (GET `active_manifests`, POST `bind_skus`; 1-to-1 SKU guard; manifest -> `placed` when all bound).
+- `public/ricochet-upc-sync.user.js`: self-injecting `Outbound Drops` tab (pre-flight queue, duplicate guard, deploy loop with first-item canary).
+- `LocationManifestTray.vue`: `1-Click Ricochet Bookmarklet Sync` button beside CSV fallback.
+
+**Next / Open**
+- Test with a 1-item manifest on Ricochet; verify `POST /api/product` payload (`name`, `price`, `quantity`, `upc_code`, `consigner_id` are guesses) and SKU extraction.
+- Confirm tray button route (`/warehouse/sync`) and `manifestMatchesLocation` meta fields in `src/lib/warehouses.ts`.
+- Confirm Sales tab view id matches `rc-tab-view-*` pattern.
+- Move inline drops-tab code out of the userscript (anti-monolith).

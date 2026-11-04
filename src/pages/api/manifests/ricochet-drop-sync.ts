@@ -22,15 +22,55 @@ const CHUNK = 100;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: CORS_HEADERS });
 
-function getDb() {
-  const endpoint = import.meta.env?.PUBLIC_APPWRITE_ENDPOINT || process.env.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1';
-  const project = import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID || process.env.PUBLIC_APPWRITE_PROJECT_ID || '';
-  const apiKey = import.meta.env?.APPWRITE_API_KEY || process.env.APPWRITE_API_KEY || '';
-  const dbId = import.meta.env?.PUBLIC_APPWRITE_DB_ID || process.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-  const itemsCol = import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || process.env.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || 'items';
-  if (!project || !apiKey) return null;
-  const client = new NodeClient().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-  return { databases: new NodeDatabases(client), dbId, itemsCol };
+function getAppwriteClients() {
+  const endpoint =
+    import.meta.env?.PUBLIC_APPWRITE_ENDPOINT ||
+    process.env.PUBLIC_APPWRITE_ENDPOINT ||
+    'https://sfo.cloud.appwrite.io/v1';
+  const project =
+    import.meta.env?.PUBLIC_APPWRITE_PROJECT_ID ||
+    process.env.PUBLIC_APPWRITE_PROJECT_ID ||
+    '69714b35003a8adab6bb';
+  const apiKey =
+    import.meta.env?.APPWRITE_API_KEY ||
+    process.env.APPWRITE_API_KEY ||
+    '';
+  const dbId =
+    import.meta.env?.PUBLIC_APPWRITE_DB_ID ||
+    process.env.PUBLIC_APPWRITE_DB_ID ||
+    'resale_db';
+  const itemsCol =
+    import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID ||
+    process.env.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID ||
+    'items';
+
+  const publicClient = new NodeClient().setEndpoint(endpoint).setProject(project);
+  const publicDb = new NodeDatabases(publicClient);
+
+  let keyedDb: NodeDatabases | null = null;
+  if (apiKey) {
+    const keyedClient = new NodeClient().setEndpoint(endpoint).setProject(project).setKey(apiKey);
+    keyedDb = new NodeDatabases(keyedClient);
+  }
+
+  // Run against keyedDb first if present; automatically fall back to keyless publicDb if X-Appwrite-Key is invalid/expired
+  async function withDb<T>(fn: (db: NodeDatabases) => Promise<T>): Promise<T> {
+    if (keyedDb) {
+      try {
+        return await fn(keyedDb);
+      } catch (err: any) {
+        const msg = String(err?.message || '');
+        if (err?.code === 401 || err?.code === 403 || msg.includes('X-Appwrite-Key') || msg.includes('API key')) {
+          keyedDb = null;
+          return await fn(publicDb);
+        }
+        throw err;
+      }
+    }
+    return await fn(publicDb);
+  }
+
+  return { withDb, dbId, itemsCol };
 }
 
 function parseList<T = any>(raw: unknown): T[] {
@@ -46,60 +86,102 @@ function parseList<T = any>(raw: unknown): T[] {
   return [];
 }
 
-const cleanSku = (v: unknown) => String(v ?? '').trim().replace(/^['"]+|['"]+$/g, '').toUpperCase();
+const cleanSku = (v: unknown) =>
+  String(v ?? '')
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .toUpperCase();
 
 function manifestMatchesLocation(doc: any, code: string): boolean {
-  const meta: any = getLocationSettingMeta(code);
-  const ids = [meta?.$id, meta?.id, meta?.docId].filter(Boolean);
-  if (doc.locationId && ids.includes(doc.locationId)) return true;
-  const names = [meta?.name, meta?.fullName].filter(Boolean);
-  return !!doc.locationName && names.includes(doc.locationName);
+  const upperCode = code.toUpperCase();
+  const meta: any = getLocationSettingMeta(upperCode);
+  const ids = [meta?.$id, meta?.id, meta?.docId, upperCode].filter(Boolean);
+  if (doc.locationId && ids.includes(String(doc.locationId))) return true;
+  const locName = String(doc.locationName || '').toLowerCase();
+  const candidateNames = [meta?.name, meta?.fullName, meta?.shortName]
+    .filter(Boolean)
+    .map((n: string) => n.toLowerCase());
+  if (locName && candidateNames.some((n) => locName.includes(n) || n.includes(locName))) {
+    return true;
+  }
+  return false;
 }
 
-async function fetchItems(db: NonNullable<ReturnType<typeof getDb>>, ids: string[]) {
+async function fetchItems(
+  appwrite: ReturnType<typeof getAppwriteClients>,
+  ids: string[],
+  snapshotFallback: any[] = []
+) {
   const out: any[] = [];
+  const snapById = new Map<string, any>();
+  for (const s of snapshotFallback) {
+    const sid = s?.$id || s?.id;
+    if (sid) snapById.set(String(sid), s);
+  }
+
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const res = await db.databases.listDocuments(db.dbId, db.itemsCol, [
-      NodeQuery.equal('$id', ids.slice(i, i + CHUNK)),
-      NodeQuery.limit(CHUNK),
-    ]);
-    out.push(...res.documents);
+    const slice = ids.slice(i, i + CHUNK);
+    try {
+      const res = await appwrite.withDb((db) =>
+        db.listDocuments(appwrite.dbId, appwrite.itemsCol, [
+          NodeQuery.equal('$id', slice),
+          NodeQuery.limit(CHUNK),
+        ])
+      );
+      out.push(...res.documents);
+    } catch {
+      // Fallback to snapshot items if items query fails
+      for (const id of slice) {
+        if (snapById.has(id)) out.push(snapById.get(id));
+      }
+    }
   }
   return out;
 }
 
-export const OPTIONS: APIRoute = async () => new Response(null, { status: 204, headers: CORS_HEADERS });
+export const OPTIONS: APIRoute = async () =>
+  new Response(null, { status: 204, headers: CORS_HEADERS });
 
 export const GET: APIRoute = async ({ url }) => {
-  const db = getDb();
-  if (!db) return json({ error: 'Appwrite server credentials missing' }, 500);
-  if (url.searchParams.get('mode') !== 'active_manifests') return json({ error: 'Unsupported mode' }, 400);
+  const appwrite = getAppwriteClients();
+  if (url.searchParams.get('mode') !== 'active_manifests') {
+    return json({ error: 'Unsupported mode' }, 400);
+  }
 
-  const code = (resolveCanonicalLocationCode(url.searchParams.get('location') || '') || '').toUpperCase();
-  if (!code) return json({ error: 'Unknown location' }, 400);
+  const code = (
+    resolveCanonicalLocationCode(url.searchParams.get('location') || 'MD') || 'MD'
+  ).toUpperCase();
 
   try {
-    const res = await db.databases.listDocuments(db.dbId, MANIFESTS_COL_ID, [
-      NodeQuery.equal('status', OPEN_STATUSES),
-      NodeQuery.orderDesc('$id'),
-      NodeQuery.limit(50),
-    ]);
+    const res = await appwrite.withDb((db) =>
+      db.listDocuments(appwrite.dbId, MANIFESTS_COL_ID, [
+        NodeQuery.equal('status', OPEN_STATUSES),
+        NodeQuery.orderDesc('$id'),
+        NodeQuery.limit(50),
+      ])
+    );
+
     const manifests = [];
     for (const doc of res.documents as any[]) {
-      const itemIds = parseList<string>(doc.itemIds);
+      const snapshot = parseList<any>(doc.itemsSnapshot);
+      let itemIds = parseList<string>(doc.itemIds);
+      if (!itemIds.length && snapshot.length) {
+        itemIds = snapshot.map((s: any) => s?.$id || s?.id).filter(Boolean);
+      }
       if (!itemIds.length || !manifestMatchesLocation(doc, code)) continue;
-      const items = await fetchItems(db, itemIds);
+
+      const items = await fetchItems(appwrite, itemIds, snapshot);
       manifests.push({
         manifestId: doc.$id,
         name: doc.name,
         status: doc.status,
         items: items.map((it: any) => ({
-          itemId: it.$id,
-          title: it.title,
-          price: it.resalePrice ?? it.price ?? 0,
+          itemId: it.$id || it.id,
+          title: it.title || 'Untitled Item',
+          price: Number(it.boutiquePrice ?? it.resalePrice ?? it.price ?? 0) || 0,
           upc: it.upc || '',
           locationSku: it.locationSku || '',
-          quantity: it.quantity ?? 1,
+          quantity: Number(it.quantity ?? 1) || 1,
           bound: !!it.locationSku,
         })),
       });
@@ -111,8 +193,7 @@ export const GET: APIRoute = async ({ url }) => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
-  const db = getDb();
-  if (!db) return json({ error: 'Appwrite server credentials missing' }, 500);
+  const appwrite = getAppwriteClients();
 
   let body: any;
   try {
@@ -123,16 +204,30 @@ export const POST: APIRoute = async ({ request }) => {
   if (body?.mode !== 'bind_skus') return json({ error: 'Unsupported mode' }, 400);
 
   const manifestId = String(body.manifestId || '');
-  const mappings: Array<{ itemId: string; locationSku: string }> = Array.isArray(body.mappings) ? body.mappings : [];
-  if (!manifestId || !mappings.length) return json({ error: 'manifestId and mappings required' }, 400);
+  const mappings: Array<{ itemId: string; locationSku: string }> = Array.isArray(body.mappings)
+    ? body.mappings
+    : [];
+  if (!manifestId || !mappings.length) {
+    return json({ error: 'manifestId and mappings required' }, 400);
+  }
 
   try {
-    const manifest: any = await db.databases.getDocument(db.dbId, MANIFESTS_COL_ID, manifestId);
-    const code = (resolveCanonicalLocationCode(String(body.location || '')) || '').toUpperCase();
-    if (!code || !manifestMatchesLocation(manifest, code)) {
+    const manifest: any = await appwrite.withDb((db) =>
+      db.getDocument(appwrite.dbId, MANIFESTS_COL_ID, manifestId)
+    );
+    const code = (
+      resolveCanonicalLocationCode(String(body.location || 'MD')) || 'MD'
+    ).toUpperCase();
+    if (!manifestMatchesLocation(manifest, code)) {
       return json({ error: 'Manifest does not belong to this location' }, 400);
     }
-    const manifestItemIds = parseList<string>(manifest.itemIds);
+
+    const snapshot = parseList<any>(manifest.itemsSnapshot);
+    let manifestItemIds = parseList<string>(manifest.itemIds);
+    if (!manifestItemIds.length && snapshot.length) {
+      manifestItemIds = snapshot.map((s: any) => s?.$id || s?.id).filter(Boolean);
+    }
+
     const bound: string[] = [];
     const rejected: Array<{ itemId: string; reason: string }> = [];
 
@@ -144,25 +239,29 @@ export const POST: APIRoute = async ({ request }) => {
         continue;
       }
       // 1-to-1 SKU <-> item bijection guard
-      const clash = await db.databases.listDocuments(db.dbId, db.itemsCol, [
-        NodeQuery.equal('locationSku', sku),
-        NodeQuery.limit(2),
-      ]);
+      const clash = await appwrite.withDb((db) =>
+        db.listDocuments(appwrite.dbId, appwrite.itemsCol, [
+          NodeQuery.equal('locationSku', sku),
+          NodeQuery.limit(2),
+        ])
+      );
       if (clash.documents.some((d: any) => d.$id !== itemId)) {
         rejected.push({ itemId, reason: `${sku} already bound to another item` });
         continue;
       }
-      await db.databases.updateDocument(db.dbId, db.itemsCol, itemId, {
-        locationSku: sku,
-        storageLocation: code,
-      });
+      await appwrite.withDb((db) =>
+        db.updateDocument(appwrite.dbId, appwrite.itemsCol, itemId, {
+          locationSku: sku,
+          storageLocation: code,
+        })
+      );
       bound.push(itemId);
       (m as any).locationSku = sku;
     }
 
-    // Update manifest snapshot + placed ids (preserve stored shape: array vs JSON string)
-    const snapshot = parseList<any>(manifest.itemsSnapshot);
-    const skuById = new Map(mappings.filter((m) => bound.includes(m.itemId)).map((m) => [m.itemId, m.locationSku]));
+    const skuById = new Map(
+      mappings.filter((m) => bound.includes(m.itemId)).map((m) => [m.itemId, m.locationSku])
+    );
     const nextSnapshot = snapshot.map((s) => {
       const id = s.$id || s.id;
       return skuById.has(id) ? { ...s, locationSku: skuById.get(id) } : s;
@@ -171,18 +270,21 @@ export const POST: APIRoute = async ({ request }) => {
     const allBound = manifestItemIds.every((id) => placed.includes(id));
 
     const update: Record<string, unknown> = {
-      itemsSnapshot: Array.isArray(manifest.itemsSnapshot) ? nextSnapshot : JSON.stringify(nextSnapshot),
+      itemsSnapshot: Array.isArray(manifest.itemsSnapshot)
+        ? nextSnapshot
+        : JSON.stringify(nextSnapshot),
       placedItemIds: Array.isArray(manifest.placedItemIds) ? placed : JSON.stringify(placed),
     };
     if (allBound) {
       update.status = 'placed';
       update.placedAt = new Date().toISOString();
     }
-    await db.databases.updateDocument(db.dbId, MANIFESTS_COL_ID, manifestId, update);
+    await appwrite.withDb((db) =>
+      db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, manifestId, update)
+    );
 
     return json({ ok: true, bound: bound.length, rejected, manifestPlaced: allBound });
   } catch (err: any) {
     return json({ error: err?.message || 'bind_skus failed' }, 500);
   }
 };
-
