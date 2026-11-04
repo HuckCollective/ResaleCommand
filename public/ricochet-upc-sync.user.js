@@ -1843,7 +1843,7 @@
           const agedPrice = Number(Math.abs(parseCurrencyFloat(cells[4])).toFixed(2));
           const discounts = cleanStr(cells[5] || '');
           const paidDate = cleanStr(cells[6] || '') || null;
-          const soldDate = cleanStr(cells[7] || '') || paidDate || '';
+          const soldDate = cleanStr(cells[7] || '');
           const ricoNetPayout = Number(parseCurrencyFloat(cells[8] ?? cells[cells.length - 1]).toFixed(2));
 
           if (!parsedTitle && !parsedSku && !rawSale) continue;
@@ -2228,15 +2228,20 @@
     const mergedAdjustments = [];
     let totalPayout = 0;
     const pages = [];
-    const seenRowKeys = new Set();
+    const seenPageSignatures = new Set();
 
     const mergeParsedPage = (parsed) => {
       if (!parsed) return;
+      const pageRows = parsed.rows || [];
+      // A ticket can hold several IDENTICAL lines (e.g. 4x the same $15 book), so rows are NEVER collapsed by their own content.
+      // Only a repeat capture of the very same page is skipped (identified by the full ordered list of its row keys).
+      const keyOf = (r) =>
+        `${r.payoutId || r.saleNumber}|${r.ricoSku || r.sku}|${r.title}|${r.paidDate || ''}|${r.soldDate || ''}|${Number(r.ricoNetPayout || 0).toFixed(2)}`;
+      const signature = pageRows.map(keyOf).join('~');
       const newRowsThisPage = [];
-      for (const r of parsed.rows || []) {
-        const key = `${r.payoutId || r.saleNumber}|${r.ricoSku || r.sku}|${r.title}|${r.paidDate || ''}|${r.soldDate || ''}|${Number(r.ricoNetPayout || 0).toFixed(2)}`;
-        if (!seenRowKeys.has(key)) {
-          seenRowKeys.add(key);
+      if (signature && !seenPageSignatures.has(signature)) {
+        seenPageSignatures.add(signature);
+        for (const r of pageRows) {
           mergedRows.push(r);
           newRowsThisPage.push(r);
         }
