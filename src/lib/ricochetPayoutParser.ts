@@ -321,7 +321,7 @@ export function parseRicochetExportCsv(csvText: string): {
     const discounts = String(cells[activeSchema.discountsIdx] || '').trim();
     const paidDate =
       activeSchema.paidIdx >= 0 ? normalizeValidPaidDate(cells[activeSchema.paidIdx]) : null;
-    const soldDate = String(cells[activeSchema.soldIdx] || '').trim() || paidDate || '';
+    const soldDate = String(cells[activeSchema.soldIdx] || '').trim();
     const ricoNetPayout = Number(
       parseCsvCurrency(cells[activeSchema.amountIdx] ?? cells[cells.length - 1]).toFixed(2)
     );
@@ -535,7 +535,7 @@ export function buildEnrichedRicochetSalesPayload(params: {
     // An explicit payout row has a real 5-8 digit ticket number or a real paid date (unlike unticketed Step 3 `/api/product` catalog fallback rows)
     const isExplicitPayoutRow = Boolean(
       cleanTicket ||
-        (validPaidDate && validPaidDate !== '2026-11-03') ||
+        validPaidDate ||
         r.payoutStatus === 'pending_payout'
     );
 
@@ -580,14 +580,7 @@ export function buildEnrichedRicochetSalesPayload(params: {
     }
   }
 
-  let latestSettledPaidDate = '';
-  for (const r of dedupedRawRows) {
-    const pd = normalizeValidPaidDate(r.paidDate);
-    if (pd && pd !== '2026-11-03') {
-      latestSettledPaidDate = pd;
-      break;
-    }
-  }
+  // (Law 7) No "latest paid date" fallback exists any more: a row without its own Sold date keeps an empty soldDate and is never committed.
 
   const normalizedRows: RicochetSyncSaleLine[] = dedupedRawRows.map((r, idx) => {
     const rawTitle = String(r._resolvedTitle || r.title || r.itemName || r.name || '').trim();
@@ -703,25 +696,8 @@ export function buildEnrichedRicochetSalesPayload(params: {
           : 'pending_payout';
     const status = payoutStatus === 'paid' ? 'Paid' : 'Sold';
 
-    // Resolve actual soldDate (falling back to paidDate / catalogRow.soldDate / matchedItem date / latestSettledPaidDate, and healing any Paid row defaulted to '2026-11-03')
-    const rawSoldInput = String(r.soldDate || r.date || '').trim();
-    const validPaidNotToday = paidDate && paidDate !== '2026-11-03' ? paidDate : '';
-    const validCatSoldNotToday = catalogRow?.soldDate && String(catalogRow.soldDate).slice(0, 10) !== '2026-11-03'
-      ? String(catalogRow.soldDate).slice(0, 10)
-      : '';
-    const validItemSoldNotToday = matchedItem?.soldDate && String(matchedItem.soldDate).slice(0, 10) !== '2026-11-03'
-      ? String(matchedItem.soldDate).slice(0, 10)
-      : '';
-    const fallbackItemDate = String(
-      validCatSoldNotToday ||
-        validPaidNotToday ||
-        validItemSoldNotToday ||
-        (payoutStatus === 'paid' ? latestSettledPaidDate : '')
-    ).trim();
-    const soldDate =
-      payoutStatus === 'paid' && (!rawSoldInput || rawSoldInput === '2026-11-03')
-        ? fallbackItemDate || rawSoldInput
-        : rawSoldInput || fallbackItemDate || new Date().toISOString().slice(0, 10);
+    // Law 7: the sold date is ONLY the Ricochet "Sold" date as written. Never the paid/check date, a catalog date, or "today".
+    const soldDate = String(r.soldDate || r.date || '').trim();
 
     const isZeroEjCatalogSku = Boolean(
       effectiveSku &&

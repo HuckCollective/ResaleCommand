@@ -327,6 +327,36 @@ if (fs.existsSync(scriptsDir)) {
 }
 
 // =========================================================================
+// 5b. SALES-SYNC INTEGRITY RULES (Laws 2, 4 and 7) - these fail `npm run verify` so a regression can never reach production
+// =========================================================================
+const salesSyncGuardedFiles = [
+    'src/composables/useRicochetSalesSync.ts',
+    'src/lib/ricochetPayoutParser.ts',
+    'src/lib/salesBucketing.ts',
+];
+const salesSyncForbiddenPatterns = [
+    { pattern: /SO-\$\{Date\.now\(\)/, reason: 'Never invent a random SO-<timestamp> order number (it defeats duplicate detection). Use the UPC, SKU or Ticket # instead.' },
+    { pattern: /['"`]20\d{2}-\d{2}-\d{2}['"`]/, reason: 'Law 2: no hardcoded calendar dates. The sold date must come from the Ricochet row, never a fixed or fallback date.' },
+    { pattern: /resolvedSku\s*=\s*['"]0EJ[0-9A-Z]+['"]/, reason: 'Law 4: never assign a hardcoded 0EJ SKU in code. Lookups come from live Appwrite items.' },
+    { pattern: /paidDate[^\n]{0,80}(?:\|\||\?\?)[^\n]{0,40}soldDate|soldDate\s*=[^\n]{0,80}paidDate/, reason: 'Law 7: the sold date is never derived from the paid/check date.' },
+];
+for (const rel of salesSyncGuardedFiles) {
+    const full = path.join(process.cwd(), rel);
+    if (!fs.existsSync(full)) continue;
+    const lines = fs.readFileSync(full, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
+        for (const { pattern, reason } of salesSyncForbiddenPatterns) {
+            if (pattern.test(line)) {
+                console.error(`❌ Sales-sync rule violation in ${rel}:${i + 1}: ${reason}`);
+                hasErrors = true;
+            }
+        }
+    });
+}
+
+// =========================================================================
 // 6. VALIDATE GOLDEN RULE #2: ZERO HARDCODED LOCATIONS IN UI COMPONENTS
 // =========================================================================
 const locationDrivenFiles = [
@@ -562,7 +592,8 @@ const transportContracts = [
             { pattern: /COMMIT_BATCH_SIZE\s*=\s*25\b/, label: 'Chunked client-side commits of 25 rows' },
             { pattern: /await\s+databases\.createDocument\(\s*DATABASE_ID\s*,\s*COLLECTION_SALES\s*,\s*ID\.unique\(\)\s*,\s*saleDoc/, label: 'Direct client-side Appwrite SDK sales document creation' },
             { pattern: /Promise\.all\(\s*pendingWrites\s*\)/, label: 'Client-side batch writes via Promise.all' },
-            { pattern: /const\s+ticketKey\s*=\s*sale\.ticket\s*\|\|\s*sale\.orderId\s*\|\|\s*sale\.sale\s*\|\|\s*sale\.ticketNumber/, label: 'Multi-field Ricochet ticketKey duplicate pre-scan check' },
+            { pattern: /ticketLineKey\s*\(/, label: 'Per-line (multiset) ticket + gross + net duplicate ledger' },
+            { pattern: /skippedNoTicket/, label: 'Sales are created only from rows that have a real Ricochet ticket + sold date' },
             { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
         ],
         mustNotContain: [

@@ -34,6 +34,10 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, message: string): Promi
     );
   });
 
+/** Ledger key for one CSV line: POS ticket # + gross + net (multiset counted, so multi-line tickets are never collapsed). */
+const ticketLineKey = (ticket: string, gross: any, net: any): string =>
+  `${ticket}|${Number(gross || 0).toFixed(2)}|${Number(net || 0).toFixed(2)}`;
+
 /** Stable identity of a staged Ricochet row (used to flag rows as synced locally right after a client commit). */
 const rowKeyOf = (r: any): string =>
   `${r?.payoutId || r?.saleNumber || ''}|${r?.sku || r?.ricoSku || ''}|${r?.soldDate || ''}|${Number(
@@ -218,11 +222,6 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const multiBinResolvedBySku =
       activeItems.length > 0 ? buildLockedMultiBinMap(activeItems, claimedItemIdToSku) : new Map<string, any>();
 
-    const latestBatchPaidDate =
-      rawList
-        .map((r: any) => (hasRealPaidDate(r?.paidDate) ? String(r.paidDate).trim() : ''))
-        .find((d: string) => Boolean(d && d !== '2026-11-03')) || '';
-
     const mapped = rawList
       .filter((r: any) => {
         const rawTitle = String(r?.title || r?.itemName || r?.name || '').trim();
@@ -269,10 +268,6 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           if (!resolvedSku) resolvedSku = itemLocSku || itemUpc;
           if (!resolvedUpc && itemUpc) resolvedUpc = itemUpc;
         }
-        if (!resolvedSku && /dungeons.*dragons/i.test(cleanTitle) && /starter\s+set|green\s+dragon|5th\s+edition/i.test(cleanTitle)) {
-          resolvedSku = '0EJ0MN';
-          if (!resolvedUpc) resolvedUpc = 'HUCK-1323';
-        }
         if (!resolvedUpc && resolvedSku && PREVERIFIED_MD_SKU_TO_UPC_OR_ID[resolvedSku]) {
           resolvedUpc = PREVERIFIED_MD_SKU_TO_UPC_OR_ID[resolvedSku];
         }
@@ -286,20 +281,8 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
               ? 'paid'
               : 'pending_payout';
 
-        const rawSoldDate = String(r?.soldDate || r?.date || '').trim();
-        const validPaid = hasRealPaidDate(r?.paidDate) && String(r.paidDate).trim() !== '2026-11-03' ? String(r.paidDate).trim() : '';
-        const itemSold = matchedItem?.soldDate && String(matchedItem.soldDate).slice(0, 10) !== '2026-11-03'
-          ? String(matchedItem.soldDate).slice(0, 10)
-          : '';
-        const fallbackPaidOrItemDate = String(
-          validPaid ||
-            itemSold ||
-            (payoutStatus === 'paid' ? latestBatchPaidDate : '')
-        ).trim();
-        const resolvedSoldDate =
-          payoutStatus === 'paid' && (!rawSoldDate || rawSoldDate === '2026-11-03')
-            ? fallbackPaidOrItemDate || rawSoldDate
-            : rawSoldDate || fallbackPaidOrItemDate;
+        // Law 7: the sold date is ONLY the Ricochet "Sold" date as written — never the paid/check date, never a hardcoded or "today" fallback.
+        const resolvedSoldDate = String(r?.soldDate || r?.date || '').trim();
 
         const isSynced = Boolean(r?.alreadySynced || r?.alreadyRecorded || r?.isAlreadyRecorded);
         let matchTier = r?.matchTier || 'unmatched';
@@ -364,24 +347,11 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       }
     }
 
-    // Re-run client-side ledger deduplication against live Appwrite sales & items (covers serverless staging when API key is absent)
+    // Re-run client-side ledger deduplication against live Appwrite sales (covers serverless staging when API key is absent)
     const liveSales = dynamicAppwriteSales.value;
-    const liveTicketDateSet = new Set<string>();
-    const livePosTicketSet = new Set<string>();
-    const liveSkuGrossSet = new Set<string>();
-    const liveSoldSingleItemIds = new Set<string>();
-    const liveUnticketedDateGrossPool = new Map<string, number>();
-    for (const item of activeItems as any[]) {
-      const iSku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
-      const isMultiBin = Boolean(
-        (iSku && PREVERIFIED_MD_MULTI_QTY_BINS[iSku]) ||
-          item?.isMultiQty ||
-          Number(item?.quantity || 1) > 1
-      );
-      if (!isMultiBin && (String(item?.status || '').toLowerCase() === 'sold' || Boolean(item?.saleId))) {
-        liveSoldSingleItemIds.add(String(item.$id));
-      }
-    }
+    // Multiset ledger: one existing sale "uses up" exactly one CSV line with the same ticket # + gross + net,
+    // so a ticket with several lines (e.g. 4x the same $15 book) is never collapsed into one.
+    const liveTicketLineCounts = new Map<string, number>();
     if (liveSales.length > 0) {
       flagAlreadyRecordedRows(mapped, liveSales, {
         getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
@@ -393,53 +363,24 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         getTitle: (r: any) => r.title,
       });
       for (const sale of liveSales) {
-        const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber || sale.soNumber;
-        const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
-        const dateKey = toPacificDateKey(sale.saleDate || sale.soldDate || sale.date);
-        const grossStr = Number(sale?.grossAmount ?? sale?.amount ?? 0).toFixed(2);
-        const netStr = Number(sale?.netPayout ?? 0).toFixed(2);
-        const sOrdSku = cleanCatalogSku(sale?.orderId).toUpperCase();
-        const sSoSku = cleanCatalogSku(sale?.soNumber).toUpperCase();
-        for (const skuCandidate of [sOrdSku, sSoSku]) {
-          if (skuCandidate && /^(?:0EJ|HUCK-|PDXGL-|BB-)/i.test(skuCandidate)) {
-            liveSkuGrossSet.add(`${skuCandidate}|${grossStr}`);
-          }
-        }
-        if (normTicket && dateKey) {
-          liveTicketDateSet.add(`${normTicket}|${dateKey}`);
-        }
-        if (normTicket && /^\d{4,8}$/.test(normTicket)) {
-          livePosTicketSet.add(normTicket);
-        } else if (dateKey && Number(grossStr) > 0) {
-          // Track unticketed existing sales (e.g. historical 0EJ/HUCK records) by date + gross + net so unmatched Payouts CSV rows match 1-for-1
-          const poolKey = `${dateKey}|${grossStr}|${netStr}`;
-          liveUnticketedDateGrossPool.set(poolKey, (liveUnticketedDateGrossPool.get(poolKey) || 0) + 1);
-        }
+        const ticket = canonicalTicketNumber(sale.ticket || sale.orderId || sale.sale || sale.ticketNumber);
+        if (!/^\d{4,8}$/.test(ticket)) continue;
+        const key = ticketLineKey(ticket, sale?.grossAmount ?? sale?.amount, sale?.netPayout);
+        liveTicketLineCounts.set(key, (liveTicketLineCounts.get(key) || 0) + 1);
       }
     }
 
     const flagged = mapped.map((row: any) => {
-      const rowTicketRaw = row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '';
-      const normRowTicket = canonicalTicketNumber(rowTicketRaw) || String(rowTicketRaw).trim().toUpperCase();
-      const rowDateKey = toPacificDateKey(row.soldDate);
-      const grossStr = Number(row.grossPrice || 0).toFixed(2);
-      const netStr = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0).toFixed(2);
-      const cleanRowSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
-      const cleanRowUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
-      const isMultiBinRow = Boolean(cleanRowSku && PREVERIFIED_MD_MULTI_QTY_BINS[cleanRowSku]);
-      const poolKey = `${rowDateKey}|${grossStr}|${netStr}`;
-      let matchedUnticketedPool = false;
-      if (!row.isAlreadyRecorded && !cleanRowSku && rowDateKey && (liveUnticketedDateGrossPool.get(poolKey) || 0) > 0) {
-        liveUnticketedDateGrossPool.set(poolKey, (liveUnticketedDateGrossPool.get(poolKey) || 0) - 1);
-        matchedUnticketedPool = true;
+      const ticket = canonicalTicketNumber(row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '');
+      let matchedLiveTicket = false;
+      if (/^\d{4,8}$/.test(ticket)) {
+        const key = ticketLineKey(ticket, row.grossPrice, row.ricoNetPayout ?? row.expectedNetPayout);
+        const left = liveTicketLineCounts.get(key) || 0;
+        if (left > 0) {
+          liveTicketLineCounts.set(key, left - 1);
+          matchedLiveTicket = true;
+        }
       }
-      const matchedLiveTicket =
-        Boolean(normRowTicket && rowDateKey && liveTicketDateSet.has(`${normRowTicket}|${rowDateKey}`)) ||
-        Boolean(normRowTicket && /^\d{4,8}$/.test(normRowTicket) && livePosTicketSet.has(normRowTicket)) ||
-        Boolean(!isMultiBinRow && cleanRowSku && liveSkuGrossSet.has(`${cleanRowSku}|${grossStr}`)) ||
-        Boolean(!isMultiBinRow && cleanRowUpc && liveSkuGrossSet.has(`${cleanRowUpc}|${grossStr}`)) ||
-        Boolean(!isMultiBinRow && row.matchedItemId && liveSoldSingleItemIds.has(String(row.matchedItemId))) ||
-        matchedUnticketedPool;
       if (
         row.isAlreadyRecorded ||
         matchedLiveTicket ||
@@ -776,40 +717,18 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     ricochetCommitProgress.value = { done: 0, total: totalRows };
     const locMeta = activeCanonicalLocationMeta.value;
     const tenantId = getTenantId?.() || '';
-    const existingSaleKeys = new Set<string>();
-    const preExistingTicketDates = new Set<string>();
-    const preExistingUnticketedPool = new Map<string, number>();
-    const saleShieldKey = (warehouseId: string, ticketRef: string, dateStr: string, amountStr?: string, occ?: number): string =>
-      `${String(warehouseId || '').trim()}|${String(ticketRef || '').trim().toUpperCase()}|${toPacificDateKey(dateStr)}${amountStr ? `|${amountStr}` : ''}${occ && occ > 1 ? `#${occ}` : ''}`;
+    // Multiset ledger of what Appwrite already holds: ticket # + gross + net -> number of existing sale docs
+    const existingTicketLineCounts = new Map<string, number>();
     const committedRowKeys = new Set<string>();
     let committedTotal = 0;
     let skippedTotal = 0;
     let skippedDuplicateTickets = 0;
+    let skippedNoTicket = 0;
     let failedTotal = 0;
     const batchErrors: string[] = [];
 
     try {
-      // Layer 3 preflight: load live inventory + existing sales from Appwrite directly via the browser session cookie
-      if (dynamicAppwriteItems.value.length === 0) {
-        await fetchDynamicAppwriteInventoryItems();
-      }
-      const activeItems =
-        Array.isArray(inventoryItems?.value) && inventoryItems!.value.length > 0
-          ? inventoryItems!.value
-          : dynamicAppwriteItems.value;
-      const soldSingleItemIds = new Set<string>();
-      for (const item of activeItems as any[]) {
-        const iSku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
-        const isMultiBin = Boolean(
-          (iSku && PREVERIFIED_MD_MULTI_QTY_BINS[iSku]) ||
-            item?.isMultiQty ||
-            Number(item?.quantity || 1) > 1
-        );
-        if (!isMultiBin && (String(item?.status || '').toLowerCase() === 'sold' || Boolean(item?.saleId))) {
-          soldSingleItemIds.add(String(item.$id));
-        }
-      }
-
+      // Layer 3 preflight: load existing sales from Appwrite directly via the browser session cookie
       const existingSalesDocs: any[] = [];
       try {
         let cursor: string | null = null;
@@ -821,36 +740,10 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           for (const sale of docs as any[]) {
             if (String(sale?.status || '').toLowerCase() === 'cancelled') continue;
             existingSalesDocs.push(sale);
-            const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber || sale.soNumber;
-            const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
-            const saleDateKey = toPacificDateKey(sale?.saleDate || sale?.soldDate || sale?.date);
-            const grossStr = Number(sale?.grossAmount ?? sale?.amount ?? 0).toFixed(2);
-            const netStr = Number(sale?.netPayout ?? 0).toFixed(2);
-            const sOrdSku = cleanCatalogSku(sale?.orderId).toUpperCase();
-            const sSoSku = cleanCatalogSku(sale?.soNumber).toUpperCase();
-            if (ticketKey) {
-              existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, String(ticketKey), saleDateKey));
-              existingSaleKeys.add(saleShieldKey(locMeta.id, String(ticketKey), saleDateKey));
-            }
-            for (const skuCandidate of [sOrdSku, sSoSku]) {
-              if (skuCandidate && /^(?:0EJ|HUCK-|PDXGL-|BB-)/i.test(skuCandidate)) {
-                existingSaleKeys.add(saleShieldKey(locMeta.id, skuCandidate, saleDateKey, grossStr));
-                preExistingTicketDates.add(`${skuCandidate}|${grossStr}`);
-              }
-            }
-            if (normTicket) {
-              existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, normTicket, saleDateKey));
-              existingSaleKeys.add(saleShieldKey(locMeta.id, normTicket, saleDateKey));
-              existingSaleKeys.add(saleShieldKey(locMeta.id, normTicket, saleDateKey, grossStr));
-              if (saleDateKey) {
-                preExistingTicketDates.add(`${normTicket}|${saleDateKey}`);
-              }
-              if (/^\d{4,8}$/.test(normTicket)) {
-                preExistingTicketDates.add(normTicket);
-              } else if (saleDateKey && Number(grossStr) > 0) {
-                const poolKey = `${saleDateKey}|${grossStr}|${netStr}`;
-                preExistingUnticketedPool.set(poolKey, (preExistingUnticketedPool.get(poolKey) || 0) + 1);
-              }
+            const ticket = canonicalTicketNumber(sale.ticket || sale.orderId || sale.sale || sale.ticketNumber);
+            if (/^\d{4,8}$/.test(ticket)) {
+              const key = ticketLineKey(ticket, sale?.grossAmount ?? sale?.amount, sale?.netPayout);
+              existingTicketLineCounts.set(key, (existingTicketLineCounts.get(key) || 0) + 1);
             }
           }
           if (docs.length < 100) break;
@@ -858,18 +751,10 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         }
         if (existingSalesDocs.length > 0) {
           dynamicAppwriteSales.value = existingSalesDocs;
-          flagAlreadyRecordedRows(rowsToCommit, existingSalesDocs, {
-            getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
-            getSoldDate: (r: any) => r.soldDate,
-            getGross: (r: any) => r.grossPrice,
-            getNet: (r: any) => r.ricoNetPayout,
-            getSku: (r: any) => r.sku,
-            getUpc: (r: any) => r.upc || r.matchedItemUpc,
-            getTitle: (r: any) => r.title,
-          });
         }
-      } catch {
-        // Proceed with row-level alreadySynced flags if initial ticket scan fails
+      } catch (preflightErr: any) {
+        // Never commit blind: without the ledger we cannot prove a row is new, so stop instead of risking duplicates.
+        throw new Error(`Could not read existing sales before committing (${preflightErr?.message || preflightErr}). Nothing was written.`);
       }
 
       for (let start = 0; start < totalRows; start += COMMIT_BATCH_SIZE) {
@@ -886,51 +771,29 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             committedRowKeys.add(rowKeyOf(row));
             continue;
           }
-          if (!row.matchedItemId && !row.sku && !row.title) {
+
+          const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
+          const normRowTicket = canonicalTicketNumber(row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '');
+          // A sale is only ever created from a real Ricochet ticket row (Payouts / Payout History). Catalog "Sold" items never create sales.
+          if (!/^\d{4,8}$/.test(normRowTicket) || !row.soldDate) {
+            skippedNoTicket++;
             skippedTotal++;
             continue;
           }
-
-          const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
-          const rowTicketKey = row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || orderRef;
-          const normRowTicket = canonicalTicketNumber(rowTicketKey) || String(rowTicketKey || '').trim().toUpperCase();
-          const rowDateKey = toPacificDateKey(row.soldDate || saleIso);
           const gross = Number(row.grossPrice || 0);
-          const grossStr = gross.toFixed(2);
           const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
-          const netStr = net.toFixed(2);
-          const rowOcc = Math.max(1, Number(row.ticketOccurrence || row.occurrenceIndex || 1));
-          const cleanRowSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
-          const cleanRowUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
-          const isMultiBinRow = Boolean(cleanRowSku && PREVERIFIED_MD_MULTI_QTY_BINS[cleanRowSku]);
 
-          const poolKey = `${rowDateKey}|${grossStr}|${netStr}`;
-          let matchedUnticketedPool = false;
-          if (!cleanRowSku && rowDateKey && (preExistingUnticketedPool.get(poolKey) || 0) > 0) {
-            preExistingUnticketedPool.set(poolKey, (preExistingUnticketedPool.get(poolKey) || 0) - 1);
-            matchedUnticketedPool = true;
-          }
-
-          // 3-Key Sale Identity Shield: skip if matched by POS ticket, by single-qty SKU/UPC + Gross, by sold single-qty itemId, or by unticketed date+gross+net pool
-          const alreadyInAppwrite =
-            (normRowTicket && rowDateKey && preExistingTicketDates.has(`${normRowTicket}|${rowDateKey}`)) ||
-            (normRowTicket && /^\d{4,8}$/.test(normRowTicket) && preExistingTicketDates.has(normRowTicket)) ||
-            (!isMultiBinRow && cleanRowSku && preExistingTicketDates.has(`${cleanRowSku}|${grossStr}`)) ||
-            (!isMultiBinRow && cleanRowUpc && preExistingTicketDates.has(`${cleanRowUpc}|${grossStr}`)) ||
-            (!isMultiBinRow && row.matchedItemId && soldSingleItemIds.has(String(row.matchedItemId))) ||
-            matchedUnticketedPool;
-
-          const shieldKey = normRowTicket
-            ? saleShieldKey(locMeta.id, normRowTicket, rowDateKey, grossStr, rowOcc)
-            : saleShieldKey(locMeta.id, orderRef, rowDateKey, grossStr, rowOcc);
-
-          if (alreadyInAppwrite || (shieldKey && existingSaleKeys.has(shieldKey))) {
+          const lineKey = ticketLineKey(normRowTicket, gross, net);
+          const alreadyHeld = existingTicketLineCounts.get(lineKey) || 0;
+          if (alreadyHeld > 0) {
+            existingTicketLineCounts.set(lineKey, alreadyHeld - 1);
             skippedDuplicateTickets++;
             skippedTotal++;
             committedRowKeys.add(rowKeyOf(row));
             continue;
           }
-          if (shieldKey) existingSaleKeys.add(shieldKey);
+          const shieldKey = lineKey;
+          void shieldKey;
           const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
           const saleDoc: Record<string, any> = {
             warehouseId: locMeta.id,
@@ -972,7 +835,6 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
                 committedTotal++;
                 committedRowKeys.add(rowKeyOf(row));
               } catch (err: any) {
-                if (shieldKey) existingSaleKeys.delete(shieldKey);
                 batchFailed++;
                 failedTotal++;
                 const msg = String(err?.message || err || 'Unknown Appwrite error');
@@ -1070,7 +932,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         message:
           failedTotal > 0
             ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed${batchErrors[0] ? ` — Appwrite: ${batchErrors[0]}` : ''}. Re-run Commit to retry (duplicates are skipped automatically).`
-            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} already synced).`,
+            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} skipped: ${skippedDuplicateTickets} already synced${skippedNoTicket ? `, ${skippedNoTicket} without a Ricochet ticket/sold date` : ''}).`,
       });
       onAfterLiveCommit?.();
     } catch (err: any) {
