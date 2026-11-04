@@ -308,8 +308,6 @@ for (const file of vueFiles) {
 const ALLOWED_PERMANENT_SCRIPTS = new Set([
     'inspect_schema.js',
     'audit_schema.mjs',
-    'dedupe-sales-collection.mjs',
-    'seed-md-booth-skus.mjs',
     'sync-ai-context.mjs',
     'validate-templates.mjs',
 ]);

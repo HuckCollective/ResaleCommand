@@ -313,23 +313,20 @@ export function extractSaleNumber(raw: any): string {
 
 /**
  * Parses a CSV/DB date into an ISO instant.
- * - `YYYY-MM-DD HH:mm:ss` (Format A, interim payouts) is wall-clock time in the browser's local zone.
- * - `MM-DD-YYYY` / `MM/DD/YYYY` (Format B, Payout History) and bare `YYYY-MM-DD` are date-only: they become NOON local,
- *   the register convention used by every other import (never UTC/local midnight, which can shift the day).
+ * - All date strings (`MM-DD-YYYY`, `YYYY-MM-DD`, or `YYYY-MM-DD HH:mm:ss`) are anchored to NOON UTC (`T12:00:00.000Z`)
+ *   on the calendar date as written so an evening sale (`2026-10-27 17:45:00`) NEVER rolls forward to `2026-10-28` UTC.
  */
 export function toSaleIso(raw: any): string {
     if (!raw) return '';
     const s = String(raw).trim();
     if (!s) return '';
-    let m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    let m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[T\s].*)?$/);
     if (m) {
-        const d = new Date(`${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}T12:00:00`);
-        return isNaN(d.getTime()) ? '' : d.toISOString();
+        return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}T12:00:00.000Z`;
     }
-    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z?|[T\s]\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM))?)$/i);
     if (m) {
-        const d = new Date(`${s}T12:00:00`);
-        return isNaN(d.getTime()) ? '' : d.toISOString();
+        return `${m[1]}-${m[2]}-${m[3]}T12:00:00.000Z`;
     }
     const d = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(s) ? s.replace(' ', 'T') : s);
     return isNaN(d.getTime()) ? '' : d.toISOString();

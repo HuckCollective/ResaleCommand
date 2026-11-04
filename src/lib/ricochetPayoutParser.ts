@@ -262,12 +262,12 @@ export function parseRicochetExportCsv(csvText: string): {
         activeSchema = {
           kind: 'payout_pending',
           itemIdx,
-          skuIdx: skuIdx >= 0 ? skuIdx : 1,
-          saleIdx: saleIdx >= 0 ? saleIdx : 2,
-          agreedIdx: agreedIdx >= 0 ? agreedIdx : 3,
-          splitIdx: splitIdx >= 0 ? splitIdx : 4,
-          agedIdx: agedIdx >= 0 ? agedIdx : 5,
-          discountsIdx: discountsIdx >= 0 ? discountsIdx : 6,
+          skuIdx: skuIdx >= 0 ? skuIdx : -1,
+          saleIdx: saleIdx >= 0 ? saleIdx : 1,
+          agreedIdx: agreedIdx >= 0 ? agreedIdx : 2,
+          splitIdx: splitIdx >= 0 ? splitIdx : 3,
+          agedIdx: agedIdx >= 0 ? agedIdx : 4,
+          discountsIdx: discountsIdx >= 0 ? discountsIdx : 5,
           paidIdx,
           soldIdx: soldIdx >= 0 ? soldIdx : 7,
           amountIdx: amountIdx >= 0 ? amountIdx : 8,
@@ -922,9 +922,11 @@ export function buildSaleOrderReference(row: RicochetSyncSaleLine, locCode: stri
   const ticket = canonicalTicketNumber(row.payoutId || row.saleNumber);
   const occ = Math.max(1, Number(row.ticketOccurrence || 1));
   const formattedTicket = ticket ? (occ > 1 ? `Ticket #${ticket} #${occ}` : `Ticket #${ticket}`) : '';
-  const orderRef = formattedTicket || row.payoutId || row.sku || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
+  const cleanSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
+  const cleanUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
+  const orderRef = formattedTicket || cleanSku || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
   const soNumber =
-    row.upc || row.matchedItemUpc || row.sku || `SO-${Date.now().toString().slice(-5)}`;
+    cleanUpc || cleanSku || formattedTicket || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
   return { saleIso, orderRef, soNumber };
 }
 

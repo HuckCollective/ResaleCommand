@@ -166,17 +166,13 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     try {
       const collected: any[] = [];
       let cursor: string | null = null;
-      for (let page = 0; page < 20; page++) {
+      for (let page = 0; page < 40; page++) {
         const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
         if (cursor) queries.push(Query.cursorAfter(cursor));
         const res = await databases.listDocuments(DB_ID, ITEMS_COLLECTION_ID, queries);
         const docs = res.documents || [];
         for (const doc of docs as any[]) {
-          const hasSku = Boolean(doc?.external_sku || doc?.locationSku || doc?.sku);
-          const hasBarcode = Boolean(doc?.barcode || doc?.upc);
-          if (hasSku || hasBarcode) {
-            collected.push(doc);
-          }
+          collected.push(doc);
         }
         if (docs.length < 100) break;
         cursor = docs[docs.length - 1].$id;
@@ -368,10 +364,24 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       }
     }
 
-    // Re-run client-side ledger deduplication against live Appwrite sales (covers serverless staging when API key is absent)
+    // Re-run client-side ledger deduplication against live Appwrite sales & items (covers serverless staging when API key is absent)
     const liveSales = dynamicAppwriteSales.value;
     const liveTicketDateSet = new Set<string>();
     const livePosTicketSet = new Set<string>();
+    const liveSkuGrossSet = new Set<string>();
+    const liveSoldSingleItemIds = new Set<string>();
+    const liveUnticketedDateGrossPool = new Map<string, number>();
+    for (const item of activeItems as any[]) {
+      const iSku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
+      const isMultiBin = Boolean(
+        (iSku && PREVERIFIED_MD_MULTI_QTY_BINS[iSku]) ||
+          item?.isMultiQty ||
+          Number(item?.quantity || 1) > 1
+      );
+      if (!isMultiBin && (String(item?.status || '').toLowerCase() === 'sold' || Boolean(item?.saleId))) {
+        liveSoldSingleItemIds.add(String(item.$id));
+      }
+    }
     if (liveSales.length > 0) {
       flagAlreadyRecordedRows(mapped, liveSales, {
         getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
@@ -383,14 +393,27 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         getTitle: (r: any) => r.title,
       });
       for (const sale of liveSales) {
-        const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber;
+        const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber || sale.soNumber;
         const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
         const dateKey = toPacificDateKey(sale.saleDate || sale.soldDate || sale.date);
+        const grossStr = Number(sale?.grossAmount ?? sale?.amount ?? 0).toFixed(2);
+        const netStr = Number(sale?.netPayout ?? 0).toFixed(2);
+        const sOrdSku = cleanCatalogSku(sale?.orderId).toUpperCase();
+        const sSoSku = cleanCatalogSku(sale?.soNumber).toUpperCase();
+        for (const skuCandidate of [sOrdSku, sSoSku]) {
+          if (skuCandidate && /^(?:0EJ|HUCK-|PDXGL-|BB-)/i.test(skuCandidate)) {
+            liveSkuGrossSet.add(`${skuCandidate}|${grossStr}`);
+          }
+        }
         if (normTicket && dateKey) {
           liveTicketDateSet.add(`${normTicket}|${dateKey}`);
         }
         if (normTicket && /^\d{4,8}$/.test(normTicket)) {
           livePosTicketSet.add(normTicket);
+        } else if (dateKey && Number(grossStr) > 0) {
+          // Track unticketed existing sales (e.g. historical 0EJ/HUCK records) by date + gross + net so unmatched Payouts CSV rows match 1-for-1
+          const poolKey = `${dateKey}|${grossStr}|${netStr}`;
+          liveUnticketedDateGrossPool.set(poolKey, (liveUnticketedDateGrossPool.get(poolKey) || 0) + 1);
         }
       }
     }
@@ -399,9 +422,24 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       const rowTicketRaw = row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '';
       const normRowTicket = canonicalTicketNumber(rowTicketRaw) || String(rowTicketRaw).trim().toUpperCase();
       const rowDateKey = toPacificDateKey(row.soldDate);
+      const grossStr = Number(row.grossPrice || 0).toFixed(2);
+      const netStr = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0).toFixed(2);
+      const cleanRowSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
+      const cleanRowUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
+      const isMultiBinRow = Boolean(cleanRowSku && PREVERIFIED_MD_MULTI_QTY_BINS[cleanRowSku]);
+      const poolKey = `${rowDateKey}|${grossStr}|${netStr}`;
+      let matchedUnticketedPool = false;
+      if (!row.isAlreadyRecorded && !cleanRowSku && rowDateKey && (liveUnticketedDateGrossPool.get(poolKey) || 0) > 0) {
+        liveUnticketedDateGrossPool.set(poolKey, (liveUnticketedDateGrossPool.get(poolKey) || 0) - 1);
+        matchedUnticketedPool = true;
+      }
       const matchedLiveTicket =
         Boolean(normRowTicket && rowDateKey && liveTicketDateSet.has(`${normRowTicket}|${rowDateKey}`)) ||
-        Boolean(normRowTicket && /^\d{4,8}$/.test(normRowTicket) && livePosTicketSet.has(normRowTicket));
+        Boolean(normRowTicket && /^\d{4,8}$/.test(normRowTicket) && livePosTicketSet.has(normRowTicket)) ||
+        Boolean(!isMultiBinRow && cleanRowSku && liveSkuGrossSet.has(`${cleanRowSku}|${grossStr}`)) ||
+        Boolean(!isMultiBinRow && cleanRowUpc && liveSkuGrossSet.has(`${cleanRowUpc}|${grossStr}`)) ||
+        Boolean(!isMultiBinRow && row.matchedItemId && liveSoldSingleItemIds.has(String(row.matchedItemId))) ||
+        matchedUnticketedPool;
       if (
         row.isAlreadyRecorded ||
         matchedLiveTicket ||
@@ -740,6 +778,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const tenantId = getTenantId?.() || '';
     const existingSaleKeys = new Set<string>();
     const preExistingTicketDates = new Set<string>();
+    const preExistingUnticketedPool = new Map<string, number>();
     const saleShieldKey = (warehouseId: string, ticketRef: string, dateStr: string, amountStr?: string, occ?: number): string =>
       `${String(warehouseId || '').trim()}|${String(ticketRef || '').trim().toUpperCase()}|${toPacificDateKey(dateStr)}${amountStr ? `|${amountStr}` : ''}${occ && occ > 1 ? `#${occ}` : ''}`;
     const committedRowKeys = new Set<string>();
@@ -750,7 +789,27 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const batchErrors: string[] = [];
 
     try {
-      // Layer 3 preflight: load existing tickets from Appwrite directly via the browser session cookie
+      // Layer 3 preflight: load live inventory + existing sales from Appwrite directly via the browser session cookie
+      if (dynamicAppwriteItems.value.length === 0) {
+        await fetchDynamicAppwriteInventoryItems();
+      }
+      const activeItems =
+        Array.isArray(inventoryItems?.value) && inventoryItems!.value.length > 0
+          ? inventoryItems!.value
+          : dynamicAppwriteItems.value;
+      const soldSingleItemIds = new Set<string>();
+      for (const item of activeItems as any[]) {
+        const iSku = cleanCatalogSku(item?.locationSku || item?.sku).toUpperCase();
+        const isMultiBin = Boolean(
+          (iSku && PREVERIFIED_MD_MULTI_QTY_BINS[iSku]) ||
+            item?.isMultiQty ||
+            Number(item?.quantity || 1) > 1
+        );
+        if (!isMultiBin && (String(item?.status || '').toLowerCase() === 'sold' || Boolean(item?.saleId))) {
+          soldSingleItemIds.add(String(item.$id));
+        }
+      }
+
       const existingSalesDocs: any[] = [];
       try {
         let cursor: string | null = null;
@@ -762,13 +821,22 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           for (const sale of docs as any[]) {
             if (String(sale?.status || '').toLowerCase() === 'cancelled') continue;
             existingSalesDocs.push(sale);
-            const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber;
+            const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber || sale.soNumber;
             const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
             const saleDateKey = toPacificDateKey(sale?.saleDate || sale?.soldDate || sale?.date);
             const grossStr = Number(sale?.grossAmount ?? sale?.amount ?? 0).toFixed(2);
+            const netStr = Number(sale?.netPayout ?? 0).toFixed(2);
+            const sOrdSku = cleanCatalogSku(sale?.orderId).toUpperCase();
+            const sSoSku = cleanCatalogSku(sale?.soNumber).toUpperCase();
             if (ticketKey) {
               existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, String(ticketKey), saleDateKey));
               existingSaleKeys.add(saleShieldKey(locMeta.id, String(ticketKey), saleDateKey));
+            }
+            for (const skuCandidate of [sOrdSku, sSoSku]) {
+              if (skuCandidate && /^(?:0EJ|HUCK-|PDXGL-|BB-)/i.test(skuCandidate)) {
+                existingSaleKeys.add(saleShieldKey(locMeta.id, skuCandidate, saleDateKey, grossStr));
+                preExistingTicketDates.add(`${skuCandidate}|${grossStr}`);
+              }
             }
             if (normTicket) {
               existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, normTicket, saleDateKey));
@@ -779,6 +847,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
               }
               if (/^\d{4,8}$/.test(normTicket)) {
                 preExistingTicketDates.add(normTicket);
+              } else if (saleDateKey && Number(grossStr) > 0) {
+                const poolKey = `${saleDateKey}|${grossStr}|${netStr}`;
+                preExistingUnticketedPool.set(poolKey, (preExistingUnticketedPool.get(poolKey) || 0) + 1);
               }
             }
           }
@@ -826,12 +897,28 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           const rowDateKey = toPacificDateKey(row.soldDate || saleIso);
           const gross = Number(row.grossPrice || 0);
           const grossStr = gross.toFixed(2);
+          const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
+          const netStr = net.toFixed(2);
           const rowOcc = Math.max(1, Number(row.ticketOccurrence || row.occurrenceIndex || 1));
+          const cleanRowSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
+          const cleanRowUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
+          const isMultiBinRow = Boolean(cleanRowSku && PREVERIFIED_MD_MULTI_QTY_BINS[cleanRowSku]);
 
-          // Strictly skip if this ticketKey + date (or canonical POS ticket) already existed in Appwrite before commit
+          const poolKey = `${rowDateKey}|${grossStr}|${netStr}`;
+          let matchedUnticketedPool = false;
+          if (!cleanRowSku && rowDateKey && (preExistingUnticketedPool.get(poolKey) || 0) > 0) {
+            preExistingUnticketedPool.set(poolKey, (preExistingUnticketedPool.get(poolKey) || 0) - 1);
+            matchedUnticketedPool = true;
+          }
+
+          // 3-Key Sale Identity Shield: skip if matched by POS ticket, by single-qty SKU/UPC + Gross, by sold single-qty itemId, or by unticketed date+gross+net pool
           const alreadyInAppwrite =
             (normRowTicket && rowDateKey && preExistingTicketDates.has(`${normRowTicket}|${rowDateKey}`)) ||
-            (normRowTicket && /^\d{4,8}$/.test(normRowTicket) && preExistingTicketDates.has(normRowTicket));
+            (normRowTicket && /^\d{4,8}$/.test(normRowTicket) && preExistingTicketDates.has(normRowTicket)) ||
+            (!isMultiBinRow && cleanRowSku && preExistingTicketDates.has(`${cleanRowSku}|${grossStr}`)) ||
+            (!isMultiBinRow && cleanRowUpc && preExistingTicketDates.has(`${cleanRowUpc}|${grossStr}`)) ||
+            (!isMultiBinRow && row.matchedItemId && soldSingleItemIds.has(String(row.matchedItemId))) ||
+            matchedUnticketedPool;
 
           const shieldKey = normRowTicket
             ? saleShieldKey(locMeta.id, normRowTicket, rowDateKey, grossStr, rowOcc)
@@ -845,7 +932,6 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           }
           if (shieldKey) existingSaleKeys.add(shieldKey);
           const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
-          const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
           const saleDoc: Record<string, any> = {
             warehouseId: locMeta.id,
             soNumber,

@@ -2449,60 +2449,33 @@
       const payoutHistoryLink = findSafeSpaNavLink('Payout History');
       const inventoryLink = findSafeSpaNavLink('Inventory');
 
-      // 1. Safely click `<a href="#">Payout</a>`, harvest Pending Payout table rows + Space Rental adjustments, and capture native "Export" CSV in memory
+      // 1. Safely click `<a href="#">Payout</a>` and harvest Pending Payout table rows + Space Rental adjustments directly from the live SPA DOM (zero native [Export] button clicks or OS file download dialogs!)
       if (safeClickSpaTab(payoutLink)) {
         try {
           const parsedPayouts = await waitForSpaTableRows(parsePayoutsHtmlDocument, 4000, false);
-          const exportedPayouts = await captureSpaExportCsvInMemory('pending_payout');
-          const bestPendingRows =
-            exportedPayouts && exportedPayouts.rows.length >= parsedPayouts.rows.length
-              ? exportedPayouts.rows
-              : parsedPayouts.rows;
-          if (bestPendingRows.length > 0) {
-            harvestedPendingPayoutRows = bestPendingRows;
-            cachedPayoutDomRows = bestPendingRows;
+          if (parsedPayouts.rows.length > 0) {
+            harvestedPendingPayoutRows = parsedPayouts.rows;
+            cachedPayoutDomRows = parsedPayouts.rows;
           }
-          persistRicochetCaptureToLocalStorage('payout', exportedPayouts && exportedPayouts.rawCsv, bestPendingRows);
-          if (exportedPayouts && exportedPayouts.rawCsv) capturedRawPayoutCsv = exportedPayouts.rawCsv;
+          persistRicochetCaptureToLocalStorage('payout', '', parsedPayouts.rows);
           if (parsedPayouts.totalPayout !== 0) {
             harvestedPendingTotalPayout = parsedPayouts.totalPayout;
           }
           (parsedPayouts.adjustments || []).forEach(addAdj);
-          if (exportedPayouts && exportedPayouts.adjustments) {
-            exportedPayouts.adjustments.forEach(addAdj);
-          }
         } catch (e) {}
       }
 
-      // 2. Safely click `<a href="#">Payout History</a>`; capture native "[Export]" CSV in memory AND traverse all table pages ("1 out of 2" -> "2 out of 2") so all 300 Paid History rows have real `- 0EJxxx` SKUs, 6-digit Sale #s, Paid dates, and Sold dates
+      // 2. Safely click `<a href="#">Payout History</a>` and traverse all table pages ("1 out of 2" -> "2 out of 2") directly from the live SPA DOM (zero native [Export] button clicks or OS file download dialogs!)
       if (safeClickSpaTab(payoutHistoryLink)) {
         try {
           let parsedHistory = await harvestAllPayoutHistoryTablePages(waitForSpaTableRows);
           if (parsedHistory.rows.length === 0 && safeClickSpaTab(payoutHistoryLink)) {
             parsedHistory = await harvestAllPayoutHistoryTablePages(waitForSpaTableRows);
           }
-          const exportedHistory = await captureSpaExportCsvInMemory('paid');
-          if (exportedHistory && exportedHistory.rows.length > 0) {
-            const seenKeys = new Set(
-              parsedHistory.rows.map(
-                (r) =>
-                  `${r.payoutId || r.saleNumber}|${r.ricoSku || r.sku}|${r.title}|${r.paidDate || ''}|${r.soldDate || ''}|${Number(r.ricoNetPayout || 0).toFixed(2)}`
-              )
-            );
-            for (const er of exportedHistory.rows) {
-              const k = `${er.payoutId || er.saleNumber}|${er.ricoSku || er.sku}|${er.title}|${er.paidDate || ''}|${er.soldDate || ''}|${Number(er.ricoNetPayout || 0).toFixed(2)}`;
-              if (!seenKeys.has(k)) {
-                seenKeys.add(k);
-                parsedHistory.rows.push(er);
-              }
-            }
-            (exportedHistory.adjustments || []).forEach(addAdj);
-          }
           if (parsedHistory.rows.length > 0) {
             harvestedPaidHistoryRows = parsedHistory.rows;
             cachedPayoutHistoryDomRows = parsedHistory.rows;
-            persistRicochetCaptureToLocalStorage('payout_history', exportedHistory && exportedHistory.rawCsv, parsedHistory.rows);
-            if (exportedHistory && exportedHistory.rawCsv) capturedRawPayoutHistoryCsv = exportedHistory.rawCsv;
+            persistRicochetCaptureToLocalStorage('payout_history', '', parsedHistory.rows);
             if (Array.isArray(parsedHistory.pages) && parsedHistory.pages.length > 0) {
               harvestedPaidHistoryPages = parsedHistory.pages;
             }
