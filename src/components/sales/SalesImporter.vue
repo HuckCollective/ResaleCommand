@@ -2050,6 +2050,8 @@ import {
   matchMemoryDenInventoryItem,
   getUnclaimedMatchCandidatesForRow,
   getPrimaryItemImageId,
+  calendarMonthKeyFromDateString,
+  monthKeyToLabel,
 } from '../../lib/salesBucketing';
 import {
   warehousesApi,
@@ -3918,28 +3920,14 @@ const handleFileUpload = async (event: any) => {
   }
 };
 
-const getCycleInfo = (paidDateStr: string, soldDateStr: string, rentDateStr: string = '') => {
-  const dateToUse = soldDateStr || rentDateStr || paidDateStr;
-  if (!dateToUse) return { id: 'default', label: 'General Payout' };
-  const clean = dateToUse.replace(/['"]/g, '').trim();
-  const parts = clean.split(/[-/]/);
-  let year = '', month = '';
-  if (parts.length === 3) {
-    if (parts[0].length === 4) { // YYYY-MM-DD
-      year = parts[0];
-      month = parts[1].padStart(2, '0');
-    } else if (parts[2].length === 4) { // MM-DD-YYYY or MM/DD/YYYY
-      year = parts[2];
-      month = parts[0].padStart(2, '0');
-    }
-  }
-  if (year && month) {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const mIdx = parseInt(month, 10);
-    const mName = (mIdx >= 1 && mIdx <= 12) ? monthNames[mIdx - 1] : month;
-    return { id: `${year}-${month}`, label: `${mName} ${year}` };
-  }
-  return { id: 'default', label: 'General Payout' };
+/**
+ * Payout-month bucketing standard: group strictly by the CALENDAR sold date (never by the payout check / paid date).
+ * Pure string parsing (1-indexed month) so 11-02-2026 and 11-03-2026 always land in "November 2026".
+ */
+const getCycleInfo = (_paidDateStr: string, soldDateStr: string, rentDateStr: string = '') => {
+  const key = calendarMonthKeyFromDateString(soldDateStr) || calendarMonthKeyFromDateString(rentDateStr);
+  if (!key) return { id: 'default', label: 'General Payout' };
+  return { id: key, label: monthKeyToLabel(key) };
 };
 
 // When several inventory docs share one booth SKU (legacy syncs), prefer the one whose title matches the register row.

@@ -16,6 +16,17 @@ const HUCKS_CORE_SKILL_PATH = path.join(SKILLS_SRC_DIR, 'hucks-resale-core', 'SK
 const SKILLS_DIST_DIR = path.join(ROOT_DIR, 'dist-gemini-skills');
 const MANIFEST_PATH = path.join(SKILLS_DIST_DIR, '.sync-manifest.json');
 
+const MASTER_LAWS_PATH = path.join(RULES_SRC_DIR, 'master-architecture-laws.md');
+
+/** The 7 immutable architecture laws (single source: .agents/rules/master-architecture-laws.md). */
+function loadMasterArchitectureLaws() {
+  if (!fs.existsSync(MASTER_LAWS_PATH)) {
+    return '## Master Architecture Laws\n\n*(Missing .agents/rules/master-architecture-laws.md)*';
+  }
+  const raw = fs.readFileSync(MASTER_LAWS_PATH, 'utf8').replace(/\r\n/g, '\n').trim();
+  return raw.replace(/^# /, '## ');
+}
+
 const WORKFLOW_AND_ANTI_GLITCH_RULES = `### Antigravity IDE Workflow & Gemini Web Anti-Glitch Rules
 1. **Exact Antigravity IDE Model + Level Lock:** Every IDE prompt must specify one of the exact Antigravity IDE dropdown choices + thinking level:
    - \`Gemini 3.8 Flash\` -> Level: \`Low\` or \`Medium\` (fast reads, doc/session syncs, single-file edits)
@@ -212,6 +223,10 @@ function syncCoreDocsAndHucksSkill() {
     '',
     '---',
     '',
+    loadMasterArchitectureLaws(),
+    '',
+    '---',
+    '',
     activeSession,
     '',
   ].join('\n');
@@ -223,6 +238,10 @@ function syncCoreDocsAndHucksSkill() {
   fs.mkdirSync(path.dirname(HUCKS_CORE_SKILL_PATH), { recursive: true });
   const hucksCoreSkillContent = [
     HUCKS_CORE_SKILL_HEADER.trim(),
+    '',
+    '---',
+    '',
+    loadMasterArchitectureLaws(),
     '',
     '---',
     '',

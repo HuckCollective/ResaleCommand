@@ -630,10 +630,51 @@ export function pacificMonthKey(dateStr?: string | null): string {
     if (!dateStr) return '';
     const s = String(dateStr).trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+    // Date-only values stored as UTC midnight (`2026-11-01T00:00:00.000Z`) are CALENDAR dates, not instants:
+    // converting them to Pacific would push Nov 1 back into October, so read the calendar month as written.
+    if (/^\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?Z$/i.test(s)) return s.slice(0, 7);
+    // Wall-clock / date-only strings with no time-zone designator (`11-02-2026`, `11/03/2026 5:21 PM`, `2026-11-03 17:21:00`)
+    // are bucketed by the calendar month they are written in.
+    const hasTimeZoneDesignator = /[T:]/.test(s) && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
+    if (!hasTimeZoneDesignator) {
+        const written = calendarMonthKeyFromDateString(s);
+        if (written) return written;
+    }
     const d = new Date(s);
     if (isNaN(d.getTime())) return s.slice(0, 7);
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).formatToParts(d);
     return `${parts.find(p => p.type === 'year')?.value}-${parts.find(p => p.type === 'month')?.value}`;
+}
+
+const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * Calendar month key (`YYYY-MM`, ONE-indexed: November = `11`) of the sold date exactly as written —
+ * `2026-11-02`, `2026-11-03 17:21:00`, `11-02-2026`, `11/03/2026 5:21 PM`. Pure string parsing: never uses
+ * `Date#getMonth()` (0-indexed) so month 11 can never slip into October. Returns `''` when no date is present.
+ */
+export function calendarMonthKeyFromDateString(raw: any): string {
+    const s = String(raw ?? '').replace(/['"]/g, '').trim();
+    if (!s) return '';
+    let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)/);
+    if (m) {
+        const mm = Number(m[2]);
+        return mm >= 1 && mm <= 12 ? `${m[1]}-${String(mm).padStart(2, '0')}` : '';
+    }
+    m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?!\d)/);
+    if (m) {
+        const mm = Number(m[1]);
+        return mm >= 1 && mm <= 12 ? `${m[3]}-${String(mm).padStart(2, '0')}` : '';
+    }
+    return '';
+}
+
+/** `2026-11` -> `November 2026` (1-indexed lookup; no Date object involved). */
+export function monthKeyToLabel(key: string): string {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return String(key || '');
+    const idx = Number(m[2]);
+    return idx >= 1 && idx <= 12 ? `${MONTH_NAMES_LONG[idx - 1]} ${m[1]}` : String(key);
 }
 
 // =========================================================================

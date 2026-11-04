@@ -573,6 +573,53 @@ const transportContracts = [
             { pattern: /committed_count/, label: 'committed_count on the staging manifest' },
         ],
     },
+    {
+        file: '.agents/rules/master-architecture-laws.md',
+        mustContain: [
+            { pattern: /LAW 1 — 4 Locations Only/, label: 'Law 1 (4 Locations Only)' },
+            { pattern: /LAW 2 — Zero Hardcoding/, label: 'Law 2 (Zero Hardcoding)' },
+            { pattern: /LAW 3 — 100% Shared Matching/, label: 'Law 3 (Shared Matching via salesBucketing.ts)' },
+            { pattern: /LAW 4 — Appwrite-First Persistence/, label: 'Law 4 (Appwrite-First Persistence)' },
+            { pattern: /LAW 5 — Enterprise UX\/IA Pattern/, label: 'Law 5 (Enterprise UX/IA Pattern)' },
+            { pattern: /LAW 6 — 3-Tier Commit Idempotency/, label: 'Law 6 (3-Tier Commit Idempotency)' },
+            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 (Date Bucketing Standard)' },
+        ],
+    },
+    {
+        file: 'scripts/sync-ai-context.mjs',
+        mustContain: [
+            { pattern: /loadMasterArchitectureLaws\s*\(/, label: 'Master laws embedded into GEMINI.md / hucks-resale-core skill' },
+        ],
+    },
+    {
+        file: 'src/lib/salesBucketing.ts',
+        mustContain: [
+            { pattern: /export function calendarMonthKeyFromDateString\s*\(/, label: 'One-indexed calendar sold-date month key helper' },
+            { pattern: /export function monthKeyToLabel\s*\(/, label: 'monthKeyToLabel (2026-11 -> November 2026)' },
+        ],
+    },
+    {
+        file: 'src/components/sales/SalesImporter.vue',
+        mustContain: [
+            { pattern: /calendarMonthKeyFromDateString\(\s*soldDateStr\s*\)/, label: 'Payout cycles grouped by calendar sold date' },
+        ],
+        mustNotContain: [
+            { pattern: /soldDateStr\s*\|\|\s*rentDateStr\s*\|\|\s*paidDateStr/, label: 'payout-check (paid date) month bucketing' },
+        ],
+    },
+    {
+        file: 'src/components/sales/CoopSettlementView.vue',
+        mustNotContain: [
+            { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
+            { pattern: /FIXED_BOOTH_RENT\s*=\s*\d/, label: 'hardcoded booth rent (resolve from the live warehouse document)' },
+        ],
+    },
+    {
+        file: 'src/components/sales/SalesList.vue',
+        mustNotContain: [
+            { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
+        ],
+    },
 ];
 for (const contract of transportContracts) {
     const fullPath = path.resolve(contract.file);

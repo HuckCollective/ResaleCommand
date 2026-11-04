@@ -442,7 +442,7 @@ import { useAuth } from '../../composables/useAuth';
 import { normalizeOrgPrefix, extractOrgPrefix } from '../../lib/inventoryUpc';
 import { generatePartnerSettlementPdf, type PartnerStatementData } from '../../lib/coopSettlementPdf';
 import { coopExpensesApi, type CoopExpenseItem } from '../../lib/coopExpenses';
-import { cleanSkuDisplay, pacificMonthKey } from '../../lib/salesBucketing';
+import { cleanSkuDisplay, pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
 
 interface SaleItem {
   id: string;
@@ -465,6 +465,8 @@ const props = defineProps<{
   period?: string;
   /** Partner filter shared with the /sales page ('all' | 'HUCK' | 'BB' | 'PDXGL'). */
   partnerFilter?: string;
+  /** Monthly booth rent from the live Appwrite `warehouses` document (never hardcoded). */
+  monthlyRent?: number;
 }>();
 
 const emit = defineEmits<{ (e: 'update:period', value: string): void }>();
@@ -522,7 +524,7 @@ const availableMonths = computed(() => {
         const year = yy;
         const month = mm;
         const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
-        const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const label = monthKeyToLabel(key);
         const existing = months.get(key);
         if (existing) {
           existing.count++;
@@ -707,7 +709,7 @@ const partnerSettlements = computed(() => {
   if (filteredSales.value.length === 0) return [];
 
   const groups: Record<string, any> = {};
-  const FIXED_BOOTH_RENT = 382.50;
+  const FIXED_BOOTH_RENT = Number(props.monthlyRent ?? 0); // from the live Appwrite warehouse document (passed by SalesList)
 
   for (const sale of filteredSales.value) {
     const prefix = resolveItemPrefix(sale);
@@ -734,7 +736,7 @@ const partnerSettlements = computed(() => {
 
     const isPureConsignor = prefix === 'BB-';
     const grossPrice = Number(sale.grossAmount || 0);
-    const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice * 0.85));
+    const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice - Number(sale.fees ?? 0)));
     const venueFee = Math.max(0, Number(sale.fees !== undefined ? sale.fees : (grossPrice - netStoreDeposit)));
     const costBasis = isPureConsignor ? 0 : Number(sale.cost || 0);
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
@@ -803,7 +805,7 @@ const settlementSummary = computed(() => {
   const totalCuratorPayouts = Number(partnerSettlements.value.reduce((acc, p) => acc + p.totalPayoutCheck, 0).toFixed(2));
   const totalCommonsPool = Number(partnerSettlements.value.reduce((acc, p) => acc + p.totalCommonsTake, 0).toFixed(2));
 
-  const FIXED_BOOTH_RENT = 382.50;
+  const FIXED_BOOTH_RENT = Number(props.monthlyRent ?? 0); // from the live Appwrite warehouse document (passed by SalesList)
   const totalStorePayout = Number((totalGross - totalVenueFee).toFixed(2));
   const memoryDenNetCheck = Number((totalStorePayout - FIXED_BOOTH_RENT).toFixed(2));
 

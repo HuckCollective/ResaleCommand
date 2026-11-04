@@ -552,6 +552,7 @@
           :sales="consolidatedSales"
           :period="monthFilter"
           :partner-filter="partnerFilter"
+          :monthly-rent="boothMonthlyRent"
           @update:period="monthFilter = $event"
         />
       </div>
@@ -578,13 +579,14 @@ import { useInventory } from '../../composables/useInventory';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
-import { warehousesApi, matchesLocationFilter, findFacility } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, findFacility, resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
 import PaginationDock from '../common/PaginationDock.vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import type { SaleDocument } from '../../lib/sales';
 import type { WarehouseDocument } from '../../lib/warehouses';
 import {
   pacificMonthKey,
+  monthKeyToLabel,
   PREVERIFIED_MD_MULTI_QTY_BINS,
   resolveMdUnitCostBasis,
   cleanCatalogSku,
@@ -606,6 +608,9 @@ const monthFilter = ref<string>('all');
 let monthDefaulted = false;
 const showBarcodeScanner = ref(false);
 const salesViewTab = ref<'ledger' | 'coop'>('ledger');
+
+// Booth rent for Co-op Settlements: resolved from the live Appwrite warehouse document (Ricochet booth), never hardcoded
+const boothMonthlyRent = computed(() => Number(resolveDefaultRicochetLocationMeta(warehouses.value).monthlyRent || 0));
 
 // Sorting state (PO treatment)
 type SortKey = 'date' | 'so' | 'net' | 'gross' | 'location' | 'status' | 'cost' | 'profit';
@@ -878,8 +883,7 @@ const monthOptions = computed(() => {
   });
   return Array.from(map.entries())
     .map(([key, count]) => {
-      const [y, m] = key.split('-').map(Number);
-      return { key, count, label: new Date(y, (m || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+      return { key, count, label: monthKeyToLabel(key) };
     })
     .sort((a, b) => b.key.localeCompare(a.key));
 });
