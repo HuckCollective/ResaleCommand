@@ -2938,7 +2938,9 @@
 
     // 3. Merge any remaining sold items from Tab 1's `buildVerificationReport()` (`tab1AuditRows` / `/api/product`)
     // via 1-for-1 multiset counters (`seenPayoutSkuCounts` + `seenPayoutTitlePriceCounts`) so all `~367` sold items resolve cleanly without touching pagination buttons!
-    for (const auditRow of tab1AuditRows) {
+    // Catalog "Sold" items must NEVER create sales (Products sync is stock-only). Sales come ONLY from real Payout / Payout History rows
+    // that carry a Ricochet ticket # and a real Sold date, so this catalog fallback loop is intentionally disabled.
+    for (const auditRow of []) {
       if (auditRow.inventory !== 'Sold' && auditRow.inventory !== 'Paid') continue;
 
       const resolvedSku = cleanStr(auditRow.sku).toUpperCase();
