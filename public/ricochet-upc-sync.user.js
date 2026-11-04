@@ -30,7 +30,216 @@
   // Fee / rent come ONLY from central Location Settings (injected as __RC_ACTIVE_LOCATION_META__) — no literal fallbacks
   const activeCommissionRate = Number(activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? 0) || 0;
   const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? 0) || 0;
-  let activeModalTab = 'inventory'; // 'inventory' | 'sales'
+  let activeModalTab = 'inventory'; // 'inventory' | 'sales' | 'drops'
+
+  // ===== 📦 Outbound Drops tab (2-way manifest sync) =====
+  // Self-injecting: adds a 3rd tab + view when the modal's tab bar mounts, so the existing
+  // inventory / sales tab code is untouched. All location data comes from activeLocationCode.
+  const RC_DROP_SYNC_ENDPOINTS = [
+    'https://www.resalecmd.com/api/manifests/ricochet-drop-sync',
+    'https://resalecmd.com/api/manifests/ricochet-drop-sync',
+    'http://localhost:4321/api/manifests/ricochet-drop-sync',
+  ];
+  let dropManifests = [];
+  let dropSelectedId = '';
+  let dropStatus = { loading: false, deploying: false, done: 0, total: 0, error: '', finished: false };
+
+  const rcDropEsc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // Falls through to the next endpoint ONLY on network failure; HTTP errors are surfaced (no double-writes).
+  async function rcDropApi(method, query, body) {
+    let netErr = null;
+    for (const base of RC_DROP_SYNC_ENDPOINTS) {
+      let res;
+      try {
+        res = await fetch(base + (query || ''), {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch (e) {
+        netErr = e;
+        continue;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Resale Command HTTP ' + res.status);
+      return data;
+    }
+    throw netErr || new Error('Resale Command unreachable');
+  }
+
+  // NOTE: payload field names for Ricochet's POST /api/product are unverified; the deploy loop
+  // aborts after the first item (canary) if no SKU comes back, so a wrong shape cannot mass-create.
+  async function rcCreateRicochetProduct(item) {
+    const payload = {
+      name: item.title,
+      price: item.price,
+      quantity: item.quantity || 1,
+      upc_code: item.upc,
+      consignor_id: consignorId,
+    };
+    if (window.axios) {
+      const r = await window.axios.post('/api/product', payload);
+      return r.data;
+    }
+    const r = await fetch('/api/product', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error('Ricochet HTTP ' + r.status);
+    return r.json();
+  }
+
+  function rcDropSkuFromResponse(data) {
+    for (const c of [data, data && data.product, data && data.data, data && data.data && data.data.product]) {
+      const sku = c ? extractRicochetSku(c) : '';
+      if (sku) return sku;
+    }
+    return '';
+  }
+
+  function rcDropActiveManifest() {
+    return dropManifests.find((m) => m.manifestId === dropSelectedId) || dropManifests[0] || null;
+  }
+
+  function renderDropsView() {
+    const view = document.getElementById('rc-tab-view-drops');
+    if (!view) return;
+    const badge = document.getElementById('rc-tab-drops-badge');
+    const m = rcDropActiveManifest();
+    if (badge) badge.textContent = String(dropManifests.reduce((n, x) => n + x.items.filter((i) => !i.bound).length, 0));
+    const origin = new URL(RC_DROP_SYNC_ENDPOINTS[0]).origin;
+    let html = '';
+    if (dropStatus.loading) html += '<div style="color:#94a3b8;font-size:11px;">⏳ Loading drops from Resale Command...</div>';
+    if (dropStatus.error) html += '<div style="padding:8px 10px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.5);color:#fecaca;font-size:11px;font-weight:700;">' + rcDropEsc(dropStatus.error) + '</div>';
+    if (!dropStatus.loading && !m) html += '<div style="color:#94a3b8;font-size:11px;">No open outbound drops for ' + rcDropEsc(activeLocationName) + '. Stage items into a manifest in Resale Command first.</div>';
+    if (m) {
+      if (dropManifests.length > 1) {
+        html += '<select id="rc-drops-select" style="background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:7px;padding:6px;font-size:11px;">' +
+          dropManifests.map((x) => '<option value="' + rcDropEsc(x.manifestId) + '"' + (x.manifestId === m.manifestId ? ' selected' : '') + '>' + rcDropEsc(x.name) + '</option>').join('') + '</select>';
+      }
+      const todo = m.items.filter((i) => !i.bound);
+      html += '<div style="background:#0f172a;border:1px solid rgba(56,189,248,0.4);border-radius:8px;padding:7px 9px;">' +
+        '<div style="font-size:11px;font-weight:800;color:#38bdf8;margin-bottom:4px;">📋 Pre-Flight Queue Preview (' + todo.length + ' to create — ' + (m.items.length - todo.length) + ' already bound)</div>' +
+        '<div style="max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;font-family:monospace;font-size:10.5px;">' +
+        m.items.map((i) => '<div style="display:flex;justify-content:space-between;gap:6px;color:' + (i.bound ? '#34d399' : '#e2e8f0') + ';">' +
+          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + rcDropEsc(i.title) + '</span>' +
+          '<span>$' + Number(i.price || 0).toFixed(2) + '</span>' +
+          '<span style="color:#38bdf8;">' + rcDropEsc(i.upc || 'NO UPC') + '</span>' +
+          '<span>' + (i.bound ? '✅ ' + rcDropEsc(i.locationSku) : '🕓 Staged') + '</span></div>').join('') +
+        '</div></div>';
+      const blocked = dropStatus.deploying || todo.length === 0 || todo.some((i) => !i.upc);
+      html += '<button id="rc-drops-deploy-btn"' + (blocked ? ' disabled' : '') + ' style="background:' + (blocked ? '#334155' : '#10b981') + ';color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-size:12px;cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">🚀 Deploy Drop to Ricochet (' + todo.length + ')</button>';
+      if (todo.some((i) => !i.upc)) html += '<div style="font-size:10.5px;color:#fbbf24;">⚠️ Some items have no HUCK-/PDXGL-/BB- barcode yet — assign barcodes in Resale Command first.</div>';
+      if (dropStatus.deploying || dropStatus.total) {
+        const pct = dropStatus.total ? Math.round((dropStatus.done / dropStatus.total) * 100) : 0;
+        html += '<div style="font-size:11px;display:flex;justify-content:space-between;"><span>Deploying ' + dropStatus.done + '/' + dropStatus.total + '</span><span>' + pct + '%</span></div>' +
+          '<div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);"></div></div>';
+      }
+      if (dropStatus.finished) {
+        html += '<div style="padding:8px 10px;border-radius:8px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.5);color:#a7f3d0;font-size:11px;font-weight:700;">✅ Drop synced! <a href="' + origin + '/warehouse/sync/' + encodeURIComponent(activeLocationCode) + '" target="_blank" style="color:#38bdf8;">Open Resale Command ➔</a></div>';
+      }
+    }
+    view.innerHTML = html;
+    const sel = document.getElementById('rc-drops-select');
+    if (sel) sel.onchange = () => { dropSelectedId = sel.value; renderDropsView(); };
+    const btn = document.getElementById('rc-drops-deploy-btn');
+    if (btn) btn.onclick = deployActiveDrop;
+  }
+
+  async function loadDrops() {
+    dropStatus.loading = true;
+    dropStatus.error = '';
+    renderDropsView();
+    try {
+      const data = await rcDropApi('GET', '?mode=active_manifests&location=' + encodeURIComponent(activeLocationCode));
+      dropManifests = data.manifests || [];
+      if (!dropManifests.some((x) => x.manifestId === dropSelectedId)) dropSelectedId = dropManifests[0] ? dropManifests[0].manifestId : '';
+    } catch (e) {
+      dropStatus.error = '❌ Could not load drops: ' + (e && e.message ? e.message : e);
+    }
+    dropStatus.loading = false;
+    renderDropsView();
+  }
+
+  async function deployActiveDrop() {
+    const m = rcDropActiveManifest();
+    if (!m || dropStatus.deploying) return;
+    const todo = m.items.filter((i) => !i.bound && i.upc);
+    dropStatus = { loading: false, deploying: true, done: 0, total: todo.length, error: '', finished: false };
+    renderDropsView();
+    try {
+      for (let idx = 0; idx < todo.length; idx++) {
+        const item = todo[idx];
+        // Duplicate guard: reuse an existing Ricochet product that already carries this barcode
+        const existing = (catalogProducts || []).find((p) => extractRicochetUpc(p) === String(item.upc).toUpperCase());
+        let sku = existing ? extractRicochetSku(existing) : '';
+        if (!sku) sku = rcDropSkuFromResponse(await rcCreateRicochetProduct(item));
+        if (!sku) {
+          throw new Error(idx === 0
+            ? 'Ricochet did not return a SKU for the first item — stopped before creating more (payload shape may need adjusting).'
+            : 'Ricochet returned no SKU for "' + item.title + '".');
+        }
+        const res = await rcDropApi('POST', '', { mode: 'bind_skus', manifestId: m.manifestId, location: activeLocationCode, mappings: [{ itemId: item.itemId, locationSku: sku }] });
+        if (res.rejected && res.rejected.length) throw new Error(res.rejected[0].reason);
+        item.bound = true;
+        item.locationSku = sku;
+        dropStatus.done = idx + 1;
+        renderDropsView();
+      }
+      dropStatus.finished = true;
+    } catch (e) {
+      dropStatus.error = '❌ ' + (e && e.message ? e.message : e);
+    }
+    dropStatus.deploying = false;
+    renderDropsView();
+  }
+
+  function setDropsTabActive(active) {
+    const btn = document.getElementById('rc-tab-btn-drops');
+    const view = document.getElementById('rc-tab-view-drops');
+    if (active) {
+      activeModalTab = 'drops';
+      document.querySelectorAll('[id^="rc-tab-view-"]').forEach((el) => { el.style.display = el.id === 'rc-tab-view-drops' ? 'flex' : 'none'; });
+      document.querySelectorAll('[id^="rc-tab-btn-"]').forEach((el) => {
+        const on = el.id === 'rc-tab-btn-drops';
+        el.style.border = on ? '1px solid #38bdf8' : '1px solid #334155';
+        el.style.background = on ? 'rgba(56, 189, 248, 0.18)' : '#1e293b';
+        el.style.color = on ? '#f8fafc' : '#cbd5e1';
+      });
+      loadDrops();
+    } else if (view) {
+      view.style.display = 'none';
+      if (btn) { btn.style.border = '1px solid #334155'; btn.style.background = '#1e293b'; btn.style.color = '#cbd5e1'; }
+    }
+  }
+
+  function ensureDropsTab() {
+    const salesBtn = document.getElementById('rc-tab-btn-sales');
+    if (!salesBtn || document.getElementById('rc-tab-btn-drops')) return;
+    const btn = salesBtn.cloneNode(false);
+    btn.id = 'rc-tab-btn-drops';
+    btn.innerHTML = '<span>📦 Outbound Drops</span><span id="rc-tab-drops-badge" style="background: rgba(56, 189, 248, 0.25); color: #7dd3fc; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
+    salesBtn.parentNode.insertBefore(btn, salesBtn);
+    salesBtn.parentNode.style.gridTemplateColumns = '1fr 1fr 1fr';
+    const invView = document.getElementById('rc-tab-view-inventory');
+    if (invView && !document.getElementById('rc-tab-view-drops')) {
+      const view = document.createElement('div');
+      view.id = 'rc-tab-view-drops';
+      view.style.cssText = 'display: none; flex-direction: column; gap: 10px;';
+      invView.parentNode.insertBefore(view, invView);
+    }
+    if (location.hash.indexOf('tab=drops') !== -1) setDropsTabActive(true);
+  }
+
+  document.addEventListener('click', (e) => {
+    const tabBtn = e.target && e.target.closest ? e.target.closest('[id^="rc-tab-btn-"]') : null;
+    if (!tabBtn) return;
+    setDropsTabActive(tabBtn.id === 'rc-tab-btn-drops');
+  });
+  new MutationObserver(ensureDropsTab).observe(document.documentElement, { childList: true, subtree: true });
   let activeSalesSubFilter = 'all'; // 'all' | 'pending_payout' | 'paid' | 'space_rental'
   let isPushingSales = false;
   let isHarvestingPayoutPages = false;

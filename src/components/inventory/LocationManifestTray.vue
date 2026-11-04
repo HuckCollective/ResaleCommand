@@ -157,6 +157,16 @@
               </div>
 
               <div class="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                <a
+                  href="/warehouse/sync"
+                  target="_blank"
+                  rel="noopener"
+                  class="btn btn-xs btn-primary text-primary-content font-bold gap-1 flex-1 sm:flex-none shadow-xs"
+                  title="Open Location Sync, launch the Ricochet bookmarklet, then use the 📦 Outbound Drops tab"
+                >
+                  <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
+                  <span>⚡ 1-Click Ricochet Bookmarklet Sync</span>
+                </a>
                 <label class="btn btn-xs font-bold gap-1 flex-1 sm:flex-none cursor-pointer" :class="reconciledCount > 0 ? 'btn-ghost text-success hover:bg-success/10' : 'btn-primary text-primary-content shadow-xs'">
                   <span v-if="isReconciling" class="loading loading-spinner loading-xs"></span>
                   <template v-else>
