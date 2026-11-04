@@ -137,7 +137,15 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Nov 3, 2026)
+# Active Session Summary (Updated Nov 4, 2026)
+
+## Nov 4, 2026 — Ricochet Sales Sync Repair (VERIFIED against both CSV exports)
+- **Result:** Appwrite `sales` matches the Ricochet `Payouts` + `Payout History` exports 1-for-1: **378/378 lines, 0 missing, 0 extra**. October 2026 = **63 sales / $2,462.99**; November = 12 sales / $369.00.
+- **What broke:** duplicate commit rows (`SO-xxxxx`, UTC date roll), 20 phantom sales from catalog "Sold" items dated by the paid date (`2026-10-07`), a cleanup script that deleted real Booth Bin sales, bookmarklet dropping identical lines, and server `alreadySynced` flags (SKU+price) hiding repeat bin sales.
+- **Fixes shipped:** ticket-line multiset ledger (`ticketLineKey`, `posTicketOfRow`) is the only duplicate test; sales are created only from rows with a ticket # + Sold date; sold date never falls back to paid/catalog/today; `toSaleIso` anchors to noon UTC; bin sales never flip bin stock; bookmarklet keeps identical lines and no longer clicks `[Export]` or builds sales from the catalog.
+- **Guards added:** `npm run verify` now fails on sales-sync rule violations (section 5b) and on skill/bundle health problems (section 5c); one-off scripts removed from `scripts/`.
+- **Docs:** single source of truth = `.agents/rules/sales-reconciliation-and-payout-invariants.md` (§15 added); `.agents/skills/sales-reconciliation-and-payout-invariants/SKILL.md` is a READ-FIRST pointer; READ-FIRST line added to `MASTER_ARCHITECTURE_LAWS`.
+- **Open / next:** (1) run `scratch/relink-item-sales.mjs` (dry-run) to repair items whose `saleId` points at deleted duplicate sales; (2) decide Booth Bin stock on Commit (rule §12.3 depletes N-K vs. current "leave bins to Ricochet's live Quantity" — see rule §15); (3) remove leftover hardcodes: `0EJ0MN` D&D fallback in `public/ricochet-upc-sync.user.js`, static `PREVERIFIED_OCT_BB_SKUS` in `src/lib/salesBucketing.ts`; (4) delete the `scratch/` repair scripts; (5) confirm the bookmarklet's "N/808 Verified" count matches Location Sync (808 verified).
 
 ## Completed & Live on Production (`resalecmd.com`)
 1. **AI Scout & Vision Pipeline**: Modular schemas, Buy-Target Authority Law, physical substrate priority (`art_decor` before `books`), and Appwrite `/preview` aspect-ratio fix for `bounding_box` auto-cropping.
