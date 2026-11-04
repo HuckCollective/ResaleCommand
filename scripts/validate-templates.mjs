@@ -337,7 +337,8 @@ const salesSyncGuardedFiles = [
 const salesSyncForbiddenPatterns = [
     { pattern: /SO-\$\{Date\.now\(\)/, reason: 'Never invent a random SO-<timestamp> order number (it defeats duplicate detection). Use the UPC, SKU or Ticket # instead.' },
     { pattern: /['"`]20\d{2}-\d{2}-\d{2}['"`]/, reason: 'Law 2: no hardcoded calendar dates. The sold date must come from the Ricochet row, never a fixed or fallback date.' },
-    { pattern: /resolvedSku\s*=\s*['"]0EJ[0-9A-Z]+['"]/, reason: 'Law 4: never assign a hardcoded 0EJ SKU in code. Lookups come from live Appwrite items.' },
+    { pattern: /['"`]0EJ[0-9A-Z]{3,5}['"`]/, reason: 'Law 4: no hardcoded booth SKU (0EJxxx) in sales-sync code. Lookups come from live Appwrite items.' },
+    { pattern: /['"`](?:HUCK|PDXGL|BB)-\d{3,6}['"`]/, reason: 'Law 4: no hardcoded partner barcode (HUCK-/PDXGL-/BB-1234) in sales-sync code. Lookups come from live Appwrite items.' },
     { pattern: /paidDate[^\n]{0,80}(?:\|\||\?\?)[^\n]{0,40}soldDate|soldDate\s*=[^\n]{0,80}paidDate/, reason: 'Law 7: the sold date is never derived from the paid/check date.' },
 ];
 for (const rel of salesSyncGuardedFiles) {

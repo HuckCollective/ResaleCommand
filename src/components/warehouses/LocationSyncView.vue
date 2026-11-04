@@ -4230,14 +4230,14 @@ const parseCsvData = (rawText: string, fileName: string) => {
         let hasSoldIndicatorDate = (soldDateIdx !== -1 && !!(cols[soldDateIdx] || '').trim()) || (paidDateIdx !== -1 && !!(cols[paidDateIdx] || '').trim());
         let rawStatus = statusIdx !== -1 ? (cols[statusIdx] || '').trim().toLowerCase() : '';
         const isMultiBin = Boolean(PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku]);
-        const isOverrideSold = !isMultiBin && cleanSku !== '0EJ0O0' && (cleanSku === '0EJ0MU' || Boolean(PREVERIFIED_MD_SINGLE_UPC_BY_SKU[cleanSku]));
+        const isOverrideSold = !isMultiBin && Boolean(PREVERIFIED_MD_SINGLE_UPC_BY_SKU[cleanSku]);
         let isSoldOrPaid =
           rawStatus.includes('sold') ||
           rawStatus.includes('paid') ||
           hasSoldIndicatorDate ||
           isOverrideSold ||
-          (!isMultiBin && cleanSku !== '0EJ0O0' && isExplicitZeroQty);
-        if (isCatalogExport.value && (isMultiBin || cleanSku === '0EJ0O0')) {
+          (!isMultiBin && isExplicitZeroQty);
+        if (isCatalogExport.value && isMultiBin) {
           isSoldOrPaid = false;
           if (isMultiBin && (!rowQty || rowQty < 1)) {
             rowQty = PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku].expectedRemainingQty;
@@ -4279,7 +4279,6 @@ const parseCsvData = (rawText: string, fileName: string) => {
           if (
             isVerifyReportCsv &&
             !isMultiBin &&
-            cleanSku !== '0EJ0O0' &&
             String(matched.status || '').toLowerCase() === 'sold'
           ) {
             isSoldOrPaid = true;
@@ -4935,8 +4934,8 @@ const executeSync = async () => {
       const normSku = cleanCatalogSku(row.extractedSku || item.locationSku).toUpperCase();
       const binConfig = PREVERIFIED_MD_MULTI_QTY_BINS[normSku];
       const isMultiBin = Boolean(binConfig);
-      const isTrapInStock = normSku === '0EJ0O0' || cleanCatalogSku(item.upc).toUpperCase() === 'HUCK-9458';
-      const isSold = !isMultiBin && !isTrapInStock && (row.status === 'sold' || row.status === 'paid' || normSku === '0EJ0MU');
+      const isTrapInStock = false; // Law 4: no per-SKU trap guards; the Ricochet export + live Appwrite item are the truth
+      const isSold = !isMultiBin && (row.status === 'sold' || row.status === 'paid');
       const targetWarehouseId = currentLocation.value?.$id || MD_CANONICAL_WAREHOUSE_ID;
 
       // If this is a staged B&B (BB-) item not yet in resale_db.items, create it first with cost: 0
@@ -5243,54 +5242,8 @@ const createNewLocation = async () => {
   }
 };
 
-const healZeroEj0CqParentLotIfNeeded = async () => {
-  try {
-    const allItems = Array.isArray(inventoryItems.value) ? inventoryItems.value : [];
-    if (allItems.length === 0) return;
-
-    const item0ej0cq = allItems.find(
-      (i: any) => cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase() === '0EJ0CQ'
-    );
-    const huck0790 = allItems.find(
-      (i: any) => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-0790'
-    );
-    const huck0467 = allItems.find(
-      (i: any) => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-0467'
-    );
-
-    if (!item0ej0cq || !huck0790) return;
-
-    const currentParentId = String(item0ej0cq.parentLotId || '').trim();
-    const notesStr = String(item0ej0cq.conditionNotes || '');
-    const isLinkedTo0467 =
-      (huck0467 && currentParentId === huck0467.$id) ||
-      /HUCK-0467/i.test(notesStr);
-
-    if (isLinkedTo0467 && currentParentId !== huck0790.$id) {
-      const pieceCount = Math.max(2, extractEstimatedLotPieceCount(huck0790) || 5);
-      const lotCost = Number(huck0790.cost ?? 0);
-      const unitCostShare = Number((lotCost / pieceCount).toFixed(2));
-      const updatedNotes = `✂️ Split 1/${pieceCount} from Parent Lot HUCK-0790 ("${huck0790.title}") • Proportional Cost: $${unitCostShare.toFixed(2)} • Booth SKU: 0EJ0CQ`;
-
-      const patchPayload: any = {
-        parentLotId: huck0790.$id,
-        cost: unitCostShare,
-        conditionNotes: updatedNotes,
-      };
-      if (huck0790.purchaseId) patchPayload.purchaseId = huck0790.purchaseId;
-      if (huck0790.orderId) patchPayload.orderId = huck0790.orderId;
-
-      await updateInventoryItem(item0ej0cq.$id, patchPayload);
-      Object.assign(item0ej0cq, patchPayload);
-      addToast({
-        type: 'info',
-        message: `✅ Updated 0EJ0CQ ("${item0ej0cq.title}") parentLotId from HUCK-0467 ➔ HUCK-0790 ($${unitCostShare.toFixed(2)} cost share)!`,
-      });
-    }
-  } catch (e) {
-    console.warn('[LocationSyncView] 0EJ0CQ parent lot check skipped:', e);
-  }
-};
+// Law 4: the one-time 0EJ0CQ / HUCK-0790 parent-lot data heal was applied to Appwrite already; per-SKU fixes never live in code.
+const healZeroEj0CqParentLotIfNeeded = async () => {};
 
 const normalizeLocationUrlParam = (locObjOrId: any) => {
   if (typeof window === 'undefined' || !window.history?.replaceState) return;

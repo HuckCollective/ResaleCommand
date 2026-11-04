@@ -671,9 +671,6 @@ export function buildEnrichedRicochetSalesPayload(params: {
     let effectiveSku =
       candidateSkuForMatch ||
       cleanCatalogSku(matchedItem?.locationSku || matchedItem?.sku || catalogRow?.sku || matchedItem?.upc || '').toUpperCase();
-    if (!effectiveSku && /dungeons.*dragons/i.test(rawTitle) && /starter\s+set|green\s+dragon|5th\s+edition/i.test(rawTitle)) {
-      effectiveSku = '0EJ0MN';
-    }
     let effectiveUpc =
       upc ||
       cleanCatalogSku(matchedItem?.upc || catalogRow?.upc || catalogRow?.expectedRcUpc || '').toUpperCase() ||

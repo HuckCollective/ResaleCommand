@@ -748,10 +748,11 @@ export interface MdPreverifiedSingle {
  */
 export const PREVERIFIED_MD_SINGLE_UPC_BY_SKU: Record<string, MdPreverifiedSingle> = {};
 
-export const PREVERIFIED_OCT_BB_SKUS = new Set<string>([
-    '0EJ0HN', '0EJ0HQ', '0EJ0HX', '0EJ0IH', '0EJ0IJ', '0EJ0IL', '0EJ0IN',
-    '0EJ0IT', '0EJ0IU', '0EJ0IV', '0EJ0J5', '0EJ0J8', '0EJ0KA', '0EJ0LM',
-]);
+/**
+ * Law 4: no static SKU lists. B&B (Biggie & Birdie) rows are recognised from their `BB-` barcode prefix or their "B&B" title
+ * (see `isBbConsignorRow`); the former hardcoded October SKU list was removed.
+ */
+export const PREVERIFIED_OCT_BB_SKUS = new Set<string>();
 
 /**
  * Runtime-hydrated SKU -> UPC lookup cache (populated dynamically at runtime by `buildLockedMultiBinMap` from live Appwrite inventory records; zero static SKU maps).
@@ -1080,17 +1081,7 @@ export function matchMemoryDenInventoryItem(params: {
         return multiBins.get(normSku);
     }
 
-    // Tier 1a: Explicit Trap Guards: 0EJ0NY -> HUCK-9459 (smaller rounded bag); 0EJ0O0 -> HUCK-9458 (larger gothic backpack)
-    if (normSku === '0EJ0NY') {
-        const huck9459 = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-9459');
-        if (huck9459) return finalizeHit(huck9459);
-    }
-    if (normSku === '0EJ0O0') {
-        const huck9458 = activeItems.find(i => cleanCatalogSku(i?.upc).toUpperCase() === 'HUCK-9458');
-        if (huck9458) return finalizeHit(huck9458);
-    }
-
-    // Tier 1b: Direct locationSku + UPC or Direct locationSku match (live Appwrite links always take priority over static baseline)
+    // Tier 1b: Direct locationSku + UPC or Direct locationSku match (live Appwrite links always take priority; no per-SKU special cases - Law 4)
     if (normSku) {
         const skuHits = activeItems.filter(i => {
             const iLocSku = cleanCatalogSku(i?.locationSku || i?.sku).toUpperCase();
@@ -1276,19 +1267,6 @@ export function matchMemoryDenInventoryItem(params: {
                 }
             }
         }
-    }
-
-    // Fallback for D&D 5th Edition Starter Set RPG Box Green Dragon -> match D&D RPG bin/lot item in activeItems if still unmatched
-    if (!bestCand && /dungeons.*dragons/i.test(effectiveRawTitle) && /starter\s+set|green\s+dragon|5th\s+edition/i.test(effectiveRawTitle)) {
-        const dndBin =
-            multiBins.get('0EJ0MN') ||
-            activeItems.find(i => {
-                const lSku = cleanCatalogSku(i.locationSku || i.sku).toUpperCase();
-                const u = cleanCatalogSku(i.upc).toUpperCase();
-                const t = String(i.title || i.identity || '').toLowerCase();
-                return lSku === '0EJ0MN' || u === 'HUCK-1323' || (t.includes('dungeons') && (t.includes('starter') || t.includes('boxed set')));
-            });
-        if (dndBin) return dndBin;
     }
 
     return bestCand ? finalizeHit(bestCand) : null;

@@ -2758,12 +2758,6 @@
         }
       }
 
-      if (!candidateSku && /dungeons.*dragons/i.test(strippedTitle) && /starter\s+set|green\s+dragon|5th\s+edition/i.test(strippedTitle)) {
-        candidateSku = '0EJ0MN';
-        if (!candidateUpc) candidateUpc = 'HUCK-1323';
-        matchedViaFuzzy = true;
-      }
-
       const tab1Row =
         (candidateSku && tab1BySku.get(candidateSku)) ||
         (rawIdStr && tab1ByProductId.get(rawIdStr)) ||

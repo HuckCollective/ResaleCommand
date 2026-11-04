@@ -4,7 +4,7 @@ import { Client, Databases, Query } from 'node-appwrite';
 export const GET: APIRoute = async ({ request }) => {
     try {
         const url = new URL(request.url);
-        const upc = url.searchParams.get('upc') || 'HUCK-0843';
+        const upc = url.searchParams.get('upc') || '';
 
         const client = new Client()
             .setEndpoint(process.env.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1')
