@@ -888,11 +888,11 @@ const monthOptions = computed(() => {
     .sort((a, b) => b.key.localeCompare(a.key));
 });
 
-// Default to the newest month with real volume (same rule the co-op settlement view uses)
+// Default to the NEWEST month present in the loaded sales (sorted desc) — including the open/current month whose payout check isn't cut yet
 watch(monthOptions, (opts) => {
   if (!monthDefaulted && opts.length > 0) {
     monthDefaulted = true;
-    monthFilter.value = (opts.find(o => o.count >= 5) || opts[0]).key;
+    monthFilter.value = opts[0].key;
   }
 }, { immediate: true });
 

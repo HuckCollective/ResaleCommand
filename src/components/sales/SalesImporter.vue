@@ -2139,6 +2139,7 @@ const {
   inventoryItems,
   addToast,
   onCsvFallbackPaste: (rawCsv: string) => handleRicochetCsvFallback(rawCsv),
+  getTenantId: () => activeTeamId.value,
   onAfterLiveCommit: () => {
     if (activeTeamId.value) {
       fetchInventory(activeTeamId.value);

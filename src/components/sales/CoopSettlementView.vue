@@ -537,11 +537,10 @@ const availableMonths = computed(() => {
   return Array.from(months.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
 });
 
-// Default to the most recent month that has substantial sales (or newest)
+// Default to the NEWEST month present in the sales (availableMonths is sorted newest-first), incl. the open current month
 watch(availableMonths, (months) => {
   if (months.length > 0 && selectedPeriod.value === 'all' && props.period === undefined) {
-    const substantialMonth = months.find(m => m.count >= 5);
-    selectedPeriod.value = substantialMonth ? substantialMonth.key : months[0].key;
+    selectedPeriod.value = months[0].key;
   }
 }, { immediate: true });
 

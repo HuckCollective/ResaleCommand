@@ -25,6 +25,8 @@ export interface UseRicochetSalesSyncOptions {
   addToast: (toast: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
   onCsvFallbackPaste: (rawCsvText: string) => void;
   onAfterLiveCommit?: () => void;
+  /** Active team/tenant id stamped onto committed sales so /sales (filtered by tenantId) lists them. */
+  getTenantId?: () => string;
 }
 
 function hasRealPaidDate(rawPaidDate: any): boolean {
@@ -37,7 +39,7 @@ function hasRealPaidDate(rawPaidDate: any): boolean {
 }
 
 export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
-  const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit } = options;
+  const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit, getTenantId } = options;
 
   const ricochetSyncPayload = ref<any | null>(null);
   /** RAW Ricochet Export CSV text (Payout + Payout History) staged by the bookmarklet via POST /api/sales/ricochet-sync. */
@@ -580,6 +582,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             mode: 'commit',
             dryRun: false,
             locationCode,
+            tenantId: getTenantId?.() || undefined,
             batch: { index: Math.floor(start / COMMIT_BATCH_SIZE), size: COMMIT_BATCH_SIZE, total: totalRows },
             rows: chunk,
             spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
