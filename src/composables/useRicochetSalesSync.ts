@@ -75,6 +75,7 @@ import {
   buildLockedMultiBinMap,
   canonicalTicketNumber,
   cleanCatalogSku,
+  flagAlreadyRecordedRows,
   isLeakedInventoryDomRow,
   isPayoutSummaryRow,
   matchMemoryDenInventoryItem,
@@ -83,6 +84,32 @@ import {
   splitTrailingBoothSku,
 } from '../lib/salesBucketing';
 import { getLocationManifestDocIds, type LocationSettingMeta } from '../lib/warehouses';
+
+function toPacificDateKey(rawDate: any): string {
+  if (!rawDate) return '';
+  const s = String(rawDate).trim();
+  if (!s) return '';
+  const mdy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (mdy) {
+    return `${mdy[3]}-${mdy[1].padStart(2, '0')}-${mdy[2].padStart(2, '0')}`;
+  }
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) return s;
+  const d = new Date(/^\d{4}-\d{2}-\d{2} \d/.test(s) ? s.replace(' ', 'T') : s);
+  if (!isNaN(d.getTime())) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Los_Angeles',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+    } catch {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  return s.slice(0, 10);
+}
 
 export interface UseRicochetSalesSyncOptions {
   activeCanonicalLocationMeta: ComputedRef<LocationSettingMeta>;
@@ -124,6 +151,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const ricochetManifestCommittedAt = computed(() => ricochetRawCsv.value?.committed_at || null);
   const locallyCommittedRowKeys = ref<Set<string>>(new Set());
   const dynamicAppwriteItems = ref<any[]>([]);
+  const dynamicAppwriteSales = ref<any[]>([]);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
   const isCommittingRicochetSync = ref(false);
@@ -158,6 +186,31 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       }
     } catch {
       // Fall back to passed inventoryItems prop when client query is unavailable
+    }
+  };
+
+  const fetchDynamicAppwriteSales = async () => {
+    try {
+      const collected: any[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 60; page++) {
+        const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
+        if (cursor) queries.push(Query.cursorAfter(cursor));
+        const res = await databases.listDocuments(DATABASE_ID, COLLECTION_SALES, queries);
+        const docs = res.documents || [];
+        for (const doc of docs as any[]) {
+          if (String(doc?.status || '').toLowerCase() !== 'cancelled') {
+            collected.push(doc);
+          }
+        }
+        if (docs.length < 100) break;
+        cursor = docs[docs.length - 1].$id;
+      }
+      if (collected.length > 0) {
+        dynamicAppwriteSales.value = collected;
+      }
+    } catch {
+      // Non-fatal if client sales pre-fetch fails on mount
     }
   };
 
@@ -314,8 +367,46 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         ticketedSkuPrices.add(`${String(row.sku).toUpperCase()}|${Number(row.grossPrice || 0).toFixed(2)}`);
       }
     }
+
+    // Re-run client-side ledger deduplication against live Appwrite sales (covers serverless staging when API key is absent)
+    const liveSales = dynamicAppwriteSales.value;
+    const liveTicketDateSet = new Set<string>();
+    const livePosTicketSet = new Set<string>();
+    if (liveSales.length > 0) {
+      flagAlreadyRecordedRows(mapped, liveSales, {
+        getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
+        getSoldDate: (r: any) => r.soldDate,
+        getGross: (r: any) => r.grossPrice,
+        getNet: (r: any) => r.ricoNetPayout,
+        getSku: (r: any) => r.sku,
+        getUpc: (r: any) => r.upc || r.matchedItemUpc,
+        getTitle: (r: any) => r.title,
+      });
+      for (const sale of liveSales) {
+        const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber;
+        const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
+        const dateKey = toPacificDateKey(sale.saleDate || sale.soldDate || sale.date);
+        if (normTicket && dateKey) {
+          liveTicketDateSet.add(`${normTicket}|${dateKey}`);
+        }
+        if (normTicket && /^\d{4,8}$/.test(normTicket)) {
+          livePosTicketSet.add(normTicket);
+        }
+      }
+    }
+
     const flagged = mapped.map((row: any) => {
-      if (locallyCommittedRowKeys.value.has(rowKeyOf(row))) {
+      const rowTicketRaw = row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '';
+      const normRowTicket = canonicalTicketNumber(rowTicketRaw) || String(rowTicketRaw).trim().toUpperCase();
+      const rowDateKey = toPacificDateKey(row.soldDate);
+      const matchedLiveTicket =
+        Boolean(normRowTicket && rowDateKey && liveTicketDateSet.has(`${normRowTicket}|${rowDateKey}`)) ||
+        Boolean(normRowTicket && /^\d{4,8}$/.test(normRowTicket) && livePosTicketSet.has(normRowTicket));
+      if (
+        row.isAlreadyRecorded ||
+        matchedLiveTicket ||
+        locallyCommittedRowKeys.value.has(rowKeyOf(row))
+      ) {
         return {
           ...row,
           alreadySynced: true,
@@ -648,8 +739,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const locMeta = activeCanonicalLocationMeta.value;
     const tenantId = getTenantId?.() || '';
     const existingSaleKeys = new Set<string>();
-    const saleShieldKey = (warehouseId: string, orderRef: string, saleIso: string): string =>
-      `${String(warehouseId || '').trim()}|${String(orderRef || '').trim().toUpperCase()}|${String(saleIso || '').slice(0, 10)}`;
+    const preExistingTicketDates = new Set<string>();
+    const saleShieldKey = (warehouseId: string, ticketRef: string, dateStr: string, amountStr?: string, occ?: number): string =>
+      `${String(warehouseId || '').trim()}|${String(ticketRef || '').trim().toUpperCase()}|${toPacificDateKey(dateStr)}${amountStr ? `|${amountStr}` : ''}${occ && occ > 1 ? `#${occ}` : ''}`;
     const committedRowKeys = new Set<string>();
     let committedTotal = 0;
     let skippedTotal = 0;
@@ -659,6 +751,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
 
     try {
       // Layer 3 preflight: load existing tickets from Appwrite directly via the browser session cookie
+      const existingSalesDocs: any[] = [];
       try {
         let cursor: string | null = null;
         for (let page = 0; page < 60; page++) {
@@ -666,13 +759,43 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           if (cursor) queries.push(Query.cursorAfter(cursor));
           const res = await databases.listDocuments(DATABASE_ID, COLLECTION_SALES, queries);
           const docs = res.documents || [];
-          for (const s of docs as any[]) {
-            if (String(s?.status || '').toLowerCase() === 'cancelled') continue;
-            const key = saleShieldKey(s?.warehouseId, s?.orderId, s?.saleDate);
-            if (key !== '||') existingSaleKeys.add(key);
+          for (const sale of docs as any[]) {
+            if (String(sale?.status || '').toLowerCase() === 'cancelled') continue;
+            existingSalesDocs.push(sale);
+            const ticketKey = sale.ticket || sale.orderId || sale.sale || sale.ticketNumber;
+            const normTicket = canonicalTicketNumber(ticketKey) || String(ticketKey || '').trim().toUpperCase();
+            const saleDateKey = toPacificDateKey(sale?.saleDate || sale?.soldDate || sale?.date);
+            const grossStr = Number(sale?.grossAmount ?? sale?.amount ?? 0).toFixed(2);
+            if (ticketKey) {
+              existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, String(ticketKey), saleDateKey));
+              existingSaleKeys.add(saleShieldKey(locMeta.id, String(ticketKey), saleDateKey));
+            }
+            if (normTicket) {
+              existingSaleKeys.add(saleShieldKey(sale?.warehouseId || locMeta.id, normTicket, saleDateKey));
+              existingSaleKeys.add(saleShieldKey(locMeta.id, normTicket, saleDateKey));
+              existingSaleKeys.add(saleShieldKey(locMeta.id, normTicket, saleDateKey, grossStr));
+              if (saleDateKey) {
+                preExistingTicketDates.add(`${normTicket}|${saleDateKey}`);
+              }
+              if (/^\d{4,8}$/.test(normTicket)) {
+                preExistingTicketDates.add(normTicket);
+              }
+            }
           }
           if (docs.length < 100) break;
           cursor = docs[docs.length - 1].$id;
+        }
+        if (existingSalesDocs.length > 0) {
+          dynamicAppwriteSales.value = existingSalesDocs;
+          flagAlreadyRecordedRows(rowsToCommit, existingSalesDocs, {
+            getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
+            getSoldDate: (r: any) => r.soldDate,
+            getGross: (r: any) => r.grossPrice,
+            getNet: (r: any) => r.ricoNetPayout,
+            getSku: (r: any) => r.sku,
+            getUpc: (r: any) => r.upc || r.matchedItemUpc,
+            getTitle: (r: any) => r.title,
+          });
         }
       } catch {
         // Proceed with row-level alreadySynced flags if initial ticket scan fails
@@ -698,17 +821,29 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           }
 
           const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
-          const hasRealTicket = Boolean(canonicalTicketNumber(row.payoutId || row.saleNumber));
-          const shieldKey = hasRealTicket ? saleShieldKey(locMeta.id, orderRef, saleIso) : '';
-          if (shieldKey && existingSaleKeys.has(shieldKey)) {
+          const rowTicketKey = row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || orderRef;
+          const normRowTicket = canonicalTicketNumber(rowTicketKey) || String(rowTicketKey || '').trim().toUpperCase();
+          const rowDateKey = toPacificDateKey(row.soldDate || saleIso);
+          const gross = Number(row.grossPrice || 0);
+          const grossStr = gross.toFixed(2);
+          const rowOcc = Math.max(1, Number(row.ticketOccurrence || row.occurrenceIndex || 1));
+
+          // Strictly skip if this ticketKey + date (or canonical POS ticket) already existed in Appwrite before commit
+          const alreadyInAppwrite =
+            (normRowTicket && rowDateKey && preExistingTicketDates.has(`${normRowTicket}|${rowDateKey}`)) ||
+            (normRowTicket && /^\d{4,8}$/.test(normRowTicket) && preExistingTicketDates.has(normRowTicket));
+
+          const shieldKey = normRowTicket
+            ? saleShieldKey(locMeta.id, normRowTicket, rowDateKey, grossStr, rowOcc)
+            : saleShieldKey(locMeta.id, orderRef, rowDateKey, grossStr, rowOcc);
+
+          if (alreadyInAppwrite || (shieldKey && existingSaleKeys.has(shieldKey))) {
             skippedDuplicateTickets++;
             skippedTotal++;
             committedRowKeys.add(rowKeyOf(row));
             continue;
           }
           if (shieldKey) existingSaleKeys.add(shieldKey);
-
-          const gross = Number(row.grossPrice || 0);
           const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
           const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
           const saleDoc: Record<string, any> = {
@@ -879,6 +1014,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       if (!Array.isArray(inventoryItems?.value) || inventoryItems!.value.length === 0) {
         void fetchDynamicAppwriteInventoryItems();
       }
+      void fetchDynamicAppwriteSales();
       window.addEventListener('focus', handleTabWakeOrFocus);
       document.addEventListener('visibilitychange', handleTabWakeOrFocus);
     }

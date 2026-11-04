@@ -308,6 +308,7 @@ for (const file of vueFiles) {
 const ALLOWED_PERMANENT_SCRIPTS = new Set([
     'inspect_schema.js',
     'audit_schema.mjs',
+    'dedupe-sales-collection.mjs',
     'seed-md-booth-skus.mjs',
     'sync-ai-context.mjs',
     'validate-templates.mjs',
@@ -563,6 +564,7 @@ const transportContracts = [
             { pattern: /COMMIT_BATCH_SIZE\s*=\s*25\b/, label: 'Chunked client-side commits of 25 rows' },
             { pattern: /await\s+databases\.createDocument\(\s*DATABASE_ID\s*,\s*COLLECTION_SALES\s*,\s*ID\.unique\(\)\s*,\s*saleDoc/, label: 'Direct client-side Appwrite SDK sales document creation' },
             { pattern: /Promise\.all\(\s*pendingWrites\s*\)/, label: 'Client-side batch writes via Promise.all' },
+            { pattern: /const\s+ticketKey\s*=\s*sale\.ticket\s*\|\|\s*sale\.orderId\s*\|\|\s*sale\.sale\s*\|\|\s*sale\.ticketNumber/, label: 'Multi-field Ricochet ticketKey duplicate pre-scan check' },
             { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
         ],
         mustNotContain: [
