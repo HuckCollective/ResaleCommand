@@ -736,6 +736,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     let skippedTotal = 0;
     let skippedDuplicateTickets = 0;
     let skippedNoTicket = 0;
+    const noTicketExamples: string[] = [];
     let failedTotal = 0;
     const batchErrors: string[] = [];
 
@@ -790,6 +791,11 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           if (!/^\d{4,8}$/.test(normRowTicket) || !row.soldDate) {
             skippedNoTicket++;
             skippedTotal++;
+            if (noTicketExamples.length < 4) {
+              noTicketExamples.push(
+                `"${String(row.title || '').slice(0, 22)}" ticket=${normRowTicket || 'none'} (payoutId=${row.payoutId ?? '∅'}, saleNumber=${row.saleNumber ?? '∅'}) sold=${row.soldDate || 'none'}`
+              );
+            }
             continue;
           }
           const gross = Number(row.grossPrice || 0);
@@ -944,7 +950,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         message:
           failedTotal > 0
             ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed${batchErrors[0] ? ` — Appwrite: ${batchErrors[0]}` : ''}. Re-run Commit to retry (duplicates are skipped automatically).`
-            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} skipped: ${skippedDuplicateTickets} already synced${skippedNoTicket ? `, ${skippedNoTicket} without a Ricochet ticket/sold date` : ''}).`,
+            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} skipped: ${skippedDuplicateTickets} already synced${skippedNoTicket ? `, ${skippedNoTicket} without a Ricochet ticket/sold date — e.g. ${noTicketExamples.join(' | ')}` : ''}).`,
       });
       onAfterLiveCommit?.();
     } catch (err: any) {
