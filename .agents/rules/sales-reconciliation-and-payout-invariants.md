@@ -229,6 +229,7 @@ Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`
 ### Sale creation & date
 - A sale is created ONLY from a real Payouts / Payout History row that has a **ticket # and a Sold date**. Catalog "Sold" items never create sales.
 - `saleDate` = Ricochet Sold date (Pacific wall-clock) stored as noon UTC of that calendar day (`toSaleIso`). Never the Paid/check date. A row without a Sold date is skipped.
+- **Memory Den Check Schedule (15th of the Month):** Memory Den cuts monthly settlement checks on the **15th of the following month** (e.g., October sales remain in `Pending (/payouts)` from Nov 1–14 alongside early November sales, and move to `Paid (/payout_history)` on Nov 15). Because Resale Command buckets strictly by calendar `Sold` date (Law 7) and deduplicates by `ticketLineKey(ticket, gross, net)`, October is already 100% settled on Nov 1 and re-syncing after the 15th never duplicates a single row.
 - If the preflight read of existing sales fails, Commit stops and writes nothing.
 
 ### Verification
