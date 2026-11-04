@@ -748,10 +748,10 @@ const stagedPartnerTotals = computed(() => {
  */
 const isCommittedLock = computed(
   () =>
-    props.manifestStatus === 'committed' ||
-    (props.stagedRows.length > 0 &&
-      props.actionableNewCount === 0 &&
-      props.summary.alreadySynced >= props.stagedRows.length)
+    // Never hide Commit while there is still something new to write (a later re-stage must be committable).
+    props.actionableNewCount === 0 &&
+    (props.manifestStatus === 'committed' ||
+      (props.stagedRows.length > 0 && props.summary.alreadySynced >= props.stagedRows.length))
 );
 const lockedItemCount = computed(() =>
   props.manifestStatus === 'committed' && Number(props.manifestCommittedCount || 0) > 0
