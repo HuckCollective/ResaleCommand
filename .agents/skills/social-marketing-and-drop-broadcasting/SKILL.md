@@ -1,6 +1,6 @@
 ---
 name: social-marketing-and-drop-broadcasting
-description: Standard Operating Procedure (SOP), AI persona heuristics, IP/trademark guardrails, multi-channel campaign taxonomy, and fast-packaging patterns for promoting Resale Command across social media.
+description: Standard Operating Procedure (SOP), AI persona heuristics, IP/trademark guardrails, multi-channel campaign taxonomy, and fast-packaging patterns for promoting Resale Command across social media. Use when writing social posts, drop announcements, or campaign copy.
 ---
 
 # Social Marketing & Drop Broadcasting Standard Operating Procedure (SOP)

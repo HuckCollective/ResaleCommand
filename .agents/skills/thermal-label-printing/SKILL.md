@@ -1,6 +1,6 @@
 ---
 name: thermal-label-printing
-description: Comprehensive standards, hardware calibration, barcode authority, and CSS layout guidelines for direct thermal label printing (Rollo, Zebra, Dymo, Munbyn) across antique mall booths (Memory Den Ricochet POS, DustyTiger), jewelry butterfly tags, and backstock bins.
+description: Comprehensive standards, hardware calibration, barcode authority, and CSS layout guidelines for direct thermal label printing (Rollo, Zebra, Dymo, Munbyn) across antique mall booths (Memory Den Ricochet POS, DustyTiger), jewelry butterfly tags, and backstock bins. Use when printing labels or changing barcode, tag, or label CSS and printer settings.
 ---
 
 # Thermal Label & Barcode Printing Engineering SOP

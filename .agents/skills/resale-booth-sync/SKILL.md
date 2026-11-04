@@ -1,6 +1,6 @@
 ---
 name: resale-booth-sync
-description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, Physical Retail Tag Safety Laws (Zero Overwrite of Existing Booth Barcodes, Pre-Flight Queue Preview, 1-Click Adopt Booth Tag), High-Confidence UX Pro Reconciliation, multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails.
+description: Memory Den (#0EJ) & Ricochet POS 2-way barcode sync, Evergreen Live-Loader bookmarklet architecture, 1-to-1 0EJ SKU <-> UPC bijection, Physical Retail Tag Safety Laws (Zero Overwrite of Existing Booth Barcodes, Pre-Flight Queue Preview, 1-Click Adopt Booth Tag), High-Confidence UX Pro Reconciliation, multi-partner bucketing (HUCK / PDXGL / B&B), and UX/IA empathy guardrails. Use when working on Ricochet or Memory Den barcode sync, the bookmarklet, UPC verification, or Booth Bin SKUs.
 ---
 
 # Resale Booth Sync & UX/IA Empathy Guardrails (`resale-booth-sync`)

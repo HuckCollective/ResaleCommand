@@ -1,6 +1,6 @@
 ---
 name: resale-merchandising-and-bundling
-description: Standard Operating Procedure (SOP) and AI heuristics for booth merchandising, online e-commerce combines/bundles, fixed-price multi-quantity lotting ($10 book packs, felt hat combines, starter bundles), 2-stage candidate retrieval, shelving lifecycle, and non-dev friendly UX.
+description: Standard Operating Procedure (SOP) and AI heuristics for booth merchandising, online e-commerce combines/bundles, fixed-price multi-quantity lotting ($10 book packs, felt hat combines, starter bundles), 2-stage candidate retrieval, shelving lifecycle, and non-dev friendly UX. Use when creating bundles, combines, fixed-price multi-quantity lots, or shelving plans.
 ---
 
 # Resale Merchandising: Combines, Bundles & Multi-Channel Lotting SOP

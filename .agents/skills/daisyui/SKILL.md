@@ -1,6 +1,6 @@
 ---
 name: daisyui
-description: Expert guidelines and best practices for building modern, responsive, and semantic UI components with daisyUI v5 and Tailwind CSS v4 in Astro and Vue.
+description: Expert guidelines and best practices for building modern, responsive, and semantic UI components with daisyUI v5 and Tailwind CSS v4 in Astro and Vue. Use when building or editing any Vue component, modal, tray, table, or page styling.
 ---
 
 # daisyUI v5 & Tailwind CSS Expert Skill

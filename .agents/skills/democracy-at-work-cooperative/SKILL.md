@@ -1,6 +1,6 @@
 ---
 name: democracy-at-work-cooperative
-description: Cooperative economics, worker-directed enterprise (WSDE) standards, shared overhead pools, patronage dividend formulas, and multi-org consensus governance for the Huckleberry Collective.
+description: Cooperative economics, worker-directed enterprise (WSDE) standards, shared overhead pools, patronage dividend formulas, and multi-org consensus governance for the Huckleberry Collective. Use when working on co-op settlements, the 70/30 waterfall, partner payouts, or the Commons Pool.
 ---
 
 # Huckleberry Collective - Democracy at Work & Cooperative Architecture

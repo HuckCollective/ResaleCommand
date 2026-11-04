@@ -1,6 +1,6 @@
 ---
 name: haul-ingestion
-description: Standard Operating Procedure (SOP) for sourcing, unboxing, AI photo enrichment, lot splitting, and multi-channel deployment (Memory Den Ricochet POS, DustyTiger, Backstock, Online) in Resale Command.
+description: Standard Operating Procedure (SOP) for sourcing, unboxing, AI photo enrichment, lot splitting, and multi-channel deployment (Memory Den Ricochet POS, DustyTiger, Backstock, Online) in Resale Command. Use when receiving a haul, intaking purchases, splitting lots, or deploying items to booths or online channels.
 ---
 
 # Haul Ingestion & Multi-Channel Sourcing SOP

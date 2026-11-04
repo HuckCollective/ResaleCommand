@@ -1,6 +1,6 @@
 ---
 name: vue-component-standards
-description: Best practices and strict rules for Vue 3 SFCs in Resale Command, focusing on defineProps, defineEmits, fragment/Teleport fallthrough attributes, and zero console warnings.
+description: Best practices and strict rules for Vue 3 SFCs in Resale Command, focusing on defineProps, defineEmits, fragment/Teleport fallthrough attributes, and zero console warnings. Use when creating or editing any Vue single-file component.
 ---
 
 # Vue 3 Component Standards & Warning Prevention

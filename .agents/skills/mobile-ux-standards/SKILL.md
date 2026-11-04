@@ -1,6 +1,6 @@
 ---
 name: mobile-ux-standards
-description: Industry-standard mobile UX/UI rules for Resale Command, synthesizing Nielsen Norman Group (NN/g), Apple Human Interface Guidelines (HIG), and Google Material Design 3 (M3).
+description: Industry-standard mobile UX/UI rules for Resale Command, synthesizing Nielsen Norman Group (NN/g), Apple Human Interface Guidelines (HIG), and Google Material Design 3 (M3). Use when designing or changing any mobile layout, touch target, bottom sheet, or navigation.
 ---
 
 # Mobile UX & Component Standards (NN/g, Apple HIG, Material 3)

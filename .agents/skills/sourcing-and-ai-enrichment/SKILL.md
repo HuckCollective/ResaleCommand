@@ -1,6 +1,6 @@
 ---
 name: sourcing-and-ai-enrichment
-description: Guide to sourcing channel capabilities (ShopGoodwill CSV & API, receipt OCR, barter/cash) and Gemini Multimodal AI Deep Scan extraction for Resale Command.
+description: Guide to sourcing channel capabilities (ShopGoodwill CSV & API, receipt OCR, barter/cash) and Gemini Multimodal AI Deep Scan extraction for Resale Command. Use when importing ShopGoodwill or receipt data, or changing AI Deep Scan enrichment.
 ---
 
 # Sourcing Sources & AI Deep Scan Capabilities

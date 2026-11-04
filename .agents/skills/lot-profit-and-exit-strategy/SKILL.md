@@ -1,6 +1,6 @@
 ---
 name: lot-profit-and-exit-strategy
-description: Standard Operating Procedure (SOP) and AI heuristics for decomposing bulk lots into maximum profit. Covers Anchor/Hero extraction to recoup 100% cost basis on first sale, Themed Combines, Remainder Floor/Grab bags, and Multi-Channel Exit Playbooks.
+description: Standard Operating Procedure (SOP) and AI heuristics for decomposing bulk lots into maximum profit. Covers Anchor/Hero extraction to recoup 100% cost basis on first sale, Themed Combines, Remainder Floor/Grab bags, and Multi-Channel Exit Playbooks. Use when decomposing a lot, pricing anchor or hero items, or planning combines and bundles.
 ---
 
 # Lot Profit & Exit Strategy Standard Operating Procedure (SOP)

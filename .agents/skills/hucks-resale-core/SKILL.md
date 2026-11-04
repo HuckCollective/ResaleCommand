@@ -1,6 +1,6 @@
 ---
 name: hucks-resale-core
-description: Master system DNA, 3 Golden Rules, canonical Appwrite warehouse IDs (MD, DT, HG, HH), co-op waterfall rules, and active session pointers for Resale Command.
+description: Master system DNA, 3 Golden Rules, canonical Appwrite warehouse IDs (MD, DT, HG, HH), co-op waterfall rules, and active session pointers for Resale Command. Use when starting any task in this repo, or when you need the business context, location IDs, or the 7 architecture laws.
 ---
 
 # Huck's Resale Core — System DNA & Golden Rules

@@ -1,6 +1,6 @@
 ---
 name: multi-angle-photo-slicing
-description: Contract and standards for multi-angle item "views" + bounding boxes returned by AI lot inspection, front/back spatial correlation, CORS-safe canvas auto-cropping via /api/proxy-image, and automatic imageId + galleryImageIds population when deconstructing lots in the Lot Splitter.
+description: Contract and standards for multi-angle item "views" + bounding boxes returned by AI lot inspection, front/back spatial correlation, CORS-safe canvas auto-cropping via /api/proxy-image, and automatic imageId + galleryImageIds population when deconstructing lots in the Lot Splitter. Use when working on photo views, bounding boxes, auto-cropping, or the Lot Splitter image logic.
 ---
 
 # Multi-Angle Photo Slicing

@@ -1,6 +1,6 @@
 ---
 name: secondary-market-appraisal-and-valuation
-description: Enforce realistic, cash-cleared secondary market valuations and channel-specific fee modeling (Poshmark 20%, eBay, Memory Den) for Resale Command, eliminating retail MSRP anchoring and fee calculation bias.
+description: Enforce realistic, cash-cleared secondary market valuations and channel-specific fee modeling (Poshmark 20%, eBay, Memory Den) for Resale Command, eliminating retail MSRP anchoring and fee calculation bias. Use when estimating resale value, comparing channel fees, or changing AI price suggestions.
 ---
 
 # Secondary Market Inventory Appraisal & Valuation Engine

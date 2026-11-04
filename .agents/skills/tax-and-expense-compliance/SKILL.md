@@ -1,6 +1,6 @@
 ---
 name: tax-and-expense-compliance
-description: Standard Operating Procedure (SOP), IRS Schedule C / Form 1065 statutory tax categories, strict proof-of-payment invariants, anti-phantom expense rules, and cooperative fiduciary standards for Resale Command.
+description: Standard Operating Procedure (SOP), IRS Schedule C / Form 1065 statutory tax categories, strict proof-of-payment invariants, anti-phantom expense rules, and cooperative fiduciary standards for Resale Command. Use when recording expenses, mileage, receipts, or preparing Schedule C or Form 1065 figures.
 ---
 
 # Resale Command: Tax & Expense Compliance Standards

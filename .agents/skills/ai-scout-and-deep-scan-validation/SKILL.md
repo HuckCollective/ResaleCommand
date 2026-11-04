@@ -1,6 +1,6 @@
 ---
 name: ai-scout-and-deep-scan-validation
-description: Guidelines, invariants, and validation standards for Resale Command's AI vision engines (Speed Scout and AI Deep Scan), ensuring zero hallucinations, strict physical OCR grounding, user note authority, and financial math integrity.
+description: Guidelines, invariants, and validation standards for Resale Command's AI vision engines (Speed Scout and AI Deep Scan), ensuring zero hallucinations, strict physical OCR grounding, user note authority, and financial math integrity. Use when editing Speed Scout, AI Deep Scan, vision prompts, or any AI endpoint that returns item titles, prices, or bounding boxes.
 ---
 
 # AI Scout & Deep Scan Vision Validation Standards
