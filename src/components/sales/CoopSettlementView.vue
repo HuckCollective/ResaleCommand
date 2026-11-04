@@ -81,7 +81,7 @@
         <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Gross Realized Sales</div>
         <div class="text-2xl font-black text-base-content font-mono">${{ settlementSummary.totalGross.toFixed(2) }}</div>
         <div class="text-xs text-base-content/50 font-medium">
-          Venue Cut (15%): -${{ settlementSummary.totalVenueFee.toFixed(2) }}
+          Venue Cut ({{ settlementSummary.venueFeePct }}%): -${{ settlementSummary.totalVenueFee.toFixed(2) }}
         </div>
       </div>
 
@@ -117,7 +117,8 @@
         <div class="text-[11px] text-base-content/70 font-medium space-y-0.5">
           <div class="flex justify-between">
             <span>Rent:</span>
-            <span class="font-mono text-error font-semibold">-${{ settlementSummary.boothRent.toFixed(2) }}</span>
+            <span v-if="settlementSummary.isMonthInProgress" class="font-mono text-base-content/60 font-semibold">at month end</span>
+            <span v-else class="font-mono text-error font-semibold">-${{ settlementSummary.boothRent.toFixed(2) }}</span>
           </div>
           <div class="flex justify-between">
             <span>Tech Ops:</span>
@@ -129,7 +130,7 @@
           </div>
         </div>
         <div class="text-xs font-bold pt-1 border-t border-warning/20" :class="settlementSummary.isCommonsFullyCovered ? 'text-success' : 'text-warning'">
-          {{ settlementSummary.isCommonsFullyCovered ? `✅ Surplus (+${settlementSummary.commonsNetBalance.toFixed(2)}) to Reserve` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
+          {{ settlementSummary.isMonthInProgress ? 'Month in progress - rent is billed by Memory Den at month end' : settlementSummary.isCommonsFullyCovered ? `✅ Surplus (+${settlementSummary.commonsNetBalance.toFixed(2)}) to Reserve` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
         </div>
       </div>
     </div>
@@ -704,11 +705,21 @@ const memoryDenDisbursementDate = computed(() => {
   return '15th of the month';
 });
 
+// Month "in progress" = the current Pacific calendar month. Memory Den posts that month's space-rental credit only at month end,
+// so no booth rent (and no rent shortfall / consignor rent share) is charged against a month that has not closed yet.
+const currentPacificMonthKey = computed(() =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7)
+);
+const isMonthInProgress = computed(
+  () => selectedPeriod.value !== 'all' && selectedPeriod.value === currentPacificMonthKey.value
+);
+const effectiveMonthlyRent = computed(() => (isMonthInProgress.value ? 0 : Number(props.monthlyRent ?? 0)));
+
 const partnerSettlements = computed(() => {
   if (filteredSales.value.length === 0) return [];
 
   const groups: Record<string, any> = {};
-  const FIXED_BOOTH_RENT = Number(props.monthlyRent ?? 0); // from the live Appwrite warehouse document (passed by SalesList)
+  const FIXED_BOOTH_RENT = effectiveMonthlyRent.value; // live Appwrite warehouse rent, or 0 while the month is still in progress
 
   for (const sale of filteredSales.value) {
     const prefix = resolveItemPrefix(sale);
@@ -804,7 +815,7 @@ const settlementSummary = computed(() => {
   const totalCuratorPayouts = Number(partnerSettlements.value.reduce((acc, p) => acc + p.totalPayoutCheck, 0).toFixed(2));
   const totalCommonsPool = Number(partnerSettlements.value.reduce((acc, p) => acc + p.totalCommonsTake, 0).toFixed(2));
 
-  const FIXED_BOOTH_RENT = Number(props.monthlyRent ?? 0); // from the live Appwrite warehouse document (passed by SalesList)
+  const FIXED_BOOTH_RENT = effectiveMonthlyRent.value; // live Appwrite warehouse rent, or 0 while the month is still in progress
   const totalStorePayout = Number((totalGross - totalVenueFee).toFixed(2));
   const memoryDenNetCheck = Number((totalStorePayout - FIXED_BOOTH_RENT).toFixed(2));
 
@@ -821,12 +832,15 @@ const settlementSummary = computed(() => {
   return {
     totalGross,
     totalVenueFee,
+    // Effective venue fee % derived from the real committed sales (fee / gross), never a typed-in rate
+    venueFeePct: totalGross > 0 ? Number(((totalVenueFee / totalGross) * 100).toFixed(1)) : 0,
     totalStorePayout,
     totalCostBasis,
     totalNetSurplus,
     totalCuratorPayouts,
     totalCommonsPool,
     boothRent: FIXED_BOOTH_RENT,
+    isMonthInProgress: isMonthInProgress.value,
     consignorRentOffsets,
     netBoothRentForCoop,
     techOps,
