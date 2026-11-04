@@ -1,16 +1,79 @@
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
-import { databases, Query } from '../lib/appwrite';
-import { parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
+import { Permission, Role } from 'appwrite';
+import { databases, ID, Query } from '../lib/appwrite';
+import { getDatabaseId, getItemsCollectionId, resolveCollectionId } from '../lib/appwriteEnv';
+import { buildSaleOrderReference, parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
 
-const DB_ID = import.meta.env?.PUBLIC_APPWRITE_DB_ID || 'resale_db';
-const ITEMS_COLLECTION_ID = import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || 'items';
-/** Safe Appwrite write batch size for chunked Live Commits (25-50 rows per request). */
+// Same environment-aware IDs the working Inventory Sync uses (client SDK, logged-in session — no serverless API key)
+const DATABASE_ID = getDatabaseId();
+const DB_ID = DATABASE_ID;
+const ITEMS_COLLECTION_ID = getItemsCollectionId();
+const COLLECTION_SALES = resolveCollectionId('sales');
+const SALES_COLLECTION_ID = COLLECTION_SALES;
+const MANIFESTS_COLLECTION_ID = 'manifests';
+/** Safe client-side write batch size (25 sales per Promise.all). */
 const COMMIT_BATCH_SIZE = 25;
-/** Max wait per batch request before the commit aborts and unfreezes the UI. */
+/** Max wait per batch before the commit stops and unfreezes the UI. */
 const COMMIT_BATCH_TIMEOUT_MS = 90_000;
+
+/** Optional `sales` attributes that may be dropped if the collection schema rejects them ("Unknown attribute"). */
+const OPTIONAL_SALE_ATTRIBUTES = new Set(['tenantId', 'shippingCharged', 'shippingCost', 'orderId', 'commissionFee']);
+
+const withTimeout = <T>(promise: Promise<T>, ms: number, message: string): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+
+/** Stable identity of a staged Ricochet row (used to flag rows as synced locally right after a client commit). */
+const rowKeyOf = (r: any): string =>
+  `${r?.payoutId || r?.saleNumber || ''}|${r?.sku || r?.ricoSku || ''}|${r?.soldDate || ''}|${Number(
+    r?.ricoNetPayout ?? r?.expectedNetPayout ?? 0
+  ).toFixed(2)}|${r?.ticketOccurrence || r?.occurrenceIndex || 1}`;
+
+/** Creates a `sales` document with the browser session (like Inventory Sync); drops an optional attribute the schema rejects and retries. */
+const createSaleDocClient = async (inputSaleDoc: Record<string, any>, tenantId: string): Promise<any> => {
+  const saleDoc: Record<string, any> = { ...inputSaleDoc };
+  let permissions: string[] | undefined = tenantId
+    ? [Permission.read(Role.team(tenantId)), Permission.update(Role.team(tenantId)), Permission.delete(Role.team(tenantId))]
+    : undefined;
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      return permissions
+        ? await databases.createDocument(DATABASE_ID, COLLECTION_SALES, ID.unique(), saleDoc, permissions)
+        : await databases.createDocument(DATABASE_ID, COLLECTION_SALES, ID.unique(), saleDoc);
+    } catch (err: any) {
+      lastErr = err;
+      const msg = String(err?.message || '');
+      const unknownAttr = msg.match(/Unknown attribute:?\s*"?([A-Za-z0-9_]+)"?/i)?.[1];
+      if (unknownAttr && OPTIONAL_SALE_ATTRIBUTES.has(unknownAttr) && unknownAttr in saleDoc) {
+        delete saleDoc[unknownAttr];
+        continue;
+      }
+      if (permissions && [400, 401, 403].includes(Number(err?.code)) && /permission|role|team/i.test(msg)) {
+        permissions = undefined;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+};
 import {
+  PREVERIFIED_MD_MULTI_QTY_BINS,
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
+  canonicalTicketNumber,
   cleanCatalogSku,
   isLeakedInventoryDomRow,
   isPayoutSummaryRow,
@@ -19,7 +82,7 @@ import {
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
 } from '../lib/salesBucketing';
-import type { LocationSettingMeta } from '../lib/warehouses';
+import { getLocationManifestDocIds, type LocationSettingMeta } from '../lib/warehouses';
 
 export interface UseRicochetSalesSyncOptions {
   activeCanonicalLocationMeta: ComputedRef<LocationSettingMeta>;
@@ -59,6 +122,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const ricochetManifestStatus = computed(() => ricochetRawCsv.value?.status || '');
   const ricochetManifestCommittedCount = computed(() => Number(ricochetRawCsv.value?.committed_count || 0));
   const ricochetManifestCommittedAt = computed(() => ricochetRawCsv.value?.committed_at || null);
+  const locallyCommittedRowKeys = ref<Set<string>>(new Set());
   const dynamicAppwriteItems = ref<any[]>([]);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
@@ -250,7 +314,18 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         ticketedSkuPrices.add(`${String(row.sku).toUpperCase()}|${Number(row.grossPrice || 0).toFixed(2)}`);
       }
     }
-    return mapped.filter((row: any) => {
+    const flagged = mapped.map((row: any) => {
+      if (locallyCommittedRowKeys.value.has(rowKeyOf(row))) {
+        return {
+          ...row,
+          alreadySynced: true,
+          alreadyRecorded: true,
+          isAlreadyRecorded: true,
+        };
+      }
+      return row;
+    });
+    return flagged.filter((row: any) => {
       const hasRealTicket = /^\d{5,8}$/.test(String(row.payoutId || row.saleNumber || '').replace(/^#/, '').trim());
       if (!hasRealTicket && row.sku && ticketedSkuPrices.has(`${String(row.sku).toUpperCase()}|${Number(row.grossPrice || 0).toFixed(2)}`)) {
         ticketedSkuPrices.delete(`${String(row.sku).toUpperCase()}|${Number(row.grossPrice || 0).toFixed(2)}`);
@@ -557,7 +632,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     }
   };
 
-  const commitStagedRicochetSales = async () => {
+  const commitLiveSales = async () => {
     if (
       isCommittingRicochetSync.value ||
       ricochetActionableNewCount.value === 0 ||
@@ -570,92 +645,201 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const rowsToCommit = ricochetStagedRows.value;
     const totalRows = rowsToCommit.length;
     ricochetCommitProgress.value = { done: 0, total: totalRows };
-    const locationCode = activeCanonicalLocationMeta.value.code;
+    const locMeta = activeCanonicalLocationMeta.value;
+    const tenantId = getTenantId?.() || '';
+    const existingSaleKeys = new Set<string>();
+    const saleShieldKey = (warehouseId: string, orderRef: string, saleIso: string): string =>
+      `${String(warehouseId || '').trim()}|${String(orderRef || '').trim().toUpperCase()}|${String(saleIso || '').slice(0, 10)}`;
+    const committedRowKeys = new Set<string>();
     let committedTotal = 0;
     let skippedTotal = 0;
+    let skippedDuplicateTickets = 0;
     let failedTotal = 0;
     const batchErrors: string[] = [];
+
     try {
+      // Layer 3 preflight: load existing tickets from Appwrite directly via the browser session cookie
+      try {
+        let cursor: string | null = null;
+        for (let page = 0; page < 60; page++) {
+          const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
+          if (cursor) queries.push(Query.cursorAfter(cursor));
+          const res = await databases.listDocuments(DATABASE_ID, COLLECTION_SALES, queries);
+          const docs = res.documents || [];
+          for (const s of docs as any[]) {
+            if (String(s?.status || '').toLowerCase() === 'cancelled') continue;
+            const key = saleShieldKey(s?.warehouseId, s?.orderId, s?.saleDate);
+            if (key !== '||') existingSaleKeys.add(key);
+          }
+          if (docs.length < 100) break;
+          cursor = docs[docs.length - 1].$id;
+        }
+      } catch {
+        // Proceed with row-level alreadySynced flags if initial ticket scan fails
+      }
+
       for (let start = 0; start < totalRows; start += COMMIT_BATCH_SIZE) {
         const chunk = rowsToCommit.slice(start, start + COMMIT_BATCH_SIZE);
         const batchNo = Math.floor(start / COMMIT_BATCH_SIZE) + 1;
         const batchCount = Math.ceil(totalRows / COMMIT_BATCH_SIZE);
+        let batchCommitted = 0;
+        let batchFailed = 0;
 
-        // Per-batch timeout so a hung request can never freeze the progress bar
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), COMMIT_BATCH_TIMEOUT_MS);
-        let res: Response;
-        try {
-          res = await fetch('/api/sales/ricochet-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-              mode: 'commit',
-              dryRun: false,
-              locationCode,
-              tenantId: getTenantId?.() || undefined,
-              batch: { index: batchNo - 1, size: COMMIT_BATCH_SIZE, total: totalRows },
-              rows: chunk,
-              spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
-            }),
-          });
-        } catch (netErr: any) {
-          throw new Error(
-            netErr?.name === 'AbortError'
-              ? `Batch ${batchNo}/${batchCount} timed out after ${Math.round(COMMIT_BATCH_TIMEOUT_MS / 1000)}s (server did not answer)`
-              : `Network error on batch ${batchNo}/${batchCount}: ${netErr?.message || netErr}`
-          );
-        } finally {
-          clearTimeout(timer);
-        }
-
-        const rawBody = await res.text();
-        let data: any = null;
-        try {
-          data = JSON.parse(rawBody);
-        } catch {
-          data = null;
-        }
-        if (!res.ok || !data?.ok) {
-          throw new Error(
-            `Batch ${batchNo}/${batchCount} failed (HTTP ${res.status}): ${data?.error || rawBody.slice(0, 240) || res.statusText}`
-          );
-        }
-
-        committedTotal += Number(data.committedCount || 0);
-        skippedTotal += Number(data.skippedAlreadySynced || 0) + Number(data.skippedDuplicateTickets || 0);
-        failedTotal += Number(data.failedCount || 0);
-        if (Array.isArray(data.errors)) {
-          for (const e of data.errors) {
-            if (e && !batchErrors.includes(String(e))) batchErrors.push(String(e));
+        const pendingWrites: Promise<void>[] = [];
+        for (const row of chunk) {
+          if (row.alreadySynced || row.alreadyRecorded || row.isAlreadyRecorded) {
+            skippedTotal++;
+            committedRowKeys.add(rowKeyOf(row));
+            continue;
           }
+          if (!row.matchedItemId && !row.sku && !row.title) {
+            skippedTotal++;
+            continue;
+          }
+
+          const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
+          const hasRealTicket = Boolean(canonicalTicketNumber(row.payoutId || row.saleNumber));
+          const shieldKey = hasRealTicket ? saleShieldKey(locMeta.id, orderRef, saleIso) : '';
+          if (shieldKey && existingSaleKeys.has(shieldKey)) {
+            skippedDuplicateTickets++;
+            skippedTotal++;
+            committedRowKeys.add(rowKeyOf(row));
+            continue;
+          }
+          if (shieldKey) existingSaleKeys.add(shieldKey);
+
+          const gross = Number(row.grossPrice || 0);
+          const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
+          const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
+          const saleDoc: Record<string, any> = {
+            warehouseId: locMeta.id,
+            soNumber,
+            orderId: orderRef,
+            saleDate: saleIso,
+            grossAmount: gross,
+            commissionFee: fee,
+            netPayout: net,
+            shippingCharged: 0,
+            shippingCost: 0,
+            status: 'Sold',
+            tenantId: tenantId || 'system',
+          };
+
+          pendingWrites.push(
+            (async () => {
+              try {
+                const createdSale = await createSaleDocClient(saleDoc, tenantId);
+                if (row.matchedItemId) {
+                  try {
+                    const cleanSku = String(row.sku || row.ricoSku || '').trim().toUpperCase();
+                    const binConfig = cleanSku ? PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku] : undefined;
+                    await databases.updateDocument(DATABASE_ID, ITEMS_COLLECTION_ID, row.matchedItemId, {
+                      status: binConfig ? 'placed' : 'sold',
+                      storageLocation: locMeta.code,
+                      warehouseId: locMeta.id,
+                      quantity: binConfig ? Math.max(1, binConfig.expectedRemainingQty) : 1,
+                      resalePrice: gross,
+                      soldPrice: net,
+                      saleId: createdSale.$id,
+                      ...(cleanSku ? { locationSku: cleanSku } : {}),
+                    });
+                  } catch {
+                    // Item status update is best-effort once the sale ledger doc is written
+                  }
+                }
+                batchCommitted++;
+                committedTotal++;
+                committedRowKeys.add(rowKeyOf(row));
+              } catch (err: any) {
+                if (shieldKey) existingSaleKeys.delete(shieldKey);
+                batchFailed++;
+                failedTotal++;
+                const msg = String(err?.message || err || 'Unknown Appwrite error');
+                if (!batchErrors.includes(msg)) batchErrors.push(msg);
+              }
+            })()
+          );
         }
+
+        if (pendingWrites.length > 0) {
+          await withTimeout(
+            Promise.all(pendingWrites),
+            COMMIT_BATCH_TIMEOUT_MS,
+            `Batch ${batchNo}/${batchCount} timed out after ${Math.round(COMMIT_BATCH_TIMEOUT_MS / 1000)}s`
+          );
+        }
+
         // Visible counter: 0 ➔ 25 ➔ 50 ➔ ... ➔ total as each batch lands
         ricochetCommitProgress.value = { done: Math.min(totalRows, start + chunk.length), total: totalRows };
 
-        // Every write in this batch was rejected: stop now and show the exact Appwrite error instead of grinding on
-        if (Number(data.failedCount || 0) > 0 && Number(data.committedCount || 0) === 0) {
+        if (batchFailed > 0 && batchCommitted === 0) {
           throw new Error(`Appwrite rejected batch ${batchNo}/${batchCount}: ${batchErrors[0] || 'unknown error'}`);
         }
       }
 
-      // Layer 2: stamp the staging manifest as committed (only when every row landed)
-      const finRes = await fetch('/api/sales/ricochet-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'finalize',
-          dryRun: false,
-          locationCode,
-          committedCount: committedTotal + skippedTotal,
-          failedCount: failedTotal,
-        }),
-      });
-      const finData = await finRes.json().catch(() => null);
-      if (finRes.ok && finData?.ok) {
-        if (finData.payload) ricochetSyncPayload.value = finData.payload;
-        if (finData.manifest) ricochetRawCsv.value = { ...(ricochetRawCsv.value || {}), ...finData.manifest };
+      // Flag all committed rows in client memory so the "✅ Already Synced" badge locks immediately
+      if (committedRowKeys.size > 0) {
+        const nextSet = new Set(locallyCommittedRowKeys.value);
+        for (const k of committedRowKeys) nextSet.add(k);
+        locallyCommittedRowKeys.value = nextSet;
+      }
+
+      // Layer 2: stamp the staging manifest as committed directly via client Appwrite SDK
+      if (failedTotal === 0) {
+        const committedAtIso = new Date().toISOString();
+        const totalCommittedCount = committedTotal + skippedTotal;
+        const { rawCsvDocId } = getLocationManifestDocIds(locMeta.code);
+        try {
+          let existingSnap: Record<string, any> = {};
+          try {
+            const existingDoc: any = await databases.getDocument(DATABASE_ID, MANIFESTS_COLLECTION_ID, rawCsvDocId);
+            if (existingDoc?.itemsSnapshot) {
+              existingSnap = JSON.parse(existingDoc.itemsSnapshot);
+            }
+            const nextSnap = {
+              ...existingSnap,
+              ...(ricochetRawCsv.value || {}),
+              status: 'committed' as const,
+              committed_at: committedAtIso,
+              committed_count: totalCommittedCount,
+            };
+            await databases.updateDocument(DATABASE_ID, MANIFESTS_COLLECTION_ID, rawCsvDocId, {
+              itemsSnapshot: JSON.stringify(nextSnap),
+              notes: `Committed ${totalCommittedCount} Ricochet sales at ${committedAtIso}`,
+            });
+          } catch {
+            const nextSnap = {
+              ...(ricochetRawCsv.value || {}),
+              status: 'committed' as const,
+              committed_at: committedAtIso,
+              committed_count: totalCommittedCount,
+            };
+            await databases.createDocument(
+              DATABASE_ID,
+              MANIFESTS_COLLECTION_ID,
+              rawCsvDocId,
+              {
+                name: `${locMeta.shortName} Ricochet Raw CSV`,
+                tenantId: 'system',
+                locationId: locMeta.id,
+                locationName: locMeta.name,
+                status: 'system_sales_sync_raw_csv',
+                itemCount: totalCommittedCount,
+                itemsSnapshot: JSON.stringify(nextSnap),
+                notes: `Committed ${totalCommittedCount} Ricochet sales at ${committedAtIso}`,
+              },
+              [Permission.read(Role.any()), Permission.update(Role.any()), Permission.delete(Role.any())]
+            );
+          }
+        } catch {
+          // Local reactive manifest state still locks the UI below
+        }
+        ricochetRawCsv.value = {
+          ...(ricochetRawCsv.value || {}),
+          status: 'committed',
+          committed_at: committedAtIso,
+          committed_count: totalCommittedCount,
+        };
       }
 
       ricochetDryRunResult.value = null;
@@ -679,6 +863,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       ricochetCommitProgress.value = null;
     }
   };
+  const commitStagedRicochetSales = commitLiveSales;
 
   const handleTabWakeOrFocus = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -731,6 +916,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     fetchStagedRicochetSales,
     applyPastedRicochetSyncPayload,
     simulateStagedRicochetSales,
+    commitLiveSales,
     commitStagedRicochetSales,
   };
 }

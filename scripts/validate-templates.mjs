@@ -560,10 +560,14 @@ const transportContracts = [
     {
         file: 'src/composables/useRicochetSalesSync.ts',
         mustContain: [
-            { pattern: /COMMIT_BATCH_SIZE\s*=\s*(?:2[5-9]|[34]\d|50)\b/, label: 'Chunked commits of 25-50 rows' },
-            { pattern: /mode:\s*['"]finalize['"]/, label: 'Manifest finalize call after all batches' },
-            { pattern: /new AbortController\(\)/, label: 'Per-batch timeout so a hung commit request can never freeze the progress bar' },
+            { pattern: /COMMIT_BATCH_SIZE\s*=\s*25\b/, label: 'Chunked client-side commits of 25 rows' },
+            { pattern: /await\s+databases\.createDocument\(\s*DATABASE_ID\s*,\s*COLLECTION_SALES\s*,\s*ID\.unique\(\)\s*,\s*saleDoc/, label: 'Direct client-side Appwrite SDK sales document creation' },
+            { pattern: /Promise\.all\(\s*pendingWrites\s*\)/, label: 'Client-side batch writes via Promise.all' },
             { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
+        ],
+        mustNotContain: [
+            { pattern: /mode:\s*['"](?:commit|finalize)['"]/, label: 'serverless proxy commit/finalize calls (commits must use client Appwrite SDK directly)' },
+            { pattern: /X-Appwrite-Key/i, label: 'serverless X-Appwrite-Key usage inside client sales sync composable' },
         ],
     },
     {
