@@ -90,6 +90,8 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 7. **LAW 7 — Date Bucketing Standard.**
    Group sales by the **calendar `sold_date`** as written — never by payout/check/paid dates. Month keys are one-indexed `YYYY-MM` strings produced by string parsing (`calendarMonthKeyFromDateString`, `pacificMonthKey`) and labeled by `monthKeyToLabel` (`2026-11` ➔ `November 2026`). Never derive a month from `Date#getMonth()` (0-indexed), and never convert a date-only/UTC-midnight sold date through a time zone. `11-02-2026` and `11-03-2026` must render as "November 2026".
 
+**READ-FIRST pointer (applies to every agent):** before editing sales or inventory-sync code (Ricochet Sales Sync, Commit, dedupe, payout/CSV imports, any script touching `sales`), read `.agents/rules/sales-reconciliation-and-payout-invariants.md` and the Booth Bin rules (`resale-booth-sync` §2.4). SKU + price is never an identity; one sale line = ticket # + gross + net.
+
 ---
 
 ## 4. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)

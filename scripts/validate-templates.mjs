@@ -357,6 +357,54 @@ for (const rel of salesSyncGuardedFiles) {
 }
 
 // =========================================================================
+// 5c. SKILL & RULE HEALTH CHECK (broken references, missing frontmatter, missing triggers)
+// =========================================================================
+{
+    const skillsRoot = path.join(process.cwd(), '.agents', 'skills');
+    const rulesRoot = path.join(process.cwd(), '.agents', 'rules');
+    if (fs.existsSync(skillsRoot)) {
+        for (const dir of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+            if (!dir.isDirectory()) continue;
+            const skillFile = path.join(skillsRoot, dir.name, 'SKILL.md');
+            if (!fs.existsSync(skillFile)) {
+                console.error(`❌ Skill health: .agents/skills/${dir.name}/ has no SKILL.md`);
+                hasErrors = true;
+                continue;
+            }
+            const text = fs.readFileSync(skillFile, 'utf8');
+            const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+            if (!fm || !/^name:\s*\S/m.test(fm[1]) || !/^description:\s*\S/m.test(fm[1])) {
+                console.error(`❌ Skill health: .agents/skills/${dir.name}/SKILL.md needs frontmatter with both "name:" and "description:"`);
+                hasErrors = true;
+                continue;
+            }
+            const nameValue = (fm[1].match(/^name:\s*(.+)$/m) || [])[1]?.trim();
+            if (nameValue && nameValue !== dir.name) {
+                console.warn(`⚠️ Skill health: .agents/skills/${dir.name}/SKILL.md has name "${nameValue}" (folder is "${dir.name}")`);
+            }
+            if (!/(use\s+(when|this|for)|read\s+first)/i.test(fm[1])) {
+                console.warn(`⚠️ Skill health: "${dir.name}" description has no trigger phrase ("Use when…" / "READ FIRST…"), so an agent may never open it`);
+            }
+        }
+    }
+    // Every module named in a Gemini Web bundle must exist as a skill folder or a rule file
+    const syncScriptPath = path.join(process.cwd(), 'scripts', 'sync-ai-context.mjs');
+    if (fs.existsSync(syncScriptPath)) {
+        const syncSource = fs.readFileSync(syncScriptPath, 'utf8');
+        const bundleRef = /\{\s*type:\s*'(skill|rule)'\s*,\s*name:\s*'([^']+)'\s*\}/g;
+        let m;
+        while ((m = bundleRef.exec(syncSource))) {
+            const [, kind, name] = m;
+            const target = kind === 'skill' ? path.join(skillsRoot, name, 'SKILL.md') : path.join(rulesRoot, `${name}.md`);
+            if (!fs.existsSync(target)) {
+                console.error(`❌ Skill health: Gemini bundle references ${kind} "${name}" but ${path.relative(process.cwd(), target)} does not exist`);
+                hasErrors = true;
+            }
+        }
+    }
+}
+
+// =========================================================================
 // 6. VALIDATE GOLDEN RULE #2: ZERO HARDCODED LOCATIONS IN UI COMPONENTS
 // =========================================================================
 const locationDrivenFiles = [

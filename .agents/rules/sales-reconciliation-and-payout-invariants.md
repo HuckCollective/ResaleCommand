@@ -214,3 +214,42 @@ Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`
 2. **Server & Userscript Collision Self-Healing**:
    - `GET /api/md-verify-report?mode=payload` enforces `EXPLICIT_COLLISION_PAIRS` (`0EJ0MQ` ➔ `HUCK-0334` / `0EJ09A` ➔ `HUCK-9716`, `0EJ0HE` ➔ `HUCK-1379` / `0EJ0MW` ➔ `HUCK-9724`, `0EJ0JJ` ➔ `HUCK-1461` / `0EJ0MY` ➔ `HUCK-9732`, `0EJ05G` ➔ `HUCK-9543` / `0EJ02D` ➔ `HUCK-9740`) and a global `usedUpcs` Set, auto-allocating and persisting a unique `HUCK-XXXX` in Appwrite if any collision is detected.
    - `public/ricochet-upc-sync.user.js` applies `CANONICAL_COLLISION_OVERRIDES` in `sanitizeBarcodeMap()` and clears `runtime422Conflicts` whenever `fetchLivePayloadFromCloud()` succeeds.
+
+
+---
+
+## 15. Ticket-Line Ledger Identity & the 2026-11-04 Incident (read before touching Commit / dedupe)
+
+### Identity of one sale line
+- **One sale line = POS ticket # + gross + net**, counted as a **multiset** (`ticketLineKey` / `posTicketOfRow` in `src/composables/useRicochetSalesSync.ts`).
+  Each existing `sales` document with that key "uses up" exactly one CSV line; remaining lines are new. A ticket may hold several identical lines (e.g. 4x `0EJ07M` `$15` on #196110) and a Booth Bin SKU appears on many tickets, so **SKU, UPC, title, price-only or date-only is never an identity**.
+- The server's `alreadySynced` / `isAlreadyRecorded` flags (SKU+price shortcuts) are **untrusted**: they hide every repeat sale of a bin after the first.
+- `orderId` = `Ticket #<n>` (`Ticket #<n> #<k>` for the k-th identical line). `soNumber` = UPC, else SKU, else the ticket ref. Never `SO-<timestamp>`.
+
+### Sale creation & date
+- A sale is created ONLY from a real Payouts / Payout History row that has a **ticket # and a Sold date**. Catalog "Sold" items never create sales.
+- `saleDate` = Ricochet Sold date (Pacific wall-clock) stored as noon UTC of that calendar day (`toSaleIso`). Never the Paid/check date. A row without a Sold date is skipped.
+- If the preflight read of existing sales fails, Commit stops and writes nothing.
+
+### Verification
+- Compare Appwrite `sales` to the two CSVs by ticket+gross+net (scratch script, dry-run first): expect **0 missing, 0 extra**.
+- Known good: October 2026 = **63 sales / $2,462.99 gross / $369.45 fee / $2,093.54 net**.
+- The importer page's "New / Ready to Sync" is an estimate; Commit re-reads Appwrite fresh.
+
+### OPEN DECISION (owner: Mike) - bin stock on Commit
+- §12.3 says a Commit depletes a Booth Bin (`quantity` N-K). Since 2026-11-04 the Commit does **not** touch a bin item at all (bin = item on >1 staged line, `quantity > 1`, `isMultiQty`, or in `PREVERIFIED_MD_MULTI_QTY_BINS`), because the Products sync already sets `quantity` from Ricochet's live count and a second decrement would double-count. Decide which source of truth wins, then update this paragraph.
+
+### Incident log - never repeat
+| Date | What happened | Root cause |
+|---|---|---|
+| 2026-10-28 | 292 bogus sales | `Products-*.csv` created sales dated "today" |
+| 2026-11-04 | 45 duplicate Oct sales after Commit | SKU/price heuristics + unlinked `SO-xxxxx` placeholders + UTC date roll |
+| 2026-11-04 | A cleanup script deleted real bin sales | Treated "same price within 2 days" as duplicate; ignored Booth Bins |
+| 2026-11-04 | 20 phantom sales dated 10-07 | Catalog "Sold" fallback + paid date used as sold date |
+| 2026-11-04 | Bookmarklet dropped identical lines | De-duplicated rows by content; a ticket can hold identical lines |
+| 2026-11-04 | Repeat bin sales never committed | Server `alreadySynced` flag (SKU+price) was trusted |
+| 2026-11-04 | ~49 items left with dangling `saleId` | Duplicate sales deleted before re-linking items (violated "Duplicate Sale Cleanup") |
+
+### Bookmarklet / paste path
+- `🔄 Harvest` then `Stage Sales to Resale Core`. It must not click Ricochet's `[Export]` (browser download dialog).
+- Reliable fallback: `📋 Paste Sync JSON / CSV` with the raw Payouts + Payout History text (`Get-Content <file> -Raw | Set-Clipboard`).

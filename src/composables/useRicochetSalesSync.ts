@@ -296,7 +296,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         // Law 7: the sold date is ONLY the Ricochet "Sold" date as written — never the paid/check date, never a hardcoded or "today" fallback.
         const resolvedSoldDate = String(r?.soldDate || r?.date || '').trim();
 
-        const isSynced = Boolean(r?.alreadySynced || r?.alreadyRecorded || r?.isAlreadyRecorded);
+        // Server "already recorded" flags use SKU+price shortcuts that wrongly swallow repeat sales of the same product,
+        // so they are never trusted here. Only the exact ticket ledger below decides what is already saved.
+        const isSynced = false;
         let matchTier = r?.matchTier || 'unmatched';
         if (matchedItem && (!matchTier || matchTier === 'unmatched')) {
           matchTier =
@@ -344,6 +346,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           payoutStatus,
           alreadySynced: isSynced,
           alreadyRecorded: isSynced,
+          isAlreadyRecorded: isSynced,
           matchTier,
           matchStatus: isMatched ? 'matched' : 'unmatched',
           partnerBucket,
@@ -365,15 +368,6 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     // so a ticket with several lines (e.g. 4x the same $15 book) is never collapsed into one.
     const liveTicketLineCounts = new Map<string, number>();
     if (liveSales.length > 0) {
-      flagAlreadyRecordedRows(mapped, liveSales, {
-        getSaleNumber: (r: any) => r.payoutId || r.saleNumber || r.ticket || r.ticketNumber || r.sku,
-        getSoldDate: (r: any) => r.soldDate,
-        getGross: (r: any) => r.grossPrice,
-        getNet: (r: any) => r.ricoNetPayout,
-        getSku: (r: any) => r.sku,
-        getUpc: (r: any) => r.upc || r.matchedItemUpc,
-        getTitle: (r: any) => r.title,
-      });
       for (const sale of liveSales) {
         const ticket = canonicalTicketNumber(sale.ticket || sale.orderId || sale.sale || sale.ticketNumber);
         if (!/^\d{4,8}$/.test(ticket)) continue;
@@ -732,6 +726,15 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     // Multiset ledger of what Appwrite already holds: ticket # + gross + net -> number of existing sale docs
     const existingTicketLineCounts = new Map<string, number>();
     const committedRowKeys = new Set<string>();
+    // Booth Bin detection (data-driven): an item that appears on more than one staged ticket line, or that Appwrite already holds with qty > 1
+    const lineCountByItem = new Map<string, number>();
+    for (const r of rowsToCommit as any[]) {
+      if (r?.matchedItemId) lineCountByItem.set(String(r.matchedItemId), (lineCountByItem.get(String(r.matchedItemId)) || 0) + 1);
+    }
+    const multiQtyItemIds = new Set<string>();
+    for (const it of ((Array.isArray(inventoryItems?.value) && inventoryItems!.value.length > 0 ? inventoryItems!.value : dynamicAppwriteItems.value) as any[])) {
+      if (it?.isMultiQty || Number(it?.quantity || 1) > 1) multiQtyItemIds.add(String(it.$id));
+    }
     let committedTotal = 0;
     let skippedTotal = 0;
     let skippedDuplicateTickets = 0;
@@ -779,12 +782,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
 
         const pendingWrites: Promise<void>[] = [];
         for (const row of chunk) {
-          if (row.alreadySynced || row.alreadyRecorded || row.isAlreadyRecorded) {
-            skippedTotal++;
-            committedRowKeys.add(rowKeyOf(row));
-            continue;
-          }
-
+          // Every row is judged ONLY by the exact ticket ledger below (fresh from Appwrite), never by pre-computed flags.
           const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
           const normRowTicket = posTicketOfRow(row);
           // A sale is only ever created from a real Ricochet ticket row (Payouts / Payout History). Catalog "Sold" items never create sales.
@@ -813,6 +811,13 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           const shieldKey = lineKey;
           void shieldKey;
           const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
+          // 📦 Booth Bin (multi-qty): one SKU sells many times. A bin sale only records the sale — it must NEVER flip the bin item to
+          // "sold / qty 1" (stock is managed by the Booth Bin / Restock flows and the Products sync).
+          const rowBinSku = String(row.sku || row.ricoSku || '').trim().toUpperCase();
+          const isBinSale =
+            Boolean(rowBinSku && PREVERIFIED_MD_MULTI_QTY_BINS[rowBinSku]) ||
+            (lineCountByItem.get(String(row.matchedItemId || '')) || 0) > 1 ||
+            multiQtyItemIds.has(String(row.matchedItemId || ''));
           const saleDoc: Record<string, any> = {
             warehouseId: locMeta.id,
             soNumber,
@@ -831,7 +836,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             (async () => {
               try {
                 const createdSale = await createSaleDocClient(saleDoc, tenantId);
-                if (row.matchedItemId) {
+                if (row.matchedItemId && !isBinSale) {
                   try {
                     const cleanSku = String(row.sku || row.ricoSku || '').trim().toUpperCase();
                     const binConfig = cleanSku ? PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku] : undefined;
