@@ -106,6 +106,14 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 - **Docs:** single source of truth = `.agents/rules/sales-reconciliation-and-payout-invariants.md` (§15 added); `.agents/skills/sales-reconciliation-and-payout-invariants/SKILL.md` is a READ-FIRST pointer; READ-FIRST line added to `MASTER_ARCHITECTURE_LAWS`.
 - **Open / next:** (1) run `scratch/relink-item-sales.mjs` (dry-run) to repair items whose `saleId` points at deleted duplicate sales; (2) decide Booth Bin stock on Commit (rule §12.3 depletes N-K vs. current "leave bins to Ricochet's live Quantity" — see rule §15); (3) remove leftover hardcodes: `0EJ0MN` D&D fallback in `public/ricochet-upc-sync.user.js`, static `PREVERIFIED_OCT_BB_SKUS` in `src/lib/salesBucketing.ts`; (4) delete the `scratch/` repair scripts; (5) confirm the bookmarklet's "N/808 Verified" count matches Location Sync (808 verified).
 
+### Closed out later on Nov 4, 2026 (verified on production)
+- Item links: 44 `items.saleId` values re-linked to their ticket sales; Booth Bins left untouched by design; 27 sold items from before April have no sale record (expected, nothing to link).
+- Hardcodes removed: D&D `0EJ0MN` fallbacks, `0EJ0NY`/`0EJ0O0`/`0EJ0MU` trap guards, one-time `0EJ0CQ` heal, static B&B SKU list, `get-item-debug` default barcode. `npm run verify` now fails on hardcoded `0EJxxx` / `HUCK-/PDXGL-/BB-1234` in the three sales-sync files.
+- `/sales` settlement view: the current Pacific month is "in progress" (no booth rent, no shortfall, no consignor rent share until month end); venue-fee % is derived from the committed sales, not typed in.
+- Skills: every skill description now has a "Use when…" trigger; `npm run verify` checks bundle references and skill frontmatter.
+- Checked live: `/sales` Oct 63 / $2,462.99 / $2,093.54 net; Nov in-progress view correct; `/warehouse/sync/MD` 808 verified.
+- **Still open (owner decisions):** (a) Booth Bin stock on Commit: depletes N-K per rule §12.3 vs current "leave bins to Ricochet's live Quantity" (rule §15); (b) delete the older `public/scripts/ricochet-upc-sync.user.js` copy; (c) bookmarklet Harvest reads 252 of 303 Payout History lines (paste of the CSV export is the proven path; Pending 75/75 is complete).
+
 ## Completed & Live on Production (`resalecmd.com`)
 1. **AI Scout & Vision Pipeline**: Modular schemas, Buy-Target Authority Law, physical substrate priority (`art_decor` before `books`), and Appwrite `/preview` aspect-ratio fix for `bounding_box` auto-cropping.
 2. **ItemDrawer & Playbook Performance**: Lazy-mounted `ItemLotTab`/`ItemVerifyTab` (`v-if`), `.toFixed()` null-safety guards, unlocked `isSold` (`status === 'sold'` only) on active Multi-Qty Booth Bins, unified `resolveMultiQtyCost`, and fixed Playbook tab component extraction (`getLotComponents` JSON array parsing + reactive `form.rawAnalysis` / `form.components` hydration).
