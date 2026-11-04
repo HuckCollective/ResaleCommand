@@ -562,6 +562,8 @@ const transportContracts = [
         mustContain: [
             { pattern: /COMMIT_BATCH_SIZE\s*=\s*(?:2[5-9]|[34]\d|50)\b/, label: 'Chunked commits of 25-50 rows' },
             { pattern: /mode:\s*['"]finalize['"]/, label: 'Manifest finalize call after all batches' },
+            { pattern: /new AbortController\(\)/, label: 'Per-batch timeout so a hung commit request can never freeze the progress bar' },
+            { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
         ],
     },
     {
@@ -574,21 +576,22 @@ const transportContracts = [
         ],
     },
     {
-        file: '.agents/rules/master-architecture-laws.md',
+        file: '.agents/skills/hucks-resale-core/SKILL.md',
         mustContain: [
-            { pattern: /LAW 1 — 4 Locations Only/, label: 'Law 1 (4 Locations Only)' },
-            { pattern: /LAW 2 — Zero Hardcoding/, label: 'Law 2 (Zero Hardcoding)' },
-            { pattern: /LAW 3 — 100% Shared Matching/, label: 'Law 3 (Shared Matching via salesBucketing.ts)' },
-            { pattern: /LAW 4 — Appwrite-First Persistence/, label: 'Law 4 (Appwrite-First Persistence)' },
-            { pattern: /LAW 5 — Enterprise UX\/IA Pattern/, label: 'Law 5 (Enterprise UX/IA Pattern)' },
-            { pattern: /LAW 6 — 3-Tier Commit Idempotency/, label: 'Law 6 (3-Tier Commit Idempotency)' },
-            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 (Date Bucketing Standard)' },
+            { pattern: /LAW 1 — 4 Locations Only/, label: 'Law 1 (4 Locations Only) in the master shared skill' },
+            { pattern: /LAW 2 — Zero Hardcoding/, label: 'Law 2 (Zero Hardcoding) in the master shared skill' },
+            { pattern: /LAW 3 — 100% Shared Matching/, label: 'Law 3 (Shared Matching via salesBucketing.ts) in the master shared skill' },
+            { pattern: /LAW 4 — Appwrite-First Persistence/, label: 'Law 4 (Appwrite-First Persistence) in the master shared skill' },
+            { pattern: /LAW 5 — Enterprise UX\/IA Pattern/, label: 'Law 5 (Enterprise UX/IA Pattern) in the master shared skill' },
+            { pattern: /LAW 6 — 3-Tier Commit Idempotency/, label: 'Law 6 (3-Tier Commit Idempotency) in the master shared skill' },
+            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 (Date Bucketing Standard) in the master shared skill' },
         ],
     },
     {
         file: 'scripts/sync-ai-context.mjs',
         mustContain: [
-            { pattern: /loadMasterArchitectureLaws\s*\(/, label: 'Master laws embedded into GEMINI.md / hucks-resale-core skill' },
+            { pattern: /const MASTER_ARCHITECTURE_LAWS\s*=/, label: 'Single-source MASTER_ARCHITECTURE_LAWS constant' },
+            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 inside the sync generator (skill header + GEMINI.md)' },
         ],
     },
     {
@@ -621,6 +624,12 @@ const transportContracts = [
         ],
     },
 ];
+// The master shared skill is the single source of truth for the 7 laws — no standalone rule files
+if (fs.existsSync(path.resolve('.agents/rules/master-architecture-laws.md'))) {
+    console.error('❌ Standalone .agents/rules/master-architecture-laws.md must be deleted: the 7 laws live ONLY in the master shared skill (hucks-resale-core) via scripts/sync-ai-context.mjs.');
+    hasErrors = true;
+}
+
 for (const contract of transportContracts) {
     const fullPath = path.resolve(contract.file);
     if (!fs.existsSync(fullPath)) {

@@ -5,7 +5,9 @@ import { parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
 const DB_ID = import.meta.env?.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const ITEMS_COLLECTION_ID = import.meta.env?.PUBLIC_APPWRITE_ITEMS_COLLECTION_ID || 'items';
 /** Safe Appwrite write batch size for chunked Live Commits (25-50 rows per request). */
-const COMMIT_BATCH_SIZE = 40;
+const COMMIT_BATCH_SIZE = 25;
+/** Max wait per batch request before the commit aborts and unfreezes the UI. */
+const COMMIT_BATCH_TIMEOUT_MS = 90_000;
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
@@ -572,30 +574,70 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     let committedTotal = 0;
     let skippedTotal = 0;
     let failedTotal = 0;
+    const batchErrors: string[] = [];
     try {
       for (let start = 0; start < totalRows; start += COMMIT_BATCH_SIZE) {
         const chunk = rowsToCommit.slice(start, start + COMMIT_BATCH_SIZE);
-        const res = await fetch('/api/sales/ricochet-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'commit',
-            dryRun: false,
-            locationCode,
-            tenantId: getTenantId?.() || undefined,
-            batch: { index: Math.floor(start / COMMIT_BATCH_SIZE), size: COMMIT_BATCH_SIZE, total: totalRows },
-            rows: chunk,
-            spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
-          }),
-        });
-        const data = await res.json().catch(() => null);
-        if (!(res.ok && data?.ok)) {
-          throw new Error(data?.error || `Commit batch ${Math.floor(start / COMMIT_BATCH_SIZE) + 1} failed`);
+        const batchNo = Math.floor(start / COMMIT_BATCH_SIZE) + 1;
+        const batchCount = Math.ceil(totalRows / COMMIT_BATCH_SIZE);
+
+        // Per-batch timeout so a hung request can never freeze the progress bar
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), COMMIT_BATCH_TIMEOUT_MS);
+        let res: Response;
+        try {
+          res = await fetch('/api/sales/ricochet-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              mode: 'commit',
+              dryRun: false,
+              locationCode,
+              tenantId: getTenantId?.() || undefined,
+              batch: { index: batchNo - 1, size: COMMIT_BATCH_SIZE, total: totalRows },
+              rows: chunk,
+              spaceRentalAdjustments: ricochetSpaceRentalAdjustments.value,
+            }),
+          });
+        } catch (netErr: any) {
+          throw new Error(
+            netErr?.name === 'AbortError'
+              ? `Batch ${batchNo}/${batchCount} timed out after ${Math.round(COMMIT_BATCH_TIMEOUT_MS / 1000)}s (server did not answer)`
+              : `Network error on batch ${batchNo}/${batchCount}: ${netErr?.message || netErr}`
+          );
+        } finally {
+          clearTimeout(timer);
         }
+
+        const rawBody = await res.text();
+        let data: any = null;
+        try {
+          data = JSON.parse(rawBody);
+        } catch {
+          data = null;
+        }
+        if (!res.ok || !data?.ok) {
+          throw new Error(
+            `Batch ${batchNo}/${batchCount} failed (HTTP ${res.status}): ${data?.error || rawBody.slice(0, 240) || res.statusText}`
+          );
+        }
+
         committedTotal += Number(data.committedCount || 0);
         skippedTotal += Number(data.skippedAlreadySynced || 0) + Number(data.skippedDuplicateTickets || 0);
         failedTotal += Number(data.failedCount || 0);
+        if (Array.isArray(data.errors)) {
+          for (const e of data.errors) {
+            if (e && !batchErrors.includes(String(e))) batchErrors.push(String(e));
+          }
+        }
+        // Visible counter: 0 ➔ 25 ➔ 50 ➔ ... ➔ total as each batch lands
         ricochetCommitProgress.value = { done: Math.min(totalRows, start + chunk.length), total: totalRows };
+
+        // Every write in this batch was rejected: stop now and show the exact Appwrite error instead of grinding on
+        if (Number(data.failedCount || 0) > 0 && Number(data.committedCount || 0) === 0) {
+          throw new Error(`Appwrite rejected batch ${batchNo}/${batchCount}: ${batchErrors[0] || 'unknown error'}`);
+        }
       }
 
       // Layer 2: stamp the staging manifest as committed (only when every row landed)
@@ -622,14 +664,15 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         type: failedTotal > 0 ? 'warning' : 'success',
         message:
           failedTotal > 0
-            ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed — re-run Commit to retry (duplicates are skipped automatically).`
+            ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed${batchErrors[0] ? ` — Appwrite: ${batchErrors[0]}` : ''}. Re-run Commit to retry (duplicates are skipped automatically).`
             : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} already synced).`,
       });
       onAfterLiveCommit?.();
     } catch (err: any) {
+      // Unfreeze immediately (finally resets isCommitting + progress) and surface the exact error message
       addToast({
         type: 'error',
-        message: `Failed to commit Ricochet sales: ${err?.message || 'Unknown error'} — re-run Commit to resume (already-written tickets are skipped).`,
+        message: `Commit stopped at ${ricochetCommitProgress.value?.done ?? 0} / ${totalRows}: ${err?.message || 'Unknown error'} — re-run Commit to resume (already-written tickets are skipped).`,
       });
     } finally {
       isCommittingRicochetSync.value = false;

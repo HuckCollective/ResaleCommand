@@ -368,13 +368,15 @@ async function fetchLocationVerifyCatalogRows(locCode: string): Promise<any[]> {
 async function enrichAndMatchSalesRows(
   rawRows: any[],
   locCode: string,
-  extraOptions?: { spaceRentalAdjustments?: SpaceRentalAdjustment[]; dryRun?: boolean }
+  extraOptions?: { spaceRentalAdjustments?: SpaceRentalAdjustment[]; dryRun?: boolean; salesSink?: any[] }
 ): Promise<RicochetSalesSyncPayload> {
   const [{ allItems, allSales }, catalogReportRows, liveWarehouses] = await Promise.all([
     fetchAllItemsAndSales(),
     fetchLocationVerifyCatalogRows(locCode),
     loadLiveWarehouseDocs(),
   ]);
+  // Hand the already-fetched sales to the caller (commit shield) so they are not downloaded a second time
+  if (extraOptions?.salesSink) extraOptions.salesSink.push(...allSales);
   return buildEnrichedRicochetSalesPayload({
     rawRows,
     locCode,
@@ -385,6 +387,38 @@ async function enrichAndMatchSalesRows(
     spaceRentalAdjustments: extraOptions?.spaceRentalAdjustments,
     dryRun: extraOptions?.dryRun,
   });
+}
+
+/**
+ * Creates a `sales` document and survives schema drift: if Appwrite rejects the request because an OPTIONAL attribute is not in the
+ * collection schema ("Unknown attribute: tenantId" → 400), that attribute is dropped and the write is retried instead of failing the batch.
+ */
+const OPTIONAL_SALE_ATTRIBUTES = new Set(['tenantId', 'shippingCharged', 'shippingCost', 'orderId', 'commissionFee']);
+
+async function createSaleDocSchemaSafe(
+  databases: NodeDatabases,
+  dbId: string,
+  salesCol: string,
+  doc: Record<string, any>
+): Promise<any> {
+  const payload: Record<string, any> = { ...doc };
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await databases.createDocument(dbId, salesCol, NodeID.unique(), payload);
+    } catch (err: any) {
+      lastErr = err;
+      const msg = String(err?.message || '');
+      const m = msg.match(/Unknown attribute:?\s*"?([A-Za-z0-9_]+)"?/i);
+      const attr = m?.[1];
+      if (attr && OPTIONAL_SALE_ATTRIBUTES.has(attr) && attr in payload) {
+        delete payload[attr];
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 export const OPTIONS: APIRoute = async () => new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -509,11 +543,13 @@ export const POST: APIRoute = async ({ request, url }) => {
           : Array.isArray(persisted?.rows)
             ? persisted.rows
             : [];
+      const preloadedSales: any[] = [];
       const currentPayload =
         sourceRows.length > 0
           ? await enrichAndMatchSalesRows(sourceRows, locMeta.code, {
               spaceRentalAdjustments: body?.spaceRentalAdjustments || persisted?.spaceRentalAdjustments,
               dryRun: isDryRunRequest,
+              salesSink: preloadedSales,
             })
           : persisted;
 
@@ -561,6 +597,11 @@ export const POST: APIRoute = async ({ request, url }) => {
       let skippedAlreadySynced = 0;
       let skippedDuplicateTickets = 0;
       let failedCount = 0;
+      const commitErrors: string[] = [];
+      const recordCommitError = (msg: string) => {
+        const clean = String(msg || '').trim();
+        if (clean && !commitErrors.includes(clean) && commitErrors.length < 5) commitErrors.push(clean);
+      };
       const tenantId = String(body?.tenantId || '').trim();
 
       // Layer 3 (Database Idempotency Shield): ticket number + sale date + location must be unique in `sales`
@@ -568,7 +609,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         `${String(warehouseId || '').trim()}|${String(orderRef || '').trim().toUpperCase()}|${String(saleIso || '').slice(0, 10)}`;
       const existingSaleKeys = new Set<string>();
       if (databases) {
-        const { allSales: existingSales } = await fetchAllItemsAndSales({ salesOnly: true });
+        const existingSales = preloadedSales.length > 0 ? preloadedSales : (await fetchAllItemsAndSales({ salesOnly: true })).allSales;
         for (const s of existingSales) {
           if (s?.status === 'Cancelled') continue;
           existingSaleKeys.add(saleShieldKey(s?.warehouseId, s?.orderId, s?.saleDate));
@@ -596,7 +637,7 @@ export const POST: APIRoute = async ({ request, url }) => {
           }
 
           try {
-            const createdSale = await databases.createDocument(dbId, salesCol, NodeID.unique(), {
+            const createdSale = await createSaleDocSchemaSafe(databases, dbId, salesCol, {
               warehouseId: locMeta.id,
               soNumber,
               orderId: orderRef,
@@ -610,26 +651,32 @@ export const POST: APIRoute = async ({ request, url }) => {
               tenantId: tenantId || 'system',
             });
 
-            if (row.matchedItemId) {
-              const binConfig = row.sku ? PREVERIFIED_MD_MULTI_QTY_BINS[row.sku.toUpperCase()] : undefined;
-              const itemUpdate: Record<string, any> = {
-                status: binConfig ? 'placed' : 'sold',
-                storageLocation: locMeta.code,
-                warehouseId: locMeta.id,
-                quantity: binConfig ? Math.max(1, binConfig.expectedRemainingQty) : 1,
-                resalePrice: gross,
-                soldPrice: net,
-                saleId: createdSale.$id,
-              };
-              if (row.sku) itemUpdate.locationSku = row.sku;
-              await databases.updateDocument(dbId, itemsCol, row.matchedItemId, itemUpdate);
-            }
-
+            // The sale is written; an item-update failure must not hide it (the ticket shield skips it on retry)
             row.alreadySynced = true;
             committedCount++;
             if (hasRealTicket) existingSaleKeys.add(shieldKey);
-          } catch {
+
+            if (row.matchedItemId) {
+              try {
+                const binConfig = row.sku ? PREVERIFIED_MD_MULTI_QTY_BINS[row.sku.toUpperCase()] : undefined;
+                const itemUpdate: Record<string, any> = {
+                  status: binConfig ? 'placed' : 'sold',
+                  storageLocation: locMeta.code,
+                  warehouseId: locMeta.id,
+                  quantity: binConfig ? Math.max(1, binConfig.expectedRemainingQty) : 1,
+                  resalePrice: gross,
+                  soldPrice: net,
+                  saleId: createdSale.$id,
+                };
+                if (row.sku) itemUpdate.locationSku = row.sku;
+                await databases.updateDocument(dbId, itemsCol, row.matchedItemId, itemUpdate);
+              } catch (itemErr: any) {
+                recordCommitError(`Sale ${orderRef} saved but item update failed: ${itemErr?.message || itemErr}`);
+              }
+            }
+          } catch (saleErr: any) {
             failedCount++;
+            recordCommitError(String(saleErr?.message || saleErr || 'Appwrite rejected the sale document'));
           }
         }
       }
@@ -646,6 +693,7 @@ export const POST: APIRoute = async ({ request, url }) => {
             skippedAlreadySynced,
             skippedDuplicateTickets,
             failedCount,
+            errors: commitErrors,
           }),
           { status: 200, headers: CORS_HEADERS }
         );
