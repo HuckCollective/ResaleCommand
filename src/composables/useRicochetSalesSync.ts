@@ -38,6 +38,18 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, message: string): Promi
 const ticketLineKey = (ticket: string, gross: any, net: any): string =>
   `${ticket}|${Number(gross || 0).toFixed(2)}|${Number(net || 0).toFixed(2)}`;
 
+/**
+ * POS ticket number of a staged Ricochet row. Accepts `226164`, `#226164`, `Ticket #226164` and repeat-line forms such as
+ * `225931 #2` (the 2nd identical line on the same ticket). Returns '' only when the row truly has no 4-8 digit ticket.
+ */
+const posTicketOfRow = (row: any): string => {
+  for (const v of [row?.ticket, row?.payoutId, row?.saleNumber, row?.ticketNumber]) {
+    const m = String(v ?? '').trim().match(/(?<!\d)(\d{4,8})(?!\d)/);
+    if (m) return m[1];
+  }
+  return '';
+};
+
 /** Stable identity of a staged Ricochet row (used to flag rows as synced locally right after a client commit). */
 const rowKeyOf = (r: any): string =>
   `${r?.payoutId || r?.saleNumber || ''}|${r?.sku || r?.ricoSku || ''}|${r?.soldDate || ''}|${Number(
@@ -371,7 +383,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     }
 
     const flagged = mapped.map((row: any) => {
-      const ticket = canonicalTicketNumber(row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '');
+      const ticket = posTicketOfRow(row);
       let matchedLiveTicket = false;
       if (/^\d{4,8}$/.test(ticket)) {
         const key = ticketLineKey(ticket, row.grossPrice, row.ricoNetPayout ?? row.expectedNetPayout);
@@ -773,7 +785,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           }
 
           const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
-          const normRowTicket = canonicalTicketNumber(row.ticket || row.payoutId || row.saleNumber || row.ticketNumber || '');
+          const normRowTicket = posTicketOfRow(row);
           // A sale is only ever created from a real Ricochet ticket row (Payouts / Payout History). Catalog "Sold" items never create sales.
           if (!/^\d{4,8}$/.test(normRowTicket) || !row.soldDate) {
             skippedNoTicket++;

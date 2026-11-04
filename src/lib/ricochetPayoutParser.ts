@@ -895,8 +895,10 @@ export function buildSaleOrderReference(row: RicochetSyncSaleLine, locCode: stri
   soNumber: string;
 } {
   const saleIso = toSaleIso(row.soldDate) || new Date().toISOString();
-  const ticket = canonicalTicketNumber(row.payoutId || row.saleNumber);
-  const occ = Math.max(1, Number(row.ticketOccurrence || 1));
+  const ticketSource = [row.payoutId, row.saleNumber].map((v) => String(v ?? '').trim()).find((s) => /(?<!\d)\d{4,8}(?!\d)/.test(s)) || '';
+  const ticket = (ticketSource.match(/(?<!\d)(\d{4,8})(?!\d)/) || [])[1] || canonicalTicketNumber(row.payoutId || row.saleNumber);
+  const occFromSuffix = Number((ticketSource.match(/#\s*(\d{1,2})\s*$/) || [])[1] || 1);
+  const occ = Math.max(1, Number(row.ticketOccurrence || 1), occFromSuffix);
   const formattedTicket = ticket ? (occ > 1 ? `Ticket #${ticket} #${occ}` : `Ticket #${ticket}`) : '';
   const cleanSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
   const cleanUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
