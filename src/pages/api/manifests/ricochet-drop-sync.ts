@@ -4,7 +4,11 @@ import {
   Databases as NodeDatabases,
   Query as NodeQuery,
 } from 'node-appwrite';
-import { getLocationSettingMeta, resolveCanonicalLocationCode } from '../../../lib/warehouses';
+import {
+  getLocationManifestDocIds,
+  getLocationSettingMeta,
+  resolveCanonicalLocationCode,
+} from '../../../lib/warehouses';
 import {
   extractItemBrand,
   extractShortTagTitle,
@@ -364,6 +368,43 @@ export const POST: APIRoute = async ({ request }) => {
     await appwrite.withDb((db) =>
       db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, manifestId, update)
     );
+
+    // Also mirror newly bound 0EJ... <-> UPC mappings into the location's livePayloadDocId (Role.any() writable)
+    // so /api/md-verify-report?mode=payload and the bookmarklet's Inventory Audit tab know them immediately!
+    try {
+      const { livePayloadDocId } = getLocationManifestDocIds(code);
+      const liveDoc: any = await appwrite.withDb((db) =>
+        db.getDocument(appwrite.dbId, MANIFESTS_COL_ID, livePayloadDocId)
+      );
+      if (liveDoc?.notes) {
+        const parsedLive = typeof liveDoc.notes === 'string' ? JSON.parse(liveDoc.notes) : liveDoc.notes;
+        const skuToUpcMap = parsedLive.skuToUpcMap || {};
+        const skuToMetaMap = parsedLive.skuToMetaMap || {};
+        for (const s of nextSnapshot) {
+          const sku = cleanSku(s?.locationSku);
+          const upc = String(s?.upc || '').trim().toUpperCase();
+          if (sku && upc) {
+            skuToUpcMap[sku] = upc;
+            skuToMetaMap[sku] = {
+              ...(skuToMetaMap[sku] || {}),
+              itemId: s.$id || s.id,
+              upc,
+              title: s.title || '',
+              status: 'placed',
+            };
+          }
+        }
+        parsedLive.skuToUpcMap = skuToUpcMap;
+        parsedLive.skuToMetaMap = skuToMetaMap;
+        parsedLive.totalMappedSkus = Object.keys(skuToUpcMap).length;
+        parsedLive.generatedAt = new Date().toISOString();
+        await appwrite.withDb((db) =>
+          db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, livePayloadDocId, {
+            notes: JSON.stringify(parsedLive),
+          })
+        );
+      }
+    } catch {}
 
     return json({ ok: true, bound: bound.length, rejected, manifestPlaced: allBound });
   } catch (err: any) {

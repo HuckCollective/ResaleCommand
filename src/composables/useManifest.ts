@@ -243,6 +243,44 @@ export function useManifest() {
         }
     }
 
+    // -- Sync any newly bound bookmarklet 0EJ... SKUs from manifest snapshots into resale_db.items --
+    async function syncBoundSnapshotSkusForManifests(manifestsList: ManifestDocument[]) {
+        const collId = getCollectionId();
+        for (const m of manifestsList) {
+            if (!m) continue;
+            let snap: any[] = [];
+            if (Array.isArray(m.itemsSnapshot)) {
+                snap = m.itemsSnapshot;
+            } else if (typeof (m as any).itemsSnapshot === 'string' && (m as any).itemsSnapshot.trim()) {
+                try { snap = JSON.parse((m as any).itemsSnapshot); } catch { snap = []; }
+            }
+            const boundSnaps = snap.filter((s: any) => (s?.$id || s?.id) && s?.locationSku);
+            if (boundSnaps.length === 0) continue;
+            const targetLoc = (m.locationId || 'MD').toUpperCase();
+            try {
+                const ids = boundSnaps.map((s: any) => String(s.$id || s.id)).slice(0, 100);
+                const resp = await databases.listDocuments(DB_ID, collId, [
+                    Query.equal('$id', ids),
+                    Query.limit(100)
+                ]);
+                const docById = new Map(resp.documents.map((d: any) => [d.$id, d]));
+                for (const s of boundSnaps) {
+                    const id = String(s.$id || s.id);
+                    const doc: any = docById.get(id);
+                    if (doc && (doc.locationSku !== s.locationSku || doc.status !== 'placed')) {
+                        await databases.updateDocument(DB_ID, collId, id, {
+                            locationSku: s.locationSku,
+                            storageLocation: targetLoc,
+                            status: 'placed'
+                        }).catch(() => {});
+                    }
+                }
+            } catch {
+                // ignore if offline
+            }
+        }
+    }
+
     // -- Load / Refresh All Drafts & Recent Drops (all locations across the tenant) --
     async function fetchAllDrafts(locationId?: string) {
         const tId = tenantId.value || (typeof localStorage !== 'undefined' ? localStorage.getItem('activeTeamId') : null) || '';
@@ -254,6 +292,7 @@ export function useManifest() {
             ]);
             allDrafts.value = drafts;
             recentManifests.value = recent;
+            await syncBoundSnapshotSkusForManifests([...drafts, ...recent.slice(0, 5)]);
         } catch (e) {
             console.warn('[useManifest.fetchAllDrafts] Error:', e);
         }
