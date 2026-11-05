@@ -5,6 +5,12 @@ import {
   Query as NodeQuery,
 } from 'node-appwrite';
 import { getLocationSettingMeta, resolveCanonicalLocationCode } from '../../../lib/warehouses';
+import {
+  extractItemBrand,
+  extractShortTagTitle,
+  sanitizeRicochetDescription,
+  truncateCleanly,
+} from '../../../lib/exportUtils';
 
 export const prerender = false;
 
@@ -176,7 +182,7 @@ export const GET: APIRoute = async ({ url }) => {
     const res = await appwrite.withDb((db) =>
       db.listDocuments(appwrite.dbId, MANIFESTS_COL_ID, [
         NodeQuery.equal('status', OPEN_STATUSES),
-        NodeQuery.orderDesc('$id'),
+        NodeQuery.orderDesc('$updatedAt'),
         NodeQuery.limit(50),
       ])
     );
@@ -203,9 +209,47 @@ export const GET: APIRoute = async ({ url }) => {
         items: items.map((it: any) => {
           const itemId = it.$id || it.id;
           const snap = snapById.get(String(itemId));
+          const merged = { ...(snap || {}), ...(it || {}) };
+          let aiObj: any = null;
+          let conditionText = merged.conditionNotes || merged.condition_notes || '';
+          const webDesc = merged.marketDescription || merged.description || '';
+          if (merged.rawAnalysis) {
+            try {
+              const ai =
+                typeof merged.rawAnalysis === 'string'
+                  ? JSON.parse(merged.rawAnalysis)
+                  : merged.rawAnalysis;
+              aiObj = Array.isArray(ai) ? ai[0] : ai;
+              if (aiObj?.condition_notes && !conditionText) {
+                conditionText = aiObj.condition_notes;
+              }
+            } catch {}
+          }
+          const tagTitle = extractShortTagTitle(merged);
+          const fullTitle = String(merged.title || merged.identity || tagTitle)
+            .replace(/["\\]/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+          const posDescription = sanitizeRicochetDescription(fullTitle).substring(0, 250);
+          let baseWeb = sanitizeRicochetDescription(webDesc || fullTitle);
+          const cleanCond = sanitizeRicochetDescription(conditionText);
+          if (
+            cleanCond &&
+            !baseWeb.toLowerCase().includes(cleanCond.toLowerCase()) &&
+            cleanCond.toLowerCase() !== fullTitle.toLowerCase()
+          ) {
+            baseWeb = baseWeb ? `${baseWeb} — Condition: ${cleanCond}` : `Condition: ${cleanCond}`;
+          }
+          const cleanWebDesc = truncateCleanly(baseWeb.replace(/[\s|–—\-,;:]+$/, '').trim(), 2000);
+          const brand = extractItemBrand(merged, aiObj).replace(/["\\]/g, '');
+
           return {
             itemId,
-            title: it.title || snap?.title || 'Untitled Item',
+            title: fullTitle || 'Untitled Item',
+            tagTitle,
+            posDescription,
+            webDescription: cleanWebDesc,
+            brand,
             price: parseItemPrice(it, snap),
             upc: it.upc || snap?.upc || '',
             locationSku: it.locationSku || snap?.locationSku || '',

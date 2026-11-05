@@ -71,9 +71,18 @@
   // NOTE: payload field names for Ricochet's POST /api/product are unverified; the deploy loop
   // aborts after the first item (canary) if no SKU comes back, so a wrong shape cannot mass-create.
   async function rcCreateRicochetProduct(item) {
+    const shortTagTitle = item.tagTitle || item.title;
+    const fullPosDescription = item.posDescription || item.title;
+    const webDesc = item.webDescription || fullPosDescription;
     const payload = {
-      name: item.title,
+      name: shortTagTitle,
+      title: shortTagTitle,
+      description: fullPosDescription,
+      short_description: fullPosDescription,
+      web_description: webDesc,
+      brand: item.brand || 'Vintage',
       price: item.price,
+      agreed_price: item.price,
       quantity: item.quantity || 1,
       upc_code: item.upc,
       consignor_id: consignorId,
@@ -116,19 +125,25 @@
     if (dropStatus.error) html += '<div style="padding:8px 10px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.5);color:#fecaca;font-size:11px;font-weight:700;">' + rcDropEsc(dropStatus.error) + '</div>';
     if (!dropStatus.loading && !m) html += '<div style="color:#94a3b8;font-size:11px;">No open outbound drops for ' + rcDropEsc(activeLocationName) + '. Stage items into a manifest in Resale Command first.</div>';
     if (m) {
-      if (dropManifests.length > 1) {
-        html += '<select id="rc-drops-select" style="background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:7px;padding:6px;font-size:11px;">' +
-          dropManifests.map((x) => '<option value="' + rcDropEsc(x.manifestId) + '"' + (x.manifestId === m.manifestId ? ' selected' : '') + '>' + rcDropEsc(x.name) + '</option>').join('') + '</select>';
-      }
+      html += '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<select id="rc-drops-select" style="flex:1;background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:7px;padding:6px 8px;font-size:11.5px;font-weight:800;">' +
+        dropManifests.map((x) => '<option value="' + rcDropEsc(x.manifestId) + '"' + (x.manifestId === m.manifestId ? ' selected' : '') + '>📦 ' + rcDropEsc(x.name) + ' (' + x.items.length + ' items — ' + rcDropEsc(x.status) + ')</option>').join('') +
+        '</select>' +
+        '<button id="rc-drops-refresh-btn" type="button" title="Refresh drops from Resale Command" style="background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:800;cursor:pointer;">🔄</button>' +
+        '</div>';
       const todo = m.items.filter((i) => !i.bound);
       html += '<div style="background:#0f172a;border:1px solid rgba(56,189,248,0.4);border-radius:8px;padding:7px 9px;">' +
         '<div style="font-size:11px;font-weight:800;color:#38bdf8;margin-bottom:4px;">📋 Pre-Flight Queue Preview (' + todo.length + ' to create — ' + (m.items.length - todo.length) + ' already bound)</div>' +
-        '<div style="max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;font-family:monospace;font-size:10.5px;">' +
-        m.items.map((i) => '<div style="display:flex;justify-content:space-between;gap:6px;color:' + (i.bound ? '#34d399' : '#e2e8f0') + ';">' +
-          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + rcDropEsc(i.title) + '</span>' +
-          '<span>$' + Number(i.price || 0).toFixed(2) + '</span>' +
-          '<span style="color:#38bdf8;">' + rcDropEsc(i.upc || 'NO UPC') + '</span>' +
-          '<span>' + (i.bound ? '✅ ' + rcDropEsc(i.locationSku) : '🕓 Staged') + '</span></div>').join('') +
+        '<div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:10.5px;">' +
+        m.items.map((i) => '<div style="padding:5px 7px;border-radius:6px;background:#1e293b;border:1px solid #334155;display:flex;flex-direction:column;gap:2px;color:' + (i.bound ? '#34d399' : '#e2e8f0') + ';">' +
+          '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">' +
+            '<strong style="color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="Tag Title (<=38 chars)">🏷️ ' + rcDropEsc(i.tagTitle || i.title) + '</strong>' +
+            '<span style="color:#fbbf24;font-weight:800;">$' + Number(i.price || 0).toFixed(2) + '</span>' +
+            '<span style="color:#38bdf8;font-weight:800;">' + rcDropEsc(i.upc || 'NO UPC') + '</span>' +
+            '<span>' + (i.bound ? '✅ ' + rcDropEsc(i.locationSku) : '🕓 Staged') + '</span>' +
+          '</div>' +
+          '<div style="color:#94a3b8;font-size:9.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="POS Description (Full Descriptive Title)">📝 POS Desc: ' + rcDropEsc(i.posDescription || i.title) + (i.brand ? ' • Brand: ' + rcDropEsc(i.brand) : '') + '</div>' +
+        '</div>').join('') +
         '</div></div>';
       const blocked = dropStatus.deploying || todo.length === 0 || todo.some((i) => !i.upc);
       html += '<button id="rc-drops-deploy-btn"' + (blocked ? ' disabled' : '') + ' style="background:' + (blocked ? '#334155' : '#10b981') + ';color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-size:12px;cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">🚀 Deploy Drop to Ricochet (' + todo.length + ')</button>';
@@ -145,6 +160,8 @@
     view.innerHTML = html;
     const sel = document.getElementById('rc-drops-select');
     if (sel) sel.onchange = () => { dropSelectedId = sel.value; renderDropsView(); };
+    const refBtn = document.getElementById('rc-drops-refresh-btn');
+    if (refBtn) refBtn.onclick = () => { loadDrops(); };
     const btn = document.getElementById('rc-drops-deploy-btn');
     if (btn) btn.onclick = deployActiveDrop;
   }
