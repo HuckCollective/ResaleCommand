@@ -70,35 +70,140 @@
 
   // NOTE: payload field names for Ricochet's POST /api/product are unverified; the deploy loop
   // aborts after the first item (canary) if no SKU comes back, so a wrong shape cannot mass-create.
+  let cachedTemplateProduct = null;
+
+  async function getRicochetProductTemplate() {
+    if (cachedTemplateProduct) return cachedTemplateProduct;
+    if (!window.axios) return null;
+    try {
+      const sample = (catalogProducts || []).find((p) => p && p.id);
+      if (!sample) return null;
+      const detailRes = await window.axios.get('/api/product/show/' + sample.id);
+      cachedTemplateProduct = detailRes.data?.product || detailRes.data?.data || detailRes.data || null;
+      return cachedTemplateProduct;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function formatAxiosError(err) {
+    const status = err?.response?.status;
+    const data = err?.response?.data;
+    if (data && typeof data === 'object') {
+      if (data.errors && typeof data.errors === 'object') {
+        const parts = Object.entries(data.errors).map(
+          ([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : String(v))
+        );
+        if (parts.length) return 'HTTP ' + (status || 422) + ' — ' + parts.join(' | ');
+      }
+      if (data.message || data.error) {
+        return 'HTTP ' + (status || 422) + ' — ' + String(data.message || data.error);
+      }
+      try {
+        return 'HTTP ' + (status || 422) + ' — ' + JSON.stringify(data).slice(0, 260);
+      } catch (e) {}
+    }
+    return err?.message || String(err);
+  }
+
   async function rcCreateRicochetProduct(item) {
     const shortTagTitle = item.tagTitle || item.title;
     const fullPosDescription = item.posDescription || item.title;
     const webDesc = item.webDescription || fullPosDescription;
+    const tmpl = await getRicochetProductTemplate();
+    const tmplItem =
+      tmpl && Array.isArray(tmpl.items)
+        ? tmpl.items[0]
+        : tmpl && tmpl.items && typeof tmpl.items === 'object'
+        ? Object.values(tmpl.items).flat()[0]
+        : null;
+
+    const cid = consignorId || tmpl?.consignor_id || tmplItem?.consignor_id || 475;
+    const storeId = tmpl?.store_id || tmpl?.store || tmplItem?.store_id || tmplItem?.store || 1;
+    const priceNum = Number(item.price || 0);
+    const qtyNum = Number(item.quantity || 1) || 1;
+
     const payload = {
+      store: storeId,
+      store_id: storeId,
+      consignor_id: cid,
+      consignor: cid,
+      type: tmpl?.type ?? 'consignment',
       name: shortTagTitle,
       title: shortTagTitle,
       description: fullPosDescription,
       short_description: fullPosDescription,
       web_description: webDesc,
       brand: item.brand || 'Vintage',
-      price: item.price,
-      agreed_price: item.price,
-      quantity: item.quantity || 1,
+      price: priceNum,
+      agreed_price: priceNum,
+      retail_price: priceNum,
+      quantity: qtyNum,
+      qty: qtyNum,
       upc_code: item.upc,
-      consignor_id: consignorId,
+      upc: item.upc,
+      tax_id: tmpl?.tax_id ?? tmplItem?.tax_id ?? undefined,
+      split: tmpl?.split ?? tmplItem?.split ?? undefined,
+      category_id: tmpl?.category_id ?? tmplItem?.category_id ?? undefined,
+      items: [
+        {
+          store: storeId,
+          consignor_id: cid,
+          name: shortTagTitle,
+          description: fullPosDescription,
+          web_description: webDesc,
+          price: priceNum,
+          agreed_price: priceNum,
+          quantity: qtyNum,
+          upc_code: item.upc,
+        },
+      ],
     };
-    if (window.axios) {
-      const r = await window.axios.post('/api/product', payload);
-      return r.data;
+
+    try {
+      let createdData;
+      if (window.axios) {
+        const r = await window.axios.post('/api/product', payload);
+        createdData = r.data;
+      } else {
+        const r = await fetch('/api/product', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const errBody = await r.json().catch(() => ({}));
+          const e = new Error('Ricochet HTTP ' + r.status);
+          e.response = { status: r.status, data: errBody };
+          throw e;
+        }
+        createdData = await r.json();
+      }
+
+      // Ensure nested item variant also has upc_code saved via PUT /api/product/items if needed
+      const createdProd = createdData?.product || createdData?.data?.product || createdData?.data || createdData;
+      const newProdId = createdProd?.id;
+      if (newProdId && window.axios && item.upc) {
+        try {
+          const detailRes = await window.axios.get('/api/product/show/' + newProdId);
+          const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
+          const allItems = Array.isArray(fullProd?.items)
+            ? fullProd.items
+            : Object.values(fullProd?.items || {}).flat();
+          const targetItem = allItems[0];
+          if (targetItem && cleanStr(targetItem.upc_code).toUpperCase() !== cleanStr(item.upc).toUpperCase()) {
+            targetItem.store = storeId;
+            targetItem.upc_code = item.upc;
+            await window.axios.put('/api/product/items', targetItem);
+          }
+          if (fullProd) return fullProd;
+        } catch (e) {}
+      }
+      return createdData;
+    } catch (err) {
+      throw new Error(formatAxiosError(err));
     }
-    const r = await fetch('/api/product', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error('Ricochet HTTP ' + r.status);
-    return r.json();
   }
 
   function rcDropSkuFromResponse(data) {
