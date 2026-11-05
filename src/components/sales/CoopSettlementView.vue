@@ -412,7 +412,33 @@
               <tr v-for="(it, iIdx) in partner.items" :key="iIdx" class="hover:bg-base-200/40">
                 <td class="font-mono text-xs">{{ it.date ? String(it.date).slice(0, 10) : 'N/A' }}</td>
                 <td class="font-mono text-xs font-semibold">{{ cleanSkuDisplay(it.sku) }}</td>
-                <td class="max-w-xs truncate font-medium">{{ it.title }}</td>
+                <td class="max-w-xs">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="truncate font-medium">{{ it.title }}</span>
+                    <span
+                      v-if="isUnlinkedRow(it)"
+                      class="badge badge-xs badge-warning font-black"
+                    >
+                      ⚠️ Unlinked Ticket
+                    </span>
+                    <button
+                      v-if="isUnlinkedRow(it)"
+                      type="button"
+                      @click="$emit('link-sale', it.rawSale)"
+                      class="btn btn-xs btn-warning font-black h-5 min-h-0 px-2 rounded-md"
+                    >
+                      Link Inventory
+                    </button>
+                    <button
+                      v-else-if="it.rawSale"
+                      type="button"
+                      @click="$emit('link-sale', it.rawSale)"
+                      class="btn btn-ghost btn-xs h-5 min-h-0 px-1.5 text-[10px] opacity-60 hover:opacity-100"
+                    >
+                      ⇄ Reassign
+                    </button>
+                  </div>
+                </td>
                 <td class="text-right font-mono font-semibold">${{ it.grossPrice.toFixed(2) }}</td>
                 <td class="text-right font-mono text-error">-${{ it.venueFee.toFixed(2) }}</td>
                 <td class="text-right font-mono text-success font-semibold">${{ it.costBasis.toFixed(2) }}</td>
@@ -638,7 +664,16 @@ const props = defineProps<{
   monthlyRent?: number;
 }>();
 
-const emit = defineEmits<{ (e: 'update:period', value: string): void }>();
+const emit = defineEmits<{
+  (e: 'update:period', value: string): void;
+  (e: 'link-sale', sale: any): void;
+}>();
+
+const isUnlinkedRow = (it: any): boolean => {
+  const title = String(it?.title || '').trim();
+  const sku = String(it?.sku || '').trim();
+  return /^ticket\s*#/i.test(title) || /^order\s+/i.test(title) || /^SO-/i.test(sku);
+};
 
 const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
@@ -966,7 +1001,8 @@ const partnerSettlements = computed(() => {
       venueFee,
       costBasis,
       netSurplus,
-      curatorTake
+      curatorTake,
+      rawSale: sale
     });
 
     groups[prefix].totalGross = Number((groups[prefix].totalGross + grossPrice).toFixed(2));

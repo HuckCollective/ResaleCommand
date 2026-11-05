@@ -125,6 +125,27 @@
       <!-- 1. SALES LEDGER TAB -->
       <div v-show="salesViewTab === 'ledger'" class="space-y-6">
 
+      <!-- Unlinked Tickets Quick-Filter Banner -->
+      <div
+        v-if="allUnlinkedTicketsCount > 0"
+        class="alert bg-warning/10 border border-warning/40 rounded-2xl py-2.5 px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs"
+      >
+        <div class="flex items-center gap-2">
+          <span class="badge badge-warning font-black text-xs">⚠️ {{ allUnlinkedTicketsCount }} Unlinked Ticket{{ allUnlinkedTicketsCount === 1 ? '' : 's' }}</span>
+          <span class="font-medium text-base-content/85">
+            Unmapped register tickets (like <code class="font-mono font-bold">Ticket #...</code> or <code class="font-mono font-bold">SO-...</code>) need an inventory SKU link or Commons Pool assignment.
+          </span>
+        </div>
+        <button
+          type="button"
+          @click="toggleOnlyUnlinkedFilter"
+          class="btn btn-xs font-black rounded-lg shrink-0"
+          :class="onlyUnlinkedFilter ? 'btn-neutral' : 'btn-warning'"
+        >
+          {{ onlyUnlinkedFilter ? '✕ Clear Unlinked Filter (Show All)' : `🔍 Show All ${allUnlinkedTicketsCount} Unlinked Ticket(s)` }}
+        </button>
+      </div>
+
       <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
       <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
@@ -592,6 +613,7 @@
           :partner-filter="partnerFilter"
           :monthly-rent="boothMonthlyRent"
           @update:period="monthFilter = $event"
+          @link-sale="openLinkTicketModal"
         />
       </div>
 
@@ -659,6 +681,7 @@ const showBarcodeScanner = ref(false);
 const salesViewTab = ref<'ledger' | 'coop'>('ledger');
 const isLinkTicketModalOpen = ref(false);
 const activeSaleForLinking = ref<any | null>(null);
+const onlyUnlinkedFilter = ref(false);
 
 const isUnlinkedTicketSale = (sale: any): boolean => {
   if (!sale) return false;
@@ -671,7 +694,19 @@ const isUnlinkedTicketSale = (sale: any): boolean => {
   if (/^SO-/i.test(so) && !sale.itemId) {
     return true;
   }
-  return !sale.itemId && (!sale.costBasis || sale.costBasis === 0) && /^ticket/i.test(String(sale.orderId || ''));
+  return !sale.itemId && (!sale.costBasis || sale.costBasis === 0);
+};
+
+const allUnlinkedTicketsCount = computed(() => {
+  return consolidatedSales.value.filter(isUnlinkedTicketSale).length;
+});
+
+const toggleOnlyUnlinkedFilter = () => {
+  onlyUnlinkedFilter.value = !onlyUnlinkedFilter.value;
+  if (onlyUnlinkedFilter.value) {
+    monthFilter.value = 'all';
+    partnerFilter.value = 'all';
+  }
 };
 
 const openLinkTicketModal = (sale: any) => {
@@ -1042,6 +1077,10 @@ const partnerBadge = (p: string) => {
 
 const displayedSales = computed(() => {
   let list = [...scopedSales.value];
+
+  if (onlyUnlinkedFilter.value) {
+    list = list.filter(isUnlinkedTicketSale);
+  }
 
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase().trim();
