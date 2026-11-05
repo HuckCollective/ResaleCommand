@@ -7,7 +7,10 @@
           <div class="flex items-center gap-2 flex-wrap">
             <span class="badge badge-secondary font-bold gap-1 text-xs px-3 py-2.5">
               <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
-              Gate 4B Enabling Labor Ledger
+              Gate 4B Sweat-Equity &amp; Enabling Labor
+            </span>
+            <span class="badge badge-accent badge-outline font-mono font-bold text-xs py-2">
+              ⚖️ {{ policyConfig.payRatioCapStandard || 4.5 }}:1 Pay Ratio Cap (1h = 1h Equal Weight)
             </span>
             <span
               class="badge badge-sm font-mono font-bold gap-1 py-2"
@@ -23,9 +26,9 @@
           <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">
             Sweat-Equity &amp; Enabling Labor Ledger
           </h1>
-          <p class="text-xs sm:text-sm text-base-content/75 max-w-2xl">
-            In our Worker Self-Directed Enterprise (WSDE) model, both <strong>Producers of Surplus</strong> (sourcing, restoration, merchandising) and <strong>Enablers of Surplus</strong> (booth restocking, AI photo/tag ops, Dropcast reels, and bookkeeping) co-govern the collective surplus. Logged hours determine each partner’s share of the
-            <strong class="text-secondary">{{ policyConfig.laborPatronagePct }}% Sweat-Equity Dividend</strong>
+          <p class="text-xs sm:text-sm text-base-content/75 max-w-3xl">
+            In our Worker Self-Directed Enterprise (WSDE) model, both <strong>Producers of Surplus</strong> (sourcing, booth restocking, pop-up markets) and <strong>Enablers of Surplus</strong> (Dropcast social media reels, photography, online order shipping, and bookkeeping — <strong>$0 inventory required</strong>) co-govern the collective surplus. Logged hours determine each worker’s share of the
+            <strong class="text-secondary">{{ policyConfig.laborPatronagePct }}% Sweat-Equity Dividend Pool</strong>
             once the Indivisible Commons Reserve covers monthly operating costs.
           </p>
         </div>
@@ -53,22 +56,22 @@
         </div>
       </div>
 
-      <!-- Partner Sweat-Equity Share Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5 pt-5 border-t border-base-200">
+      <!-- Partner & Enabler Sweat-Equity Share Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-5 pt-5 border-t border-base-200">
         <div class="rounded-2xl bg-base-200/60 border border-base-300 p-4 flex items-center justify-between">
           <div>
             <div class="text-[11px] font-extrabold uppercase tracking-wider text-base-content/60">
-              Total Logged Hours ({{ selectedMonth === 'all' ? 'All-Time' : selectedMonth }})
+              Total Logged ({{ selectedMonth === 'all' ? 'All-Time' : selectedMonth }})
             </div>
             <div class="text-2xl font-black font-mono text-base-content mt-0.5">
               {{ totalFilteredHours.toFixed(1) }} hrs
             </div>
             <div class="text-[11px] text-base-content/60">
-              {{ filteredEntries.length }} verified contributions
+              Producer: {{ producerVsEnablerTotals.producer.toFixed(1) }}h • Enabler: {{ producerVsEnablerTotals.enabler.toFixed(1) }}h
             </div>
           </div>
-          <div class="w-11 h-11 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center">
-            <Icon icon="solar:stopwatch-bold-duotone" class="w-6 h-6" />
+          <div class="w-10 h-10 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
+            <Icon icon="solar:stopwatch-bold-duotone" class="w-5 h-5" />
           </div>
         </div>
 
@@ -77,12 +80,12 @@
             <div class="text-[11px] font-extrabold uppercase tracking-wider text-primary">
               Huckleberry Collective (HUCK-)
             </div>
-            <div class="text-2xl font-black font-mono text-base-content mt-0.5">
+            <div class="text-xl font-black font-mono text-base-content mt-0.5">
               {{ partnerHours.HUCK.toFixed(1) }} hrs
-              <span class="text-sm font-bold text-primary">({{ huckSharePct }}%)</span>
+              <span class="text-xs font-bold text-primary">({{ huckSharePct }}%)</span>
             </div>
             <div class="text-[11px] text-base-content/70">
-              Receives {{ huckSharePct }}% of Gate 4B Labor Pool
+              Curator &amp; Ops Hours
             </div>
           </div>
           <span class="badge badge-primary font-mono font-bold">HUCK-</span>
@@ -93,15 +96,67 @@
             <div class="text-[11px] font-extrabold uppercase tracking-wider text-accent">
               PDX Game Library (PDXGL-)
             </div>
-            <div class="text-2xl font-black font-mono text-base-content mt-0.5">
+            <div class="text-xl font-black font-mono text-base-content mt-0.5">
               {{ partnerHours.PDXGL.toFixed(1) }} hrs
-              <span class="text-sm font-bold text-accent">({{ pdxglSharePct }}%)</span>
+              <span class="text-xs font-bold text-accent">({{ pdxglSharePct }}%)</span>
             </div>
             <div class="text-[11px] text-base-content/70">
-              Receives {{ pdxglSharePct }}% of Gate 4B Labor Pool
+              Curator &amp; Ops Hours
             </div>
           </div>
           <span class="badge badge-accent font-mono font-bold">PDXGL-</span>
+        </div>
+
+        <div class="rounded-2xl bg-secondary/10 border border-secondary/30 p-4 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-extrabold uppercase tracking-wider text-secondary">
+              Marketing &amp; Social Enablers
+            </div>
+            <div class="text-xl font-black font-mono text-base-content mt-0.5">
+              {{ partnerHours.SWEAT.toFixed(1) }} hrs
+              <span class="text-xs font-bold text-secondary">({{ sweatSharePct }}%)</span>
+            </div>
+            <div class="text-[11px] text-base-content/70">
+              $0 Inventory • Direct Labor Share
+            </div>
+          </div>
+          <span class="badge badge-secondary font-mono font-bold">SWEAT-</span>
+        </div>
+      </div>
+
+      <!-- Individual Worker Sweat-Equity Share Breakdown Strip -->
+      <div v-if="memberShares.length > 0" class="mt-4 pt-4 border-t border-base-200 space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-extrabold uppercase tracking-wider text-base-content/60">
+            Individual Worker-Member Sweat-Equity Shares (Feeds Gate 4B Payouts)
+          </span>
+          <a href="/coop/governance?tab=roster" class="link link-primary font-bold text-[11px]">
+            + Add Marketing / Social Worker in Roster ➔
+          </a>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div
+            v-for="m in memberShares"
+            :key="m.member"
+            class="p-3 rounded-xl bg-base-200/50 border border-base-300 flex items-center justify-between gap-2 text-xs"
+          >
+            <div class="min-w-0">
+              <div class="font-black text-base-content truncate">{{ m.member }}</div>
+              <div class="text-[10px] text-base-content/65 flex items-center gap-1 flex-wrap">
+                <span
+                  class="badge badge-xs font-mono font-bold"
+                  :class="m.partner === 'SWEAT' ? 'badge-secondary' : m.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'"
+                >
+                  {{ m.partner }}-
+                </span>
+                <span>{{ m.roleLabel }}</span>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-mono font-black text-sm text-secondary">{{ m.hours.toFixed(1) }}h</div>
+              <div class="text-[10px] font-mono font-bold text-base-content/70">{{ m.sharePct }}% of pool</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -117,14 +172,14 @@
           <div>
             <h2 class="font-black text-base text-base-content">Log Co-op Labor Hours</h2>
             <p class="text-[11px] text-base-content/65">
-              Saved directly to Appwrite Cloud &amp; Monthly Settlements
+              Booths, Online Shipping, Pop-Ups &amp; Social Reels
             </p>
           </div>
         </div>
 
         <div class="form-control">
           <label class="label py-1">
-            <span class="label-text text-xs font-bold">Member &amp; Partner Prefix</span>
+            <span class="label-text text-xs font-bold">Worker-Member &amp; Prefix</span>
           </label>
           <select
             v-model="selectedMemberIdx"
@@ -135,7 +190,7 @@
               :key="m.name"
               :value="idx"
             >
-              {{ m.name }} — [{{ m.partner }}-]
+              {{ m.name }} — [{{ m.partner }}-] ({{ m.role }})
             </option>
           </select>
         </div>
@@ -169,18 +224,35 @@
 
         <div class="form-control">
           <label class="label py-1">
-            <span class="label-text text-xs font-bold">Enabling Labor Category</span>
+            <span class="label-text text-xs font-bold">Channel &amp; Labor Category</span>
+            <span class="label-text-alt text-[10px] font-mono font-bold" :class="classifySurplusLaborRole(form.category) === 'Enabler of Surplus' ? 'text-secondary' : 'text-primary'">
+              {{ classifySurplusLaborRole(form.category) }}
+            </span>
           </label>
           <select
             v-model="form.category"
             class="select select-bordered select-sm rounded-xl font-bold text-xs w-full"
           >
-            <option value="Booth Restock">🏪 Booth Restock &amp; Floor Merchandising</option>
-            <option value="Photography & Staging">📸 AI Deep Scan, Photo &amp; Tagging</option>
-            <option value="Social & Marketing">📲 Dropcast Reels &amp; Social Marketing</option>
-            <option value="Tech & Admin">⚙️ Tech Ops, Sync &amp; Ledger Reconciliation</option>
-            <option value="Sourcing">📦 Collective Sourcing &amp; Lot Splitting</option>
+            <option value="Social & Marketing">📲 Dropcast Reels &amp; Social Marketing (Enabler)</option>
+            <option value="Photography & Staging">📸 AI Deep Scan, Photo &amp; Tagging (Enabler)</option>
+            <option value="Online Fulfillment & Shipping">📦 Online Order Fulfillment &amp; Shipping (Enabler)</option>
+            <option value="Tech & Admin">⚙️ Tech Ops, Sync &amp; Ledger Prep (Enabler)</option>
+            <option value="Booth Restock">🏪 Booth Restock &amp; Floor Merchandising (Producer)</option>
+            <option value="Pop-Up & Event Staffing">⛺ Pop-Up Market &amp; Event Staffing (Producer)</option>
+            <option value="Sourcing">🔍 Collective Sourcing &amp; Lot Splitting (Producer)</option>
           </select>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs font-bold">Deliverable / Reel / Drop Proof (Optional)</span>
+          </label>
+          <input
+            v-model="form.deliverableRef"
+            type="text"
+            placeholder="e.g. IG Reel URL, Dropcast #14, Pirate Ship batch, or Pop-Up event"
+            class="input input-bordered input-sm rounded-xl text-xs w-full"
+          />
         </div>
 
         <div class="form-control">
@@ -190,7 +262,7 @@
           <textarea
             v-model="form.notes"
             rows="2"
-            placeholder="e.g., Restocked Booth #0EJ endcap, tagged 14 items with Rollo barcodes..."
+            placeholder="e.g., Filmed 3 TikTok/IG reels for Friday booth drop, packed 4 eBay orders..."
             class="textarea textarea-bordered textarea-sm rounded-xl text-xs w-full"
           ></textarea>
         </div>
@@ -208,7 +280,7 @@
 
       <!-- Right: Cloud Labor Entries Table -->
       <div class="lg:col-span-8 card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 class="font-black text-base text-base-content">Verified Sweat-Equity Contributions</h2>
             <p class="text-[11px] text-base-content/65">
@@ -229,11 +301,11 @@
             <thead>
               <tr class="bg-base-200/60 text-xs font-extrabold uppercase text-base-content/70">
                 <th>Date</th>
-                <th>Member</th>
-                <th>Partner</th>
-                <th>Category</th>
+                <th>Worker</th>
+                <th>Prefix</th>
+                <th>Category &amp; WSDE Role</th>
                 <th class="text-right">Hours</th>
-                <th>Notes</th>
+                <th>Deliverable &amp; Notes</th>
                 <th class="text-right">Action</th>
               </tr>
             </thead>
@@ -248,21 +320,32 @@
                 <td>
                   <span
                     class="badge badge-xs font-mono font-bold"
-                    :class="entry.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'"
+                    :class="entry.partner === 'SWEAT' ? 'badge-secondary' : entry.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'"
                   >
                     {{ entry.partner }}-
                   </span>
                 </td>
                 <td>
-                  <span class="badge badge-xs badge-ghost font-semibold whitespace-nowrap">
-                    {{ entry.category }}
-                  </span>
+                  <div class="flex flex-col gap-0.5">
+                    <span class="badge badge-xs badge-ghost font-semibold whitespace-nowrap">
+                      {{ entry.category }}
+                    </span>
+                    <span
+                      class="text-[10px] font-mono font-bold"
+                      :class="classifySurplusLaborRole(entry.category) === 'Enabler of Surplus' ? 'text-secondary' : 'text-primary'"
+                    >
+                      {{ classifySurplusLaborRole(entry.category) }}
+                    </span>
+                  </div>
                 </td>
                 <td class="text-right font-mono font-black text-xs text-secondary">
                   {{ Number(entry.hours).toFixed(2) }}h
                 </td>
-                <td class="text-xs text-base-content/80 max-w-xs truncate" :title="entry.notes">
-                  {{ entry.notes }}
+                <td class="text-xs text-base-content/80 max-w-xs">
+                  <div v-if="entry.deliverableRef" class="font-mono font-bold text-[11px] text-primary truncate">
+                    🔗 {{ entry.deliverableRef }}
+                  </div>
+                  <div class="truncate" :title="entry.notes">{{ entry.notes }}</div>
                 </td>
                 <td class="text-right">
                   <button
@@ -277,7 +360,7 @@
               </tr>
               <tr v-if="filteredEntries.length === 0">
                 <td colspan="7" class="text-center py-8 text-xs text-base-content/60">
-                  No labor hours logged for this period yet. Use the form on the left to log booth restocking, staging, or tech ops hours.
+                  No labor hours logged for this period yet. Use the form on the left to log Dropcast reels, booth restocking, online shipping, or pop-up staffing hours.
                 </td>
               </tr>
             </tbody>
@@ -297,6 +380,8 @@ import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
   getLaborHoursByPartnerForMonth,
+  getLaborHoursByMemberForMonth,
+  classifySurplusLaborRole,
   DEFAULT_COOP_POLICY_CONFIG,
   DEFAULT_COOP_LABOR_ENTRIES,
   type CoopLaborEntry,
@@ -317,17 +402,19 @@ const form = ref<{
   date: string;
   hours: number;
   category: CoopLaborCategory;
+  deliverableRef: string;
   notes: string;
 }>({
   date: new Date().toISOString().slice(0, 10),
   hours: 1.5,
-  category: 'Booth Restock',
+  category: 'Social & Marketing',
+  deliverableRef: '',
   notes: '',
 });
 
 const eligibleMembers = computed(() => {
   return policyConfig.value.members.filter(
-    (m) => m.partner === 'HUCK' || m.partner === 'PDXGL'
+    (m) => m.partner === 'HUCK' || m.partner === 'PDXGL' || m.partner === 'SWEAT'
   );
 });
 
@@ -350,18 +437,48 @@ const partnerHours = computed(() =>
   getLaborHoursByPartnerForMonth(laborEntries.value, selectedMonth.value)
 );
 
+const memberShares = computed(() =>
+  getLaborHoursByMemberForMonth(
+    laborEntries.value,
+    selectedMonth.value,
+    policyConfig.value.members
+  )
+);
+
+const producerVsEnablerTotals = computed(() => {
+  let producer = 0;
+  let enabler = 0;
+  for (const e of filteredEntries.value) {
+    const hrs = Number(e.hours) || 0;
+    if (classifySurplusLaborRole(e.category) === 'Enabler of Surplus') {
+      enabler += hrs;
+    } else {
+      producer += hrs;
+    }
+  }
+  return { producer, enabler };
+});
+
 const totalFilteredHours = computed(
-  () => Number((partnerHours.value.HUCK + partnerHours.value.PDXGL).toFixed(2))
+  () =>
+    Number(
+      (partnerHours.value.HUCK + partnerHours.value.PDXGL + partnerHours.value.SWEAT).toFixed(2)
+    )
 );
 
 const huckSharePct = computed(() => {
-  if (totalFilteredHours.value <= 0) return 50;
+  if (totalFilteredHours.value <= 0) return 0;
   return Math.round((partnerHours.value.HUCK / totalFilteredHours.value) * 100);
 });
 
 const pdxglSharePct = computed(() => {
-  if (totalFilteredHours.value <= 0) return 50;
-  return 100 - huckSharePct.value;
+  if (totalFilteredHours.value <= 0) return 0;
+  return Math.round((partnerHours.value.PDXGL / totalFilteredHours.value) * 100);
+});
+
+const sweatSharePct = computed(() => {
+  if (totalFilteredHours.value <= 0) return 0;
+  return Math.max(0, 100 - huckSharePct.value - pdxglSharePct.value);
 });
 
 const handleAddLabor = async () => {
@@ -373,13 +490,21 @@ const handleAddLabor = async () => {
 
   isSaving.value = true;
   try {
+    const partnerPrefix =
+      memberObj.partner === 'PDXGL'
+        ? 'PDXGL'
+        : memberObj.partner === 'SWEAT'
+          ? 'SWEAT'
+          : 'HUCK';
+
     const newEntry: CoopLaborEntry = {
       id: `labor-${Date.now()}`,
       date: form.value.date || new Date().toISOString().slice(0, 10),
       member: memberObj.name,
-      partner: memberObj.partner === 'PDXGL' ? 'PDXGL' : 'HUCK',
+      partner: partnerPrefix,
       category: form.value.category,
       hours: Number(form.value.hours),
+      deliverableRef: form.value.deliverableRef.trim() || undefined,
       notes: form.value.notes.trim() || `${form.value.category} contribution`,
     };
 
@@ -391,6 +516,7 @@ const handleAddLabor = async () => {
     );
     isCloudSynced.value = ok;
     form.value.notes = '';
+    form.value.deliverableRef = '';
     addToast({
       type: 'success',
       message: `Logged ${newEntry.hours}h for ${newEntry.member} (${newEntry.partner}-)`,
@@ -413,13 +539,15 @@ const handleDeleteLabor = async (id: string) => {
 
 const exportCsv = () => {
   if (filteredEntries.value.length === 0) return;
-  const header = ['Date', 'Member', 'Partner', 'Category', 'Hours', 'Notes'];
+  const header = ['Date', 'Member', 'Partner', 'Category', 'WSDE_Role', 'Hours', 'DeliverableRef', 'Notes'];
   const rows = filteredEntries.value.map((l) => [
     l.date,
     `"${l.member.replace(/"/g, '""')}"`,
     l.partner,
     `"${l.category}"`,
+    `"${classifySurplusLaborRole(l.category)}"`,
     l.hours,
+    `"${(l.deliverableRef || '').replace(/"/g, '""')}"`,
     `"${l.notes.replace(/"/g, '""')}"`,
   ]);
   const csv = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -447,4 +575,3 @@ onMounted(async () => {
   }
 });
 </script>
-

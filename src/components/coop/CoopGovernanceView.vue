@@ -281,8 +281,8 @@
         </div>
       </div>
 
-      <!-- Dials 3, 4, 5: Reserve Cap, Consensus Quorum, Orphan Ticket Window -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <!-- Dials 3, 4, 5, 6: Reserve Cap, Shortfall Carryover, Consensus Quorum, Orphan Ticket Window -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
           <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 3 • Rainy-Day Reserve Cap ($)</label>
           <input type="number" min="0" step="50" v-model.number="policyConfig.reserveCapTarget" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
@@ -290,13 +290,19 @@
         </div>
 
         <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
-          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 4 • Consensus Quorum (Agree Votes)</label>
+          <label class="text-xs font-extrabold uppercase tracking-wider text-warning">Dial 4 • Prior Shortfall Carryover ($)</label>
+          <input type="number" min="0" step="10" v-model.number="policyConfig.carriedOverShortfall" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <p class="text-[11px] text-base-content/60">Prior deficit repaid 100% first in Gate 4A before Gate 4B bonus dividends unlock.</p>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 5 • Consensus Quorum (Agree Votes)</label>
           <input type="number" min="1" max="10" step="1" v-model.number="policyConfig.minAgreeVotes" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Minimum Agree signals (with 0 Blocks) required to pass a proposal.</p>
         </div>
 
         <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
-          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 5 • Orphan Ticket Claim Window (Days)</label>
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 6 • Orphan Ticket Window (Days)</label>
           <input type="number" min="7" max="90" step="1" v-model.number="policyConfig.orphanClaimWindowDays" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Days before an unlinked register ticket can be swept 100% to Commons Pool.</p>
         </div>
@@ -341,15 +347,16 @@
     <div v-if="activeGovTab === 'roster'" class="card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 sm:p-7 space-y-5">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h3 class="text-xl font-black text-base-content">Co-op Partner &amp; Voter Roster</h3>
-          <p class="text-xs text-base-content/70">Manage eligible Loomio voters and Sweat-Equity Labor contributors across HUCK-, PDXGL-, and BB-.</p>
+          <h3 class="text-xl font-black text-base-content">Co-op Partner, Marketing Worker &amp; Voter Roster</h3>
+          <p class="text-xs text-base-content/70">Manage eligible Loomio voters, Curator Partners (HUCK-, PDXGL-), Marketing &amp; Social Enablers (SWEAT- — $0 inventory required), and Consignors (BB-).</p>
         </div>
-        <div class="flex items-center gap-2 w-full sm:w-auto">
+        <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <input v-model="newRosterMember.name" type="text" placeholder="Member Name (e.g. Alex)" class="input input-bordered input-sm rounded-xl text-xs" />
           <select v-model="newRosterMember.partner" class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs">
-            <option value="HUCK">HUCK-</option>
-            <option value="PDXGL">PDXGL-</option>
-            <option value="BB">BB-</option>
+            <option value="HUCK">HUCK- (Curator)</option>
+            <option value="PDXGL">PDXGL- (Curator)</option>
+            <option value="SWEAT">SWEAT- (Marketing &amp; Social Enabler)</option>
+            <option value="BB">BB- (Consignor)</option>
           </select>
           <button type="button" @click="addRosterMember" class="btn btn-sm btn-primary rounded-xl font-bold">+ Add Member</button>
         </div>
@@ -370,7 +377,7 @@
             <tr v-for="(member, idx) in policyConfig.members" :key="member.name" class="hover:bg-base-200/40">
               <td class="font-bold text-xs">{{ member.name }}</td>
               <td>
-                <span class="badge badge-xs font-mono font-bold" :class="member.partner === 'PDXGL' ? 'badge-accent' : member.partner === 'BB' ? 'badge-warning' : 'badge-primary'">
+                <span class="badge badge-xs font-mono font-bold" :class="member.partner === 'SWEAT' ? 'badge-secondary' : member.partner === 'PDXGL' ? 'badge-accent' : member.partner === 'BB' ? 'badge-warning' : 'badge-primary'">
                   {{ member.partner }}-
                 </span>
               </td>
@@ -428,14 +435,24 @@
             </div>
           </div>
 
-          <!-- Status Indicator Pill -->
-          <div class="shrink-0">
+          <!-- Status Indicator Pill & 1-Click Enact Button -->
+          <div class="shrink-0 flex items-center gap-2 flex-wrap">
+            <button
+              v-if="!hasBlock(proposal) && getSignalCount(proposal, 'agree') >= (policyConfig.minAgreeVotes || 2) && proposal.status !== 'passed'"
+              type="button"
+              @click="enactConsensusProposal(proposal)"
+              class="btn btn-xs btn-primary rounded-xl font-black gap-1 shadow-xs"
+              title="Mark proposal as Enacted and sync policy rules to Appwrite Cloud"
+            >
+              <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
+              <span>⚡ Enact Passed Proposal</span>
+            </button>
             <div 
               class="px-3.5 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-xs"
               :class="getStatusPillClass(proposal)"
             >
               <Icon :icon="getStatusPillIcon(proposal)" class="w-4 h-4 shrink-0" />
-              <span>{{ getProposalStatusLabel(proposal) }}</span>
+              <span>{{ proposal.status === 'passed' ? 'Enacted by Consensus' : getProposalStatusLabel(proposal) }}</span>
             </div>
           </div>
         </div>
@@ -841,7 +858,7 @@ const policyConfig = ref<CoopPolicyConfig>({
 
 const newRosterMember = ref<{
   name: string;
-  partner: 'HUCK' | 'PDXGL' | 'BB';
+  partner: 'HUCK' | 'PDXGL' | 'SWEAT' | 'BB';
 }>({
   name: '',
   partner: 'HUCK',
@@ -915,12 +932,35 @@ const addRosterMember = async () => {
   policyConfig.value.members.push({
     name: formattedName,
     partner,
-    role: partner === 'BB' ? 'Consignor' : partner === 'PDXGL' ? 'Partner Curator' : 'Co-op Member',
+    role:
+      partner === 'BB'
+        ? 'Consignor'
+        : partner === 'SWEAT'
+          ? 'Marketing & Social Enabler'
+          : partner === 'PDXGL'
+            ? 'Partner Curator'
+            : 'Co-op Member',
     canVote: partner !== 'BB',
   });
   newRosterMember.value.name = '';
   await saveProposals();
   addToast({ type: 'success', message: `Added ${formattedName} to Co-op Roster!` });
+};
+
+const enactConsensusProposal = async (proposal: CoopProposal) => {
+  proposal.status = 'passed';
+  if (proposal.presetAction === 'mondragon_10_45_45') {
+    applyExcessPreset(10, 45, 45);
+  } else if (proposal.presetAction === 'wsde_10_60_30') {
+    applyExcessPreset(10, 60, 30);
+  } else if (proposal.presetAction === 'sales_10_90_0') {
+    applyExcessPreset(10, 90, 0);
+  }
+  await saveProposals();
+  addToast({
+    type: 'success',
+    message: `Enacted "${proposal.title}" and synced policy to Appwrite Cloud!`,
+  });
 };
 
 const removeRosterMember = async (idx: number) => {

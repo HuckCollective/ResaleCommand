@@ -169,14 +169,14 @@
               title="Log or review verified Sweat-Equity Labor hours"
             >
               <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
-              <span>Labor: {{ periodLaborHours.HUCK + periodLaborHours.PDXGL }}h logged</span>
+              <span>Labor: {{ periodLaborHours.HUCK + periodLaborHours.PDXGL + periodLaborHours.SWEAT }}h logged</span>
             </a>
           </div>
           <h3 class="text-base sm:text-lg font-black text-base-content">
-            Operating Costs Breakeven &amp; Partner Profit Sharing (Over Operating Costs)
+            Multi-Channel Operating Breakeven, Mondragon ICAs &amp; Partner Profit Sharing
           </h3>
           <p class="text-xs text-base-content/70">
-            Once the 30% Commons Pool covers 100% of Monthly Operating Costs (Net Booth Rent + Tech Ops + Supplies), excess surplus can be shared between Co-op Partners.
+            Once the {{ policyConfig.commonsSharePct }}% Commons Pool covers 100% of Monthly Operating Costs (Net Booth Rent + Tech Ops + Supplies + Prior Shortfall Carryover), excess surplus distributes across Reserve ({{ policyConfig.reserveSharePct }}%), Sales Patronage ({{ policyConfig.salesPatronagePct }}%), and Sweat-Equity Labor ({{ policyConfig.laborPatronagePct }}%).
           </p>
         </div>
 
@@ -242,13 +242,13 @@
       <div class="space-y-1.5">
         <div class="flex items-center justify-between text-xs flex-wrap gap-2">
           <span class="font-bold text-base-content/80">
-            30% Commons Pool Collected:
+            {{ policyConfig.commonsSharePct }}% Commons Pool Collected:
             <strong class="font-mono text-warning">${{ settlementSummary.totalCommonsPool.toFixed(2) }}</strong>
             <span class="opacity-60 mx-1">vs.</span>
-            Operating Costs:
+            Operating Hurdle:
             <strong class="font-mono text-base-content">${{ settlementSummary.totalCommonsOverhead.toFixed(2) }}</strong>
             <span class="opacity-60 text-[11px]">
-              (Rent ${{ settlementSummary.netBoothRentForCoop.toFixed(2) }} + Tech ${{ settlementSummary.techOps.toFixed(2) }} + Supplies ${{ settlementSummary.supplies.toFixed(2) }})
+              (Rent ${{ settlementSummary.netBoothRentForCoop.toFixed(2) }} + Tech ${{ settlementSummary.techOps.toFixed(2) }} + Supplies ${{ settlementSummary.supplies.toFixed(2) }}<template v-if="settlementSummary.carriedOverShortfall > 0"> + Prior Shortfall ${{ settlementSummary.carriedOverShortfall.toFixed(2) }}</template>)
             </span>
           </span>
           <span class="font-mono font-black text-xs" :class="settlementSummary.distributablePartnerBonusPool > 0 ? 'text-success' : 'text-base-content/60'">
@@ -261,6 +261,42 @@
             :class="settlementSummary.isCommonsFullyCovered ? 'bg-success' : 'bg-warning'"
             :style="{ width: `${settlementSummary.breakevenProgressPct}%` }"
           ></div>
+        </div>
+      </div>
+
+      <!-- Individual Marketing / Social & Sweat-Equity Worker Dividend + Mondragon ICA Strip -->
+      <div v-if="periodMemberLaborShares.length > 0" class="p-3.5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+        <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
+          <span class="font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
+            <Icon icon="solar:users-group-rounded-bold" class="w-4 h-4" />
+            <span>Gate 4B Sweat-Equity &amp; Marketing Worker Dividend Breakdown ({{ policyConfig.laborPatronagePct }}% Labor Pool = ${{ settlementSummary.laborBonusPool.toFixed(2) }})</span>
+          </span>
+          <span class="badge badge-xs badge-outline font-mono font-bold">
+            Mondragon ICA Target Yield: {{ policyConfig.icaAnnualYieldRatePct || 7 }}%/yr
+          </span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          <div
+            v-for="worker in periodMemberLaborShares"
+            :key="worker.member"
+            class="p-2.5 rounded-xl bg-base-100 border border-base-300 flex items-center justify-between gap-2"
+          >
+            <div class="min-w-0">
+              <div class="font-bold text-base-content truncate">{{ worker.member }}</div>
+              <div class="text-[10px] text-base-content/60 flex items-center gap-1">
+                <span class="badge badge-xs font-mono font-bold" :class="worker.partner === 'SWEAT' ? 'badge-secondary' : worker.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'">
+                  {{ worker.partner }}-
+                </span>
+                <span class="truncate">{{ worker.roleLabel }}</span>
+              </div>
+            </div>
+            <div class="text-right shrink-0 font-mono">
+              <div class="font-black text-success">
+                +${{ ((settlementSummary.laborBonusPool * worker.sharePct) / 100).toFixed(2) }}
+              </div>
+              <div class="text-[10px] text-base-content/60">{{ worker.hours.toFixed(1) }}h ({{ worker.sharePct }}%)</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -523,9 +559,17 @@
     <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-200 pb-3">
         <div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="badge badge-warning font-black text-xs px-2.5 py-0.5">Tier 1 Covered First</span>
-            <span class="badge badge-outline font-mono text-xs">{{ filteredExpenses.length }} Expenses Tracked</span>
+            <span class="badge badge-outline font-mono text-xs">{{ filteredExpenses.length }} Co-op Shared Receipts</span>
+            <a
+              v-if="personalWriteOffSummary.count > 0"
+              href="/expenses"
+              class="badge badge-secondary badge-outline font-mono font-bold text-xs"
+              title="Personal Schedule C Write-Offs are excluded from Co-op Commons overhead"
+            >
+              👤 {{ personalWriteOffSummary.count }} Personal Write-Offs (${{ personalWriteOffSummary.amount.toFixed(2) }}) Excluded from Co-op Pool
+            </a>
           </div>
           <h3 class="text-base font-black text-base-content tracking-tight mt-1 flex items-center gap-2">
             <Icon icon="solar:bolt-bold-duotone" class="w-5 h-5 text-warning shrink-0" />
@@ -647,6 +691,7 @@ import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
   getLaborHoursByPartnerForMonth,
+  getLaborHoursByMemberForMonth,
   DEFAULT_COOP_POLICY_CONFIG,
   DEFAULT_COOP_LABOR_ENTRIES,
   type SurplusPolicyMode,
@@ -703,6 +748,14 @@ const laborEntries = ref<CoopLaborEntry[]>([...DEFAULT_COOP_LABOR_ENTRIES]);
 
 const periodLaborHours = computed(() =>
   getLaborHoursByPartnerForMonth(laborEntries.value, selectedPeriod.value)
+);
+
+const periodMemberLaborShares = computed(() =>
+  getLaborHoursByMemberForMonth(
+    laborEntries.value,
+    selectedPeriod.value,
+    policyConfig.value.members
+  )
 );
 
 const setSurplusPolicyMode = async (mode: SurplusPolicyMode) => {
@@ -892,7 +945,7 @@ const resolvePartnerName = (prefix: string): string => {
 };
 
 // Filter expenses by selected month and active tenant
-const filteredExpenses = computed(() => {
+const allPeriodExpenses = computed(() => {
   return expenses.value.filter(exp => {
     if (exp.status === 'rejected') return false;
     if (selectedPeriod.value === 'all') return true;
@@ -907,6 +960,27 @@ const filteredExpenses = computed(() => {
     }
     return cleanDate.startsWith(selectedPeriod.value);
   });
+});
+
+// Strictly exclude Personal IRS Schedule C Write-Offs from the Co-op Shared Commons Pool
+const filteredExpenses = computed(() => {
+  return allPeriodExpenses.value.filter(exp => {
+    if (exp.scope === 'personal_write_off') return false;
+    return (exp.coopSharedAmount ?? exp.amount) > 0;
+  });
+});
+
+const personalWriteOffSummary = computed(() => {
+  let count = 0;
+  let amount = 0;
+  for (const exp of allPeriodExpenses.value) {
+    const personalAmt = exp.personalWriteOffAmount ?? (exp.scope === 'personal_write_off' ? exp.amount : 0);
+    if (personalAmt > 0) {
+      count += 1;
+      amount += personalAmt;
+    }
+  }
+  return { count, amount: Number(amount.toFixed(2)) };
 });
 
 const techOpsExpenses = computed(() => {
@@ -931,14 +1005,14 @@ const suppliesExpenses = computed(() => {
 });
 
 const totalTechOpsAmount = computed(() => {
-  return Number(techOpsExpenses.value.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2));
+  return Number(techOpsExpenses.value.reduce((sum, e) => sum + Number(e.coopSharedAmount ?? e.amount ?? 0), 0).toFixed(2));
 });
 
 const totalSuppliesAmount = computed(() => {
-  return Number(suppliesExpenses.value.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2));
+  return Number(suppliesExpenses.value.reduce((sum, e) => sum + Number(e.coopSharedAmount ?? e.amount ?? 0), 0).toFixed(2));
 });
 
-// Member reimbursements from approved expenses
+// Member reimbursements from approved Co-op Shared expenses only
 const memberReimbursements = computed(() => {
   const map: Record<string, number> = {};
   for (const exp of filteredExpenses.value) {
@@ -946,7 +1020,8 @@ const memberReimbursements = computed(() => {
     const cat = (exp.category || '').toLowerCase();
     if (cat.includes('rent') || cat.includes('mall fee')) continue;
     const partnerPrefix = normalizeOrgPrefix(exp.partner || 'HUCK-');
-    map[partnerPrefix] = Number(((map[partnerPrefix] || 0) + Number(exp.amount || 0)).toFixed(2));
+    const sharedAmt = Number(exp.coopSharedAmount ?? exp.amount ?? 0);
+    map[partnerPrefix] = Number(((map[partnerPrefix] || 0) + sharedAmt).toFixed(2));
   }
   return map;
 });
@@ -1078,7 +1153,8 @@ const partnerSettlements = computed(() => {
     allGroups.filter(g => g.isConsignor).reduce((acc, g) => acc + (g.rentDeduction || 0), 0).toFixed(2)
   );
   const netBoothRentForCoop = Math.max(0, Number((FIXED_BOOTH_RENT - consignorRentOffsets).toFixed(2)));
-  const totalCommonsOverhead = Number((netBoothRentForCoop + totalTechOpsAmount.value + totalSuppliesAmount.value).toFixed(2));
+  const carriedOverShortfall = isMonthInProgress.value ? 0 : Math.max(0, Number(policyConfig.value.carriedOverShortfall || 0));
+  const totalCommonsOverhead = Number((netBoothRentForCoop + totalTechOpsAmount.value + totalSuppliesAmount.value + carriedOverShortfall).toFixed(2));
   const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
 
   const coopPartners = allGroups.filter(g => !g.isConsignor && !g.isCommonsPool);
@@ -1156,13 +1232,21 @@ const settlementSummary = computed(() => {
 
   const techOps = totalTechOpsAmount.value;
   const supplies = totalSuppliesAmount.value;
-  const totalCommonsOverhead = Number((netBoothRentForCoop + techOps + supplies).toFixed(2));
+  const carriedOverShortfall = isMonthInProgress.value ? 0 : Math.max(0, Number(policyConfig.value.carriedOverShortfall || 0));
+  const totalCommonsOverhead = Number((netBoothRentForCoop + techOps + supplies + carriedOverShortfall).toFixed(2));
   const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
   const isCommonsFullyCovered = commonsNetBalance >= 0;
   const distributablePartnerBonusPool = Number(
     partnerSettlements.value.reduce((acc, p) => acc + Number(p.bonusSurplusDividend || 0), 0).toFixed(2)
   );
   const reserveAddition = Math.max(0, Number((commonsNetBalance - distributablePartnerBonusPool).toFixed(2)));
+  const salesWeight = policyConfig.value.salesPatronagePct ?? 60;
+  const laborWeight = policyConfig.value.laborPatronagePct ?? 30;
+  const totalWeight = salesWeight + laborWeight;
+  const laborBonusPool =
+    distributablePartnerBonusPool > 0 && totalWeight > 0
+      ? Number((distributablePartnerBonusPool * (laborWeight / totalWeight)).toFixed(2))
+      : 0;
   const breakevenProgressPct =
     totalCommonsOverhead > 0
       ? Math.min(100, Math.round((totalCommonsPool / totalCommonsOverhead) * 100))
@@ -1184,10 +1268,12 @@ const settlementSummary = computed(() => {
     netBoothRentForCoop,
     techOps,
     supplies,
+    carriedOverShortfall,
     totalCommonsOverhead,
     commonsNetBalance,
     isCommonsFullyCovered,
     distributablePartnerBonusPool,
+    laborBonusPool,
     reserveAddition,
     breakevenProgressPct,
     memoryDenNetCheck,

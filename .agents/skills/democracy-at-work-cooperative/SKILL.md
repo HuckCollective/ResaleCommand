@@ -1,102 +1,63 @@
 ---
 name: democracy-at-work-cooperative
-description: Cooperative economics, Worker Self-Directed Enterprise (WSDE) surplus theory (Producers vs. Enablers of Surplus), Mondragon 10/45/45 waterfall & Internal Capital Accounts (ICAs), ICA/Rochdale & SELC bylaw rules, 4-Gate waterfall accounting, and Loomio consent governance for the Huckleberry Collective. Use when working on co-op settlements, `/coop/*` routes, the 70/30 waterfall, partner payouts, sweat-equity labor, or the Commons Pool.
+description: Cooperative economics, Worker Self-Directed Enterprise (WSDE) surplus theory (Producers vs. Enablers of Surplus, Marketing/Social Sweat-Equity Workers), Multi-Channel Waterfall (Booths, Online + Postage, Pop-Ups), Mondragon 10/45/45 & ICAs, Personal Write-Off vs. Co-op Commons Expense Separation, and Loomio consent governance. Use when working on co-op settlements, `/coop/*` routes, `/expenses`, the 70/30 waterfall, partner payouts, sweat-equity labor, or the Commons Pool.
 ---
 
 # Huckleberry Collective — WSDE, Mondragon & SELC Cooperative Architecture
 
-This skill defines the cooperative economic engine, 4-Gate financial waterfall, Mondragon federation stabilization & `10/45/45` capital account rules, SELC/Rochdale bylaw tiers, and Loomio consent governance for **The Huckleberry Collective** (`HUCK-`), **PDX Game Library** (`PDXGL-`), and consignors (`BB-`) on Resale Command (`resalecmd.com`).
+This skill defines the cooperative economic engine, 4-Gate multi-channel financial waterfall, Marketing/Social Enabling Worker-Member model (`SWEAT-`), Personal Schedule C vs. Co-op Commons expense separation, Mondragon `10/45/45` capital account rules, SELC/Rochdale bylaw tiers, and Loomio consent governance for **The Huckleberry Collective** (`HUCK-`), **PDX Game Library** (`PDXGL-`), **Marketing & Ops Enablers** (`SWEAT-`), and consignors (`BB-`) on Resale Command (`resalecmd.com`).
 
 > **Deep Reference:** See [`.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md) and [`docs/coop/WSDE_OPERATING_CHARTER.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/coop/WSDE_OPERATING_CHARTER.md).
 > **UI Wording Rule:** Always use institutional WSDE/Mondragon/cooperative terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Mondragon 10/45/45`, `Indivisible Commons Reserve`) in UI components—never cite individual economists by personal name in user-facing UI text.
 
 ---
 
-## 1. WSDE Surplus Theory: Producers vs. Enablers of Surplus
+## 1. WSDE Surplus Theory & The 3 Member Archetypes
 
-1. **Producers of Surplus:** Direct labor generating revenue through sourcing, restoration, pricing, merchandising, and floor/online sales.
-2. **Enablers of Surplus:** Infrastructure, software/AI automation, bookkeeping, thermal barcode tagging, Dropcast social reels, and retail space management that make surplus production possible.
-3. **Surplus Appropriation (Subsumed Class Distribution):**
-   - Both **Producers** and **Enablers** co-govern the collective surplus on an equal `1 Member = 1 Vote` basis.
-   - Enabler costs and fixed overhead (**Net Booth Rent**, **Tech & AI Ops**, **Supplies**) are funded via a **Subsumed Class Distribution** (**30% Shared Commons Pool / Indivisible Collective Reserve**) prior to bonus patronage payouts.
+1. **Curator Worker-Members (`HUCK-`, `PDXGL-` — Producers of Surplus):**
+   - Source and own inventory (`UPC` prefix). Recoup `100%` of item cost basis first, keep `70%` Curator Base Profit (Gate 3), and share in Gate 4B Sales Patronage (`45%–60%`) + Sweat-Equity Labor (`30%–45%`). Full `1 Member = 1 Vote` rights.
+2. **Marketing, Social Media & Ops Worker-Members (`SWEAT-` — Enablers of Surplus):**
+   - **`$0` Inventory Required.** Contribute Dropcast Reels, social media campaigns, photography, online order packing/shipping, booth restocking, and pop-up staffing.
+   - Earn direct **Individual Worker Sweat-Equity Dividends** from the Gate 4B Labor Pool (`30%–45%` of excess surplus) proportional to their verified hours (`getLaborHoursByMemberForMonth`) and deliverable proof links (`deliverableRef`) logged in `/coop/labor`. Hold full `1 Member = 1 Vote` rights.
+3. **External Consignors (`BB-` — Contractual Sub-Lease):**
+   - Pay `15%` Venue Fee (Gate 1) + **`$85.41/mo`** fixed sub-lease rent offset (Gate 2, reducing gross `$382.50` booth rent to `$297.09` Net Co-op Rent) and keep `100%` of remaining net sales. Do not pay into the `30%` Commons Pool or vote on WSDE surplus.
 
 ---
 
-## 2. Mondragon 10/45/45 Waterfall, ICAs & Stabilization Rules
+## 2. Multi-Channel Co-op Economics (Physical Booths + Online + Pop-Ups)
 
-1. **Indivisible Collective Reserve & Shortfall Carryover:**
-   - Funded by the **30% Shared Commons Pool** (`commonsSharePct` in `CoopPolicyConfig`).
-   - Covers fixed monthly operating costs (`$297.09` Net Booth Rent + `$219.99` Tech Ops + `$6.18` Supplies = `$523.26/mo`) and absorbs monthly operating shortfalls.
-   - **Shortfall Carryover Invariant:** Any monthly operating deficit (e.g., `-$132.97`) is carried forward and must be repaid **100% first** before Gate 4B bonus patronage dividends unlock.
+- **Physical Mall Booths (`MD` 15% / `DT` 10%):** Venue fee deducted in Gate 1; Net Booth Rent (`$297.09` at `MD`, `$75` at `DT`) covered by the `30%` Commons Pool in Gate 4A.
+- **Online Marketplaces & Storefront (`eBay` 13% / `Poshmark` 20% / `Stripe` 2.9%):** Marketplace fee **+ `100%` of Actual Outbound Shipping Label Cost (`Pirate Ship` / USPS)** recouped first before the `70/30` split; shipping supplies and packing hours (`Online Fulfillment & Shipping`) covered by Commons & `/coop/labor`.
+- **Pop-Up Markets & Conventions (`2.9%` Card / `0%` Cash):** Weekend Table/Tent Fee reimbursed `100%` from the `30%` Commons Pool; load-in and booth staffing logged under `Pop-Up & Event Staffing` in `/coop/labor`.
+
+---
+
+## 3. Mondragon 10/45/45 Waterfall, ICAs & Stabilization Rules
+
+1. **Indivisible Collective Reserve & Shortfall Carryover (`carriedOverShortfall`):**
+   - Funded by the **30% Shared Commons Pool** (`commonsSharePct`). Covers fixed monthly operating costs (`$297.09` Net Rent + `$219.99` Tech Ops + `$6.18` Supplies = `$523.26/mo`). Any monthly operating deficit (e.g., `-$132.97`) is carried forward and repaid **100% first** before Gate 4B bonus patronage dividends unlock.
 2. **The Mondragon 10 / 45 / 45 Net Revenue Waterfall:**
-   - **10% Inter-Co-op Coordination & Reserve Fund:** Funds shared administration, network infrastructure, and mutual rainy-day insurance across co-op units.
-   - **45% Enterprise Collective Reserve / Sales Patronage:** Supports working capital, inventory expansion, and pro-rata sales patronage.
-   - **45% Member Capital / Sweat-Equity Ledger:** Credited to member accounts by verified patronage and enabling labor hours (with a **7% annual cash yield/bonus** target on retained member capital balances).
+   - **10% Inter-Co-op Coordination & Reserve Fund:** Shared administration, infrastructure, and mutual rainy-day reserve.
+   - **45% Enterprise Collective Reserve / Sales Patronage:** Working capital, inventory expansion, and pro-rata sales patronage.
+   - **45% Member Capital / Sweat-Equity Ledger (ICAs):** Credited to individual worker-member accounts by verified patronage and enabling labor hours (targeting a **7% annual cash yield/bonus** on retained member capital balances).
 3. **Mondragon Governance & Pay Guardrails:**
-   - **Reversed Hierarchy:** The General Assembly (`1 Member = 1 Vote`) hires, evaluates, and can recall operational leads; financial prep and reconciliation meetings count as credited enabling labor time.
-   - **Open Procurement:** Competitive bidding for tools, thermal labels, and supplies (best quality at lowest price) rather than subsidizing inefficient internal vendors.
-   - **Pay Ratio Cap (`4.5:1` Standard / `6.5:1` Max):** Compensation/bounty rates between highest and lowest tiers are compressed to **4.5:1** (max **6.5:1** exception).
-   - **Complementary Niche Non-Competition:** Partner co-ops within the collective network (`HUCK-` vintage/apparel/oddities vs. `PDXGL-` tabletop games/RPGs) operate in complementary product niches and never compete head-to-head in the same booth category.
+   - **Reversed Hierarchy (`1M1V`)**, **Open Procurement**, **`4.5:1` Standard (`6.5:1` Max) Pay Ratio Cap**, and **Complementary Niche Non-Competition** (`HUCK-` vintage/apparel/oddities vs. `PDXGL-` tabletop games/RPGs).
 
 ---
 
-## 3. ICA / Rochdale & SELC Bylaw Rules
+## 4. Personal Schedule C Write-Off vs. Shared Co-op Commons Expense Separation
 
-1. **1 Member = 1 Vote:** Governance is decoupled from capital or inventory volume. Proposals on `/coop/governance` use the **4-Signal Loomio Consent Protocol** (`🟢 Agree`, `🟡 Abstain`, `🟠 Disagree`, `🔴 Block`).
-2. **Partner Tiers (Worker-Members vs. Consignors):**
-   - **Worker-Members (`HUCK-`, `PDXGL-`):** Full governance voting rights + `100%` cost basis recoupment + `70/30` base margin split + Gate 4B Sales & Sweat-Equity Labor patronage dividends.
-   - **Consignors (`BB-`):** Contractual split only. Pays `15%` Venue Fee (Gate 1) + fixed monthly sub-lease rent offset (`$85.41/mo` in Gate 2, reducing gross `$382.50` booth rent to `$297.09` Net Co-op Rent) and keeps `100%` of remaining net sales. Does not pay into the `30%` Commons Pool, does not absorb co-op shortfalls, and does not vote on WSDE surplus governance.
-3. **30-Day Orphan Ticket Sweep (`orphanClaimWindowDays`):**
-   - Unlinked register tickets (`Ticket #<n>`) have a configurable claim window (default `30` days) for partners to link via `[Link Inventory]`. Unclaimed tickets after 30 days can be swept `100%` (after the `15%` venue fee) into the Shared Commons Pool (`COMMONS-`).
-
----
-
-## 4. The 4-Gate Waterfall Accounting Engine (`src/lib/coop/settlementEngine.ts`)
-
-```
-[ Gross Venue Revenue ]
-          │
-          ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Gate 1: Venue Commission (15% Memory Den Fee)                │
-│   Net After Venue = Gross Sales × 85%                        │
-└──────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Gate 2: Consignor Fixed-Rent Offset (BB- = $85.41/mo)        │
-│   Reduces Gross Booth Rent ($382.50) -> $297.09 Net Co-op    │
-│   BB- Payout = Net After Venue - $85.41                      │
-└──────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Gate 3: Worker-Member Cost Recoupment & 70/30 Split          │
-│   1. 100% Documented Item Cost Basis (COGS) returned first   │
-│   2. Net Margin = Net After Venue - Cost Basis               │
-│   3. 70% Curator Base Profit / 30% Shared Commons Pool       │
-└──────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Gate 4A & 4B: Operating Hurdle, Shortfall & 3-Way Surplus    │
-│   • 4A Operating Hurdle: $297.09 Net Rent + $219.99 Tech     │
-│     + $6.18 Supplies = $523.26/mo + Prior Shortfall Carryover│
-│   • 4B Excess Surplus (10/60/30 WSDE or 10/45/45 Mondragon): │
-│     - Inter-Co-op / Rainy-Day Reserve Slice (10%)            │
-│     - Sales Patronage / Enterprise Reserve (60% or 45%)      │
-│     - Sweat-Equity Labor / ICA Ledger (30% or 45%)           │
-└──────────────────────────────────────────────────────────────┘
-```
+Every expense in `src/lib/coopExpenses.ts` (`/expenses`) has an explicit `scope`:
+- **`coop_shared` (`🤝 Co-op Shared 100%`):** Reimbursed from the 30% Commons Pool in Gate 4A (Booth Rent, shared Rollo tags, shared AI/cloud ops, pop-up table fees).
+- **`personal_write_off` (`👤 Personal Write-Off 100%`):** **`$0.00` charged to the Co-op Commons Pool** (strictly excluded from `CoopSettlementView.vue`); tracked `100%` in the member's **Personal IRS Schedule C Write-Off Ledger & CSV Export** (thrift mileage/gas, home office/garage storage, personal phone/camera gear).
+- **`split` (`⚖️ Split %`):** Charges `coopSharePct%` to Gate 4A Co-op Commons and `(100 - coopSharePct)%` to Personal Schedule C Write-Offs.
 
 ---
 
 ## 5. Canonical `/coop/*` Routes & Cloud Persistence
 
-- **Routes:**
-  - `/coop/settlements` ([`src/pages/coop/settlements.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/settlements.astro)) — 4-Gate Monthly Settlement Workbench (`CoopSettlementView.vue`)
-  - `/coop/governance` ([`src/pages/coop/governance.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/governance.astro)) — 3-Tab Loomio Proposals, 5 Democratic Dials & 3-Way Sliders, and Voter Roster (`CoopGovernanceView.vue`)
-  - `/coop/labor` ([`src/pages/coop/labor.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/labor.astro)) — Cloud-Synced Sweat-Equity & Enabling Labor Ledger (`CoopLaborView.vue`)
-  - `/coop` ([`src/pages/coop.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop.astro)) — Interactive WSDE Operating Charter & 70/30 Simulator (`CoopCharterView.vue`)
-- **Appwrite Cloud Persistence (`src/lib/coopGovernance.ts`):**
-  - Stored in `resale_db.manifests` document `coop_governance_proposals_v1` (`itemsSnapshot` JSON containing `proposals`, `surplusPolicyMode`, `surplusSplitBasis`, `policyConfig`, and `laborEntries`).
+- `/coop/settlements` ([`src/pages/coop/settlements.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/settlements.astro)) — 4-Gate Monthly Settlement Workbench (`CoopSettlementView.vue`)
+- `/coop/governance` ([`src/pages/coop/governance.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/governance.astro)) — 3-Tab Loomio Proposals, 6 Democratic Dials & Sliders, and Voter Roster (`CoopGovernanceView.vue`)
+- `/coop/labor` ([`src/pages/coop/labor.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/labor.astro)) — Cloud-Synced Sweat-Equity & Enabling Labor Ledger (`CoopLaborView.vue`)
+- `/expenses` ([`src/pages/expenses.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/expenses.astro)) — Co-op Shared Commons vs. Personal Schedule C Write-Off Ledger (`CoopExpensesLedger.vue`)
+- `/coop` ([`src/pages/coop.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop.astro)) — Interactive WSDE Operating Charter & Multi-Channel Simulator (`CoopCharterView.vue`)

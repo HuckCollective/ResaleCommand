@@ -173,42 +173,83 @@
             <!-- Sales Channel Fee Presets -->
             <div class="form-control space-y-1.5">
               <label class="label py-0">
-                <span class="label-text font-bold text-xs">Sales Channel &amp; Venue Cut</span>
+                <span class="label-text font-bold text-xs">Sales Channel &amp; Platform Cut (Gate 1)</span>
                 <span class="label-text-alt font-mono font-bold">{{ simVenueFeeRate }}%</span>
               </label>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 <button 
                   type="button" 
                   class="btn btn-xs rounded-xl font-bold" 
                   :class="simVenueFeeRate === 15 ? 'btn-primary' : 'btn-ghost border border-base-300'"
-                  @click="simVenueFeeRate = 15"
+                  @click="simVenueFeeRate = 15; simShippingCost = 0"
                 >
                   Memory Den (15%)
                 </button>
                 <button 
                   type="button" 
                   class="btn btn-xs rounded-xl font-bold" 
+                  :class="simVenueFeeRate === 10 ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  @click="simVenueFeeRate = 10; simShippingCost = 0"
+                >
+                  Dusty Tiger (10%)
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-xs rounded-xl font-bold" 
                   :class="simVenueFeeRate === 13 ? 'btn-primary' : 'btn-ghost border border-base-300'"
-                  @click="simVenueFeeRate = 13"
+                  @click="simVenueFeeRate = 13; if (simShippingCost === 0) simShippingCost = 8"
                 >
                   eBay / Etsy (13%)
                 </button>
                 <button 
                   type="button" 
                   class="btn btn-xs rounded-xl font-bold" 
-                  :class="simVenueFeeRate === 2.9 ? 'btn-primary' : 'btn-ghost border border-base-300'"
-                  @click="simVenueFeeRate = 2.9"
+                  :class="simVenueFeeRate === 20 ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  @click="simVenueFeeRate = 20; simShippingCost = 0"
                 >
-                  Pop-up / Card (2.9%)
+                  Poshmark (20%)
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-xs rounded-xl font-bold" 
+                  :class="simVenueFeeRate === 2.9 ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  @click="simVenueFeeRate = 2.9; simShippingCost = 0"
+                >
+                  Pop-up Card (2.9%)
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-xs rounded-xl font-bold" 
+                  :class="simVenueFeeRate === 0 ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  @click="simVenueFeeRate = 0; simShippingCost = 0"
+                >
+                  Pop-up Cash (0%)
                 </button>
               </div>
             </div>
 
+            <!-- Outbound Shipping Label Postage (Online Sales Only) -->
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text font-bold text-xs">Outbound Shipping Label Postage (Online)</span>
+                <span class="label-text-alt font-mono font-bold text-info text-sm">${{ simShippingCost.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="simShippingCost" 
+                min="0" 
+                max="35" 
+                step="1" 
+                class="range range-xs range-info" 
+              />
+              <span class="text-[11px] text-base-content/60 mt-1">100% recouped at Gate 1 before Net Surplus is split.</span>
+            </div>
+
             <!-- Explainer Box -->
             <div class="p-3.5 rounded-2xl bg-base-200/60 border border-base-300 text-[11px] space-y-1 text-base-content/75">
-              <div class="font-bold text-base-content">Why 70 / 30 is the Fairest Model:</div>
+              <div class="font-bold text-base-content">Live Governance Split ({{ liveCuratorPct }} / {{ liveCommonsPct }}):</div>
               <p>
-                Sourcing great goods takes curation skill and capital risk. You keep <strong>70% of the net profit</strong>. The collective takes <strong>30%</strong> to pay the booth rent, software, and member staffing.
+                Sourcing great goods takes curation skill and capital risk. You keep <strong>{{ liveCuratorPct }}% of the net profit</strong>. The collective takes <strong>{{ liveCommonsPct }}%</strong> to pay booth rent, pop-up table fees, software, and Sweat-Equity marketing &amp; floor labor.
               </p>
             </div>
           </div>
@@ -229,9 +270,9 @@
             <div class="flex items-center justify-between p-2.5 rounded-xl bg-base-100 border border-base-300 text-xs">
               <span class="text-error font-medium flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-error"></span>
-                Venue / Platform Fee ({{ simVenueFeeRate }}%)
+                Gate 1: Venue / Platform Fee ({{ simVenueFeeRate }}%<span v-if="simShippingCost > 0"> + ${{ simShippingCost.toFixed(2) }} Label</span>)
               </span>
-              <span class="font-mono font-bold text-error">-${{ simVenueFee.toFixed(2) }}</span>
+              <span class="font-mono font-bold text-error">-${{ (simVenueFee + simShippingCost).toFixed(2) }}</span>
             </div>
 
             <!-- Cost Returned -->
@@ -239,27 +280,27 @@
               <div>
                 <span class="font-bold text-success flex items-center gap-1.5">
                   <Icon icon="solar:shield-check-bold" class="w-3.5 h-3.5" />
-                  Your Cost Basis Returned (100%)
+                  Gate 2: Your Cost Basis<span v-if="simShippingCost > 0"> + Shipping Postage</span> Returned (100%)
                 </span>
                 <div class="text-[10px] text-base-content/65">Guaranteed refund of your out-of-pocket spend</div>
               </div>
-              <span class="font-mono font-black text-success text-sm">+${{ simCostBasis.toFixed(2) }}</span>
+              <span class="font-mono font-black text-success text-sm">+${{ (simCostBasis + simShippingCost).toFixed(2) }}</span>
             </div>
 
             <!-- Net Surplus -->
             <div class="p-3 rounded-xl bg-primary/10 border border-primary/25 space-y-2 text-xs">
               <div class="flex items-center justify-between font-bold text-primary">
-                <span>Net Surplus Generated (Profit to Split)</span>
+                <span>Gate 3: Net Surplus Generated (Profit to Split)</span>
                 <span class="font-mono font-black text-sm">${{ simNetSurplus.toFixed(2) }}</span>
               </div>
 
               <div class="grid grid-cols-2 gap-2 pt-1">
                 <div class="bg-base-100 p-2.5 rounded-xl border border-primary/20">
-                  <div class="text-[10px] text-base-content/60 font-semibold">Your Curator Profit (70%)</div>
+                  <div class="text-[10px] text-base-content/60 font-semibold">Your Curator Profit ({{ liveCuratorPct }}%)</div>
                   <div class="font-mono font-black text-sm text-success mt-0.5">+${{ simCuratorProfit.toFixed(2) }}</div>
                 </div>
                 <div class="bg-base-100 p-2.5 rounded-xl border border-primary/20">
-                  <div class="text-[10px] text-base-content/60 font-semibold">Commons Pool (30%)</div>
+                  <div class="text-[10px] text-base-content/60 font-semibold">Commons Pool ({{ liveCommonsPct }}%)</div>
                   <div class="font-mono font-black text-sm text-secondary mt-0.5">${{ simCommonsTake.toFixed(2) }}</div>
                 </div>
               </div>
@@ -272,11 +313,11 @@
                   Your Total Cash Payout
                 </div>
                 <div class="text-[11px] text-base-content/75 font-medium">
-                  Cost ($<span class="font-mono">{{ simCostBasis.toFixed(2) }}</span>) + Profit ($<span class="font-mono">{{ simCuratorProfit.toFixed(2) }}</span>)
+                  Cost ($<span class="font-mono">{{ (simCostBasis + simShippingCost).toFixed(2) }}</span>) + Profit ($<span class="font-mono">{{ simCuratorProfit.toFixed(2) }}</span>)
                 </div>
               </div>
               <div class="text-2xl sm:text-3xl font-black text-success font-mono">
-                ${{ (simCostBasis + simCuratorProfit).toFixed(2) }}
+                ${{ (simCostBasis + simShippingCost + simCuratorProfit).toFixed(2) }}
               </div>
             </div>
 
@@ -630,35 +671,46 @@
             </div>
           </div>
 
-          <!-- Multi-Org Prefixes -->
+          <!-- Multi-Org Prefixes & SWEAT Marketing Worker Tier -->
           <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-3">
             <h3 class="font-bold text-sm text-base-content flex items-center gap-2">
               <Icon icon="solar:scanner-bold" class="w-4 h-4 text-secondary" />
-              Independent Barcode Prefixes (Collision-Free Tracking)
+              3 Cooperative Member Archetypes (Curators, Marketing Workers &amp; Consignors)
             </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div class="p-3 bg-base-100 rounded-xl border border-base-300">
-                <span class="badge badge-primary font-mono font-bold text-[10px] mb-1">HUCK-</span>
-                <div class="font-bold text-base-content">Huckleberry Collective</div>
-                <p class="text-base-content/65">Curated vintage apparel, leatherwear, paperbacks, and oddities.</p>
+                <span class="badge badge-primary font-mono font-bold text-[10px] mb-1">HUCK- / PDXGL-</span>
+                <div class="font-bold text-base-content">Curator Worker-Members</div>
+                <p class="text-base-content/65">Source inventory, earn 100% cost back + {{ liveCuratorPct }}% Net Surplus + Gate 4B Sweat-Equity hours + 1M1V vote.</p>
+              </div>
+              <div class="p-3 bg-accent/10 rounded-xl border border-accent/30">
+                <span class="badge badge-accent font-mono font-bold text-[10px] mb-1">SWEAT- ($0 Inventory)</span>
+                <div class="font-bold text-base-content">Marketing, Social &amp; Enabling Workers</div>
+                <p class="text-base-content/75">Drive sales via Dropcast Reels, photography, online shipping &amp; pop-ups. Earn pro-rata Gate 4B Labor Pool dividends + full 1M1V vote with $0 inventory required!</p>
               </div>
               <div class="p-3 bg-base-100 rounded-xl border border-base-300">
-                <span class="badge badge-secondary font-mono font-bold text-[10px] mb-1">PDXGL-</span>
-                <div class="font-bold text-base-content">PDX Game Library</div>
-                <p class="text-base-content/65">Curated tabletop board games, roleplaying books, and accessories.</p>
+                <span class="badge badge-warning font-mono font-bold text-[10px] mb-1">BB-</span>
+                <div class="font-bold text-base-content">Contractual Consignors</div>
+                <p class="text-base-content/65">Receive contractual inventory split only; do not hold General Assembly voting seats or Labor Pool draws.</p>
               </div>
             </div>
           </div>
 
-          <!-- Marketing Labor Recognition -->
-          <div class="p-4 rounded-2xl bg-base-200/70 border border-base-300 space-y-2 text-xs">
-            <div class="font-bold text-base-content flex items-center gap-1.5">
-              <Icon icon="solar:camera-bold" class="w-4 h-4 text-accent" />
-              Social Media, Photography &amp; Tech Hours Count as Labor:
+          <!-- Marketing Labor Recognition & Link to Full Ledger -->
+          <div class="p-4 rounded-2xl bg-base-200/70 border border-base-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div class="space-y-1">
+              <div class="font-bold text-base-content flex items-center gap-1.5">
+                <Icon icon="solar:camera-bold" class="w-4 h-4 text-accent" />
+                Social Media, Photography, Online Shipping &amp; Pop-Up Hours Count as Equal WSDE Labor:
+              </div>
+              <p class="text-base-content/75 leading-relaxed">
+                In retail resale, nobody buys if nobody knows the goods are on the rack. Taking photos, editing Dropcast Reels, packing online orders, and staffing pop-ups earn direct pro-rata payouts from the Gate 4B Sweat-Equity Labor Pool and Mondragon Internal Capital Accounts (7%/yr target yield).
+              </p>
             </div>
-            <p class="text-base-content/75 leading-relaxed">
-              In retail resale, nobody buys if nobody knows the goods are on the rack. Taking photos, staging displays, and broadcasting drops count as credited cooperative labor. Surplus left in the 30% commons pool after rent is distributed to members based on verified hours worked!
-            </p>
+            <a href="/coop/labor" class="btn btn-xs sm:btn-sm btn-accent font-bold shrink-0 gap-1.5">
+              <Icon icon="solar:clock-circle-bold" class="w-4 h-4" />
+              <span>Open Full Sweat-Equity Ledger</span>
+            </a>
           </div>
 
           <!-- Simple Labor & Engagement Logger -->
@@ -836,9 +888,13 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
 import CoopSubNav from './CoopSubNav.vue';
+import { loadCoopGovernanceState, DEFAULT_COOP_POLICY_CONFIG } from '../../lib/coopGovernance';
 
 const activeSection = ref<'payouts' | 'monthly' | 'expenses' | 'governance' | 'legal'>('payouts');
 const copiedLink = ref(false);
+
+const liveCuratorPct = ref<number>(DEFAULT_COOP_POLICY_CONFIG.curatorSharePct);
+const liveCommonsPct = ref<number>(DEFAULT_COOP_POLICY_CONFIG.commonsSharePct);
 
 const sections = [
   { id: 'payouts', label: '1. 70/30 Profit Engine', icon: 'solar:calculator-bold' },
@@ -848,17 +904,18 @@ const sections = [
   { id: 'legal', label: '5. Legal Model & Labor', icon: 'solar:diploma-verified-bold' }
 ] as const;
 
-// Interactive Simulator Reactive State (Clean 70/30 Formula)
+// Interactive Simulator Reactive State (Live Policy Formula + Multi-Channel Shipping)
 const simSalePrice = ref<number>(60);
 const simCostBasis = ref<number>(10);
 const simVenueFeeRate = ref<number>(15);
+const simShippingCost = ref<number>(0);
 
 const simVenueFee = computed(() => {
   return Number((simSalePrice.value * (simVenueFeeRate.value / 100)).toFixed(2));
 });
 
 const simNetDeposit = computed(() => {
-  return Math.max(0, Number((simSalePrice.value - simVenueFee.value).toFixed(2)));
+  return Math.max(0, Number((simSalePrice.value - simVenueFee.value - simShippingCost.value).toFixed(2)));
 });
 
 const simNetSurplus = computed(() => {
@@ -866,11 +923,11 @@ const simNetSurplus = computed(() => {
 });
 
 const simCuratorProfit = computed(() => {
-  return Number((simNetSurplus.value * 0.70).toFixed(2));
+  return Number((simNetSurplus.value * (liveCuratorPct.value / 100)).toFixed(2));
 });
 
 const simCommonsTake = computed(() => {
-  return Number((simNetSurplus.value * 0.30).toFixed(2));
+  return Number((simNetSurplus.value * (liveCommonsPct.value / 100)).toFixed(2));
 });
 
 // Co-op Labor & Engagement Logger State
@@ -899,7 +956,14 @@ const newLabor = ref({
   notes: ''
 });
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const gov = await loadCoopGovernanceState();
+    if (gov.policyConfig) {
+      liveCuratorPct.value = gov.policyConfig.curatorSharePct;
+      liveCommonsPct.value = gov.policyConfig.commonsSharePct;
+    }
+  } catch {}
   try {
     const params = new URLSearchParams(window.location.search);
     const sec = params.get('section') || params.get('tab');

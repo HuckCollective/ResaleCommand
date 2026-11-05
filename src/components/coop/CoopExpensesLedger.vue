@@ -58,34 +58,95 @@
 
       <!-- Top KPI Overview -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-base-200">
-        <div class="p-4 rounded-2xl bg-base-200/60 border border-base-300 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Total Commons Expenses</div>
-          <div class="text-xl sm:text-2xl font-black text-base-content font-mono">${{ metrics.totalExpenses.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">{{ expenses.length }} logged receipts</div>
+        <div class="p-4 rounded-2xl bg-primary/5 border border-primary/30 shadow-xs space-y-1">
+          <div class="text-[11px] font-bold text-primary uppercase tracking-wider">🤝 Co-op Shared Commons Pool</div>
+          <div class="text-xl sm:text-2xl font-black text-primary font-mono">${{ metrics.totalCoopShared.toFixed(2) }}</div>
+          <div class="text-xs text-base-content/60 font-medium">{{ countByScope.coop + countByScope.split }} shared receipts (Gate 4A)</div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-secondary/10 border border-secondary/30 shadow-xs space-y-1">
+          <div class="text-[11px] font-bold text-secondary uppercase tracking-wider">👤 Personal Tax Write-Offs</div>
+          <div class="text-xl sm:text-2xl font-black text-secondary font-mono">${{ metrics.totalPersonalWriteOff.toFixed(2) }}</div>
+          <div class="text-xs text-base-content/60 font-medium">100% Personal Schedule C ($0 to Co-op)</div>
         </div>
 
         <div class="p-4 rounded-2xl bg-success/5 border border-success/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-success uppercase tracking-wider">Reimbursed to Members</div>
+          <div class="text-[11px] font-bold text-success uppercase tracking-wider">Reimbursed from Commons</div>
           <div class="text-xl sm:text-2xl font-black text-success font-mono">${{ metrics.totalReimbursed.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">Repaid from Tier 1 Pool</div>
+          <div class="text-xs text-base-content/60 font-medium">Repaid from 30% Commons Pool</div>
         </div>
 
         <div class="p-4 rounded-2xl bg-warning/5 border border-warning/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-warning uppercase tracking-wider">Pending Reimbursement</div>
+          <div class="text-[11px] font-bold text-warning uppercase tracking-wider">Pending Co-op Reimbursement</div>
           <div class="text-xl sm:text-2xl font-black text-warning font-mono">${{ metrics.totalPending.toFixed(2) }}</div>
           <div class="text-xs text-base-content/60 font-medium">Owed to fronting members</div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-primary/5 border border-primary/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-primary uppercase tracking-wider">Active Booth Rent</div>
-          <div class="text-xl sm:text-2xl font-black text-primary font-mono">$382.50<span class="text-xs font-normal opacity-70">/mo</span></div>
-          <div class="text-xs text-base-content/60 font-medium">Memory Den (Booth 0EJ)</div>
         </div>
       </div>
     </div>
 
     <!-- Filter Pills & Search Bar -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3 sm:p-4">
+    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3 sm:p-4 space-y-3">
+      <!-- Row 1: Allocation Scope Filter (Co-op Shared vs Personal Schedule C Write-Off) -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-2.5 border-b border-base-200">
+        <div class="join bg-base-200/80 p-1 rounded-xl shadow-inner flex-wrap">
+          <button
+            type="button"
+            class="btn btn-xs join-item font-bold"
+            :class="scopeFilter === 'all' ? 'btn-neutral shadow-xs' : 'btn-ghost opacity-75'"
+            @click="scopeFilter = 'all'"
+          >
+            All Scopes ({{ expenses.length }})
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item font-bold"
+            :class="scopeFilter === 'coop_shared' ? 'btn-primary shadow-xs font-black' : 'btn-ghost text-primary'"
+            @click="scopeFilter = 'coop_shared'"
+          >
+            🤝 Co-op Shared ({{ countByScope.coop }})
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item font-bold"
+            :class="scopeFilter === 'personal_write_off' ? 'btn-secondary shadow-xs font-black' : 'btn-ghost text-secondary'"
+            @click="scopeFilter = 'personal_write_off'"
+          >
+            👤 Personal Write-Offs ({{ countByScope.personal }})
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item font-bold"
+            :class="scopeFilter === 'split' ? 'btn-accent shadow-xs font-black' : 'btn-ghost text-accent'"
+            @click="scopeFilter = 'split'"
+          >
+            ⚖️ Split Co-op/Personal ({{ countByScope.split }})
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5 justify-end flex-wrap">
+          <button
+            type="button"
+            @click="exportCsvByScope('coop_shared')"
+            class="btn btn-xs btn-outline btn-primary rounded-xl font-bold gap-1"
+            :disabled="expenses.length === 0"
+            title="Download CSV of Co-op Shared Commons expenses only"
+          >
+            <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5" />
+            <span>Co-op Commons CSV</span>
+          </button>
+          <button
+            type="button"
+            @click="exportCsvByScope('personal_write_off')"
+            class="btn btn-xs btn-outline btn-secondary rounded-xl font-bold gap-1"
+            :disabled="expenses.length === 0"
+            title="Download CSV of Personal IRS Schedule C Write-Offs only"
+          >
+            <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5" />
+            <span>Personal Schedule C CSV</span>
+          </button>
+        </div>
+      </div>
+
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <!-- Status Filter Tabs -->
         <div class="join bg-base-200/80 p-1 rounded-xl shadow-inner w-full sm:w-auto">
@@ -177,6 +238,7 @@
               <th>Date</th>
               <th>Member / Partner</th>
               <th>Category</th>
+              <th>Allocation Scope</th>
               <th>Description</th>
               <th class="text-center">Receipt</th>
               <th class="text-right">Amount</th>
@@ -198,6 +260,22 @@
                   <Icon :icon="getCategoryIcon(expense.category)" class="w-3.5 h-3.5" />
                   <span>{{ expense.category }}</span>
                 </span>
+              </td>
+              <td>
+                <select
+                  :value="expense.scope || 'coop_shared'"
+                  @change="handleQuickScopeChange(expense, ($event.target as HTMLSelectElement).value as any)"
+                  class="select select-bordered select-xs rounded-lg font-bold text-[11px]"
+                  :class="expense.scope === 'personal_write_off' ? 'border-secondary/50 text-secondary' : expense.scope === 'split' ? 'border-accent/50 text-accent' : 'border-primary/40 text-primary'"
+                  title="Switch between Shared Co-op Commons Pool vs Personal IRS Schedule C Write-Off"
+                >
+                  <option value="coop_shared">🤝 Co-op Shared (100%)</option>
+                  <option value="personal_write_off">👤 Personal Write-Off (100%)</option>
+                  <option value="split">⚖️ Split ({{ expense.scope === 'split' ? expense.coopSharePct : 50 }}% Co-op)</option>
+                </select>
+                <div v-if="expense.scope === 'split'" class="text-[10px] font-mono text-base-content/60 mt-0.5">
+                  Co-op: ${{ expense.coopSharedAmount.toFixed(2) }} • Personal: ${{ expense.personalWriteOffAmount.toFixed(2) }}
+                </div>
               </td>
               <td class="max-w-xs font-medium truncate text-base-content/85" :title="expense.description">
                 {{ expense.description }}
@@ -313,15 +391,61 @@
           <!-- Category -->
           <div class="form-control">
             <label class="label py-1"><span class="label-text font-bold">Category *</span></label>
-            <select v-model="newExpense.category" class="select select-bordered select-sm rounded-xl font-bold" required>
+            <select v-model="newExpense.category" @change="onNewCategoryChange" class="select select-bordered select-sm rounded-xl font-bold" required>
               <option value="Thermal Tags & Merch Supplies">🏷️ Thermal Tags &amp; Merch Supplies (Labels, Tags, Bags)</option>
-              <option value="Booth Rent & Mall Fees">🏪 Booth Rent &amp; Mall Fees (Memory Den $382.50)</option>
+              <option value="Booth Rent & Mall Fees">🏪 Booth Rent &amp; Mall Fees (Memory Den / Pop-Up Table)</option>
               <option value="Display Hardware & Fixtures">🪵 Display Hardware &amp; Fixtures (Shelving, Racks, Lights)</option>
               <option value="Tech Commons & AI Credits">⚡ Tech Commons &amp; AI Credits (Hosting, Gemini Credits)</option>
-              <option value="Hauling & Sourcing Transport">🚚 Hauling &amp; Sourcing Transport (Gas, Van, Tolls)</option>
+              <option value="Hauling & Sourcing Transport">🚚 Hauling &amp; Sourcing Transport (Mileage, Gas, Tolls)</option>
+              <option value="Personal Schedule C Write-Off">👤 Personal Schedule C Write-Off (Home Office, Phone, Curator Tools)</option>
               <option value="Cleaning & Facility Maintenance">🧹 Cleaning &amp; Facility Maintenance</option>
               <option value="General Operational Commons">📦 General Operational Commons</option>
             </select>
+          </div>
+
+          <!-- Tax & Co-op Allocation Scope -->
+          <div class="p-3.5 rounded-2xl bg-base-200/60 border border-base-300 space-y-2.5">
+            <label class="label py-0">
+              <span class="label-text font-black text-xs">Who Pays / Tax Write-Off Scope *</span>
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                @click="newExpense.scope = 'coop_shared'; newExpense.coopSharePct = 100"
+                class="btn btn-xs rounded-xl font-bold h-9"
+                :class="newExpense.scope === 'coop_shared' ? 'btn-primary' : 'btn-ghost border border-base-300'"
+              >
+                🤝 Co-op Shared (100%)
+              </button>
+              <button
+                type="button"
+                @click="newExpense.scope = 'personal_write_off'; newExpense.coopSharePct = 0"
+                class="btn btn-xs rounded-xl font-bold h-9"
+                :class="newExpense.scope === 'personal_write_off' ? 'btn-secondary' : 'btn-ghost border border-base-300'"
+              >
+                👤 Personal Write-Off
+              </button>
+              <button
+                type="button"
+                @click="newExpense.scope = 'split'; newExpense.coopSharePct = 50"
+                class="btn btn-xs rounded-xl font-bold h-9"
+                :class="newExpense.scope === 'split' ? 'btn-accent' : 'btn-ghost border border-base-300'"
+              >
+                ⚖️ Split Co-op / Personal
+              </button>
+            </div>
+            <div v-if="newExpense.scope === 'split'" class="space-y-1 pt-1">
+              <div class="flex justify-between text-[11px] font-mono font-bold">
+                <span class="text-primary">Co-op Commons: {{ newExpense.coopSharePct }}%</span>
+                <span class="text-secondary">Personal Schedule C: {{ 100 - newExpense.coopSharePct }}%</span>
+              </div>
+              <input type="range" min="10" max="90" step="5" v-model.number="newExpense.coopSharePct" class="range range-xs range-accent" />
+            </div>
+            <p class="text-[11px] text-base-content/70">
+              <span v-if="newExpense.scope === 'coop_shared'">Reimbursed 100% from the 30% Co-op Commons Pool in monthly settlements.</span>
+              <span v-else-if="newExpense.scope === 'personal_write_off'">$0.00 charged to Co-op partners; tracked 100% for your Personal IRS Schedule C tax deduction.</span>
+              <span v-else>Charges {{ newExpense.coopSharePct }}% to Co-op Commons and {{ 100 - newExpense.coopSharePct }}% to your Personal Schedule C.</span>
+            </p>
           </div>
 
           <!-- Amount & Date -->
@@ -785,9 +909,11 @@ import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
 import { 
   coopExpensesApi, 
+  inferDefaultScopeForCategory,
   type CoopExpenseItem, 
   type ExpenseCategory, 
-  type ExpenseStatus 
+  type ExpenseStatus,
+  type ExpenseAllocationScope
 } from '../../lib/coopExpenses';
 
 const { user, currentTeam } = useAuth();
@@ -798,6 +924,7 @@ const loading = ref(true);
 const submitting = ref(false);
 const searchQuery = ref('');
 const statusFilter = ref<'all' | 'pending' | 'approved' | 'reimbursed'>('all');
+const scopeFilter = ref<'all' | ExpenseAllocationScope>('all');
 
 // Bulk Invoices & Receipts Import State
 const isImportModalOpen = ref(false);
@@ -877,6 +1004,8 @@ const newExpense = ref<{
   member: string;
   partner: string;
   description: string;
+  scope: ExpenseAllocationScope;
+  coopSharePct: number;
   receiptFile: File | null;
 }>({
   amount: '',
@@ -885,6 +1014,8 @@ const newExpense = ref<{
   member: '',
   partner: 'HUCK',
   description: '',
+  scope: 'coop_shared',
+  coopSharePct: 100,
   receiptFile: null
 });
 
@@ -918,17 +1049,35 @@ const countByStatus = computed(() => {
   };
 });
 
+const countByScope = computed(() => {
+  return {
+    coop: expenses.value.filter(e => (e.scope || 'coop_shared') === 'coop_shared').length,
+    personal: expenses.value.filter(e => e.scope === 'personal_write_off').length,
+    split: expenses.value.filter(e => e.scope === 'split').length,
+  };
+});
+
 const metrics = computed(() => {
   const totalExpenses = expenses.value.reduce((acc, e) => acc + e.amount, 0);
+  const totalCoopShared = expenses.value.reduce(
+    (acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount),
+    0
+  );
+  const totalPersonalWriteOff = expenses.value.reduce(
+    (acc, e) => acc + (e.personalWriteOffAmount || 0),
+    0
+  );
   const totalReimbursed = expenses.value
-    .filter(e => e.status === 'reimbursed')
-    .reduce((acc, e) => acc + e.amount, 0);
+    .filter(e => e.status === 'reimbursed' && (e.scope || 'coop_shared') !== 'personal_write_off')
+    .reduce((acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount), 0);
   const totalPending = expenses.value
-    .filter(e => e.status === 'pending' || e.status === 'approved')
-    .reduce((acc, e) => acc + e.amount, 0);
+    .filter(e => (e.status === 'pending' || e.status === 'approved') && (e.scope || 'coop_shared') !== 'personal_write_off')
+    .reduce((acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount), 0);
 
   return {
     totalExpenses,
+    totalCoopShared,
+    totalPersonalWriteOff,
     totalReimbursed,
     totalPending
   };
@@ -936,6 +1085,10 @@ const metrics = computed(() => {
 
 const filteredExpenses = computed(() => {
   let list = [...expenses.value];
+
+  if (scopeFilter.value !== 'all') {
+    list = list.filter(e => (e.scope || 'coop_shared') === scopeFilter.value);
+  }
 
   if (statusFilter.value !== 'all') {
     list = list.filter(e => e.status === statusFilter.value);
@@ -954,14 +1107,22 @@ const filteredExpenses = computed(() => {
   return list;
 });
 
+const onNewCategoryChange = () => {
+  const inferred = inferDefaultScopeForCategory(newExpense.value.category, newExpense.value.description);
+  newExpense.value.scope = inferred.scope;
+  newExpense.value.coopSharePct = inferred.coopSharePct;
+};
+
 const openSubmitModal = () => {
   newExpense.value = {
     amount: '',
     date: new Date().toISOString().slice(0, 10),
     category: 'Thermal Tags & Merch Supplies',
-    member: user.value?.name || 'Tyler',
+    member: user.value?.name || 'Mike',
     partner: 'HUCK',
     description: '',
+    scope: 'coop_shared',
+    coopSharePct: 100,
     receiptFile: null
   };
   isSubmitModalOpen.value = true;
@@ -993,13 +1154,21 @@ const submitExpense = async () => {
       member: newExpense.value.member,
       partner: newExpense.value.partner,
       description: newExpense.value.description,
+      scope: newExpense.value.scope,
+      coopSharePct: newExpense.value.coopSharePct,
       receiptFile: newExpense.value.receiptFile,
       tenantId: (currentTeam.value as any)?.$id || '69a9cbcb0038df55f6b9'
     });
 
     expenses.value.unshift(created);
     isSubmitModalOpen.value = false;
-    addToast({ type: 'success', message: `Logged $${created.amount.toFixed(2)} to Commons Expenses!` });
+    addToast({
+      type: 'success',
+      message:
+        created.scope === 'personal_write_off'
+          ? `Logged $${created.amount.toFixed(2)} to Personal Schedule C Write-Offs!`
+          : `Logged $${created.coopSharedAmount.toFixed(2)} to Co-op Commons Expenses!`,
+    });
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to save expense: ' + err.message });
   } finally {
@@ -1017,6 +1186,31 @@ const updateStatus = async (expense: CoopExpenseItem, newStatus: ExpenseStatus) 
     addToast({ type: 'success', message: `Marked as ${newStatus}!` });
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to update status: ' + err.message });
+  }
+};
+
+const handleQuickScopeChange = async (
+  expense: CoopExpenseItem,
+  newScope: ExpenseAllocationScope
+) => {
+  try {
+    const pct = newScope === 'personal_write_off' ? 0 : newScope === 'split' ? 50 : 100;
+    const updated = await coopExpensesApi.updateExpenseScope(expense.id, expense, newScope, pct);
+    const idx = expenses.value.findIndex(e => e.id === expense.id);
+    if (idx !== -1) {
+      expenses.value[idx] = updated;
+    }
+    addToast({
+      type: 'success',
+      message:
+        newScope === 'personal_write_off'
+          ? 'Moved to Personal Schedule C Write-Offs ($0 charged to Co-op)'
+          : newScope === 'split'
+            ? 'Split 50% Co-op Commons / 50% Personal Schedule C'
+            : 'Moved to 100% Shared Co-op Commons Pool',
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to update allocation scope: ' + err.message });
   }
 };
 
@@ -1118,15 +1312,45 @@ const getStatusBadgeClass = (status: ExpenseStatus) => {
 };
 
 const exportCsv = () => {
+  exportCsvByScope('all');
+};
+
+const exportCsvByScope = (targetScope: 'all' | 'coop_shared' | 'personal_write_off') => {
   if (expenses.value.length === 0) return;
-  const header = ['Date', 'Member', 'Partner', 'Category', 'Description', 'Amount', 'Status', 'ReceiptId'];
-  const rows = expenses.value.map(e => [
+  const rowsToExport = expenses.value.filter(e => {
+    if (targetScope === 'all') return true;
+    if (targetScope === 'coop_shared') return (e.coopSharedAmount ?? e.amount) > 0;
+    return (e.personalWriteOffAmount ?? 0) > 0;
+  });
+  if (rowsToExport.length === 0) {
+    addToast({ type: 'info', message: 'No matching expenses in that tax scope to export.' });
+    return;
+  }
+  const header = [
+    'Date',
+    'Member',
+    'Partner',
+    'Category',
+    'AllocationScope',
+    'CoopSharePct',
+    'CoopSharedAmount',
+    'PersonalWriteOffAmount',
+    'TotalAmount',
+    'Description',
+    'Status',
+    'ReceiptId'
+  ];
+  const rows = rowsToExport.map(e => [
     e.date ? e.date.slice(0, 10) : '',
     `"${e.member.replace(/"/g, '""')}"`,
     e.partner,
     `"${e.category}"`,
-    `"${e.description.replace(/"/g, '""')}"`,
+    e.scope || 'coop_shared',
+    e.coopSharePct ?? 100,
+    (e.coopSharedAmount ?? e.amount).toFixed(2),
+    (e.personalWriteOffAmount ?? 0).toFixed(2),
     e.amount.toFixed(2),
+    `"${e.description.replace(/"/g, '""')}"`,
     e.status,
     e.receiptImageId || ''
   ]);
@@ -1135,11 +1359,17 @@ const exportCsv = () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `Coop_Expenses_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+  const prefix =
+    targetScope === 'personal_write_off'
+      ? 'Personal_ScheduleC_WriteOffs'
+      : targetScope === 'coop_shared'
+        ? 'Coop_Shared_Commons_Expenses'
+        : 'All_Expenses_Ledger';
+  link.setAttribute('download', `${prefix}_${new Date().toISOString().slice(0, 10)}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  addToast({ type: 'success', message: 'Downloaded Co-op Expense Ledger CSV!' });
+  addToast({ type: 'success', message: `Downloaded ${prefix}.csv!` });
 };
 
 const openImportModal = () => {

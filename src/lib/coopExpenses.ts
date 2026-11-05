@@ -1,16 +1,19 @@
 import { databases, storage, ID, Query } from './appwrite';
 import { getDatabaseId, getBucketId } from './appwriteEnv';
 
-export type ExpenseCategory = 
+export type ExpenseCategory =
   | 'Booth Rent & Mall Fees'
   | 'Thermal Tags & Merch Supplies'
   | 'Display Hardware & Fixtures'
   | 'Tech Commons & AI Credits'
   | 'Hauling & Sourcing Transport'
   | 'Cleaning & Facility Maintenance'
-  | 'General Operational Commons';
+  | 'General Operational Commons'
+  | 'Personal Schedule C Write-Off';
 
 export type ExpenseStatus = 'pending' | 'approved' | 'reimbursed' | 'rejected';
+
+export type ExpenseAllocationScope = 'coop_shared' | 'personal_write_off' | 'split';
 
 export interface CoopExpenseItem {
   id: string;
@@ -26,6 +29,14 @@ export interface CoopExpenseItem {
   reimbursedAt: string | null;
   receiptImageId: string | null;
   receiptUrl: string | null;
+  /** Allocation scope separating Co-op Commons reimbursement from Personal IRS Schedule C write-offs */
+  scope: ExpenseAllocationScope;
+  /** Percentage (0-100) charged to the 30% Co-op Commons Pool */
+  coopSharePct: number;
+  /** Dollar amount charged to the 30% Co-op Commons Pool */
+  coopSharedAmount: number;
+  /** Dollar amount retained for the member's Personal IRS Schedule C Tax Write-Off Ledger */
+  personalWriteOffAmount: number;
   rawNote?: string;
   createdAt?: string;
 }
@@ -37,6 +48,8 @@ export interface NewCoopExpensePayload {
   member: string;
   partner?: string;
   description: string;
+  scope?: ExpenseAllocationScope;
+  coopSharePct?: number;
   receiptFile?: File | null;
   tenantId?: string;
 }
@@ -44,6 +57,53 @@ export interface NewCoopExpensePayload {
 const DB_ID = () => getDatabaseId();
 const BUCKET_ID = () => getBucketId();
 const EXPENSES_COL = 'expenses';
+
+function roundCents(val: number): number {
+  return Math.round((Number(val) || 0) * 100) / 100;
+}
+
+export function inferDefaultScopeForCategory(
+  category: ExpenseCategory,
+  description = ''
+): { scope: ExpenseAllocationScope; coopSharePct: number } {
+  const lower = `${category} ${description}`.toLowerCase();
+  if (
+    category === 'Personal Schedule C Write-Off' ||
+    category === 'Hauling & Sourcing Transport' ||
+    lower.includes('mileage') ||
+    lower.includes('home office') ||
+    lower.includes('personal') ||
+    lower.includes('gas')
+  ) {
+    return { scope: 'personal_write_off', coopSharePct: 0 };
+  }
+  return { scope: 'coop_shared', coopSharePct: 100 };
+}
+
+export function computeScopeSplitAmounts(
+  amount: number,
+  scope: ExpenseAllocationScope,
+  rawCoopPct?: number
+): {
+  scope: ExpenseAllocationScope;
+  coopSharePct: number;
+  coopSharedAmount: number;
+  personalWriteOffAmount: number;
+} {
+  const total = roundCents(amount);
+  let coopSharePct = 100;
+  if (scope === 'personal_write_off') {
+    coopSharePct = 0;
+  } else if (scope === 'split') {
+    const pct = Number.isFinite(Number(rawCoopPct)) ? Number(rawCoopPct) : 50;
+    coopSharePct = Math.min(99, Math.max(1, Math.round(pct)));
+  } else {
+    coopSharePct = 100;
+  }
+  const coopSharedAmount = roundCents(total * (coopSharePct / 100));
+  const personalWriteOffAmount = roundCents(Math.max(0, total - coopSharedAmount));
+  return { scope, coopSharePct, coopSharedAmount, personalWriteOffAmount };
+}
 
 export function getReceiptImageUrl(fileId: string | null | undefined): string | null {
   if (!fileId) return null;
@@ -60,6 +120,8 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
   description: string;
   status: ExpenseStatus;
   reimbursedAt: string | null;
+  scope: ExpenseAllocationScope;
+  coopSharePct: number;
 } {
   const fallback = {
     category: 'General Operational Commons' as ExpenseCategory,
@@ -67,7 +129,9 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
     partner: 'HUCK',
     description: noteStr || 'Operational Expense',
     status: 'reimbursed' as ExpenseStatus,
-    reimbursedAt: null
+    reimbursedAt: null,
+    scope: 'coop_shared' as ExpenseAllocationScope,
+    coopSharePct: 100,
   };
 
   if (!noteStr) return fallback;
@@ -76,13 +140,25 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
   if (noteStr.trim().startsWith('{') && noteStr.trim().endsWith('}')) {
     try {
       const parsed = JSON.parse(noteStr);
+      const category = (parsed.category as ExpenseCategory) || fallback.category;
+      const description = parsed.desc || parsed.description || fallback.description;
+      const inferred = inferDefaultScopeForCategory(category, description);
+      const scope: ExpenseAllocationScope =
+        parsed.scope === 'personal_write_off' || parsed.scope === 'split' || parsed.scope === 'coop_shared'
+          ? parsed.scope
+          : inferred.scope;
+      const coopSharePct =
+        parsed.coopSharePct !== undefined ? Number(parsed.coopSharePct) : inferred.coopSharePct;
+
       return {
-        category: (parsed.category as ExpenseCategory) || fallback.category,
+        category,
         member: parsed.member || fallback.member,
         partner: parsed.partner || fallback.partner,
-        description: parsed.desc || parsed.description || fallback.description,
+        description,
         status: (parsed.status as ExpenseStatus) || 'approved',
-        reimbursedAt: parsed.reimbursedAt || null
+        reimbursedAt: parsed.reimbursedAt || null,
+        scope,
+        coopSharePct,
       };
     } catch {}
   }
@@ -97,14 +173,19 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
     else if (rawTag.includes('DISPLAY') || rawTag.includes('HARDWARE')) cat = 'Display Hardware & Fixtures';
     else if (rawTag.includes('AI') || rawTag.includes('TECH') || rawTag.includes('CLOUD')) cat = 'Tech Commons & AI Credits';
     else if (rawTag.includes('GAS') || rawTag.includes('TRANSPORT') || rawTag.includes('HAUL')) cat = 'Hauling & Sourcing Transport';
+    else if (rawTag.includes('PERSONAL')) cat = 'Personal Schedule C Write-Off';
 
+    const desc = tagMatch[2] || noteStr;
+    const inferred = inferDefaultScopeForCategory(cat, desc);
     return {
       category: cat,
       member: 'Core Member',
       partner: 'HUCK',
-      description: tagMatch[2] || noteStr,
+      description: desc,
       status: 'approved',
-      reimbursedAt: null
+      reimbursedAt: null,
+      scope: inferred.scope,
+      coopSharePct: inferred.coopSharePct,
     };
   }
 
@@ -116,10 +197,40 @@ export function parseExpenseNote(noteStr: string | null | undefined): {
   else if (lower.includes('bag') || lower.includes('box') || lower.includes('label')) cat = 'Thermal Tags & Merch Supplies';
   else if (lower.includes('rent') || lower.includes('memory den')) cat = 'Booth Rent & Mall Fees';
 
+  const inferred = inferDefaultScopeForCategory(cat, noteStr);
   return {
     ...fallback,
     category: cat,
-    description: noteStr
+    description: noteStr,
+    scope: inferred.scope,
+    coopSharePct: inferred.coopSharePct,
+  };
+}
+
+function hydrateExpenseDoc(doc: any): CoopExpenseItem {
+  const amount = Number(doc.amount || 0);
+  const parsed = parseExpenseNote(doc.note);
+  const split = computeScopeSplitAmounts(amount, parsed.scope, parsed.coopSharePct);
+  return {
+    id: doc.$id,
+    cartId: doc.cartId || '',
+    tenantId: doc.tenantId || '',
+    amount,
+    date: doc.date || doc.$createdAt,
+    category: parsed.category,
+    member: parsed.member,
+    partner: parsed.partner,
+    description: parsed.description,
+    status: parsed.status,
+    reimbursedAt: parsed.reimbursedAt,
+    receiptImageId: doc.receiptImageId || null,
+    receiptUrl: getReceiptImageUrl(doc.receiptImageId),
+    scope: split.scope,
+    coopSharePct: split.coopSharePct,
+    coopSharedAmount: split.coopSharedAmount,
+    personalWriteOffAmount: split.personalWriteOffAmount,
+    rawNote: doc.note || '',
+    createdAt: doc.$createdAt,
   };
 }
 
@@ -133,7 +244,7 @@ export const coopExpensesApi = {
       while (allDocs.length < maxItems) {
         const queries = [
           Query.orderDesc('date'),
-          Query.limit(Math.min(pageSize, maxItems - allDocs.length))
+          Query.limit(Math.min(pageSize, maxItems - allDocs.length)),
         ];
         if (tenantId && tenantId !== 'all') {
           queries.push(Query.equal('tenantId', tenantId));
@@ -152,26 +263,7 @@ export const coopExpensesApi = {
         }
       }
 
-      return allDocs.map(doc => {
-        const parsed = parseExpenseNote(doc.note);
-        return {
-          id: doc.$id,
-          cartId: doc.cartId || '',
-          tenantId: doc.tenantId || '',
-          amount: Number(doc.amount || 0),
-          date: doc.date || doc.$createdAt,
-          category: parsed.category,
-          member: parsed.member,
-          partner: parsed.partner,
-          description: parsed.description,
-          status: parsed.status,
-          reimbursedAt: parsed.reimbursedAt,
-          receiptImageId: doc.receiptImageId || null,
-          receiptUrl: getReceiptImageUrl(doc.receiptImageId),
-          rawNote: doc.note || '',
-          createdAt: doc.$createdAt
-        };
-      });
+      return allDocs.map(hydrateExpenseDoc);
     } catch (err) {
       console.error('[coopExpensesApi] Failed to list expenses:', err);
       return [];
@@ -191,6 +283,14 @@ export const coopExpensesApi = {
       }
     }
 
+    const inferred = inferDefaultScopeForCategory(payload.category, payload.description);
+    const scope = payload.scope || inferred.scope;
+    const split = computeScopeSplitAmounts(
+      payload.amount,
+      scope,
+      payload.coopSharePct !== undefined ? payload.coopSharePct : inferred.coopSharePct
+    );
+
     // 2. Prepare structured note JSON
     const noteJson = JSON.stringify({
       category: payload.category,
@@ -198,46 +298,30 @@ export const coopExpensesApi = {
       partner: payload.partner ? payload.partner.trim().toUpperCase() : 'HUCK',
       desc: payload.description.trim(),
       status: 'pending',
-      reimbursedAt: null
+      reimbursedAt: null,
+      scope: split.scope,
+      coopSharePct: split.coopSharePct,
     });
 
     const activeTenant = payload.tenantId || '69a9cbcb0038df55f6b9';
 
-    const doc = await databases.createDocument(
-      DB_ID(),
-      EXPENSES_COL,
-      ID.unique(),
-      {
-        cartId: `COOP-EXPENSE-${Date.now()}`,
-        tenantId: activeTenant,
-        amount: Math.round(Number(payload.amount) * 100) / 100,
-        note: noteJson,
-        receiptImageId: receiptFileId,
-        date: payload.date ? new Date(payload.date).toISOString() : new Date().toISOString()
-      }
-    );
+    const doc = await databases.createDocument(DB_ID(), EXPENSES_COL, ID.unique(), {
+      cartId: `COOP-EXPENSE-${Date.now()}`,
+      tenantId: activeTenant,
+      amount: roundCents(payload.amount),
+      note: noteJson,
+      receiptImageId: receiptFileId,
+      date: payload.date ? new Date(payload.date).toISOString() : new Date().toISOString(),
+    });
 
-    const parsed = parseExpenseNote(doc.note);
-    return {
-      id: doc.$id,
-      cartId: doc.cartId || '',
-      tenantId: doc.tenantId || '',
-      amount: Number(doc.amount || 0),
-      date: doc.date,
-      category: parsed.category,
-      member: parsed.member,
-      partner: parsed.partner,
-      description: parsed.description,
-      status: parsed.status,
-      reimbursedAt: parsed.reimbursedAt,
-      receiptImageId: doc.receiptImageId || null,
-      receiptUrl: getReceiptImageUrl(doc.receiptImageId),
-      rawNote: doc.note,
-      createdAt: doc.$createdAt
-    };
+    return hydrateExpenseDoc(doc);
   },
 
-  async updateExpenseStatus(id: string, currentExpense: CoopExpenseItem, newStatus: ExpenseStatus): Promise<CoopExpenseItem> {
+  async updateExpenseStatus(
+    id: string,
+    currentExpense: CoopExpenseItem,
+    newStatus: ExpenseStatus
+  ): Promise<CoopExpenseItem> {
     const isReimbursed = newStatus === 'reimbursed';
     const updatedNote = JSON.stringify({
       category: currentExpense.category,
@@ -245,25 +329,41 @@ export const coopExpensesApi = {
       partner: currentExpense.partner,
       desc: currentExpense.description,
       status: newStatus,
-      reimbursedAt: isReimbursed ? new Date().toISOString() : null
+      reimbursedAt: isReimbursed ? new Date().toISOString() : null,
+      scope: currentExpense.scope || 'coop_shared',
+      coopSharePct: currentExpense.coopSharePct ?? 100,
     });
 
-    const updated = await databases.updateDocument(
-      DB_ID(),
-      EXPENSES_COL,
-      id,
-      {
-        note: updatedNote
-      }
-    );
+    const updated = await databases.updateDocument(DB_ID(), EXPENSES_COL, id, {
+      note: updatedNote,
+    });
 
-    const parsed = parseExpenseNote(updated.note);
-    return {
-      ...currentExpense,
-      status: parsed.status,
-      reimbursedAt: parsed.reimbursedAt,
-      rawNote: updated.note
-    };
+    return hydrateExpenseDoc(updated);
+  },
+
+  async updateExpenseScope(
+    id: string,
+    currentExpense: CoopExpenseItem,
+    newScope: ExpenseAllocationScope,
+    newCoopSharePct?: number
+  ): Promise<CoopExpenseItem> {
+    const split = computeScopeSplitAmounts(currentExpense.amount, newScope, newCoopSharePct);
+    const updatedNote = JSON.stringify({
+      category: currentExpense.category,
+      member: currentExpense.member,
+      partner: currentExpense.partner,
+      desc: currentExpense.description,
+      status: currentExpense.status,
+      reimbursedAt: currentExpense.reimbursedAt || null,
+      scope: split.scope,
+      coopSharePct: split.coopSharePct,
+    });
+
+    const updated = await databases.updateDocument(DB_ID(), EXPENSES_COL, id, {
+      note: updatedNote,
+    });
+
+    return hydrateExpenseDoc(updated);
   },
 
   async deleteExpense(id: string, receiptImageId?: string | null): Promise<void> {
@@ -277,7 +377,11 @@ export const coopExpensesApi = {
     await databases.deleteDocument(DB_ID(), EXPENSES_COL, id);
   },
 
-  async attachReceipt(id: string, file: File, existingReceiptId?: string | null): Promise<{ receiptImageId: string; receiptUrl: string }> {
+  async attachReceipt(
+    id: string,
+    file: File,
+    existingReceiptId?: string | null
+  ): Promise<{ receiptImageId: string; receiptUrl: string }> {
     if (existingReceiptId) {
       try {
         await storage.deleteFile(BUCKET_ID(), existingReceiptId);
@@ -287,11 +391,11 @@ export const coopExpensesApi = {
     }
     const upload = await storage.createFile(BUCKET_ID(), ID.unique(), file);
     await databases.updateDocument(DB_ID(), EXPENSES_COL, id, {
-      receiptImageId: upload.$id
+      receiptImageId: upload.$id,
     });
     return {
       receiptImageId: upload.$id,
-      receiptUrl: getReceiptImageUrl(upload.$id)!
+      receiptUrl: getReceiptImageUrl(upload.$id)!,
     };
-  }
+  },
 };

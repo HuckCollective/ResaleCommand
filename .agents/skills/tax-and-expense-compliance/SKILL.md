@@ -102,16 +102,16 @@ Every line item extracted MUST include a `status` field:
 
 ---
 
-## 5. Co-op Settlement & Expense Reimbursement Workflow
+## 5. Co-op Shared Commons vs. Personal IRS Schedule C Write-Off Separation
 
-In the **Huckleberry Collective**:
-1. **Curator Expense Submission**:
-   - A member fronts an expense (e.g. buying $50 of thermal labels or paying the $382.50 booth rent).
-   - Member submits receipt via `/expenses` or `/purchases/speed-entry?mode=all_expense`.
-2. **Proof-of-Payment Verification**:
-   - Receipt must show proof of settled payment.
-   - Status is logged as `PENDING_REIMBURSEMENT`.
-3. **Monthly Settlement Recoupment**:
-   - During the monthly Ricochet POS settlement run, pending reimbursements are paid out dollar-for-dollar from the **30% Commons Pool**.
-   - The member receives their reimbursement check, and the expense status transitions to `REIMBURSED`.
-   - The Co-op maintains an audit-proof exportable CSV ledger of all reimbursed receipts and attached image URLs.
+In the **Huckleberry Collective**, every logged expense (`src/lib/coopExpenses.ts` & `/expenses`) is classified into one of **3 Allocation Scopes (`ExpenseAllocationScope`)** so partner settlements and personal tax returns never cross-contaminate:
+
+1. **`coop_shared` (`🤝 Co-op Shared — 100% Reimbursed from 30% Commons Pool`):**
+   - **Examples:** Memory Den Net Booth Rent (`$297.09`), shared Rollo thermal barcode labels, booth display fixtures, shared Resale Command cloud/AI ops (`$219.99`), Pop-Up Event table fees.
+   - **Accounting Rule:** Reimbursed dollar-for-dollar from the **30% Shared Commons Pool** during the monthly settlement run (`CoopSettlementView.vue`). Because the member is reimbursed in cash by the collective, the member may **not** double-deduct the reimbursed portion as an unreimbursed personal loss.
+2. **`personal_write_off` (`👤 Personal Write-Off — 100% Personal Schedule C, $0 Charged to Co-op`):**
+   - **Examples:** Personal thrift/estate sale sourcing mileage & gas (`TRAVEL_MILEAGE` / `Hauling & Sourcing Transport`), Home Office / `HG` Garage / `HH` Hideout storage & utility deductions (`IRC § 280A`), personal cellular/camera/gimbal gear, and curator-only restoration supplies.
+   - **Accounting Rule:** **`$0.00` is charged to the 30% Co-op Commons Pool** (strictly excluded from Gate 4A overhead in `CoopSettlementView.vue` so partners like `PDXGL-` never subsidize personal curator write-offs). Tracked `100%` in the member's **Personal Schedule C Write-Off Ledger & CSV Export** on `/expenses` to shelter their 70% Curator Profit from taxes.
+3. **`split` (`⚖️ Split Co-op / Personal — e.g. 50% Co-op / 50% Personal`):**
+   - **Examples:** Mixed-use subscriptions (Google One / AI Ultra, cellular data) or combined booth + personal supply orders.
+   - **Accounting Rule:** Charges `coopSharePct%` (`coopSharedAmount`) to the 30% Co-op Commons Pool and records `(100 - coopSharePct)%` (`personalWriteOffAmount`) in the Personal Schedule C Write-Off Ledger.
