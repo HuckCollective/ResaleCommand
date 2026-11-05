@@ -389,8 +389,11 @@ const copyUpc = () => {
     }
 };
 
+import { useManifest } from '../../../composables/useManifest';
+const { getBoundLocationSku } = useManifest();
+
 const effectiveLocationSku = computed(() => {
-    return props.editForm?.locationSku || props.item?.locationSku || null;
+    return props.editForm?.locationSku || props.item?.locationSku || getBoundLocationSku(props.item?.$id) || null;
 });
 
 const copyLocationSku = () => {

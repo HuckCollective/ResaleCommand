@@ -195,7 +195,7 @@
                             </td>
 
                             <!-- SKU / Barcode Pill -->
-                            <td class="font-mono text-[11px]" @click.stop="copyUpc(item.upc)">
+                            <td class="font-mono text-[11px]" @click.stop="copyUpc(item.upc || item.locationSku || getBoundLocationSku(item.$id))">
                                 <div class="flex flex-col items-start gap-1">
                                     <span 
                                         v-if="item.upc" 
@@ -206,6 +206,17 @@
                                         {{ item.upc }}
                                     </span>
                                     <span v-else class="text-[10px] opacity-40 italic">No Barcode</span>
+
+                                    <!-- Ricochet / Booth Location SKU Pill (e.g. 0EJ0OF) -->
+                                    <span 
+                                        v-if="item.locationSku || item.sku || getBoundLocationSku(item.$id)" 
+                                        class="badge badge-xs font-mono font-black bg-secondary/15 border border-secondary/35 text-secondary gap-1 px-1.5 py-2 hover:border-secondary transition-colors cursor-copy"
+                                        title="Booth / Ricochet SKU (Click to copy)"
+                                        @click.stop="copyUpc((item.locationSku || item.sku || getBoundLocationSku(item.$id)).replace(/^'/, ''))"
+                                    >
+                                        <Icon icon="solar:shop-2-bold" class="w-2.5 h-2.5" />
+                                        {{ (item.locationSku || item.sku || getBoundLocationSku(item.$id)).replace(/^'/, '') }}
+                                    </span>
 
                                     <!-- Needs Shop Update reminder with 1-click turn off -->
                                     <div v-if="hasShopUpdateReminder(item)" class="flex items-center gap-1" @click.stop>
@@ -556,6 +567,7 @@ const {
     removeFromManifest,
     clearStagedItems,
     getStagedInfo,
+    getBoundLocationSku,
     initActiveDraft
 } = useManifest();
 

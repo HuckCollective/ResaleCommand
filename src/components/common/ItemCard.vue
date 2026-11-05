@@ -70,8 +70,8 @@
                     <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/80 text-[10px] px-1.5" title="UPC">
                         <Icon icon="solar:barcode-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-primary" />{{ item.upc }}
                     </span>
-                    <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5">
-                        {{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                    <span v-if="effectiveLocationSku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5" title="Booth / Ricochet SKU">
+                        <Icon icon="solar:shop-2-bold" class="w-2.5 h-2.5 mr-0.5" />{{ effectiveLocationSku }}
                     </span>
                     <span v-if="locationText" class="text-[10px] opacity-60 truncate flex items-center gap-0.5">
                         <Icon icon="solar:map-point-linear" class="w-3 h-3 inline shrink-0" />{{ locationText }}
@@ -198,12 +198,12 @@
                 </h2>
 
                 <!-- UPC & Location SKU Identifiers -->
-                <div v-if="item.upc || item.locationSku || item.sku" class="flex gap-1 flex-wrap items-center">
+                <div v-if="item.upc || effectiveLocationSku" class="flex gap-1 flex-wrap items-center">
                     <span v-if="item.upc" class="badge badge-xs font-mono font-bold bg-base-200 border-base-300 text-base-content/80 text-[10px] px-1.5" title="UPC">
                         <Icon icon="solar:barcode-minimalistic-bold" class="w-2.5 h-2.5 mr-0.5 text-primary" />{{ item.upc }}
                     </span>
-                    <span v-if="item.locationSku || item.sku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5" title="Location SKU">
-                        <Icon icon="solar:tag-bold" class="w-2.5 h-2.5 mr-0.5" />{{ (item.locationSku || item.sku).replace(/^'/, '') }}
+                    <span v-if="effectiveLocationSku" class="badge badge-xs font-mono font-bold bg-secondary/15 border-secondary/30 text-secondary text-[10px] px-1.5" title="Booth / Ricochet SKU">
+                        <Icon icon="solar:shop-2-bold" class="w-2.5 h-2.5 mr-0.5" />{{ effectiveLocationSku }}
                     </span>
                 </div>
             </div>
@@ -277,8 +277,12 @@ const onImgError = () => {
     emit('image-error', props.item?.$id);
 };
 
-const { getStagedInfo } = useManifest();
+const { getStagedInfo, getBoundLocationSku } = useManifest();
 const stagedInfo = computed(() => getStagedInfo(props.item?.$id));
+const effectiveLocationSku = computed(() => {
+    const raw = props.item?.locationSku || props.item?.sku || getBoundLocationSku(props.item?.$id) || '';
+    return String(raw).replace(/^'/, '').trim();
+});
 
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;

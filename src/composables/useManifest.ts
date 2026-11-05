@@ -417,6 +417,30 @@ export function useManifest() {
         return null;
     }
 
+    // -- Resolve bound Ricochet / Booth SKU (e.g. 0EJ0OF) from active or recent manifest snapshots --
+    function getBoundLocationSku(itemId: string): string {
+        if (!itemId) return '';
+        const pools = [
+            ...(activeManifest.value ? [activeManifest.value] : []),
+            ...(allDrafts.value || []),
+            ...(recentManifests.value || []),
+        ];
+        for (const m of pools) {
+            let snap: any[] = [];
+            if (Array.isArray(m?.itemsSnapshot)) {
+                snap = m.itemsSnapshot;
+            } else if (typeof (m as any)?.itemsSnapshot === 'string' && (m as any).itemsSnapshot.trim()) {
+                try { snap = JSON.parse((m as any).itemsSnapshot); } catch { snap = []; }
+            }
+            for (const s of snap) {
+                if ((s?.$id === itemId || s?.id === itemId) && s?.locationSku) {
+                    return String(s.locationSku).replace(/^['"]+/, '').trim();
+                }
+            }
+        }
+        return '';
+    }
+
     // -- Resume a Paused Manifest --
     async function resumeManifest(manifestId: string) {
         isSyncing.value = true;
@@ -877,6 +901,7 @@ export function useManifest() {
         unverifyAllItems,
         reopenClosedManifest,
         getStagedInfo,
+        getBoundLocationSku,
         createNewDraft,
         addToActiveManifest,
         removeFromManifest,
