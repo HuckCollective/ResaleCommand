@@ -23,7 +23,7 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
      - `🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium` (for standard code/refactor prompts)
      - `⚡ PICK IN ANTIGRAVITY: Gemini 3.8 Flash` (for file reads, doc updates, and `ACTIVE_SESSION.md` / `GEMINI.md` syncs)
      - `🟣 PICK IN ANTIGRAVITY: Claude Sonnet 5.5 (⚠️ Switch back to Gemini right after!)` (only for complex, unguided bug-fixing or architecture)
-   - **Rule for Antigravity IDE**: Keep every response compact (**under 8 short bullet lines max**), followed by **ONE single PowerShell code block** at the bottom (`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin main }`) and this exact 1-line footer right above the chat input box:
+   - **Rule for Antigravity IDE**: Keep every response compact (**under 8 short bullet lines max**). **NEVER output a redundant PowerShell code block at the bottom of your message when you have already executed the command via `run_command` (`BypassSandbox: true`)** (so the user never thinks they have to copy-paste and run it manually). End with this exact 1-line footer right above the chat input box:
      `🔔 **ADHD MODEL CHECK:** Keep picker on **Gemini 4 Argon Medium / 3.8 Flash** — if you used Claude for this turn, switch back to **Gemini 3.8 Flash** now before syncing docs!`
 3. **NO Local `astro build`:** Every IDE prompt MUST forbid running `astro build` or `npm run build` locally (hangs Windows PC). Only run `node scripts/validate-templates.mjs` locally; let Vercel build in the cloud.
 4. **1-Click `run_command` (`BypassSandbox: true`) Auto-Verify & Push Standard & Zero One-Off Scripts in `scripts/`:** On Windows, standard sandboxed terminal calls (`BypassSandbox: false`) fail with `CreateProcessSecurityEnvironment`, and local `astro build` hangs the PC. Therefore, Antigravity IDE must do all file inspections and code edits using native `read_file`, `edit_file`, and `write_file` tools, and whenever running `npm run verify` + `git commit` + `git push`, Antigravity MUST invoke `run_command` with **`BypassSandbox: true`** (`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin main }`) so the user gets a **1-Click Run/Allow button** right in the chat and Antigravity monitors the live terminal output automatically (zero copy-pasting into PowerShell!). Any temporary Appwrite/audit script MUST be created inside git-ignored `scratch/` and self-delete (`fs.unlinkSync`) before finishing (`scripts/validate-templates.mjs` strictly enforces an allowlist on `scripts/`: only `inspect_schema.js`, `audit_schema.mjs`, `sync-ai-context.mjs`, and `validate-templates.mjs` are permitted).
@@ -146,7 +146,17 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Nov 4, 2026)
+# Active Session Summary (Updated Nov 5, 2026)
+
+## Nov 5, 2026 — `alpha-1` Branch: UX/IA Navbar Refactor, Appwrite Co-op Voting & Surplus Policy, and Unlinked Ticket Reconciliation
+- **UX/IA Master Navbar (`src/components/nav/Navbar.vue`) & Subdomain Middleware (`src/middleware.ts`)**:
+  - Treated `alpha.resalecmd.com`, `dev.resalecmd.com`, and `*.vercel.app` as primary app domains in `src/middleware.ts` (`RESERVED_APP_SUBDOMAINS`).
+  - Refactored `Navbar.vue` with 5-Pillar Desktop Lifecycle Navigation (`Command`, `Purchases`, `Inventory`, `Locations ▾` dynamically driven by `getAllLocationSettingMetas()`, `Finance ▾`, `Studios ▾`), separated Workspace Switcher, unified Mobile Drawer with SSR-safe `<Teleport :disabled="!isMounted">`, and eliminated double scrollbars.
+- **Co-op Operating-Cost Breakeven & Appwrite Governance Voting (`src/lib/coopGovernance.ts`, `CoopGovernanceView.vue`, `CoopSettlementView.vue`)**:
+  - Upgraded Co-op Proposals, Loomio 4-Signal Votes (`agree` / `abstain` / `disagree` / `block`), and active Surplus Policy (`patronage_90_10` | `cap_100` | `reserve_100`) from `localStorage` to live Appwrite Cloud (`resale_db.manifests` doc `coop_governance_proposals_v1`).
+  - Added Gate 3 ➔ Gate 4 Operating Costs Breakeven Progress Bar and Partner Bonus Surplus Dividend calculator in `CoopSettlementView.vue`.
+- **Unlinked Ticket Inventory Matcher & Commons Pool Sweep (`LinkTicketInventoryModal.vue`, `SalesList.vue`, `CoopSettlementView.vue`)**:
+  - Wired canonical 4-tier `matchMemoryDenInventoryItem` + `splitTrailingBoothSku` into `SalesList.vue`, added the Top Unlinked Tickets Quick-Filter Banner, and created `LinkTicketInventoryModal.vue` (`[Link Inventory]`, `⇄ Reassign`, and `[Assign to Commons Pool (100% Margin)]` setting curator split to `$0.00` and sweeping 100% of net margin to the Commons Pool).
 
 ## Nov 4, 2026 — Ricochet Sales Sync Repair (VERIFIED against both CSV exports)
 - **Result:** Appwrite `sales` matches the Ricochet `Payouts` + `Payout History` exports 1-for-1: **378/378 lines, 0 missing, 0 extra**. October 2026 = **63 sales / $2,462.99**; November = 12 sales / $369.00.

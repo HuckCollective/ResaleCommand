@@ -96,7 +96,17 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 
 ## 4. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)
 
-# Active Session Summary (Updated Nov 4, 2026)
+# Active Session Summary (Updated Nov 5, 2026)
+
+## Nov 5, 2026 — `alpha-1` Branch: UX/IA Navbar Refactor, Appwrite Co-op Voting & Surplus Policy, and Unlinked Ticket Reconciliation
+- **UX/IA Master Navbar (`src/components/nav/Navbar.vue`) & Subdomain Middleware (`src/middleware.ts`)**:
+  - Treated `alpha.resalecmd.com`, `dev.resalecmd.com`, and `*.vercel.app` as primary app domains in `src/middleware.ts` (`RESERVED_APP_SUBDOMAINS`).
+  - Refactored `Navbar.vue` with 5-Pillar Desktop Lifecycle Navigation (`Command`, `Purchases`, `Inventory`, `Locations ▾` dynamically driven by `getAllLocationSettingMetas()`, `Finance ▾`, `Studios ▾`), separated Workspace Switcher, unified Mobile Drawer with SSR-safe `<Teleport :disabled="!isMounted">`, and eliminated double scrollbars.
+- **Co-op Operating-Cost Breakeven & Appwrite Governance Voting (`src/lib/coopGovernance.ts`, `CoopGovernanceView.vue`, `CoopSettlementView.vue`)**:
+  - Upgraded Co-op Proposals, Loomio 4-Signal Votes (`agree` / `abstain` / `disagree` / `block`), and active Surplus Policy (`patronage_90_10` | `cap_100` | `reserve_100`) from `localStorage` to live Appwrite Cloud (`resale_db.manifests` doc `coop_governance_proposals_v1`).
+  - Added Gate 3 ➔ Gate 4 Operating Costs Breakeven Progress Bar and Partner Bonus Surplus Dividend calculator in `CoopSettlementView.vue`.
+- **Unlinked Ticket Inventory Matcher & Commons Pool Sweep (`LinkTicketInventoryModal.vue`, `SalesList.vue`, `CoopSettlementView.vue`)**:
+  - Wired canonical 4-tier `matchMemoryDenInventoryItem` + `splitTrailingBoothSku` into `SalesList.vue`, added the Top Unlinked Tickets Quick-Filter Banner, and created `LinkTicketInventoryModal.vue` (`[Link Inventory]`, `⇄ Reassign`, and `[Assign to Commons Pool (100% Margin)]` setting curator split to `$0.00` and sweeping 100% of net margin to the Commons Pool).
 
 ## Nov 4, 2026 — Ricochet Sales Sync Repair (VERIFIED against both CSV exports)
 - **Result:** Appwrite `sales` matches the Ricochet `Payouts` + `Payout History` exports 1-for-1: **378/378 lines, 0 missing, 0 extra**. October 2026 = **63 sales / $2,462.99**; November = 12 sales / $369.00.
