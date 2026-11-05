@@ -206,15 +206,17 @@
         try {
           const detailRes = await window.axios.get('/api/product/show/' + newProdId);
           const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
-          const allItems = Array.isArray(fullProd?.items)
-            ? fullProd.items
-            : Object.values(fullProd?.items || {}).flat();
-          const targetItem = allItems[0];
+          const targetItem = extractFirstRicochetItemVariant(fullProd);
           if (item.upc && targetItem && cleanStr(targetItem.upc_code).toUpperCase() !== cleanStr(item.upc).toUpperCase()) {
             targetItem.store = storeId;
             targetItem.upc_code = item.upc;
             await window.axios.put('/api/product/items', targetItem);
           }
+          const resolvedSku =
+            extractRicochetSku(targetItem) ||
+            extractRicochetSku(fullProd) ||
+            rcDropSkuFromResponse(createdData);
+          if (resolvedSku) return { sku: resolvedSku };
           if (fullProd) return fullProd;
         } catch (e) {}
       }
@@ -227,32 +229,60 @@
       return createdData;
     } catch (err) {
       const errText = formatAxiosError(err);
-      // If Ricochet says "The UPC Code already exists", find that existing product's 0EJ SKU and adopt/bind it!
+      // If Ricochet says "The UPC Code already exists", find that existing product's 0EJ SKU (or create with blank UPC & attach)
       if (/upc.*already\s+exists|already\s+been\s+taken/i.test(errText)) {
         const existingSku = await findExistingRicochetSkuForDropItem(item);
         if (existingSku) {
           return { sku: existingSku, reusedExisting: true };
         }
+        // If UPC exists on a historical/archived item not in active catalog, create product shell cleanly with blank upc_code so it still gets its 0EJ SKU!
+        try {
+          const fallbackPayload = {
+            ...payload,
+            upc_code: '',
+            items: [{ ...payload.items[0], upc_code: '' }],
+          };
+          const r2 = await window.axios.post('/api/product', fallbackPayload);
+          const d2 = r2.data;
+          const sku2 = rcDropSkuFromResponse(d2) || (await findExistingRicochetSkuForDropItem(item));
+          if (sku2) return { sku: sku2 };
+        } catch (e2) {}
       }
-      const tmplKeys = tmpl ? Object.keys(tmpl).join(',') : 'no-tmpl';
-      const itemKeys = tmplItem ? Object.keys(tmplItem).join(',') : 'no-item';
-      throw new Error(errText + ' [tmplKeys: ' + tmplKeys + ' | itemKeys: ' + itemKeys + ']');
+      throw new Error(errText);
     }
+  }
+
+  function extractFirstRicochetItemVariant(p) {
+    if (!p || typeof p !== 'object') return null;
+    if (Array.isArray(p.items) && p.items.length > 0) return p.items[0];
+    if (p.items && typeof p.items === 'object') {
+      const flat = Object.values(p.items).flat().filter(Boolean);
+      if (flat.length > 0) return flat[0];
+    }
+    return null;
   }
 
   function rcDropSkuFromResponse(data) {
     if (!data || typeof data !== 'object') return '';
+    if (data.sku && /^0EJ/i.test(cleanStr(data.sku))) return cleanStr(data.sku).toUpperCase();
     const candidates = [
       data,
       data.product,
       data.data,
       data.data && data.data.product,
-      Array.isArray(data.items) ? data.items[0] : null,
-      data.product && Array.isArray(data.product.items) ? data.product.items[0] : null,
+      extractFirstRicochetItemVariant(data),
+      extractFirstRicochetItemVariant(data.product),
+      extractFirstRicochetItemVariant(data.data),
     ];
     for (const c of candidates) {
-      const sku = c ? extractRicochetSku(c) : '';
+      if (!c) continue;
+      const sku = extractRicochetSku(c);
       if (sku && /^0EJ/i.test(sku)) return sku;
+      const vItem = extractFirstRicochetItemVariant(c);
+      if (vItem) {
+        const vSku = extractRicochetSku(vItem);
+        if (vSku && /^0EJ/i.test(vSku)) return vSku;
+      }
     }
     return '';
   }
@@ -260,69 +290,105 @@
   // Find a product's 0EJ SKU in Ricochet by UPC or Title (handles newly created items & 422 "UPC Code already exists")
   async function findExistingRicochetSkuForDropItem(item) {
     const targetUpc = cleanStr(item.upc).toUpperCase();
-    const targetName = cleanStr(item.tagTitle || item.title).toLowerCase();
-    if (!targetUpc) return '';
+    const shortName = cleanStr(item.tagTitle || item.title).toLowerCase();
+    const fullName = cleanStr(item.title).toLowerCase();
+    const posDesc = cleanStr(item.posDescription || '').toLowerCase();
 
-    // 1. Check in-memory catalog first
-    const memMatch = (catalogProducts || []).find(
-      (p) => extractRicochetUpc(p) === targetUpc
-    );
-    if (memMatch) {
-      const s = extractRicochetSku(memMatch);
-      if (s) return s;
-    }
+    const matchesName = (rawName) => {
+      const n = cleanStr(rawName).toLowerCase();
+      if (!n) return false;
+      return n === shortName || n === fullName || (posDesc && n === posDesc);
+    };
 
-    if (!window.axios) return '';
-    const cid = consignorId || 475;
-
-    // 2. Try Ricochet search query by UPC and fetch newest 25 products for this consignor
-    const candidateProducts = [];
-    try {
-      const searchRes = await window.axios.get(
-        `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&consignor_id=${cid}&search=${encodeURIComponent(targetUpc)}`
-      );
-      const sProds = searchRes.data?.products || (Array.isArray(searchRes.data) ? searchRes.data : []);
-      candidateProducts.push(...sProds);
-    } catch (e) {}
-
-    try {
-      const recentRes = await window.axios.get(
-        `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&consignor_id=${cid}`
-      );
-      const rProds = recentRes.data?.products || (Array.isArray(recentRes.data) ? recentRes.data : []);
-      for (const rp of rProds) {
-        if (!candidateProducts.some((cp) => cp.id === rp.id)) {
-          candidateProducts.push(rp);
-        }
-      }
-    } catch (e) {}
-
-    // 3. Check top-level fields first, then inspect `/api/product/show/{id}` for matching upc_code or exact name
-    for (const p of candidateProducts) {
+    // 1. Check in-memory catalogProducts (809 items) by UPC or exact Tag Title / Full Title!
+    for (const p of catalogProducts || []) {
       const sku = extractRicochetSku(p);
+      if (!sku) continue;
       const upc = extractRicochetUpc(p);
-      if (sku && upc === targetUpc) {
+      if (targetUpc && upc === targetUpc) {
+        recordVerifiedMdUpc(sku, targetUpc);
+        return sku;
+      }
+      if (matchesName(p.name || p.title)) {
+        // Confirm or attach UPC on this product via /api/product/show/{id}
+        if (window.axios && p.id && targetUpc) {
+          try {
+            const detailRes = await window.axios.get('/api/product/show/' + p.id);
+            const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
+            const targetItem = extractFirstRicochetItemVariant(fullProd);
+            const existingUpc = cleanStr(targetItem?.upc_code || fullProd?.upc_code || '').toUpperCase();
+            if (!existingUpc || existingUpc === targetUpc) {
+              if (!existingUpc && targetItem) {
+                targetItem.store = 1;
+                targetItem.upc_code = targetUpc;
+                await window.axios.put('/api/product/items', targetItem).catch(() => {});
+              }
+              recordVerifiedMdUpc(sku, targetUpc);
+              return sku;
+            }
+          } catch (e) {}
+        }
         recordVerifiedMdUpc(sku, targetUpc);
         return sku;
       }
     }
 
-    for (const p of candidateProducts.slice(0, 15)) {
+    if (!window.axios) return '';
+    const cid = consignorId || 475;
+
+    // 2. Fetch newest 35 products + search by UPC and Title in Ricochet
+    const candidateProducts = [];
+    const addCandidates = (arr) => {
+      for (const rp of arr || []) {
+        if (rp && rp.id && !candidateProducts.some((cp) => cp.id === rp.id)) {
+          candidateProducts.push(rp);
+        }
+      }
+    };
+
+    try {
+      const recentRes = await window.axios.get(
+        `/api/product?store=1&limit=35&offset=0&order_by=id&direction=desc&consignor_id=${cid}`
+      );
+      addCandidates(recentRes.data?.products || (Array.isArray(recentRes.data) ? recentRes.data : []));
+    } catch (e) {}
+
+    if (targetUpc) {
+      try {
+        const searchRes = await window.axios.get(
+          `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&search=${encodeURIComponent(targetUpc)}`
+        );
+        addCandidates(searchRes.data?.products || (Array.isArray(searchRes.data) ? searchRes.data : []));
+      } catch (e) {}
+    }
+
+    // 3. Check top-level fields first (including name match!)
+    for (const p of candidateProducts) {
+      const sku = extractRicochetSku(p);
+      const upc = extractRicochetUpc(p);
+      if (sku && ((targetUpc && upc === targetUpc) || matchesName(p.name || p.title))) {
+        if (targetUpc) recordVerifiedMdUpc(sku, targetUpc);
+        return sku;
+      }
+    }
+
+    // 4. Deep check `/api/product/show/{id}` using `extractFirstRicochetItemVariant` (handles Object-keyed `items`!)
+    for (const p of candidateProducts.slice(0, 20)) {
       if (!p || !p.id) continue;
       try {
         const detailRes = await window.axios.get('/api/product/show/' + p.id);
         const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
         if (!fullProd) continue;
-        const sku = extractRicochetSku(fullProd) || extractRicochetSku(p);
-        const allItems = Array.isArray(fullProd.items)
-          ? fullProd.items
-          : Object.values(fullProd.items || {}).flat();
+        const targetItem = extractFirstRicochetItemVariant(fullProd);
+        const sku =
+          extractRicochetSku(targetItem) ||
+          extractRicochetSku(fullProd) ||
+          extractRicochetSku(p);
         const itemUpc = cleanStr(
-          (allItems[0] && (allItems[0].upc_code || allItems[0].upc)) || fullProd.upc_code || ''
+          targetItem?.upc_code || targetItem?.upc || fullProd.upc_code || ''
         ).toUpperCase();
-        const prodName = cleanStr(fullProd.name || p.name || '').toLowerCase();
-        if (sku && (itemUpc === targetUpc || (prodName && prodName === targetName))) {
-          recordVerifiedMdUpc(sku, targetUpc);
+        if (sku && ((targetUpc && itemUpc === targetUpc) || matchesName(fullProd.name || p.name))) {
+          if (targetUpc) recordVerifiedMdUpc(sku, targetUpc);
           return sku;
         }
       } catch (e) {}
@@ -338,45 +404,58 @@
   function renderDropsView() {
     const view = document.getElementById('rc-tab-view-drops');
     if (!view) return;
+    view.style.overflowX = 'hidden';
     const badge = document.getElementById('rc-tab-drops-badge');
     const m = rcDropActiveManifest();
     if (badge) badge.textContent = String(dropManifests.reduce((n, x) => n + x.items.filter((i) => !i.bound).length, 0));
     const origin = new URL(RC_DROP_SYNC_ENDPOINTS[0]).origin;
     let html = '';
-    if (dropStatus.loading) html += '<div style="color:#94a3b8;font-size:11px;">⏳ Loading drops from Resale Command...</div>';
-    if (dropStatus.error) html += '<div style="padding:8px 10px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.5);color:#fecaca;font-size:11px;font-weight:700;">' + rcDropEsc(dropStatus.error) + '</div>';
-    if (!dropStatus.loading && !m) html += '<div style="color:#94a3b8;font-size:11px;">No open outbound drops for ' + rcDropEsc(activeLocationName) + '. Stage items into a manifest in Resale Command first.</div>';
+    if (dropStatus.loading) {
+      html += '<div style="padding:12px;border-radius:10px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:11.5px;display:flex;align-items:center;gap:8px;">⏳ Loading active outbound drops from Resale Command...</div>';
+    }
+    if (dropStatus.error) {
+      html += '<div style="padding:10px 12px;border-radius:10px;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.45);color:#fecaca;font-size:11.5px;font-weight:700;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;">' + rcDropEsc(dropStatus.error) + '</div>';
+    }
+    if (!dropStatus.loading && !m) {
+      html += '<div style="padding:14px;border-radius:10px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:11.5px;text-align:center;">No open outbound drops for ' + rcDropEsc(activeLocationName) + '. Stage items into a manifest in Resale Command first.</div>';
+    }
     if (m) {
-      html += '<div style="display:flex;gap:6px;align-items:center;">' +
-        '<select id="rc-drops-select" style="flex:1;background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:7px;padding:6px 8px;font-size:11.5px;font-weight:800;">' +
+      html += '<div style="display:flex;gap:6px;align-items:center;min-width:0;">' +
+        '<select id="rc-drops-select" style="flex:1;min-width:0;background:#1e293b;color:#f8fafc;border:1px solid #38bdf8;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:800;outline:none;">' +
         dropManifests.map((x) => '<option value="' + rcDropEsc(x.manifestId) + '"' + (x.manifestId === m.manifestId ? ' selected' : '') + '>📦 ' + rcDropEsc(x.name) + ' (' + x.items.length + ' items — ' + rcDropEsc(x.status) + ')</option>').join('') +
         '</select>' +
-        '<button id="rc-drops-refresh-btn" type="button" title="Refresh drops from Resale Command" style="background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:800;cursor:pointer;">🔄</button>' +
+        '<button id="rc-drops-refresh-btn" type="button" title="Refresh drops from Resale Command" style="background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0;">🔄</button>' +
         '</div>';
       const todo = m.items.filter((i) => !i.bound);
-      html += '<div style="background:#0f172a;border:1px solid rgba(56,189,248,0.4);border-radius:8px;padding:7px 9px;">' +
-        '<div style="font-size:11px;font-weight:800;color:#38bdf8;margin-bottom:4px;">📋 Pre-Flight Queue Preview (' + todo.length + ' to create — ' + (m.items.length - todo.length) + ' already bound)</div>' +
-        '<div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-family:monospace;font-size:10.5px;">' +
-        m.items.map((i) => '<div style="padding:5px 7px;border-radius:6px;background:#1e293b;border:1px solid #334155;display:flex;flex-direction:column;gap:2px;color:' + (i.bound ? '#34d399' : '#e2e8f0') + ';">' +
-          '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">' +
-            '<strong style="color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="Tag Title (<=38 chars)">🏷️ ' + rcDropEsc(i.tagTitle || i.title) + '</strong>' +
-            '<span style="color:#fbbf24;font-weight:800;">$' + Number(i.price || 0).toFixed(2) + '</span>' +
-            '<span style="color:#38bdf8;font-weight:800;">' + rcDropEsc(i.upc || 'NO UPC') + '</span>' +
-            '<span>' + (i.bound ? '✅ ' + rcDropEsc(i.locationSku) : '🕓 Staged') + '</span>' +
+      const boundCount = m.items.length - todo.length;
+      html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
+          '<span style="font-size:11.5px;font-weight:800;color:#f8fafc;">📋 Pre-Flight Queue Preview</span>' +
+          '<span style="font-size:10.5px;font-family:monospace;padding:2px 8px;border-radius:999px;background:rgba(56,189,248,0.16);color:#38bdf8;font-weight:800;">' + todo.length + ' Staged • ' + boundCount + ' Bound</span>' +
+        '</div>' +
+        '<div style="max-height:210px;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:6px;padding-right:2px;">' +
+        m.items.map((i) => '<div style="padding:8px 10px;border-radius:9px;background:#0f172a;border:1px solid ' + (i.bound ? 'rgba(16,185,129,0.45)' : '#334155') + ';display:flex;flex-direction:column;gap:4px;min-width:0;">' +
+          '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;min-width:0;">' +
+            '<strong style="color:#f8fafc;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;" title="Thermal Tag Title (<=38 chars)">🏷️ ' + rcDropEsc(i.tagTitle || i.title) + '</strong>' +
+            '<span style="color:#fbbf24;font-family:monospace;font-size:11.5px;font-weight:800;flex-shrink:0;">$' + Number(i.price || 0).toFixed(2) + '</span>' +
           '</div>' +
-          '<div style="color:#94a3b8;font-size:9.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="POS Description (Full Descriptive Title)">📝 POS Desc: ' + rcDropEsc(i.posDescription || i.title) + (i.brand ? ' • Brand: ' + rcDropEsc(i.brand) : '') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;font-family:monospace;font-size:10px;min-width:0;">' +
+            '<span style="color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;" title="' + rcDropEsc(i.posDescription || i.title) + '">' + rcDropEsc(i.posDescription || i.title) + '</span>' +
+            '<span style="padding:1px 6px;border-radius:5px;background:rgba(56,189,248,0.14);color:#38bdf8;font-weight:800;flex-shrink:0;">' + rcDropEsc(i.upc || 'NO UPC') + '</span>' +
+            '<span style="padding:1px 6px;border-radius:5px;background:' + (i.bound ? 'rgba(16,185,129,0.18);color:#34d399;' : 'rgba(148,163,184,0.15);color:#cbd5e1;') + 'font-weight:800;flex-shrink:0;">' + (i.bound ? '✅ ' + rcDropEsc(i.locationSku) : '🕓 Staged') + '</span>' +
+          '</div>' +
         '</div>').join('') +
         '</div></div>';
       const blocked = dropStatus.deploying || todo.length === 0 || todo.some((i) => !i.upc);
-      html += '<button id="rc-drops-deploy-btn"' + (blocked ? ' disabled' : '') + ' style="background:' + (blocked ? '#334155' : '#10b981') + ';color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-size:12px;cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">🚀 Deploy Drop to Ricochet (' + todo.length + ')</button>';
+      html += '<button id="rc-drops-deploy-btn"' + (blocked ? ' disabled' : '') + ' style="background:' + (blocked ? '#334155' : 'linear-gradient(135deg,#10b981,#059669)') + ';color:' + (blocked ? '#94a3b8' : '#022c22') + ';border:none;border-radius:10px;padding:11px;font-weight:900;font-size:12.5px;cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';box-shadow:' + (blocked ? 'none' : '0 4px 14px rgba(16,185,129,0.3)') + ';">' + (dropStatus.deploying ? '⏳ Deploying to Ricochet (' + dropStatus.done + '/' + dropStatus.total + ')...' : (todo.length === 0 ? '✅ All ' + m.items.length + ' Items Bound in Ricochet' : '🚀 Deploy Drop to Ricochet (' + todo.length + ')')) + '</button>';
       if (todo.some((i) => !i.upc)) html += '<div style="font-size:10.5px;color:#fbbf24;">⚠️ Some items have no HUCK-/PDXGL-/BB- barcode yet — assign barcodes in Resale Command first.</div>';
       if (dropStatus.deploying || dropStatus.total) {
         const pct = dropStatus.total ? Math.round((dropStatus.done / dropStatus.total) * 100) : 0;
-        html += '<div style="font-size:11px;display:flex;justify-content:space-between;"><span>Deploying ' + dropStatus.done + '/' + dropStatus.total + '</span><span>' + pct + '%</span></div>' +
-          '<div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);"></div></div>';
+        html += '<div style="font-size:11px;display:flex;justify-content:space-between;color:#cbd5e1;font-weight:700;"><span>Progress: ' + dropStatus.done + ' of ' + dropStatus.total + ' Bound</span><span>' + pct + '%</span></div>' +
+          '<div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#10b981,#38bdf8);transition:width 0.25s ease;"></div></div>';
       }
       if (dropStatus.finished) {
-        html += '<div style="padding:8px 10px;border-radius:8px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.5);color:#a7f3d0;font-size:11px;font-weight:700;">✅ Drop synced! <a href="' + origin + '/warehouse/sync/' + encodeURIComponent(activeLocationCode) + '" target="_blank" style="color:#38bdf8;">Open Resale Command ➔</a></div>';
+        html += '<div style="padding:10px 12px;border-radius:10px;background:rgba(16,185,129,0.16);border:1px solid rgba(16,185,129,0.5);color:#a7f3d0;font-size:11.5px;font-weight:800;display:flex;justify-content:space-between;align-items:center;"><span>🎉 All ' + m.items.length + ' items deployed &amp; bound!</span><a href="' + origin + '/warehouse/sync/' + encodeURIComponent(activeLocationCode) + '" target="_blank" style="color:#38bdf8;text-decoration:none;">Open RC ➔</a></div>';
       }
     }
     view.innerHTML = html;
@@ -412,14 +491,15 @@
     try {
       for (let idx = 0; idx < todo.length; idx++) {
         const item = todo[idx];
-        // Duplicate guard: reuse an existing Ricochet product that already carries this barcode
-        const existing = (catalogProducts || []).find((p) => extractRicochetUpc(p) === String(item.upc).toUpperCase());
-        let sku = existing ? extractRicochetSku(existing) : '';
-        if (!sku) sku = rcDropSkuFromResponse(await rcCreateRicochetProduct(item));
+        // 1. Duplicate guard: check if this item already exists in Ricochet by UPC or exact Tag Title!
+        let sku = await findExistingRicochetSkuForDropItem(item);
+        // 2. Otherwise create the product in Ricochet and extract its new 0EJ... SKU
         if (!sku) {
-          throw new Error(idx === 0
-            ? 'Ricochet did not return a SKU for the first item — stopped before creating more (payload shape may need adjusting).'
-            : 'Ricochet returned no SKU for "' + item.title + '".');
+          const created = await rcCreateRicochetProduct(item);
+          sku = rcDropSkuFromResponse(created) || (await findExistingRicochetSkuForDropItem(item));
+        }
+        if (!sku) {
+          throw new Error('Ricochet created "' + (item.tagTitle || item.title) + '" but did not return its 0EJ SKU yet — click 🔄 and Deploy again to bind it.');
         }
         const res = await rcDropApi('POST', '', { mode: 'bind_skus', manifestId: m.manifestId, location: activeLocationCode, mappings: [{ itemId: item.itemId, locationSku: sku }] });
         if (res.rejected && res.rejected.length) throw new Error(res.rejected[0].reason);
@@ -429,6 +509,7 @@
         renderDropsView();
       }
       dropStatus.finished = true;
+      await loadConsignorCatalog();
     } catch (e) {
       dropStatus.error = '❌ ' + (e && e.message ? e.message : e);
     }
