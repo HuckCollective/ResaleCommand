@@ -156,12 +156,20 @@
               }}
             </span>
             <a
-              href="/coop?section=governance"
+              href="/coop/governance?tab=rules"
               class="badge badge-sm badge-secondary text-secondary-content font-bold gap-1 hover:brightness-110 whitespace-nowrap shrink-0"
-              title="Open Co-op Democratic Governance to vote on the Surplus Profit-Sharing Policy"
+              title="Open Co-op Governance & Policy Sliders to configure Gate 3 and Gate 4B rules"
             >
               <Icon icon="solar:user-hand-up-bold" class="w-3 h-3" />
-              <span>Up for Co-op Vote ➔</span>
+              <span>Configure Sliders ({{ policyConfig.reserveSharePct }}/{{ policyConfig.salesPatronagePct }}/{{ policyConfig.laborPatronagePct }}) ➔</span>
+            </a>
+            <a
+              href="/coop/labor"
+              class="badge badge-sm badge-outline border-accent/40 text-accent font-mono font-bold gap-1 hover:bg-accent/10 whitespace-nowrap shrink-0"
+              title="Log or review verified Sweat-Equity Labor hours"
+            >
+              <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
+              <span>Labor: {{ periodLaborHours.HUCK + periodLaborHours.PDXGL }}h logged</span>
             </a>
           </div>
           <h3 class="text-base sm:text-lg font-black text-base-content">
@@ -266,8 +274,9 @@
               <th class="text-right">Gross Sales</th>
               <th class="text-right">15% Venue Fee</th>
               <th class="text-right">100% Cost Recoup</th>
-              <th class="text-right">Base Profit (70%)</th>
+              <th class="text-right">Base Profit ({{ policyConfig.curatorSharePct }}%)</th>
               <th class="text-right">Ops / Rent Share</th>
+              <th class="text-right">Labor Logged</th>
               <th class="text-right text-success">Bonus Over Ops</th>
               <th class="text-right font-black">Final Payout Check</th>
             </tr>
@@ -285,7 +294,10 @@
               <td class="text-right font-mono text-success">{{ p.isConsignor ? '—' : `+$${p.totalCostBasis.toFixed(2)}` }}</td>
               <td class="text-right font-mono text-primary">{{ p.isConsignor ? '—' : `+$${p.totalCuratorProfit.toFixed(2)}` }}</td>
               <td class="text-right font-mono text-warning">
-                {{ p.isConsignor ? `-$${(p.rentDeduction || 0).toFixed(2)} Rent` : `$${p.totalCommonsTake.toFixed(2)} (30%)` }}
+                {{ p.isConsignor ? `-$${(p.rentDeduction || 0).toFixed(2)} Rent` : `$${p.totalCommonsTake.toFixed(2)} (${policyConfig.commonsSharePct}%)` }}
+              </td>
+              <td class="text-right font-mono text-secondary">
+                {{ p.isConsignor ? '—' : `${(p.laborHoursLogged || 0).toFixed(1)}h` }}
               </td>
               <td class="text-right font-mono font-bold" :class="p.bonusSurplusDividend > 0 ? 'text-success' : 'opacity-50'">
                 {{ p.isConsignor ? '—' : `+$${(p.bonusSurplusDividend || 0).toFixed(2)}` }}
@@ -634,8 +646,13 @@ import { coopExpensesApi, type CoopExpenseItem } from '../../lib/coopExpenses';
 import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
+  getLaborHoursByPartnerForMonth,
+  DEFAULT_COOP_POLICY_CONFIG,
+  DEFAULT_COOP_LABOR_ENTRIES,
   type SurplusPolicyMode,
   type SurplusSplitBasis,
+  type CoopPolicyConfig,
+  type CoopLaborEntry,
 } from '../../lib/coopGovernance';
 import { cleanSkuDisplay, pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
 
@@ -681,6 +698,12 @@ const selectedLocation = ref<'memory_den' | 'all'>('memory_den');
 
 const surplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');
 const surplusSplitBasis = ref<SurplusSplitBasis>('volume');
+const policyConfig = ref<CoopPolicyConfig>({ ...DEFAULT_COOP_POLICY_CONFIG });
+const laborEntries = ref<CoopLaborEntry[]>([...DEFAULT_COOP_LABOR_ENTRIES]);
+
+const periodLaborHours = computed(() =>
+  getLaborHoursByPartnerForMonth(laborEntries.value, selectedPeriod.value)
+);
 
 const setSurplusPolicyMode = async (mode: SurplusPolicyMode) => {
   surplusPolicyMode.value = mode;
@@ -724,6 +747,12 @@ onMounted(async () => {
   const { state } = await loadCoopGovernanceState([], currentTeam.value?.$id || 'huck_collective');
   surplusPolicyMode.value = state.surplusPolicyMode;
   surplusSplitBasis.value = state.surplusSplitBasis;
+  if (state.policyConfig) {
+    policyConfig.value = state.policyConfig;
+  }
+  if (Array.isArray(state.laborEntries) && state.laborEntries.length > 0) {
+    laborEntries.value = state.laborEntries;
+  }
 });
 
 watch(currentTeam, (n) => {
@@ -982,16 +1011,18 @@ const partnerSettlements = computed(() => {
     const venueFee = Math.max(0, Number(sale.fees !== undefined ? sale.fees : (grossPrice - netStoreDeposit)));
     const costBasis = (isPureConsignor || isCommonsClaimed) ? 0 : Number(sale.cost || 0);
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
+    const curatorRatio = (policyConfig.value.curatorSharePct || 70) / 100;
+    const commonsRatio = (policyConfig.value.commonsSharePct || 30) / 100;
     const curatorTake = isCommonsClaimed
       ? 0
       : isPureConsignor
         ? netStoreDeposit
-        : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
+        : Number((costBasis + (netSurplus * curatorRatio)).toFixed(2));
     const commonsTake = isCommonsClaimed
       ? netSurplus
       : isPureConsignor
         ? 0
-        : Number((netSurplus * 0.30).toFixed(2));
+        : Number((netSurplus * commonsRatio).toFixed(2));
 
     groups[prefix].items.push({
       date: sale.date,
@@ -1009,7 +1040,7 @@ const partnerSettlements = computed(() => {
     groups[prefix].totalVenueFee = Number((groups[prefix].totalVenueFee + venueFee).toFixed(2));
     groups[prefix].totalCostBasis = Number((groups[prefix].totalCostBasis + costBasis).toFixed(2));
     groups[prefix].totalNetSurplus = Number((groups[prefix].totalNetSurplus + netSurplus).toFixed(2));
-    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (isCommonsClaimed ? 0 : isPureConsignor ? netStoreDeposit : (netSurplus * 0.70))).toFixed(2));
+    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (isCommonsClaimed ? 0 : isPureConsignor ? netStoreDeposit : (netSurplus * curatorRatio))).toFixed(2));
     groups[prefix].totalCommonsTake = Number((groups[prefix].totalCommonsTake + commonsTake).toFixed(2));
     groups[prefix].grossCuratorShare = Number((groups[prefix].totalCostBasis + groups[prefix].totalCuratorProfit).toFixed(2));
   }
@@ -1017,12 +1048,13 @@ const partnerSettlements = computed(() => {
   const allGroups = Object.values(groups);
   const totalGrossAll = Number(allGroups.reduce((sum, g) => sum + g.totalGross, 0).toFixed(2));
 
-  // First pass: compute consignor rent offsets and base payouts
+  // First pass: compute consignor rent offsets, labor hours, and base payouts
   for (const grp of allGroups) {
     const grossRatio = totalGrossAll > 0 ? (grp.totalGross / totalGrossAll) : 0;
     const rentShare = Number((grossRatio * FIXED_BOOTH_RENT).toFixed(2));
     grp.rentDeduction = rentShare;
     grp.bonusSurplusDividend = 0;
+    grp.laborHoursLogged = grp.prefix === 'PDXGL-' ? periodLaborHours.value.PDXGL : grp.prefix === 'HUCK-' ? periodLaborHours.value.HUCK : 0;
 
     if (grp.isCommonsPool) {
       grp.totalCuratorProfit = 0;
@@ -1033,14 +1065,14 @@ const partnerSettlements = computed(() => {
       grp.totalCuratorProfit = Math.max(0, Number((grp.totalGross - grp.totalVenueFee - rentShare).toFixed(2)));
       grp.totalPayoutCheck = grp.totalCuratorProfit;
     } else {
-      // Co-op Member: Rent is covered by 30% Commons Pool
+      // Co-op Member: Rent is covered by Commons Pool
       const reimbursements = memberReimbursements.value[grp.prefix] || 0;
       grp.reimbursements = reimbursements;
       grp.totalPayoutCheck = Number((grp.grossCuratorShare + reimbursements).toFixed(2));
     }
   }
 
-  // Second pass: Gate 4 Partner Surplus Sharing when 30% Commons Pool exceeds Operating Costs
+  // Second pass: Gate 4B WSDE Partner Surplus Sharing when Commons Pool exceeds Operating Costs
   const totalCommonsPool = Number(allGroups.reduce((acc, g) => acc + g.totalCommonsTake, 0).toFixed(2));
   const consignorRentOffsets = Number(
     allGroups.filter(g => g.isConsignor).reduce((acc, g) => acc + (g.rentDeduction || 0), 0).toFixed(2)
@@ -1051,23 +1083,42 @@ const partnerSettlements = computed(() => {
 
   const coopPartners = allGroups.filter(g => !g.isConsignor && !g.isCommonsPool);
   if (commonsNetBalance > 0 && coopPartners.length > 0 && !isMonthInProgress.value) {
-    const distributableRatio =
-      surplusPolicyMode.value === 'patronage_90_10'
-        ? 0.9
+    const reserveSliceRatio =
+      surplusPolicyMode.value === 'reserve_100'
+        ? 1.0
         : surplusPolicyMode.value === 'cap_100'
-          ? 1.0
-          : 0;
-    const bonusPool = Number((commonsNetBalance * distributableRatio).toFixed(2));
+          ? 0.0
+          : (policyConfig.value.reserveSharePct ?? 10) / 100;
+
+    const rawReserve = Number((commonsNetBalance * reserveSliceRatio).toFixed(2));
+    const capRoom = Math.max(0, (policyConfig.value.reserveCapTarget || 500) - (policyConfig.value.currentReserveBalance || 0));
+    const effectiveReserve = surplusPolicyMode.value === 'reserve_100' ? commonsNetBalance : Math.min(rawReserve, capRoom);
+    const distributablePool = Math.max(0, Number((commonsNetBalance - effectiveReserve).toFixed(2)));
+
+    const salesWeight = policyConfig.value.salesPatronagePct ?? 60;
+    const laborWeight = policyConfig.value.laborPatronagePct ?? 30;
+    const totalWeight = salesWeight + laborWeight;
+    const salesPool = totalWeight > 0 ? Number((distributablePool * (salesWeight / totalWeight)).toFixed(2)) : distributablePool;
+    const laborPool = Math.max(0, Number((distributablePool - salesPool).toFixed(2)));
+
     const totalCoopNetSurplus = Number(coopPartners.reduce((acc, g) => acc + g.totalNetSurplus, 0).toFixed(2));
+    const totalCoopLaborHours = Number(coopPartners.reduce((acc, g) => acc + (g.laborHoursLogged || 0), 0).toFixed(2));
 
     for (const grp of coopPartners) {
-      const shareRatio =
+      const salesShareRatio =
         surplusSplitBasis.value === 'equal'
           ? 1 / coopPartners.length
           : totalCoopNetSurplus > 0
             ? grp.totalNetSurplus / totalCoopNetSurplus
             : 1 / coopPartners.length;
-      const bonus = Number((bonusPool * shareRatio).toFixed(2));
+      const laborShareRatio =
+        totalCoopLaborHours > 0
+          ? (grp.laborHoursLogged || 0) / totalCoopLaborHours
+          : salesShareRatio;
+
+      const salesBonus = Number((salesPool * salesShareRatio).toFixed(2));
+      const laborBonus = Number((laborPool * laborShareRatio).toFixed(2));
+      const bonus = Number((salesBonus + laborBonus).toFixed(2));
       grp.bonusSurplusDividend = bonus;
       grp.totalPayoutCheck = Number((grp.grossCuratorShare + (grp.reimbursements || 0) + bonus).toFixed(2));
     }

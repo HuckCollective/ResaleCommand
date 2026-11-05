@@ -138,12 +138,9 @@
 
         <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <select v-model="activeVotingMember" @change="initializeActiveSignals" class="select select-bordered select-sm rounded-xl font-bold text-xs h-9 min-h-9 flex-1 sm:w-56">
-            <option value="Mike (Core)">Mike (Core - HUCK)</option>
-            <option value="Tyler (Core)">Tyler (Core - HUCK)</option>
-            <option value="PDX Partner">PDX Partner (PDXGL)</option>
-            <option value="Member Jesse">Member Jesse (HUCK)</option>
-            <option value="Member Alex">Member Alex (Associate)</option>
-            <option value="Guest Curator">Guest Curator (Consignor)</option>
+            <option v-for="m in policyConfig.members" :key="m.name" :value="m.name">
+              {{ m.name }} — [{{ m.partner }}-]
+            </option>
           </select>
           <span class="badge badge-sm badge-success font-bold shrink-0">Eligible Voter</span>
           <span
@@ -158,8 +155,209 @@
       </div>
     </div>
 
-    <!-- Proposals List -->
-    <div class="space-y-4">
+    <!-- 3-Tab Governance Workbench Switcher -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-base-200/80 border border-base-300 rounded-2xl shadow-xs">
+      <button
+        type="button"
+        @click="setGovTab('proposals')"
+        class="btn btn-sm h-10 rounded-xl font-bold gap-2 transition-all"
+        :class="activeGovTab === 'proposals' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
+      >
+        <Icon icon="solar:chat-round-check-bold-duotone" class="w-4 h-4 shrink-0" />
+        <span>1. Active Proposals ({{ proposals.length }})</span>
+      </button>
+      <button
+        type="button"
+        @click="setGovTab('rules')"
+        class="btn btn-sm h-10 rounded-xl font-bold gap-2 transition-all"
+        :class="activeGovTab === 'rules' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
+      >
+        <Icon icon="solar:settings-minimalistic-bold-duotone" class="w-4 h-4 shrink-0" />
+        <span>2. Configurable Rules &amp; Sliders ({{ policyConfig.curatorSharePct }}/{{ policyConfig.commonsSharePct }})</span>
+      </button>
+      <button
+        type="button"
+        @click="setGovTab('roster')"
+        class="btn btn-sm h-10 rounded-xl font-bold gap-2 transition-all"
+        :class="activeGovTab === 'roster' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
+      >
+        <Icon icon="solar:users-group-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
+        <span>3. Partner &amp; Voter Roster ({{ policyConfig.members.length }})</span>
+      </button>
+    </div>
+
+    <!-- TAB 2: CONFIGURABLE CO-OP RULES & 3-WAY WSDE SLIDERS -->
+    <div v-if="activeGovTab === 'rules'" class="card bg-base-100 border border-primary/30 shadow-md rounded-3xl p-5 sm:p-7 space-y-6">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-base-200 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-primary font-bold text-xs">5 Democratic Dials</span>
+            <span class="badge badge-outline font-mono text-xs">Appwrite Cloud Policy Engine</span>
+          </div>
+          <h3 class="text-xl sm:text-2xl font-black text-base-content mt-1">
+            Configurable 4-Gate WSDE Waterfall &amp; Excess Surplus Sliders
+          </h3>
+          <p class="text-xs text-base-content/70 mt-0.5">
+            Adjusting and enacting these sliders updates <a href="/coop/settlements" class="link link-primary font-bold">/coop/settlements</a>, <a href="/sales" class="link link-primary font-bold">/sales</a>, and <a href="/coop" class="link link-primary font-bold">/coop</a> in real time.
+          </p>
+        </div>
+        <button
+          type="button"
+          @click="savePolicyConfigToCloud"
+          :disabled="isSavingCloud"
+          class="btn btn-primary btn-sm h-10 px-5 rounded-xl font-black gap-2 shadow-sm shrink-0"
+        >
+          <Icon icon="solar:cloud-upload-bold" class="w-4 h-4" />
+          <span>{{ isSavingCloud ? 'Saving...' : 'Enact & Sync Policy to Cloud' }}</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Dial 1: Gate 3 Item Margin Split -->
+        <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs font-extrabold uppercase tracking-wider text-primary">Dial 1 • Gate 3 Item Margin Split</div>
+              <div class="text-sm font-black text-base-content">Curator Share vs. Shared Commons Pool</div>
+            </div>
+            <span class="badge badge-primary font-mono font-black text-sm py-3 px-3">
+              {{ policyConfig.curatorSharePct }}% / {{ policyConfig.commonsSharePct }}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min="50"
+            max="90"
+            step="5"
+            v-model.number="policyConfig.curatorSharePct"
+            @input="onCuratorShareChange"
+            class="range range-primary range-sm"
+          />
+          <div class="flex justify-between text-xs font-mono text-base-content/70">
+            <span>Curator Profit: <strong>{{ policyConfig.curatorSharePct }}%</strong></span>
+            <span>Commons Pool: <strong>{{ policyConfig.commonsSharePct }}%</strong></span>
+          </div>
+        </div>
+
+        <!-- Dial 2: Gate 4B 3-Way Excess Surplus Split -->
+        <div class="p-5 rounded-2xl bg-base-200/50 border border-base-300 space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Dial 2 • Gate 4B Excess Surplus (Over Operating Costs)</div>
+              <div class="text-sm font-black text-base-content">Reserve % + Sales Patronage % + Sweat-Equity Labor %</div>
+            </div>
+            <div class="flex gap-1">
+              <button type="button" @click="applyExcessPreset(10, 60, 30)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.laborPatronagePct === 30 ? 'btn-secondary' : 'btn-ghost border border-base-300'">10/60/30 WSDE</button>
+              <button type="button" @click="applyExcessPreset(10, 90, 0)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.salesPatronagePct === 90 ? 'btn-primary' : 'btn-ghost border border-base-300'">10/90/0 Sales</button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs font-bold mb-1">
+                <span>🛡️ Rainy-Day Reserve Slice</span>
+                <span class="font-mono text-info">{{ policyConfig.reserveSharePct }}%</span>
+              </div>
+              <input type="range" min="0" max="50" step="5" v-model.number="policyConfig.reserveSharePct" @input="rebalanceExcessSliders('reserve')" class="range range-xs range-info" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs font-bold mb-1">
+                <span>📊 Partner Sales Patronage Dividend</span>
+                <span class="font-mono text-success">{{ policyConfig.salesPatronagePct }}%</span>
+              </div>
+              <input type="range" min="0" max="100" step="5" v-model.number="policyConfig.salesPatronagePct" @input="rebalanceExcessSliders('sales')" class="range range-xs range-success" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs font-bold mb-1">
+                <span>⏱️ Sweat-Equity Enabling Labor Dividend (<a href="/coop/labor" class="link link-secondary">logged hours</a>)</span>
+                <span class="font-mono text-secondary">{{ policyConfig.laborPatronagePct }}%</span>
+              </div>
+              <input type="range" min="0" max="100" step="5" v-model.number="policyConfig.laborPatronagePct" @input="rebalanceExcessSliders('labor')" class="range range-xs range-secondary" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dials 3, 4, 5: Reserve Cap, Consensus Quorum, Orphan Ticket Window -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 3 • Rainy-Day Reserve Cap ($)</label>
+          <input type="number" min="0" step="50" v-model.number="policyConfig.reserveCapTarget" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <p class="text-[11px] text-base-content/60">Once Reserve reaches ${{ policyConfig.reserveCapTarget }}, the {{ policyConfig.reserveSharePct }}% slice overflows to Partner Dividends.</p>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 4 • Consensus Quorum (Agree Votes)</label>
+          <input type="number" min="1" max="10" step="1" v-model.number="policyConfig.minAgreeVotes" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <p class="text-[11px] text-base-content/60">Minimum Agree signals (with 0 Blocks) required to pass a proposal.</p>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 5 • Orphan Ticket Claim Window (Days)</label>
+          <input type="number" min="7" max="90" step="1" v-model.number="policyConfig.orphanClaimWindowDays" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <p class="text-[11px] text-base-content/60">Days before an unlinked register ticket can be swept 100% to Commons Pool.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: PARTNER & VOTER ROSTER REGISTRY -->
+    <div v-if="activeGovTab === 'roster'" class="card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 sm:p-7 space-y-5">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="text-xl font-black text-base-content">Co-op Partner &amp; Voter Roster</h3>
+          <p class="text-xs text-base-content/70">Manage eligible Loomio voters and Sweat-Equity Labor contributors across HUCK-, PDXGL-, and BB-.</p>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <input v-model="newRosterMember.name" type="text" placeholder="Member Name (e.g. Alex)" class="input input-bordered input-sm rounded-xl text-xs" />
+          <select v-model="newRosterMember.partner" class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs">
+            <option value="HUCK">HUCK-</option>
+            <option value="PDXGL">PDXGL-</option>
+            <option value="BB">BB-</option>
+          </select>
+          <button type="button" @click="addRosterMember" class="btn btn-sm btn-primary rounded-xl font-bold">+ Add Member</button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto border border-base-200 rounded-2xl">
+        <table class="table table-sm">
+          <thead>
+            <tr class="bg-base-200/60 text-xs font-extrabold uppercase text-base-content/70">
+              <th>Member Name</th>
+              <th>Partner Prefix</th>
+              <th>Role</th>
+              <th>Voting Rights</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(member, idx) in policyConfig.members" :key="member.name" class="hover:bg-base-200/40">
+              <td class="font-bold text-xs">{{ member.name }}</td>
+              <td>
+                <span class="badge badge-xs font-mono font-bold" :class="member.partner === 'PDXGL' ? 'badge-accent' : member.partner === 'BB' ? 'badge-warning' : 'badge-primary'">
+                  {{ member.partner }}-
+                </span>
+              </td>
+              <td class="text-xs">{{ member.role }}</td>
+              <td>
+                <span class="badge badge-xs font-bold" :class="member.canVote ? 'badge-success' : 'badge-ghost'">
+                  {{ member.canVote ? '1 Member = 1 Vote' : 'Observer' }}
+                </span>
+              </td>
+              <td class="text-right">
+                <button v-if="policyConfig.members.length > 1" type="button" @click="removeRosterMember(idx)" class="btn btn-ghost btn-xs text-error">
+                  Remove
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Proposals List (TAB 1) -->
+    <div v-show="activeGovTab === 'proposals'" class="space-y-4">
       <div 
         v-for="proposal in proposals" 
         :key="proposal.id"
@@ -585,19 +783,118 @@ import { useAuth } from '../../composables/useAuth';
 import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
+  DEFAULT_COOP_POLICY_CONFIG,
   type LoomioSignal,
   type ProposalVote,
   type CoopProposal,
   type SurplusPolicyMode,
+  type CoopPolicyConfig,
 } from '../../lib/coopGovernance';
 
 const { user, currentTeam } = useAuth();
 
-const activeVotingMember = ref('Mike (Core)');
+const activeGovTab = ref<'proposals' | 'rules' | 'roster'>('proposals');
+const activeVotingMember = ref(DEFAULT_COOP_POLICY_CONFIG.members[0]?.name || 'Mike (HUCK)');
 const isNewProposalModalOpen = ref(false);
 const isCloudSynced = ref(false);
 const isSavingCloud = ref(false);
 const activeSurplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');
+const policyConfig = ref<CoopPolicyConfig>({
+  ...DEFAULT_COOP_POLICY_CONFIG,
+  members: [...DEFAULT_COOP_POLICY_CONFIG.members],
+});
+
+const newRosterMember = ref<{
+  name: string;
+  partner: 'HUCK' | 'PDXGL' | 'BB';
+}>({
+  name: '',
+  partner: 'HUCK',
+});
+
+const setGovTab = (tab: 'proposals' | 'rules' | 'roster') => {
+  activeGovTab.value = tab;
+  if (typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    if (tab === 'proposals') {
+      url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', tab);
+    }
+    window.history.replaceState({}, '', url.toString());
+  }
+};
+
+const onCuratorShareChange = () => {
+  policyConfig.value.commonsSharePct = Math.max(10, 100 - policyConfig.value.curatorSharePct);
+};
+
+const rebalanceExcessSliders = (changed: 'reserve' | 'sales' | 'labor') => {
+  const r = Math.min(100, Math.max(0, Number(policyConfig.value.reserveSharePct) || 0));
+  const s = Math.min(100, Math.max(0, Number(policyConfig.value.salesPatronagePct) || 0));
+  const l = Math.min(100, Math.max(0, Number(policyConfig.value.laborPatronagePct) || 0));
+
+  if (changed === 'reserve') {
+    const remaining = Math.max(0, 100 - r);
+    const currentSL = s + l;
+    if (currentSL > 0) {
+      policyConfig.value.salesPatronagePct = Math.round((s / currentSL) * remaining);
+      policyConfig.value.laborPatronagePct = remaining - policyConfig.value.salesPatronagePct;
+    } else {
+      policyConfig.value.salesPatronagePct = remaining;
+      policyConfig.value.laborPatronagePct = 0;
+    }
+  } else if (changed === 'sales') {
+    const maxSales = Math.max(0, 100 - r);
+    policyConfig.value.salesPatronagePct = Math.min(s, maxSales);
+    policyConfig.value.laborPatronagePct = Math.max(0, 100 - r - policyConfig.value.salesPatronagePct);
+  } else {
+    const maxLabor = Math.max(0, 100 - r);
+    policyConfig.value.laborPatronagePct = Math.min(l, maxLabor);
+    policyConfig.value.salesPatronagePct = Math.max(0, 100 - r - policyConfig.value.laborPatronagePct);
+  }
+};
+
+const applyExcessPreset = (reserve: number, sales: number, labor: number) => {
+  policyConfig.value.reserveSharePct = reserve;
+  policyConfig.value.salesPatronagePct = sales;
+  policyConfig.value.laborPatronagePct = labor;
+};
+
+const savePolicyConfigToCloud = async () => {
+  await saveProposals();
+  addToast({
+    type: 'success',
+    message: `Enacted Policy: ${policyConfig.value.curatorSharePct}/${policyConfig.value.commonsSharePct} Gate 3 • ${policyConfig.value.reserveSharePct}% Res / ${policyConfig.value.salesPatronagePct}% Sales / ${policyConfig.value.laborPatronagePct}% Labor!`,
+  });
+};
+
+const addRosterMember = async () => {
+  const rawName = newRosterMember.value.name.trim();
+  if (!rawName) {
+    addToast({ type: 'warning', message: 'Enter a member name first.' });
+    return;
+  }
+  const partner = newRosterMember.value.partner;
+  const formattedName = rawName.includes('(') ? rawName : `${rawName} (${partner})`;
+  policyConfig.value.members.push({
+    name: formattedName,
+    partner,
+    role: partner === 'BB' ? 'Consignor' : partner === 'PDXGL' ? 'Partner Curator' : 'Co-op Member',
+    canVote: partner !== 'BB',
+  });
+  newRosterMember.value.name = '';
+  await saveProposals();
+  addToast({ type: 'success', message: `Added ${formattedName} to Co-op Roster!` });
+};
+
+const removeRosterMember = async (idx: number) => {
+  const removed = policyConfig.value.members.splice(idx, 1);
+  await saveProposals();
+  if (removed[0]) {
+    addToast({ type: 'info', message: `Removed ${removed[0].name} from Co-op Roster.` });
+  }
+};
 
 // Local state for active voting controls per proposal
 const selectedSignal = ref<Record<string, LoomioSignal>>({});
@@ -698,16 +995,32 @@ const newProposal = ref<{
 });
 
 onMounted(async () => {
-  if (user.value?.name) {
-    activeVotingMember.value = user.value.name;
-    newProposal.value.proposer = user.value.name;
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'rules' || tab === 'roster' || tab === 'proposals') {
+      activeGovTab.value = tab;
+    }
   }
 
   const tenantId = currentTeam.value?.$id || 'huck_collective';
   const { state, syncedFromCloud } = await loadCoopGovernanceState(defaultProposals, tenantId);
   proposals.value = state.proposals;
   activeSurplusPolicyMode.value = state.surplusPolicyMode;
+  if (state.policyConfig) {
+    policyConfig.value = state.policyConfig;
+  }
   isCloudSynced.value = syncedFromCloud;
+
+  if (user.value?.name) {
+    const matched = policyConfig.value.members.find((m) =>
+      m.name.toLowerCase().includes(user.value!.name.toLowerCase())
+    );
+    activeVotingMember.value = matched?.name || policyConfig.value.members[0]?.name || user.value.name;
+    newProposal.value.proposer = activeVotingMember.value;
+  } else if (policyConfig.value.members[0]) {
+    activeVotingMember.value = policyConfig.value.members[0].name;
+  }
 
   // Pre-fill active votes for current member
   initializeActiveSignals();
@@ -721,6 +1034,7 @@ const saveProposals = async () => {
       {
         proposals: proposals.value,
         surplusPolicyMode: activeSurplusPolicyMode.value,
+        policyConfig: policyConfig.value,
       },
       tenantId
     );
