@@ -3,10 +3,11 @@ import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { warehousesApi } from './warehouses';
 
-import { getDatabaseId, resolveCollectionId } from './appwriteEnv';
+import { getDatabaseId, getItemsCollectionId, resolveCollectionId } from './appwriteEnv';
 
 const DB_ID = getDatabaseId();
 const getSalesCol = () => resolveCollectionId('sales');
+const getItemsCol = () => getItemsCollectionId();
 
 export interface SaleData {
     soNumber: string;
@@ -122,6 +123,32 @@ export const salesApi = {
     },
 
     async deleteSale(id: string): Promise<void> {
+        // Guardrail ("Duplicate Sale Cleanup"): never leave items with a dangling `saleId` pointing at a deleted sale.
+        try {
+            const targetSale = await databases.getDocument(DB_ID, getSalesCol(), id).catch(() => null) as SaleDocument | null;
+            const linkedItemsRes = await databases.listDocuments(DB_ID, getItemsCol(), [
+                Query.equal('saleId', id),
+                Query.limit(100),
+            ]);
+            if (linkedItemsRes.documents.length > 0) {
+                let replacementSaleId: string | null = null;
+                if (targetSale?.soNumber) {
+                    const sibRes = await databases.listDocuments(DB_ID, getSalesCol(), [
+                        Query.equal('soNumber', targetSale.soNumber),
+                        Query.limit(10),
+                    ]);
+                    const surviving = sibRes.documents.find((d) => d.$id !== id && d.status !== 'Cancelled');
+                    if (surviving) replacementSaleId = surviving.$id;
+                }
+                for (const item of linkedItemsRes.documents) {
+                    await databases.updateDocument(DB_ID, getItemsCol(), item.$id, {
+                        saleId: replacementSaleId,
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('[salesApi.deleteSale] Non-fatal item.saleId cleanup warning:', err);
+        }
         await databases.deleteDocument(DB_ID, getSalesCol(), id);
     },
 

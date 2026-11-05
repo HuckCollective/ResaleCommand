@@ -725,6 +725,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     const tenantId = getTenantId?.() || '';
     // Multiset ledger of what Appwrite already holds: ticket # + gross + net -> number of existing sale docs
     const existingTicketLineCounts = new Map<string, number>();
+    const existingSalesByLineKey = new Map<string, any[]>();
     const committedRowKeys = new Set<string>();
     // Booth Bin detection (data-driven): an item that appears on more than one staged ticket line, or that Appwrite already holds with qty > 1
     const lineCountByItem = new Map<string, number>();
@@ -760,6 +761,8 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             if (/^\d{4,8}$/.test(ticket)) {
               const key = ticketLineKey(ticket, sale?.grossAmount ?? sale?.amount, sale?.netPayout);
               existingTicketLineCounts.set(key, (existingTicketLineCounts.get(key) || 0) + 1);
+              if (!existingSalesByLineKey.has(key)) existingSalesByLineKey.set(key, []);
+              existingSalesByLineKey.get(key)!.push(sale);
             }
           }
           if (docs.length < 100) break;
@@ -803,6 +806,40 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           const alreadyHeld = existingTicketLineCounts.get(lineKey) || 0;
           if (alreadyHeld > 0) {
             existingTicketLineCounts.set(lineKey, alreadyHeld - 1);
+            const matchedExistingSale = existingSalesByLineKey.get(lineKey)?.shift();
+            if (matchedExistingSale) {
+              const existingSo = String(matchedExistingSale.soNumber || '').trim();
+              const existingOrd = String(matchedExistingSale.orderId || '').trim();
+              const isExistingUnlinkedSo = !existingSo || /^(?:SO-|Ticket\s*#|RICO-)/i.test(existingSo);
+              const isIncomingRealSkuOrUpc = Boolean(soNumber && !/^(?:SO-|Ticket\s*#|RICO-)/i.test(soNumber));
+              const needsOrderTitleEnrich = !existingOrd.includes('•') && orderRef.includes('•');
+              const salePatch: Record<string, any> = {};
+              if (isExistingUnlinkedSo && isIncomingRealSkuOrUpc) salePatch.soNumber = soNumber;
+              if (needsOrderTitleEnrich) salePatch.orderId = orderRef;
+              if (Object.keys(salePatch).length > 0 || row.matchedItemId) {
+                const rowBinSkuForHeal = String(row.sku || row.ricoSku || '').trim().toUpperCase();
+                const isBinForHeal =
+                  Boolean(rowBinSkuForHeal && PREVERIFIED_MD_MULTI_QTY_BINS[rowBinSkuForHeal]) ||
+                  (lineCountByItem.get(String(row.matchedItemId || '')) || 0) > 1 ||
+                  multiQtyItemIds.has(String(row.matchedItemId || ''));
+                pendingWrites.push(
+                  (async () => {
+                    try {
+                      if (Object.keys(salePatch).length > 0) {
+                        await databases.updateDocument(DATABASE_ID, COLLECTION_SALES, matchedExistingSale.$id, salePatch);
+                      }
+                      if (row.matchedItemId && !isBinForHeal) {
+                        await databases.updateDocument(DATABASE_ID, ITEMS_COLLECTION_ID, row.matchedItemId, {
+                          saleId: matchedExistingSale.$id,
+                        });
+                      }
+                    } catch {
+                      // Self-heal of existing sale metadata is best-effort
+                    }
+                  })()
+                );
+              }
+            }
             skippedDuplicateTickets++;
             skippedTotal++;
             committedRowKeys.add(rowKeyOf(row));
