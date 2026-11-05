@@ -631,6 +631,7 @@
         :is-open="isLinkTicketModalOpen"
         :sale="activeSaleForLinking"
         :inventory-items="inventoryItems"
+        :live-sale-ids="sales.map((s) => s.$id)"
         :tenant-id="currentTeam?.$id"
         @close="isLinkTicketModalOpen = false"
         @updated="handleSaleLinkedOrReassigned"

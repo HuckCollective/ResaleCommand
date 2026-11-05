@@ -899,7 +899,16 @@ export function buildSaleOrderReference(row: RicochetSyncSaleLine, locCode: stri
   const formattedTicket = ticket ? (occ > 1 ? `Ticket #${ticket} #${occ}` : `Ticket #${ticket}`) : '';
   const cleanSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
   const cleanUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
-  const orderRef = formattedTicket || cleanSku || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
+  // Keep the human-readable title + booth SKU after the ticket (`Ticket #N • Title - 0EJXXX`) so a sale never degrades to a bare
+  // `Ticket #N` row when its item link is lost. `canonicalTicketNumber()` still extracts N, so ticket-line dedupe is unchanged.
+  const cleanTitle = String(row.matchedItemTitle || row.title || '')
+    .replace(/\s*-\s*0EJ[0-9A-Z]+\s*$/i, '')
+    .replace(/•/g, '-')
+    .trim()
+    .slice(0, 60)
+    .trim();
+  const ticketWithTitle = formattedTicket && cleanTitle ? `${formattedTicket} • ${cleanTitle}${cleanSku ? ` - ${cleanSku}` : ''}` : formattedTicket;
+  const orderRef = ticketWithTitle || cleanSku || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
   const soNumber =
     cleanUpc || cleanSku || formattedTicket || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
   return { saleIso, orderRef, soNumber };

@@ -196,7 +196,7 @@
                     📦 Bin/Lot Qty: {{ item.quantity }}
                   </span>
                   <span
-                    v-if="String(item.status || '').toLowerCase() === 'sold' && !item.saleId"
+                    v-if="String(item.status || '').toLowerCase() === 'sold' && !hasLiveSaleLink(item)"
                     class="badge badge-xs badge-warning font-bold"
                     title="Marked Sold by Products-*.csv catalog sync, awaiting link to a Payout ticket"
                   >
@@ -326,6 +326,8 @@ const props = defineProps<{
   sale: any | null;
   inventoryItems: any[];
   tenantId?: string;
+  /** IDs of all live `sales` docs, so items whose `saleId` points at a deleted sale are offered as unlinked. */
+  liveSaleIds?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -389,6 +391,14 @@ const getItemCost = (item: any): number => {
   return qty > 1 ? Number((rawCost / qty).toFixed(2)) : rawCost;
 };
 
+const liveSaleIdSet = computed(() => new Set((props.liveSaleIds || []).map(String)));
+/** True when the item is linked to a different sale that still exists (unknown list => trust the link). */
+const hasLiveSaleLink = (item: any): boolean => {
+  const sid = String(item?.saleId || '');
+  if (!sid || sid === String(props.sale?.id || '')) return false;
+  return liveSaleIdSet.value.size === 0 || liveSaleIdSet.value.has(sid);
+};
+
 const isEligibleInventoryItem = (item: any): boolean => {
   if (!item) return false;
   const status = String(item.status || '').toLowerCase().trim();
@@ -396,8 +406,9 @@ const isEligibleInventoryItem = (item: any): boolean => {
     return false;
   }
   const qty = Number(item.quantity || 1);
-  // Allow items marked 'sold' by Products-*.csv catalog sync if they don't have a linked saleId yet!
-  if (status === 'sold' && qty <= 1 && item.saleId && item.saleId !== props.sale?.id) {
+  // Allow items marked 'sold' by Products-*.csv catalog sync if they don't have a LIVE linked sale yet.
+  // A `saleId` pointing at a deleted (duplicate-cleanup) sale is dangling and counts as unlinked.
+  if (status === 'sold' && qty <= 1 && hasLiveSaleLink(item)) {
     return false;
   }
 
@@ -457,7 +468,7 @@ const filteredCandidates = computed(() => {
       if (itemTitle.includes(tok)) score += 20;
     }
     const status = String(item.status || '').toLowerCase();
-    if (status === 'sold' && !item.saleId) score += 15; // Catalog-sold item awaiting ticket link
+    if (status === 'sold' && !hasLiveSaleLink(item)) score += 15; // Catalog-sold item awaiting ticket link
     if (String(item.storageLocation || '').toUpperCase() === 'MD' || /^0EJ/i.test(String(item.locationSku || ''))) {
       score += 10;
     }
