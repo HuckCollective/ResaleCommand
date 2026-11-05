@@ -201,8 +201,8 @@
 
       // Ensure nested item variant also has upc_code saved via PUT /api/product/items if needed
       const createdProd = createdData?.product || createdData?.data?.product || createdData?.data || createdData;
-      const newProdId = createdProd?.id;
-      if (newProdId && window.axios && item.upc) {
+      const newProdId = createdProd?.id || createdData?.id;
+      if (newProdId && window.axios) {
         try {
           const detailRes = await window.axios.get('/api/product/show/' + newProdId);
           const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
@@ -210,7 +210,7 @@
             ? fullProd.items
             : Object.values(fullProd?.items || {}).flat();
           const targetItem = allItems[0];
-          if (targetItem && cleanStr(targetItem.upc_code).toUpperCase() !== cleanStr(item.upc).toUpperCase()) {
+          if (item.upc && targetItem && cleanStr(targetItem.upc_code).toUpperCase() !== cleanStr(item.upc).toUpperCase()) {
             targetItem.store = storeId;
             targetItem.upc_code = item.upc;
             await window.axios.put('/api/product/items', targetItem);
@@ -218,19 +218,116 @@
           if (fullProd) return fullProd;
         } catch (e) {}
       }
+      // If POST /api/product returned 200 without the product object, look up the newly created SKU by UPC/title
+      const directSku = rcDropSkuFromResponse(createdData);
+      if (!directSku) {
+        const lookedUpSku = await findExistingRicochetSkuForDropItem(item);
+        if (lookedUpSku) return { sku: lookedUpSku };
+      }
       return createdData;
     } catch (err) {
+      const errText = formatAxiosError(err);
+      // If Ricochet says "The UPC Code already exists", find that existing product's 0EJ SKU and adopt/bind it!
+      if (/upc.*already\s+exists|already\s+been\s+taken/i.test(errText)) {
+        const existingSku = await findExistingRicochetSkuForDropItem(item);
+        if (existingSku) {
+          return { sku: existingSku, reusedExisting: true };
+        }
+      }
       const tmplKeys = tmpl ? Object.keys(tmpl).join(',') : 'no-tmpl';
       const itemKeys = tmplItem ? Object.keys(tmplItem).join(',') : 'no-item';
-      throw new Error(formatAxiosError(err) + ' [tmplKeys: ' + tmplKeys + ' | itemKeys: ' + itemKeys + ']');
+      throw new Error(errText + ' [tmplKeys: ' + tmplKeys + ' | itemKeys: ' + itemKeys + ']');
     }
   }
 
   function rcDropSkuFromResponse(data) {
-    for (const c of [data, data && data.product, data && data.data, data && data.data && data.data.product]) {
+    if (!data || typeof data !== 'object') return '';
+    const candidates = [
+      data,
+      data.product,
+      data.data,
+      data.data && data.data.product,
+      Array.isArray(data.items) ? data.items[0] : null,
+      data.product && Array.isArray(data.product.items) ? data.product.items[0] : null,
+    ];
+    for (const c of candidates) {
       const sku = c ? extractRicochetSku(c) : '';
-      if (sku) return sku;
+      if (sku && /^0EJ/i.test(sku)) return sku;
     }
+    return '';
+  }
+
+  // Find a product's 0EJ SKU in Ricochet by UPC or Title (handles newly created items & 422 "UPC Code already exists")
+  async function findExistingRicochetSkuForDropItem(item) {
+    const targetUpc = cleanStr(item.upc).toUpperCase();
+    const targetName = cleanStr(item.tagTitle || item.title).toLowerCase();
+    if (!targetUpc) return '';
+
+    // 1. Check in-memory catalog first
+    const memMatch = (catalogProducts || []).find(
+      (p) => extractRicochetUpc(p) === targetUpc
+    );
+    if (memMatch) {
+      const s = extractRicochetSku(memMatch);
+      if (s) return s;
+    }
+
+    if (!window.axios) return '';
+    const cid = consignorId || 475;
+
+    // 2. Try Ricochet search query by UPC and fetch newest 25 products for this consignor
+    const candidateProducts = [];
+    try {
+      const searchRes = await window.axios.get(
+        `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&consignor_id=${cid}&search=${encodeURIComponent(targetUpc)}`
+      );
+      const sProds = searchRes.data?.products || (Array.isArray(searchRes.data) ? searchRes.data : []);
+      candidateProducts.push(...sProds);
+    } catch (e) {}
+
+    try {
+      const recentRes = await window.axios.get(
+        `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&consignor_id=${cid}`
+      );
+      const rProds = recentRes.data?.products || (Array.isArray(recentRes.data) ? recentRes.data : []);
+      for (const rp of rProds) {
+        if (!candidateProducts.some((cp) => cp.id === rp.id)) {
+          candidateProducts.push(rp);
+        }
+      }
+    } catch (e) {}
+
+    // 3. Check top-level fields first, then inspect `/api/product/show/{id}` for matching upc_code or exact name
+    for (const p of candidateProducts) {
+      const sku = extractRicochetSku(p);
+      const upc = extractRicochetUpc(p);
+      if (sku && upc === targetUpc) {
+        recordVerifiedMdUpc(sku, targetUpc);
+        return sku;
+      }
+    }
+
+    for (const p of candidateProducts.slice(0, 15)) {
+      if (!p || !p.id) continue;
+      try {
+        const detailRes = await window.axios.get('/api/product/show/' + p.id);
+        const fullProd = detailRes.data?.product || detailRes.data?.data || detailRes.data;
+        if (!fullProd) continue;
+        const sku = extractRicochetSku(fullProd) || extractRicochetSku(p);
+        const allItems = Array.isArray(fullProd.items)
+          ? fullProd.items
+          : Object.values(fullProd.items || {}).flat();
+        const itemUpc = cleanStr(
+          (allItems[0] && (allItems[0].upc_code || allItems[0].upc)) || fullProd.upc_code || ''
+        ).toUpperCase();
+        const prodName = cleanStr(fullProd.name || p.name || '').toLowerCase();
+        if (sku && (itemUpc === targetUpc || (prodName && prodName === targetName))) {
+          recordVerifiedMdUpc(sku, targetUpc);
+          return sku;
+        }
+      } catch (e) {}
+    }
+
     return '';
   }
 
