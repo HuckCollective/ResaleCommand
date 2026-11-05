@@ -246,8 +246,9 @@
               <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Dial 2 • Gate 4B Excess Surplus (Over Operating Costs)</div>
               <div class="text-sm font-black text-base-content">Reserve % + Sales Patronage % + Sweat-Equity Labor %</div>
             </div>
-            <div class="flex gap-1">
-              <button type="button" @click="applyExcessPreset(10, 60, 30)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.laborPatronagePct === 30 ? 'btn-secondary' : 'btn-ghost border border-base-300'">10/60/30 WSDE</button>
+            <div class="flex gap-1 flex-wrap">
+              <button type="button" @click="applyExcessPreset(10, 60, 30)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.salesPatronagePct === 60 && policyConfig.laborPatronagePct === 30 ? 'btn-secondary' : 'btn-ghost border border-base-300'">10/60/30 WSDE</button>
+              <button type="button" @click="applyExcessPreset(10, 45, 45)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.salesPatronagePct === 45 && policyConfig.laborPatronagePct === 45 ? 'btn-accent' : 'btn-ghost border border-base-300'" title="Mondragon 10% Coordination Reserve / 45% Sales & Enterprise / 45% Member Labor & ICA">10/45/45 Mondragon</button>
               <button type="button" @click="applyExcessPreset(10, 90, 0)" class="btn btn-xs rounded-lg font-mono" :class="policyConfig.salesPatronagePct === 90 ? 'btn-primary' : 'btn-ghost border border-base-300'">10/90/0 Sales</button>
             </div>
           </div>
@@ -298,6 +299,40 @@
           <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 5 • Orphan Ticket Claim Window (Days)</label>
           <input type="number" min="7" max="90" step="1" v-model.number="policyConfig.orphanClaimWindowDays" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Days before an unlinked register ticket can be swept 100% to Commons Pool.</p>
+        </div>
+      </div>
+
+      <!-- Mondragon Federation & WSDE Structural Guardrails -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-base-200/40 border border-base-300 space-y-3">
+        <div class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
+          <Icon icon="solar:shield-check-bold" class="w-4 h-4 text-accent" />
+          <span>Mondragon Federation &amp; WSDE Structural Guardrails</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-base-100 border border-base-300 space-y-1">
+            <div class="font-black text-base-content">🔄 Reversed Hierarchy</div>
+            <p class="text-[11px] text-base-content/75 leading-relaxed">
+              The General Assembly (<span class="font-mono font-bold">1M1V</span>) evaluates and directs operational leads. Financial prep &amp; reconciliation count as credited enabling labor.
+            </p>
+          </div>
+          <div class="p-3 rounded-xl bg-base-100 border border-base-300 space-y-1">
+            <div class="font-black text-base-content">⚖️ 4.5:1 Pay Ratio Cap</div>
+            <p class="text-[11px] text-base-content/75 leading-relaxed">
+              Labor bounty &amp; compensation tiers are compressed to a <span class="font-mono font-bold">4.5:1</span> standard (<span class="font-mono font-bold">6.5:1</span> max exception) + <span class="font-mono font-bold">7%</span> ICA target yield.
+            </p>
+          </div>
+          <div class="p-3 rounded-xl bg-base-100 border border-base-300 space-y-1">
+            <div class="font-black text-base-content">🛒 Open Procurement</div>
+            <p class="text-[11px] text-base-content/75 leading-relaxed">
+              Competitive sourcing for thermal labels, fixtures, and software inputs (best quality at lowest price) with 100% receipt transparency.
+            </p>
+          </div>
+          <div class="p-3 rounded-xl bg-base-100 border border-base-300 space-y-1">
+            <div class="font-black text-base-content">🤝 Niche Non-Competition</div>
+            <p class="text-[11px] text-base-content/75 leading-relaxed">
+              Co-op partners curate complementary niches (<span class="font-mono font-bold">HUCK-</span> vintage/apparel/oddities vs. <span class="font-mono font-bold">PDXGL-</span> tabletop games/RPGs) rather than competing head-to-head.
+            </p>
+          </div>
         </div>
       </div>
     </div>

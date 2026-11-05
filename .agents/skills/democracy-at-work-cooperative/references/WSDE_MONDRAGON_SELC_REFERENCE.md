@@ -1,6 +1,8 @@
 # Co-op & WSDE Economic Governance Reference (`WSDE_MONDRAGON_SELC_REFERENCE.md`)
 
-This reference codifies the three foundational economic and legal pillars governing **The Huckleberry Collective** and **Resale Command (`resalecmd.com`)** across `/coop/settlements`, `/coop/governance`, `/coop/labor`, and `/coop`.
+This reference codifies the foundational economic, federation, and legal pillars governing **The Huckleberry Collective** and **Resale Command (`resalecmd.com`)** across `/coop/settlements`, `/coop/governance`, `/coop/labor`, and `/coop`.
+
+> **UI Wording Rule:** Always use institutional WSDE, Mondragon, and Rochdale/SELC terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Mondragon 10/45/45 Waterfall`, `Indivisible Commons Reserve`) in UI views rather than citing individual economists by personal name.
 
 ---
 
@@ -11,20 +13,26 @@ This reference codifies the three foundational economic and legal pillars govern
 - **Surplus Appropriation & Subsumed Class Distribution:**
   - Both **Producers** and **Enablers** co-govern the collective surplus on an equal `1 Member = 1 Vote` basis.
   - Enabler costs and fixed overhead (**Net Booth Rent**, **Tech & AI Ops**, **Supplies**) are funded via a **Subsumed Class Distribution** (**30% Shared Commons Pool / Collective Reserve**) prior to bonus patronage payouts.
-  - Note on UI Copy: Always use institutional WSDE / cooperative terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Indivisible Commons Reserve`) in UI views rather than citing individual economists by name.
 
 ---
 
-## 2. Mondragon Internal Capital Accounts (ICAs) & Reserves
+## 2. Mondragon Internal Capital Accounts (ICAs) & Federation Stabilization Rules
 
-- **Indivisible Collective Reserve (Commons Pool):**
-  - An indivisible collective fund (`30%` default Gate 3 allocation) that covers fixed monthly operating costs (`$297.09` Net Booth Rent after `$85.41` Consignor offset + `$219.99` Tech Ops + `$6.18` Supplies = `$523.26/mo` baseline) and absorbs operating shortfalls.
-  - **Shortfall Carryover Rule:** Any monthly operating deficit (e.g., `-$132.97`) is carried forward as a Collective Reserve obligation and repaid **100% first** in subsequent profitable months before Gate 4B bonus patronage dividends unlock.
-- **Individual Capital Accounts (ICAs) & Patronage Allocation:**
-  - Once the Indivisible Collective Reserve covers monthly operating costs and any carried-over shortfall, excess surplus is credited to active Worker-Member Partners (`HUCK-`, `PDXGL-`) via:
-    1. **Rainy-Day Reserve Slice** (default `10%` up to the configured Reserve Cap Target, e.g., `$500`–`$523.26`).
-    2. **Sales Margin Patronage Dividend** (default `60%` of excess surplus, pro-rata by contributed net margin or equal split).
-    3. **Sweat-Equity Enabling Labor Dividend** (default `30%` of excess surplus, pro-rata by verified hours logged in `/coop/labor`).
+### A. Indivisible Collective Reserve & Shortfall Carryover
+- **Indivisible Collective Reserve (Commons Pool):** An indivisible collective fund (`30%` default Gate 3 allocation) that covers fixed monthly operating costs (`$297.09` Net Booth Rent after `$85.41` Consignor offset + `$219.99` Tech Ops + `$6.18` Supplies = `$523.26/mo` baseline) and absorbs operating shortfalls.
+- **Shortfall Carryover Rule:** Any monthly operating deficit (e.g., `-$132.97`) is carried forward as a Collective Reserve obligation and repaid **100% first** in subsequent profitable months before Gate 4B bonus patronage dividends unlock.
+
+### B. The Mondragon 10 / 45 / 45 Net Revenue Waterfall
+- **Net Revenue Definition:** Gross sales minus direct material/production costs (Venue Commission + 100% Member Cost Basis Recoupment + Shared Operating Hurdle).
+- **10% Inter-Co-op Coordination Fund:** Withdrawn first from excess surplus to fund shared central administration, network infrastructure, and mutual insurance/rainy-day reserve across partner co-op units.
+- **45% Enterprise Collective Reserve / Sales Patronage:** Retained for inventory expansion, working capital, and pro-rata sales patronage.
+- **45% Member Capital / Sweat-Equity Ledger:** Credited to individual worker-member accounts based on verified patronage and enabling labor hours. In full Mondragon ICA maturity, retained internal capital balances earn a **7% annual cash yield/bonus** while providing working liquidity to the collective.
+
+### C. Mondragon Governance & Pay Guardrails
+- **Reversed Hierarchy:** The General Assembly (all worker-members, `1 Member = 1 Vote`) hires, evaluates, and can recall/terminate operational leads or managers. Financial prep, reconciliation, and governance meetings count as credited enabling labor time.
+- **Open Procurement:** Co-op units solicit competitive bids for tools, thermal labels, packaging, and software inputs (best quality at lowest price) rather than subsidizing inefficient vendors.
+- **Pay & Bounty Ratio Cap (`4.5:1` Standard / `6.5:1` Max):** Any hourly labor bounties or stipends between highest- and lowest-compensated roles are compressed to a **4.5:1** standard (and never exceed a **6.5:1** maximum exception).
+- **Complementary Niche Non-Competition:** Partner co-ops within the collective network operate in complementary product niches rather than competing head-to-head in the same booth (`HUCK-` focuses on curated vintage apparel, oddities, decor & media; `PDXGL-` focuses on tabletop board games, RPGs & gaming accessories).
 
 ---
 
@@ -40,4 +48,4 @@ This reference codifies the three foundational economic and legal pillars govern
   1. **Gate 1 (Venue Commission):** Gross Sales $\rightarrow$ deduct `15%` Memory Den venue fee (`Net After Venue`).
   2. **Gate 2 (Consignor Fixed-Rent Offset):** `BB-` contributes `$85.41/mo` fixed sub-lease rent toward `$382.50` gross booth rent (`$297.09` Net Co-op Rent).
   3. **Gate 3 (100% Cost Basis Recoupment & 70/30 Split):** Worker-Members recoup `100%` of documented out-of-pocket item COGS first; remaining Net Margin splits `70%` Curator Base Profit / `30%` Shared Commons Pool.
-  4. **Gate 4A & 4B (Operating Hurdle, Shortfall Carryover & 3-Way Surplus Allocation):** `30%` Commons Pool pays Monthly Operating Costs (`Net Booth Rent + Tech Ops + Supplies`) and repays any prior Shortfall Carryover first; remaining Excess Surplus splits across `Reserve % / Sales Patronage % / Sweat-Equity Labor %`.
+  4. **Gate 4A & 4B (Operating Hurdle, Shortfall Carryover & 3-Way Surplus Allocation):** `30%` Commons Pool pays Monthly Operating Costs (`Net Booth Rent + Tech Ops + Supplies`) and repays any prior Shortfall Carryover first; remaining Excess Surplus splits across `Reserve % / Sales Patronage % / Sweat-Equity Labor %` (with 1-click presets for `10/60/30 WSDE`, `10/45/45 Mondragon`, and `10/90/0 Sales`).

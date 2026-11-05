@@ -1,14 +1,14 @@
 ---
 name: democracy-at-work-cooperative
-description: Cooperative economics, Worker Self-Directed Enterprise (WSDE) surplus theory (Producers vs. Enablers of Surplus), Mondragon Internal Capital Accounts (ICAs) & Indivisible Reserves, ICA/Rochdale & SELC bylaw rules, 4-Gate waterfall accounting, and Loomio consent governance for the Huckleberry Collective. Use when working on co-op settlements, `/coop/*` routes, the 70/30 waterfall, partner payouts, sweat-equity labor, or the Commons Pool.
+description: Cooperative economics, Worker Self-Directed Enterprise (WSDE) surplus theory (Producers vs. Enablers of Surplus), Mondragon 10/45/45 waterfall & Internal Capital Accounts (ICAs), ICA/Rochdale & SELC bylaw rules, 4-Gate waterfall accounting, and Loomio consent governance for the Huckleberry Collective. Use when working on co-op settlements, `/coop/*` routes, the 70/30 waterfall, partner payouts, sweat-equity labor, or the Commons Pool.
 ---
 
 # Huckleberry Collective — WSDE, Mondragon & SELC Cooperative Architecture
 
-This skill defines the cooperative economic engine, 4-Gate financial waterfall, Mondragon reserve/capital account rules, SELC/Rochdale bylaw tiers, and Loomio consent governance for **The Huckleberry Collective** (`HUCK-`), **PDX Game Library** (`PDXGL-`), and consignors (`BB-`) on Resale Command (`resalecmd.com`).
+This skill defines the cooperative economic engine, 4-Gate financial waterfall, Mondragon federation stabilization & `10/45/45` capital account rules, SELC/Rochdale bylaw tiers, and Loomio consent governance for **The Huckleberry Collective** (`HUCK-`), **PDX Game Library** (`PDXGL-`), and consignors (`BB-`) on Resale Command (`resalecmd.com`).
 
 > **Deep Reference:** See [`.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md) and [`docs/coop/WSDE_OPERATING_CHARTER.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/coop/WSDE_OPERATING_CHARTER.md).
-> **UI Wording Rule:** Always use institutional WSDE/cooperative terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Indivisible Commons Reserve`) in UI components—never cite individual economists by personal name in user-facing UI text.
+> **UI Wording Rule:** Always use institutional WSDE/Mondragon/cooperative terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Mondragon 10/45/45`, `Indivisible Commons Reserve`) in UI components—never cite individual economists by personal name in user-facing UI text.
 
 ---
 
@@ -22,14 +22,21 @@ This skill defines the cooperative economic engine, 4-Gate financial waterfall, 
 
 ---
 
-## 2. Mondragon Internal Capital Accounts (ICAs) & Indivisible Reserves
+## 2. Mondragon 10/45/45 Waterfall, ICAs & Stabilization Rules
 
-1. **Indivisible Collective Reserve (Commons Pool):**
+1. **Indivisible Collective Reserve & Shortfall Carryover:**
    - Funded by the **30% Shared Commons Pool** (`commonsSharePct` in `CoopPolicyConfig`).
    - Covers fixed monthly operating costs (`$297.09` Net Booth Rent + `$219.99` Tech Ops + `$6.18` Supplies = `$523.26/mo`) and absorbs monthly operating shortfalls.
-   - **Shortfall Carryover Invariant:** In slow months, any operating deficit (e.g., `-$132.97`) is carried forward and must be repaid **100% first** before Gate 4B bonus patronage dividends unlock.
-2. **Individual Capital & Patronage Accounts:**
-   - Net surplus remaining after the Collective Reserve covers operating costs and shortfall carryover is credited to active Worker-Member Partners (`HUCK-`, `PDXGL-`) via the configurable **3-Way Gate 4B WSDE Split** (`reserveSharePct` / `salesPatronagePct` / `laborPatronagePct`, default `10% / 60% / 30%`).
+   - **Shortfall Carryover Invariant:** Any monthly operating deficit (e.g., `-$132.97`) is carried forward and must be repaid **100% first** before Gate 4B bonus patronage dividends unlock.
+2. **The Mondragon 10 / 45 / 45 Net Revenue Waterfall:**
+   - **10% Inter-Co-op Coordination & Reserve Fund:** Funds shared administration, network infrastructure, and mutual rainy-day insurance across co-op units.
+   - **45% Enterprise Collective Reserve / Sales Patronage:** Supports working capital, inventory expansion, and pro-rata sales patronage.
+   - **45% Member Capital / Sweat-Equity Ledger:** Credited to member accounts by verified patronage and enabling labor hours (with a **7% annual cash yield/bonus** target on retained member capital balances).
+3. **Mondragon Governance & Pay Guardrails:**
+   - **Reversed Hierarchy:** The General Assembly (`1 Member = 1 Vote`) hires, evaluates, and can recall operational leads; financial prep and reconciliation meetings count as credited enabling labor time.
+   - **Open Procurement:** Competitive bidding for tools, thermal labels, and supplies (best quality at lowest price) rather than subsidizing inefficient internal vendors.
+   - **Pay Ratio Cap (`4.5:1` Standard / `6.5:1` Max):** Compensation/bounty rates between highest and lowest tiers are compressed to **4.5:1** (max **6.5:1** exception).
+   - **Complementary Niche Non-Competition:** Partner co-ops within the collective network (`HUCK-` vintage/apparel/oddities vs. `PDXGL-` tabletop games/RPGs) operate in complementary product niches and never compete head-to-head in the same booth category.
 
 ---
 
@@ -75,10 +82,10 @@ This skill defines the cooperative economic engine, 4-Gate financial waterfall, 
 │ Gate 4A & 4B: Operating Hurdle, Shortfall & 3-Way Surplus    │
 │   • 4A Operating Hurdle: $297.09 Net Rent + $219.99 Tech     │
 │     + $6.18 Supplies = $523.26/mo + Prior Shortfall Carryover│
-│   • 4B Excess Surplus (when 30% Commons > Hurdle):           │
-│     - Rainy-Day Reserve Slice (default 10%, capped at $500)  │
-│     - Sales Patronage Dividend (default 60% pro-rata/equal)  │
-│     - Sweat-Equity Labor Dividend (default 30% by hours)     │
+│   • 4B Excess Surplus (10/60/30 WSDE or 10/45/45 Mondragon): │
+│     - Inter-Co-op / Rainy-Day Reserve Slice (10%)            │
+│     - Sales Patronage / Enterprise Reserve (60% or 45%)      │
+│     - Sweat-Equity Labor / ICA Ledger (30% or 45%)           │
 └──────────────────────────────────────────────────────────────┘
 ```
 
