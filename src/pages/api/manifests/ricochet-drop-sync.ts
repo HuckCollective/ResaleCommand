@@ -369,15 +369,18 @@ export const POST: APIRoute = async ({ request }) => {
       db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, manifestId, update)
     );
 
-    // Also mirror newly bound 0EJ... <-> UPC mappings into the location's livePayloadDocId (Role.any() writable)
+    // Also mirror newly bound 0EJ... <-> UPC mappings into the location's payloadDocId (Role.any() writable)
     // so /api/md-verify-report?mode=payload and the bookmarklet's Inventory Audit tab know them immediately!
     try {
-      const { livePayloadDocId } = getLocationManifestDocIds(code);
+      const { payloadDocId } = getLocationManifestDocIds(code);
       const liveDoc: any = await appwrite.withDb((db) =>
-        db.getDocument(appwrite.dbId, MANIFESTS_COL_ID, livePayloadDocId)
+        db.getDocument(appwrite.dbId, MANIFESTS_COL_ID, payloadDocId)
       );
-      if (liveDoc?.notes) {
-        const parsedLive = typeof liveDoc.notes === 'string' ? JSON.parse(liveDoc.notes) : liveDoc.notes;
+      if (liveDoc?.itemsSnapshot) {
+        const parsedLive =
+          typeof liveDoc.itemsSnapshot === 'string'
+            ? JSON.parse(liveDoc.itemsSnapshot)
+            : liveDoc.itemsSnapshot;
         const skuToUpcMap = parsedLive.skuToUpcMap || {};
         const skuToMetaMap = parsedLive.skuToMetaMap || {};
         for (const s of nextSnapshot) {
@@ -396,11 +399,10 @@ export const POST: APIRoute = async ({ request }) => {
         }
         parsedLive.skuToUpcMap = skuToUpcMap;
         parsedLive.skuToMetaMap = skuToMetaMap;
-        parsedLive.totalMappedSkus = Object.keys(skuToUpcMap).length;
-        parsedLive.generatedAt = new Date().toISOString();
         await appwrite.withDb((db) =>
-          db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, livePayloadDocId, {
-            notes: JSON.stringify(parsedLive),
+          db.updateDocument(appwrite.dbId, MANIFESTS_COL_ID, payloadDocId, {
+            itemCount: Object.keys(skuToUpcMap).length,
+            itemsSnapshot: JSON.stringify(parsedLive),
           })
         );
       }
