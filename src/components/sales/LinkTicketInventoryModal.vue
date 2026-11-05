@@ -260,17 +260,26 @@
 
         <!-- Modal Footer Actions: 1) Claim for Commons Pool, 2) Link Inventory / Reassign Member -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-base-200">
-          <!-- Fallback: Claim for Commons Pool -->
-          <button
-            type="button"
-            :disabled="isSubmitting"
-            @click="handleClaimForCommons"
-            class="btn btn-sm btn-outline btn-warning rounded-xl font-black gap-1.5 h-10"
-            title="Set curator split to $0.00 and sweep 100% of net margin into the Shared Commons Pool"
-          >
-            <Icon icon="solar:buildings-2-bold-duotone" class="w-4 h-4 shrink-0" />
-            <span>Assign to Commons Pool (100% Margin)</span>
-          </button>
+          <!-- Fallback: Claim for Commons Pool (30-Day Orphan Ticket Rule) -->
+          <div class="flex flex-col gap-1">
+            <button
+              type="button"
+              :disabled="isSubmitting || !isCommonsSweepEligible"
+              @click="handleClaimForCommons"
+              class="btn btn-sm btn-outline btn-warning rounded-xl font-black gap-1.5 h-10"
+              title="Set curator split to $0.00 and sweep 100% of net margin into the Shared Commons Pool"
+            >
+              <Icon icon="solar:buildings-2-bold-duotone" class="w-4 h-4 shrink-0" />
+              <span>Assign 100% to Commons Pool</span>
+            </button>
+            <label
+              v-if="daysUntilCommonsEligible > 0"
+              class="flex items-center gap-1.5 text-[10px] opacity-70 cursor-pointer"
+            >
+              <input v-model="commonsOverride" type="checkbox" class="checkbox checkbox-xs checkbox-warning" />
+              <span>Claim window open {{ daysUntilCommonsEligible }} more day(s) — all partners agreed to sweep early</span>
+            </label>
+          </div>
 
           <div class="flex items-center gap-2 justify-end">
             <button
@@ -330,8 +339,25 @@ const selectedPartnerPrefix = ref<'HUCK-' | 'PDXGL-' | 'BB-'>('HUCK-');
 const selectedItem = ref<any | null>(null);
 const candidateSearch = ref('');
 const filterByApproxPrice = ref(true);
-const priceTolerance = ref(15);
+const priceTolerance = ref(10);
 const scopeFilter = ref<'all_eligible' | 'md_only'>('all_eligible');
+
+// 30-Day Orphan Ticket Rule (docs/coop/WSDE_OPERATING_CHARTER.md §4)
+const ORPHAN_CLAIM_WINDOW_DAYS = 30;
+const commonsOverride = ref(false);
+const ticketAgeDays = computed<number | null>(() => {
+  const raw = props.sale?.date || props.sale?.saleDate;
+  if (!raw) return null;
+  const ms = new Date(raw).getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.floor((Date.now() - ms) / 86_400_000);
+});
+const daysUntilCommonsEligible = computed(() =>
+  ticketAgeDays.value === null ? 0 : Math.max(0, ORPHAN_CLAIM_WINDOW_DAYS - ticketAgeDays.value)
+);
+const isCommonsSweepEligible = computed(
+  () => commonsOverride.value || daysUntilCommonsEligible.value === 0
+);
 
 onMounted(() => {
   isMounted.value = true;
@@ -344,6 +370,7 @@ watch(
     selectedItem.value = null;
     candidateSearch.value = '';
     filterByApproxPrice.value = true;
+    commonsOverride.value = false;
     const p = String(nextSale.partner || 'HUCK').toUpperCase();
     if (p === 'PDXGL') selectedPartnerPrefix.value = 'PDXGL-';
     else if (p === 'BB') selectedPartnerPrefix.value = 'BB-';
@@ -479,7 +506,8 @@ const markManifestItemSold = async (itemId: string, locationSku: string, soldDat
           return {
             ...entry,
             status: 'SOLD',
-            sold_at: soldDateStr,
+            // Law 7: only stamp sold_at from the real ticket date — never invent one
+            ...(soldDateStr ? { sold_at: soldDateStr } : {}),
           };
         }
         return entry;
@@ -500,7 +528,8 @@ const handleConfirmLinkOrReassign = async () => {
   isSubmitting.value = true;
   try {
     const ticketNum = extractTicketDigits(props.sale);
-    const soldAtDate = props.sale.date || new Date().toISOString();
+    // Law 2/7: sold date comes from the Ricochet ticket only — never fall back to "today"
+    const soldAtDate = String(props.sale.date || props.sale.saleDate || '');
 
     if (selectedItem.value) {
       const item = selectedItem.value;
