@@ -26,22 +26,26 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // 2. Identify if we are on a custom tenant domain or subdomain
   const primaryDomain = "resalecmd.com";
+  const RESERVED_APP_SUBDOMAINS = new Set(["www", "alpha", "dev", "staging", "preview"]);
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("localhost:4321");
+  const isVercelPreview = host.endsWith(".vercel.app");
   
   let tenantId: string | null = null;
   
-  const isPrimary = host === primaryDomain || host === `www.${primaryDomain}`;
+  const isPrimary =
+    host === primaryDomain ||
+    isVercelPreview ||
+    (host.endsWith("." + primaryDomain) && RESERVED_APP_SUBDOMAINS.has(host.split(".")[0]));
   
   if (isPrimary) {
-    // Main site, no tenant rewrite
+    // Main site or Vercel/alpha/dev preview deployment — no tenant rewrite
     tenantId = null;
   } else if (!isLocalhost) {
-    // Check if it is a subdomain of our primary domain
+    // Check if it is a non-reserved tenant subdomain of our primary domain
     if (host.endsWith("." + primaryDomain)) {
-      // Extract subdomain
       const parts = host.split(".");
       const subdomain = parts[0];
-      if (subdomain !== "www") {
+      if (!RESERVED_APP_SUBDOMAINS.has(subdomain)) {
         tenantId = subdomain;
       }
     } else {
@@ -51,7 +55,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   } else if (isLocalhost) {
     // For local testing: if hostname contains a port, strip it, or check subdomains
     const subdomain = host.split(":")[0];
-    if (subdomain !== "localhost" && subdomain !== "127.0.0.1" && subdomain !== "www") {
+    if (subdomain !== "localhost" && subdomain !== "127.0.0.1" && !RESERVED_APP_SUBDOMAINS.has(subdomain)) {
       // e.g. "tenant1.localhost:4321" -> "tenant1"
       tenantId = subdomain.split(".")[0];
     }
@@ -92,10 +96,17 @@ async function resolveTenantIdFromHost(host: string): Promise<string | null> {
   }
 
   // Set up Appwrite Client (Server Side)
+  const endpoint = process.env.PUBLIC_APPWRITE_ENDPOINT || import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
+  const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
+  if (!endpoint || !projectId) {
+    console.warn(`[Middleware] Skipping domain lookup for ${host}: Appwrite endpoint/project env vars not set.`);
+    return null;
+  }
+
   const client = new Client();
   client
-    .setEndpoint(import.meta.env.PUBLIC_APPWRITE_ENDPOINT)
-    .setProject(import.meta.env.PUBLIC_APPWRITE_PROJECT_ID);
+    .setEndpoint(endpoint)
+    .setProject(projectId);
   
   const apiKey = process.env.APPWRITE_API_KEY || import.meta.env.APPWRITE_API_KEY;
   if (apiKey) {
@@ -123,4 +134,3 @@ async function resolveTenantIdFromHost(host: string): Promise<string | null> {
     return null;
   }
 }
-
