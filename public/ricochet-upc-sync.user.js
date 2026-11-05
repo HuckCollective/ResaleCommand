@@ -122,40 +122,61 @@
     const storeId = tmpl?.store_id || tmpl?.store || tmplItem?.store_id || tmplItem?.store || 1;
     const priceNum = Number(item.price || 0);
     const qtyNum = Number(item.quantity || 1) || 1;
+    const todayFormatted = new Date().toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    });
 
+    // Build payload starting from actual Ricochet product keys if template exists (never send string brand when Ricochet expects integer brand ID or null)
     const payload = {
       store: storeId,
-      store_id: storeId,
       consignor_id: cid,
-      consignor: cid,
-      type: tmpl?.type ?? 'consignment',
+      consignor: tmpl?.consignor ?? cid,
       name: shortTagTitle,
-      title: shortTagTitle,
-      description: fullPosDescription,
       short_description: fullPosDescription,
+      description: fullPosDescription,
+      notes: webDesc,
       web_description: webDesc,
-      brand: item.brand || 'Vintage',
+      category: null,
+      brand: null,
+      split: tmpl?.split ?? 85,
+      charge_tax: tmpl?.charge_tax ?? true,
+      tax_id: tmpl?.tax_id ?? tmplItem?.tax_id ?? 1,
+      type: tmpl?.type ?? 0,
       price: priceNum,
       agreed_price: priceNum,
-      retail_price: priceNum,
-      quantity: qtyNum,
       qty: qtyNum,
+      quantity: qtyNum,
+      sku: '',
       upc_code: item.upc,
       upc: item.upc,
-      tax_id: tmpl?.tax_id ?? tmplItem?.tax_id ?? undefined,
-      split: tmpl?.split ?? tmplItem?.split ?? undefined,
-      category_id: tmpl?.category_id ?? tmplItem?.category_id ?? undefined,
+      status: 'In Stock',
+      in_stock: todayFormatted,
+      low_stock: 0,
+      department: null,
+      weight: null,
       items: [
         {
-          store: storeId,
-          consignor_id: cid,
+          ...(tmplItem
+            ? {
+                store: tmplItem.store ?? storeId,
+                consignor_id: tmplItem.consignor_id ?? cid,
+                tax_id: tmplItem.tax_id ?? 1,
+                split: tmplItem.split ?? 85,
+              }
+            : { store: storeId, consignor_id: cid }),
           name: shortTagTitle,
+          short_description: fullPosDescription,
           description: fullPosDescription,
           web_description: webDesc,
           price: priceNum,
           agreed_price: priceNum,
           quantity: qtyNum,
+          qty: qtyNum,
+          sku: '',
           upc_code: item.upc,
+          in_stock: todayFormatted,
         },
       ],
     };
@@ -202,7 +223,9 @@
       }
       return createdData;
     } catch (err) {
-      throw new Error(formatAxiosError(err));
+      const tmplKeys = tmpl ? Object.keys(tmpl).join(',') : 'no-tmpl';
+      const itemKeys = tmplItem ? Object.keys(tmplItem).join(',') : 'no-item';
+      throw new Error(formatAxiosError(err) + ' [tmplKeys: ' + tmplKeys + ' | itemKeys: ' + itemKeys + ']');
     }
   }
 
@@ -356,12 +379,20 @@
     if (location.hash.indexOf('tab=drops') !== -1) setDropsTabActive(true);
   }
 
-  document.addEventListener('click', (e) => {
+  if (window.__RC_DROPS_TAB_CLICK_HANDLER__) {
+    document.removeEventListener('click', window.__RC_DROPS_TAB_CLICK_HANDLER__);
+  }
+  window.__RC_DROPS_TAB_CLICK_HANDLER__ = (e) => {
     const tabBtn = e.target && e.target.closest ? e.target.closest('[id^="rc-tab-btn-"]') : null;
     if (!tabBtn) return;
     setDropsTabActive(tabBtn.id === 'rc-tab-btn-drops');
-  });
-  new MutationObserver(ensureDropsTab).observe(document.documentElement, { childList: true, subtree: true });
+  };
+  document.addEventListener('click', window.__RC_DROPS_TAB_CLICK_HANDLER__);
+  if (window.__RC_DROPS_MUTATION_OBSERVER__) {
+    try { window.__RC_DROPS_MUTATION_OBSERVER__.disconnect(); } catch (e) {}
+  }
+  window.__RC_DROPS_MUTATION_OBSERVER__ = new MutationObserver(ensureDropsTab);
+  window.__RC_DROPS_MUTATION_OBSERVER__.observe(document.documentElement, { childList: true, subtree: true });
   let activeSalesSubFilter = 'all'; // 'all' | 'pending_payout' | 'paid' | 'space_rental'
   let isPushingSales = false;
   let isHarvestingPayoutPages = false;
