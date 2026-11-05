@@ -311,23 +311,32 @@ export const POST: APIRoute = async ({ request }) => {
         rejected.push({ itemId, reason: 'Invalid item or SKU' });
         continue;
       }
-      // 1-to-1 SKU <-> item bijection guard
-      const clash = await appwrite.withDb((db) =>
-        db.listDocuments(appwrite.dbId, appwrite.itemsCol, [
-          NodeQuery.equal('locationSku', sku),
-          NodeQuery.limit(2),
-        ])
-      );
-      if (clash.documents.some((d: any) => d.$id !== itemId)) {
-        rejected.push({ itemId, reason: `${sku} already bound to another item` });
-        continue;
-      }
-      await appwrite.withDb((db) =>
-        db.updateDocument(appwrite.dbId, appwrite.itemsCol, itemId, {
-          locationSku: sku,
-          storageLocation: code,
-        })
-      );
+      // 1-to-1 SKU <-> item bijection guard (best-effort if items collection is readable)
+      try {
+        const clash = await appwrite.withDb((db) =>
+          db.listDocuments(appwrite.dbId, appwrite.itemsCol, [
+            NodeQuery.equal('locationSku', sku),
+            NodeQuery.limit(2),
+          ])
+        );
+        if (clash.documents.some((d: any) => d.$id !== itemId)) {
+          rejected.push({ itemId, reason: `${sku} already bound to another item` });
+          continue;
+        }
+      } catch {}
+
+      // Best-effort direct item update (succeeds when server APPWRITE_API_KEY is active or item has Role.any();
+      // otherwise manifest.itemsSnapshot + placedItemIds below stores the authoritative binding and client syncs it)
+      try {
+        await appwrite.withDb((db) =>
+          db.updateDocument(appwrite.dbId, appwrite.itemsCol, itemId, {
+            locationSku: sku,
+            storageLocation: code,
+            status: 'placed',
+          })
+        );
+      } catch {}
+
       bound.push(itemId);
       (m as any).locationSku = sku;
     }

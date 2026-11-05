@@ -218,8 +218,21 @@ export function useManifest() {
             if (fetchedDocs.length > 0) {
                 const idMap = new Map(fetchedDocs.map(d => [d.$id, d]));
                 const snapMap = new Map(snapshot.map((s: any) => [s.$id || s.id, s]));
-                // Keep order matching itemIds, falling back to snapshot if an older item document was moved or not returned
-                const resolved = itemIds.map(id => idMap.get(id) || snapMap.get(id)).filter(Boolean);
+                // Keep order matching itemIds, and if snapshot has a newly bound locationSku from the Ricochet Bookmarklet, merge & persist it to items!
+                const resolved = itemIds.map(id => {
+                    const doc = idMap.get(id);
+                    const snap = snapMap.get(id);
+                    if (doc && snap && snap.locationSku && doc.locationSku !== snap.locationSku) {
+                        const targetLoc = (manifest.locationId || 'MD').toUpperCase();
+                        databases.updateDocument(DB_ID, collId, id, {
+                            locationSku: snap.locationSku,
+                            storageLocation: targetLoc,
+                            status: 'placed'
+                        }).catch(() => {});
+                        return { ...doc, locationSku: snap.locationSku, storageLocation: targetLoc, status: 'placed' };
+                    }
+                    return doc || snap;
+                }).filter(Boolean);
                 stagedItems.value = resolved as any[];
             }
         } catch (e) {
