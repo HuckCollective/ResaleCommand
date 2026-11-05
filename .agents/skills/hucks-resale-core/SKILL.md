@@ -107,8 +107,9 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
   - Added Gate 3 ➔ Gate 4 Operating Costs Breakeven Progress Bar and Partner Bonus Surplus Dividend calculator in `CoopSettlementView.vue`.
 - **Unlinked Ticket Inventory Matcher & Commons Pool Sweep (`LinkTicketInventoryModal.vue`, `SalesList.vue`, `CoopSettlementView.vue`)**:
   - Wired canonical 4-tier `matchMemoryDenInventoryItem` + `splitTrailingBoothSku` into `SalesList.vue`, added the Top Unlinked Tickets Quick-Filter Banner, and created `LinkTicketInventoryModal.vue` (`[Link Inventory]`, `⇄ Reassign`, and `[Assign to Commons Pool (100% Margin)]` setting curator split to `$0.00` and sweeping 100% of net margin to the Commons Pool).
-- **Pure 4-Gate Co-op Settlement Engine (`src/types/coop.ts`, `src/lib/coop/settlementEngine.ts`)**:
+- **Pure 4-Gate Co-op Settlement Engine & Operating Charter (`src/types/coop.ts`, `src/lib/coop/settlementEngine.ts`, `docs/coop/WSDE_OPERATING_CHARTER.md`)**:
   - Created strongly typed `PartnerCode`, `PartnerRole`, `SettlementConfig`, `PartnerSummary`, and `SettlementResult` interfaces plus pure `runCoopSettlement(partners, config)` implementing Gate 1 (15% venue fee), Gate 2 (Consignor `BB-` fixed rent offset reducing gross rent `$382.50 -> $297.09`), Gate 3 (100% cost basis recoupment + 70/30 split), Gate 4A (`$523.26` operating breakeven & carried-over shortfall repayment priority), and Gate 4B (50% Sales Margin pro-rata / 50% Labor Bounties pro-rata).
+  - Authored `docs/coop/WSDE_OPERATING_CHARTER.md` documenting Enterprise Structure (`HUCK-`, `PDXGL-`, `BB-`), the 4-Gate Financial Waterfall, the 5 Democratic Dials via Loomio 4-signal consent, and the 30-Day Orphan Ticket Rule.
 
 ## Nov 4, 2026 — Ricochet Sales Sync Repair (VERIFIED against both CSV exports)
 - **Result:** Appwrite `sales` matches the Ricochet `Payouts` + `Payout History` exports 1-for-1: **378/378 lines, 0 missing, 0 extra**. October 2026 = **63 sales / $2,462.99**; November = 12 sales / $369.00.
