@@ -443,7 +443,7 @@
       </div>
 
       <!-- Mobile Menu Backdrop -->
-      <Teleport to="body">
+      <Teleport to="body" :disabled="!isMounted">
         <Transition name="fade">
           <div
             v-if="openMobile"
@@ -822,6 +822,7 @@ const { purchaseItems, activePurchase, pausedTracker, draftPurchases, loadDraftP
   useScoutPurchase();
 
 const currentPath = ref('/');
+const isMounted = ref(false);
 
 const locationMetas = computed(() => getAllLocationSettingMetas());
 const defaultSyncLocationCode = computed(() => resolveDefaultRicochetLocationMeta().code);
@@ -928,6 +929,7 @@ const displayTrackedCount = computed(() => {
 });
 
 onMounted(() => {
+  isMounted.value = true;
   if (typeof window !== 'undefined') {
     currentPath.value = window.location.pathname;
   }
