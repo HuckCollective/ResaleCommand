@@ -130,8 +130,170 @@
           </div>
         </div>
         <div class="text-xs font-bold pt-1 border-t border-warning/20" :class="settlementSummary.isCommonsFullyCovered ? 'text-success' : 'text-warning'">
-          {{ settlementSummary.isMonthInProgress ? 'Month in progress - rent is billed by Memory Den at month end' : settlementSummary.isCommonsFullyCovered ? `✅ Surplus (+${settlementSummary.commonsNetBalance.toFixed(2)}) to Reserve` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
+          {{ settlementSummary.isMonthInProgress ? 'Month in progress - rent is billed by Memory Den at month end' : settlementSummary.isCommonsFullyCovered ? `✅ Over Operating Costs (+$${settlementSummary.commonsNetBalance.toFixed(2)} Surplus)` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
         </div>
+      </div>
+    </div>
+
+    <!-- Operating Costs Breakeven & Partner Profit-Sharing Policy Card (Up for Co-op Vote) -->
+    <div v-if="partnerSettlements.length > 0" class="card bg-base-100 border border-primary/25 shadow-sm rounded-2xl p-4 sm:p-5 space-y-4">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-base-200 pb-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="badge badge-sm badge-primary text-primary-content font-black whitespace-nowrap shrink-0">
+              Gate 3 ➔ Gate 4 Breakeven
+            </span>
+            <span
+              class="badge badge-sm font-bold whitespace-nowrap shrink-0"
+              :class="settlementSummary.commonsNetBalance > 0 ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
+            >
+              {{
+                settlementSummary.isMonthInProgress
+                  ? '⏳ Month In Progress'
+                  : settlementSummary.commonsNetBalance > 0
+                    ? `🎉 +$${settlementSummary.commonsNetBalance.toFixed(2)} Over Operating Costs`
+                    : `$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} Until Operating Breakeven`
+              }}
+            </span>
+            <a
+              href="/coop?section=governance"
+              class="badge badge-sm badge-secondary text-secondary-content font-bold gap-1 hover:brightness-110 whitespace-nowrap shrink-0"
+              title="Open Co-op Democratic Governance to vote on the Surplus Profit-Sharing Policy"
+            >
+              <Icon icon="solar:user-hand-up-bold" class="w-3 h-3" />
+              <span>Up for Co-op Vote ➔</span>
+            </a>
+          </div>
+          <h3 class="text-base sm:text-lg font-black text-base-content">
+            Operating Costs Breakeven &amp; Partner Profit Sharing (Over Operating Costs)
+          </h3>
+          <p class="text-xs text-base-content/70">
+            Once the 30% Commons Pool covers 100% of Monthly Operating Costs (Net Booth Rent + Tech Ops + Supplies), excess surplus can be shared between Co-op Partners.
+          </p>
+        </div>
+
+        <!-- Policy Mode & Partner Split Switchers -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+          <div class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300">
+            <button
+              type="button"
+              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+              :class="surplusPolicyMode === 'patronage_90_10' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+              @click="setSurplusPolicyMode('patronage_90_10')"
+              title="10% to Rainy-Day Reserve, 90% distributed to Co-op Partners"
+            >
+              ⚖️ 90/10 Dividend
+            </button>
+            <button
+              type="button"
+              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+              :class="surplusPolicyMode === 'cap_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+              @click="setSurplusPolicyMode('cap_100')"
+              title="Cap Commons at Operating Costs; 100% of excess goes to Co-op Partners"
+            >
+              🚀 100% Over Ops
+            </button>
+            <button
+              type="button"
+              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+              :class="surplusPolicyMode === 'reserve_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+              @click="setSurplusPolicyMode('reserve_100')"
+              title="Keep 100% of excess in the Collective Rainy-Day Reserve"
+            >
+              🛡️ 100% Reserve
+            </button>
+          </div>
+
+          <div
+            v-if="surplusPolicyMode !== 'reserve_100'"
+            class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300"
+          >
+            <button
+              type="button"
+              class="join-item btn btn-xs font-bold rounded-lg px-2"
+              :class="surplusSplitBasis === 'volume' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
+              @click="setSurplusSplitBasis('volume')"
+              title="Split excess surplus proportional to each partner's contributed net surplus"
+            >
+              📊 Pro-Rata Sales
+            </button>
+            <button
+              type="button"
+              class="join-item btn btn-xs font-bold rounded-lg px-2"
+              :class="surplusSplitBasis === 'equal' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
+              @click="setSurplusSplitBasis('equal')"
+              title="Split excess surplus equally (50/50) among active Co-op Partners"
+            >
+              🤝 Equal Split
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual Operating Costs Breakeven Progress Bar -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-xs flex-wrap gap-2">
+          <span class="font-bold text-base-content/80">
+            30% Commons Pool Collected:
+            <strong class="font-mono text-warning">${{ settlementSummary.totalCommonsPool.toFixed(2) }}</strong>
+            <span class="opacity-60 mx-1">vs.</span>
+            Operating Costs:
+            <strong class="font-mono text-base-content">${{ settlementSummary.totalCommonsOverhead.toFixed(2) }}</strong>
+            <span class="opacity-60 text-[11px]">
+              (Rent ${{ settlementSummary.netBoothRentForCoop.toFixed(2) }} + Tech ${{ settlementSummary.techOps.toFixed(2) }} + Supplies ${{ settlementSummary.supplies.toFixed(2) }})
+            </span>
+          </span>
+          <span class="font-mono font-black text-xs" :class="settlementSummary.distributablePartnerBonusPool > 0 ? 'text-success' : 'text-base-content/60'">
+            Partner Bonus Pool: +${{ settlementSummary.distributablePartnerBonusPool.toFixed(2) }} | Reserve Added: +${{ settlementSummary.reserveAddition.toFixed(2) }}
+          </span>
+        </div>
+        <div class="w-full h-3 rounded-full bg-base-300 overflow-hidden flex shadow-inner">
+          <div
+            class="transition-all duration-300"
+            :class="settlementSummary.isCommonsFullyCovered ? 'bg-success' : 'bg-warning'"
+            :style="{ width: `${settlementSummary.breakevenProgressPct}%` }"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Side-by-Side Partner Profit-Sharing Summary Table -->
+      <div class="overflow-x-auto border border-base-200 rounded-xl">
+        <table class="table table-xs">
+          <thead>
+            <tr class="bg-base-200/70 text-base-content/70 font-bold">
+              <th>Partner</th>
+              <th>Role</th>
+              <th class="text-right">Gross Sales</th>
+              <th class="text-right">15% Venue Fee</th>
+              <th class="text-right">100% Cost Recoup</th>
+              <th class="text-right">Base Profit (70%)</th>
+              <th class="text-right">Ops / Rent Share</th>
+              <th class="text-right text-success">Bonus Over Ops</th>
+              <th class="text-right font-black">Final Payout Check</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in partnerSettlements" :key="'summary-' + p.prefix" class="hover:bg-base-200/40">
+              <td class="font-bold">{{ p.name }} <span class="font-mono text-[10px] opacity-60">({{ p.prefix }})</span></td>
+              <td>
+                <span class="badge badge-xs font-bold whitespace-nowrap" :class="p.isConsignor ? 'badge-secondary text-secondary-content' : 'badge-primary text-primary-content'">
+                  {{ p.isConsignor ? 'Consignor' : 'Co-op Partner' }}
+                </span>
+              </td>
+              <td class="text-right font-mono">${{ p.totalGross.toFixed(2) }}</td>
+              <td class="text-right font-mono text-error">-${{ p.totalVenueFee.toFixed(2) }}</td>
+              <td class="text-right font-mono text-success">{{ p.isConsignor ? '—' : `+$${p.totalCostBasis.toFixed(2)}` }}</td>
+              <td class="text-right font-mono text-primary">{{ p.isConsignor ? '—' : `+$${p.totalCuratorProfit.toFixed(2)}` }}</td>
+              <td class="text-right font-mono text-warning">
+                {{ p.isConsignor ? `-$${(p.rentDeduction || 0).toFixed(2)} Rent` : `$${p.totalCommonsTake.toFixed(2)} (30%)` }}
+              </td>
+              <td class="text-right font-mono font-bold" :class="p.bonusSurplusDividend > 0 ? 'text-success' : 'opacity-50'">
+                {{ p.isConsignor ? '—' : `+$${(p.bonusSurplusDividend || 0).toFixed(2)}` }}
+              </td>
+              <td class="text-right font-mono font-black text-success">${{ p.totalPayoutCheck.toFixed(2) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -443,6 +605,12 @@ import { useAuth } from '../../composables/useAuth';
 import { normalizeOrgPrefix, extractOrgPrefix } from '../../lib/inventoryUpc';
 import { generatePartnerSettlementPdf, type PartnerStatementData } from '../../lib/coopSettlementPdf';
 import { coopExpensesApi, type CoopExpenseItem } from '../../lib/coopExpenses';
+import {
+  loadCoopGovernanceState,
+  saveCoopGovernanceState,
+  type SurplusPolicyMode,
+  type SurplusSplitBasis,
+} from '../../lib/coopGovernance';
 import { cleanSkuDisplay, pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
 
 interface SaleItem {
@@ -476,6 +644,25 @@ const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
 const selectedLocation = ref<'memory_den' | 'all'>('memory_den');
 
+const surplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');
+const surplusSplitBasis = ref<SurplusSplitBasis>('volume');
+
+const setSurplusPolicyMode = async (mode: SurplusPolicyMode) => {
+  surplusPolicyMode.value = mode;
+  await saveCoopGovernanceState(
+    { surplusPolicyMode: mode, surplusSplitBasis: surplusSplitBasis.value },
+    currentTeam.value?.$id || 'huck_collective'
+  );
+};
+
+const setSurplusSplitBasis = async (basis: SurplusSplitBasis) => {
+  surplusSplitBasis.value = basis;
+  await saveCoopGovernanceState(
+    { surplusPolicyMode: surplusPolicyMode.value, surplusSplitBasis: basis },
+    currentTeam.value?.$id || 'huck_collective'
+  );
+};
+
 // Keep this view's month in sync with the /sales page filter
 watch(() => props.period, (p) => {
   if (p && p !== selectedPeriod.value) selectedPeriod.value = p;
@@ -497,8 +684,11 @@ const loadExpenses = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   loadExpenses();
+  const { state } = await loadCoopGovernanceState([], currentTeam.value?.$id || 'huck_collective');
+  surplusPolicyMode.value = state.surplusPolicyMode;
+  surplusSplitBasis.value = state.surplusSplitBasis;
 });
 
 watch(currentTeam, (n) => {
@@ -776,10 +966,12 @@ const partnerSettlements = computed(() => {
   const allGroups = Object.values(groups);
   const totalGrossAll = Number(allGroups.reduce((sum, g) => sum + g.totalGross, 0).toFixed(2));
 
+  // First pass: compute consignor rent offsets and base payouts
   for (const grp of allGroups) {
     const grossRatio = totalGrossAll > 0 ? (grp.totalGross / totalGrossAll) : 0;
     const rentShare = Number((grossRatio * FIXED_BOOTH_RENT).toFixed(2));
     grp.rentDeduction = rentShare;
+    grp.bonusSurplusDividend = 0;
 
     if (grp.isConsignor) {
       // Pure Consignor: Gross - 15% Mall Fee - Proportional Booth Rent Share
@@ -790,6 +982,39 @@ const partnerSettlements = computed(() => {
       const reimbursements = memberReimbursements.value[grp.prefix] || 0;
       grp.reimbursements = reimbursements;
       grp.totalPayoutCheck = Number((grp.grossCuratorShare + reimbursements).toFixed(2));
+    }
+  }
+
+  // Second pass: Gate 4 Partner Surplus Sharing when 30% Commons Pool exceeds Operating Costs
+  const totalCommonsPool = Number(allGroups.reduce((acc, g) => acc + g.totalCommonsTake, 0).toFixed(2));
+  const consignorRentOffsets = Number(
+    allGroups.filter(g => g.isConsignor).reduce((acc, g) => acc + (g.rentDeduction || 0), 0).toFixed(2)
+  );
+  const netBoothRentForCoop = Math.max(0, Number((FIXED_BOOTH_RENT - consignorRentOffsets).toFixed(2)));
+  const totalCommonsOverhead = Number((netBoothRentForCoop + totalTechOpsAmount.value + totalSuppliesAmount.value).toFixed(2));
+  const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
+
+  const coopPartners = allGroups.filter(g => !g.isConsignor);
+  if (commonsNetBalance > 0 && coopPartners.length > 0 && !isMonthInProgress.value) {
+    const distributableRatio =
+      surplusPolicyMode.value === 'patronage_90_10'
+        ? 0.9
+        : surplusPolicyMode.value === 'cap_100'
+          ? 1.0
+          : 0;
+    const bonusPool = Number((commonsNetBalance * distributableRatio).toFixed(2));
+    const totalCoopNetSurplus = Number(coopPartners.reduce((acc, g) => acc + g.totalNetSurplus, 0).toFixed(2));
+
+    for (const grp of coopPartners) {
+      const shareRatio =
+        surplusSplitBasis.value === 'equal'
+          ? 1 / coopPartners.length
+          : totalCoopNetSurplus > 0
+            ? grp.totalNetSurplus / totalCoopNetSurplus
+            : 1 / coopPartners.length;
+      const bonus = Number((bonusPool * shareRatio).toFixed(2));
+      grp.bonusSurplusDividend = bonus;
+      grp.totalPayoutCheck = Number((grp.grossCuratorShare + (grp.reimbursements || 0) + bonus).toFixed(2));
     }
   }
 
@@ -828,6 +1053,14 @@ const settlementSummary = computed(() => {
   const totalCommonsOverhead = Number((netBoothRentForCoop + techOps + supplies).toFixed(2));
   const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
   const isCommonsFullyCovered = commonsNetBalance >= 0;
+  const distributablePartnerBonusPool = Number(
+    partnerSettlements.value.reduce((acc, p) => acc + Number(p.bonusSurplusDividend || 0), 0).toFixed(2)
+  );
+  const reserveAddition = Math.max(0, Number((commonsNetBalance - distributablePartnerBonusPool).toFixed(2)));
+  const breakevenProgressPct =
+    totalCommonsOverhead > 0
+      ? Math.min(100, Math.round((totalCommonsPool / totalCommonsOverhead) * 100))
+      : 100;
 
   return {
     totalGross,
@@ -848,6 +1081,9 @@ const settlementSummary = computed(() => {
     totalCommonsOverhead,
     commonsNetBalance,
     isCommonsFullyCovered,
+    distributablePartnerBonusPool,
+    reserveAddition,
+    breakevenProgressPct,
     memoryDenNetCheck,
     memoryDenDisbursementDate: memoryDenDisbursementDate.value
   };

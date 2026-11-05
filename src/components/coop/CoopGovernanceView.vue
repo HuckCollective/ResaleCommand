@@ -136,8 +136,9 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 w-full sm:w-auto">
-          <select v-model="activeVotingMember" class="select select-bordered select-sm rounded-xl font-bold text-xs h-9 min-h-9 flex-1 sm:w-56">
+        <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <select v-model="activeVotingMember" @change="initializeActiveSignals" class="select select-bordered select-sm rounded-xl font-bold text-xs h-9 min-h-9 flex-1 sm:w-56">
+            <option value="Mike (Core)">Mike (Core - HUCK)</option>
             <option value="Tyler (Core)">Tyler (Core - HUCK)</option>
             <option value="PDX Partner">PDX Partner (PDXGL)</option>
             <option value="Member Jesse">Member Jesse (HUCK)</option>
@@ -145,6 +146,14 @@
             <option value="Guest Curator">Guest Curator (Consignor)</option>
           </select>
           <span class="badge badge-sm badge-success font-bold shrink-0">Eligible Voter</span>
+          <span
+            class="badge badge-sm font-mono font-bold shrink-0 gap-1"
+            :class="isCloudSynced ? 'badge-primary' : 'badge-ghost'"
+            :title="isCloudSynced ? 'Proposals & Votes synced live in Appwrite Cloud (resale_db)' : 'Using browser fallback storage'"
+          >
+            <Icon :icon="isCloudSynced ? 'solar:cloud-check-bold' : 'solar:cloud-storage-linear'" class="w-3.5 h-3.5" />
+            <span>{{ isSavingCloud ? 'Saving...' : isCloudSynced ? 'Appwrite DB Live' : 'Local Cache' }}</span>
+          </span>
         </div>
       </div>
     </div>
@@ -206,6 +215,48 @@
             <div class="p-3.5 rounded-2xl bg-base-200/60 border border-base-300 text-xs space-y-1">
               <span class="font-bold text-base-content">Collective Rationale: </span>
               <span class="text-base-content/75">{{ proposal.rationale }}</span>
+            </div>
+
+            <!-- Live Surplus Profit-Sharing Policy Binding on prop-surplus-policy -->
+            <div
+              v-if="proposal.id === 'prop-surplus-policy'"
+              class="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+            >
+              <div class="space-y-0.5">
+                <div class="text-xs font-black text-primary flex items-center gap-1.5">
+                  <Icon icon="solar:settings-minimalistic-bold-duotone" class="w-4 h-4 shrink-0" />
+                  <span>Active Waterfall Policy Bound to Settlement Ledger</span>
+                </div>
+                <p class="text-[11px] text-base-content/65">
+                  Changing this option updates the live Co-op Settlement &amp; Waterfall calculator in Appwrite Cloud across all partners.
+                </p>
+              </div>
+              <div class="join border border-base-300 rounded-xl bg-base-100 p-0.5 shrink-0">
+                <button
+                  type="button"
+                  @click="updateCloudSurplusPolicy('patronage_90_10')"
+                  class="join-item btn btn-xs font-bold rounded-lg border-0"
+                  :class="activeSurplusPolicyMode === 'patronage_90_10' ? 'btn-primary text-primary-content' : 'btn-ghost text-base-content/70'"
+                >
+                  ⚖️ 90/10 Dividend
+                </button>
+                <button
+                  type="button"
+                  @click="updateCloudSurplusPolicy('cap_100')"
+                  class="join-item btn btn-xs font-bold rounded-lg border-0"
+                  :class="activeSurplusPolicyMode === 'cap_100' ? 'btn-primary text-primary-content' : 'btn-ghost text-base-content/70'"
+                >
+                  🚀 100% Over Ops
+                </button>
+                <button
+                  type="button"
+                  @click="updateCloudSurplusPolicy('reserve_100')"
+                  class="join-item btn btn-xs font-bold rounded-lg border-0"
+                  :class="activeSurplusPolicyMode === 'reserve_100' ? 'btn-neutral text-neutral-content' : 'btn-ghost text-base-content/70'"
+                >
+                  🛡️ 100% Reserve
+                </button>
+              </div>
             </div>
           </div>
 
@@ -531,36 +582,22 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import {
+  loadCoopGovernanceState,
+  saveCoopGovernanceState,
+  type LoomioSignal,
+  type ProposalVote,
+  type CoopProposal,
+  type SurplusPolicyMode,
+} from '../../lib/coopGovernance';
 
-export type LoomioSignal = 'agree' | 'abstain' | 'disagree' | 'block';
+const { user, currentTeam } = useAuth();
 
-export interface ProposalVote {
-  signal: LoomioSignal;
-  memberName: string;
-  partner: string;
-  comment?: string;
-  votedAt: string;
-}
-
-export interface CoopProposal {
-  id: string;
-  title: string;
-  proposer: string;
-  proposerPartner: string;
-  category: 'Booth & Physical Footprint' | 'Inventory & Consignment' | 'Hardware & Equipment' | 'Software & Tech Commons' | 'Policy & Membership';
-  description: string;
-  rationale: string;
-  financialImpact?: string;
-  deadline: string;
-  status: 'active' | 'passed' | 'blocked';
-  createdAt: string;
-  votes: Record<string, ProposalVote>;
-}
-
-const { user } = useAuth();
-
-const activeVotingMember = ref('Tyler (Core)');
+const activeVotingMember = ref('Mike (Core)');
 const isNewProposalModalOpen = ref(false);
+const isCloudSynced = ref(false);
+const isSavingCloud = ref(false);
+const activeSurplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');
 
 // Local state for active voting controls per proposal
 const selectedSignal = ref<Record<string, LoomioSignal>>({});
@@ -568,6 +605,22 @@ const votingRationale = ref<Record<string, string>>({});
 
 // Initial Seed Proposals representing authentic collective choices
 const defaultProposals: CoopProposal[] = [
+  {
+    id: 'prop-surplus-policy',
+    title: 'Adopt Partner Surplus Dividend When Monthly Commons Pool Exceeds Operating Costs',
+    proposer: 'Mike (Core)',
+    proposerPartner: 'HUCK',
+    category: 'Policy & Membership',
+    description: 'When the 30% Monthly Commons Pool exceeds actual Monthly Operating Costs (Booth Rent net of Consignor Share + Tech Ops + Supplies), keep 10% of the excess in the Collective Rainy-Day Reserve and distribute 90% of the excess back to Co-op Partners (HUCK- & PDXGL-) as a Bonus Surplus Dividend.',
+    rationale: 'Ensures Operating Costs and 100% Cost Basis are always covered first while rewarding active Co-op Partners with real profit sharing whenever the booth beats monthly operating expenses.',
+    financialImpact: 'Distributes 90% of Commons Surplus above Operating Costs to Partners (10% to Reserve)',
+    deadline: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10),
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    votes: {
+      'mike': { signal: 'agree', memberName: 'Mike (Core)', partner: 'HUCK', comment: 'Lets partners share directly in upside once booth rent and tech ops are paid.', votedAt: new Date().toISOString() }
+    }
+  },
   {
     id: 'prop-1',
     title: 'Expand Memory Den Booth 0EJ Second Shelf Tier',
@@ -644,32 +697,46 @@ const newProposal = ref<{
   deadline: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10)
 });
 
-onMounted(() => {
-  try {
-    const saved = localStorage.getItem('huck_coop_proposals_v1');
-    if (saved) {
-      proposals.value = JSON.parse(saved);
-    } else {
-      proposals.value = defaultProposals;
-      saveProposals();
-    }
-  } catch {
-    proposals.value = defaultProposals;
-  }
-
+onMounted(async () => {
   if (user.value?.name) {
     activeVotingMember.value = user.value.name;
     newProposal.value.proposer = user.value.name;
   }
 
+  const tenantId = currentTeam.value?.$id || 'huck_collective';
+  const { state, syncedFromCloud } = await loadCoopGovernanceState(defaultProposals, tenantId);
+  proposals.value = state.proposals;
+  activeSurplusPolicyMode.value = state.surplusPolicyMode;
+  isCloudSynced.value = syncedFromCloud;
+
   // Pre-fill active votes for current member
   initializeActiveSignals();
 });
 
-const saveProposals = () => {
+const saveProposals = async () => {
+  isSavingCloud.value = true;
   try {
-    localStorage.setItem('huck_coop_proposals_v1', JSON.stringify(proposals.value));
-  } catch {}
+    const tenantId = currentTeam.value?.$id || 'huck_collective';
+    const ok = await saveCoopGovernanceState(
+      {
+        proposals: proposals.value,
+        surplusPolicyMode: activeSurplusPolicyMode.value,
+      },
+      tenantId
+    );
+    isCloudSynced.value = ok;
+  } finally {
+    isSavingCloud.value = false;
+  }
+};
+
+const updateCloudSurplusPolicy = async (mode: SurplusPolicyMode) => {
+  activeSurplusPolicyMode.value = mode;
+  await saveProposals();
+  addToast({
+    type: 'success',
+    message: `Active Co-op Surplus Policy updated in Appwrite Cloud (${mode === 'patronage_90_10' ? '90/10 Dividend' : mode === 'cap_100' ? '100% Over Ops' : '100% Reserve'})!`,
+  });
 };
 
 const initializeActiveSignals = () => {
