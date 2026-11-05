@@ -77,3 +77,4 @@ When Memory Den’s Ricochet POS records a hand-written or untagged register sal
 2. **30-Day Commons Sweep (Day 31+):**
    - If an unlinked mystery ticket remains unclaimed **30 days after the sale date** (or at the close of monthly settlement reconciliation after all partners have reviewed the Unlinked Tickets banner), a partner clicks **`[Assign to Commons Pool]`** (`COMMONS-`).
    - **Commons Sweep Accounting:** Curator split is set to **`$0.00`** and **100% of the Net Margin** (`Gross Sales - 15% Venue Fee`) is swept directly into the **Shared Commons Pool** to help pay down booth rent, tech ops, or carried-over shortfalls for the benefit of the entire collective.
+
