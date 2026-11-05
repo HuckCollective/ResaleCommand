@@ -780,6 +780,10 @@ const resolveItemPrefix = (item: SaleItem): string => {
   const soNumber = (item.soNumber || '').trim().toUpperCase();
   const title = (item.title || '').trim().toUpperCase();
 
+  if (upc.startsWith('COMMONS') || sku.startsWith('COMMONS') || soNumber.startsWith('COMMONS') || title.includes('[COMMONS]')) {
+    return 'COMMONS-';
+  }
+
   const extracted = extractOrgPrefix(upc) || extractOrgPrefix(sku) || extractOrgPrefix(soNumber);
   if (extracted) return extracted;
 
@@ -808,6 +812,7 @@ const resolveItemPrefix = (item: SaleItem): string => {
 
 const resolvePartnerName = (prefix: string): string => {
   const clean = prefix.replace(/[-_]$/, '');
+  if (clean === 'COMMONS') return 'Shared Commons Pool (100% Margin Sweep)';
   if (clean === 'HUCK') return 'Huckleberry Collective';
   if (clean === 'PDXGL') return 'PDX Game Library';
   if (clean === 'BB') return 'B&B Consignment (PDXGL Sub-Client)';
@@ -920,6 +925,7 @@ const partnerSettlements = computed(() => {
         prefix,
         name: partnerName,
         isConsignor: prefix === 'BB-',
+        isCommonsPool: prefix === 'COMMONS-',
         items: [],
         totalGross: 0,
         totalVenueFee: 0,
@@ -935,13 +941,22 @@ const partnerSettlements = computed(() => {
     }
 
     const isPureConsignor = prefix === 'BB-';
+    const isCommonsClaimed = prefix === 'COMMONS-';
     const grossPrice = Number(sale.grossAmount || 0);
     const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice - Number(sale.fees ?? 0)));
     const venueFee = Math.max(0, Number(sale.fees !== undefined ? sale.fees : (grossPrice - netStoreDeposit)));
-    const costBasis = isPureConsignor ? 0 : Number(sale.cost || 0);
+    const costBasis = (isPureConsignor || isCommonsClaimed) ? 0 : Number(sale.cost || 0);
     const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
-    const curatorTake = isPureConsignor ? netStoreDeposit : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
-    const commonsTake = isPureConsignor ? 0 : Number((netSurplus * 0.30).toFixed(2));
+    const curatorTake = isCommonsClaimed
+      ? 0
+      : isPureConsignor
+        ? netStoreDeposit
+        : Number((costBasis + (netSurplus * 0.70)).toFixed(2));
+    const commonsTake = isCommonsClaimed
+      ? netSurplus
+      : isPureConsignor
+        ? 0
+        : Number((netSurplus * 0.30).toFixed(2));
 
     groups[prefix].items.push({
       date: sale.date,
@@ -958,7 +973,7 @@ const partnerSettlements = computed(() => {
     groups[prefix].totalVenueFee = Number((groups[prefix].totalVenueFee + venueFee).toFixed(2));
     groups[prefix].totalCostBasis = Number((groups[prefix].totalCostBasis + costBasis).toFixed(2));
     groups[prefix].totalNetSurplus = Number((groups[prefix].totalNetSurplus + netSurplus).toFixed(2));
-    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (isPureConsignor ? netStoreDeposit : (netSurplus * 0.70))).toFixed(2));
+    groups[prefix].totalCuratorProfit = Number((groups[prefix].totalCuratorProfit + (isCommonsClaimed ? 0 : isPureConsignor ? netStoreDeposit : (netSurplus * 0.70))).toFixed(2));
     groups[prefix].totalCommonsTake = Number((groups[prefix].totalCommonsTake + commonsTake).toFixed(2));
     groups[prefix].grossCuratorShare = Number((groups[prefix].totalCostBasis + groups[prefix].totalCuratorProfit).toFixed(2));
   }
@@ -973,7 +988,11 @@ const partnerSettlements = computed(() => {
     grp.rentDeduction = rentShare;
     grp.bonusSurplusDividend = 0;
 
-    if (grp.isConsignor) {
+    if (grp.isCommonsPool) {
+      grp.totalCuratorProfit = 0;
+      grp.grossCuratorShare = 0;
+      grp.totalPayoutCheck = 0;
+    } else if (grp.isConsignor) {
       // Pure Consignor: Gross - 15% Mall Fee - Proportional Booth Rent Share
       grp.totalCuratorProfit = Math.max(0, Number((grp.totalGross - grp.totalVenueFee - rentShare).toFixed(2)));
       grp.totalPayoutCheck = grp.totalCuratorProfit;
@@ -994,7 +1013,7 @@ const partnerSettlements = computed(() => {
   const totalCommonsOverhead = Number((netBoothRentForCoop + totalTechOpsAmount.value + totalSuppliesAmount.value).toFixed(2));
   const commonsNetBalance = Number((totalCommonsPool - totalCommonsOverhead).toFixed(2));
 
-  const coopPartners = allGroups.filter(g => !g.isConsignor);
+  const coopPartners = allGroups.filter(g => !g.isConsignor && !g.isCommonsPool);
   if (commonsNetBalance > 0 && coopPartners.length > 0 && !isMonthInProgress.value) {
     const distributableRatio =
       surplusPolicyMode.value === 'patronage_90_10'

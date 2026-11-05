@@ -327,13 +327,16 @@
               {{ sale.title }}
             </a>
 
-            <!-- Chips / Pills: Location, UPC, SKU -->
+            <!-- Chips / Pills: Location, UPC, SKU, Unlinked Ticket Warning -->
             <div class="flex items-center gap-1.5 flex-wrap text-xs">
               <span class="badge badge-sm badge-outline font-semibold gap-1 py-2 whitespace-nowrap shrink-0">
                 <Icon icon="solar:shop-2-linear" class="w-3 h-3 opacity-60 shrink-0" />
                 {{ sale.locationName }}
               </span>
               <span class="badge badge-sm font-bold py-2 whitespace-nowrap shrink-0" :class="partnerBadge(sale.partner).cls">{{ partnerBadge(sale.partner).text }}</span>
+              <span v-if="isUnlinkedTicketSale(sale)" class="badge badge-sm badge-warning font-black py-2 whitespace-nowrap shrink-0">
+                ⚠️ Unlinked Ticket
+              </span>
               <span v-if="sale.sku" class="badge badge-sm badge-secondary badge-outline font-mono text-[10px] font-bold py-2 whitespace-nowrap shrink-0">
                 SKU: {{ sale.sku }}
               </span>
@@ -359,8 +362,17 @@
             </div>
           </div>
 
-          <!-- Touch Actions: Edit Sale + Item Link -->
-          <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
+          <!-- Touch Actions: Link Inventory + Edit Sale + Item Link -->
+          <div class="flex items-center gap-2 pt-1 border-t border-base-200/60 flex-wrap">
+            <button
+              v-if="isUnlinkedTicketSale(sale)"
+              type="button"
+              @click="openLinkTicketModal(sale)"
+              class="btn btn-sm btn-warning font-black flex-1 rounded-xl gap-1.5 min-h-[38px] shadow-xs active:scale-95 transition-all"
+            >
+              <Icon icon="solar:link-circle-bold" class="w-4 h-4 shrink-0" />
+              <span>Link Inventory</span>
+            </button>
             <a 
               :href="`/sales/${sale.id}`" 
               class="btn btn-sm btn-primary text-primary-content font-bold flex-1 rounded-xl gap-1.5 min-h-[38px] shadow-xs active:scale-95 transition-all"
@@ -443,15 +455,41 @@
 
                 <!-- Item & Partner badge + condensed venue -->
                 <td class="py-2.5 px-3">
-                  <a
-                    :href="`/sales/${sale.id}`"
-                    class="font-bold text-xs text-base-content hover:text-primary transition-colors block max-w-[14rem] xl:max-w-sm truncate"
-                    :title="sale.title"
-                  >{{ sale.title }}</a>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <a
+                      :href="`/sales/${sale.id}`"
+                      class="font-bold text-xs text-base-content hover:text-primary transition-colors block max-w-[14rem] xl:max-w-sm truncate"
+                      :title="sale.title"
+                    >{{ sale.title }}</a>
+                    <span
+                      v-if="isUnlinkedTicketSale(sale)"
+                      class="badge badge-xs badge-warning font-black whitespace-nowrap"
+                    >
+                      ⚠️ Unlinked Ticket
+                    </span>
+                    <button
+                      v-if="isUnlinkedTicketSale(sale)"
+                      type="button"
+                      @click="openLinkTicketModal(sale)"
+                      class="btn btn-xs btn-warning font-black h-6 min-h-0 px-2 rounded-lg gap-1 shadow-2xs"
+                    >
+                      <Icon icon="solar:link-circle-bold" class="w-3 h-3 shrink-0" />
+                      <span>Link Inventory</span>
+                    </button>
+                  </div>
                   <div class="flex items-center gap-1 mt-1 flex-wrap">
                     <span class="badge badge-xs font-bold whitespace-nowrap" :class="partnerBadge(sale.partner).cls">{{ partnerBadge(sale.partner).text }}</span>
                     <span class="badge badge-xs badge-outline font-semibold whitespace-nowrap" :title="`${sale.locationName}${sale.sku ? ' · ' + sale.sku : ''}`">{{ condenseLocation(sale) }}</span>
                     <span v-if="sale.upc" class="font-mono text-[10px] opacity-60 whitespace-nowrap">{{ sale.upc }}</span>
+                    <button
+                      v-if="!isUnlinkedTicketSale(sale)"
+                      type="button"
+                      @click="openLinkTicketModal(sale)"
+                      class="btn btn-ghost btn-xs h-5 min-h-0 px-1.5 text-[10px] font-bold opacity-60 hover:opacity-100"
+                      title="Reassign Partner or Re-link Inventory SKU"
+                    >
+                      ⇄ Reassign
+                    </button>
                   </div>
                 </td>
 
@@ -566,6 +604,16 @@
           @scan="(res) => { if (res && res.rawValue) searchQuery = res.rawValue; }"
       />
 
+      <!-- Unlinked Ticket Inventory Match & Partner Reassignment Modal -->
+      <LinkTicketInventoryModal
+        :is-open="isLinkTicketModalOpen"
+        :sale="activeSaleForLinking"
+        :inventory-items="inventoryItems"
+        :tenant-id="currentTeam?.$id"
+        @close="isLinkTicketModalOpen = false"
+        @updated="handleSaleLinkedOrReassigned"
+      />
+
     </div>
   </div>
 </template>
@@ -574,6 +622,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import CoopSettlementView from './CoopSettlementView.vue';
+import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
@@ -602,12 +651,43 @@ const loading = ref(true);
 const error = ref('');
 const searchQuery = ref('');
 const locationFilter = ref('all');
-type PartnerKey = 'all' | 'HUCK' | 'BB' | 'PDXGL';
+type PartnerKey = 'all' | 'HUCK' | 'BB' | 'PDXGL' | 'COMMONS';
 const partnerFilter = ref<PartnerKey>('all');
 const monthFilter = ref<string>('all');
 let monthDefaulted = false;
 const showBarcodeScanner = ref(false);
 const salesViewTab = ref<'ledger' | 'coop'>('ledger');
+const isLinkTicketModalOpen = ref(false);
+const activeSaleForLinking = ref<any | null>(null);
+
+const isUnlinkedTicketSale = (sale: any): boolean => {
+  if (!sale) return false;
+  if (sale.partner === 'COMMONS') return false;
+  const title = String(sale.title || '').trim();
+  const so = String(sale.soNumber || '').trim();
+  if (/^ticket\s*#/i.test(title) || /^order\s+/i.test(title) || /^md-payout/i.test(title)) {
+    return true;
+  }
+  if (/^SO-/i.test(so) && !sale.itemId) {
+    return true;
+  }
+  return !sale.itemId && (!sale.costBasis || sale.costBasis === 0) && /^ticket/i.test(String(sale.orderId || ''));
+};
+
+const openLinkTicketModal = (sale: any) => {
+  activeSaleForLinking.value = sale;
+  isLinkTicketModalOpen.value = true;
+};
+
+const handleSaleLinkedOrReassigned = async ({ saleId, updatedSale }: { saleId: string; updatedSale: any }) => {
+  const idx = sales.value.findIndex((s) => s.$id === saleId);
+  if (idx !== -1 && updatedSale) {
+    sales.value[idx] = { ...sales.value[idx], ...updatedSale };
+  }
+  if (currentTeam.value?.$id) {
+    await fetchInventory(currentTeam.value.$id).catch(() => {});
+  }
+};
 
 // Booth rent for Co-op Settlements: resolved from the live Appwrite warehouse document (Ricochet booth), never hardcoded
 const boothMonthlyRent = computed(() => Number(resolveDefaultRicochetLocationMeta(warehouses.value).monthlyRent || 0));
@@ -808,14 +888,18 @@ const consolidatedSales = computed(() => {
     const comm = (sale.commissionFee || 0) + (sale.shippingCost || 0);
 
     const soUpper = (sale.soNumber || '').trim().toUpperCase();
-    const isBB = soUpper.startsWith('BB-') || soUpper.startsWith('BB') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('BB'));
-    const isPDXGL = soUpper.startsWith('PDXGL-') || soUpper.startsWith('PDXGL') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('PDXGL'));
-    const fallbackUpc = (soUpper.startsWith('HUCK-') || soUpper.startsWith('PDXGL-') || soUpper.startsWith('BB-')) ? soUpper : '';
+    const ordUpper = (sale.orderId || '').trim().toUpperCase();
+    const isCommons = soUpper.startsWith('COMMONS-') || soUpper.startsWith('COMMONS') || ordUpper.includes('[COMMONS]');
+    const isBB = !isCommons && (soUpper.startsWith('BB-') || soUpper.startsWith('BB') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('BB')));
+    const isPDXGL = !isCommons && (soUpper.startsWith('PDXGL-') || soUpper.startsWith('PDXGL') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('PDXGL')));
+    const fallbackUpc = (soUpper.startsWith('HUCK-') || soUpper.startsWith('PDXGL-') || soUpper.startsWith('BB-') || soUpper.startsWith('COMMONS-')) ? soUpper : '';
 
     let displayTitle = linkedItem?.title;
     if (!displayTitle) {
       if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT') && !sale.orderId.startsWith('SYNC-')) {
         displayTitle = sale.orderId.includes('•') ? sale.orderId.split('•')[1].trim() : sale.orderId;
+      } else if (isCommons) {
+        displayTitle = `[COMMONS] Unclaimed Booth Item (${sale.soNumber})`;
       } else if (isBB) {
         displayTitle = `B&B Consignment Item (${sale.soNumber})`;
       } else if (isPDXGL) {
@@ -827,7 +911,7 @@ const consolidatedSales = computed(() => {
       }
     }
 
-    const partner: PartnerKey = isBB ? 'BB' : (isPDXGL ? 'PDXGL' : 'HUCK');
+    const partner: PartnerKey = isCommons ? 'COMMONS' : (isBB ? 'BB' : (isPDXGL ? 'PDXGL' : 'HUCK'));
     // Cost basis per sale: single-unit = item cost; multi-qty bin = verified per-unit cost basis ($2.61, $0.81, $4.46, $4.16, etc.); B&B = $0
     let costBasis = 0;
     if (isBB) {
@@ -899,7 +983,8 @@ watch(monthOptions, (opts) => {
 const PARTNER_LABELS: Record<Exclude<PartnerKey, 'all'>, string> = {
   HUCK: 'Huck (HUCK-)',
   BB: 'B&B (BB-)',
-  PDXGL: 'PDXGL (PDXGL-)'
+  PDXGL: 'PDXGL (PDXGL-)',
+  COMMONS: 'Commons Pool (COMMONS-)'
 };
 
 const monthLabel = computed(() => {
@@ -949,6 +1034,7 @@ const condenseLocation = (sale: any) => {
 };
 
 const partnerBadge = (p: string) => {
+  if (p === 'COMMONS') return { text: '🏛️ COMMONS (100%)', cls: 'badge-warning' };
   if (p === 'BB') return { text: '👗 B&B', cls: 'badge-secondary' };
   if (p === 'PDXGL') return { text: '🎲 PDXGL', cls: 'badge-accent' };
   return { text: '🫐 HUCK', cls: 'badge-primary' };
