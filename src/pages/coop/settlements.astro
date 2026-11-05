@@ -1,0 +1,16 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CoopSubNav from '../../components/coop/CoopSubNav.vue';
+import SalesList from '../../components/sales/SalesList.vue';
+---
+
+<Layout
+  title="Co-op Monthly Settlements & Waterfall | Resale Command"
+  description="4-Gate WSDE Monthly Co-op Settlement Workbench, Operating Cost Breakeven, and Partner PDF Statements."
+  hideFooter={true}
+>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-44 sm:pb-40">
+    <CoopSubNav client:only="vue" activeTab="settlements" />
+    <SalesList client:only="vue" initialTab="coop" />
+  </div>
+</Layout>

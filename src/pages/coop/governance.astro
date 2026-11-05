@@ -1,0 +1,16 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CoopSubNav from '../../components/coop/CoopSubNav.vue';
+import CoopGovernanceView from '../../components/coop/CoopGovernanceView.vue';
+---
+
+<Layout
+  title="Co-op Governance, Voting & Policy Rules | Resale Command"
+  description="Democratic WSDE proposal voting, configurable 4-Gate waterfall rules, and partner roster management."
+  hideFooter={true}
+>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
+    <CoopSubNav client:only="vue" activeTab="governance" />
+    <CoopGovernanceView client:only="vue" />
+  </div>
+</Layout>

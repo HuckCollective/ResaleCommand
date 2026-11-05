@@ -148,7 +148,40 @@
             <Icon icon="solar:dollar-minimalistic-bold-duotone" class="w-4 h-4 text-success shrink-0" />
             <div class="flex flex-col min-w-0">
               <span class="font-bold text-xs">Sales &amp; Payout Ledger</span>
-              <span class="text-[10px] opacity-60">Settlements &amp; 70/30 Waterfall</span>
+              <span class="text-[10px] opacity-60">Register Tickets &amp; CSV Import</span>
+            </div>
+          </a>
+          <a
+            href="/coop/settlements"
+            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+            :class="isRouteActive('/coop/settlements') ? 'bg-primary/15 text-primary font-bold' : ''"
+          >
+            <Icon icon="solar:hand-money-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs">Co-op Monthly Settlements</span>
+              <span class="text-[10px] opacity-60">4-Gate 70/30 Waterfall &amp; PDFs</span>
+            </div>
+          </a>
+          <a
+            href="/coop/governance"
+            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+            :class="isRouteActive('/coop/governance') ? 'bg-primary/15 text-primary font-bold' : ''"
+          >
+            <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs">Co-op Governance &amp; Rules</span>
+              <span class="text-[10px] opacity-60">Proposals, Loomio Votes &amp; Sliders</span>
+            </div>
+          </a>
+          <a
+            href="/coop/labor"
+            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+            :class="isRouteActive('/coop/labor') ? 'bg-primary/15 text-primary font-bold' : ''"
+          >
+            <Icon icon="solar:clock-circle-bold-duotone" class="w-4 h-4 text-accent shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs">Sweat-Equity Labor Ledger</span>
+              <span class="text-[10px] opacity-60">Log Booth &amp; Social Work Hours</span>
             </div>
           </a>
           <a
@@ -165,12 +198,12 @@
           <a
             href="/coop"
             class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/coop') ? 'bg-primary/15 text-primary font-bold' : ''"
+            :class="currentPath === '/coop' ? 'bg-primary/15 text-primary font-bold' : ''"
           >
             <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
             <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Co-op Charter &amp; Rules</span>
-              <span class="text-[10px] opacity-60">Commons Pool &amp; Consignor Terms</span>
+              <span class="font-bold text-xs">Living Co-op Charter</span>
+              <span class="text-[10px] opacity-60">WSDE Rules &amp; Payout Simulator</span>
             </div>
           </a>
         </div>
@@ -800,6 +833,27 @@ const mobileFinanceLinks = computed(() => [
     active: isRouteActive('/sales'),
   },
   {
+    label: 'Co-op Monthly Settlements',
+    url: '/coop/settlements',
+    icon: 'solar:hand-money-bold-duotone',
+    iconColor: 'text-primary',
+    active: isRouteActive('/coop/settlements'),
+  },
+  {
+    label: 'Co-op Governance & Rules',
+    url: '/coop/governance',
+    icon: 'solar:users-group-two-rounded-bold-duotone',
+    iconColor: 'text-secondary',
+    active: isRouteActive('/coop/governance'),
+  },
+  {
+    label: 'Sweat-Equity Labor Ledger',
+    url: '/coop/labor',
+    icon: 'solar:clock-circle-bold-duotone',
+    iconColor: 'text-accent',
+    active: isRouteActive('/coop/labor'),
+  },
+  {
     label: 'Expenses & Receipts',
     url: '/expenses',
     icon: 'solar:bill-list-bold-duotone',
@@ -807,11 +861,11 @@ const mobileFinanceLinks = computed(() => [
     active: isRouteActive('/expenses'),
   },
   {
-    label: 'Co-op Charter & Rules',
+    label: 'Living Co-op Charter',
     url: '/coop',
     icon: 'solar:shield-star-bold-duotone',
     iconColor: 'text-primary',
-    active: isRouteActive('/coop'),
+    active: currentPath.value === '/coop',
   },
 ]);
 

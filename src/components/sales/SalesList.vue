@@ -667,6 +667,10 @@ import {
   matchMemoryDenInventoryItem,
 } from '../../lib/salesBucketing';
 
+const props = defineProps<{
+  initialTab?: 'ledger' | 'coop';
+}>();
+
 const { currentTeam } = useAuth();
 const { inventoryItems, fetchInventory } = useInventory();
 
@@ -681,7 +685,7 @@ const partnerFilter = ref<PartnerKey>('all');
 const monthFilter = ref<string>('all');
 let monthDefaulted = false;
 const showBarcodeScanner = ref(false);
-const salesViewTab = ref<'ledger' | 'coop'>('ledger');
+const salesViewTab = ref<'ledger' | 'coop'>(props.initialTab || 'ledger');
 const isLinkTicketModalOpen = ref(false);
 const activeSaleForLinking = ref<any | null>(null);
 const onlyUnlinkedFilter = ref(false);

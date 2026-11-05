@@ -1,0 +1,16 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CoopSubNav from '../../components/coop/CoopSubNav.vue';
+import CoopLaborView from '../../components/coop/CoopLaborView.vue';
+---
+
+<Layout
+  title="Co-op Sweat-Equity & Enabling Labor Ledger | Resale Command"
+  description="Cloud-synced WSDE member labor ledger for booth restocking, AI staging, Dropcast social reels, and Gate 4B Sweat-Equity dividends."
+  hideFooter={true}
+>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
+    <CoopSubNav client:only="vue" activeTab="labor" />
+    <CoopLaborView client:only="vue" />
+  </div>
+</Layout>

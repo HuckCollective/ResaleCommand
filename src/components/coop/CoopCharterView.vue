@@ -1,6 +1,7 @@
 <template>
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8">
-    
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6">
+    <CoopSubNav activeTab="charter" />
+
     <!-- Hero Banner with Richard Wolff WSDE Framing -->
     <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/15 via-base-200 to-base-100 border border-primary/25 p-6 sm:p-10 shadow-xl">
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
@@ -834,6 +835,7 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
+import CoopSubNav from './CoopSubNav.vue';
 
 const activeSection = ref<'payouts' | 'monthly' | 'expenses' | 'governance' | 'legal'>('payouts');
 const copiedLink = ref(false);
