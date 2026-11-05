@@ -499,12 +499,95 @@
                 </div>
               </div>
 
+              <!-- 1-Click Sales Channel & Marketplace Preset Selector (Booths, Online + Postage, Pop-Ups) -->
+              <div class="p-3.5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2.5">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <span class="text-xs font-black uppercase tracking-wider text-base-content flex items-center gap-1.5">
+                    <Icon icon="solar:globus-bold-duotone" class="w-4 h-4 text-primary" />
+                    <span>Sales Channel &amp; Marketplace Preset</span>
+                  </span>
+                  <span class="badge badge-xs font-mono font-bold" :class="selectedChannelPreset === 'booth' ? 'badge-primary' : 'badge-secondary'">
+                    {{ selectedChannelLabel }} · {{ effectiveCommissionRate }}% Fee
+                  </span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  <button
+                    type="button"
+                    @click="applyChannelPreset('booth')"
+                    class="btn btn-xs sm:btn-sm rounded-xl font-bold h-auto py-2 flex flex-col items-start gap-0.5"
+                    :class="selectedChannelPreset === 'booth' ? 'btn-primary shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
+                  >
+                    <span class="text-[11px] font-black">🏪 Retail Booth</span>
+                    <span class="text-[9px] opacity-75 font-mono">MD 15% / DT 10%</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="applyChannelPreset('ebay')"
+                    class="btn btn-xs sm:btn-sm rounded-xl font-bold h-auto py-2 flex flex-col items-start gap-0.5"
+                    :class="selectedChannelPreset === 'ebay' ? 'btn-info shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
+                  >
+                    <span class="text-[11px] font-black">📦 eBay Online</span>
+                    <span class="text-[9px] opacity-75 font-mono">13.25% + Label</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="applyChannelPreset('poshmark')"
+                    class="btn btn-xs sm:btn-sm rounded-xl font-bold h-auto py-2 flex flex-col items-start gap-0.5"
+                    :class="selectedChannelPreset === 'poshmark' ? 'btn-secondary shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
+                  >
+                    <span class="text-[11px] font-black">👗 Poshmark</span>
+                    <span class="text-[9px] opacity-75 font-mono">20% Flat Fee</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="applyChannelPreset('direct_online')"
+                    class="btn btn-xs sm:btn-sm rounded-xl font-bold h-auto py-2 flex flex-col items-start gap-0.5"
+                    :class="selectedChannelPreset === 'direct_online' ? 'btn-accent shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
+                  >
+                    <span class="text-[11px] font-black">💳 Direct / Social</span>
+                    <span class="text-[9px] opacity-75 font-mono">2.9% + Postage</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="applyChannelPreset('popup')"
+                    class="btn btn-xs sm:btn-sm rounded-xl font-bold h-auto py-2 flex flex-col items-start gap-0.5 col-span-2 sm:col-span-1"
+                    :class="selectedChannelPreset === 'popup' ? 'btn-warning shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
+                  >
+                    <span class="text-[11px] font-black">🎪 Pop-Up Event</span>
+                    <span class="text-[9px] opacity-75 font-mono">{{ popupPaymentMode === 'cash' ? '0% Cash' : '2.9% Card Tap' }}</span>
+                  </button>
+                </div>
+
+                <!-- Pop-Up Cash vs Card Sub-Toggle -->
+                <div v-if="selectedChannelPreset === 'popup'" class="flex items-center justify-between gap-2 pt-1 text-xs">
+                  <span class="font-bold text-base-content/75">Pop-Up Payment Tender:</span>
+                  <div class="join border border-base-300 rounded-lg bg-base-100 p-0.5">
+                    <button
+                      type="button"
+                      @click="setPopupTender('card')"
+                      class="join-item btn btn-xs rounded-md border-0 font-bold"
+                      :class="popupPaymentMode === 'card' ? 'btn-warning' : 'btn-ghost'"
+                    >
+                      💳 Card Tap (2.9%)
+                    </button>
+                    <button
+                      type="button"
+                      @click="setPopupTender('cash')"
+                      class="join-item btn btn-xs rounded-md border-0 font-bold"
+                      :class="popupPaymentMode === 'cash' ? 'btn-success' : 'btn-ghost'"
+                    >
+                      💵 Cash / Venmo (0%)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Core Order Fields Grid -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Location / Platform -->
                 <div class="form-control w-full flex flex-col gap-1.5">
                   <label class="text-xs font-black uppercase tracking-wider text-base-content">
-                    Location / Selling Platform
+                    Origin Facility / Booth (4 Canonical Locations)
                   </label>
                   <select 
                     v-model="form.warehouseId" 
@@ -513,9 +596,8 @@
                   >
                     <option value="" disabled>Select Location</option>
                     <option v-for="wh in warehouses" :key="wh.$id" :value="wh.$id">
-                      {{ wh.name }} ({{ wh.commissionRate ?? 0 }}% fee)
+                      {{ wh.name }} ({{ wh.commissionRate ?? 0 }}% booth fee)
                     </option>
-                    <option value="General">General / Direct Sale (0% fee)</option>
                   </select>
                 </div>
 
@@ -646,8 +728,8 @@
                 <!-- Shipping Cost -->
                 <div class="form-control w-full flex flex-col gap-1.5">
                   <div class="flex justify-between items-center">
-                    <label class="text-xs font-black uppercase tracking-wider text-base-content">Shipping Cost</label>
-                    <span class="text-[10px] font-bold opacity-60">Label Expense ($0 in-booth)</span>
+                    <label class="text-xs font-black uppercase tracking-wider text-base-content">Outbound Label Postage</label>
+                    <span class="badge badge-xs badge-success font-bold text-[9px]">100% Gate 2 Recouped</span>
                   </div>
                   <div class="relative">
                     <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-xs opacity-50 pointer-events-none z-10">$</span>
@@ -710,19 +792,24 @@
             <div class="flex items-center justify-between pb-2 border-b border-base-200">
               <h3 class="font-black text-sm flex items-center gap-2 text-base-content">
                 <Icon icon="solar:wallet-money-bold" class="w-4 h-4 text-success" />
-                <span>Real-Time P&L Preview</span>
+                <span>Real-Time P&amp;L &amp; Co-op Waterfall</span>
               </h3>
-              <span class="badge badge-xs badge-info font-bold">LIVE SYNC</span>
+              <span class="badge badge-xs badge-info font-bold">{{ selectedChannelLabel }}</span>
             </div>
 
             <div class="flex justify-between py-1 border-b border-base-200">
-              <span class="font-bold text-base-content/70">Gross Sale Price</span>
-              <span class="font-mono font-bold">{{ formatCurrency(form.grossAmount || 0) }}</span>
+              <span class="font-bold text-base-content/70">Gross Sale + Buyer Shipping</span>
+              <span class="font-mono font-bold">{{ formatCurrency((form.grossAmount || 0) + (form.shippingCharged || 0)) }}</span>
             </div>
 
             <div class="flex justify-between py-1 border-b border-base-200">
-              <span class="font-bold text-rose-700 dark:text-rose-400">Platform Fee ({{ effectiveCommissionRate }}%)</span>
+              <span class="font-bold text-rose-700 dark:text-rose-400">Gate 1: Platform Fee ({{ effectiveCommissionRate }}%)</span>
               <span class="font-mono font-bold text-rose-600 dark:text-rose-400">-{{ formatCurrency(computedCommissionFee) }}</span>
+            </div>
+
+            <div v-if="Number(form.shippingCost || 0) > 0" class="flex justify-between py-1 border-b border-base-200">
+              <span class="font-bold text-info">Gate 2A: Outbound Label Postage (100% Recouped)</span>
+              <span class="font-mono font-bold text-info">-{{ formatCurrency(form.shippingCost || 0) }}</span>
             </div>
 
             <div class="flex justify-between py-2 px-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-black">
@@ -731,7 +818,7 @@
             </div>
 
             <div class="flex justify-between py-1 border-b border-base-200">
-              <span class="font-bold text-base-content/70">Less: Buy Cost Basis</span>
+              <span class="font-bold text-base-content/70">Gate 2B: Buy Cost Basis (100% Recouped)</span>
               <span class="font-mono font-bold text-rose-600 dark:text-rose-400">-{{ formatCurrency(costBasis) }}</span>
             </div>
 
@@ -744,7 +831,7 @@
                 :class="netRealizedProfit >= 0 ? 'text-emerald-800 dark:text-emerald-300' : 'text-rose-800 dark:text-rose-300'"
               >
                 <Icon :icon="netRealizedProfit >= 0 ? 'solar:cup-first-bold' : 'solar:danger-circle-bold'" class="w-4 h-4" />
-                <span>{{ netRealizedProfit >= 0 ? 'Realized Net Profit' : 'Realized Net Loss' }}</span>
+                <span>{{ netRealizedProfit >= 0 ? 'Gate 3 Net Surplus' : 'Realized Net Loss' }}</span>
               </span>
               <span 
                 class="font-mono font-black text-base"
@@ -752,6 +839,22 @@
               >
                 {{ formatCurrency(netRealizedProfit) }}
               </span>
+            </div>
+
+            <!-- Gate 3 70/30 Co-op Waterfall Split Box -->
+            <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
+              <div class="p-2.5 rounded-xl bg-primary/10 border border-primary/25">
+                <span class="block text-[10px] font-sans font-black uppercase text-primary">Curator Total (70% + Cost + Label)</span>
+                <span class="text-sm font-black text-primary">
+                  {{ formatCurrency(costBasis + Number(form.shippingCost || 0) + Math.max(0, netRealizedProfit) * 0.7) }}
+                </span>
+              </div>
+              <div class="p-2.5 rounded-xl bg-warning/10 border border-warning/25">
+                <span class="block text-[10px] font-sans font-black uppercase text-warning">Co-op Commons Pool (30%)</span>
+                <span class="text-sm font-black text-warning">
+                  {{ formatCurrency(Math.max(0, netRealizedProfit) * 0.3) }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -799,7 +902,7 @@
                 <option value="HG">Huck's Garage (HG)</option>
                 <option value="MD">Memory Den (MD)</option>
                 <option value="DT">Dusty Tiger (DT)</option>
-                <option value="HD">Hideout (HD)</option>
+                <option value="HH">Huck's Hideout (HH)</option>
               </select>
             </div>
 
@@ -973,8 +1076,72 @@ const selectedWarehouse = computed(() => {
   return warehouses.value.find(w => w.$id === form.value.warehouseId);
 });
 
-// Effective Commission Rate: checks warehouse rate, or infers from historical commissionFee / grossAmount
+type SalesChannelPreset = 'booth' | 'ebay' | 'poshmark' | 'direct_online' | 'popup';
+const selectedChannelPreset = ref<SalesChannelPreset>('booth');
+const popupPaymentMode = ref<'card' | 'cash'>('card');
+const customCommissionRate = ref<number | null>(null);
+
+const selectedChannelLabel = computed(() => {
+  if (selectedChannelPreset.value === 'ebay') return '📦 eBay Online';
+  if (selectedChannelPreset.value === 'poshmark') return '👗 Poshmark Online';
+  if (selectedChannelPreset.value === 'direct_online') return '💳 Direct / Dropcast Online';
+  if (selectedChannelPreset.value === 'popup') {
+    return popupPaymentMode.value === 'cash' ? '🎪 Pop-Up (Cash 0%)' : '🎪 Pop-Up (Card 2.9%)';
+  }
+  return '🏪 Retail Booth';
+});
+
+const applyChannelPreset = (preset: SalesChannelPreset) => {
+  selectedChannelPreset.value = preset;
+  const curOrd = String(form.value.orderId || '').replace(/^(EBAY|POSH|ONLINE|POPUP)-\s*/i, '').trim();
+  const hgWh = warehouses.value.find(w => w.code === 'HG' || w.name.toLowerCase().includes('garage'));
+  const mdWh = warehouses.value.find(w => w.code === 'MD' || w.name.toLowerCase().includes('memory den'));
+
+  if (preset === 'booth') {
+    customCommissionRate.value = null;
+    form.value.shippingCharged = 0;
+    form.value.shippingCost = 0;
+    if (mdWh && (!form.value.warehouseId || form.value.warehouseId === hgWh?.$id)) {
+      form.value.warehouseId = mdWh.$id;
+    }
+    form.value.orderId = curOrd;
+  } else if (preset === 'ebay') {
+    customCommissionRate.value = 13.25;
+    if (hgWh && !linkedItem.value) form.value.warehouseId = hgWh.$id;
+    form.value.status = 'Shipped';
+    form.value.orderId = `EBAY-${curOrd || new Date().toISOString().slice(0, 10)}`;
+  } else if (preset === 'poshmark') {
+    customCommissionRate.value = 20;
+    if (hgWh && !linkedItem.value) form.value.warehouseId = hgWh.$id;
+    form.value.status = 'Shipped';
+    form.value.orderId = `POSH-${curOrd || new Date().toISOString().slice(0, 10)}`;
+  } else if (preset === 'direct_online') {
+    customCommissionRate.value = 2.9;
+    if (hgWh && !linkedItem.value) form.value.warehouseId = hgWh.$id;
+    form.value.status = 'Shipped';
+    form.value.orderId = `ONLINE-${curOrd || new Date().toISOString().slice(0, 10)}`;
+  } else if (preset === 'popup') {
+    customCommissionRate.value = popupPaymentMode.value === 'cash' ? 0 : 2.9;
+    form.value.shippingCharged = 0;
+    form.value.shippingCost = 0;
+    if (hgWh && !linkedItem.value) form.value.warehouseId = hgWh.$id;
+    form.value.status = 'Sold';
+    form.value.orderId = `POPUP-${curOrd || new Date().toISOString().slice(0, 10)}`;
+  }
+  onGrossChange();
+};
+
+const setPopupTender = (mode: 'card' | 'cash') => {
+  popupPaymentMode.value = mode;
+  customCommissionRate.value = mode === 'cash' ? 0 : 2.9;
+  onGrossChange();
+};
+
+// Effective Commission Rate: checks custom channel preset rate first, then warehouse rate, or infers from historical commissionFee / grossAmount
 const effectiveCommissionRate = computed(() => {
+  if (customCommissionRate.value !== null) {
+    return Number(customCommissionRate.value);
+  }
   if (selectedWarehouse.value && selectedWarehouse.value.commissionRate !== undefined && selectedWarehouse.value.commissionRate !== null) {
     return Number(selectedWarehouse.value.commissionRate);
   }
@@ -1294,7 +1461,7 @@ const loadData = async () => {
       const mdWh = warehouses.value.find(w => w.code === 'MD' || w.name.toLowerCase().includes('memory den'));
       form.value.warehouseId = mdWh?.$id || warehouses.value[0]?.$id || '';
 
-      // Check URL query parameters for ?itemId=...
+      // Check URL query parameters for ?itemId=... and ?channel=...
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const qId = params.get('itemId') || params.get('item') || params.get('id') || params.get('sku');
@@ -1303,6 +1470,16 @@ const loadData = async () => {
           if (found) {
             selectItemToLink(found);
           }
+        }
+        const ch = (params.get('channel') || '').toLowerCase();
+        if (ch === 'online' || ch === 'ebay') {
+          applyChannelPreset('ebay');
+        } else if (ch === 'poshmark' || ch === 'posh') {
+          applyChannelPreset('poshmark');
+        } else if (ch === 'direct' || ch === 'social') {
+          applyChannelPreset('direct_online');
+        } else if (ch === 'popup' || ch === 'event') {
+          applyChannelPreset('popup');
         }
       }
     }
@@ -1341,9 +1518,12 @@ const saveSale = async () => {
       const newSale = await salesApi.createSale(payload);
       if (linkedItemId.value) {
         try {
+          const curQty = Math.max(1, Number(linkedItem.value?.quantity || 1));
+          const isMulti = curQty > 1;
           await databases.updateDocument(DB_ID, 'items', linkedItemId.value, { 
             saleId: newSale.$id,
-            status: 'sold',
+            status: isMulti ? 'placed' : 'sold',
+            quantity: isMulti ? curQty - 1 : 1,
             soldPrice: payload.grossAmount
           });
         } catch (itemErr) {

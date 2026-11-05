@@ -20,6 +20,10 @@
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Location Sync</span>
         </a>
+        <a href="/sales/new?channel=online" class="btn btn-sm sm:btn-md btn-outline btn-info gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Record an eBay, Poshmark, Direct Online, or Pop-Up Market sale with 100% postage recoupment">
+          <Icon icon="solar:globus-bold-duotone" class="w-4 h-4 shrink-0" />
+          <span>Online / Pop-Up</span>
+        </a>
         <a href="/sales/new" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-lg shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]">
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
           <span>Record Sale</span>
@@ -695,13 +699,13 @@ const isUnlinkedTicketSale = (sale: any): boolean => {
   if (sale.partner === 'COMMONS') return false;
   const title = String(sale.title || '').trim();
   const so = String(sale.soNumber || '').trim();
-  if (/^ticket\s*#/i.test(title) || /^order\s+/i.test(title) || /^md-payout/i.test(title)) {
+  if (/^SO-/i.test(so)) {
     return true;
   }
-  if (/^SO-/i.test(so) && !sale.itemId) {
+  if (!sale.itemId && (/^ticket\s*#/i.test(title) || /^order\s+/i.test(title) || /^md-payout/i.test(title))) {
     return true;
   }
-  return !sale.itemId && (!sale.costBasis || sale.costBasis === 0);
+  return !sale.itemId;
 };
 
 const allUnlinkedTicketsCount = computed(() => {
@@ -926,7 +930,12 @@ const consolidatedSales = computed(() => {
         claimedItemIdToSku,
         multiBinResolvedBySku: multiBinBySku,
       }) ||
-      inventoryItems.value.find(i => i.saleId === sale.$id);
+      inventoryItems.value.find(i => i.saleId === sale.$id) ||
+      inventoryItems.value.find(i =>
+        (sSo && (cleanCatalogSku(i.locationSku).toUpperCase() === sSo || cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
+        (extractedSku && (cleanCatalogSku(i.locationSku).toUpperCase() === extractedSku || cleanCatalogSku(i.upc).toUpperCase() === extractedSku)) ||
+        (sOrd && (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd || cleanCatalogSku(i.upc).toUpperCase() === sOrd))
+      );
     const resolvedBinSku = cleanCatalogSku(linkedItem?.locationSku || linkedItem?.sku || sSo).toUpperCase();
     const resolvedUpc = cleanCatalogSku(linkedItem?.upc || sSo).toUpperCase();
     const matchedBinEntry = Object.entries(PREVERIFIED_MD_MULTI_QTY_BINS).find(
@@ -1000,6 +1009,9 @@ const consolidatedSales = computed(() => {
       date: sale.saleDate || sale.$createdAt,
       status: sale.status || 'Sold',
       grossAmount: Number(sale.grossAmount || 0),
+      shippingCharged: Number(sale.shippingCharged || 0),
+      shippingCost: Number(sale.shippingCost || 0),
+      commissionFee: Number(sale.commissionFee || 0),
       fees: comm,
       netPayout: netPayoutVal,
       partner,

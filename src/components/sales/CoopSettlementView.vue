@@ -1084,8 +1084,10 @@ const partnerSettlements = computed(() => {
     const grossPrice = Number(sale.grossAmount || 0);
     const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice - Number(sale.fees ?? 0)));
     const venueFee = Math.max(0, Number(sale.fees !== undefined ? sale.fees : (grossPrice - netStoreDeposit)));
-    const costBasis = (isPureConsignor || isCommonsClaimed) ? 0 : Number(sale.cost || 0);
-    const netSurplus = Math.max(0, Number((netStoreDeposit - costBasis).toFixed(2)));
+    const itemCostBasis = (isPureConsignor || isCommonsClaimed) ? 0 : Number(sale.cost || 0);
+    const shippingLabelRecouped = (isPureConsignor || isCommonsClaimed) ? 0 : Number((sale as any).shippingCost || 0);
+    const costBasis = Number((itemCostBasis + shippingLabelRecouped).toFixed(2));
+    const netSurplus = Math.max(0, Number((netStoreDeposit - itemCostBasis).toFixed(2)));
     const curatorRatio = (policyConfig.value.curatorSharePct || 70) / 100;
     const commonsRatio = (policyConfig.value.commonsSharePct || 30) / 100;
     const curatorTake = isCommonsClaimed
