@@ -122,61 +122,83 @@
     const storeId = tmpl?.store_id || tmpl?.store || tmplItem?.store_id || tmplItem?.store || 1;
     const priceNum = Number(item.price || 0);
     const qtyNum = Number(item.quantity || 1) || 1;
-    const todayFormatted = new Date().toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-    });
+    const now = new Date();
+    const todayIso =
+      now.getFullYear() +
+      '-' +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(now.getDate()).padStart(2, '0');
 
-    // Build payload starting from actual Ricochet product keys if template exists (never send string brand when Ricochet expects integer brand ID or null)
+    // Build payload matching Ricochet's exact `products` + `items` schema from GET /api/product/show/{id}
     const payload = {
+      ...(tmpl
+        ? {
+            auto_discount: tmpl.auto_discount ?? 0,
+            auto_discount_plan: tmpl.auto_discount_plan ?? null,
+            item_fee: tmpl.item_fee ?? 0,
+            track_inventory: tmpl.track_inventory ?? 1,
+            sell_online: tmpl.sell_online ?? 0,
+            featured_online: tmpl.featured_online ?? 0,
+            deliverable: tmpl.deliverable ?? 0,
+            shipping: tmpl.shipping ?? 0,
+            split: tmpl.split ?? 85,
+            split_id: tmpl.split_id ?? null,
+            tax_rate: tmpl.tax_rate ?? null,
+            tax_rate_id: tmpl.tax_rate_id ?? 1,
+            tax_rate_selected: tmpl.tax_rate_selected ?? null,
+            consignor: tmpl.consignor ?? null,
+            consignor_name: tmpl.consignor_name ?? undefined,
+          }
+        : {
+            auto_discount: 0,
+            item_fee: 0,
+            track_inventory: 1,
+            sell_online: 0,
+            featured_online: 0,
+            split: 85,
+            tax_rate_id: 1,
+          }),
       store: storeId,
+      store_id: storeId,
       consignor_id: cid,
-      consignor: tmpl?.consignor ?? cid,
       name: shortTagTitle,
-      short_description: fullPosDescription,
       description: fullPosDescription,
-      notes: webDesc,
       web_description: webDesc,
+      note: '',
       category: null,
+      category_id: null,
       brand: null,
-      split: tmpl?.split ?? 85,
-      charge_tax: tmpl?.charge_tax ?? true,
-      tax_id: tmpl?.tax_id ?? tmplItem?.tax_id ?? 1,
-      type: tmpl?.type ?? 0,
+      brand_id: null,
       price: priceNum,
       agreed_price: priceNum,
-      qty: qtyNum,
       quantity: qtyNum,
-      sku: '',
       upc_code: item.upc,
-      upc: item.upc,
       status: 'In Stock',
-      in_stock: todayFormatted,
-      low_stock: 0,
-      department: null,
-      weight: null,
+      in_stock: todayIso,
       items: [
         {
           ...(tmplItem
             ? {
-                store: tmplItem.store ?? storeId,
-                consignor_id: tmplItem.consignor_id ?? cid,
-                tax_id: tmplItem.tax_id ?? 1,
-                split: tmplItem.split ?? 85,
+                in_store_location_id: tmplItem.in_store_location_id ?? null,
+                threshold: tmplItem.threshold ?? 0,
+                fee: tmplItem.fee ?? 0,
+                attributes_enabled: tmplItem.attributes_enabled ?? 0,
               }
-            : { store: storeId, consignor_id: cid }),
+            : { threshold: 0, fee: 0 }),
+          store: storeId,
+          consignor_id: cid,
           name: shortTagTitle,
-          short_description: fullPosDescription,
           description: fullPosDescription,
           web_description: webDesc,
           price: priceNum,
-          agreed_price: priceNum,
+          aged_price: priceNum,
+          cost: 0,
+          weight: null,
           quantity: qtyNum,
-          qty: qtyNum,
           sku: '',
           upc_code: item.upc,
-          in_stock: todayFormatted,
+          in_stock: todayIso,
         },
       ],
     };

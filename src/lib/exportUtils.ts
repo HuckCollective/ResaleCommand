@@ -170,8 +170,9 @@ export function sanitizeRicochetDescription(text: string | null | undefined): st
     if (!text) return '';
     return text
         .replace(/\[[A-Z0-9_ ]+:[^\]]+\]/gi, '') // e.g. [MAIN IMAGE ID: ...], [RECEIPT ID: ...]
-        .replace(/--- IMPORT DETAILS ---[\s\S]*/gi, '')
-        .replace(/(?:^|\b)(?:Paid|Resale|Sold|Location|Est\. Low|Est\. High|Order #):\s*[^\n|]*/gi, '')
+        .replace(/---\s*(?:IMPORT DETAILS|COST BREAKDOWN|FINANCIALS|INTERNAL NOTES)\s*---[\s\S]*/gi, '')
+        .replace(/(?:^|\b)(?:Paid|Resale|Sold|Location|Est\. Low|Est\. High|Order #|Base Bid|Shipping(?:\s*\([^)]*\))?|Handling(?:\s*\([^)]*\))?|True Landed Cost|Landed Cost|Cost Basis|Buyer's Premium|Tax):\s*[^\n|]*/gi, '')
+        .replace(/\bCondition:\s*Condition\b/gi, '')
         .replace(/https?:\/\/[^\s]+/gi, '') // strip internal URLs
         .replace(/[\r\n"\\]+/g, ' ')
         .replace(/\s{2,}/g, ' ')
