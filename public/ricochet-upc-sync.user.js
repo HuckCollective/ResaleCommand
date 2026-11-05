@@ -131,34 +131,8 @@
       String(now.getDate()).padStart(2, '0');
 
     // Build payload matching Ricochet's exact `products` + `items` schema from GET /api/product/show/{id}
+    // Never send null for brand_id or category_id (MySQL NOT NULL columns default to 0 when omitted or 0)
     const payload = {
-      ...(tmpl
-        ? {
-            auto_discount: tmpl.auto_discount ?? 0,
-            auto_discount_plan: tmpl.auto_discount_plan ?? null,
-            item_fee: tmpl.item_fee ?? 0,
-            track_inventory: tmpl.track_inventory ?? 1,
-            sell_online: tmpl.sell_online ?? 0,
-            featured_online: tmpl.featured_online ?? 0,
-            deliverable: tmpl.deliverable ?? 0,
-            shipping: tmpl.shipping ?? 0,
-            split: tmpl.split ?? 85,
-            split_id: tmpl.split_id ?? null,
-            tax_rate: tmpl.tax_rate ?? null,
-            tax_rate_id: tmpl.tax_rate_id ?? 1,
-            tax_rate_selected: tmpl.tax_rate_selected ?? null,
-            consignor: tmpl.consignor ?? null,
-            consignor_name: tmpl.consignor_name ?? undefined,
-          }
-        : {
-            auto_discount: 0,
-            item_fee: 0,
-            track_inventory: 1,
-            sell_online: 0,
-            featured_online: 0,
-            split: 85,
-            tax_rate_id: 1,
-          }),
       store: storeId,
       store_id: storeId,
       consignor_id: cid,
@@ -166,26 +140,24 @@
       description: fullPosDescription,
       web_description: webDesc,
       note: '',
-      category: null,
-      category_id: null,
-      brand: null,
-      brand_id: null,
+      brand_id: tmpl?.brand_id || 0,
+      category_id: tmpl?.category_id || 0,
+      split: tmpl?.split ?? 85,
+      split_id: tmpl?.split_id ?? 5,
+      tax_rate_id: tmpl?.tax_rate_id ?? 1,
       price: priceNum,
       agreed_price: priceNum,
       quantity: qtyNum,
       upc_code: item.upc,
       status: 'In Stock',
       in_stock: todayIso,
+      auto_discount: false,
+      item_fee: false,
+      track_inventory: true,
+      sell_online: false,
+      featured_online: false,
       items: [
         {
-          ...(tmplItem
-            ? {
-                in_store_location_id: tmplItem.in_store_location_id ?? null,
-                threshold: tmplItem.threshold ?? 0,
-                fee: tmplItem.fee ?? 0,
-                attributes_enabled: tmplItem.attributes_enabled ?? 0,
-              }
-            : { threshold: 0, fee: 0 }),
           store: storeId,
           consignor_id: cid,
           name: shortTagTitle,
@@ -194,7 +166,10 @@
           price: priceNum,
           aged_price: priceNum,
           cost: 0,
-          weight: null,
+          weight: 0,
+          threshold: 0,
+          fee: 0,
+          attributes_enabled: 0,
           quantity: qtyNum,
           sku: '',
           upc_code: item.upc,
