@@ -1,7 +1,7 @@
 # The Huckleberry Collective — WSDE Cooperative Operating Charter
 
 > **Worker Self-Directed Enterprise (WSDE) Living Charter**
-> Inspired by Richard D. Wolff’s *Democracy at Work* framework and adapted for multi-partner vintage, games, and collectibles retail at **Memory Den Vintage Mall (Booth #0EJ)** and **Resale Command (`resalecmd.com`)**.
+> Built on *Democracy at Work* cooperative economics and the international Rochdale Cooperative Principles, adapted for multi-partner vintage, games, and collectibles retail at **Memory Den Vintage Mall (Booth #0EJ)** and **Resale Command (`resalecmd.com`)**.
 
 ---
 

@@ -2,7 +2,7 @@
   <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6">
     <CoopSubNav activeTab="charter" />
 
-    <!-- Hero Banner with Richard Wolff WSDE Framing -->
+    <!-- Hero Banner with WSDE Framing -->
     <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/15 via-base-200 to-base-100 border border-primary/25 p-6 sm:p-10 shadow-xl">
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
         <div class="space-y-3 max-w-2xl">
@@ -58,7 +58,7 @@
         </div>
       </div>
 
-      <!-- The 3 Core Guarantees (Richard Wolff Principles) -->
+      <!-- The 3 Core Guarantees (WSDE Cooperative Principles) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-8 pt-6 border-t border-base-content/10">
         <div class="bg-base-100/80 backdrop-blur-xs p-4 rounded-2xl border border-success/30 shadow-xs space-y-1">
           <div class="flex items-center gap-2">

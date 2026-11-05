@@ -11,7 +11,7 @@ This skill defines the cooperative economic engine, financial formulas, transpar
 
 ## 1. Foundational Principles: Worker Self-Directed Enterprise (WSDE)
 
-The Huckleberry Collective operates on the principles of **Democracy at Work** (as formulated by cooperative economics and Richard Wolff) and the international **Rochdale Cooperative Principles**:
+The Huckleberry Collective operates on the principles of a **Worker Self-Directed Enterprise (WSDE)** (*Democracy at Work* cooperative economics) and the international **Rochdale Cooperative Principles**:
 
 1. **Democratic Member Equality**: 1 member = 1 vote. Decisions affecting the collective are made democratically by the workers and creators who produce the value.
 2. **Total Financial Transparency**: No hidden markups or opaque cuts. All venue costs (e.g. Memory Den 15% commission, booth rent, storage) and gross revenues are auditable by every active member.

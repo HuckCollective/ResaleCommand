@@ -24,7 +24,7 @@
             Sweat-Equity &amp; Enabling Labor Ledger
           </h1>
           <p class="text-xs sm:text-sm text-base-content/75 max-w-2xl">
-            In Richard Wolff’s WSDE model, enabling work (booth restocking, AI photo enrichment, Dropcast reels, and tech ops) makes booth sales possible. Logged hours determine each partner’s share of the
+            In our Worker Self-Directed Enterprise (WSDE) model, enabling work (booth restocking, AI photo enrichment, Dropcast reels, and tech ops) makes booth sales possible. Logged hours determine each partner’s share of the
             <strong class="text-secondary">{{ policyConfig.laborPatronagePct }}% Sweat-Equity Dividend</strong>
             when the 30% Commons Pool exceeds monthly operating costs.
           </p>
