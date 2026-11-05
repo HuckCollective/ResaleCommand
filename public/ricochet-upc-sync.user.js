@@ -23,6 +23,8 @@
     'http://localhost:4321/api/sales/ricochet-sync',
   ];
 
+  const RC_SCRIPT_VERSION = 'v4.9';
+
   // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
   const activeLocationCode = String(window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || '').toUpperCase();
@@ -288,7 +290,7 @@
   }
 
   // Find a product's 0EJ SKU in Ricochet by UPC or Title (handles newly created items & 422 "UPC Code already exists")
-  async function findExistingRicochetSkuForDropItem(item) {
+  async function findExistingRicochetSkuForDropItem(item, preCheckOnly = false) {
     const targetUpc = cleanStr(item.upc).toUpperCase();
     const shortName = cleanStr(item.tagTitle || item.title).toLowerCase();
     const fullName = cleanStr(item.title).toLowerCase();
@@ -300,7 +302,7 @@
       return n === shortName || n === fullName || (posDesc && n === posDesc);
     };
 
-    // 1. Check in-memory catalogProducts (809 items) by UPC or exact Tag Title / Full Title!
+    // 1. Fast 0ms check against in-memory catalogProducts (809 items) by UPC or exact Tag Title / Full Title!
     for (const p of catalogProducts || []) {
       const sku = extractRicochetSku(p);
       if (!sku) continue;
@@ -310,7 +312,6 @@
         return sku;
       }
       if (matchesName(p.name || p.title)) {
-        // Confirm or attach UPC on this product via /api/product/show/{id}
         if (window.axios && p.id && targetUpc) {
           try {
             const detailRes = await window.axios.get('/api/product/show/' + p.id);
@@ -333,10 +334,10 @@
       }
     }
 
-    if (!window.axios) return '';
+    if (preCheckOnly || !window.axios) return '';
     const cid = consignorId || 475;
 
-    // 2. Fetch newest 35 products + search by UPC and Title in Ricochet
+    // 2. Fetch newest 10 products + search by UPC in Ricochet
     const candidateProducts = [];
     const addCandidates = (arr) => {
       for (const rp of arr || []) {
@@ -348,7 +349,7 @@
 
     try {
       const recentRes = await window.axios.get(
-        `/api/product?store=1&limit=35&offset=0&order_by=id&direction=desc&consignor_id=${cid}`
+        `/api/product?store=1&limit=10&offset=0&order_by=id&direction=desc&consignor_id=${cid}`
       );
       addCandidates(recentRes.data?.products || (Array.isArray(recentRes.data) ? recentRes.data : []));
     } catch (e) {}
@@ -356,7 +357,7 @@
     if (targetUpc) {
       try {
         const searchRes = await window.axios.get(
-          `/api/product?store=1&limit=25&offset=0&order_by=id&direction=desc&search=${encodeURIComponent(targetUpc)}`
+          `/api/product?store=1&limit=10&offset=0&order_by=id&direction=desc&search=${encodeURIComponent(targetUpc)}`
         );
         addCandidates(searchRes.data?.products || (Array.isArray(searchRes.data) ? searchRes.data : []));
       } catch (e) {}
@@ -372,8 +373,8 @@
       }
     }
 
-    // 4. Deep check `/api/product/show/{id}` using `extractFirstRicochetItemVariant` (handles Object-keyed `items`!)
-    for (const p of candidateProducts.slice(0, 20)) {
+    // 4. Deep check top 4 newest candidates via `/api/product/show/{id}` using `extractFirstRicochetItemVariant`
+    for (const p of candidateProducts.slice(0, 4)) {
       if (!p || !p.id) continue;
       try {
         const detailRes = await window.axios.get('/api/product/show/' + p.id);
@@ -491,12 +492,12 @@
     try {
       for (let idx = 0; idx < todo.length; idx++) {
         const item = todo[idx];
-        // 1. Duplicate guard: check if this item already exists in Ricochet by UPC or exact Tag Title!
-        let sku = await findExistingRicochetSkuForDropItem(item);
+        // 1. Fast 0ms duplicate guard: check in-memory catalogProducts first
+        let sku = await findExistingRicochetSkuForDropItem(item, true);
         // 2. Otherwise create the product in Ricochet and extract its new 0EJ... SKU
         if (!sku) {
           const created = await rcCreateRicochetProduct(item);
-          sku = rcDropSkuFromResponse(created) || (await findExistingRicochetSkuForDropItem(item));
+          sku = rcDropSkuFromResponse(created) || (await findExistingRicochetSkuForDropItem(item, false));
         }
         if (!sku) {
           throw new Error('Ricochet created "' + (item.tagTitle || item.title) + '" but did not return its 0EJ SKU yet — click 🔄 and Deploy again to bind it.');
@@ -904,7 +905,7 @@
           <div>
             <div style="font-weight: 800; font-size: 14px; color: #f8fafc; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span>⚡ ${activeLocationName} Barcode Sync &amp; Verifier</span>
-              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800;">✅ Live Auto-Updated Script</span>
+              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800;">✅ ${RC_SCRIPT_VERSION} Live Auto-Updated</span>
             </div>
             <div style="font-size: 11px; color: #94a3b8;" id="rc-catalog-status">Connecting to Ricochet session...</div>
           </div>
@@ -1540,7 +1541,7 @@
         ta.value = JSON.stringify(parsedMap, null, 2);
       }
       if (cloudBadge) {
-        cloudBadge.textContent = `✅ Live Auto-Updated (${cloudLiveSyncedCount})`;
+        cloudBadge.textContent = `✅ ${RC_SCRIPT_VERSION} Live Auto-Updated (${cloudLiveSyncedCount})`;
         cloudBadge.style.background = '#065f46';
         cloudBadge.style.color = '#6ee7b7';
       }
@@ -1550,7 +1551,7 @@
       if (manualTrigger) {
         setStatusBanner(
           'success',
-          `✅ Live Auto-Updated Script: Fetched ${cloudLiveSyncedCount} live barcodes from Resale Command!`
+          `✅ ${RC_SCRIPT_VERSION} Live Auto-Updated Script: Fetched ${cloudLiveSyncedCount} live barcodes from Resale Command!`
         );
       }
       isFetchingCloudPayload = false;
@@ -1562,7 +1563,7 @@
     isFetchingCloudPayload = false;
     if (cloudBadge) {
       const fallbackCount = Math.max(Object.keys(parsedMap).length, verifiedSkuSet.size);
-      cloudBadge.textContent = fallbackCount > 0 ? `✅ Live Auto-Updated (${fallbackCount})` : '⚠️ Offline';
+      cloudBadge.textContent = fallbackCount > 0 ? `✅ ${RC_SCRIPT_VERSION} Live Auto-Updated (${fallbackCount})` : '⚠️ Offline';
       cloudBadge.style.background = '#78350f';
       cloudBadge.style.color = '#fde68a';
     }
