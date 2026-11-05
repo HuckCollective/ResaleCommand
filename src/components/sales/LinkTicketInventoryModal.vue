@@ -83,22 +83,43 @@
           </div>
         </div>
 
-        <!-- Step 2: Candidate Inventory Lookup (Booth #0EJ / Approximate Price) -->
+        <!-- Step 2: Candidate Inventory Lookup (Booth #0EJ + Unlinked Sold + Backstock/Parent Lots) -->
         <div class="space-y-3">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span class="text-xs font-black uppercase tracking-wider text-base-content/80">
-              2. Match Active Booth #0EJ Item ({{ filteredCandidates.length }} candidates)
+              2. Match Inventory Item ({{ filteredCandidates.length }} candidates)
             </span>
-            <label class="label cursor-pointer gap-2 py-0">
-              <input
-                type="checkbox"
-                v-model="filterByApproxPrice"
-                class="checkbox checkbox-xs checkbox-primary rounded"
-              />
-              <span class="label-text text-xs font-bold">
-                Near Gross Price (${{ Number(sale.grossAmount || 0).toFixed(2) }} ± ${{ priceTolerance }})
-              </span>
-            </label>
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="join border border-base-300 rounded-lg bg-base-200/50 p-0.5">
+                <button
+                  type="button"
+                  @click="scopeFilter = 'all_eligible'"
+                  class="join-item btn btn-xs rounded-md border-0 font-bold text-[11px]"
+                  :class="scopeFilter === 'all_eligible' ? 'btn-primary' : 'btn-ghost'"
+                  title="Includes Booth #0EJ items, Unlinked Sold catalog items, and HG/HH Backstock/Parent Lots"
+                >
+                  All Eligible (MD + Backstock + Unlinked Sold)
+                </button>
+                <button
+                  type="button"
+                  @click="scopeFilter = 'md_only'"
+                  class="join-item btn btn-xs rounded-md border-0 font-bold text-[11px]"
+                  :class="scopeFilter === 'md_only' ? 'btn-primary' : 'btn-ghost'"
+                >
+                  MD Booth Only
+                </button>
+              </div>
+              <label class="label cursor-pointer gap-1.5 py-0">
+                <input
+                  type="checkbox"
+                  v-model="filterByApproxPrice"
+                  class="checkbox checkbox-xs checkbox-primary rounded"
+                />
+                <span class="label-text text-xs font-bold">
+                  ±${{ priceTolerance }} of ${{ Number(sale.grossAmount || 0).toFixed(2) }}
+                </span>
+              </label>
+            </div>
           </div>
 
           <!-- Search & Tolerance Controls -->
@@ -172,7 +193,20 @@
                     v-if="Number(item.quantity || 1) > 1"
                     class="badge badge-xs badge-info font-mono font-bold"
                   >
-                    📦 Bin Qty: {{ item.quantity }}
+                    📦 Bin/Lot Qty: {{ item.quantity }}
+                  </span>
+                  <span
+                    v-if="String(item.status || '').toLowerCase() === 'sold' && !item.saleId"
+                    class="badge badge-xs badge-warning font-bold"
+                    title="Marked Sold by Products-*.csv catalog sync, awaiting link to a Payout ticket"
+                  >
+                    🏷️ Catalog Sold (Unlinked)
+                  </span>
+                  <span
+                    v-else-if="item.storageLocation"
+                    class="badge badge-xs badge-ghost font-mono"
+                  >
+                    📍 {{ item.storageLocation }}
                   </span>
                 </div>
                 <div class="font-bold text-xs text-base-content truncate">
@@ -297,6 +331,7 @@ const selectedItem = ref<any | null>(null);
 const candidateSearch = ref('');
 const filterByApproxPrice = ref(true);
 const priceTolerance = ref(15);
+const scopeFilter = ref<'all_eligible' | 'md_only'>('all_eligible');
 
 onMounted(() => {
   isMounted.value = true;
@@ -327,35 +362,49 @@ const getItemCost = (item: any): number => {
   return qty > 1 ? Number((rawCost / qty).toFixed(2)) : rawCost;
 };
 
-const isBooth0EJItem = (item: any): boolean => {
+const isEligibleInventoryItem = (item: any): boolean => {
   if (!item) return false;
-  const status = String(item.status || '').toLowerCase();
+  const status = String(item.status || '').toLowerCase().trim();
+  if (status === 'tracked' || status === 'draft' || status === 'scouted' || status === 'combined' || status === 'deconstructed') {
+    return false;
+  }
   const qty = Number(item.quantity || 1);
-  if (status === 'sold' && qty <= 1) return false;
+  // Allow items marked 'sold' by Products-*.csv catalog sync if they don't have a linked saleId yet!
+  if (status === 'sold' && qty <= 1 && item.saleId && item.saleId !== props.sale?.id) {
+    return false;
+  }
 
-  const loc = String(item.storageLocation || '').toUpperCase();
-  const sku = String(item.locationSku || '').toUpperCase();
-  const selling = Array.isArray(item.sellingLocations) ? item.sellingLocations.join(' ').toUpperCase() : '';
-  return (
-    loc === 'MD' ||
-    loc.includes('MEMORY') ||
-    loc.includes('0EJ') ||
-    sku.startsWith('0EJ') ||
-    selling.includes('MEMORY') ||
-    selling.includes('MD')
-  );
+  if (scopeFilter.value === 'md_only') {
+    const loc = String(item.storageLocation || '').toUpperCase();
+    const sku = String(item.locationSku || '').toUpperCase();
+    const selling = Array.isArray(item.sellingLocations) ? item.sellingLocations.join(' ').toUpperCase() : '';
+    return (
+      loc === 'MD' ||
+      loc.includes('MEMORY') ||
+      loc.includes('0EJ') ||
+      sku.startsWith('0EJ') ||
+      selling.includes('MEMORY') ||
+      selling.includes('MD')
+    );
+  }
+  return true;
 };
 
 const filteredCandidates = computed(() => {
   if (!props.sale) return [];
   const gross = Number(props.sale.grossAmount || 0);
   const q = candidateSearch.value.trim().toLowerCase();
+  const saleTitleTokens = String(props.sale.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && w !== 'ticket' && w !== 'order' && w !== 'payout');
 
-  const boothItems = (props.inventoryItems || []).filter(isBooth0EJItem);
+  const eligibleItems = (props.inventoryItems || []).filter(isEligibleInventoryItem);
 
-  const filtered = boothItems.filter((item) => {
+  const filtered = eligibleItems.filter((item) => {
     if (q) {
-      const hay = `${item.title || ''} ${item.locationSku || ''} ${item.upc || ''}`.toLowerCase();
+      const hay = `${item.title || ''} ${item.locationSku || ''} ${item.upc || ''} ${item.storageLocation || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (filterByApproxPrice.value && gross > 0 && !q) {
@@ -367,12 +416,29 @@ const filteredCandidates = computed(() => {
     return true;
   });
 
+  const scoreCandidate = (item: any): number => {
+    let score = 0;
+    const ask = getItemPrice(item);
+    if (gross > 0 && ask > 0) {
+      const diff = Math.abs(ask - gross);
+      if (diff < 0.05) score += 50;
+      else if (diff <= 5) score += 25;
+      else score -= Math.min(20, diff);
+    }
+    const itemTitle = String(item.title || '').toLowerCase();
+    for (const tok of saleTitleTokens) {
+      if (itemTitle.includes(tok)) score += 20;
+    }
+    const status = String(item.status || '').toLowerCase();
+    if (status === 'sold' && !item.saleId) score += 15; // Catalog-sold item awaiting ticket link
+    if (String(item.storageLocation || '').toUpperCase() === 'MD' || /^0EJ/i.test(String(item.locationSku || ''))) {
+      score += 10;
+    }
+    return score;
+  };
+
   return filtered
-    .sort((a, b) => {
-      const diffA = Math.abs(getItemPrice(a) - gross);
-      const diffB = Math.abs(getItemPrice(b) - gross);
-      return diffA - diffB;
-    })
+    .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
     .slice(0, 60);
 });
 

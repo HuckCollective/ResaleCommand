@@ -662,6 +662,8 @@ import {
   resolveMdUnitCostBasis,
   cleanCatalogSku,
   buildLockedMultiBinMap,
+  splitTrailingBoothSku,
+  matchMemoryDenInventoryItem,
 } from '../../lib/salesBucketing';
 
 const { currentTeam } = useAuth();
@@ -878,7 +880,8 @@ const getCommissionRate = (locNameOrId: string) => {
 const consolidatedSales = computed(() => {
   const list: any[] = [];
   const linkedSaleIds = new Set<string>();
-  const multiBinBySku = buildLockedMultiBinMap(inventoryItems.value || []);
+  const claimedItemIdToSku = new Map<string, string>();
+  const multiBinBySku = buildLockedMultiBinMap(inventoryItems.value || [], claimedItemIdToSku);
   const isSoldUnitSplitChild = (it: any) => /\(sold unit\)/i.test(String(it?.title || ''));
 
   // 1. Process official sales collection documents
@@ -887,22 +890,38 @@ const consolidatedSales = computed(() => {
 
     const sSo = cleanCatalogSku(sale.soNumber).toUpperCase();
     const sOrd = cleanCatalogSku(sale.orderId).toUpperCase();
-    // Prefer locked Multi-Qty Booth Bins when SKU is a known Booth Bin, then explicit saleId, then UPC / SKU lookups (preferring non-split-child items)
+    const rawOrderDesc = sale.orderId && sale.orderId.includes('•')
+      ? sale.orderId.split('•').slice(1).join('•').trim()
+      : String(sale.orderId || '');
+    const trailingParsed = splitTrailingBoothSku(rawOrderDesc);
+    const extractedSku = cleanCatalogSku(trailingParsed.sku || (/^0EJ/i.test(sSo) ? sSo : '')).toUpperCase();
+    const extractedUpc = /^(?:HUCK|PDXGL|BB)-/i.test(sSo) ? sSo : '';
+
+    // Prefer locked Multi-Qty Booth Bins when SKU is a known Booth Bin, then explicit saleId, then canonical 4-tier matchMemoryDenInventoryItem (Law #3)
     const linkedItem =
       (sSo && multiBinBySku.get(sSo)) ||
+      (extractedSku && multiBinBySku.get(extractedSku)) ||
       (sOrd && multiBinBySku.get(sOrd)) ||
       inventoryItems.value.find(i => i.saleId === sale.$id && !isSoldUnitSplitChild(i)) ||
       inventoryItems.value.find(i =>
         !isSoldUnitSplitChild(i) && (
           (sSo && (cleanCatalogSku(i.locationSku).toUpperCase() === sSo || cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
+          (extractedSku && (cleanCatalogSku(i.locationSku).toUpperCase() === extractedSku || cleanCatalogSku(i.upc).toUpperCase() === extractedSku)) ||
           (sOrd && (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd || cleanCatalogSku(i.upc).toUpperCase() === sOrd))
         )
       ) ||
-      inventoryItems.value.find(i => i.saleId === sale.$id) ||
-      inventoryItems.value.find(i =>
-        (sSo && (cleanCatalogSku(i.locationSku).toUpperCase() === sSo || cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
-        (sOrd && (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd || cleanCatalogSku(i.upc).toUpperCase() === sOrd))
-      );
+      matchMemoryDenInventoryItem({
+        sku: extractedSku || sSo,
+        upc: extractedUpc,
+        title: trailingParsed.title || rawOrderDesc,
+        price: Number(sale.grossAmount || 0),
+        extraText: `${sale.soNumber || ''} ${sale.orderId || ''}`,
+        allowPrefixForPayout: true,
+        activeItems: inventoryItems.value || [],
+        claimedItemIdToSku,
+        multiBinResolvedBySku: multiBinBySku,
+      }) ||
+      inventoryItems.value.find(i => i.saleId === sale.$id);
     const resolvedBinSku = cleanCatalogSku(linkedItem?.locationSku || linkedItem?.sku || sSo).toUpperCase();
     const resolvedUpc = cleanCatalogSku(linkedItem?.upc || sSo).toUpperCase();
     const matchedBinEntry = Object.entries(PREVERIFIED_MD_MULTI_QTY_BINS).find(
