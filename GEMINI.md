@@ -245,3 +245,10 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 - Confirm tray button route (`/warehouse/sync`) and `manifestMatchesLocation` meta fields in `src/lib/warehouses.ts`.
 - Confirm Sales tab view id matches `rc-tab-view-*` pattern.
 - Move inline drops-tab code out of the userscript (anti-monolith).
+
+
+## 2026-11-05 — Unlinked Memory Den Tickets Repaired (`alpha-1` @ `7a161de`)
+- **Data repair (dry run first, then applied):** 17 `sales` rows that showed `SO-75xx` / bare `Ticket #N` now carry their real barcode (`HUCK-1795`, `HUCK-5064`, `PDXGL-0130`, …) and `orderId = Ticket #N • Title - 0EJXXX`. 11 dangling `items.saleId` pointers re-linked; the Booth Bin `0EJ0H5` (Frazetta) was left alone. October check still exact: 63 / $2,462.99 / $369.45 / $2,093.54.
+- **Root causes:** `Payouts *.csv` has no SKU column; `orderId` stored only `Ticket #N`; the Nov 4 duplicate cleanup left `items.saleId` pointing at deleted sales.
+- **Code:** `buildSaleOrderReference` (`src/lib/ricochetPayoutParser.ts`) keeps title + SKU in `orderRef`; `LinkTicketInventoryModal.vue` treats a `saleId` that points at a deleted sale as unlinked (new `liveSaleIds` prop from `SalesList.vue`).
+- **Next:** about 17 more items still have dangling `saleId`s (34 found before this repair, 11 fixed here, some are bins). Audit them the same way (dry run first).
