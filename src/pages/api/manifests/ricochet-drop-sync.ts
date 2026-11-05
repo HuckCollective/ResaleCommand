@@ -92,6 +92,26 @@ const cleanSku = (v: unknown) =>
     .replace(/^['"]+|['"]+$/g, '')
     .toUpperCase();
 
+function parseItemPrice(it: any, snap?: any): number {
+  const candidates = [
+    it?.boutiquePrice,
+    it?.resalePrice,
+    it?.price,
+    it?.listPrice,
+    it?.estValue,
+    snap?.boutiquePrice,
+    snap?.resalePrice,
+    snap?.price,
+  ];
+  for (const raw of candidates) {
+    if (raw === null || raw === undefined || raw === '') continue;
+    const cleaned = String(raw).replace(/[^0-9.]/g, '');
+    const n = parseFloat(cleaned);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 function manifestMatchesLocation(doc: any, code: string): boolean {
   const upperCode = code.toUpperCase();
   const meta: any = getLocationSettingMeta(upperCode);
@@ -171,19 +191,28 @@ export const GET: APIRoute = async ({ url }) => {
       if (!itemIds.length || !manifestMatchesLocation(doc, code)) continue;
 
       const items = await fetchItems(appwrite, itemIds, snapshot);
+      const snapById = new Map<string, any>();
+      for (const s of snapshot) {
+        const sid = s?.$id || s?.id;
+        if (sid) snapById.set(String(sid), s);
+      }
       manifests.push({
         manifestId: doc.$id,
         name: doc.name,
         status: doc.status,
-        items: items.map((it: any) => ({
-          itemId: it.$id || it.id,
-          title: it.title || 'Untitled Item',
-          price: Number(it.boutiquePrice ?? it.resalePrice ?? it.price ?? 0) || 0,
-          upc: it.upc || '',
-          locationSku: it.locationSku || '',
-          quantity: Number(it.quantity ?? 1) || 1,
-          bound: !!it.locationSku,
-        })),
+        items: items.map((it: any) => {
+          const itemId = it.$id || it.id;
+          const snap = snapById.get(String(itemId));
+          return {
+            itemId,
+            title: it.title || snap?.title || 'Untitled Item',
+            price: parseItemPrice(it, snap),
+            upc: it.upc || snap?.upc || '',
+            locationSku: it.locationSku || snap?.locationSku || '',
+            quantity: Number(it.quantity ?? snap?.quantity ?? 1) || 1,
+            bound: !!(it.locationSku || snap?.locationSku),
+          };
+        }),
       });
     }
     return json({ location: code, manifests });
