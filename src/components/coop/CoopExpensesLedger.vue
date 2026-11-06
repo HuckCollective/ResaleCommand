@@ -432,7 +432,6 @@
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="w-40 whitespace-nowrap">Member / Partner</th>
               <th class="w-36 cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('scope')">
                 <div class="flex items-center gap-1">
                   <span>Tax / Pool Scope</span>
@@ -440,8 +439,7 @@
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="w-24 text-center whitespace-nowrap">Receipt</th>
-              <th class="w-28 text-right cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('amount')">
+              <th class="w-24 text-right cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('amount')">
                 <div class="flex items-center justify-end gap-1">
                   <span>Amount</span>
                   <span v-if="sortBy === 'amount'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
@@ -455,7 +453,7 @@
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="w-28 text-right whitespace-nowrap">Actions</th>
+              <th class="w-20 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -491,15 +489,17 @@
                     <Icon :icon="getCategoryIcon(expense.category)" class="w-3 h-3 shrink-0" />
                     <span>{{ condenseCategory(expense.category) }}</span>
                   </span>
+                  <span class="text-[10px] font-mono opacity-60 truncate max-w-[180px]">{{ expense.partner }} · {{ expense.member }}</span>
+                  <button
+                    v-if="expense.receiptUrl"
+                    type="button"
+                    @click.stop="previewReceipt(expense)"
+                    class="text-primary hover:scale-110 transition-transform"
+                    title="View receipt / PDF"
+                  >
+                    <Icon icon="solar:paperclip-bold" class="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </td>
-
-              <!-- Member / Partner -->
-              <td class="whitespace-nowrap">
-                <div class="font-bold text-xs text-base-content truncate max-w-[140px]">{{ expense.member }}</div>
-                <span class="badge badge-xs badge-outline font-mono font-bold mt-0.5 whitespace-nowrap">
-                  {{ expense.partner }}
-                </span>
               </td>
 
               <!-- Tax / Pool Scope Static Opaque Pill -->
@@ -516,29 +516,6 @@
                 </div>
               </td>
 
-              <!-- Receipt -->
-              <td class="text-center whitespace-nowrap" @click.stop>
-                <button
-                  v-if="expense.receiptUrl"
-                  type="button"
-                  @click="previewReceipt(expense)"
-                  class="btn btn-ghost btn-xs text-primary gap-1 font-bold"
-                  title="View full receipt / PDF"
-                >
-                  <Icon icon="solar:paperclip-bold" class="w-3.5 h-3.5" />
-                  <span>View</span>
-                </button>
-                <label
-                  v-else
-                  class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary gap-1 font-bold cursor-pointer"
-                  title="Attach PDF or receipt"
-                >
-                  <Icon icon="solar:upload-minimalistic-bold" class="w-3 h-3" />
-                  <span>Attach</span>
-                  <input type="file" accept=".pdf,image/*" @change="uploadReceiptForExpense(expense, $event)" class="hidden" />
-                </label>
-              </td>
-
               <!-- Amount -->
               <td class="text-right font-mono font-black text-sm whitespace-nowrap text-base-content">
                 ${{ expense.amount.toFixed(2) }}
@@ -551,46 +528,47 @@
                 </span>
               </td>
 
-              <!-- Actions (Matches SalesList & InventoryTableView) -->
-              <td class="text-right whitespace-nowrap" @click.stop>
-                <div class="flex items-center justify-end gap-1">
-                  <button
-                    type="button"
-                    @click="openEditModal(expense)"
-                    class="btn btn-xs btn-outline btn-primary btn-square rounded-lg h-7 w-7"
-                    title="Edit Expense Details"
-                  >
-                    <Icon icon="solar:pen-bold" class="w-3 h-3 shrink-0" />
+              <!-- Actions (kebab menu — identical to InventoryTableView) -->
+              <td class="text-center" @click.stop>
+                <div class="dropdown dropdown-end">
+                  <button tabindex="0" type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100">
+                    <Icon icon="solar:menu-dots-bold" class="w-4 h-4" />
                   </button>
-
-                  <button
-                    v-if="expense.status === 'pending'"
-                    type="button"
-                    @click="updateStatus(expense, 'approved')"
-                    class="btn btn-xs btn-success text-success-content font-bold rounded-lg h-7 px-2 shadow-2xs"
-                    title="Approve for reimbursement"
-                  >
-                    Approve
-                  </button>
-
-                  <button
-                    v-if="expense.status === 'approved'"
-                    type="button"
-                    @click="updateStatus(expense, 'reimbursed')"
-                    class="btn btn-xs btn-primary text-primary-content font-bold rounded-lg h-7 px-2 shadow-2xs"
-                    title="Mark as paid out from Commons Pool"
-                  >
-                    Reimburse
-                  </button>
-
-                  <button
-                    type="button"
-                    @click="confirmDelete(expense)"
-                    class="btn btn-ghost btn-xs btn-square text-error opacity-60 hover:opacity-100 rounded-lg h-7 w-7"
-                    title="Delete expense"
-                  >
-                    <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
-                  </button>
+                  <ul tabindex="0" class="dropdown-content z-50 menu p-1.5 shadow-xl bg-base-100 rounded-box w-48 border border-base-200 text-xs font-bold space-y-0.5">
+                    <li>
+                      <a @click="openEditModal(expense)" class="text-primary">
+                        <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> Edit Details
+                      </a>
+                    </li>
+                    <li v-if="expense.status === 'pending'">
+                      <a @click="updateStatus(expense, 'approved')" class="text-success">
+                        <Icon icon="solar:check-circle-bold" class="w-3.5 h-3.5" /> Approve
+                      </a>
+                    </li>
+                    <li v-if="expense.status === 'approved'">
+                      <a @click="updateStatus(expense, 'reimbursed')" class="text-info">
+                        <Icon icon="solar:card-recive-bold" class="w-3.5 h-3.5" /> Mark Reimbursed
+                      </a>
+                    </li>
+                    <li v-if="expense.receiptUrl">
+                      <a @click="previewReceipt(expense)">
+                        <Icon icon="solar:paperclip-bold" class="w-3.5 h-3.5" /> View Receipt
+                      </a>
+                    </li>
+                    <li>
+                      <label class="cursor-pointer">
+                        <Icon icon="solar:upload-minimalistic-bold" class="w-3.5 h-3.5" />
+                        {{ expense.receiptUrl ? 'Replace Receipt' : 'Attach Receipt' }}
+                        <input type="file" accept=".pdf,image/*" @change="uploadReceiptForExpense(expense, $event)" class="hidden" />
+                      </label>
+                    </li>
+                    <div class="divider my-0.5"></div>
+                    <li>
+                      <a @click="confirmDelete(expense)" class="text-error">
+                        <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> Delete
+                      </a>
+                    </li>
+                  </ul>
                 </div>
               </td>
             </tr>

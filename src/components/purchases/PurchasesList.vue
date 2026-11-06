@@ -284,8 +284,8 @@
     <!-- 2. DESKTOP TABLE VIEW (VISIBLE ON MD AND LARGER SCREENS) -->
     <div class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
       <div class="overflow-x-auto">
-        <table class="table table-zebra w-full">
-          <thead class="bg-base-200/70 text-xs font-black uppercase tracking-wider text-base-content/80">
+        <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
+          <thead class="bg-base-200/90 text-xs font-bold text-base-content select-none border-b border-base-300">
             <tr>
               <th class="w-40 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('po')">
                 <div class="flex items-center gap-1.5">
