@@ -332,7 +332,7 @@
               <td class="text-right font-mono text-success">{{ p.isConsignor ? '—' : `+$${p.totalCostBasis.toFixed(2)}` }}</td>
               <td class="text-right font-mono text-primary">{{ p.isConsignor ? '—' : `+$${p.totalCuratorProfit.toFixed(2)}` }}</td>
               <td class="text-right font-mono text-warning">
-                {{ p.isConsignor ? `-$${(p.rentDeduction || 0).toFixed(2)} Rent` : `$${p.totalCommonsTake.toFixed(2)} (${policyConfig.commonsSharePct}%)` }}
+                {{ p.isConsignor ? `-$${((p.rentDeduction || 0) + (p.coopCommission || 0)).toFixed(2)} ${p.dealMode === 'flat_commission' ? 'Co-op' : 'Rent'}` : `$${p.totalCommonsTake.toFixed(2)} (${policyConfig.commonsSharePct}%)` }}
               </td>
               <td class="text-right font-mono text-secondary">
                 {{ p.isConsignor ? '—' : `${(p.laborHoursLogged || 0).toFixed(1)}h` }}
@@ -378,7 +378,9 @@
                 <span class="badge badge-sm badge-outline font-mono font-bold">{{ partner.prefix }}</span>
                 <span class="badge badge-sm badge-ghost font-bold">{{ partner.items.length }} {{ partner.items.length === 1 ? 'item sold' : 'items sold' }}</span>
               </div>
-              <p class="text-xs text-base-content/60">Governed under Huckleberry Collective 70/30 Net Surplus Settlement</p>
+              <p class="text-xs text-base-content/60">
+                {{ partner.isConsignor ? `Consignor deal: ${partner.dealFormulaLabel || 'Pro-Rata Booth Rent Share'}` : 'Governed under Huckleberry Collective 70/30 Net Surplus Settlement' }}
+              </p>
             </div>
           </div>
 
@@ -395,6 +397,16 @@
                 <span>Includes +${{ partner.reimbursements.toFixed(2) }} Fronted Reimbursement</span>
               </div>
             </div>
+            <button
+              v-if="partner.isConsignor"
+              type="button"
+              class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold"
+              @click="openDealModal(partner)"
+              title="Adjust this consignor's deal (straight % split, pro-rata rent, or fixed shelf rent)"
+            >
+              <Icon icon="solar:settings-bold-duotone" class="w-4 h-4 shrink-0" />
+              <span>⚙️ Adjust Consignor Deal</span>
+            </button>
             <button 
               type="button" 
               class="btn btn-sm btn-primary gap-1.5 shadow-sm rounded-xl font-bold"
@@ -418,8 +430,10 @@
             <span class="font-mono text-sm text-error font-bold">-${{ partner.totalVenueFee.toFixed(2) }}</span>
           </div>
           <div v-if="partner.isConsignor">
-            <span class="opacity-60 block font-medium">Booth Rent Share:</span>
-            <span class="font-mono text-sm text-warning font-bold">-${{ (partner.rentDeduction || 0).toFixed(2) }}</span>
+            <span class="opacity-60 block font-medium">{{ partner.dealMode === 'flat_commission' ? 'Co-op Commission:' : partner.dealMode === 'fixed_shelf_rent' ? 'Shelf Rent:' : 'Booth Rent Share:' }}</span>
+            <span class="font-mono text-sm text-warning font-bold">
+              -${{ (partner.dealMode === 'flat_commission' ? (partner.coopCommission || 0) : (partner.rentDeduction || 0)).toFixed(2) }}
+            </span>
           </div>
           <div v-else>
             <span class="opacity-60 block font-medium">100% Cost Basis Recouped:</span>
@@ -678,6 +692,56 @@
 
       </div>
     </details>
+
+    <!-- Consignor Deal Quick-Adjust Modal -->
+    <dialog :class="{ 'modal modal-open': dealModalPartner && dealDraft }" class="modal">
+      <div v-if="dealModalPartner && dealDraft" class="modal-box max-w-md rounded-3xl p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-base-200 pb-3">
+          <h3 class="font-black text-lg">⚙️ Consignor Deal — {{ dealDraft.displayName }}</h3>
+          <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="closeDealModal">✕</button>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold text-xs">Deal Mode</span></label>
+          <select v-model="dealDraft.mode" class="select select-bordered select-sm rounded-xl font-bold">
+            <option v-for="(label, key) in CONSIGNOR_DEAL_MODE_LABELS" :key="key" :value="key as ConsignorDealMode">{{ label }}</option>
+          </select>
+        </div>
+
+        <div v-if="dealDraft.mode !== 'pro_rata_rent'" class="form-control">
+          <label class="label py-1">
+            <span class="label-text font-bold text-xs">Co-op Commission to Commons Pool</span>
+            <span class="font-mono font-black text-xs">{{ dealDraft.coopCommissionPct }}% Co-op / {{ 100 - dealDraft.coopCommissionPct }}% Consignor</span>
+          </label>
+          <input type="range" min="0" max="60" step="5" v-model.number="dealDraft.coopCommissionPct" class="range range-primary range-sm" />
+        </div>
+
+        <div v-if="dealDraft.mode === 'fixed_shelf_rent'" class="form-control">
+          <label class="label py-1"><span class="label-text font-bold text-xs">Fixed Shelf Rent ($/mo)</span></label>
+          <input type="number" min="0" step="0.01" v-model.number="dealDraft.fixedMonthlyRent" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
+        </div>
+
+        <label class="label cursor-pointer justify-start gap-2 py-0">
+          <input type="checkbox" v-model="dealDraft.capRentAtNetSales" class="checkbox checkbox-sm checkbox-primary" />
+          <span class="label-text text-xs font-bold">Never let rent push payout below $0</span>
+        </label>
+
+        <div v-if="dealPreview" class="p-3 rounded-2xl bg-base-200/60 border border-base-300 text-xs space-y-1 font-mono">
+          <div class="flex justify-between"><span>Current check</span><strong>${{ dealModalPartner.totalPayoutCheck.toFixed(2) }}</strong></div>
+          <div class="flex justify-between"><span>New check</span><strong class="text-success">${{ dealPreview.payout.toFixed(2) }}</strong></div>
+          <div class="flex justify-between"><span>Rent deducted</span><span>-${{ dealPreview.rentDeduction.toFixed(2) }}</span></div>
+          <div class="flex justify-between"><span>Commons Pool +</span><span class="text-warning">${{ dealPreview.coopCommission.toFixed(2) }}</span></div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
+          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="closeDealModal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary rounded-xl font-black px-5" :disabled="isSavingDeal" @click="saveDeal">
+            {{ isSavingDeal ? 'Saving...' : 'Save & Sync' }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="closeDealModal">close</button></form>
+    </dialog>
   </div>
 </template>
 
@@ -696,6 +760,11 @@ import {
   getLaborHoursByMemberForMonth,
   DEFAULT_COOP_POLICY_CONFIG,
   DEFAULT_COOP_LABOR_ENTRIES,
+  CONSIGNOR_DEAL_MODE_LABELS,
+  calculateConsignorSettlement,
+  findConsignorAgreement,
+  type ConsignorAgreementConfig,
+  type ConsignorDealMode,
   type SurplusPolicyMode,
   type SurplusSplitBasis,
   type CoopPolicyConfig,
@@ -786,6 +855,69 @@ const setSurplusSplitBasis = async (basis: SurplusSplitBasis) => {
     { surplusPolicyMode: surplusPolicyMode.value, surplusSplitBasis: basis },
     currentTeam.value?.$id || 'huck_collective'
   );
+};
+
+// --- Consignor Deal Quick-Adjust Modal ---
+const dealModalPartner = ref<any | null>(null);
+const dealDraft = ref<ConsignorAgreementConfig | null>(null);
+const isSavingDeal = ref(false);
+
+const openDealModal = (partner: any) => {
+  const existing = findConsignorAgreement(policyConfig.value.consignors, partner.prefix);
+  dealDraft.value = existing
+    ? { ...existing }
+    : {
+        prefix: partner.prefix,
+        displayName: partner.name,
+        mode: 'pro_rata_rent',
+        coopCommissionPct: 20,
+        fixedMonthlyRent: 0,
+        capRentAtNetSales: true,
+      };
+  dealModalPartner.value = partner;
+};
+
+const closeDealModal = () => {
+  dealModalPartner.value = null;
+  dealDraft.value = null;
+};
+
+const dealPreview = computed(() => {
+  const p = dealModalPartner.value;
+  const d = dealDraft.value;
+  if (!p || !d) return null;
+  const totalGrossAll = partnerSettlements.value.reduce((s, g) => s + g.totalGross, 0);
+  return calculateConsignorSettlement({
+    agreement: d,
+    netStoreDeposit: p.totalGross - p.totalVenueFee,
+    grossRatio: totalGrossAll > 0 ? p.totalGross / totalGrossAll : 0,
+    boothRent: effectiveMonthlyRent.value,
+    isMonthInProgress: isMonthInProgress.value,
+  });
+});
+
+const saveDeal = async () => {
+  if (!dealDraft.value) return;
+  isSavingDeal.value = true;
+  try {
+    const draft = { ...dealDraft.value };
+    const others = (policyConfig.value.consignors || []).filter(
+      (c) => c.prefix !== draft.prefix
+    );
+    const next = { ...policyConfig.value, consignors: [...others, draft] };
+    policyConfig.value = next;
+    const ok = await saveCoopGovernanceState(
+      { policyConfig: next },
+      currentTeam.value?.$id || 'huck_collective'
+    );
+    addToast({
+      type: ok ? 'success' : 'warning',
+      message: ok ? `Saved consignor deal for ${draft.displayName}` : 'Saved locally; cloud sync failed',
+    });
+    closeDealModal();
+  } finally {
+    isSavingDeal.value = false;
+  }
 };
 
 // Keep this view's month in sync with the /sales page filter
@@ -1095,7 +1227,7 @@ const partnerSettlements = computed(() => {
       groups[prefix] = {
         prefix,
         name: partnerName,
-        isConsignor: prefix === 'BB-',
+        isConsignor: !!findConsignorAgreement(policyConfig.value.consignors, prefix) || prefix === 'BB-',
         isCommonsPool: prefix === 'COMMONS-',
         items: [],
         totalGross: 0,
@@ -1111,7 +1243,7 @@ const partnerSettlements = computed(() => {
       };
     }
 
-    const isPureConsignor = prefix === 'BB-';
+    const isPureConsignor = !!findConsignorAgreement(policyConfig.value.consignors, prefix) || prefix === 'BB-';
     const isCommonsClaimed = prefix === 'COMMONS-';
     const grossPrice = Number(sale.grossAmount || 0);
     const netStoreDeposit = Number(sale.netPayout !== undefined ? sale.netPayout : (grossPrice - Number(sale.fees ?? 0)));
@@ -1170,9 +1302,29 @@ const partnerSettlements = computed(() => {
       grp.grossCuratorShare = 0;
       grp.totalPayoutCheck = 0;
     } else if (grp.isConsignor) {
-      // Pure Consignor: Gross - 15% Mall Fee - Proportional Booth Rent Share
-      grp.totalCuratorProfit = Math.max(0, Number((grp.totalGross - grp.totalVenueFee - rentShare).toFixed(2)));
-      grp.totalPayoutCheck = grp.totalCuratorProfit;
+      // Straight Consignor: payout driven by the live cloud agreement (pro-rata rent / straight % / fixed shelf rent)
+      const agreement = findConsignorAgreement(policyConfig.value.consignors, grp.prefix) || {
+        prefix: grp.prefix,
+        displayName: grp.name,
+        mode: 'pro_rata_rent' as const,
+        coopCommissionPct: 0,
+        fixedMonthlyRent: 0,
+        capRentAtNetSales: true,
+      };
+      const result = calculateConsignorSettlement({
+        agreement,
+        netStoreDeposit: grp.totalGross - grp.totalVenueFee,
+        grossRatio,
+        boothRent: FIXED_BOOTH_RENT,
+        isMonthInProgress: isMonthInProgress.value,
+      });
+      grp.rentDeduction = result.rentDeduction;
+      grp.coopCommission = result.coopCommission;
+      grp.dealFormulaLabel = result.formulaLabel;
+      grp.dealMode = agreement.mode;
+      grp.totalCommonsTake = Number((grp.totalCommonsTake + result.coopCommission).toFixed(2));
+      grp.totalCuratorProfit = result.payout;
+      grp.totalPayoutCheck = result.payout;
     } else {
       // Co-op Member: Rent is covered by Commons Pool
       const reimbursements = memberReimbursements.value[grp.prefix] || 0;
@@ -1340,7 +1492,10 @@ const downloadPartnerPdf = (partner: any) => {
         ? `${activeLocationMeta.value.shortName} (${activeLocationMeta.value.code})`
         : 'All Co-op Channels',
       reimbursements: partner.reimbursements || 0,
-      rentDeduction: partner.isConsignor ? (partner.rentDeduction || 0) : undefined
+      rentDeduction: partner.isConsignor ? (partner.rentDeduction || 0) : undefined,
+      coopCommission: partner.isConsignor ? (partner.coopCommission || 0) : undefined,
+      dealFormulaLabel: partner.isConsignor ? partner.dealFormulaLabel : undefined,
+      isConsignor: !!partner.isConsignor
     };
 
     const doc = generatePartnerSettlementPdf(data);

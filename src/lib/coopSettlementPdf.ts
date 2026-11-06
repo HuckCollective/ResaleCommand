@@ -27,6 +27,9 @@ export interface PartnerStatementData {
   boothLocation?: string;
   reimbursements?: number;
   rentDeduction?: number;
+  coopCommission?: number;
+  dealFormulaLabel?: string;
+  isConsignor?: boolean;
 }
 
 function formatPdfDate(dateStr: string | null | undefined): string {
@@ -236,9 +239,12 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   const summaryBoxX = pageWidth - margin - summaryBoxWidth;
   const hasReimbursement = Boolean(data.reimbursements && data.reimbursements > 0);
   const hasRentDeduction = Boolean(data.rentDeduction && data.rentDeduction > 0);
+  const hasCoopCommission = Boolean(data.coopCommission && data.coopCommission > 0);
   let summaryBoxHeight = 90;
   if (hasReimbursement) summaryBoxHeight += 14;
   if (hasRentDeduction) summaryBoxHeight += 14;
+  if (hasCoopCommission) summaryBoxHeight += 14;
+  if (data.isConsignor && data.dealFormulaLabel) summaryBoxHeight += 14;
 
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
@@ -267,10 +273,24 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.text(`+$${data.totalCuratorProfit.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
   sy += 14;
 
+  if (data.isConsignor && data.dealFormulaLabel) {
+    doc.text('Consignment Deal:', summaryBoxX + 14, sy);
+    doc.text(data.dealFormulaLabel.slice(0, 44), summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    sy += 14;
+  }
+
   if (hasRentDeduction && data.rentDeduction) {
-    doc.text('Proportional Booth Rent Share:', summaryBoxX + 14, sy);
+    doc.text('Booth / Shelf Rent Share:', summaryBoxX + 14, sy);
     doc.setTextColor(220, 38, 38);
     doc.text(`-$${data.rentDeduction.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
+  }
+
+  if (hasCoopCommission && data.coopCommission) {
+    doc.text('Co-op Commons Commission:', summaryBoxX + 14, sy);
+    doc.setTextColor(220, 38, 38);
+    doc.text(`-$${data.coopCommission.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
     doc.setTextColor(71, 85, 105);
     sy += 14;
   }

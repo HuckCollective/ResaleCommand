@@ -43,7 +43,106 @@ export interface CoopMemberProfile {
   canVote: boolean;
 }
 
+export type ConsignorDealMode =
+  /** Venue Fee + pro-rata share of booth rent (matches % of booth gross sales); 0% Co-op commission */
+  | 'pro_rata_rent'
+  /** Straight % Split: Venue Fee + X% Co-op commission to Commons Pool; $0 rent */
+  | 'flat_commission'
+  /** Venue Fee + fixed $/mo shelf rent + optional X% Co-op commission */
+  | 'fixed_shelf_rent';
+
+export interface ConsignorAgreementConfig {
+  /** Normalized barcode prefix, e.g. 'BB-' */
+  prefix: string;
+  displayName: string;
+  mode: ConsignorDealMode;
+  /** % of net store deposit (after rent in fixed mode) contributed to the Commons Pool (0–60) */
+  coopCommissionPct: number;
+  /** Fixed monthly shelf rent ($) used in 'fixed_shelf_rent' mode */
+  fixedMonthlyRent: number;
+  /** Never let rent push the consignor payout below $0 */
+  capRentAtNetSales: boolean;
+  notes?: string;
+}
+
+export const CONSIGNOR_DEAL_MODE_LABELS: Record<ConsignorDealMode, string> = {
+  pro_rata_rent: '📊 Pro-Rata Booth Rent Share',
+  flat_commission: '✂️ Straight % Split ($0 Rent)',
+  fixed_shelf_rent: '🏪 Fixed Monthly Shelf Rent',
+};
+
+export const DEFAULT_CONSIGNOR_AGREEMENTS: ConsignorAgreementConfig[] = [
+  {
+    prefix: 'BB-',
+    displayName: 'B&B Consignment (PDXGL Sub-Client)',
+    mode: 'pro_rata_rent',
+    coopCommissionPct: 20,
+    fixedMonthlyRent: 85.41,
+    capRentAtNetSales: true,
+  },
+];
+
+export interface ConsignorSettlementInput {
+  agreement: ConsignorAgreementConfig;
+  /** Net store deposit for the consignor's sales (gross - venue fee) */
+  netStoreDeposit: number;
+  /** Consignor's share of total gross sales (0–1) */
+  grossRatio: number;
+  /** Live monthly booth rent (0 while the month is still in progress) */
+  boothRent: number;
+  /** True while the Pacific month is open: no rent is billed yet */
+  isMonthInProgress: boolean;
+}
+
+export interface ConsignorSettlementResult {
+  rentDeduction: number;
+  coopCommission: number;
+  payout: number;
+  formulaLabel: string;
+}
+
+/** Single shared consignor payout formula for /coop/settlements and the PDF statement. */
+export function calculateConsignorSettlement(input: ConsignorSettlementInput): ConsignorSettlementResult {
+  const { agreement, netStoreDeposit, grossRatio, boothRent, isMonthInProgress } = input;
+  const net = Math.max(0, Number(netStoreDeposit) || 0);
+  const pct = Math.min(60, Math.max(0, Number(agreement.coopCommissionPct) || 0)) / 100;
+  const round = (n: number) => Number(n.toFixed(2));
+
+  let rent = 0;
+  let commission = 0;
+  let formulaLabel = '';
+
+  if (agreement.mode === 'flat_commission') {
+    commission = round(net * pct);
+    formulaLabel = `Straight Consignment Split (${round(100 - pct * 100)}% Consignor / ${round(pct * 100)}% Co-op)`;
+  } else if (agreement.mode === 'fixed_shelf_rent') {
+    const fixed = isMonthInProgress ? 0 : Math.max(0, Number(agreement.fixedMonthlyRent) || 0);
+    rent = agreement.capRentAtNetSales ? Math.min(fixed, net) : fixed;
+    commission = round(Math.max(0, net - rent) * pct);
+    formulaLabel = `Fixed Shelf Rent ($${round(Number(agreement.fixedMonthlyRent) || 0).toFixed(2)}/mo)${pct > 0 ? ` + ${round(pct * 100)}% Co-op` : ''}`;
+  } else {
+    const share = round(grossRatio * boothRent);
+    rent = agreement.capRentAtNetSales ? Math.min(share, net) : share;
+    formulaLabel = 'Pro-Rata Booth Rent Share';
+  }
+
+  rent = round(rent);
+  const rawPayout = round(net - rent - commission);
+  const payout = agreement.capRentAtNetSales ? Math.max(0, rawPayout) : rawPayout;
+  return { rentDeduction: rent, coopCommission: commission, payout, formulaLabel };
+}
+
+export function findConsignorAgreement(
+  agreements: ConsignorAgreementConfig[] | undefined,
+  prefix: string
+): ConsignorAgreementConfig | undefined {
+  const key = String(prefix || '').toUpperCase().replace(/[-_]+$/, '');
+  return (agreements || []).find((a) => a.prefix.toUpperCase().replace(/[-_]+$/, '') === key);
+}
+
 export interface CoopPolicyConfig {
+  /** Straight-consignment agreements (BB- and any added consignor prefix) */
+  consignors: ConsignorAgreementConfig[];
   /** Gate 3 Item Margin Split (must sum to 100) */
   curatorSharePct: number;
   commonsSharePct: number;
@@ -124,6 +223,7 @@ export function classifySurplusLaborRole(category: CoopLaborCategory): WsdeSurpl
 }
 
 export const DEFAULT_COOP_POLICY_CONFIG: CoopPolicyConfig = {
+  consignors: DEFAULT_CONSIGNOR_AGREEMENTS.map((c) => ({ ...c })),
   curatorSharePct: 70,
   commonsSharePct: 30,
   reserveSharePct: 10,
@@ -210,7 +310,26 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
       ? base.members
       : DEFAULT_COOP_POLICY_CONFIG.members;
 
+  const rawConsignors = Array.isArray(base.consignors) ? base.consignors : DEFAULT_CONSIGNOR_AGREEMENTS;
+  const consignors: ConsignorAgreementConfig[] = rawConsignors
+    .filter((c) => c && String(c.prefix || '').trim())
+    .map((c) => {
+      const prefix = String(c.prefix).trim().toUpperCase().replace(/[-_]+$/, '') + '-';
+      const mode: ConsignorDealMode =
+        c.mode === 'flat_commission' || c.mode === 'fixed_shelf_rent' ? c.mode : 'pro_rata_rent';
+      return {
+        prefix,
+        displayName: String(c.displayName || `${prefix.replace(/-$/, '')} Consignor`),
+        mode,
+        coopCommissionPct: Math.min(60, Math.max(0, Number(c.coopCommissionPct ?? 20))),
+        fixedMonthlyRent: Math.max(0, Number(c.fixedMonthlyRent ?? 0)),
+        capRentAtNetSales: c.capRentAtNetSales !== false,
+        notes: c.notes ? String(c.notes) : undefined,
+      };
+    });
+
   return {
+    consignors,
     curatorSharePct,
     commonsSharePct,
     reserveSharePct,

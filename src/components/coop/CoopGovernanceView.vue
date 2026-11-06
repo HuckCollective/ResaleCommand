@@ -326,6 +326,61 @@
         </div>
       </div>
 
+      <!-- Consignor Agreements & Straight Commission Settings -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-base-200/40 border border-base-300 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Consignor Agreements</div>
+            <div class="text-sm font-black text-base-content">Straight Consignment Deals (applied on /coop/settlements)</div>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input v-model="newConsignor.prefix" type="text" placeholder="PREFIX (e.g. CON)" class="input input-bordered input-sm rounded-xl font-mono text-xs w-32" />
+            <input v-model="newConsignor.displayName" type="text" placeholder="Display name" class="input input-bordered input-sm rounded-xl text-xs w-40" />
+            <button type="button" @click="addConsignor" class="btn btn-sm btn-secondary rounded-xl font-bold">+ Add Straight Consignor</button>
+          </div>
+        </div>
+
+        <div v-if="policyConfig.consignors.length === 0" class="text-xs text-base-content/60">No consignors configured yet.</div>
+
+        <div v-for="(c, idx) in policyConfig.consignors" :key="c.prefix" class="p-4 rounded-2xl bg-base-100 border border-base-300 space-y-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="badge badge-sm badge-warning font-mono font-bold">{{ c.prefix }}</span>
+              <span class="font-black text-sm">{{ c.displayName }}</span>
+            </div>
+            <button type="button" @click="removeConsignor(idx)" class="btn btn-ghost btn-xs text-error">Remove</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="form-control">
+              <label class="label py-1"><span class="label-text font-bold text-xs">Deal Mode</span></label>
+              <select v-model="c.mode" class="select select-bordered select-sm rounded-xl font-bold text-xs">
+                <option v-for="(label, key) in CONSIGNOR_DEAL_MODE_LABELS" :key="key" :value="key">{{ label }}</option>
+              </select>
+            </div>
+
+            <div v-if="c.mode !== 'pro_rata_rent'" class="form-control">
+              <label class="label py-1">
+                <span class="label-text font-bold text-xs">Co-op Commission</span>
+                <span class="font-mono font-black text-xs">{{ c.coopCommissionPct }}% / {{ 100 - c.coopCommissionPct }}%</span>
+              </label>
+              <input type="range" min="0" max="60" step="5" v-model.number="c.coopCommissionPct" class="range range-secondary range-sm" />
+            </div>
+
+            <div v-if="c.mode === 'fixed_shelf_rent'" class="form-control">
+              <label class="label py-1"><span class="label-text font-bold text-xs">Fixed Shelf Rent ($/mo)</span></label>
+              <input type="number" min="0" step="0.01" v-model.number="c.fixedMonthlyRent" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
+            </div>
+          </div>
+
+          <label class="label cursor-pointer justify-start gap-2 py-0">
+            <input type="checkbox" v-model="c.capRentAtNetSales" class="checkbox checkbox-sm checkbox-primary" />
+            <span class="label-text text-xs font-bold">Never let rent push payout below $0</span>
+          </label>
+        </div>
+        <p class="text-[11px] text-base-content/60">Click "Enact &amp; Sync Policy to Cloud" above to save consignor deals.</p>
+      </div>
+
       <!-- Mondragon Federation & WSDE Structural Guardrails -->
       <div class="p-4 sm:p-5 rounded-2xl bg-base-200/40 border border-base-300 space-y-3">
         <div class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
@@ -854,6 +909,7 @@ import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
   DEFAULT_COOP_POLICY_CONFIG,
+  CONSIGNOR_DEAL_MODE_LABELS,
   type LoomioSignal,
   type ProposalVote,
   type CoopProposal,
@@ -881,6 +937,34 @@ const newRosterMember = ref<{
   name: '',
   partner: 'HUCK',
 });
+
+const newConsignor = ref({ prefix: '', displayName: '' });
+
+const addConsignor = () => {
+  const clean = newConsignor.value.prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!clean) {
+    addToast({ type: 'warning', message: 'Enter a consignor prefix first.' });
+    return;
+  }
+  const prefix = `${clean}-`;
+  if (policyConfig.value.consignors.some((c) => c.prefix === prefix)) {
+    addToast({ type: 'warning', message: `${prefix} already has an agreement.` });
+    return;
+  }
+  policyConfig.value.consignors.push({
+    prefix,
+    displayName: newConsignor.value.displayName.trim() || `${clean} Consignor`,
+    mode: 'flat_commission',
+    coopCommissionPct: 20,
+    fixedMonthlyRent: 0,
+    capRentAtNetSales: true,
+  });
+  newConsignor.value = { prefix: '', displayName: '' };
+};
+
+const removeConsignor = (idx: number) => {
+  policyConfig.value.consignors.splice(idx, 1);
+};
 
 const setGovTab = (tab: 'proposals' | 'rules' | 'roster') => {
   activeGovTab.value = tab;
