@@ -149,11 +149,15 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 5, 2026)
 
-## 📌 UP NEXT (Saved Before Restart — Reply `all` or `1`/`2`/`3`/`4` When Back)
-1. **Social Studio ➔ 1-Click `SWEAT-` Labor Log**: Wire a 1-click button in Social Dropcast Studio (`/marketing`) to log `SWEAT-` Marketing & Social hours + `deliverableRef` directly into `CoopLaborView.vue` (`/coop/labor`).
-2. **Dusty Tiger (`DT`) Sales & Drop Polish**: Add a 1-click Dusty Tiger (`10%` fee, `$75/mo` rent) quick-entry & settlement filter in `SalesList.vue` and `CoopSettlementView.vue`.
-3. **Booth Bin Stock Depletion Guardrail**: Lock in the canonical rule in `useRicochetSalesSync.ts` so Multi-Qty Booth Bins (`HUCK-0113`, `HUCK-1498`, etc.) never double-deplete when both `Payouts` and `Products` syncs run.
-4. **Repo Housekeeping**: Clean up any duplicate script in `public/scripts/` and point `git remote origin` to `https://github.com/HuckCollective/ResaleCommand.git`.
+## ✅ ALL 4 QUEUED CO-OP & POLISH MILESTONES COMPLETED (Nov 5, 2026)
+1. **Social Studio ➔ 1-Click `SWEAT-` Labor Log (`src/lib/coopGovernance.ts`, `DropcastHubDashboard.vue`, `SocialHubView.vue`, `CoopLaborView.vue`)**:
+   - Added `logSweatEquityLaborEntry()` in `src/lib/coopGovernance.ts` and wired 1-click **`+ Log SWEAT- (1.5h)`** buttons on both `DropcastHubDashboard.vue` cards and `SocialHubView.vue`'s studio header bar (plus `/coop/labor?partner=SWEAT` deep-link prefill in `CoopLaborView.vue`) to log `SWEAT-` Marketing & Social hours + `deliverableRef` directly into Appwrite (`coop_governance_proposals_v1`).
+2. **Dusty Tiger (`DT`) Sales & Settlement Filter (`SalesList.vue`, `CoopSettlementView.vue`, `SaleEditor.vue`)**:
+   - Added 1-click **`🐯 Dusty Tiger Sale`** header CTA (`/sales/new?location=DT` auto-selecting `DT` in `SaleEditor.vue`) and 1-click canonical venue filter pills (`All Venues`, `🔮 Memory Den (MD)`, `🐯 Dusty Tiger (DT)`) in `SalesList.vue` and `CoopSettlementView.vue`, dynamically driven by `getAllLocationSettingMetas()` (`10%` fee, `$75/mo` rent for `DT`; `15%` fee, `$382.50/mo` rent for `MD`).
+3. **Booth Bin Stock Depletion Guardrail (`useRicochetSalesSync.ts`, `scripts/validate-templates.mjs`, `.agents/rules/sales-reconciliation-and-payout-invariants.md`)**:
+   - Locked in the canonical rule (`if (row.matchedItemId && !isBinSale)`) and added an automated linter assertion in `scripts/validate-templates.mjs` so Multi-Qty Booth Bins (`HUCK-0113`, `HUCK-1498`, etc.) never double-deplete when both `Payouts` and `Products` syncs run.
+4. **Repo Housekeeping**:
+   - Verified `public/scripts/` is already clean (`public/ricochet-upc-sync.user.js` is the single canonical userscript) and pointed `git remote origin` to `https://github.com/HuckCollective/ResaleCommand.git`.
 
 ## Nov 5, 2026 — `alpha-1` Branch (Merged to `main` at `957bf27`): UX/IA Navbar Refactor, Appwrite Co-op Voting & Surplus Policy, and Unlinked Ticket Reconciliation
 - **UX/IA Master Navbar (`src/components/nav/Navbar.vue`) & Subdomain Middleware (`src/middleware.ts`)**:

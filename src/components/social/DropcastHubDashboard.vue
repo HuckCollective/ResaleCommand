@@ -29,6 +29,11 @@
           <span>+ Custom Cast</span>
         </button>
 
+        <a href="/coop/labor?partner=SWEAT" class="btn btn-sm btn-outline btn-secondary gap-1.5 font-bold text-xs rounded-2xl">
+          <Icon icon="solar:clock-circle-bold-duotone" class="w-4 h-4" />
+          <span>SWEAT- Labor Ledger</span>
+        </a>
+
         <a href="/warehouse" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 font-bold text-xs rounded-2xl">
           <Icon icon="solar:buildings-linear" class="w-4 h-4 text-secondary" />
           <span>Locations &amp; Drops</span>
@@ -383,6 +388,18 @@
               <span class="hidden sm:inline">Copy</span>
             </button>
 
+            <!-- 1-Click Log SWEAT- Marketing Labor -->
+            <button
+              type="button"
+              @click="handleLogSweatLabor(cast)"
+              :disabled="loggingCastId === cast.id"
+              class="btn btn-xs btn-secondary btn-outline gap-1 rounded-xl font-bold"
+              title="1-Click Log 1.5h SWEAT- Marketing & Social Labor + Deliverable Proof into Co-op Labor Ledger"
+            >
+              <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
+              <span>{{ loggedCastIds.has(cast.id) ? '✓ Logged SWEAT-' : '+ Log SWEAT- (1.5h)' }}</span>
+            </button>
+
             <!-- Duplicate -->
             <button 
               type="button" 
@@ -420,14 +437,21 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useDropcasts } from '../../composables/useDropcasts';
+import { useAuth } from '../../composables/useAuth';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { type Dropcast } from '../../lib/dropcastModel';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';
 import { resolveItemImageUrls } from '../../lib/inventory';
+import { logSweatEquityLaborEntry } from '../../lib/coopGovernance';
 import { addToast } from '../../stores/toast';
+
+const { currentTeam } = useAuth();
+const loggingCastId = ref<string | null>(null);
+const loggedCastIds = ref<Set<string>>(new Set());
 
 const {
   filteredDropcasts,
@@ -485,6 +509,33 @@ async function handleCopyCaption(cast: Dropcast) {
     addToast({ type: 'success', message: 'Caption copied to clipboard! 📋' });
   } catch {
     addToast({ type: 'info', message: 'Failed to copy to clipboard' });
+  }
+}
+
+async function handleLogSweatLabor(cast: Dropcast) {
+  if (loggingCastId.value) return;
+  loggingCastId.value = cast.id;
+  try {
+    const deliverableRef = `Dropcast: ${cast.title} (${cast.locationName || 'MD'} · ${cast.items?.length || 0} items)`;
+    const { entry } = await logSweatEquityLaborEntry(
+      {
+        partner: 'SWEAT',
+        category: 'Social & Marketing',
+        hours: 1.5,
+        deliverableRef,
+        notes: `Produced & staged Dropcast "${cast.title}" (${cast.items?.length || 0} items, $${Number(cast.totalRetailValue || 0).toFixed(2)} retail)`,
+      },
+      currentTeam.value?.$id || 'huck_collective'
+    );
+    loggedCastIds.value = new Set([...loggedCastIds.value, cast.id]);
+    addToast({
+      type: 'success',
+      message: `⏱️ Logged ${entry.hours}h SWEAT- labor for ${entry.member} (${deliverableRef})!`,
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: err?.message || 'Failed to log SWEAT- labor' });
+  } finally {
+    loggingCastId.value = null;
   }
 }
 </script>

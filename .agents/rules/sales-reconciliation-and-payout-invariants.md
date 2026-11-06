@@ -237,8 +237,8 @@ Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`
 - Known good: October 2026 = **63 sales / $2,462.99 gross / $369.45 fee / $2,093.54 net**.
 - The importer page's "New / Ready to Sync" is an estimate; Commit re-reads Appwrite fresh.
 
-### OPEN DECISION (owner: Mike) - bin stock on Commit
-- §12.3 says a Commit depletes a Booth Bin (`quantity` N-K). Since 2026-11-04 the Commit does **not** touch a bin item at all (bin = item on >1 staged line, `quantity > 1`, `isMultiQty`, or in `PREVERIFIED_MD_MULTI_QTY_BINS`), because the Products sync already sets `quantity` from Ricochet's live count and a second decrement would double-count. Decide which source of truth wins, then update this paragraph.
+### LOCKED DECISION (owner: Mike) - bin stock on Commit
+- A Booth Bin (`quantity > 1`, `isMultiQty`, on `>1` staged ticket line, or in `PREVERIFIED_MD_MULTI_QTY_BINS` / `buildLockedMultiBinMap`) is **NEVER** depleted or flipped to `sold / qty 1` by the Sales Commit (`useRicochetSalesSync.ts`). Sales Commit writes ONLY the `sales` ledger document for bin sales; physical bin `quantity` is governed exclusively by Ricochet's live `Products-*.csv` / catalog sync and `➕ Restock Bin` so running both `Payouts` and `Products` syncs can never double-deplete a Booth Bin.
 
 ### Incident log - never repeat
 | Date | What happened | Root cause |

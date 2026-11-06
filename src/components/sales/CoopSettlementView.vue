@@ -42,10 +42,12 @@
             <span>Commons Expenses</span>
           </a>
 
-          <!-- Location / Channel Selector -->
+          <!-- Location / Channel Selector (100% Driven by Central Location Settings) -->
           <div class="form-control">
             <select v-model="selectedLocation" class="select select-bordered select-sm font-bold text-xs h-9 min-h-9 rounded-xl">
-              <option value="memory_den">🏪 Memory Den (Booth 0EJ)</option>
+              <option v-for="loc in boothLocationMetas" :key="loc.code" :value="loc.code">
+                {{ loc.icon }} {{ loc.shortName }} ({{ loc.code }} · {{ loc.feePct }}% fee)
+              </option>
               <option value="all">🌐 All Channels &amp; Locations</option>
             </select>
           </div>
@@ -700,6 +702,7 @@ import {
   type CoopLaborEntry,
 } from '../../lib/coopGovernance';
 import { cleanSkuDisplay, pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
+import { getAllLocationSettingMetas, getLocationSettingMeta, resolveCanonicalLocationCode } from '../../lib/warehouses';
 
 interface SaleItem {
   id: string;
@@ -724,6 +727,8 @@ const props = defineProps<{
   partnerFilter?: string;
   /** Monthly booth rent from the live Appwrite `warehouses` document (never hardcoded). */
   monthlyRent?: number;
+  /** Live Appwrite warehouse documents for dynamic location fee & rent resolution. */
+  warehouses?: any[];
 }>();
 
 const emit = defineEmits<{
@@ -739,7 +744,16 @@ const isUnlinkedRow = (it: any): boolean => {
 
 const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
-const selectedLocation = ref<'memory_den' | 'all'>('memory_den');
+const selectedLocation = ref<string>('MD');
+
+const boothLocationMetas = computed(() =>
+  getAllLocationSettingMetas(props.warehouses).filter((m) => m.monthlyRent > 0 || m.commissionRate > 0)
+);
+
+const activeLocationMeta = computed(() => {
+  if (selectedLocation.value === 'all') return null;
+  return getLocationSettingMeta(selectedLocation.value, props.warehouses);
+});
 
 const surplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');
 const surplusSplitBasis = ref<SurplusSplitBasis>('volume');
@@ -866,19 +880,31 @@ const filteredSales = computed(() => {
       if (pacificMonthKey(s.date) !== selectedPeriod.value) return false;
     }
 
-    // 2. Venue isolation filter: Strictly verify Memory Den venue attribution
-    if (selectedLocation.value === 'memory_den') {
+    // 2. Venue isolation filter: Strictly verify canonical location attribution
+    if (selectedLocation.value !== 'all') {
+      const targetCode = resolveCanonicalLocationCode(selectedLocation.value, props.warehouses) || 'MD';
       const loc = (s.locationName || '').toLowerCase();
       const sSku = (s.sku || '').toLowerCase();
       const sUpc = (s.upc || '').toLowerCase();
       const soNumber = (s.soNumber || '').toLowerCase();
       const orderId = ((s as any).orderId || '').toLowerCase();
       const whId = ((s as any).warehouseId || '').toLowerCase();
-      const isMd = loc.includes('memory') || loc.includes('0ej') || loc === 'md' ||
-                   sSku.includes('0ej') || sUpc.includes('0ej') || soNumber.includes('0ej') ||
-                   orderId.startsWith('md-payout') || orderId.startsWith('md-') || orderId.startsWith('t-') ||
-                   whId === '6a7e70050009db0e1857' || whId === '6ab9a37500233d76d580';
-      if (!isMd) return false;
+
+      if (targetCode === 'MD') {
+        const isMd = loc.includes('memory') || loc.includes('0ej') || loc === 'md' ||
+                     sSku.includes('0ej') || sUpc.includes('0ej') || soNumber.includes('0ej') ||
+                     orderId.startsWith('md-payout') || orderId.startsWith('md-') || orderId.startsWith('t-') ||
+                     whId === '6a7e70050009db0e1857' || whId === '6ab9a37500233d76d580';
+        if (!isMd) return false;
+      } else if (targetCode === 'DT') {
+        const isDt = loc.includes('dusty') || loc.includes('tiger') || loc === 'dt' ||
+                     sSku.startsWith('dt-') || orderId.startsWith('dt-') ||
+                     whId === '6a7e71eb001f53734a86';
+        if (!isDt) return false;
+      } else {
+        const resolved = resolveCanonicalLocationCode(whId || loc, props.warehouses);
+        if (resolved !== targetCode) return false;
+      }
     }
 
     // 3. Resale Invariant: 1 Sale Record = 1 Unique Physical Register Transaction
@@ -1047,7 +1073,13 @@ const currentPacificMonthKey = computed(() =>
 const isMonthInProgress = computed(
   () => selectedPeriod.value !== 'all' && selectedPeriod.value === currentPacificMonthKey.value
 );
-const effectiveMonthlyRent = computed(() => (isMonthInProgress.value ? 0 : Number(props.monthlyRent ?? 0)));
+const effectiveMonthlyRent = computed(() => {
+  if (isMonthInProgress.value) return 0;
+  if (activeLocationMeta.value) {
+    return Number(activeLocationMeta.value.monthlyRent ?? props.monthlyRent ?? 0);
+  }
+  return Number(props.monthlyRent ?? 0);
+});
 
 const partnerSettlements = computed(() => {
   if (filteredSales.value.length === 0) return [];
@@ -1304,7 +1336,9 @@ const downloadPartnerPdf = (partner: any) => {
       totalNetSurplus: partner.totalNetSurplus,
       totalCuratorProfit: partner.totalCuratorProfit,
       totalPayoutCheck: partner.totalPayoutCheck,
-      boothLocation: 'Memory Den (Booth 0EJ)',
+      boothLocation: activeLocationMeta.value
+        ? `${activeLocationMeta.value.shortName} (${activeLocationMeta.value.code})`
+        : 'All Co-op Channels',
       reimbursements: partner.reimbursements || 0,
       rentDeduction: partner.isConsignor ? (partner.rentDeduction || 0) : undefined
     };

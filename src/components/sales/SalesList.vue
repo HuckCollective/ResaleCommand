@@ -20,6 +20,9 @@
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Location Sync</span>
         </a>
+        <a href="/sales/new?location=DT" class="btn btn-sm sm:btn-md btn-outline btn-warning gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Record a Dusty Tiger (DT · 10% fee · $75/mo rent) paper sales sheet entry">
+          <span>🐯 Dusty Tiger Sale</span>
+        </a>
         <a href="/sales/new?channel=online" class="btn btn-sm sm:btn-md btn-outline btn-info gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Record an eBay, Poshmark, Direct Online, or Pop-Up Market sale with 100% postage recoupment">
           <Icon icon="solar:globus-bold-duotone" class="w-4 h-4 shrink-0" />
           <span>Online / Pop-Up</span>
@@ -223,12 +226,22 @@
               >🎲 PDXGL (PDXGL-) <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.PDXGL }}</span></button>
             </div>
 
-            <!-- Location Dropdown Pill -->
-            <div class="relative shrink-0">
-              <select v-model="locationFilter" class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs">
-                <option value="all">All Locations</option>
-                <option v-for="wh in warehouses" :key="wh.$id" :value="wh.name">{{ wh.name }}</option>
-              </select>
+            <!-- 1-Click Canonical Location Filter Pills (MD / DT / All) -->
+            <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by location">
+              <button
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+                :class="locationFilter === 'all' ? 'btn-neutral shadow-xs' : 'btn-ghost opacity-75'"
+                @click="locationFilter = 'all'"
+              >All Venues</button>
+              <button
+                v-for="loc in boothLocationMetas"
+                :key="loc.code"
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+                :class="locationFilter === loc.code ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
+                @click="locationFilter = loc.code"
+              >{{ loc.icon }} {{ loc.shortName }} ({{ loc.code }})</button>
             </div>
           </div>
 
@@ -616,6 +629,7 @@
           :period="monthFilter"
           :partner-filter="partnerFilter"
           :monthly-rent="boothMonthlyRent"
+          :warehouses="warehouses"
           @update:period="monthFilter = $event"
           @link-sale="openLinkTicketModal"
         />
@@ -655,7 +669,7 @@ import { useInventory } from '../../composables/useInventory';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
-import { warehousesApi, matchesLocationFilter, findFacility, resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
+import { warehousesApi, matchesLocationFilter, findFacility, resolveDefaultRicochetLocationMeta, getAllLocationSettingMetas } from '../../lib/warehouses';
 import PaginationDock from '../common/PaginationDock.vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import type { SaleDocument } from '../../lib/sales';
@@ -737,6 +751,9 @@ const handleSaleLinkedOrReassigned = async ({ saleId, updatedSale }: { saleId: s
 
 // Booth rent for Co-op Settlements: resolved from the live Appwrite warehouse document (Ricochet booth), never hardcoded
 const boothMonthlyRent = computed(() => Number(resolveDefaultRicochetLocationMeta(warehouses.value).monthlyRent || 0));
+const boothLocationMetas = computed(() =>
+  getAllLocationSettingMetas(warehouses.value).filter((m) => m.monthlyRent > 0 || m.commissionRate > 0)
+);
 
 // Sorting state (PO treatment)
 type SortKey = 'date' | 'so' | 'net' | 'gross' | 'location' | 'status' | 'cost' | 'profit';

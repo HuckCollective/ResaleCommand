@@ -540,3 +540,43 @@ export async function saveCoopGovernanceState(
     return false;
   }
 }
+
+export async function logSweatEquityLaborEntry(
+  input: {
+    member?: string;
+    partner?: 'HUCK' | 'PDXGL' | 'SWEAT';
+    category?: CoopLaborCategory;
+    hours: number;
+    deliverableRef?: string;
+    notes?: string;
+    date?: string;
+  },
+  tenantId = 'huck_collective'
+): Promise<{ entry: CoopLaborEntry; syncedToCloud: boolean }> {
+  const { state } = await loadCoopGovernanceState([], tenantId);
+  const sweatMember =
+    state.policyConfig.members.find((m) => m.partner === 'SWEAT') ||
+    state.policyConfig.members[0] || {
+      name: 'Jesse (Social & Ops)',
+      partner: 'SWEAT' as const,
+    };
+
+  const memberName = (input.member || sweatMember.name).trim();
+  const partnerPrefix =
+    input.partner || inferPartnerFromMemberName(memberName, sweatMember.partner);
+
+  const entry: CoopLaborEntry = {
+    id: `labor-${Date.now()}`,
+    date: (input.date || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    member: memberName,
+    partner: partnerPrefix,
+    category: input.category || 'Social & Marketing',
+    hours: Math.max(0.25, Number(input.hours || 1)),
+    deliverableRef: input.deliverableRef?.trim() || undefined,
+    notes: input.notes?.trim() || 'Dropcast social reel & marketing contribution',
+  };
+
+  const nextEntries = [entry, ...(state.laborEntries || [])];
+  const syncedToCloud = await saveCoopGovernanceState({ laborEntries: nextEntries }, tenantId);
+  return { entry, syncedToCloud };
+}

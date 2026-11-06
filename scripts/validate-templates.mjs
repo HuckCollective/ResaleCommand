@@ -643,6 +643,7 @@ const transportContracts = [
             { pattern: /Promise\.all\(\s*pendingWrites\s*\)/, label: 'Client-side batch writes via Promise.all' },
             { pattern: /ticketLineKey\s*\(/, label: 'Per-line (multiset) ticket + gross + net duplicate ledger' },
             { pattern: /skippedNoTicket/, label: 'Sales are created only from rows that have a real Ricochet ticket + sold date' },
+            { pattern: /if\s*\(\s*row\.matchedItemId\s*&&\s*!isBinSale\s*\)/, label: 'Booth Bin double-depletion guard (!isBinSale on item update)' },
             { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
         ],
         mustNotContain: [

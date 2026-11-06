@@ -55,7 +55,19 @@
         </div>
 
         <!-- Right Side: Current Status Pill & Active/Paused Quick Toggle -->
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex items-center gap-2 shrink-0 flex-wrap">
+          <!-- 1-Click Log SWEAT- Marketing Labor Button -->
+          <button
+            type="button"
+            @click="handleLogActiveCastSweatLabor"
+            :disabled="isLoggingSweatLabor"
+            class="btn btn-xs btn-secondary rounded-xl font-black gap-1 shadow-2xs transition-all"
+            title="1-Click Log 1.5h SWEAT- Marketing & Social Labor + Deliverable Ref into Co-op Labor Ledger"
+          >
+            <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
+            <span>{{ isLoggingSweatLabor ? 'Logging...' : '+ Log SWEAT- (1.5h)' }}</span>
+          </button>
+
           <!-- Quick Active / Paused Toggle Button -->
           <button
             type="button"
@@ -1958,6 +1970,11 @@ import {
 import ScannerWidget from '../common/ScannerWidget.vue';
 import SocialItemPickerModal from './SocialItemPickerModal.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
+import { logSweatEquityLaborEntry } from '../../lib/coopGovernance';
+import { useAuth } from '../../composables/useAuth';
+
+const { currentTeam } = useAuth();
+const isLoggingSweatLabor = ref(false);
 import AnimatedReelPlayerModal from './AnimatedReelPlayerModal.vue';
 import SlideImageEditorModal from './SlideImageEditorModal.vue';
 import { 
@@ -3185,6 +3202,34 @@ function copyToClipboard() {
   setTimeout(() => {
     isCopied.value = false;
   }, 2500);
+}
+
+async function handleLogActiveCastSweatLabor() {
+  if (isLoggingSweatLabor.value) return;
+  isLoggingSweatLabor.value = true;
+  try {
+    const title = (studioCastTitle.value || activeCast.value?.title || 'Social Dropcast').trim();
+    const loc = currentTargetLocation.value || 'Memory Den';
+    const deliverableRef = `Dropcast: ${title} (${loc} · ${postMediaList.value.length} slides)`;
+    const { entry } = await logSweatEquityLaborEntry(
+      {
+        partner: 'SWEAT',
+        category: 'Social & Marketing',
+        hours: 1.5,
+        deliverableRef,
+        notes: `Produced & published Dropcast "${title}" (${studioItems.value.length} items, ${postMediaList.value.length} slides)`,
+      },
+      currentTeam.value?.$id || 'huck_collective'
+    );
+    addToast({
+      type: 'success',
+      message: `⏱️ Logged ${entry.hours}h SWEAT- labor for ${entry.member} (${deliverableRef})!`,
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: err?.message || 'Failed to log SWEAT- labor' });
+  } finally {
+    isLoggingSweatLabor.value = false;
+  }
 }
 
 function handleUrlCastNavigation() {

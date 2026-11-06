@@ -538,5 +538,20 @@ onMounted(async () => {
   if (Array.isArray(state.laborEntries) && state.laborEntries.length > 0) {
     laborEntries.value = state.laborEntries;
   }
+
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const refParam = params.get('deliverableRef') || params.get('ref');
+    const hrsParam = Number(params.get('hours'));
+    const notesParam = params.get('notes');
+    const partnerParam = (params.get('partner') || '').toUpperCase();
+    if (refParam) form.value.deliverableRef = refParam;
+    if (hrsParam > 0) form.value.hours = hrsParam;
+    if (notesParam) form.value.notes = notesParam;
+    if (partnerParam === 'SWEAT' || partnerParam === 'PDXGL' || partnerParam === 'HUCK') {
+      const idx = eligibleMembers.value.findIndex((m) => m.partner === partnerParam);
+      if (idx >= 0) selectedMemberIdx.value = idx;
+    }
+  }
 });
 </script>

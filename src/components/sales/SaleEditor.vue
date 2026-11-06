@@ -1471,6 +1471,17 @@ const loadData = async () => {
             selectItemToLink(found);
           }
         }
+        const locParam = (params.get('location') || params.get('loc') || '').toUpperCase();
+        if (locParam) {
+          const matchedWhId = resolveWarehouseId(locParam);
+          if (matchedWhId) {
+            form.value.warehouseId = matchedWhId;
+            if (locParam === 'DT' && (!form.value.orderId || form.value.orderId.startsWith('SO-'))) {
+              form.value.orderId = `DT-${new Date().toISOString().slice(0, 10)}`;
+            }
+            onGrossChange();
+          }
+        }
         const ch = (params.get('channel') || '').toLowerCase();
         if (ch === 'online' || ch === 'ebay') {
           applyChannelPreset('ebay');
