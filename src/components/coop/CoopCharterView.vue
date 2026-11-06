@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6">
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
     <CoopSubNav activeTab="charter" />
 
     <!-- Hero Banner with WSDE Framing -->

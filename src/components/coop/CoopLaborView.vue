@@ -1,131 +1,97 @@
 <template>
   <div class="space-y-6">
-    <!-- Header Card -->
-    <div class="card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 sm:p-6">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="badge badge-secondary font-bold gap-1 text-xs px-3 py-2.5">
-              <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
-              Gate 4B Sweat-Equity &amp; Enabling Labor
-            </span>
-            <span class="badge badge-accent badge-outline font-mono font-bold text-xs py-2">
-              ⚖️ {{ policyConfig.payRatioCapStandard || 4.5 }}:1 Pay Ratio Cap (1h = 1h Equal Weight)
-            </span>
-            <span
-              class="badge badge-sm font-mono font-bold gap-1 py-2"
-              :class="isCloudSynced ? 'badge-success badge-outline' : 'badge-ghost'"
-            >
-              <Icon
-                :icon="isCloudSynced ? 'solar:cloud-check-bold' : 'solar:cloud-upload-bold'"
-                class="w-3.5 h-3.5"
-              />
-              {{ isCloudSynced ? 'Appwrite Cloud Synced' : 'Local Fallback' }}
-            </span>
+    <!-- Canonical Ledger Header (Matches SalesList & CoopExpensesLedger) -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight flex items-center gap-3">
+          <Icon icon="solar:clock-circle-bold-duotone" class="w-8 h-8 sm:w-9 sm:h-9 text-secondary shrink-0" />
+          <span>Sweat-Equity &amp; Enabling Labor Ledger</span>
+        </h1>
+        <p class="text-sm text-base-content/70 mt-1 max-w-3xl">
+          Producers (sourcing, booth restocking, pop-ups) and Enablers (Dropcast social reels, photography, shipping — $0 inventory required) earn pro-rata shares of the {{ policyConfig.laborPatronagePct }}% Sweat-Equity Pool ({{ policyConfig.payRatioCapStandard || 4.5 }}:1 Pay Ratio Cap · 1h = 1h).
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+        <select
+          v-model="selectedMonth"
+          class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-100 border-base-300 focus:border-primary pr-8 shadow-2xs"
+        >
+          <option value="all">All-Time ({{ laborEntries.length }} logs)</option>
+          <option v-for="m in availableMonths" :key="m" :value="m">
+            {{ m }}
+          </option>
+        </select>
+
+        <button
+          type="button"
+          @click="exportCsv"
+          class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold min-h-[40px]"
+          :disabled="filteredEntries.length === 0"
+        >
+          <Icon icon="solar:file-download-bold" class="w-4 h-4 shrink-0" />
+          <span>Export CSV</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Canonical 4-Card Icon-Badge KPI Strip -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-secondary/10 text-secondary rounded-xl shrink-0">
+            <Icon icon="solar:stopwatch-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">
-            Sweat-Equity &amp; Enabling Labor Ledger
-          </h1>
-          <p class="text-xs sm:text-sm text-base-content/75 max-w-3xl">
-            In our Worker Self-Directed Enterprise (WSDE) model, both <strong>Producers of Surplus</strong> (sourcing, booth restocking, pop-up markets) and <strong>Enablers of Surplus</strong> (Dropcast social media reels, photography, online order shipping, and bookkeeping — <strong>$0 inventory required</strong>) co-govern the collective surplus. Logged hours determine each worker’s share of the
-            <strong class="text-secondary">{{ policyConfig.laborPatronagePct }}% Sweat-Equity Dividend Pool</strong>
-            once the Indivisible Commons Reserve covers monthly operating costs.
-          </p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-          <select
-            v-model="selectedMonth"
-            class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs"
-          >
-            <option value="all">All Time ({{ laborEntries.length }} logs)</option>
-            <option v-for="m in availableMonths" :key="m" :value="m">
-              {{ m }}
-            </option>
-          </select>
-
-          <button
-            type="button"
-            @click="exportCsv"
-            class="btn btn-sm btn-outline rounded-xl font-bold gap-1.5"
-            :disabled="filteredEntries.length === 0"
-          >
-            <Icon icon="solar:file-download-bold" class="w-4 h-4 text-primary" />
-            <span>Export CSV</span>
-          </button>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Total Logged</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-base-content truncate">{{ totalFilteredHours.toFixed(1) }} hrs</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Prod: {{ producerVsEnablerTotals.producer.toFixed(1) }}h · Enab: {{ producerVsEnablerTotals.enabler.toFixed(1) }}h</div>
+          </div>
         </div>
       </div>
 
-      <!-- Partner & Enabler Sweat-Equity Share Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-5 pt-5 border-t border-base-200">
-        <div class="rounded-2xl bg-base-200/60 border border-base-300 p-4 flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-base-content/60">
-              Total Logged ({{ selectedMonth === 'all' ? 'All-Time' : selectedMonth }})
-            </div>
-            <div class="text-2xl font-black font-mono text-base-content mt-0.5">
-              {{ totalFilteredHours.toFixed(1) }} hrs
-            </div>
-            <div class="text-[11px] text-base-content/60">
-              Producer: {{ producerVsEnablerTotals.producer.toFixed(1) }}h • Enabler: {{ producerVsEnablerTotals.enabler.toFixed(1) }}h
-            </div>
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-primary/10 text-primary rounded-xl shrink-0">
+            <Icon icon="solar:users-group-rounded-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div class="w-10 h-10 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
-            <Icon icon="solar:stopwatch-bold-duotone" class="w-5 h-5" />
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Huckleberry (HUCK-)</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">{{ partnerHours.HUCK.toFixed(1) }}h ({{ huckSharePct }}%)</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Curator &amp; Ops Hours</div>
           </div>
-        </div>
-
-        <div class="rounded-2xl bg-primary/10 border border-primary/25 p-4 flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-primary">
-              Huckleberry Collective (HUCK-)
-            </div>
-            <div class="text-xl font-black font-mono text-base-content mt-0.5">
-              {{ partnerHours.HUCK.toFixed(1) }} hrs
-              <span class="text-xs font-bold text-primary">({{ huckSharePct }}%)</span>
-            </div>
-            <div class="text-[11px] text-base-content/70">
-              Curator &amp; Ops Hours
-            </div>
-          </div>
-          <span class="badge badge-primary font-mono font-bold">HUCK-</span>
-        </div>
-
-        <div class="rounded-2xl bg-accent/10 border border-accent/25 p-4 flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-accent">
-              PDX Game Library (PDXGL-)
-            </div>
-            <div class="text-xl font-black font-mono text-base-content mt-0.5">
-              {{ partnerHours.PDXGL.toFixed(1) }} hrs
-              <span class="text-xs font-bold text-accent">({{ pdxglSharePct }}%)</span>
-            </div>
-            <div class="text-[11px] text-base-content/70">
-              Curator &amp; Ops Hours
-            </div>
-          </div>
-          <span class="badge badge-accent font-mono font-bold">PDXGL-</span>
-        </div>
-
-        <div class="rounded-2xl bg-secondary/10 border border-secondary/30 p-4 flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-secondary">
-              Marketing &amp; Social Enablers
-            </div>
-            <div class="text-xl font-black font-mono text-base-content mt-0.5">
-              {{ partnerHours.SWEAT.toFixed(1) }} hrs
-              <span class="text-xs font-bold text-secondary">({{ sweatSharePct }}%)</span>
-            </div>
-            <div class="text-[11px] text-base-content/70">
-              $0 Inventory • Direct Labor Share
-            </div>
-          </div>
-          <span class="badge badge-secondary font-mono font-bold">SWEAT-</span>
         </div>
       </div>
 
-      <!-- Individual Worker Sweat-Equity Share Breakdown Strip -->
-      <div v-if="memberShares.length > 0" class="mt-4 pt-4 border-t border-base-200 space-y-2">
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-accent/10 text-accent rounded-xl shrink-0">
+            <Icon icon="solar:gamepad-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">PDX Game Lib (PDXGL-)</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-accent truncate">{{ partnerHours.PDXGL.toFixed(1) }}h ({{ pdxglSharePct }}%)</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Curator &amp; Ops Hours</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-info/10 text-info rounded-xl shrink-0">
+            <Icon icon="solar:camera-add-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Marketing Enablers (SWEAT-)</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">{{ partnerHours.SWEAT.toFixed(1) }}h ({{ sweatSharePct }}%)</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">$0 Inventory · Direct Labor Share</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Individual Worker Sweat-Equity Share Breakdown Strip -->
+    <div v-if="memberShares.length > 0" class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 space-y-2.5">
         <div class="flex items-center justify-between text-xs">
           <span class="font-extrabold uppercase tracking-wider text-base-content/60">
             Individual Worker-Member Sweat-Equity Shares (Feeds Gate 4B Payouts)
@@ -158,7 +124,6 @@
             </div>
           </div>
         </div>
-      </div>
     </div>
 
     <!-- Main 2-Column Grid: Log Form + Ledger Table -->

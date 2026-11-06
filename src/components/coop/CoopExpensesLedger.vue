@@ -1,289 +1,390 @@
 <template>
-  <div class="space-y-6">
-    <!-- Header Card -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-7">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2 flex-wrap mb-1.5">
-            <span class="badge badge-primary font-black text-xs px-2.5 py-1">
-              Open Collective Model
-            </span>
-            <span class="badge badge-outline font-mono text-xs">
-              Tier 1 Commons Pool
-            </span>
-            <span class="badge badge-neutral font-bold text-xs">
-              100% Tax Deductible
-            </span>
-          </div>
-          <h2 class="text-2xl sm:text-3xl font-black text-base-content tracking-tight flex items-center gap-2.5">
-            <Icon icon="solar:bill-list-bold-duotone" class="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
-            <span>Shared Commons Expense Ledger</span>
-          </h2>
-          <p class="text-xs sm:text-sm text-base-content/70 mt-1 max-w-2xl leading-relaxed">
-            Out-of-pocket reimbursements for thermal labels, booth rent, shelving, display hardware, and tech. Reimbursed dollar-for-dollar from the 30% Commons Pool before profits are distributed.
-          </p>
-        </div>
-
-        <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap justify-end">
-          <a 
-            href="/purchases/speed-entry?mode=all_expense"
-            class="btn btn-sm btn-secondary gap-2 rounded-xl font-black shadow-md shadow-secondary/25 h-10 px-4"
-            title="Scan itemized multi-line paper receipt or screenshot into business expenses via OCR"
-          >
-            <Icon icon="solar:scanner-bold-duotone" class="w-5 h-5 shrink-0" />
-            <span>🧾 Scan Multi-Line Receipt</span>
-          </a>
-
-          <button 
-            type="button" 
-            @click="openImportModal"
-            class="btn btn-sm btn-primary gap-2 rounded-xl font-black shadow-md shadow-primary/25 h-10 px-4"
-            title="Upload multiple invoice PDFs at once (Appwrite, Google, Vercel, etc.)"
-          >
-            <Icon icon="solar:upload-track-bold-duotone" class="w-5 h-5 shrink-0" />
-            <span>Upload Multi-PDF Invoices</span>
-          </button>
-
-          <button 
-            type="button" 
-            @click="openSubmitModal"
-            class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
-            title="Manually log a single expense or receipt"
-          >
-            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
-            <span>+ Single Expense</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Top KPI Overview -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-base-200">
-        <div class="p-4 rounded-2xl bg-primary/5 border border-primary/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-primary uppercase tracking-wider">🤝 Co-op Shared Commons Pool</div>
-          <div class="text-xl sm:text-2xl font-black text-primary font-mono">${{ metrics.totalCoopShared.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">{{ countByScope.coop + countByScope.split }} shared receipts (Gate 4A)</div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-secondary/10 border border-secondary/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-secondary uppercase tracking-wider">👤 Personal Tax Write-Offs</div>
-          <div class="text-xl sm:text-2xl font-black text-secondary font-mono">${{ metrics.totalPersonalWriteOff.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">100% Personal Schedule C ($0 to Co-op)</div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-success/5 border border-success/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-success uppercase tracking-wider">Reimbursed from Commons</div>
-          <div class="text-xl sm:text-2xl font-black text-success font-mono">${{ metrics.totalReimbursed.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">Repaid from 30% Commons Pool</div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-warning/5 border border-warning/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-warning uppercase tracking-wider">Pending Co-op Reimbursement</div>
-          <div class="text-xl sm:text-2xl font-black text-warning font-mono">${{ metrics.totalPending.toFixed(2) }}</div>
-          <div class="text-xs text-base-content/60 font-medium">Owed to fronting members</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Filter Pills & Search Bar -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3 sm:p-4 space-y-3">
-      <!-- Row 1: Allocation Scope Filter (Co-op Shared vs Personal Schedule C Write-Off) -->
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-2.5 border-b border-base-200">
-        <div class="join bg-base-200/80 p-1 rounded-xl shadow-inner flex-wrap">
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :class="scopeFilter === 'all' ? 'btn-neutral shadow-xs' : 'btn-ghost opacity-75'"
-            @click="scopeFilter = 'all'"
-          >
-            All Scopes ({{ expenses.length }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :class="scopeFilter === 'coop_shared' ? 'btn-primary shadow-xs font-black' : 'btn-ghost text-primary'"
-            @click="scopeFilter = 'coop_shared'"
-          >
-            🤝 Co-op Shared ({{ countByScope.coop }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :class="scopeFilter === 'personal_write_off' ? 'btn-secondary shadow-xs font-black' : 'btn-ghost text-secondary'"
-            @click="scopeFilter = 'personal_write_off'"
-          >
-            👤 Personal Write-Offs ({{ countByScope.personal }})
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :class="scopeFilter === 'split' ? 'btn-accent shadow-xs font-black' : 'btn-ghost text-accent'"
-            @click="scopeFilter = 'split'"
-          >
-            ⚖️ Split Co-op/Personal ({{ countByScope.split }})
-          </button>
-        </div>
-
-        <div class="flex items-center gap-1.5 justify-end flex-wrap">
-          <button
-            type="button"
-            @click="exportCsvByScope('coop_shared')"
-            class="btn btn-xs btn-outline btn-primary rounded-xl font-bold gap-1"
-            :disabled="expenses.length === 0"
-            title="Download CSV of Co-op Shared Commons expenses only"
-          >
-            <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5" />
-            <span>Co-op Commons CSV</span>
-          </button>
-          <button
-            type="button"
-            @click="exportCsvByScope('personal_write_off')"
-            class="btn btn-xs btn-outline btn-secondary rounded-xl font-bold gap-1"
-            :disabled="expenses.length === 0"
-            title="Download CSV of Personal IRS Schedule C Write-Offs only"
-          >
-            <Icon icon="solar:file-download-bold" class="w-3.5 h-3.5" />
-            <span>Personal Schedule C CSV</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <!-- Status Filter Tabs -->
-        <div class="join bg-base-200/80 p-1 rounded-xl shadow-inner w-full sm:w-auto">
-          <button 
-            type="button" 
-            class="btn btn-xs sm:btn-sm join-item font-bold text-xs" 
-            :class="statusFilter === 'all' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
-            @click="statusFilter = 'all'"
-          >
-            All ({{ expenses.length }})
-          </button>
-          <button 
-            type="button" 
-            class="btn btn-xs sm:btn-sm join-item font-bold text-xs" 
-            :class="statusFilter === 'pending' ? 'btn-warning text-warning-content shadow-xs font-black' : 'btn-ghost text-warning'"
-            @click="statusFilter = 'pending'"
-          >
-            🟡 Pending ({{ countByStatus.pending }})
-          </button>
-          <button 
-            type="button" 
-            class="btn btn-xs sm:btn-sm join-item font-bold text-xs" 
-            :class="statusFilter === 'approved' ? 'btn-success text-success-content shadow-xs font-black' : 'btn-ghost text-success'"
-            @click="statusFilter = 'approved'"
-          >
-            🟢 Approved ({{ countByStatus.approved }})
-          </button>
-          <button 
-            type="button" 
-            class="btn btn-xs sm:btn-sm join-item font-bold text-xs" 
-            :class="statusFilter === 'reimbursed' ? 'btn-neutral text-neutral-content shadow-xs font-black' : 'btn-ghost opacity-75'"
-            @click="statusFilter = 'reimbursed'"
-          >
-            💎 Reimbursed ({{ countByStatus.reimbursed }})
-          </button>
-        </div>
-
-        <!-- Search Bar & Unobtrusive Export -->
-        <div class="flex items-center gap-2 flex-1 max-w-sm justify-end">
-          <div class="relative flex-1">
-            <Icon icon="solar:magnifer-linear" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
-            <input 
-              type="text" 
-              v-model="searchQuery" 
-              placeholder="Search expense, member, category..."
-              class="input input-bordered input-sm w-full pl-9 text-xs rounded-xl bg-base-200/50 focus:bg-base-100"
-            />
-          </div>
-          <button 
-            type="button" 
-            @click="exportCsv"
-            class="btn btn-sm btn-ghost btn-square rounded-xl text-base-content/60 hover:text-base-content hover:bg-base-200 shrink-0"
-            :disabled="expenses.length === 0"
-            title="Download CSV for accounting"
-          >
-            <Icon icon="solar:file-download-bold" class="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Expenses Table -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl overflow-hidden">
-      <!-- Loading State -->
-      <div v-if="loading" class="p-16 flex flex-col items-center justify-center gap-3">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <span class="text-xs font-bold opacity-60">Loading Shared Commons Ledger...</span>
-      </div>
-
-      <!-- Empty State -->
-      <div v-else-if="filteredExpenses.length === 0" class="p-16 text-center space-y-3">
-        <div class="w-12 h-12 rounded-2xl bg-base-200 text-base-content/40 flex items-center justify-center mx-auto">
-          <Icon icon="solar:bill-cross-linear" class="w-6 h-6" />
-        </div>
-        <h3 class="font-bold text-base text-base-content">No expenses match your filter</h3>
-        <p class="text-xs text-base-content/60 max-w-sm mx-auto">
-          {{ searchQuery ? 'Try adjusting your search terms.' : 'Submit your first receipt or out-of-pocket operational cost.' }}
+  <div class="space-y-6 pb-36 sm:pb-44">
+    <!-- Canonical Ledger Archetype Header (Matches SalesList & PurchasesList) -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight flex items-center gap-3">
+          <Icon icon="solar:bill-list-bold-duotone" class="w-8 h-8 sm:w-9 sm:h-9 text-primary shrink-0" />
+          <span>Commons &amp; Tax Expense Ledger</span>
+        </h1>
+        <p class="text-sm text-base-content/70 mt-1">
+          Reimburse shared Gate 4A operational receipts from the 30% Commons Pool and separate personal IRS Schedule C write-offs.
         </p>
-        <button type="button" @click="openSubmitModal" class="btn btn-xs btn-primary font-bold">
-          Log an Expense
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+        <a
+          href="/purchases/speed-entry?mode=all_expense"
+          class="btn btn-sm sm:btn-md btn-secondary gap-1.5 shadow-md shadow-secondary/20 font-bold flex-1 sm:flex-initial min-h-[40px]"
+          title="Scan itemized multi-line paper receipt or screenshot into business expenses via OCR"
+        >
+          <Icon icon="solar:scanner-bold-duotone" class="w-4 h-4 shrink-0" />
+          <span>Scan Receipt</span>
+        </a>
+        <button
+          type="button"
+          @click="openImportModal"
+          class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]"
+          title="Upload multiple invoice PDFs at once (Appwrite, Google, Vercel, etc.)"
+        >
+          <Icon icon="solar:upload-track-bold-duotone" class="w-4 h-4 shrink-0" />
+          <span>Upload PDFs</span>
+        </button>
+        <button
+          type="button"
+          @click="openSubmitModal"
+          class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-lg shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]"
+          title="Manually log a single expense or receipt"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+          <span>Log Expense</span>
         </button>
       </div>
+    </div>
 
-      <!-- Table Body -->
-      <div v-else class="overflow-x-auto">
+    <!-- Canonical 4-Card Icon-Badge KPI Strip (Matches SalesList.vue) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <!-- 1. Co-op Shared Commons Pool -->
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-primary/10 text-primary rounded-xl shrink-0">
+            <Icon icon="solar:buildings-2-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Co-op Shared Pool</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">${{ metrics.totalCoopShared.toFixed(2) }}</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">{{ countByScope.coop + countByScope.split }} Gate 4A receipts · {{ activeMonthLabel }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Personal Schedule C Tax Write-Offs -->
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-secondary/10 text-secondary rounded-xl shrink-0">
+            <Icon icon="solar:user-check-rounded-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Personal Write-Offs</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-secondary truncate">${{ metrics.totalPersonalWriteOff.toFixed(2) }}</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Schedule C ($0 to Co-op) · {{ activeMonthLabel }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Reimbursed from Commons -->
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-success/10 text-success rounded-xl shrink-0">
+            <Icon icon="solar:check-circle-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Reimbursed</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-success truncate">${{ metrics.totalReimbursed.toFixed(2) }}</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Paid from 30% Commons · {{ activeMonthLabel }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Pending Co-op Reimbursement -->
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="p-2.5 sm:p-3 bg-warning/10 text-warning rounded-xl shrink-0">
+            <Icon icon="solar:clock-circle-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Pending Payout</div>
+            <div class="text-lg sm:text-2xl font-black font-mono text-warning truncate">${{ metrics.totalPending.toFixed(2) }}</div>
+            <div class="text-[10px] font-semibold opacity-50 truncate">Owed to fronting members · {{ activeMonthLabel }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED — MATCHES SALESLIST.VUE) -->
+    <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+        <!-- Left: Omnibox Search + Month + Status + Allocation Scope Join -->
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 flex-1">
+          <!-- Omnibox Search Input -->
+          <div class="relative flex-1 min-w-[200px] w-full sm:w-auto">
+            <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
+            <input
+              type="text"
+              v-model="searchQuery"
+              placeholder="Search expense by description, member, category..."
+              class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
+            />
+            <button
+              v-if="searchQuery"
+              type="button"
+              @click="searchQuery = ''"
+              class="btn btn-ghost btn-circle btn-xs absolute right-2 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 w-6 h-6 min-h-6"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Month Filter Dropdown -->
+          <div class="relative shrink-0">
+            <select
+              v-model="monthFilter"
+              class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs"
+              title="Filter expenses and KPI cards by month"
+            >
+              <option value="all">All-Time ({{ expenses.length }})</option>
+              <option v-for="m in monthOptions" :key="m.key" :value="m.key">{{ m.label }} ({{ m.count }})</option>
+            </select>
+          </div>
+
+          <!-- Status Filter Dropdown -->
+          <div class="relative shrink-0">
+            <select
+              v-model="statusFilter"
+              class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs"
+              title="Filter by reimbursement status"
+            >
+              <option value="all">All Status ({{ monthScopedExpenses.length }})</option>
+              <option value="pending">🟡 Pending ({{ countByStatus.pending }})</option>
+              <option value="approved">🟢 Approved ({{ countByStatus.approved }})</option>
+              <option value="reimbursed">💎 Reimbursed ({{ countByStatus.reimbursed }})</option>
+            </select>
+          </div>
+
+          <!-- Allocation Scope Filter Join Pills -->
+          <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by tax and co-op allocation scope">
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+              :class="scopeFilter === 'all' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="scopeFilter = 'all'"
+            >
+              All <span class="badge badge-xs badge-ghost font-mono">{{ monthScopedExpenses.length }}</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+              :class="scopeFilter === 'coop_shared' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="scopeFilter = 'coop_shared'"
+            >
+              🤝 Co-op Shared <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.coop }}</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+              :class="scopeFilter === 'personal_write_off' ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="scopeFilter = 'personal_write_off'"
+            >
+              👤 Personal <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.personal }}</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
+              :class="scopeFilter === 'split' ? 'btn-accent shadow-xs' : 'btn-ghost opacity-75'"
+              @click="scopeFilter = 'split'"
+            >
+              ⚖️ Split <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.split }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Record Counter -->
+        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
+          <span class="badge badge-sm badge-ghost font-mono opacity-70">
+            {{ filteredExpenses.length }} record{{ filteredExpenses.length === 1 ? '' : 's' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div v-if="loading && expenses.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+      <span class="text-xs font-bold opacity-60">Loading Shared Commons &amp; Tax Ledger...</span>
+    </div>
+
+    <!-- Empty State -->
+    <div v-else-if="filteredExpenses.length === 0" class="card bg-base-100 shadow-xl border border-base-200">
+      <div class="card-body text-center py-16 space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+          <Icon icon="solar:bill-cross-linear" class="w-6 h-6" />
+        </div>
+        <h3 class="font-bold text-lg text-base-content">No Expenses Matching Filter</h3>
+        <p class="text-xs text-base-content/60 max-w-sm mx-auto">
+          {{ searchQuery || scopeFilter !== 'all' || statusFilter !== 'all' || monthFilter !== 'all' ? 'Try clearing your active search or scope filters.' : 'Submit your first receipt or out-of-pocket operational cost.' }}
+        </p>
+        <div class="pt-2 flex justify-center gap-2">
+          <button
+            v-if="searchQuery || scopeFilter !== 'all' || statusFilter !== 'all' || monthFilter !== 'all'"
+            type="button"
+            @click="resetAllFilters"
+            class="btn btn-sm btn-outline rounded-xl font-bold"
+          >
+            Reset Filters
+          </button>
+          <button type="button" @click="openSubmitModal" class="btn btn-sm btn-primary rounded-xl font-bold">
+            + Log Expense
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. MOBILE CARD VIEW (VISIBLE ON < MD) -->
+    <div v-else class="block md:hidden space-y-3 mb-6">
+      <div
+        v-for="expense in paginatedExpenses"
+        :key="expense.id"
+        class="card bg-base-100 shadow-md border border-base-200/80 rounded-2xl p-3.5 space-y-3"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="space-y-1 min-w-0">
+            <div class="font-bold text-sm text-base-content line-clamp-2">{{ expense.description }}</div>
+            <div class="flex items-center gap-1.5 flex-wrap text-[11px] opacity-75">
+              <span class="font-mono">{{ formatDate(expense.date) }}</span>
+              <span>•</span>
+              <span class="font-bold">{{ expense.member }}</span>
+              <span class="badge badge-xs badge-outline font-mono">{{ expense.partner }}</span>
+            </div>
+          </div>
+          <div class="text-right shrink-0 space-y-1">
+            <div class="font-mono font-black text-lg text-base-content">${{ expense.amount.toFixed(2) }}</div>
+            <span class="badge badge-xs font-bold capitalize" :class="getStatusBadgeClass(expense.status)">
+              {{ expense.status }}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-200/60">
+          <span class="badge badge-xs font-semibold gap-1 py-2" :class="getCategoryBadgeClass(expense.category)">
+            <Icon :icon="getCategoryIcon(expense.category)" class="w-3 h-3" />
+            <span>{{ condenseCategory(expense.category) }}</span>
+          </span>
+
+          <select
+            :value="expense.scope || 'coop_shared'"
+            @change="handleQuickScopeChange(expense, ($event.target as HTMLSelectElement).value as any)"
+            class="select select-bordered select-xs rounded-lg font-bold text-[11px] h-7 min-h-7"
+            :class="expense.scope === 'personal_write_off' ? 'border-secondary/50 text-secondary' : expense.scope === 'split' ? 'border-accent/50 text-accent' : 'border-primary/40 text-primary'"
+          >
+            <option value="coop_shared">🤝 Co-op 100%</option>
+            <option value="personal_write_off">👤 Personal 100%</option>
+            <option value="split">⚖️ Split ({{ expense.scope === 'split' ? expense.coopSharePct : 50 }}%)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <div>
+            <button
+              v-if="expense.receiptUrl"
+              type="button"
+              @click="previewReceipt(expense)"
+              class="btn btn-xs btn-outline btn-primary rounded-lg gap-1 font-bold"
+            >
+              <Icon icon="solar:paperclip-bold" class="w-3.5 h-3.5" />
+              <span>View Receipt</span>
+            </button>
+            <label
+              v-else
+              class="btn btn-xs btn-ghost rounded-lg gap-1 font-bold cursor-pointer opacity-75"
+            >
+              <Icon icon="solar:upload-minimalistic-bold" class="w-3.5 h-3.5" />
+              <span>Attach PDF</span>
+              <input type="file" accept=".pdf,image/*" @change="uploadReceiptForExpense(expense, $event)" class="hidden" />
+            </label>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button
+              v-if="expense.status === 'pending'"
+              type="button"
+              @click="updateStatus(expense, 'approved')"
+              class="btn btn-xs btn-success font-bold rounded-lg"
+            >
+              Approve
+            </button>
+            <button
+              v-if="expense.status === 'approved'"
+              type="button"
+              @click="updateStatus(expense, 'reimbursed')"
+              class="btn btn-xs btn-primary font-bold rounded-lg"
+            >
+              Reimburse
+            </button>
+            <button
+              type="button"
+              @click="confirmDelete(expense)"
+              class="btn btn-xs btn-ghost btn-square text-error rounded-lg"
+              title="Delete expense"
+            >
+              <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. DESKTOP TABLE VIEW (ZERO RIGHT-EDGE CLIPPING — MATCHES SALESLIST.VUE) -->
+    <div v-if="filteredExpenses.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
+      <div class="overflow-x-auto">
         <table class="table table-sm w-full">
-          <thead>
-            <tr class="bg-base-200/80 text-base-content/70 text-xs">
-              <th>Date</th>
-              <th>Member / Partner</th>
-              <th>Category</th>
-              <th>Allocation Scope</th>
-              <th>Description</th>
-              <th class="text-center">Receipt</th>
-              <th class="text-right">Amount</th>
-              <th>Status</th>
-              <th class="text-right">Actions</th>
+          <thead class="bg-base-200/70 text-[11px] font-black uppercase tracking-wider text-base-content/80">
+            <tr>
+              <th class="py-3 px-3 whitespace-nowrap">Date</th>
+              <th class="py-3 px-3">Expense &amp; Category</th>
+              <th class="py-3 px-3 whitespace-nowrap">Tax / Pool Scope</th>
+              <th class="py-3 px-3 text-center whitespace-nowrap">Receipt</th>
+              <th class="py-3 px-3 text-right whitespace-nowrap">Amount</th>
+              <th class="py-3 px-3 whitespace-nowrap">Status</th>
+              <th class="py-3 px-3 text-right whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-base-200 text-xs">
-            <tr v-for="expense in filteredExpenses" :key="expense.id" class="hover:bg-base-200/40">
-              <td class="font-mono text-xs whitespace-nowrap">
+            <tr v-for="expense in paginatedExpenses" :key="expense.id" class="hover:bg-base-200/40 transition-colors">
+              <!-- Date -->
+              <td class="py-2.5 px-3 font-mono text-xs opacity-75 whitespace-nowrap">
                 {{ formatDate(expense.date) }}
               </td>
-              <td>
-                <div class="font-bold text-base-content">{{ expense.member }}</div>
-                <div class="text-[10px] font-mono text-primary font-bold">{{ expense.partner }}</div>
+
+              <!-- Expense Description + Condensed Category + Member/Partner Pill -->
+              <td class="py-2.5 px-3">
+                <div class="font-bold text-xs text-base-content max-w-md xl:max-w-lg truncate" :title="expense.description">
+                  {{ expense.description }}
+                </div>
+                <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <span class="badge badge-xs font-semibold gap-1 whitespace-nowrap" :class="getCategoryBadgeClass(expense.category)" :title="expense.category">
+                    <Icon :icon="getCategoryIcon(expense.category)" class="w-3 h-3 shrink-0" />
+                    <span>{{ condenseCategory(expense.category) }}</span>
+                  </span>
+                  <span class="badge badge-xs badge-outline font-mono font-bold whitespace-nowrap">
+                    {{ expense.partner }} · {{ expense.member }}
+                  </span>
+                </div>
               </td>
-              <td>
-                <span class="badge badge-sm font-semibold gap-1 whitespace-nowrap" :class="getCategoryBadgeClass(expense.category)">
-                  <Icon :icon="getCategoryIcon(expense.category)" class="w-3.5 h-3.5" />
-                  <span>{{ expense.category }}</span>
-                </span>
-              </td>
-              <td>
+
+              <!-- Tax / Pool Scope Selector (Compact & Unclipped) -->
+              <td class="py-2.5 px-3 whitespace-nowrap">
                 <select
                   :value="expense.scope || 'coop_shared'"
                   @change="handleQuickScopeChange(expense, ($event.target as HTMLSelectElement).value as any)"
-                  class="select select-bordered select-xs rounded-lg font-bold text-[11px]"
-                  :class="expense.scope === 'personal_write_off' ? 'border-secondary/50 text-secondary' : expense.scope === 'split' ? 'border-accent/50 text-accent' : 'border-primary/40 text-primary'"
+                  class="select select-bordered select-xs rounded-lg font-bold text-[11px] h-7 min-h-7 pr-6"
+                  :class="expense.scope === 'personal_write_off' ? 'border-secondary/50 text-secondary bg-secondary/5' : expense.scope === 'split' ? 'border-accent/50 text-accent bg-accent/5' : 'border-primary/40 text-primary bg-primary/5'"
                   title="Switch between Shared Co-op Commons Pool vs Personal IRS Schedule C Write-Off"
                 >
-                  <option value="coop_shared">🤝 Co-op Shared (100%)</option>
-                  <option value="personal_write_off">👤 Personal Write-Off (100%)</option>
-                  <option value="split">⚖️ Split ({{ expense.scope === 'split' ? expense.coopSharePct : 50 }}% Co-op)</option>
+                  <option value="coop_shared">🤝 Co-op 100%</option>
+                  <option value="personal_write_off">👤 Personal 100%</option>
+                  <option value="split">⚖️ Split ({{ expense.scope === 'split' ? expense.coopSharePct : 50 }}%)</option>
                 </select>
                 <div v-if="expense.scope === 'split'" class="text-[10px] font-mono text-base-content/60 mt-0.5">
-                  Co-op: ${{ expense.coopSharedAmount.toFixed(2) }} • Personal: ${{ expense.personalWriteOffAmount.toFixed(2) }}
+                  Co-op ${{ expense.coopSharedAmount.toFixed(2) }} · Pers ${{ expense.personalWriteOffAmount.toFixed(2) }}
                 </div>
               </td>
-              <td class="max-w-xs font-medium truncate text-base-content/85" :title="expense.description">
-                {{ expense.description }}
-              </td>
-              <td class="text-center">
-                <button 
-                  v-if="expense.receiptUrl" 
-                  type="button" 
+
+              <!-- Receipt -->
+              <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                <button
+                  v-if="expense.receiptUrl"
+                  type="button"
                   @click="previewReceipt(expense)"
                   class="btn btn-ghost btn-xs text-primary gap-1 font-bold"
                   title="View full receipt / PDF"
@@ -291,8 +392,8 @@
                   <Icon icon="solar:paperclip-bold" class="w-3.5 h-3.5" />
                   <span>View</span>
                 </button>
-                <label 
-                  v-else 
+                <label
+                  v-else
                   class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary gap-1 font-bold cursor-pointer"
                   title="Attach PDF or receipt"
                 >
@@ -301,45 +402,48 @@
                   <input type="file" accept=".pdf,image/*" @change="uploadReceiptForExpense(expense, $event)" class="hidden" />
                 </label>
               </td>
-              <td class="text-right font-mono font-black text-sm whitespace-nowrap text-base-content">
+
+              <!-- Amount -->
+              <td class="py-2.5 px-3 text-right font-mono font-black text-xs whitespace-nowrap text-base-content">
                 ${{ expense.amount.toFixed(2) }}
               </td>
-              <td>
-                <span class="badge badge-sm font-bold capitalize" :class="getStatusBadgeClass(expense.status)">
+
+              <!-- Status -->
+              <td class="py-2.5 px-3 whitespace-nowrap">
+                <span class="badge badge-xs font-bold capitalize py-2 px-2" :class="getStatusBadgeClass(expense.status)">
                   {{ expense.status }}
                 </span>
               </td>
-              <td class="text-right whitespace-nowrap">
-                <div class="flex items-center justify-end gap-1.5">
-                  <!-- Approve button -->
-                  <button 
-                    v-if="expense.status === 'pending'" 
-                    type="button" 
+
+              <!-- Actions (Compact so nothing ever clips) -->
+              <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                <div class="flex items-center justify-end gap-1">
+                  <button
+                    v-if="expense.status === 'pending'"
+                    type="button"
                     @click="updateStatus(expense, 'approved')"
-                    class="btn btn-xs btn-success text-success-content font-bold gap-1 shadow-2xs"
+                    class="btn btn-xs btn-success text-success-content font-bold gap-1 rounded-lg h-7 px-2 shadow-2xs"
                     title="Approve for reimbursement"
                   >
-                    <Icon icon="solar:check-circle-bold" class="w-3 h-3" />
+                    <Icon icon="solar:check-circle-bold" class="w-3 h-3 shrink-0" />
                     <span>Approve</span>
                   </button>
 
-                  <!-- Mark Reimbursed button -->
-                  <button 
-                    v-if="expense.status === 'approved'" 
-                    type="button" 
+                  <button
+                    v-if="expense.status === 'approved'"
+                    type="button"
                     @click="updateStatus(expense, 'reimbursed')"
-                    class="btn btn-xs btn-primary text-primary-content font-bold gap-1 shadow-2xs"
+                    class="btn btn-xs btn-primary text-primary-content font-bold gap-1 rounded-lg h-7 px-2 shadow-2xs"
                     title="Mark as paid out from Commons Pool"
                   >
-                    <Icon icon="solar:card-recive-bold" class="w-3 h-3" />
+                    <Icon icon="solar:card-recive-bold" class="w-3 h-3 shrink-0" />
                     <span>Reimburse</span>
                   </button>
 
-                  <!-- Delete button -->
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     @click="confirmDelete(expense)"
-                    class="btn btn-ghost btn-xs text-error opacity-60 hover:opacity-100"
+                    class="btn btn-ghost btn-xs btn-square text-error opacity-60 hover:opacity-100 rounded-lg h-7 w-7"
                     title="Delete expense"
                   >
                     <Icon icon="solar:trash-bin-trash-bold" class="w-3.5 h-3.5" />
@@ -351,6 +455,75 @@
         </table>
       </div>
     </div>
+
+    <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER PATTERN (CANONICAL UX TAXONOMY) -->
+    <PaginationDock
+      v-if="filteredExpenses.length > 0"
+      v-model:currentPage="currentPage"
+      v-model:pageSize="pageSize"
+      :totalItems="filteredExpenses.length"
+      :totalPages="totalPages"
+      :isLoading="loading"
+      entityLabel="expenses"
+      :isFiltered="scopeFilter !== 'all' || statusFilter !== 'all' || monthFilter !== 'all' || !!searchQuery"
+      @scroll-top="scrollToTop"
+    >
+      <template #dock>
+        <!-- Dock Item 1: Scan Receipt -->
+        <a
+          href="/purchases/speed-entry?mode=all_expense"
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer"
+          title="Scan multi-line paper receipt via OCR"
+        >
+          <Icon icon="solar:scanner-bold" class="w-4.5 h-4.5 text-secondary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Scan OCR</span>
+        </a>
+
+        <!-- Dock Item 2: Upload Multi-PDF Invoices -->
+        <button
+          type="button"
+          @click="openImportModal"
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="Upload multiple PDF invoices at once"
+        >
+          <Icon icon="solar:upload-track-bold" class="w-4.5 h-4.5 text-primary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Upload PDFs</span>
+        </button>
+
+        <!-- Dock Item 3: Co-op Commons CSV -->
+        <button
+          type="button"
+          @click="exportCsvByScope('coop_shared')"
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="Export Co-op Shared Commons CSV"
+        >
+          <Icon icon="solar:file-download-bold" class="w-4.5 h-4.5 text-primary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Co-op CSV</span>
+        </button>
+
+        <!-- Dock Item 4: Personal Schedule C CSV -->
+        <button
+          type="button"
+          @click="exportCsvByScope('personal_write_off')"
+          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="Export Personal IRS Schedule C Write-Off CSV"
+        >
+          <Icon icon="solar:user-check-rounded-bold" class="w-4.5 h-4.5 text-secondary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Personal CSV</span>
+        </button>
+
+        <!-- Dock Item 5: Log Expense (Elevated Contextual Primary Action) -->
+        <button
+          type="button"
+          @click="openSubmitModal"
+          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          title="Log a single expense or receipt"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Log Expense</span>
+        </button>
+      </template>
+    </PaginationDock>
 
     <!-- SUBMIT EXPENSE MODAL -->
     <dialog :class="{ 'modal modal-open': isSubmitModalOpen }" class="modal">
@@ -901,12 +1074,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import PaginationDock from '../common/PaginationDock.vue';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
+import { pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
 import { 
   coopExpensesApi, 
   inferDefaultScopeForCategory,
@@ -923,8 +1098,39 @@ const expenses = ref<CoopExpenseItem[]>([]);
 const loading = ref(true);
 const submitting = ref(false);
 const searchQuery = ref('');
+const monthFilter = ref<string>('all');
 const statusFilter = ref<'all' | 'pending' | 'approved' | 'reimbursed'>('all');
 const scopeFilter = ref<'all' | ExpenseAllocationScope>('all');
+const currentPage = ref(1);
+const pageSize = ref(50);
+
+watch([searchQuery, monthFilter, statusFilter, scopeFilter], () => {
+  currentPage.value = 1;
+});
+
+const scrollToTop = () => {
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
+const resetAllFilters = () => {
+  searchQuery.value = '';
+  monthFilter.value = 'all';
+  statusFilter.value = 'all';
+  scopeFilter.value = 'all';
+};
+
+const condenseCategory = (category: ExpenseCategory | string): string => {
+  if (category === 'Thermal Tags & Merch Supplies') return 'Thermal Tags & Supplies';
+  if (category === 'Booth Rent & Mall Fees') return 'Booth Rent & Fees';
+  if (category === 'Display Hardware & Fixtures') return 'Display Fixtures';
+  if (category === 'Tech Commons & AI Credits') return 'Tech Commons & AI';
+  if (category === 'Hauling & Sourcing Transport') return 'Hauling & Mileage';
+  if (category === 'Personal Schedule C Write-Off') return 'Personal Schedule C';
+  if (category === 'Cleaning & Facility Maintenance') return 'Facility Maintenance';
+  return 'Operational Commons';
+};
 
 // Bulk Invoices & Receipts Import State
 const isImportModalOpen = ref(false);
@@ -1041,36 +1247,65 @@ const loadExpenses = async () => {
   }
 };
 
+const expenseMonthKey = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
+  if (/^\d{4}-\d{2}/.test(clean)) return clean.slice(0, 7);
+  return pacificMonthKey(dateStr);
+};
+
+const monthOptions = computed(() => {
+  const map = new Map<string, number>();
+  expenses.value.forEach(e => {
+    const k = expenseMonthKey(e.date);
+    if (k) map.set(k, (map.get(k) || 0) + 1);
+  });
+  return Array.from(map.entries())
+    .map(([key, count]) => ({ key, count, label: monthKeyToLabel(key) }))
+    .sort((a, b) => b.key.localeCompare(a.key));
+});
+
+const activeMonthLabel = computed(() => {
+  if (monthFilter.value === 'all') return 'All-Time';
+  return monthOptions.value.find(m => m.key === monthFilter.value)?.label || monthFilter.value;
+});
+
+const monthScopedExpenses = computed(() => {
+  if (monthFilter.value === 'all') return expenses.value;
+  return expenses.value.filter(e => expenseMonthKey(e.date) === monthFilter.value);
+});
+
 const countByStatus = computed(() => {
   return {
-    pending: expenses.value.filter(e => e.status === 'pending').length,
-    approved: expenses.value.filter(e => e.status === 'approved').length,
-    reimbursed: expenses.value.filter(e => e.status === 'reimbursed').length
+    pending: monthScopedExpenses.value.filter(e => e.status === 'pending').length,
+    approved: monthScopedExpenses.value.filter(e => e.status === 'approved').length,
+    reimbursed: monthScopedExpenses.value.filter(e => e.status === 'reimbursed').length
   };
 });
 
 const countByScope = computed(() => {
   return {
-    coop: expenses.value.filter(e => (e.scope || 'coop_shared') === 'coop_shared').length,
-    personal: expenses.value.filter(e => e.scope === 'personal_write_off').length,
-    split: expenses.value.filter(e => e.scope === 'split').length,
+    coop: monthScopedExpenses.value.filter(e => (e.scope || 'coop_shared') === 'coop_shared').length,
+    personal: monthScopedExpenses.value.filter(e => e.scope === 'personal_write_off').length,
+    split: monthScopedExpenses.value.filter(e => e.scope === 'split').length,
   };
 });
 
 const metrics = computed(() => {
-  const totalExpenses = expenses.value.reduce((acc, e) => acc + e.amount, 0);
-  const totalCoopShared = expenses.value.reduce(
+  const list = monthScopedExpenses.value;
+  const totalExpenses = list.reduce((acc, e) => acc + e.amount, 0);
+  const totalCoopShared = list.reduce(
     (acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount),
     0
   );
-  const totalPersonalWriteOff = expenses.value.reduce(
+  const totalPersonalWriteOff = list.reduce(
     (acc, e) => acc + (e.personalWriteOffAmount || 0),
     0
   );
-  const totalReimbursed = expenses.value
+  const totalReimbursed = list
     .filter(e => e.status === 'reimbursed' && (e.scope || 'coop_shared') !== 'personal_write_off')
     .reduce((acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount), 0);
-  const totalPending = expenses.value
+  const totalPending = list
     .filter(e => (e.status === 'pending' || e.status === 'approved') && (e.scope || 'coop_shared') !== 'personal_write_off')
     .reduce((acc, e) => acc + (e.coopSharedAmount !== undefined ? e.coopSharedAmount : e.amount), 0);
 
@@ -1084,7 +1319,7 @@ const metrics = computed(() => {
 });
 
 const filteredExpenses = computed(() => {
-  let list = [...expenses.value];
+  let list = [...monthScopedExpenses.value];
 
   if (scopeFilter.value !== 'all') {
     list = list.filter(e => (e.scope || 'coop_shared') === scopeFilter.value);
@@ -1105,6 +1340,15 @@ const filteredExpenses = computed(() => {
   }
 
   return list;
+});
+
+const totalPages = computed(() => {
+  return Math.max(1, Math.ceil(filteredExpenses.value.length / pageSize.value));
+});
+
+const paginatedExpenses = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredExpenses.value.slice(start, start + pageSize.value);
 });
 
 const onNewCategoryChange = () => {

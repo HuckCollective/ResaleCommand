@@ -1,75 +1,93 @@
 <template>
   <div class="space-y-6">
-    <!-- Header Card -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-7">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2 flex-wrap mb-1.5">
-            <span class="badge badge-primary font-black text-xs px-2.5 py-1">
-              Loomio Consent Protocol
-            </span>
-            <span class="badge badge-outline font-mono text-xs">
-              1 Member = 1 Vote
-            </span>
-            <span class="badge badge-neutral font-bold text-xs">
-              Zero Backroom Decisions
-            </span>
-          </div>
-          <h2 class="text-2xl sm:text-3xl font-black text-base-content tracking-tight flex items-center gap-2.5">
-            <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
-            <span>Democratic Governance &amp; Consent Voting</span>
-          </h2>
-          <p class="text-xs sm:text-sm text-base-content/70 mt-1 max-w-2xl leading-relaxed">
-            Every member has equal voting authority. Operational proposals require consent under the Loomio 4-signal protocol. Any member can cast a Block to halt an unsafe action and trigger deliberation.
-          </p>
+    <!-- Top Header & Actions (Canonical Ledger Archetype) -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div>
+        <div class="flex items-center gap-2 flex-wrap mb-1.5">
+          <span class="badge badge-primary font-black text-xs px-2.5 py-1">
+            Loomio Consent Protocol
+          </span>
+          <span class="badge badge-outline font-mono text-xs">
+            1 Member = 1 Vote
+          </span>
+          <span class="badge badge-neutral font-bold text-xs">
+            Zero Backroom Decisions
+          </span>
         </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2.5">
+          <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
+          <span>Democratic Governance &amp; Consent Voting</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-base-content/60 font-medium mt-1 max-w-2xl leading-relaxed">
+          Every member has equal voting authority. Operational proposals require consent under the Loomio 4-signal protocol. Any member can cast a Block to halt an unsafe action and trigger deliberation.
+        </p>
+      </div>
 
-        <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap justify-end">
-          <button 
-            type="button" 
-            @click="exportProposalsCsv"
-            class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
-            title="Download CSV record of all proposals and member votes"
-          >
-            <Icon icon="solar:file-download-bold" class="w-4 h-4 shrink-0" />
-            <span>Export Record</span>
-          </button>
+      <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
+        <button 
+          type="button" 
+          @click="exportProposalsCsv"
+          class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
+          title="Download CSV record of all proposals and member votes"
+        >
+          <Icon icon="solar:file-download-bold" class="w-4 h-4 shrink-0" />
+          <span>Export Record</span>
+        </button>
 
-          <button 
-            type="button" 
-            @click="isNewProposalModalOpen = true"
-            class="btn btn-sm btn-primary gap-1.5 rounded-xl font-black shadow-md shadow-primary/20 h-10 px-4"
-          >
-            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
-            <span>Create Proposal</span>
-          </button>
+        <button 
+          type="button" 
+          @click="isNewProposalModalOpen = true"
+          class="btn btn-sm btn-primary gap-1.5 rounded-xl font-black shadow-md shadow-primary/20 h-10 px-4"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+          <span>Create Proposal</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Standalone Icon-Badge KPI Cards (Canonical Ledger Archetype) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
+          <Icon icon="solar:chat-round-dots-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">Active Deliberations</div>
+          <div class="text-lg sm:text-2xl font-black font-mono text-base-content truncate">{{ activeProposalsCount }}</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Open for member voting</div>
         </div>
       </div>
 
-      <!-- Top KPI Overview -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-base-200">
-        <div class="p-4 rounded-2xl bg-base-200/60 border border-base-300 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Active Deliberations</div>
-          <div class="text-xl sm:text-2xl font-black text-base-content font-mono">{{ activeProposalsCount }}</div>
-          <div class="text-xs text-base-content/60 font-medium">Open for member voting</div>
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-success/10 text-success rounded-xl flex items-center justify-center shrink-0">
+          <Icon icon="solar:check-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
-
-        <div class="p-4 rounded-2xl bg-success/5 border border-success/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-success uppercase tracking-wider">Consensus Achieved</div>
-          <div class="text-xl sm:text-2xl font-black text-success font-mono">{{ consensusProposalsCount }}</div>
-          <div class="text-xs text-base-content/60 font-medium">Passed by collective consent</div>
+        <div class="min-w-0">
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">Consensus Achieved</div>
+          <div class="text-lg sm:text-2xl font-black font-mono text-success truncate">{{ consensusProposalsCount }}</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Passed by collective consent</div>
         </div>
+      </div>
 
-        <div class="p-4 rounded-2xl bg-error/5 border border-error/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-error uppercase tracking-wider">Active Blocks / Vetoes</div>
-          <div class="text-xl sm:text-2xl font-black text-error font-mono">{{ blockedProposalsCount }}</div>
-          <div class="text-xs text-base-content/60 font-medium">{{ blockedProposalsCount === 0 ? 'Zero active objections' : 'Requires collective deliberation' }}</div>
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-error/10 text-error rounded-xl flex items-center justify-center shrink-0">
+          <Icon icon="solar:forbidden-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
+        <div class="min-w-0">
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">Active Blocks / Vetoes</div>
+          <div class="text-lg sm:text-2xl font-black font-mono text-error truncate">{{ blockedProposalsCount }}</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">{{ blockedProposalsCount === 0 ? 'Zero active objections' : 'Requires deliberation' }}</div>
+        </div>
+      </div>
 
-        <div class="p-4 rounded-2xl bg-primary/5 border border-primary/30 shadow-xs space-y-1">
-          <div class="text-[11px] font-bold text-primary uppercase tracking-wider">Consensus Standard</div>
-          <div class="text-xl sm:text-2xl font-black text-primary font-mono">0 Blocks</div>
-          <div class="text-xs text-base-content/60 font-medium">Consent over pure majoritarianism</div>
+      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
+          <Icon icon="solar:shield-check-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">Consensus Standard</div>
+          <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">0 Blocks</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Consent over majoritarianism</div>
         </div>
       </div>
     </div>

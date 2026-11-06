@@ -1,6 +1,12 @@
 # Active Session Summary (Updated Nov 5, 2026)
 
-## Nov 5, 2026 — `alpha-1` Branch: UX/IA Navbar Refactor, Appwrite Co-op Voting & Surplus Policy, and Unlinked Ticket Reconciliation
+## 📌 UP NEXT (Saved Before Restart — Reply `all` or `1`/`2`/`3`/`4` When Back)
+1. **Social Studio ➔ 1-Click `SWEAT-` Labor Log**: Wire a 1-click button in Social Dropcast Studio (`/marketing`) to log `SWEAT-` Marketing & Social hours + `deliverableRef` directly into `CoopLaborView.vue` (`/coop/labor`).
+2. **Dusty Tiger (`DT`) Sales & Drop Polish**: Add a 1-click Dusty Tiger (`10%` fee, `$75/mo` rent) quick-entry & settlement filter in `SalesList.vue` and `CoopSettlementView.vue`.
+3. **Booth Bin Stock Depletion Guardrail**: Lock in the canonical rule in `useRicochetSalesSync.ts` so Multi-Qty Booth Bins (`HUCK-0113`, `HUCK-1498`, etc.) never double-deplete when both `Payouts` and `Products` syncs run.
+4. **Repo Housekeeping**: Clean up any duplicate script in `public/scripts/` and point `git remote origin` to `https://github.com/HuckCollective/ResaleCommand.git`.
+
+## Nov 5, 2026 — `alpha-1` Branch (Merged to `main` at `957bf27`): UX/IA Navbar Refactor, Appwrite Co-op Voting & Surplus Policy, and Unlinked Ticket Reconciliation
 - **UX/IA Master Navbar (`src/components/nav/Navbar.vue`) & Subdomain Middleware (`src/middleware.ts`)**:
   - Treated `alpha.resalecmd.com`, `dev.resalecmd.com`, and `*.vercel.app` as primary app domains in `src/middleware.ts` (`RESERVED_APP_SUBDOMAINS`).
   - Refactored `Navbar.vue` with 5-Pillar Desktop Lifecycle Navigation (`Command`, `Purchases`, `Inventory`, `Locations ▾` dynamically driven by `getAllLocationSettingMetas()`, `Finance ▾`, `Studios ▾`), separated Workspace Switcher, unified Mobile Drawer with SSR-safe `<Teleport :disabled="!isMounted">`, and eliminated double scrollbars.
@@ -20,6 +26,10 @@
     - Added 1-click Sales Channel & Marketplace Preset Selector (`🏪 Retail Booth`, `📦 eBay Online 13.25% + Label`, `👗 Poshmark 20%`, `💳 Direct / Social 2.9% + Postage`, `🎪 Pop-Up Event 2.9% Card / 0% Cash`), URL `?channel=online|popup` support, and real-time Gate 2 Postage + Cost Basis & Gate 3 70/30 Waterfall preview in `SaleEditor.vue`.
     - Wired 100% Outbound Label Postage (`shippingCost`) recoupment into Gate 2 of `CoopSettlementView.vue` and hardened `isUnlinkedTicketSale` + fallback item matching in `SalesList.vue` (verified `378/378` sales linked, `0` `SO-` rows, and `0` dangling `saleId` pointers in Appwrite).
     - Promoted and merged `alpha-1` into production `main` (`resalecmd.com`).
+  - **UX/IA Master Pattern Alignment Across Co-op Suite (`src/pages/expenses.astro`, `src/pages/coop/charter.astro`, `CoopExpensesLedger.vue`, `CoopCharterView.vue`, `CoopLaborView.vue`, `CoopGovernanceView.vue`)**:
+    - Added `<CoopSubNav client:only="vue" activeTab="expenses" />`, `hideFooter={true}`, and `max-w-7xl` layout to `/expenses` (`src/pages/expenses.astro`), and created `src/pages/coop/charter.astro`.
+    - Refactored `CoopExpensesLedger.vue` to the canonical **Ledger Archetype** (`SalesList.vue`): unboxed header + 4 standalone Icon-Badge KPI cards (`grid-cols-2 lg:grid-cols-4`), single Omnibox Search + Month + Status + Scope toolbar (`bg-base-100/90 border-base-200/80 rounded-2xl`), responsive Mobile Card View + zero-clipping Desktop Table (combining Description + Condensed Category Badge + Member/Partner into `Expense & Category`), and 2-tier `<PaginationDock>` (`src/components/common/PaginationDock.vue`).
+    - Upgraded `CoopLaborView.vue` and `CoopGovernanceView.vue` headers to the canonical unboxed header + 4 standalone Icon-Badge KPI cards.
 
 ## Nov 4, 2026 — Ricochet Sales Sync Repair (VERIFIED against both CSV exports)
 - **Result:** Appwrite `sales` matches the Ricochet `Payouts` + `Payout History` exports 1-for-1: **378/378 lines, 0 missing, 0 extra**. October 2026 = **63 sales / $2,462.99**; November = 12 sales / $369.00.

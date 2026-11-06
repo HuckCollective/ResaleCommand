@@ -1,20 +1,16 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import CoopSubNav from '../components/coop/CoopSubNav.vue';
 import CoopExpensesLedger from '../components/coop/CoopExpensesLedger.vue';
 ---
 
-<Layout 
-  title="Shared Commons Expense Ledger & Invoices | Resale Command"
-  description="Audit-ready cooperative expense ledger, PDF invoice storage, and Tier 1 shared pool reimbursements."
+<Layout
+  title="Shared Commons & Personal Tax Expense Ledger | Resale Command"
+  description="Audit-ready cooperative expense ledger, Personal Schedule C write-off separation, PDF invoice storage, and Tier 1 shared pool reimbursements."
+  hideFooter={true}
 >
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6">
-    <div class="breadcrumbs text-xs opacity-60 mb-2">
-      <ul>
-        <li><a href="/dashboard">Dashboard</a></li>
-        <li><a href="/coop">Co-op Consortium</a></li>
-        <li class="font-bold text-primary">Expenses &amp; Invoices</li>
-      </ul>
-    </div>
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-44 sm:pb-40">
+    <CoopSubNav client:only="vue" activeTab="expenses" />
     <CoopExpensesLedger client:only="vue" />
   </div>
 </Layout>
