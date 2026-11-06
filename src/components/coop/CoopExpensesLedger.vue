@@ -101,19 +101,19 @@
       </div>
     </div>
 
-    <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED — MATCHES SALESLIST.VUE) -->
+    <!-- SEARCH & CONTROLS TOOLBAR (CANONICAL 2-ROW PIPELINE PATTERN — MATCHES PURCHASESLIST & INVENTORYHEADER) -->
     <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
+      <!-- Row 1: Constrained Omnibox Search + Month Filter + Record Count + CSV Export Buttons -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
-        <!-- Left: Omnibox Search + Month + Status + Allocation Scope Join -->
-        <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 flex-1">
-          <!-- Omnibox Search Input -->
-          <div class="relative flex-1 min-w-[200px] w-full sm:w-auto">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1">
+          <!-- Constrained Omnibox Search Input -->
+          <div class="relative w-full sm:max-w-md md:max-w-lg flex-1">
             <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
             <input
               type="text"
               v-model="searchQuery"
-              placeholder="Search expense by description, member, category..."
-              class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
+              placeholder="Search description, member, partner, category..."
+              class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
             />
             <button
               v-if="searchQuery"
@@ -126,74 +126,130 @@
             </button>
           </div>
 
-          <!-- Month Filter Dropdown -->
+          <!-- Month Filter Dropdown (100% Opaque bg-base-100) -->
           <div class="relative shrink-0">
             <select
               v-model="monthFilter"
-              class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs"
+              class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-100 text-base-content border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs"
               title="Filter expenses and KPI cards by month"
             >
               <option value="all">All-Time ({{ expenses.length }})</option>
               <option v-for="m in monthOptions" :key="m.key" :value="m.key">{{ m.label }} ({{ m.count }})</option>
             </select>
           </div>
-
-          <!-- Status Filter Dropdown -->
-          <div class="relative shrink-0">
-            <select
-              v-model="statusFilter"
-              class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs"
-              title="Filter by reimbursement status"
-            >
-              <option value="all">All Status ({{ monthScopedExpenses.length }})</option>
-              <option value="pending">🟡 Pending ({{ countByStatus.pending }})</option>
-              <option value="approved">🟢 Approved ({{ countByStatus.approved }})</option>
-              <option value="reimbursed">💎 Reimbursed ({{ countByStatus.reimbursed }})</option>
-            </select>
-          </div>
-
-          <!-- Allocation Scope Filter Join Pills -->
-          <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by tax and co-op allocation scope">
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-              :class="scopeFilter === 'all' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
-              @click="scopeFilter = 'all'"
-            >
-              All <span class="badge badge-xs badge-ghost font-mono">{{ monthScopedExpenses.length }}</span>
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-              :class="scopeFilter === 'coop_shared' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
-              @click="scopeFilter = 'coop_shared'"
-            >
-              🤝 Co-op Shared <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.coop }}</span>
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-              :class="scopeFilter === 'personal_write_off' ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
-              @click="scopeFilter = 'personal_write_off'"
-            >
-              👤 Personal <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.personal }}</span>
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-              :class="scopeFilter === 'split' ? 'btn-accent shadow-xs' : 'btn-ghost opacity-75'"
-              @click="scopeFilter = 'split'"
-            >
-              ⚖️ Split <span class="badge badge-xs badge-ghost font-mono">{{ countByScope.split }}</span>
-            </button>
-          </div>
         </div>
 
-        <!-- Right: Record Counter -->
-        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
+        <!-- Right Side: Count & CSV Export Buttons -->
+        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0 flex-wrap">
           <span class="badge badge-sm badge-ghost font-mono opacity-70">
-            {{ filteredExpenses.length }} record{{ filteredExpenses.length === 1 ? '' : 's' }}
+            {{ filteredExpenses.length }} expense{{ filteredExpenses.length === 1 ? '' : 's' }}
           </span>
+          <button
+            type="button"
+            @click="exportCsvByScope('coop_shared')"
+            class="btn btn-xs sm:btn-sm btn-outline btn-primary gap-1.5 font-bold rounded-xl h-9 min-h-9 px-3 active:scale-95 transition-all shadow-2xs"
+            title="Export Co-op Shared Commons CSV"
+          >
+            <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" />
+            <span>Co-op CSV</span>
+          </button>
+          <button
+            type="button"
+            @click="exportCsvByScope('personal_write_off')"
+            class="btn btn-xs sm:btn-sm btn-outline btn-secondary gap-1.5 font-bold rounded-xl h-9 min-h-9 px-3 active:scale-95 transition-all shadow-2xs"
+            title="Export Personal Schedule C Write-Off CSV"
+          >
+            <Icon icon="solar:user-check-rounded-bold" class="w-3.5 h-3.5" />
+            <span>Schedule C CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: Horizontal Scope & Status Pipeline Pills (Matches PurchasesList & InventoryHeader) -->
+      <div class="flex items-center justify-between gap-2 flex-wrap pt-2.5 mt-1 border-t border-base-200/60 text-xs">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+          <!-- Scope Pills -->
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="scopeFilter === 'all' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="scopeFilter = 'all'"
+          >
+            <span>All Scopes</span>
+            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'all' ? 'badge-neutral' : 'badge-ghost'">{{ monthScopedExpenses.length }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="scopeFilter === 'coop_shared' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="scopeFilter = 'coop_shared'"
+          >
+            <span>🤝 Co-op Shared</span>
+            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'coop_shared' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.coop }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="scopeFilter === 'personal_write_off' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="scopeFilter = 'personal_write_off'"
+          >
+            <span>👤 Personal Write-Offs</span>
+            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'personal_write_off' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.personal }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="scopeFilter === 'split' ? 'btn-accent text-accent-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="scopeFilter = 'split'"
+          >
+            <span>⚖️ Split</span>
+            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'split' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.split }}</span>
+          </button>
+
+          <div class="h-3.5 w-px bg-base-content/20 shrink-0 mx-1"></div>
+
+          <!-- Status Pipeline Pills -->
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="statusFilter === 'all' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'all'"
+          >
+            <span>All Status</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="statusFilter === 'pending' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'pending'"
+          >
+            <span>🟡 Pending</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'pending' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.pending }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="statusFilter === 'approved' ? 'btn-success text-success-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'approved'"
+          >
+            <span>🟢 Approved</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'approved' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.approved }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            :class="statusFilter === 'reimbursed' ? 'btn-info text-info-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
+            @click="statusFilter = 'reimbursed'"
+          >
+            <span>💎 Reimbursed</span>
+            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'reimbursed' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.reimbursed }}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -264,14 +320,14 @@
           </div>
           <div class="text-right shrink-0 space-y-1">
             <div class="font-mono font-black text-lg text-base-content">${{ expense.amount.toFixed(2) }}</div>
-            <span class="badge badge-xs font-bold capitalize" :class="getStatusBadgeClass(expense.status)">
+            <span class="badge badge-xs font-bold uppercase tracking-wider" :class="getStatusBadgeClass(expense.status)">
               {{ expense.status }}
             </span>
           </div>
         </div>
 
         <div class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-200/60">
-          <span class="badge badge-xs font-semibold gap-1 py-2" :class="getCategoryBadgeClass(expense.category)">
+          <span class="badge badge-xs font-semibold gap-1 py-2 whitespace-nowrap" :class="getCategoryBadgeClass(expense.category)">
             <Icon :icon="getCategoryIcon(expense.category)" class="w-3 h-3" />
             <span>{{ condenseCategory(expense.category) }}</span>
           </span>
@@ -279,7 +335,7 @@
           <button
             type="button"
             @click="openEditModal(expense)"
-            class="badge badge-sm font-bold gap-1 py-2.5 px-2.5 cursor-pointer hover:brightness-95 transition-all"
+            class="badge badge-sm font-bold gap-1 py-2.5 px-2.5 cursor-pointer hover:brightness-95 transition-all whitespace-nowrap"
             :class="getScopeBadgeClass(expense.scope)"
             title="Click to edit scope or split percentage"
           >
@@ -347,117 +403,121 @@
       </div>
     </div>
 
-    <!-- 2. DESKTOP TABLE VIEW (MASTER LEDGER PATTERN — ZERO INLINE SELECT BLEED, SORTABLE HEADERS, MULTI-SELECT) -->
-    <div v-if="filteredExpenses.length > 0" class="hidden md:block card bg-base-100 shadow-xl border border-base-200 overflow-hidden mb-6">
-      <div class="overflow-x-auto">
-        <table class="table table-sm w-full">
-          <thead class="bg-base-200/70 text-[11px] font-black uppercase tracking-wider text-base-content/80">
-            <tr>
-              <th class="py-3 pl-3 pr-1 w-8">
+    <!-- 2. DESKTOP TABLE VIEW (CANONICAL MASTER TABLE PATTERN — MATCHES INVENTORYTABLEVIEW & PURCHASESLIST) -->
+    <div v-if="filteredExpenses.length > 0" class="hidden md:block card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0 mb-6">
+      <div class="overflow-x-auto w-full max-w-full min-w-0 overscroll-x-contain touch-pan-x">
+        <table class="table table-sm table-pin-rows table-zebra w-full text-xs">
+          <thead>
+            <tr class="bg-base-200/90 text-base-content font-bold border-b border-base-300 select-none">
+              <th class="w-10 text-center">
                 <input
                   type="checkbox"
                   :checked="isAllPageSelected"
                   @change="toggleSelectAllPage"
-                  class="checkbox checkbox-xs checkbox-primary rounded"
-                  title="Select all rows on this page for multi-line bulk actions"
+                  class="checkbox checkbox-xs checkbox-primary"
+                  title="Select all rows on this page for bulk actions"
                 />
               </th>
-              <th class="py-3 px-3 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('date')">
+              <th class="w-28 cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('date')">
                 <div class="flex items-center gap-1">
                   <span>Date</span>
                   <span v-if="sortBy === 'date'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="py-3 px-3 cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('description')">
+              <th class="min-w-56 cursor-pointer hover:text-primary transition-colors" @click="toggleSort('description')">
                 <div class="flex items-center gap-1">
-                  <span>Expense &amp; Category</span>
+                  <span>Description &amp; Category</span>
                   <span v-if="sortBy === 'description'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="py-3 px-3 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('scope')">
+              <th class="w-40 whitespace-nowrap">Member / Partner</th>
+              <th class="w-36 cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('scope')">
                 <div class="flex items-center gap-1">
                   <span>Tax / Pool Scope</span>
                   <span v-if="sortBy === 'scope'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="py-3 px-3 text-center whitespace-nowrap">Receipt</th>
-              <th class="py-3 px-3 text-right whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('amount')">
+              <th class="w-24 text-center whitespace-nowrap">Receipt</th>
+              <th class="w-28 text-right cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('amount')">
                 <div class="flex items-center justify-end gap-1">
                   <span>Amount</span>
                   <span v-if="sortBy === 'amount'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="py-3 px-3 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('status')">
-                <div class="flex items-center gap-1">
+              <th class="w-28 text-center cursor-pointer hover:text-primary transition-colors whitespace-nowrap" @click="toggleSort('status')">
+                <div class="flex items-center justify-center gap-1">
                   <span>Status</span>
                   <span v-if="sortBy === 'status'" class="text-xs font-black text-primary">{{ sortDesc ? '▼' : '▲' }}</span>
+                  <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="py-3 px-3 text-right whitespace-nowrap">Actions</th>
+              <th class="w-28 text-right whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-base-200 text-xs">
+          <tbody>
             <tr
               v-for="expense in paginatedExpenses"
               :key="expense.id"
-              class="hover:bg-base-200/40 transition-colors"
-              :class="selectedIds.includes(expense.id) ? 'bg-primary/5' : ''"
+              class="hover:bg-primary/5 transition-colors cursor-pointer group"
+              :class="{ 'bg-primary/10 font-medium': selectedIds.includes(expense.id) }"
+              @click="openEditModal(expense)"
             >
               <!-- Row Checkbox -->
-              <td class="py-2.5 pl-3 pr-1">
+              <td class="text-center" @click.stop>
                 <input
                   type="checkbox"
                   :checked="selectedIds.includes(expense.id)"
                   @change="toggleSelectRow(expense.id)"
-                  class="checkbox checkbox-xs checkbox-primary rounded"
+                  class="checkbox checkbox-xs checkbox-primary align-middle"
                 />
               </td>
 
               <!-- Date -->
-              <td class="py-2.5 px-3 font-mono text-xs opacity-75 whitespace-nowrap">
-                {{ formatDate(expense.date) }}
+              <td class="font-mono text-xs whitespace-nowrap">
+                <span class="font-bold text-base-content/90">{{ formatDate(expense.date) }}</span>
               </td>
 
-              <!-- Expense Description + Condensed Category + Member/Partner Pill -->
-              <td class="py-2.5 px-3">
-                <button
-                  type="button"
-                  @click="openEditModal(expense)"
-                  class="font-bold text-xs text-left text-base-content hover:text-primary transition-colors block max-w-md xl:max-w-lg truncate cursor-pointer"
-                  :title="`Click to edit: ${expense.description}`"
-                >
+              <!-- Description + Condensed Category Badge -->
+              <td class="min-w-56 max-w-md">
+                <div class="font-bold text-xs text-base-content group-hover:text-primary transition-colors truncate" :title="expense.description">
                   {{ expense.description }}
-                </button>
+                </div>
                 <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                  <span class="badge badge-xs font-semibold gap-1 whitespace-nowrap" :class="getCategoryBadgeClass(expense.category)" :title="expense.category">
+                  <span class="badge badge-xs font-semibold gap-1 py-2 whitespace-nowrap" :class="getCategoryBadgeClass(expense.category)" :title="expense.category">
                     <Icon :icon="getCategoryIcon(expense.category)" class="w-3 h-3 shrink-0" />
                     <span>{{ condenseCategory(expense.category) }}</span>
-                  </span>
-                  <span class="badge badge-xs badge-outline font-mono font-bold whitespace-nowrap">
-                    {{ expense.partner }} · {{ expense.member }}
                   </span>
                 </div>
               </td>
 
-              <!-- Tax / Pool Scope Static Opaque Pill (Opens Edit Modal on Click — Zero Native Select Bleed) -->
-              <td class="py-2.5 px-3 whitespace-nowrap">
-                <button
-                  type="button"
-                  @click="openEditModal(expense)"
-                  class="badge badge-sm font-bold gap-1.5 py-2.5 px-2.5 cursor-pointer hover:brightness-95 transition-all shadow-2xs"
+              <!-- Member / Partner -->
+              <td class="whitespace-nowrap">
+                <div class="font-bold text-xs text-base-content truncate max-w-[140px]">{{ expense.member }}</div>
+                <span class="badge badge-xs badge-outline font-mono font-bold mt-0.5 whitespace-nowrap">
+                  {{ expense.partner }}
+                </span>
+              </td>
+
+              <!-- Tax / Pool Scope Static Opaque Pill -->
+              <td class="whitespace-nowrap" @click.stop="openEditModal(expense)">
+                <span
+                  class="badge badge-sm font-bold gap-1.5 py-2.5 px-2.5 whitespace-nowrap shadow-2xs"
                   :class="getScopeBadgeClass(expense.scope)"
                   title="Click to edit scope or select multiple rows for bulk change"
                 >
                   <span>{{ getScopeBadgeLabel(expense) }}</span>
-                  <Icon icon="solar:pen-bold" class="w-2.5 h-2.5 opacity-70" />
-                </button>
+                </span>
                 <div v-if="expense.scope === 'split'" class="text-[10px] font-mono text-base-content/60 mt-0.5">
                   Co-op ${{ expense.coopSharedAmount.toFixed(2) }} · Pers ${{ expense.personalWriteOffAmount.toFixed(2) }}
                 </div>
               </td>
 
               <!-- Receipt -->
-              <td class="py-2.5 px-3 text-center whitespace-nowrap">
+              <td class="text-center whitespace-nowrap" @click.stop>
                 <button
                   v-if="expense.receiptUrl"
                   type="button"
@@ -480,19 +540,19 @@
               </td>
 
               <!-- Amount -->
-              <td class="py-2.5 px-3 text-right font-mono font-black text-xs whitespace-nowrap text-base-content">
+              <td class="text-right font-mono font-black text-sm whitespace-nowrap text-base-content">
                 ${{ expense.amount.toFixed(2) }}
               </td>
 
               <!-- Status -->
-              <td class="py-2.5 px-3 whitespace-nowrap">
-                <span class="badge badge-xs font-bold capitalize py-2 px-2" :class="getStatusBadgeClass(expense.status)">
+              <td class="text-center whitespace-nowrap">
+                <span class="badge badge-xs font-bold uppercase tracking-wider py-2 px-2 whitespace-nowrap" :class="getStatusBadgeClass(expense.status)">
                   {{ expense.status }}
                 </span>
               </td>
 
-              <!-- Actions (Edit + Approve/Reimburse + Delete) -->
-              <td class="py-2.5 px-3 text-right whitespace-nowrap">
+              <!-- Actions (Matches SalesList & InventoryTableView) -->
+              <td class="text-right whitespace-nowrap" @click.stop>
                 <div class="flex items-center justify-end gap-1">
                   <button
                     type="button"
@@ -507,22 +567,20 @@
                     v-if="expense.status === 'pending'"
                     type="button"
                     @click="updateStatus(expense, 'approved')"
-                    class="btn btn-xs btn-success text-success-content font-bold gap-1 rounded-lg h-7 px-2 shadow-2xs"
+                    class="btn btn-xs btn-success text-success-content font-bold rounded-lg h-7 px-2 shadow-2xs"
                     title="Approve for reimbursement"
                   >
-                    <Icon icon="solar:check-circle-bold" class="w-3 h-3 shrink-0" />
-                    <span>Approve</span>
+                    Approve
                   </button>
 
                   <button
                     v-if="expense.status === 'approved'"
                     type="button"
                     @click="updateStatus(expense, 'reimbursed')"
-                    class="btn btn-xs btn-primary text-primary-content font-bold gap-1 rounded-lg h-7 px-2 shadow-2xs"
+                    class="btn btn-xs btn-primary text-primary-content font-bold rounded-lg h-7 px-2 shadow-2xs"
                     title="Mark as paid out from Commons Pool"
                   >
-                    <Icon icon="solar:card-recive-bold" class="w-3 h-3 shrink-0" />
-                    <span>Reimburse</span>
+                    Reimburse
                   </button>
 
                   <button
@@ -541,7 +599,7 @@
       </div>
     </div>
 
-    <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER & DYNAMIC MULTI-LINE BULK ACTION BAR -->
+    <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER & 4 ERGONOMIC DOCK TABS (MATCHES INVENTORYPAGINATIONDOCK) -->
     <PaginationDock
       v-if="filteredExpenses.length > 0"
       v-model:currentPage="currentPage"
@@ -554,144 +612,176 @@
       @scroll-top="scrollToTop"
     >
       <template #dock>
-        <!-- MODE A: MULTI-LINE BULK EDIT BAR (MORPHS AUTOMATICALLY WHEN 1+ ROWS ARE CHECKED) -->
-        <template v-if="selectedIds.length > 0">
-          <!-- Selected Counter Pill -->
-          <div class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center bg-primary/15 text-primary border border-primary/30 shrink-0">
-            <span class="font-black text-xs leading-none">{{ selectedIds.length }} Selected</span>
-            <span class="font-mono text-[10px] font-bold opacity-80">${{ selectedTotalAmount.toFixed(2) }}</span>
-          </div>
+        <!-- Dock Item 1: Actions (N) — Opens Multi-Line Bulk Edit Tray/Modal (Matches InventoryPaginationDock) -->
+        <button
+          type="button"
+          @click="isBulkActionsOpen = true"
+          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer shrink-0"
+          :class="selectedIds.length > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
+          :title="selectedIds.length > 0 ? `${selectedIds.length} expenses selected for multi-line bulk edit` : 'Select rows in the table to run multi-line bulk edits'"
+        >
+          <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">
+            Actions ({{ selectedIds.length }})
+          </span>
+        </button>
 
-          <!-- Bulk Scope: Co-op 100% -->
-          <button
-            type="button"
-            :disabled="bulkBusy"
-            @click="bulkUpdateScope('coop_shared', 100)"
-            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-primary text-primary-content font-bold shadow-xs active:scale-95 cursor-pointer shrink-0"
-            title="Set selected expenses to 100% Co-op Shared Commons Pool"
-          >
-            <Icon icon="solar:buildings-2-bold" class="w-4 h-4" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">🤝 Co-op 100%</span>
-          </button>
+        <!-- Dock Item 2: Scan Receipt -->
+        <a
+          href="/purchases/speed-entry?mode=all_expense"
+          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer shrink-0"
+          title="Scan multi-line paper receipt via OCR"
+        >
+          <Icon icon="solar:scanner-bold" class="w-4.5 h-4.5 text-secondary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Scan OCR</span>
+        </a>
 
-          <!-- Bulk Scope: Personal 100% -->
-          <button
-            type="button"
-            :disabled="bulkBusy"
-            @click="bulkUpdateScope('personal_write_off', 0)"
-            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-secondary text-secondary-content font-bold shadow-xs active:scale-95 cursor-pointer shrink-0"
-            title="Set selected expenses to 100% Personal IRS Schedule C Write-Off"
-          >
-            <Icon icon="solar:user-check-rounded-bold" class="w-4 h-4" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">👤 Personal 100%</span>
-          </button>
+        <!-- Dock Item 3: Upload Multi-PDF Invoices -->
+        <button
+          type="button"
+          @click="openImportModal"
+          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
+          title="Upload multiple PDF invoices at once"
+        >
+          <Icon icon="solar:upload-track-bold" class="w-4.5 h-4.5 text-primary" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Upload PDFs</span>
+        </button>
 
-          <!-- Bulk Scope: Split 50% -->
-          <button
-            type="button"
-            :disabled="bulkBusy"
-            @click="bulkUpdateScope('split', 50)"
-            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-accent text-accent-content font-bold shadow-xs active:scale-95 cursor-pointer shrink-0"
-            title="Set selected expenses to 50/50 Co-op & Personal Split"
-          >
-            <Icon icon="solar:scale-bold" class="w-4 h-4" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">⚖️ Split 50%</span>
-          </button>
-
-          <!-- Bulk Reimburse -->
-          <button
-            type="button"
-            :disabled="bulkBusy"
-            @click="bulkUpdateStatus('reimbursed')"
-            class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-success text-success-content font-bold shadow-xs active:scale-95 cursor-pointer shrink-0"
-            title="Mark selected expenses as Reimbursed"
-          >
-            <Icon icon="solar:check-circle-bold" class="w-4 h-4" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Reimburse</span>
-          </button>
-
-          <!-- Bulk Delete -->
-          <button
-            type="button"
-            :disabled="bulkBusy"
-            @click="bulkDeleteSelected"
-            class="h-11 my-auto px-2.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-error/15 hover:bg-error text-error hover:text-error-content font-bold border border-error/30 active:scale-95 cursor-pointer shrink-0"
-            title="Delete selected expenses"
-          >
-            <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Delete</span>
-          </button>
-
-          <!-- Clear Selection -->
-          <button
-            type="button"
-            @click="selectedIds = []"
-            class="h-11 my-auto px-2.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all bg-base-200 hover:bg-base-300 text-base-content font-bold border border-base-content/15 active:scale-95 cursor-pointer shrink-0"
-            title="Clear selection"
-          >
-            <Icon icon="solar:close-circle-bold" class="w-4 h-4 opacity-70" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Clear</span>
-          </button>
-        </template>
-
-        <!-- MODE B: DEFAULT DOCK ACTIONS (WHEN 0 ROWS ARE SELECTED) -->
-        <template v-else>
-          <!-- Dock Item 1: Scan Receipt -->
-          <a
-            href="/purchases/speed-entry?mode=all_expense"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer"
-            title="Scan multi-line paper receipt via OCR"
-          >
-            <Icon icon="solar:scanner-bold" class="w-4.5 h-4.5 text-secondary" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Scan OCR</span>
-          </a>
-
-          <!-- Dock Item 2: Upload Multi-PDF Invoices -->
-          <button
-            type="button"
-            @click="openImportModal"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
-            title="Upload multiple PDF invoices at once"
-          >
-            <Icon icon="solar:upload-track-bold" class="w-4.5 h-4.5 text-primary" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Upload PDFs</span>
-          </button>
-
-          <!-- Dock Item 3: Co-op Commons CSV -->
-          <button
-            type="button"
-            @click="exportCsvByScope('coop_shared')"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
-            title="Export Co-op Shared Commons CSV"
-          >
-            <Icon icon="solar:file-download-bold" class="w-4.5 h-4.5 text-primary" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Co-op CSV</span>
-          </button>
-
-          <!-- Dock Item 4: Personal Schedule C CSV -->
-          <button
-            type="button"
-            @click="exportCsvByScope('personal_write_off')"
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
-            title="Export Personal IRS Schedule C Write-Off CSV"
-          >
-            <Icon icon="solar:user-check-rounded-bold" class="w-4.5 h-4.5 text-secondary" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Personal CSV</span>
-          </button>
-
-          <!-- Dock Item 5: Log Expense (Elevated Contextual Primary Action) -->
-          <button
-            type="button"
-            @click="openSubmitModal"
-            class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
-            title="Log a single expense or receipt"
-          >
-            <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-            <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Log Expense</span>
-          </button>
-        </template>
+        <!-- Dock Item 4: Log Expense (Elevated Contextual Primary Action) -->
+        <button
+          type="button"
+          @click="openSubmitModal"
+          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
+          title="Log a single expense or receipt"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Log Expense</span>
+        </button>
       </template>
     </PaginationDock>
+
+    <!-- MULTI-LINE BULK ACTIONS TRAY / MODAL (MATCHES INVENTORY BOTTOM ACTION TRAY PATTERN) -->
+    <dialog :class="{ 'modal modal-bottom sm:modal-middle': true, 'modal-open': isBulkActionsOpen }">
+      <div class="modal-box max-w-lg rounded-t-3xl sm:rounded-3xl p-6 space-y-5 bg-base-100 border border-base-300 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-base-200 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-warning/15 text-warning flex items-center justify-center">
+              <Icon icon="solar:bolt-bold" class="w-5 h-5" />
+            </div>
+            <div>
+              <h3 class="font-black text-base text-base-content">Multi-Line Bulk Actions</h3>
+              <p class="text-xs text-base-content/60 font-mono">
+                {{ selectedIds.length }} expense{{ selectedIds.length === 1 ? '' : 's' }} selected · ${{ selectedTotalAmount.toFixed(2) }} total
+              </p>
+            </div>
+          </div>
+          <button type="button" @click="isBulkActionsOpen = false" class="btn btn-ghost btn-sm btn-circle">✕</button>
+        </div>
+
+        <div v-if="selectedIds.length === 0" class="py-6 text-center space-y-3">
+          <p class="text-xs text-base-content/70">No rows selected yet. Check rows in the table or select all on this page:</p>
+          <button type="button" @click="toggleSelectAllPage" class="btn btn-sm btn-primary font-bold rounded-xl">
+            Select All {{ paginatedExpenses.length }} Rows on Page
+          </button>
+        </div>
+
+        <div v-else class="space-y-4 text-xs">
+          <!-- 1. Bulk Tax / Co-op Allocation Scope -->
+          <div class="space-y-2">
+            <div class="font-black uppercase tracking-wider text-[11px] opacity-70">1. Set Tax / Pool Scope</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateScope('coop_shared', 100)"
+                class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl"
+              >
+                🤝 Co-op 100%
+              </button>
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateScope('personal_write_off', 0)"
+                class="btn btn-sm btn-secondary text-secondary-content font-bold rounded-xl"
+              >
+                👤 Personal 100%
+              </button>
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateScope('split', 50)"
+                class="btn btn-sm btn-accent text-accent-content font-bold rounded-xl"
+              >
+                ⚖️ Split 50/50
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Bulk Reimbursement Status -->
+          <div class="space-y-2">
+            <div class="font-black uppercase tracking-wider text-[11px] opacity-70">2. Set Reimbursement Status</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateStatus('pending')"
+                class="btn btn-sm btn-warning text-warning-content font-bold rounded-xl"
+              >
+                🟡 Mark Pending
+              </button>
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateStatus('approved')"
+                class="btn btn-sm btn-success text-success-content font-bold rounded-xl"
+              >
+                🟢 Approve ({{ selectedIds.length }})
+              </button>
+              <button
+                type="button"
+                :disabled="bulkBusy"
+                @click="bulkUpdateStatus('reimbursed')"
+                class="btn btn-sm btn-info text-info-content font-bold rounded-xl"
+              >
+                💎 Reimburse ({{ selectedIds.length }})
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Clear or Delete -->
+          <div class="flex items-center justify-between pt-3 border-t border-base-200">
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkDeleteSelected"
+              class="btn btn-sm btn-outline btn-error font-bold rounded-xl gap-1.5"
+            >
+              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+              <span>Delete ({{ selectedIds.length }})</span>
+            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                @click="selectedIds = []; isBulkActionsOpen = false"
+                class="btn btn-sm btn-ghost font-bold rounded-xl"
+              >
+                Clear Selection
+              </button>
+              <button
+                type="button"
+                @click="isBulkActionsOpen = false"
+                class="btn btn-sm btn-neutral font-bold rounded-xl"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="isBulkActionsOpen = false">close</button>
+      </form>
+    </dialog>
 
     <!-- SUBMIT / EDIT EXPENSE MODAL -->
     <dialog :class="{ 'modal modal-open': isSubmitModalOpen }" class="modal">
@@ -1301,6 +1391,7 @@ const toggleSort = (col: 'date' | 'description' | 'scope' | 'amount' | 'status')
 // Multi-line selection state
 const selectedIds = ref<string[]>([]);
 const editingExpenseId = ref<string | null>(null);
+const isBulkActionsOpen = ref(false);
 
 watch([searchQuery, monthFilter, statusFilter, scopeFilter], () => {
   currentPage.value = 1;
@@ -1735,6 +1826,7 @@ const bulkUpdateScope = async (newScope: ExpenseAllocationScope, pct: number) =>
       }!`,
     });
     selectedIds.value = [];
+    isBulkActionsOpen.value = false;
   } catch (err: any) {
     addToast({ type: 'error', message: 'Bulk scope update failed: ' + err.message });
   } finally {
@@ -1756,6 +1848,7 @@ const bulkUpdateStatus = async (newStatus: ExpenseStatus) => {
     }
     addToast({ type: 'success', message: `Marked ${ids.length} expense${ids.length === 1 ? '' : 's'} as ${newStatus}!` });
     selectedIds.value = [];
+    isBulkActionsOpen.value = false;
   } catch (err: any) {
     addToast({ type: 'error', message: 'Bulk status update failed: ' + err.message });
   } finally {
@@ -1778,6 +1871,7 @@ const bulkDeleteSelected = async () => {
     const idSet = new Set(ids);
     expenses.value = expenses.value.filter(e => !idSet.has(e.id));
     selectedIds.value = [];
+    isBulkActionsOpen.value = false;
     addToast({ type: 'info', message: `Deleted ${ids.length} expense${ids.length === 1 ? '' : 's'}.` });
   } catch (err: any) {
     addToast({ type: 'error', message: 'Bulk delete failed: ' + err.message });
