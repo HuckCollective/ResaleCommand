@@ -366,6 +366,54 @@ export const coopExpensesApi = {
     return hydrateExpenseDoc(updated);
   },
 
+  async updateExpense(
+    id: string,
+    currentExpense: CoopExpenseItem,
+    patch: {
+      amount?: number;
+      date?: string;
+      category?: ExpenseCategory;
+      member?: string;
+      partner?: string;
+      description?: string;
+      status?: ExpenseStatus;
+      scope?: ExpenseAllocationScope;
+      coopSharePct?: number;
+    }
+  ): Promise<CoopExpenseItem> {
+    const nextAmount = patch.amount !== undefined ? roundCents(patch.amount) : currentExpense.amount;
+    const nextScope = patch.scope || currentExpense.scope || 'coop_shared';
+    const nextPct =
+      patch.coopSharePct !== undefined ? patch.coopSharePct : currentExpense.coopSharePct ?? 100;
+    const split = computeScopeSplitAmounts(nextAmount, nextScope, nextPct);
+    const nextStatus = patch.status || currentExpense.status;
+    const isReimbursed = nextStatus === 'reimbursed';
+
+    const updatedNote = JSON.stringify({
+      category: patch.category || currentExpense.category,
+      member: (patch.member !== undefined ? patch.member : currentExpense.member).trim(),
+      partner: (patch.partner !== undefined ? patch.partner : currentExpense.partner).trim().toUpperCase(),
+      desc: (patch.description !== undefined ? patch.description : currentExpense.description).trim(),
+      status: nextStatus,
+      reimbursedAt: isReimbursed
+        ? currentExpense.reimbursedAt || new Date().toISOString()
+        : null,
+      scope: split.scope,
+      coopSharePct: split.coopSharePct,
+    });
+
+    const docPayload: Record<string, any> = {
+      note: updatedNote,
+      amount: nextAmount,
+    };
+    if (patch.date) {
+      docPayload.date = new Date(patch.date).toISOString();
+    }
+
+    const updated = await databases.updateDocument(DB_ID(), EXPENSES_COL, id, docPayload);
+    return hydrateExpenseDoc(updated);
+  },
+
   async deleteExpense(id: string, receiptImageId?: string | null): Promise<void> {
     if (receiptImageId) {
       try {
