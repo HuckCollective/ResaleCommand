@@ -1,6 +1,25 @@
 <template>
   <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
-    <CoopSubNav activeTab="charter" />
+    <CoopSubNav v-if="isAuthenticated" activeTab="charter" />
+
+    <!-- Guest banner: how to connect with the collective -->
+    <div
+      v-if="!isAuthenticated"
+      class="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+    >
+      <div class="text-sm">
+        <span class="font-black">👋 Exploring The Huckleberry Collective?</span>
+        <span class="text-base-content/75"> Tell us how you'd like to be part of it, or log in if you're already a member.</span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" class="btn btn-sm btn-primary rounded-xl font-black gap-1.5" @click="showConnectModal = true">
+          <Icon icon="solar:hand-shake-bold" class="w-4 h-4" />
+          Connect With Us
+        </button>
+        <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
+      </div>
+    </div>
+
 
     <!-- Hero Banner with WSDE Framing -->
     <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/15 via-base-200 to-base-100 border border-primary/25 p-6 sm:p-10 shadow-xl">
@@ -95,20 +114,110 @@
       </div>
     </div>
 
-    <!-- RESPONSIVE SEGMENTED MODULE SWITCHER (NO SIDE SCROLLING) -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-1.5 bg-base-200/90 rounded-2xl border border-base-300 shadow-sm">
-      <button 
-        v-for="section in sections" 
-        :key="section.id"
-        @click="activeSection = section.id"
-        type="button"
-        class="btn btn-sm sm:btn-md gap-2 font-bold rounded-xl transition-all text-xs sm:text-sm"
-        :class="activeSection === section.id ? 'btn-primary shadow-sm' : 'btn-ghost hover:bg-base-100 text-base-content/80'"
-      >
-        <Icon :icon="section.icon" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-        <span class="truncate">{{ section.label }}</span>
-      </button>
+    <!-- WAYS TO JOIN THE COLLECTIVE -->
+    <div class="space-y-3">
+      <div class="flex items-end justify-between flex-wrap gap-2">
+        <div>
+          <div class="text-xs font-extrabold uppercase tracking-wider text-primary">Find Your Hat</div>
+          <h2 class="text-xl sm:text-2xl font-black tracking-tight">Ways to join the Collective</h2>
+        </div>
+        <button v-if="!isAuthenticated" type="button" class="btn btn-sm btn-primary rounded-xl font-bold" @click="showConnectModal = true">
+          Connect With Us
+        </button>
+        <a v-else href="/dashboard" class="btn btn-sm btn-primary rounded-xl font-bold gap-1.5">
+          <Icon icon="solar:rocket-2-bold" class="w-4 h-4" />
+          Open My Role Dashboard
+        </a>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div v-for="hat in joinHats" :key="hat.id" class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-4 space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">{{ hat.icon }}</span>
+            <span class="font-black text-base">{{ hat.title }}</span>
+          </div>
+          <p class="text-xs text-base-content/75 leading-relaxed">{{ hat.pitch }}</p>
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            <span v-for="tag in hat.tags" :key="tag" class="badge badge-sm badge-ghost font-semibold">{{ tag }}</span>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- 5 PILLAR SUMMARY CARDS (select to preview below; members get a live-page link) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+      <div
+        v-for="section in sections"
+        :key="section.id"
+        class="card border-2 rounded-2xl p-4 space-y-2 cursor-pointer transition-all"
+        :class="activeSection === section.id ? 'border-primary bg-primary/5 shadow-md' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
+        role="button"
+        tabindex="0"
+        @click="activeSection = section.id"
+        @keydown.enter="activeSection = section.id"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <Icon :icon="section.icon" class="w-5 h-5" />
+          </div>
+          <span class="badge badge-sm badge-primary badge-outline font-mono font-bold">{{ section.stat }}</span>
+        </div>
+        <div class="font-black text-sm leading-snug">{{ section.title }}</div>
+        <p class="text-[11px] text-base-content/70 leading-relaxed">{{ section.summary }}</p>
+        <a
+          v-if="isAuthenticated && section.href"
+          :href="section.href"
+          class="text-xs font-bold text-primary hover:underline inline-flex items-center gap-1"
+          @click.stop
+        >
+          Open live page
+          <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+        </a>
+        <span v-else class="text-[11px] font-semibold opacity-60">Preview below ↓</span>
+      </div>
+    </div>
+
+    <!-- CONNECT WITH US MODAL (guests) -->
+    <dialog :class="{ 'modal modal-open': showConnectModal }" class="modal">
+      <div class="modal-box max-w-lg rounded-3xl p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-base-200 pb-3">
+          <h3 class="font-black text-lg">🤝 Connect with The Huckleberry Collective</h3>
+          <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="showConnectModal = false">✕</button>
+        </div>
+        <div class="space-y-2">
+          <div class="text-xs font-bold">Which hat fits you?</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="hat in joinHats"
+              :key="hat.id"
+              type="button"
+              class="btn btn-sm rounded-xl gap-1.5"
+              :class="connectHats.includes(hat.id) ? 'btn-primary' : 'btn-ghost border border-base-300'"
+              @click="toggleConnectHat(hat.id)"
+            >
+              <span>{{ hat.icon }}</span>
+              <span>{{ hat.title }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold text-xs">Your name</span></label>
+          <input v-model="connectName" type="text" class="input input-bordered input-sm rounded-xl" placeholder="Name or shop" />
+        </div>
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold text-xs">What do you curate, create or want to help with?</span></label>
+          <textarea v-model="connectNote" class="textarea textarea-bordered rounded-xl text-xs h-20" placeholder="Vintage TTRPG, jewelry, reels, booth restocking..."></textarea>
+        </div>
+        <p class="text-[11px] text-base-content/60">
+          Copy your intro and send it to any Collective member, or tell us in person at the booth. Members will reply with next steps.
+        </p>
+        <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
+          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="showConnectModal = false">Close</button>
+          <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" @click="copyConnectIntro">Copy My Intro</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="showConnectModal = false">close</button></form>
+    </dialog>
+
 
     <!-- MODULE 1: THE 70/30 PROFIT ENGINE & LIVE CALCULATOR -->
     <div v-show="activeSection === 'payouts'" class="space-y-6">
@@ -888,6 +997,7 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
 import CoopSubNav from './CoopSubNav.vue';
+import { useAuth } from '../../composables/useAuth';
 import { loadCoopGovernanceState, DEFAULT_COOP_POLICY_CONFIG } from '../../lib/coopGovernance';
 
 const activeSection = ref<'payouts' | 'monthly' | 'expenses' | 'governance' | 'legal'>('payouts');
@@ -897,12 +1007,104 @@ const liveCuratorPct = ref<number>(DEFAULT_COOP_POLICY_CONFIG.curatorSharePct);
 const liveCommonsPct = ref<number>(DEFAULT_COOP_POLICY_CONFIG.commonsSharePct);
 
 const sections = [
-  { id: 'payouts', label: '1. 70/30 Profit Engine', icon: 'solar:calculator-bold' },
-  { id: 'monthly', label: '2. Monthly Settlements', icon: 'solar:calendar-date-bold' },
-  { id: 'expenses', label: '3. Commons Expense Ledger', icon: 'solar:bill-list-bold' },
-  { id: 'governance', label: '4. Democratic Governance', icon: 'solar:users-group-two-rounded-bold' },
-  { id: 'legal', label: '5. Legal Model & Labor', icon: 'solar:diploma-verified-bold' }
+  {
+    id: 'payouts',
+    icon: 'solar:calculator-bold',
+    title: '70/30 Profit & Consignor Engine',
+    summary: 'See exactly what you take home on any sale: capital back first, then the profit split.',
+    stat: 'Cost back first',
+    href: '/coop/settlements',
+  },
+  {
+    id: 'monthly',
+    icon: 'solar:calendar-date-bold',
+    title: 'Monthly Settlements',
+    summary: 'One transparent statement per partner, generated from real register sales every month.',
+    stat: 'PDF statements',
+    href: '/coop/settlements',
+  },
+  {
+    id: 'expenses',
+    icon: 'solar:bill-list-bold',
+    title: 'Commons Expenses vs. Personal Write-Offs',
+    summary: 'Shared costs are reimbursed from the Commons Pool. Personal write-offs stay personal.',
+    stat: 'Receipts tracked',
+    href: '/expenses',
+  },
+  {
+    id: 'governance',
+    icon: 'solar:users-group-two-rounded-bold',
+    title: 'Democratic Governance',
+    summary: 'One member, one vote. Proposals use consent, and any member can block an unsafe change.',
+    stat: '1 Member = 1 Vote',
+    href: '/coop/governance',
+  },
+  {
+    id: 'legal',
+    icon: 'solar:diploma-verified-bold',
+    title: 'Legal Model & Labor Pool',
+    summary: 'Promoters and Surplus Enablers earn from the shared surplus by logging verified work.',
+    stat: 'Labor pool',
+    href: '/coop/labor',
+  },
 ] as const;
+
+const joinHats = [
+  {
+    id: 'curator',
+    icon: '💎',
+    title: 'Curator Partner',
+    pitch: 'Have an eye for vintage, games or oddities? Bring your inventory. Your cost comes back first, then you keep the Curator share of profit.',
+    tags: ['Brings inventory', 'Votes', 'Cost back first'],
+  },
+  {
+    id: 'promoter',
+    icon: '📣',
+    title: 'Promoter',
+    pitch: 'Film Dropcasts, edit reels, photograph drops and grow our audience. No inventory required.',
+    tags: ['$0 inventory', 'Votes', 'Labor pool'],
+  },
+  {
+    id: 'enabler',
+    icon: '🔥',
+    title: 'Surplus Enabler',
+    pitch: 'Power the booth: restocking, tagging, hauling, shipping and reconciliation. No inventory required.',
+    tags: ['$0 inventory', 'Votes', 'Labor pool'],
+  },
+  {
+    id: 'consignor',
+    icon: '🏷️',
+    title: 'Straight Consignor',
+    pitch: 'Want zero co-op duties? Drop off items on a clean percentage split or fixed shelf rent.',
+    tags: ['No duties', 'Clear contract', 'Open statements'],
+  },
+] as const;
+
+const { isAuthenticated } = useAuth();
+const showConnectModal = ref(false);
+const connectHats = ref<string[]>([]);
+const connectName = ref('');
+const connectNote = ref('');
+
+const toggleConnectHat = (id: string) => {
+  connectHats.value = connectHats.value.includes(id)
+    ? connectHats.value.filter((h) => h !== id)
+    : [...connectHats.value, id];
+};
+
+const copyConnectIntro = async () => {
+  const names = joinHats
+    .filter((h) => connectHats.value.includes(h.id))
+    .map((h) => h.title)
+    .join(', ') || 'a way to be involved';
+  const text = `Hi Huckleberry Collective! I'm ${connectName.value.trim() || '(my name)'} and I'm interested in: ${names}.\n${connectNote.value.trim()}`.trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    addToast({ type: 'success', message: 'Intro copied. Send it to any Collective member!' });
+  } catch {
+    addToast({ type: 'warning', message: 'Could not copy automatically. Please copy your intro manually.' });
+  }
+};
 
 // Interactive Simulator Reactive State (Live Policy Formula + Multi-Channel Shipping)
 const simSalePrice = ref<number>(60);

@@ -36,7 +36,7 @@
       <a
         href="/coop/governance?tab=rules"
         class="badge badge-sm badge-ghost font-mono font-semibold gap-1 py-2.5 px-2.5 text-[11px] hover:bg-base-200 transition-colors"
-        title="Gate 4B Excess Surplus WSDE Split: Reserve / Sales Patronage / Sweat-Equity Labor"
+        title="Gate 4B Excess Surplus WSDE Split: Reserve / Sales Patronage / Promoter &amp; Enabler Labor"
       >
         <span>
           Over Ops: {{ policy.reserveSharePct }}% Res • {{ policy.salesPatronagePct }}% Sales • {{ policy.laborPatronagePct }}% Labor
@@ -77,7 +77,7 @@ const navTabs = [
   },
   {
     id: 'labor',
-    label: 'Sweat-Equity Labor',
+    label: 'Labor Pool',
     href: '/coop/labor',
     icon: 'solar:clock-circle-bold-duotone',
   },

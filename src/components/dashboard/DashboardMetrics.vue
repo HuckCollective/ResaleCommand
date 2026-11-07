@@ -23,6 +23,9 @@
             </div>
         </div>
 
+        <!-- MY ROLE IN THE COLLECTIVE (adapts to the member's hats) -->
+        <RoleHubCard />
+
         <!-- AREA 0: OPERATIONS & BOOTH RESTOCK RADAR (EXPANDED BY DEFAULT) -->
         <OperationsRadarGrid />
 
@@ -496,6 +499,7 @@ import { useLoader } from '../../composables/useLoader';
 import { useAuth } from '../../composables/useAuth';
 import AiUsageCard from './AiUsageCard.vue';
 import OperationsRadarGrid from './OperationsRadarGrid.vue';
+import RoleHubCard from './RoleHubCard.vue';
 
 const { isAdmin } = useAuth();
 

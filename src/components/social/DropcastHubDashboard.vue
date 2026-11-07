@@ -31,7 +31,7 @@
 
         <a href="/coop/labor?partner=SWEAT" class="btn btn-sm btn-outline btn-secondary gap-1.5 font-bold text-xs rounded-2xl">
           <Icon icon="solar:clock-circle-bold-duotone" class="w-4 h-4" />
-          <span>SWEAT- Labor Ledger</span>
+          <span>Labor Pool Ledger</span>
         </a>
 
         <a href="/warehouse" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 font-bold text-xs rounded-2xl">
@@ -397,7 +397,7 @@
               title="1-Click Log 1.5h SWEAT- Marketing & Social Labor + Deliverable Proof into Co-op Labor Ledger"
             >
               <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
-              <span>{{ loggedCastIds.has(cast.id) ? '✓ Logged SWEAT-' : '+ Log SWEAT- (1.5h)' }}</span>
+              <span>{{ loggedCastIds.has(cast.id) ? '✓ Logged Promoter Hours' : '+ Log Promoter Hours (1.5h)' }}</span>
             </button>
 
             <!-- Duplicate -->

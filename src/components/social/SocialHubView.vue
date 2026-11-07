@@ -65,7 +65,7 @@
             title="1-Click Log 1.5h SWEAT- Marketing & Social Labor + Deliverable Ref into Co-op Labor Ledger"
           >
             <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
-            <span>{{ isLoggingSweatLabor ? 'Logging...' : '+ Log SWEAT- (1.5h)' }}</span>
+            <span>{{ isLoggingSweatLabor ? 'Logging...' : '+ Log Promoter Hours (1.5h)' }}</span>
           </button>
 
           <!-- Quick Active / Paused Toggle Button -->

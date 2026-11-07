@@ -180,7 +180,7 @@
           >
             <Icon icon="solar:clock-circle-bold-duotone" class="w-4 h-4 text-accent shrink-0" />
             <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Sweat-Equity Labor Ledger</span>
+              <span class="font-bold text-xs">Promoter &amp; Enabler Labor Pool</span>
               <span class="text-[10px] opacity-60">Log Booth &amp; Social Work Hours</span>
             </div>
           </a>
@@ -847,7 +847,7 @@ const mobileFinanceLinks = computed(() => [
     active: isRouteActive('/coop/governance'),
   },
   {
-    label: 'Sweat-Equity Labor Ledger',
+    label: 'Promoter & Enabler Labor Pool',
     url: '/coop/labor',
     icon: 'solar:clock-circle-bold-duotone',
     iconColor: 'text-accent',

@@ -149,6 +149,13 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 6, 2026)
 
+## ✅ COLLECTIVE HOME, 5 WSDE HATS, ROLE DASHBOARD & ORG SETTINGS HUB (Nov 6, 2026 — `alpha-1`)
+- **5 combinable hats** (`src/lib/coopGovernance.ts`): `founder`, `curator`, `promoter`, `enabler` (Surplus Enabler), `consignor` via `MEMBER_HAT_META`; `SWEAT-` retired from user-facing labels (legacy `SWEAT` partner code still accepted). Promoter/Enabler need no barcode prefix.
+- **Immutable prefixes**: `PROTECTED_BARCODE_PREFIXES` (`HUCK-`, `PDXGL-`, `BB-`) render as locked badges in `/settings`; only a Founder (or team owner) can register a new prefix, with a permanence confirmation. `canMemberEditGlobalFinancials()` gates saves; everyone else gets sandbox preview.
+- **`/settings`** (`SettingsManager.vue`): 4 tabs (Personas/Prefixes/Consignor contracts with 3-mode calculator, Locations from live warehouse metas, Team/Storefront/API via `OrgSettingsView`, Thermal Hardware). `/org/settings` redirects to `/settings?tab=team`.
+- **`/` and `/coop`** (`CoopCharterView.vue`): community home page; guests see a "Connect With Us" modal (copy-intro) and no internal nav; members see live-page links on 5 pillar cards and an "Open My Role Dashboard" button.
+- **`/dashboard`**: new `RoleHubCard.vue` adapts actions to the member's hats and logs Promoter/Enabler hours.
+
 ## ✅ STRAIGHT CONSIGNMENT MEMBER AGREEMENTS & CONFIGURABLE RATE ENGINE (Nov 6, 2026 — `alpha-1`)
 1. **3 Selectable Consignor Deal Modes (`src/lib/coopGovernance.ts`)**:
    - Added `ConsignorDealMode` (`'pro_rata_rent'` | `'flat_commission'` | `'fixed_shelf_rent'`), `ConsignorAgreementConfig`, `calculateConsignorSettlement()`, and `findConsignorAgreement()` in `src/lib/coopGovernance.ts` (persisted in `resale_db.manifests` doc `coop_governance_proposals_v1`).
