@@ -96,7 +96,17 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 
 ## 4. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)
 
-# Active Session Summary (Updated Nov 5, 2026)
+# Active Session Summary (Updated Nov 6, 2026)
+
+## ✅ STRAIGHT CONSIGNMENT MEMBER AGREEMENTS & CONFIGURABLE RATE ENGINE (Nov 6, 2026 — `alpha-1`)
+1. **3 Selectable Consignor Deal Modes (`src/lib/coopGovernance.ts`)**:
+   - Added `ConsignorDealMode` (`'pro_rata_rent'` | `'flat_commission'` | `'fixed_shelf_rent'`), `ConsignorAgreementConfig`, `calculateConsignorSettlement()`, and `findConsignorAgreement()` in `src/lib/coopGovernance.ts` (persisted in `resale_db.manifests` doc `coop_governance_proposals_v1`).
+   - Supports any existing (`BB-`) or newly added straight consignor prefix (`CON-`, etc.) with a `capRentAtNetSales` toggle so slow sales months never produce a negative payout check.
+2. **Dual-Location Consignor Management (`CoopGovernanceView.vue`, `CoopSettlementView.vue`, `coopSettlementPdf.ts`)**:
+   - Added the **Consignor Agreements** registry & rate panel in `/coop/governance?tab=rules` (`+ Add Straight Consignor`, Deal Mode selector, Commission % slider, and Fixed Shelf Rent $/mo input).
+   - Added the **`⚙️ Adjust Consignor Deal`** button + Quick-Adjust Modal (with live `Current check` vs. `New check` + `Commons Pool +` preview) on every Consignor statement card in `/coop/settlements`, and updated PDF statement exports to print the active deal formula and Co-op commission line.
+3. **Active-Branch Push Rule (`git push origin HEAD`)**:
+   - Updated `docs/AI_STUDIO_PLAYBOOK.md`, `scripts/sync-ai-context.mjs`, and `GEMINI.md` so auto-verify & push commands always run `git push origin HEAD` (pushing to the currently checked-out branch such as `alpha-1`, and never pushing to `main` unless explicitly asked to merge).
 
 ## ✅ ALL 4 QUEUED CO-OP & POLISH MILESTONES COMPLETED (Nov 5, 2026)
 1. **Social Studio ➔ 1-Click `SWEAT-` Labor Log (`src/lib/coopGovernance.ts`, `DropcastHubDashboard.vue`, `SocialHubView.vue`, `CoopLaborView.vue`)**:
