@@ -1,7 +1,5 @@
 <template>
   <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
-    <CoopSubNav v-if="isAuthenticated" activeTab="charter" />
-
     <!-- Guest banner: how to connect with the collective -->
     <div
       v-if="!isAuthenticated"
@@ -163,16 +161,25 @@
         </div>
         <div class="font-black text-sm leading-snug">{{ section.title }}</div>
         <p class="text-[11px] text-base-content/70 leading-relaxed">{{ section.summary }}</p>
-        <a
-          v-if="isAuthenticated && section.href"
-          :href="section.href"
-          class="text-xs font-bold text-primary hover:underline inline-flex items-center gap-1"
-          @click.stop
-        >
-          Open live page
-          <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
-        </a>
-        <span v-else class="text-[11px] font-semibold opacity-60">Preview below ↓</span>
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <a
+            v-if="isAuthenticated && section.href"
+            :href="section.href"
+            class="btn btn-xs btn-primary rounded-lg gap-1 font-bold"
+            @click.stop
+          >
+            Open page
+            <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+          </a>
+          <span v-else class="text-[11px] font-semibold opacity-60">Members get a live page</span>
+          <button
+            type="button"
+            class="text-[11px] font-bold text-primary hover:underline"
+            @click.stop="activeSection = section.id"
+          >
+            {{ activeSection === section.id ? 'Previewing ↓' : 'Preview ↓' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -996,7 +1003,6 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
-import CoopSubNav from './CoopSubNav.vue';
 import { useAuth } from '../../composables/useAuth';
 import { loadCoopGovernanceState, DEFAULT_COOP_POLICY_CONFIG } from '../../lib/coopGovernance';
 
