@@ -693,51 +693,190 @@
       </div>
     </details>
 
-    <!-- Consignor Deal Quick-Adjust Modal -->
+    <!-- Consignor Deal Quick-Adjust & 3-Mode Interactive Comparison Modal -->
     <dialog :class="{ 'modal modal-open': dealModalPartner && dealDraft }" class="modal">
-      <div v-if="dealModalPartner && dealDraft" class="modal-box max-w-md rounded-3xl p-6 space-y-4">
+      <div v-if="dealModalPartner && dealDraft" class="modal-box max-w-2xl rounded-3xl p-5 sm:p-6 space-y-4">
         <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <h3 class="font-black text-lg">⚙️ Consignor Deal — {{ dealDraft.displayName }}</h3>
+          <div>
+            <div class="badge badge-secondary badge-xs font-mono font-bold mb-1">{{ dealDraft.prefix }} CONSIGNOR</div>
+            <h3 class="font-black text-lg">⚙️ Consignor Deal &amp; Live Mode Comparison — {{ dealDraft.displayName }}</h3>
+          </div>
           <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="closeDealModal">✕</button>
         </div>
 
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold text-xs">Deal Mode</span></label>
-          <select v-model="dealDraft.mode" class="select select-bordered select-sm rounded-xl font-bold">
-            <option v-for="(label, key) in CONSIGNOR_DEAL_MODE_LABELS" :key="key" :value="key as ConsignorDealMode">{{ label }}</option>
-          </select>
+        <!-- Percentage After Venue Take + Fixed Shelf Rent Controls (Always Visible so You Can Compare All 3 Modes) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-base-200/50 border border-base-300">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-primary">✂️ % Split (After Venue Take)</span>
+              <span class="badge badge-primary badge-sm font-mono font-black">
+                {{ dealDraft.coopCommissionPct }}% Co-op / {{ 100 - dealDraft.coopCommissionPct }}% Consignor
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="1"
+                v-model.number="dealDraft.coopCommissionPct"
+                class="range range-primary range-xs flex-1"
+              />
+              <div class="join">
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  v-model.number="dealDraft.coopCommissionPct"
+                  class="input input-bordered input-xs w-14 font-mono font-bold text-right join-item"
+                />
+                <span class="btn btn-xs btn-ghost border border-base-300 join-item pointer-events-none font-mono">%</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 flex-wrap">
+              <span class="text-[10px] font-bold opacity-60 mr-1">Quick %:</span>
+              <button
+                v-for="pct in [10, 15, 20, 25, 30, 50]"
+                :key="pct"
+                type="button"
+                @click="dealDraft.coopCommissionPct = pct; dealDraft.mode = 'flat_commission'"
+                class="btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
+                :class="dealDraft.coopCommissionPct === pct && dealDraft.mode === 'flat_commission' ? 'btn-primary' : 'btn-ghost border border-base-300'"
+              >
+                {{ pct }}% / {{ 100 - pct }}%
+              </button>
+            </div>
+            <p class="text-[11px] text-base-content/65">
+              Taken out of the <strong>Net Store Deposit</strong> (after the 15% Memory Den / 10% Dusty Tiger venue fee).
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-warning">🏪 Fixed Shelf Rent ($/mo)</span>
+              <span class="badge badge-warning badge-sm font-mono font-black">${{ Number(dealDraft.fixedMonthlyRent || 0).toFixed(2) }}/mo</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="5"
+                v-model.number="dealDraft.fixedMonthlyRent"
+                class="input input-bordered input-sm rounded-xl font-mono font-bold w-full"
+              />
+            </div>
+            <div class="flex items-center gap-1 flex-wrap">
+              <span class="text-[10px] font-bold opacity-60 mr-1">Presets:</span>
+              <button
+                v-for="amt in [0, 35, 50, 75, 85.41]"
+                :key="amt"
+                type="button"
+                @click="dealDraft.fixedMonthlyRent = amt; if (amt > 0) dealDraft.mode = 'fixed_shelf_rent'"
+                class="btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
+                :class="Number(dealDraft.fixedMonthlyRent) === amt && dealDraft.mode === 'fixed_shelf_rent' ? 'btn-warning' : 'btn-ghost border border-base-300'"
+              >
+                ${{ amt }}
+              </button>
+            </div>
+            <label class="label cursor-pointer justify-start gap-2 py-0 pt-1">
+              <input type="checkbox" v-model="dealDraft.capRentAtNetSales" class="checkbox checkbox-xs checkbox-primary" />
+              <span class="label-text text-[11px] font-bold">Never let rent push payout below $0</span>
+            </label>
+          </div>
         </div>
 
-        <div v-if="dealDraft.mode !== 'pro_rata_rent'" class="form-control">
-          <label class="label py-1">
-            <span class="label-text font-bold text-xs">Co-op Commission to Commons Pool</span>
-            <span class="font-mono font-black text-xs">{{ dealDraft.coopCommissionPct }}% Co-op / {{ 100 - dealDraft.coopCommissionPct }}% Consignor</span>
-          </label>
-          <input type="range" min="0" max="60" step="5" v-model.number="dealDraft.coopCommissionPct" class="range range-primary range-sm" />
+        <!-- Side-by-Side 3-Mode Comparison Tool (Actual Sales or Sample $100 / $250 / $500) -->
+        <div v-if="dealModeComparison" class="space-y-2.5">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-base-content/75">
+              🔍 Click Any Card Below to Pick That Deal Mode ({{ dealModeComparison.basisLabel }}):
+            </span>
+            <div class="join border border-base-300 rounded-xl bg-base-200/60 p-0.5">
+              <button
+                type="button"
+                @click="dealSampleGross = 0"
+                class="join-item btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
+                :class="dealSampleGross === 0 ? 'btn-neutral' : 'btn-ghost'"
+              >
+                Actual (${{ dealModalPartner.totalGross.toFixed(0) }})
+              </button>
+              <button
+                v-for="sample in [100, 250, 500]"
+                :key="sample"
+                type="button"
+                @click="dealSampleGross = sample"
+                class="join-item btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
+                :class="dealSampleGross === sample ? 'btn-neutral' : 'btn-ghost'"
+              >
+                Ex: ${{ sample }}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <button
+              v-for="card in dealModeComparison.cards"
+              :key="card.mode"
+              type="button"
+              @click="dealDraft.mode = card.mode"
+              class="text-left p-3.5 rounded-2xl border-2 transition-all space-y-2 flex flex-col justify-between"
+              :class="dealDraft.mode === card.mode ? 'border-primary bg-primary/10 shadow-sm' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
+            >
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="font-black text-xs text-base-content">{{ card.title }}</span>
+                  <span v-if="dealDraft.mode === card.mode" class="badge badge-xs badge-primary font-bold">ACTIVE</span>
+                </div>
+                <p class="text-[11px] text-base-content/65 leading-snug">{{ card.subtitle }}</p>
+                <div class="pt-1 border-t border-base-300/80 space-y-1 font-mono text-[11px]">
+                  <div class="flex justify-between">
+                    <span class="opacity-65">Gross Sales:</span>
+                    <span>${{ dealModeComparison.gross.toFixed(2) }}</span>
+                  </div>
+                  <div class="flex justify-between text-error">
+                    <span>Venue Take ({{ dealModeComparison.venueFeePct }}%):</span>
+                    <span>-${{ dealModeComparison.venueFee.toFixed(2) }}</span>
+                  </div>
+                  <div class="flex justify-between font-bold border-b border-base-300/60 pb-1">
+                    <span>After Venue Take:</span>
+                    <span>${{ dealModeComparison.netAfterVenue.toFixed(2) }}</span>
+                  </div>
+                  <div v-if="card.result.rentDeduction > 0" class="flex justify-between text-warning">
+                    <span>Shelf / Booth Rent:</span>
+                    <span>-${{ card.result.rentDeduction.toFixed(2) }}</span>
+                  </div>
+                  <div v-if="card.result.coopCommission > 0" class="flex justify-between text-primary">
+                    <span>Co-op Cut ({{ dealDraft.coopCommissionPct }}%):</span>
+                    <span>-${{ card.result.coopCommission.toFixed(2) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-2 border-t border-base-300 font-mono">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-sans font-bold uppercase opacity-70">Consignor Gets:</span>
+                  <span class="text-sm font-black text-success">${{ card.result.payout.toFixed(2) }}</span>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-base-content/60">
+                  <span class="font-sans">Co-op Gets:</span>
+                  <span class="font-bold text-warning">+${{ (card.result.rentDeduction + card.result.coopCommission).toFixed(2) }}</span>
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
 
-        <div v-if="dealDraft.mode === 'fixed_shelf_rent'" class="form-control">
-          <label class="label py-1"><span class="label-text font-bold text-xs">Fixed Shelf Rent ($/mo)</span></label>
-          <input type="number" min="0" step="0.01" v-model.number="dealDraft.fixedMonthlyRent" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
-        </div>
-
-        <label class="label cursor-pointer justify-start gap-2 py-0">
-          <input type="checkbox" v-model="dealDraft.capRentAtNetSales" class="checkbox checkbox-sm checkbox-primary" />
-          <span class="label-text text-xs font-bold">Never let rent push payout below $0</span>
-        </label>
-
-        <div v-if="dealPreview" class="p-3 rounded-2xl bg-base-200/60 border border-base-300 text-xs space-y-1 font-mono">
-          <div class="flex justify-between"><span>Current check</span><strong>${{ dealModalPartner.totalPayoutCheck.toFixed(2) }}</strong></div>
-          <div class="flex justify-between"><span>New check</span><strong class="text-success">${{ dealPreview.payout.toFixed(2) }}</strong></div>
-          <div class="flex justify-between"><span>Rent deducted</span><span>-${{ dealPreview.rentDeduction.toFixed(2) }}</span></div>
-          <div class="flex justify-between"><span>Commons Pool +</span><span class="text-warning">${{ dealPreview.coopCommission.toFixed(2) }}</span></div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="closeDealModal">Cancel</button>
-          <button type="button" class="btn btn-sm btn-primary rounded-xl font-black px-5" :disabled="isSavingDeal" @click="saveDeal">
-            {{ isSavingDeal ? 'Saving...' : 'Save & Sync' }}
-          </button>
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-base-200">
+          <div class="text-xs font-mono">
+            Selected: <strong class="text-primary">{{ CONSIGNOR_DEAL_MODE_LABELS[dealDraft.mode] }}</strong>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="closeDealModal">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary rounded-xl font-black px-5" :disabled="isSavingDeal" @click="saveDeal">
+              {{ isSavingDeal ? 'Saving...' : 'Save & Sync Deal' }}
+            </button>
+          </div>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="closeDealModal">close</button></form>
@@ -860,6 +999,7 @@ const setSurplusSplitBasis = async (basis: SurplusSplitBasis) => {
 // --- Consignor Deal Quick-Adjust Modal ---
 const dealModalPartner = ref<any | null>(null);
 const dealDraft = ref<ConsignorAgreementConfig | null>(null);
+const dealSampleGross = ref<number>(0); // 0 = use actual period sales; >0 = sample $ amount
 const isSavingDeal = ref(false);
 
 const openDealModal = (partner: any) => {
@@ -869,11 +1009,12 @@ const openDealModal = (partner: any) => {
     : {
         prefix: partner.prefix,
         displayName: partner.name,
-        mode: 'pro_rata_rent',
+        mode: 'flat_commission',
         coopCommissionPct: 20,
-        fixedMonthlyRent: 0,
+        fixedMonthlyRent: 50,
         capRentAtNetSales: true,
       };
+  dealSampleGross.value = 0;
   dealModalPartner.value = partner;
 };
 
@@ -882,18 +1023,65 @@ const closeDealModal = () => {
   dealDraft.value = null;
 };
 
-const dealPreview = computed(() => {
+const dealModeComparison = computed(() => {
   const p = dealModalPartner.value;
   const d = dealDraft.value;
   if (!p || !d) return null;
+
+  const actualGross = Number(p.totalGross || 0);
+  const actualFee = Number(p.totalVenueFee || 0);
+  const feeRatio = actualGross > 0 ? actualFee / actualGross : (activeLocationMeta.value?.commissionRate ?? 0.15);
+
+  const gross = dealSampleGross.value > 0 ? dealSampleGross.value : actualGross;
+  const venueFee = Number((gross * feeRatio).toFixed(2));
+  const netAfterVenue = Number((gross - venueFee).toFixed(2));
+  const venueFeePct = Number((feeRatio * 100).toFixed(1));
+
   const totalGrossAll = partnerSettlements.value.reduce((s, g) => s + g.totalGross, 0);
-  return calculateConsignorSettlement({
-    agreement: d,
-    netStoreDeposit: p.totalGross - p.totalVenueFee,
-    grossRatio: totalGrossAll > 0 ? p.totalGross / totalGrossAll : 0,
-    boothRent: effectiveMonthlyRent.value,
-    isMonthInProgress: isMonthInProgress.value,
-  });
+  const grossRatio =
+    dealSampleGross.value > 0
+      ? Math.min(1, gross / Math.max(gross, totalGrossAll || 1000))
+      : totalGrossAll > 0
+        ? actualGross / totalGrossAll
+        : 0;
+  const boothRent = effectiveMonthlyRent.value || Number(activeLocationMeta.value?.monthlyRent ?? 382.5);
+
+  const buildForMode = (mode: ConsignorDealMode) =>
+    calculateConsignorSettlement({
+      agreement: { ...d, mode },
+      netStoreDeposit: netAfterVenue,
+      grossRatio,
+      boothRent,
+      isMonthInProgress: dealSampleGross.value > 0 ? false : isMonthInProgress.value,
+    });
+
+  return {
+    basisLabel: dealSampleGross.value > 0 ? `$${dealSampleGross.value} Sample Sales` : `Actual Period Sales ($${actualGross.toFixed(2)})`,
+    gross,
+    venueFee,
+    venueFeePct,
+    netAfterVenue,
+    cards: [
+      {
+        mode: 'flat_commission' as ConsignorDealMode,
+        title: '✂️ 1. Straight % Split',
+        subtitle: `$0 rent. Co-op takes ${d.coopCommissionPct}% after venue fee; Consignor keeps ${100 - d.coopCommissionPct}%.`,
+        result: buildForMode('flat_commission'),
+      },
+      {
+        mode: 'fixed_shelf_rent' as ConsignorDealMode,
+        title: '🏪 2. Fixed Shelf Rent',
+        subtitle: `Flat $${Number(d.fixedMonthlyRent || 0).toFixed(2)}/mo space fee${d.coopCommissionPct > 0 ? ` + ${d.coopCommissionPct}% Co-op cut` : ''}.`,
+        result: buildForMode('fixed_shelf_rent'),
+      },
+      {
+        mode: 'pro_rata_rent' as ConsignorDealMode,
+        title: '📊 3. Pro-Rata Rent Share',
+        subtitle: `Pays ${(grossRatio * 100).toFixed(1)}% of $${boothRent.toFixed(2)} booth rent (0% Co-op cut).`,
+        result: buildForMode('pro_rata_rent'),
+      },
+    ],
+  };
 });
 
 const saveDeal = async () => {

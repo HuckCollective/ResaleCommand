@@ -359,17 +359,89 @@
               </select>
             </div>
 
-            <div v-if="c.mode !== 'pro_rata_rent'" class="form-control">
+            <div class="form-control">
               <label class="label py-1">
-                <span class="label-text font-bold text-xs">Co-op Commission</span>
-                <span class="font-mono font-black text-xs">{{ c.coopCommissionPct }}% / {{ 100 - c.coopCommissionPct }}%</span>
+                <span class="label-text font-bold text-xs">✂️ % Split (After Venue Take)</span>
+                <span class="font-mono font-black text-xs text-primary">{{ c.coopCommissionPct }}% Co-op / {{ 100 - c.coopCommissionPct }}% Consignor</span>
               </label>
-              <input type="range" min="0" max="60" step="5" v-model.number="c.coopCommissionPct" class="range range-secondary range-sm" />
+              <div class="flex items-center gap-2">
+                <input type="range" min="0" max="60" step="1" v-model.number="c.coopCommissionPct" class="range range-secondary range-xs flex-1" />
+                <input type="number" min="0" max="60" step="1" v-model.number="c.coopCommissionPct" class="input input-bordered input-xs w-14 font-mono font-bold text-right" />
+              </div>
+              <div class="flex items-center gap-1 flex-wrap mt-1">
+                <button
+                  v-for="pct in [10, 15, 20, 25, 30, 50]"
+                  :key="pct"
+                  type="button"
+                  @click="c.coopCommissionPct = pct; c.mode = 'flat_commission'"
+                  class="btn btn-xs h-5 min-h-0 px-1.5 rounded font-mono text-[10px]"
+                  :class="c.coopCommissionPct === pct && c.mode === 'flat_commission' ? 'btn-secondary' : 'btn-ghost border border-base-300'"
+                >
+                  {{ pct }}%
+                </button>
+              </div>
             </div>
 
-            <div v-if="c.mode === 'fixed_shelf_rent'" class="form-control">
-              <label class="label py-1"><span class="label-text font-bold text-xs">Fixed Shelf Rent ($/mo)</span></label>
-              <input type="number" min="0" step="0.01" v-model.number="c.fixedMonthlyRent" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
+            <div class="form-control">
+              <label class="label py-1"><span class="label-text font-bold text-xs">🏪 Fixed Shelf Rent ($/mo)</span></label>
+              <input type="number" min="0" step="5" v-model.number="c.fixedMonthlyRent" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
+            </div>
+          </div>
+
+          <!-- Interactive 3-Mode Side-by-Side Example Calculator -->
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300 space-y-2 text-xs">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <span class="font-extrabold uppercase tracking-wider text-[11px] text-base-content/70">
+                🔍 Live 3-Mode Example Calculator (After 15% Venue Fee = ${{ (consignorSampleGross * 0.85).toFixed(2) }} Net Deposit):
+              </span>
+              <div class="join border border-base-300 rounded-lg bg-base-100 p-0.5">
+                <button
+                  v-for="amt in [100, 250, 500]"
+                  :key="amt"
+                  type="button"
+                  @click="consignorSampleGross = amt"
+                  class="join-item btn btn-xs h-5 min-h-0 px-2 font-mono text-[10px]"
+                  :class="consignorSampleGross === amt ? 'btn-primary' : 'btn-ghost'"
+                >
+                  ${{ amt }} Gross
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+              <button
+                type="button"
+                @click="c.mode = 'flat_commission'"
+                class="text-left p-2.5 rounded-xl border transition-all"
+                :class="c.mode === 'flat_commission' ? 'border-primary bg-primary/10 font-bold' : 'border-base-300 bg-base-100'"
+              >
+                <div class="font-sans font-black text-xs mb-0.5">✂️ 1. Straight {{ c.coopCommissionPct }}% Split</div>
+                <div class="text-base-content/70">$0 Rent • Co-op gets ${{ ((consignorSampleGross * 0.85 * c.coopCommissionPct) / 100).toFixed(2) }}</div>
+                <div class="text-success font-black mt-0.5">Consignor: ${{ (consignorSampleGross * 0.85 * (1 - c.coopCommissionPct / 100)).toFixed(2) }}</div>
+              </button>
+              <button
+                type="button"
+                @click="c.mode = 'fixed_shelf_rent'"
+                class="text-left p-2.5 rounded-xl border transition-all"
+                :class="c.mode === 'fixed_shelf_rent' ? 'border-primary bg-primary/10 font-bold' : 'border-base-300 bg-base-100'"
+              >
+                <div class="font-sans font-black text-xs mb-0.5">🏪 2. Fixed ${{ Number(c.fixedMonthlyRent || 0).toFixed(0) }}/mo Shelf</div>
+                <div class="text-base-content/70">-${{ Math.min(consignorSampleGross * 0.85, Number(c.fixedMonthlyRent || 0)).toFixed(2) }} Rent + {{ c.coopCommissionPct }}% Co-op</div>
+                <div class="text-success font-black mt-0.5">
+                  Consignor: ${{ (Math.max(0, consignorSampleGross * 0.85 - Number(c.fixedMonthlyRent || 0)) * (1 - c.coopCommissionPct / 100)).toFixed(2) }}
+                </div>
+              </button>
+              <button
+                type="button"
+                @click="c.mode = 'pro_rata_rent'"
+                class="text-left p-2.5 rounded-xl border transition-all"
+                :class="c.mode === 'pro_rata_rent' ? 'border-primary bg-primary/10 font-bold' : 'border-base-300 bg-base-100'"
+              >
+                <div class="font-sans font-black text-xs mb-0.5">📊 3. Pro-Rata Booth Rent</div>
+                <div class="text-base-content/70">0% Co-op • ~${{ Math.min(consignorSampleGross * 0.85, (consignorSampleGross / 2000) * 382.5).toFixed(2) }} Rent Share</div>
+                <div class="text-success font-black mt-0.5">
+                  Consignor: ${{ Math.max(0, consignorSampleGross * 0.85 - (consignorSampleGross / 2000) * 382.5).toFixed(2) }}
+                </div>
+              </button>
             </div>
           </div>
 
@@ -939,6 +1011,7 @@ const newRosterMember = ref<{
 });
 
 const newConsignor = ref({ prefix: '', displayName: '' });
+const consignorSampleGross = ref<number>(100);
 
 const addConsignor = () => {
   const clean = newConsignor.value.prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
