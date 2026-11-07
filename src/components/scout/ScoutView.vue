@@ -99,6 +99,7 @@
             </div>
             
             <div class="flex items-center gap-1.5">
+                <AiFeedbackButton surface="quick_scout" :item-context="JSON.stringify(result).slice(0, 1500)" />
                 <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-circle btn-ghost" title="Close Scouting Report">
                     ✕
                 </button>
@@ -1304,6 +1305,7 @@ import { getPurchasesCollectionId } from '../../lib/purchases';
 import ScannerWidget from '../common/ScannerWidget.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
 import ScoutAssignTrackerModal from './ScoutAssignTrackerModal.vue';
+import AiFeedbackButton from '../common/AiFeedbackButton.vue';
 import { 
     getSubItemBoutique, 
     getSubItemFair, 

@@ -56,7 +56,7 @@ import {
 } from '../../lib/coopGovernance';
 
 const props = defineProps<{
-  activeTab?: 'settlements' | 'governance' | 'labor' | 'expenses' | 'charter';
+  activeTab?: 'settlements' | 'governance' | 'labor' | 'expenses' | 'vault' | 'charter';
 }>();
 
 const currentPath = ref('');
@@ -86,6 +86,12 @@ const navTabs = [
     label: 'Commons Expenses',
     href: '/expenses',
     icon: 'solar:bill-list-bold-duotone',
+  },
+  {
+    id: 'vault',
+    label: 'AI Vault & Prompts',
+    href: '/coop/vault',
+    icon: 'solar:notebook-bold-duotone',
   },
   {
     id: 'charter',

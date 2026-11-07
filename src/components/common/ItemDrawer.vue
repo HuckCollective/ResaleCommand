@@ -65,6 +65,11 @@
                 >({{ editForm.quantity || item?.quantity }})</span
               >
             </a>
+            <div v-if="item" class="flex items-center pl-1 shrink-0">
+              <AiFeedbackButton
+                :surface="mainTab === 'lot' ? 'playbook' : 'deep_scan'"
+                :item-context="[item?.title, editForm.price, editForm.quantity, String(item?.rawAnalysis || '').slice(0, 800)].filter(Boolean).join(' | ')" />
+            </div>
           </div>
         </div>
 
@@ -371,6 +376,7 @@ import ItemDrawerFooter from './drawer/ItemDrawerFooter.vue';
 import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
+import AiFeedbackButton from './AiFeedbackButton.vue';
 import { useItemDrawerForm, resolveMultiQtyCost, getDefaultStorageLocation, rememberStorageLocation } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 

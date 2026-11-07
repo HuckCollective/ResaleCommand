@@ -185,6 +185,17 @@
             </div>
           </a>
           <a
+            href="/coop/vault"
+            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+            :class="isRouteActive('/coop/vault') ? 'bg-primary/15 text-primary font-bold' : ''"
+          >
+            <Icon icon="solar:notebook-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs">AI Vault &amp; Prompt Maker</span>
+              <span class="text-[10px] opacity-60">Ideas, AI Reports &amp; Gemini Prompts</span>
+            </div>
+          </a>
+          <a
             href="/expenses"
             class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
             :class="isRouteActive('/expenses') ? 'bg-primary/15 text-primary font-bold' : ''"
@@ -852,6 +863,13 @@ const mobileFinanceLinks = computed(() => [
     icon: 'solar:clock-circle-bold-duotone',
     iconColor: 'text-accent',
     active: isRouteActive('/coop/labor'),
+  },
+  {
+    label: 'AI Vault & Prompt Maker',
+    url: '/coop/vault',
+    icon: 'solar:notebook-bold-duotone',
+    iconColor: 'text-primary',
+    active: isRouteActive('/coop/vault'),
   },
   {
     label: 'Expenses & Receipts',
