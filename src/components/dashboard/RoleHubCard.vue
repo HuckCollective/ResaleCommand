@@ -101,6 +101,7 @@ const actions = computed(() => {
         { label: 'Governance & Votes', hint: 'Proposals and sliders', icon: 'solar:users-group-two-rounded-bold-duotone', href: '/coop/governance' },
         { label: 'Org & Co-op Settings', hint: 'Personas, prefixes, contracts', icon: 'solar:settings-bold-duotone', href: '/settings' },
         { label: 'Expenses & Receipts', hint: 'Commons vs personal', icon: 'solar:bill-list-bold-duotone', href: '/expenses' },
+        { label: 'Idea & Prompt Vault', hint: 'Phone notes & Gemini prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault' },
       ];
     case 'curator':
       return [

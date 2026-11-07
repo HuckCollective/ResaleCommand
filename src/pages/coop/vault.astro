@@ -1,0 +1,14 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import FounderVaultView from '../../components/coop/FounderVaultView.vue';
+---
+
+<Layout
+  title="Founder Idea & Prompt Vault | Resale Command"
+  description="Mobile-friendly vault for ideas, Gemini prompts, and specs synced to the cloud."
+  hideFooter={true}
+>
+  <div class="p-4 sm:p-6 md:p-8 mx-auto pb-32">
+    <FounderVaultView client:only="vue" />
+  </div>
+</Layout>
