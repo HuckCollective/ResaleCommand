@@ -126,3 +126,4 @@ export async function saveVaultNotes(notes: VaultNote[]): Promise<boolean> {
     return false;
   }
 }
+

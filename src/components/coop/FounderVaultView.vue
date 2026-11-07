@@ -10,6 +10,44 @@
       </span>
     </div>
 
+    <div class="collapse collapse-arrow bg-base-100 border border-primary/30 rounded-2xl">
+      <input type="checkbox" />
+      <div class="collapse-title text-sm font-black">❓ How to use the Vault &amp; these prompts</div>
+      <div class="collapse-content text-xs space-y-3">
+        <div>
+          <div class="font-black">What the vault is for</div>
+          <p class="opacity-80">A phone-friendly notebook that syncs to the cloud. Capture ideas while out, keep your reusable Gemini prompts in one place, and hand finished specs to the IDE later.</p>
+        </div>
+        <div>
+          <div class="font-black">Note types</div>
+          <ul class="list-disc pl-4 opacity-80 space-y-0.5">
+            <li><b>💡 Idea</b> — a quick thought or voice note. Mark <i>Done</i> once built.</li>
+            <li><b>📋 Prompt</b> — reusable text you paste into Gemini (app, web, Chrome sidebar, or AI Studio).</li>
+            <li><b>📌 Spec</b> — a locked decision or "SAVED MASTER SPEC &amp; IDE QUEUE" block copied back from Gemini.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="font-black">Workflow: phone to PC</div>
+          <ol class="list-decimal pl-4 opacity-80 space-y-0.5">
+            <li>On your phone, tap <b>Copy</b> on a starter prompt and paste it into the Gemini app (pin the chat 📌).</li>
+            <li>Brainstorm. When Gemini gives a decision or spec, copy it and save it here as a <b>📌 Spec</b>.</li>
+            <li>Jot stray ideas as <b>💡 Ideas</b> using your keyboard's mic.</li>
+            <li>At your PC, tell Antigravity: <i>"Read my latest Founder Vault notes and build the top spec on alpha-1."</i></li>
+            <li>When shipped, tap <b>Done</b> so the list stays short.</li>
+          </ol>
+        </div>
+        <div>
+          <div class="font-black">Which prompt goes where</div>
+          <ul class="list-disc pl-4 opacity-80 space-y-0.5">
+            <li><b>Gemini Starter (Preview Member &amp; Trial User)</b> — first message of a new Gemini chat or AI Studio System Instructions. Works in both; in Chrome, open the target page first so it can read it.</li>
+            <li><b>Mobile Add-On</b> — paste at the end of that chat so replies stay phone-sized and end with a saved spec block.</li>
+            <li>IDE prompts Gemini writes for you go in Antigravity, not back into Gemini.</li>
+          </ul>
+        </div>
+        <p class="opacity-60">Notes are visible to anyone with app access, so don't store passwords or API keys here.</p>
+      </div>
+    </div>
+
     <form class="card bg-base-100 border border-base-300 rounded-2xl p-3 space-y-2" @submit.prevent="addNote">
       <div class="flex gap-1.5">
         <button
@@ -160,3 +198,4 @@ onMounted(async () => {
   loading.value = false;
 });
 </script>
+
