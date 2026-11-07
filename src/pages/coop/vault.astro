@@ -1,15 +1,16 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import CoopSubNav from '../../components/coop/CoopSubNav.vue';
 import FounderVaultView from '../../components/coop/FounderVaultView.vue';
 ---
 
 <Layout
-  title="Founder Idea & Prompt Vault | Resale Command"
-  description="Mobile-friendly vault for ideas, Gemini prompts, and specs synced to the cloud."
+  title="AI Prompt Studio & Governed Learning Vault | Resale Command"
+  description="Interactive Resale Prompt Co-Pilot, Deal-Hunter playbooks, Ops token cost estimator, and governed community AI feedback queue."
   hideFooter={true}
 >
-  <div class="p-4 sm:p-6 md:p-8 mx-auto pb-32">
+  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-36 sm:pb-44">
+    <CoopSubNav client:only="vue" activeTab="vault" />
     <FounderVaultView client:only="vue" />
   </div>
 </Layout>
-

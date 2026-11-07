@@ -147,9 +147,18 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Nov 6, 2026)
+# Active Session Summary (Updated Nov 7, 2026)
 
-## ✅ COLLECTIVE HOME, 5 WSDE HATS, ROLE DASHBOARD & ORG SETTINGS HUB (Nov 6, 2026 — `alpha-1`)
+## ✅ AI PROMPT STUDIO, DEAL-HUNTER PLAYBOOKS & GOVERNED AI REVIEW VAULT (`/coop/vault` — Nov 7, 2026 — `alpha-1`)
+- **Enterprise 3-Tab Studio & Ledger UX (`src/pages/coop/vault.astro`, `src/components/coop/FounderVaultView.vue`, `src/lib/founderVault.ts`)**:
+  - Mounted `<CoopSubNav activeTab="vault" />` inside a `max-w-7xl` layout with 4 Icon-Badge KPI cards (`Ready Prompts`, `Pending AI Review`, `Vetted & Shipped`, `6 Skill Bundles / $40/mo Credit Pool`) and 3 workspace tabs (`1. Interactive Prompt Co-Pilot`, `2. Saved Prompts, Ideas & Specs`, `3. AI Review Queue`).
+  - Added 4 1-tap Playbook Starter Cards (`🔭 Whole-Page Auction Grid Sweeper`, `🤝 FBMP / Local Deal & Negotiation Coach`, `🧭 Estate Table / Thrift Pile Triage`, and `🧪 Paired Human-AI Live Page QA Tester`), a 2-column Studio canvas with Ops Token & Cost Impact estimator (`estimatePromptOpsImpact`), 3-Point Anti-Bias Audit callouts, and an interactive Co-Pilot refinement loop (`🔄 Refine Draft` + quick-answer chips).
+- **1-Tap Community `🚩 Report AI Issue` Modal (`src/components/common/AiFeedbackButton.vue`)**:
+  - Mounted in Quick Scout (`ScoutView.vue`) and the Item / Playbook Drawer (`ItemDrawer.vue`) with 2-column selectable cards for Surface, Issue Type, and Anti-Bias Root Cause (`📷 Clue Hidden in Photo` vs. `🔎 AI Ignored Visible Clue` vs. `📊 MSRP Bias`). Stages reports in Appwrite (`founder_vault_notes_v1`) as `🟡 Pending Review` with zero live prompt mutation.
+- **Static Skill Bundle Registry (`scripts/sync-ai-context.mjs` ➔ `src/lib/generatedSkillBundles.ts` & `/api/generate-vault-prompt`)**:
+  - Compiled all 6 focused Resale Command skill bundles into `src/lib/generatedSkillBundles.ts` during `npm run verify` so `/api/generate-vault-prompt` reads them in memory on Vercel with zero runtime file writes.
+
+## ✅ COLLECTIVE HOME, 5 WSDE HATS, ROLE DASHBOARD & ORG SETTINGS HUB (Nov 6, 2026 — `alpha-1` ➔ `main`)
 - **5 combinable hats** (`src/lib/coopGovernance.ts`): `founder`, `curator`, `promoter`, `enabler` (Surplus Enabler), `consignor` via `MEMBER_HAT_META`; `SWEAT-` retired from user-facing labels (legacy `SWEAT` partner code still accepted). Promoter/Enabler need no barcode prefix.
 - **Immutable prefixes**: `PROTECTED_BARCODE_PREFIXES` (`HUCK-`, `PDXGL-`, `BB-`) render as locked badges in `/settings`; only a Founder (or team owner) can register a new prefix, with a permanence confirmation. `canMemberEditGlobalFinancials()` gates saves; everyone else gets sandbox preview.
 - **`/settings`** (`SettingsManager.vue`): 4 tabs (Personas/Prefixes/Consignor contracts with 3-mode calculator, Locations from live warehouse metas, Team/Storefront/API via `OrgSettingsView`, Thermal Hardware). `/org/settings` redirects to `/settings?tab=team`.

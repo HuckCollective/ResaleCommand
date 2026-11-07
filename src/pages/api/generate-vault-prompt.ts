@@ -119,3 +119,4 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: err?.message || 'Prompt generation failed.' }, 500);
   }
 };
+
