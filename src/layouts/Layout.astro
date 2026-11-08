@@ -61,6 +61,11 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     <script is:inline>
       window.addEventListener('error', function(e) {
         if (!e) return;
+        // Benign browser warning (layout settled next frame) — never block the view.
+        if (/ResizeObserver loop/i.test(e.message || '')) {
+          e.stopImmediatePropagation();
+          return;
+        }
         const banner = document.getElementById('runtime-error-banner');
         const msg = document.getElementById('runtime-error-msg');
         if (banner && msg) {
