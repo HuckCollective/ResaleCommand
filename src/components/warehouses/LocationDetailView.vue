@@ -1597,6 +1597,21 @@ const loadManifests = async () => {
 };
 
 // Computed Breakdown of Manifests
+// Realtime/raw docs can carry itemsSnapshot as a JSON string — never call .map on it directly.
+const snapshotList = (m: ManifestDocument | null | undefined): any[] => {
+  const raw: any = m?.itemsSnapshot;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const activeDraft = computed(() => {
   return locationManifests.value.find(m => m.status === 'draft' || m.status === 'paused') || null;
 });
@@ -1605,7 +1620,7 @@ const activeDraftItems = computed(() => {
   if (!activeDraft.value) return [];
   const ids = activeDraft.value.itemIds || [];
   const invMap = new Map(inventoryItems.value.map(i => [i.$id, i]));
-  const snapMap = new Map((activeDraft.value.itemsSnapshot || []).map(s => [s.$id, s]));
+  const snapMap = new Map(snapshotList(activeDraft.value).map(s => [s.$id, s]));
   return ids.map(id => invMap.get(id) || snapMap.get(id) || { $id: id, title: 'Item ' + id });
 });
 
@@ -1655,7 +1670,7 @@ const filteredManifests = computed(() => {
 const getDropItems = (drop: ManifestDocument) => {
   const ids = drop.itemIds || [];
   const invMap = new Map(inventoryItems.value.map(i => [i.$id, i]));
-  const snapMap = new Map((drop.itemsSnapshot || []).map(s => [s.$id, s]));
+  const snapMap = new Map(snapshotList(drop).map(s => [s.$id, s]));
   return ids.map(id => invMap.get(id) || snapMap.get(id) || { $id: id, title: 'Item ' + id });
 };
 
@@ -1778,7 +1793,7 @@ const filteredCatalogItems = computed(() => {
 const getItemRecord = (drop: ManifestDocument, itemId: string) => {
   const inv = inventoryItems.value.find(i => i.$id === itemId);
   if (inv) return inv;
-  return (drop.itemsSnapshot || []).find(s => s.$id === itemId) || null;
+  return snapshotList(drop).find(s => s.$id === itemId) || null;
 };
 
 const getItemPhotoUrl = (imageId?: string) => {

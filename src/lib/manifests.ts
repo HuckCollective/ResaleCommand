@@ -86,7 +86,13 @@ function parseDoc(doc: any): ManifestDocument {
         itemsSnapshot = doc.itemsSnapshot;
     } else if (typeof doc.itemsSnapshot === 'string' && doc.itemsSnapshot.trim()) {
         try {
-            itemsSnapshot = JSON.parse(doc.itemsSnapshot);
+            const parsedSnap = JSON.parse(doc.itemsSnapshot);
+            // Snapshot may be stored as an object wrapper ({ items: [...] }) — always normalize to an array.
+            itemsSnapshot = Array.isArray(parsedSnap)
+                ? parsedSnap
+                : Array.isArray(parsedSnap?.items)
+                  ? parsedSnap.items
+                  : [];
         } catch {
             itemsSnapshot = [];
         }
