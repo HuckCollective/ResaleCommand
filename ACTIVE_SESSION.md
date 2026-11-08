@@ -1,4 +1,13 @@
-# Active Session Summary (Updated Nov 7, 2026)
+# Active Session Summary (Updated Nov 8, 2026)
+
+## ✅ MOBILE-FIRST PAGE SHELLS (`.rc-page-shell`), `.rc-card-grid` & LIVE SELF-CLEARING DOCK SPACERS (`useDockClearance.ts` — Nov 8, 2026 — `alpha-1`)
+- **Semantic Tailwind v4 / PostCSS Component Classes (`src/styles/global.css`)**:
+  - Added `.rc-page-shell` (`96rem` / `--breakpoint-2xl` aligned 1:1 with `Navbar.vue`), `.rc-page-shell-narrow` (`64rem` / `max-w-5xl` for single-task forms & scanners), `.rc-card-grid` (`1 -> 2 -> 3 -> 4 -> 5` retail catalog columns), and `.rc-dock-spacer` (`height: calc(var(--rc-dock-height, 4.25rem) + 1rem)` with `margin-top: 0 !important`).
+- **Shared Live `ResizeObserver` Dock Clearance Composable (`src/composables/useDockClearance.ts`)**:
+  - Measures any fixed bottom dock (`BottomActionDock.vue`, `PaginationDock.vue`, `InventoryPaginationDock.vue`, `LocationSyncView.vue`, `PurchaseEditor.vue`, `ScoutView.vue`, `ScoutPurchaseList.vue`) in real time using root `rem` sizing and sets `--rc-dock-height` on its in-flow `.rc-dock-spacer`.
+  - Eliminated double/triple-stacked manual `pb-32` / `pb-36` / `pb-40` / `pb-44` across all `.astro` page wrappers (`inventory.astro`, `purchases/index.astro`, `purchases/[id].astro`, `purchases/new.astro`, `purchases/speed-entry.astro`, `sales.astro`, `sales/new.astro`, `sales/import/[...location].astro`, `expenses.astro`, `coop/*.astro`, `warehouse*.astro`, `scout.astro`, `settings.astro`, `dashboard.astro`, `profile.astro`, `labels/*.astro`) and Vue views (`InventoryManager.vue`, `InventoryTableView.vue`, `PurchasesList.vue`, `PurchaseEditor.vue`, `SalesList.vue`, `CoopExpensesLedger.vue`, `LocationSyncView.vue`, `ScoutPurchaseList.vue`).
+- **Automated Pre-Push Linter & AI Skill Governance (`scripts/validate-templates.mjs` Checks 12A–12E + `scripts/sync-ai-context.mjs`)**:
+  - Enforces `.rc-page-shell`, `.rc-page-shell-narrow`, `.rc-card-grid`, and `.rc-dock-spacer` in `global.css`, bans manual `pb-28..pb-48` in views rendering self-clearing docks, bans arbitrary pixel hacks (`h-[72px]`, `h-[100px]`, `max-w-[1600px]`), and updated Law 5 + UI/Mobile skills so AI agents never re-introduce stacked bottom padding.
 
 ## ✅ AI PROMPT STUDIO, SLIDE-OVER VAULT DRAWER EDITOR, 🔒 LOCKED MASTER TEMPLATES & 🤝 AI ALLY (`/coop/vault` — Nov 8, 2026 — `alpha-1`)
 - **Catalog + Slide-Over Drawer + BottomActionDock UX/IA (`src/pages/coop/vault.astro`, `src/components/coop/FounderVaultView.vue`, `src/components/coop/VaultNoteDrawer.vue`, `src/lib/founderVault.ts`)**:

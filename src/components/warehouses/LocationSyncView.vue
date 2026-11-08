@@ -918,8 +918,8 @@
         </div>
       </div>
 
-      <!-- Main Reconciliation Table Container (pb-44 for bottom dock clearance) -->
-      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-x-auto pb-44">
+      <!-- Main Reconciliation Table Container -->
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-x-auto">
         <table class="table w-full">
             <thead>
               <tr class="bg-base-200/90 text-xs font-black uppercase tracking-wider text-base-content/80 border-b border-base-300">
@@ -1333,9 +1333,11 @@
     <!-- ========================================================================= -->
     <!-- CANONICAL CONTEXTUAL COMMAND DOCK (NN/g, Apple HIG, Material 3 Standard)   -->
     <!-- ========================================================================= -->
+    <div v-if="syncRows.length > 0" class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
     <Teleport to="body">
       <div 
         v-if="syncRows.length > 0"
+        ref="dockEl"
         class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-8px_30px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
       >
         <!-- TIER 1: STATUS & TELEMETRY STRIP -->
@@ -2154,7 +2156,10 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
+
+const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
 import {

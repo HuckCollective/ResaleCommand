@@ -1161,8 +1161,10 @@
     />
 
     <!-- BOTTOM DOCK NAV (Unified Semantic DaisyUI Dock Pattern matching InventoryPaginationDock) -->
+    <div v-if="!isResultsModalOpen" class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
     <div 
         v-if="!isResultsModalOpen" 
+        ref="dockEl"
         class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
     >
         <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
@@ -1307,7 +1309,10 @@ import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
+import { useDockClearance } from '../../composables/useDockClearance';
 import { useLoader } from '../../composables/useLoader';
+
+const { dockEl, dockHeightRem } = useDockClearance(5.5);
 import { addToast } from '../../stores/toast';
 import { isAlphaMode } from '../../stores/env';
 import { getPurchasesCollectionId } from '../../lib/purchases';

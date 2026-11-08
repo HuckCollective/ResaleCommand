@@ -814,6 +814,14 @@ for (const contract of transportContracts) {
                 );
                 hasErrors = true;
             }
+
+            // 12E. Ban arbitrary pixel height/width hacks (h-[72px], h-[100px], max-w-[1600px]) on docks and page shells — enforce rem tokens & .rc-page-shell / .rc-dock-spacer
+            if (/\b(?:h-\[72px\]|h-\[100px\]|max-w-\[1600px\])\b/.test(cls)) {
+                console.error(
+                    `❌ Arbitrary Pixel Shell/Dock Hack in ${relFile}:${line}: "${cls}" uses hardcoded pixel utilities (h-[72px]/h-[100px]/max-w-[1600px]). Use .rc-page-shell (96rem) and .rc-dock-spacer (useDockClearance) instead!`
+                );
+                hasErrors = true;
+            }
         }
     }
 }

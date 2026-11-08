@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 pb-44 sm:pb-40">
+  <div class="space-y-8">
     <div v-if="loadingInit" class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
@@ -960,8 +960,9 @@
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
 
     <!-- STANDARDIZED ERGONOMIC ACTION BUTTON DOCK -->
+    <div class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
     <Teleport to="body">
-      <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+      <div ref="dockEl" class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
         <!-- Tier 1: Slim Telemetry & Cost Strip -->
         <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-between text-xs shadow-2xs font-mono">
           <div class="max-w-xl w-full mx-auto flex items-center justify-between text-xs">
@@ -1033,7 +1034,10 @@ import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryI
 import { databases, storage, client, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { useDockClearance } from '../../composables/useDockClearance';
 import { useLoader } from '../../composables/useLoader';
+
+const { dockEl, dockHeightRem } = useDockClearance(5.75);
 import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 pb-36">
+  <div class="space-y-6">
     <!-- Top Financial Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <!-- Active Drafts -->
@@ -305,7 +305,8 @@
     </dialog>
 
     <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
-    <div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
+    <div class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
+    <div ref="dockEl" class="fixed bottom-0 inset-x-0 z-40 bg-base-100/90 backdrop-blur-md border-t border-base-300/80 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-2xl transition-all">
       <div class="max-w-md mx-auto flex flex-col gap-2">
         <!-- State C: Active Buy Tracker Status Strip (Unified Pill with Resume inside) -->
         <div v-if="activePurchase" class="pb-1.5 border-b border-base-content/10">
@@ -445,6 +446,9 @@
 import { ref, onMounted, computed, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
+import { useDockClearance } from '../../composables/useDockClearance';
+
+const { dockEl, dockHeightRem } = useDockClearance(5.75);
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 
