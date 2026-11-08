@@ -31,6 +31,9 @@
 
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 flex-wrap">
+                <span v-if="form.isLocked || form.isMasterTemplate" class="badge badge-error badge-xs font-bold gap-1">
+                  <span>{{ isCardLocked ? '🔒 Locked' : '🔓 Founder Unlocked' }}</span>
+                </span>
                 <span class="badge badge-xs font-bold" :class="kindBadgeClass(form.kind)">
                   {{ KIND_META[form.kind].icon }} {{ KIND_META[form.kind].label }}
                 </span>
@@ -52,7 +55,8 @@
               <input
                 v-model="form.title"
                 type="text"
-                class="font-black text-sm sm:text-base text-base-content bg-transparent border-b border-transparent hover:border-base-300 focus:border-primary focus:outline-none w-full mt-0.5 py-0.5 truncate"
+                :disabled="isCardLocked"
+                class="font-black text-sm sm:text-base text-base-content bg-transparent border-b border-transparent hover:border-base-300 focus:border-primary focus:outline-none w-full mt-0.5 py-0.5 truncate disabled:opacity-80"
                 placeholder="Enter card title..."
               />
             </div>
@@ -97,8 +101,8 @@
               :class="{ 'tab-active text-secondary font-black': drawerTab === 'copilot' }"
               @click="switchTab('copilot')"
             >
-              <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
-              <span>🪄 AI Co-Pilot &amp; Skills</span>
+              <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4" />
+              <span>🤝 AI Ally &amp; Skills</span>
             </a>
             <a
               role="tab"
@@ -114,6 +118,88 @@
 
         <!-- 3. SCROLLABLE DRAWER BODY -->
         <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          <!-- 🔒 LOCKED TEMPLATE / CARD GOVERNANCE GUARD BANNER -->
+          <div
+            v-if="form.isLocked || form.isMasterTemplate"
+            class="rounded-2xl border p-4 space-y-3"
+            :class="
+              isCardLocked
+                ? 'border-warning/50 bg-warning/10'
+                : 'border-error/50 bg-error/10'
+            "
+          >
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div class="space-y-0.5">
+                <div class="text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                  <span>{{ isCardLocked ? '🔒 Locked & Guarded by Co-op Governance' : '🔓 Founder Governance Override Active' }}</span>
+                </div>
+                <p class="text-xs opacity-80 leading-relaxed">
+                  <template v-if="isCardLocked">
+                    This template is locked so it stays clean for the whole co-op. Click <b>🌱 Clone as New Editable Card</b> to customize your own copy, or (👑 Founder/Dev only) unlock the governance guard below.
+                  </template>
+                  <template v-else>
+                    You have temporarily unlocked this guarded card as a 👑 Founder / Developer. Click <b>🔒 Re-Lock Guard</b> when finished.
+                  </template>
+                </p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5"
+                  @click="cloneCurrentCardToEditable"
+                >
+                  <span>🌱 Clone as New Editable Card</span>
+                </button>
+
+                <template v-if="isFounder">
+                  <button
+                    v-if="isCardLocked && !showUnlockConfirm"
+                    type="button"
+                    class="btn btn-xs sm:btn-sm btn-outline border-warning text-warning-content rounded-xl font-bold"
+                    @click="showUnlockConfirm = true"
+                  >
+                    🔓 Founder Override
+                  </button>
+                  <button
+                    v-else-if="!isCardLocked"
+                    type="button"
+                    class="btn btn-xs sm:btn-sm btn-warning rounded-xl font-black"
+                    @click="reLockCard"
+                  >
+                    🔒 Re-Lock Guard
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <!-- 2-Step Founder Governance Confirmation -->
+            <div
+              v-if="isFounder && isCardLocked && showUnlockConfirm"
+              class="p-3 rounded-xl bg-base-100 border border-warning/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+            >
+              <span class="font-bold text-warning">
+                ⚠️ Confirm 👑 Founder / Dev Governance Override to unlock direct editing on this guarded card?
+              </span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost rounded-lg font-semibold"
+                  @click="showUnlockConfirm = false"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-error rounded-lg font-black"
+                  @click="confirmFounderUnlock"
+                >
+                  🔓 Confirm Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- ============================================================= -->
           <!-- TAB A: EDIT & DETAILS                                         -->
           <!-- ============================================================= -->
@@ -129,7 +215,8 @@
                     v-for="(meta, k) in KIND_META"
                     :key="k"
                     type="button"
-                    class="p-2.5 rounded-xl border text-left transition-all flex items-center gap-2"
+                    :disabled="isCardLocked"
+                    class="p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 disabled:opacity-60"
                     :class="
                       form.kind === k
                         ? 'border-primary bg-primary/10 text-primary font-black shadow-2xs'
@@ -160,7 +247,8 @@
                     v-for="(meta, key) in DEST_META"
                     :key="key"
                     type="button"
-                    class="p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5"
+                    :disabled="isCardLocked"
+                    class="p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5 disabled:opacity-60"
                     :class="
                       form.destination === key
                         ? 'border-secondary bg-secondary/10 text-secondary font-black shadow-2xs'
@@ -191,7 +279,8 @@
               <input
                 v-model="form.title"
                 type="text"
-                class="input input-bordered w-full rounded-xl font-bold text-sm"
+                :disabled="isCardLocked"
+                class="input input-bordered w-full rounded-xl font-bold text-sm disabled:opacity-70"
                 placeholder="Descriptive title for this prompt, idea, spec, or AI report..."
               />
             </div>
@@ -237,7 +326,7 @@
             <div class="space-y-1.5">
               <div class="flex items-center justify-between gap-2 flex-wrap">
                 <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70">
-                  {{ form.kind === 'report' ? 'Reported AI Issue & Expected Behavior (Feeds AI Co-Pilot Automatically)' : 'Prompt / Spec / Idea Content' }}
+                  {{ form.kind === 'report' ? 'Reported AI Issue & Expected Behavior (Feeds Your AI Ally Automatically)' : 'Prompt / Spec / Idea Content' }}
                 </label>
                 <div class="flex items-center gap-2">
                   <span class="text-[11px] font-mono opacity-60">
@@ -248,15 +337,16 @@
                     class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
                     @click="sendDescriptionToCoPilot"
                   >
-                    <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
-                    <span>Build Prompt from This Description →</span>
+                    <Icon icon="solar:users-group-two-rounded-bold" class="w-3.5 h-3.5" />
+                    <span>Ask AI Ally to Build Prompt →</span>
                   </button>
                 </div>
               </div>
               <textarea
                 v-model="form.body"
                 rows="10"
-                class="textarea textarea-bordered w-full font-mono text-xs sm:text-sm leading-relaxed rounded-2xl bg-base-200/40"
+                :disabled="isCardLocked"
+                class="textarea textarea-bordered w-full font-mono text-xs sm:text-sm leading-relaxed rounded-2xl bg-base-200/40 disabled:opacity-75"
                 placeholder="Write or paste your issue description, expected behavior, idea, or prompt here..."
                 @input="handleBodyEdited"
               ></textarea>
@@ -319,31 +409,44 @@
               <textarea
                 v-model="form.draftedFixPrompt"
                 rows="8"
-                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100"
+                :disabled="isCardLocked"
+                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100 disabled:opacity-75"
               ></textarea>
             </div>
 
-            <!-- Governance & Vetting Controls (For AI Reports & Ideas) -->
+            <!-- Governance & Vetting Controls (For AI Reports, Ideas & Founder Card Locking) -->
             <div class="bg-base-200/60 rounded-2xl p-4 border border-base-300 space-y-3">
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <div class="text-xs font-extrabold uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
                     <Icon icon="solar:shield-user-bold-duotone" class="w-4 h-4 text-primary" />
-                    <span>Co-op Governance &amp; Developer Vetting Status</span>
+                    <span>Co-op Governance, Vetting &amp; Card Lock</span>
                   </div>
                   <p class="text-[11px] opacity-65">
-                    Only a 👑 Founder / Developer can approve reports for <code class="font-mono">alpha-1</code> or mark them shipped in Git.
+                    Only a 👑 Founder / Developer can lock cards, approve reports for <code class="font-mono">alpha-1</code>, or mark them shipped in Git.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  class="btn btn-xs btn-outline rounded-xl font-bold gap-1.5 self-start sm:self-center"
-                  @click="emit('upvote', form.id)"
-                >
-                  <span>👍 Confirm Pattern</span>
-                  <span class="badge badge-xs badge-primary font-mono">{{ form.upvotedBy?.length || 0 }}</span>
-                </button>
+                <div class="flex items-center gap-1.5 self-start sm:self-center">
+                  <button
+                    v-if="isFounder && !form.isMasterTemplate"
+                    type="button"
+                    class="btn btn-xs rounded-xl font-bold gap-1"
+                    :class="form.isLocked ? 'btn-warning' : 'btn-outline border-base-300'"
+                    @click="toggleFounderLock"
+                  >
+                    <span>{{ form.isLocked ? '🔒 Locked Card' : '🔓 Lock This Card' }}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline rounded-xl font-bold gap-1.5"
+                    @click="emit('upvote', form.id)"
+                  >
+                    <span>👍 Confirm Pattern</span>
+                    <span class="badge badge-xs badge-primary font-mono">{{ form.upvotedBy?.length || 0 }}</span>
+                  </button>
+                </div>
               </div>
 
               <div v-if="isFounder" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -351,6 +454,7 @@
                   v-for="(gMeta, gKey) in GOV_META"
                   :key="gKey"
                   type="button"
+                  :disabled="isCardLocked"
                   class="btn btn-xs sm:btn-sm rounded-xl font-bold justify-start gap-1.5"
                   :class="
                     effectiveGovStatus === gKey
@@ -370,7 +474,7 @@
           </div>
 
           <!-- ============================================================= -->
-          <!-- TAB B: INTERACTIVE AI CO-PILOT & SKILLS                       -->
+          <!-- TAB B: 🤝 AI ALLY & COLLECTIVE SKILLS                         -->
           <!-- ============================================================= -->
           <div v-show="drawerTab === 'copilot'" class="space-y-5">
             <!-- Auto-Detected Template & Surface Banner -->
@@ -379,7 +483,7 @@
                 <div class="space-y-0.5">
                   <div class="text-xs font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
                     <Icon icon="solar:stars-bold-duotone" class="w-4 h-4" />
-                    <span>✨ Auto-Matched Starter &amp; Target Surface from Your Description</span>
+                    <span>✨ AI Ally Auto-Matched Template &amp; Surface from Your Description</span>
                   </div>
                   <div class="text-xs sm:text-sm font-black text-base-content">
                     Template: {{ detectedRecommendation.recommendedPresetTitle }} → {{ DEST_META[form.destination || detectedRecommendation.recommendedDestination].icon }} {{ DEST_META[form.destination || detectedRecommendation.recommendedDestination].label }}
@@ -402,6 +506,7 @@
                   v-for="(meta, key) in DEST_META"
                   :key="key"
                   type="button"
+                  :disabled="isCardLocked"
                   class="btn btn-xs rounded-lg font-bold gap-1"
                   :class="form.destination === key ? 'btn-primary' : 'btn-ghost bg-base-100 border border-base-300'"
                   @click="form.destination = key"
@@ -412,13 +517,13 @@
               </div>
             </div>
 
-            <!-- 6 Playbook Starters Bar (With Auto-Matched Highlight) -->
+            <!-- 5 Locked Master Templates Bar (With Auto-Matched Highlight) -->
             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-2.5">
               <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-extrabold uppercase tracking-wider text-primary">
-                  1-Tap Dev, IDE, QA &amp; Resale Playbook Starters
+                <span class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                  <span>🔒 Locked Co-op Master Templates</span>
                 </span>
-                <span class="text-[10px] opacity-60">Tap any template to load into Co-Pilot</span>
+                <span class="text-[10px] opacity-60">Tap any template to load into AI Ally (never overwrites master)</span>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
@@ -438,7 +543,7 @@
                     <div class="min-w-0">
                       <div class="text-xs font-black truncate">{{ preset.title }}</div>
                       <div class="text-[10px] opacity-65 truncate">
-                        {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
+                        🔒 Master • {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
                       </div>
                     </div>
                   </div>
@@ -487,11 +592,11 @@
               </div>
             </div>
 
-            <!-- Co-Pilot Goal / Instruction Box (Auto-Fed from Issue Description!) -->
+            <!-- AI Ally Goal / Instruction Box (Auto-Fed from Issue Description!) -->
             <div class="space-y-2">
               <div class="flex items-center justify-between gap-2 flex-wrap">
                 <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/75 block">
-                  What Should the AI Co-Pilot Build or Refine for This Card? (Auto-Fed from Issue Description)
+                  What Should Your 🤝 AI Ally Build or Refine for This Card? (Auto-Fed from Issue Description)
                 </label>
                 <button
                   type="button"
@@ -506,8 +611,9 @@
               <textarea
                 v-model="coPilotGoal"
                 rows="5"
-                class="textarea textarea-bordered w-full text-xs sm:text-sm rounded-xl leading-relaxed font-mono bg-base-200/30"
-                placeholder="Describe what you want to generate or how to improve this card..."
+                :disabled="isCardLocked"
+                class="textarea textarea-bordered w-full text-xs sm:text-sm rounded-xl leading-relaxed font-mono bg-base-200/30 disabled:opacity-75"
+                placeholder="Describe what you want your AI Ally to generate or how to improve this card..."
                 @input="goalManuallyEdited = true"
               ></textarea>
 
@@ -515,16 +621,16 @@
                 <button
                   type="button"
                   class="btn btn-primary btn-sm rounded-xl font-black gap-1.5 shadow-sm"
-                  :disabled="!coPilotGoal.trim() || making"
+                  :disabled="!coPilotGoal.trim() || making || isCardLocked"
                   @click="runCoPilot(false)"
                 >
                   <span v-if="making" class="loading loading-spinner loading-xs"></span>
-                  <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+                  <Icon v-else icon="solar:users-group-two-rounded-bold" class="w-4 h-4" />
                   <span>
                     {{
                       making
-                        ? 'Drafting with Skills & Saving…'
-                        : `✨ Generate ${DEST_META[form.destination || detectedRecommendation.recommendedDestination].label} Prompt & Save`
+                        ? 'AI Ally Drafting & Saving…'
+                        : `✨ Draft ${DEST_META[form.destination || detectedRecommendation.recommendedDestination].label} Prompt with AI Ally`
                     }}
                   </span>
                 </button>
@@ -533,7 +639,7 @@
                   v-if="form.kind === 'report'"
                   type="button"
                   class="btn btn-secondary btn-sm rounded-xl font-black gap-1.5"
-                  :disabled="making"
+                  :disabled="making || isCardLocked"
                   @click="runReportAuditAndFix"
                 >
                   <Icon icon="solar:shield-check-bold" class="w-4 h-4" />
@@ -546,7 +652,7 @@
               </div>
             </div>
 
-            <!-- 🧭 WHERE TO PASTE + GENERATED PROMPT PREVIEW RIGHT INSIDE CO-PILOT TAB -->
+            <!-- 🧭 WHERE TO PASTE + GENERATED PROMPT PREVIEW RIGHT INSIDE AI ALLY TAB -->
             <div
               v-if="form.draftedFixPrompt || form.coPilotNotes"
               class="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3"
@@ -586,22 +692,23 @@
                 v-if="form.draftedFixPrompt"
                 v-model="form.draftedFixPrompt"
                 rows="7"
-                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100"
+                :disabled="isCardLocked"
+                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100 disabled:opacity-75"
               ></textarea>
             </div>
 
-            <!-- Co-Pilot Strategy Note & Follow-Up Question Chips -->
+            <!-- AI Ally Strategy Note & Follow-Up Question Chips -->
             <div
               v-if="form.coPilotNotes || (form.followUpQuestions && form.followUpQuestions.length)"
               class="p-4 rounded-2xl bg-base-200/60 border border-base-300 space-y-3"
             >
               <p v-if="form.coPilotNotes" class="text-xs text-base-content/85 bg-primary/10 border border-primary/25 rounded-xl p-3">
-                <b class="text-primary">💬 Co-Pilot Routing &amp; Strategy Note:</b> {{ form.coPilotNotes }}
+                <b class="text-primary">🤝 AI Ally Routing &amp; Strategy Note:</b> {{ form.coPilotNotes }}
               </p>
 
               <div v-if="form.followUpQuestions?.length" class="space-y-2">
                 <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">
-                  Tap Answer Chips Below to Refine Conversationally
+                  Tap Answer Chips Below to Refine Conversationally with Your AI Ally
                 </div>
                 <div
                   v-for="(q, qi) in form.followUpQuestions"
@@ -614,6 +721,7 @@
                       v-for="chip in q.chips"
                       :key="chip"
                       type="button"
+                      :disabled="isCardLocked"
                       class="btn btn-xs btn-outline border-base-300 hover:border-secondary hover:bg-secondary/10 rounded-lg font-semibold"
                       @click="appendRefinementChip(q.question, chip)"
                     >
@@ -627,13 +735,14 @@
                 <textarea
                   v-model="refinementInput"
                   rows="2"
+                  :disabled="isCardLocked"
                   class="textarea textarea-bordered flex-1 text-xs rounded-xl bg-base-100"
                   placeholder="Tap chips above or type a tweak, then click 🔄 Refine & Save..."
                 ></textarea>
                 <button
                   type="button"
                   class="btn btn-secondary rounded-xl font-black gap-1.5 sm:self-stretch px-4"
-                  :disabled="!refinementInput.trim() || making"
+                  :disabled="!refinementInput.trim() || making || isCardLocked"
                   @click="runCoPilot(true)"
                 >
                   <Icon icon="solar:refresh-circle-bold" class="w-4 h-4" />
@@ -691,7 +800,7 @@
                 <button
                   type="button"
                   class="btn btn-xs sm:btn-sm btn-warning rounded-xl font-black gap-1.5"
-                  :disabled="making"
+                  :disabled="making || isCardLocked"
                   @click="runReportAuditAndFix"
                 >
                   <span v-if="making" class="loading loading-spinner loading-xs"></span>
@@ -703,7 +812,8 @@
               <textarea
                 v-model="form.antiBiasAudit"
                 rows="6"
-                class="textarea textarea-bordered w-full text-xs leading-relaxed rounded-xl bg-base-100"
+                :disabled="isCardLocked"
+                class="textarea textarea-bordered w-full text-xs leading-relaxed rounded-xl bg-base-100 disabled:opacity-75"
                 placeholder="No Anti-Bias Audit recorded on this card yet. Click '✨ Run Anti-Bias Audit Now' above to analyze this card and save the audit result."
               ></textarea>
             </div>
@@ -719,12 +829,12 @@
                 class="btn btn-xs sm:btn-sm btn-secondary rounded-xl font-black gap-1.5"
                 @click="switchTab(drawerTab === 'copilot' ? 'edit' : 'copilot')"
               >
-                <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-                <span>{{ drawerTab === 'copilot' ? '✏️ Back to Editor' : '🪄 AI Co-Pilot' }}</span>
+                <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4" />
+                <span>{{ drawerTab === 'copilot' ? '✏️ Back to Editor' : '🤝 AI Ally' }}</span>
               </button>
 
               <button
-                v-if="canDelete"
+                v-if="canDelete && !isCardLocked && !form.isMasterTemplate"
                 type="button"
                 class="btn btn-xs sm:btn-sm btn-ghost text-error hover:bg-error/10 rounded-xl font-bold gap-1"
                 @click="emit('delete', form.id)"
@@ -738,30 +848,41 @@
           <template #right>
             <div class="flex items-center gap-2">
               <button
+                v-if="isCardLocked"
                 type="button"
-                class="btn btn-xs sm:btn-sm btn-outline border-base-300 rounded-xl font-bold"
-                @click="toggleDoneAndSave"
+                class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 px-4 shadow-md"
+                @click="cloneCurrentCardToEditable"
               >
-                {{ form.done ? '↩️ Reopen Card' : '✅ Mark Done' }}
+                <span>🌱 Clone as New Editable Card</span>
               </button>
 
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-semibold"
-                @click="emit('close')"
-              >
-                Cancel
-              </button>
+              <template v-else>
+                <button
+                  type="button"
+                  class="btn btn-xs sm:btn-sm btn-outline border-base-300 rounded-xl font-bold"
+                  @click="toggleDoneAndSave"
+                >
+                  {{ form.done ? '↩️ Reopen Card' : '✅ Mark Done' }}
+                </button>
 
-              <button
-                type="button"
-                class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 px-5 shadow-md"
-                :disabled="!form.body.trim() || saving"
-                @click="saveCard"
-              >
-                <Icon icon="solar:diskette-bold" class="w-4 h-4" />
-                <span>{{ saving ? 'Saving…' : 'Save Card' }}</span>
-              </button>
+                <button
+                  type="button"
+                  class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-semibold"
+                  @click="emit('close')"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 px-5 shadow-md"
+                  :disabled="!form.body.trim() || saving"
+                  @click="saveCard"
+                >
+                  <Icon icon="solar:diskette-bold" class="w-4 h-4" />
+                  <span>{{ saving ? 'Saving…' : 'Save Card' }}</span>
+                </button>
+              </template>
             </div>
           </template>
         </BottomActionDock>
@@ -780,6 +901,7 @@ import {
   GOVERNANCE_META,
   DESTINATION_META,
   BLOAT_BADGE,
+  newVaultNoteId,
   effectiveStatus,
   estimatePromptOpsImpact,
   parseItemContextSummary,
@@ -829,6 +951,8 @@ const goalManuallyEdited = ref(false);
 const refinementInput = ref('');
 const making = ref(false);
 const coPilotError = ref('');
+const founderUnlockedSession = ref(false);
+const showUnlockConfirm = ref(false);
 
 const emptyForm = (): VaultNote => ({
   id: '',
@@ -842,10 +966,52 @@ const emptyForm = (): VaultNote => ({
 
 const form = ref<VaultNote>(emptyForm());
 
+const isCardLocked = computed(
+  () => Boolean(form.value.isLocked || form.value.isMasterTemplate) && !founderUnlockedSession.value
+);
+
 const detectedRecommendation = computed(() => recommendVaultTemplateAndSurface(form.value));
 const activeRoutingGuide = computed(() =>
   recommendVaultTemplateAndSurface(form.value, form.value.destination)
 );
+
+function confirmFounderUnlock() {
+  if (!props.isFounder) return;
+  founderUnlockedSession.value = true;
+  showUnlockConfirm.value = false;
+  addToast('Founder Governance Override unlocked for this session.', 'info');
+}
+
+function reLockCard() {
+  founderUnlockedSession.value = false;
+  showUnlockConfirm.value = false;
+  form.value.isLocked = true;
+  addToast('Card re-locked under Co-op Governance.', 'success');
+}
+
+function toggleFounderLock() {
+  if (!props.isFounder) return;
+  form.value.isLocked = !form.value.isLocked;
+  if (form.value.isLocked) {
+    founderUnlockedSession.value = false;
+  }
+}
+
+function cloneCurrentCardToEditable() {
+  const now = new Date().toISOString();
+  form.value = {
+    ...form.value,
+    id: newVaultNoteId(),
+    title: `${form.value.title.replace(/\s*\(Custom Copy\)$/i, '')} (Custom Copy)`,
+    isLocked: false,
+    isMasterTemplate: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  founderUnlockedSession.value = false;
+  showUnlockConfirm.value = false;
+  addToast('Cloned into a new editable card — master template remains locked!', 'success');
+}
 
 function syncGoalFromCard(force = false) {
   if (!force && goalManuallyEdited.value && coPilotGoal.value.trim()) return;
@@ -887,6 +1053,8 @@ watch(
     coPilotError.value = '';
     refinementInput.value = '';
     goalManuallyEdited.value = false;
+    founderUnlockedSession.value = false;
+    showUnlockConfirm.value = false;
     if (incoming) {
       const rec = recommendVaultTemplateAndSurface(incoming);
       form.value = {
@@ -930,9 +1098,12 @@ function toggleBundle(id: string) {
 }
 
 function applyPresetInDrawer(preset: PlaybookPresetItem) {
+  if (isCardLocked.value) {
+    cloneCurrentCardToEditable();
+  }
   form.value.destination = preset.destination;
   if (!form.value.title.trim()) {
-    form.value.title = preset.title;
+    form.value.title = `${preset.icon} ${preset.title} (Custom Copy)`;
   }
   selectedBundles.value = [...preset.bundles];
   const existingDescription = form.value.body.trim();
@@ -940,7 +1111,7 @@ function applyPresetInDrawer(preset: PlaybookPresetItem) {
     coPilotGoal.value = `${preset.defaultGoal}\n\nCard Title: ${form.value.title}\nUser Issue / Context:\n${existingDescription}`;
   } else {
     coPilotGoal.value = preset.defaultGoal;
-    form.value.body = preset.defaultGoal;
+    form.value.body = preset.masterPromptBody;
   }
   goalManuallyEdited.value = true;
 }
@@ -950,6 +1121,7 @@ function appendRefinementChip(question: string, chip: string) {
 }
 
 async function runCoPilot(isRefine = false) {
+  if (isCardLocked.value) return;
   making.value = true;
   coPilotError.value = '';
   try {
@@ -992,9 +1164,8 @@ async function runCoPilot(isRefine = false) {
     form.value.updatedAt = new Date().toISOString();
     if (isRefine) refinementInput.value = '';
 
-    // Immediately emit save so generated work is persisted to Appwrite Cloud right away!
     emit('save', { ...form.value });
-    addToast('Prompt generated & saved to card!', 'success');
+    addToast('AI Ally drafted & saved prompt to card!', 'success');
   } catch (err: any) {
     coPilotError.value = err?.message || 'Generation failed';
   } finally {
@@ -1003,12 +1174,14 @@ async function runCoPilot(isRefine = false) {
 }
 
 async function runReportAuditAndFix() {
+  if (isCardLocked.value) return;
   form.value.destination = 'antigravity_ide';
   syncGoalFromCard(true);
   await runCoPilot(false);
 }
 
 function saveCard() {
+  if (isCardLocked.value) return;
   if (!form.value.title.trim()) {
     form.value.title = form.value.body.trim().split('\n')[0].slice(0, 60) || 'Untitled Vault Card';
   }
@@ -1018,6 +1191,7 @@ function saveCard() {
 }
 
 function toggleDoneAndSave() {
+  if (isCardLocked.value) return;
   form.value.done = !form.value.done;
   saveCard();
 }

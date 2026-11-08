@@ -35,6 +35,9 @@ export interface VaultNote {
   title: string;
   body: string;
   done?: boolean;
+  isLocked?: boolean;
+  isMasterTemplate?: boolean;
+  templateId?: string;
   createdAt: string;
   updatedAt: string;
   status?: VaultGovernanceStatus;
@@ -112,7 +115,6 @@ export function parseItemContextSummary(raw?: string): ParsedItemContextSummary 
       const whyPass = firstItem?.why_pass || undefined;
       return { title: String(title), tier, priceOrValue, verdict, whyPayUp, whyPass, rawText: text };
     } catch {
-      // Truncated JSON at 1,500 chars: extract fields cleanly via regex without leaking raw JSON
       const title =
         extractJsonFieldRegex(jsonSlice, 'title') ||
         extractJsonFieldRegex(jsonSlice, 'identity') ||
@@ -197,93 +199,183 @@ export const AI_ROOT_CAUSE_LABELS: Record<AiRootCause, string> = {
 
 export interface PlaybookPresetItem {
   id: string;
-  starterNoteId?: string;
   icon: string;
   title: string;
   summary: string;
   destination: PromptTargetDestination;
   bundles: string[];
   defaultGoal: string;
+  masterPromptBody: string;
+  locked: true;
 }
 
-/** Canonical 6 Playbook Starters (Dev/IDE, AI Studio Architecture, Live QA, and Deal Hunting). */
+/**
+ * Canonical 5 Locked & Governed Master Templates.
+ * These are NEVER injected as editable clutter in the user's card grid.
+ * Members can 1-Tap Copy or Clone to a New Card; Founders must unlock a 2-step governance guard to edit a master template.
+ */
 export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
   {
     id: 'ide-surgical-builder',
-    starterNoteId: 'starter-ide-surgical-builder',
     icon: '🎯',
-    title: 'Antigravity IDE Surgical Bug Fix & Feature',
+    title: 'Antigravity IDE: Surgical Bug Fix & Feature',
     summary:
       'Turns an AI Report, UI bug, or feature note (e.g., saving Quick Scout estimate range cards) into a 1-shot surgical Antigravity IDE prompt with Model Picker & 3-file lock.',
     destination: 'antigravity_ide',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
       'Turn this issue description into a surgical Antigravity IDE prompt (with Model Picker header, ALLOWED FILES max 3, MAX TOOL CALLS: 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
-  },
-  {
-    id: 'ai-studio-architect',
-    starterNoteId: 'starter-preview-trial',
-    icon: '🧪',
-    title: 'AI Studio Feature Architect & Spec Co-Pilot',
-    summary:
-      'Brainstorms multi-file features, UX flows, or prompt architecture in Google AI Studio Focused Chats (#1–#5) with a cumulative SAVED MASTER SPEC & IDE QUEUE.',
-    destination: 'ai_studio',
-    bundles: ['rc-2-inventory-splitter', 'rc-4-sales-coop'],
-    defaultGoal:
-      'Design a complete UX/IA and data architecture plan for this feature in Google AI Studio, ask 2-3 clarifying product questions, and maintain a cumulative SAVED MASTER SPEC & IDE QUEUE block.',
+    masterPromptBody: [
+      '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ Gemini 3.8 Flash for Read-Only Recon first)',
+      '',
+      'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
+      '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
+      '',
+      'STRICT CONSTRAINTS:',
+      '- ALLOWED FILES (MAX 3): Identify the exact 1-3 files first (e.g., `src/components/scout/ScoutView.vue`, `src/components/inventory/ItemDetailsTab.vue`, `src/types/inventory.ts`).',
+      '- MAX TOOL CALLS: 3 edit calls after targeted line-range reads.',
+      '- FORBIDDEN ACTIONS: Never run `astro build` or `npm run build` locally; never write `quantity: 0` or Base64 to Appwrite; never mutate unrelated functions.',
+      '- VERIFY & PUSH: Run `npm run verify` via `run_command` (`BypassSandbox: true`) and push to `origin HEAD` (`alpha-1`).',
+    ].join('\n'),
+    locked: true,
   },
   {
     id: 'paired-qa',
-    starterNoteId: 'starter-paired-qa-sidebar',
     icon: '🧪',
-    title: 'Paired Human-AI Live Page QA Tester',
+    title: 'Chrome Sidebar: Paired Human-AI Live Page QA',
     summary:
       'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
     destination: 'chrome_sidebar',
     bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
     defaultGoal:
       'Create a step-by-step Paired Human-AI Chrome Sidebar QA prompt to test our latest feature on alpha.resalecmd.com one page at a time.',
+    masterPromptBody: [
+      '🌐 OPEN PAGE FIRST: https://alpha.resalecmd.com/coop/vault',
+      '',
+      'You are my paired QA AI Ally for Resale Command on alpha.resalecmd.com. Report strictly what you SEE in the live DOM — never guess code.',
+      '',
+      'HOW THIS SESSION WORKS:',
+      '- Run ONE step at a time. For each step: (1) tell me the exact URL to open, (2) give me a short PRE-CLICK checklist of what to open/expand BEFORE pressing Enter, (3) grade what you see (PASS / FAIL / CANNOT TELL), and (4) give me the next step.',
+      '- Flag any clipped buttons, mobile overflow, or unverified AI price/edition claims.',
+      '',
+      'AFTER EACH STEP, OUTPUT THIS 4-LINE COPY-PASTE BLOCK:',
+      'URL | Step # | Checks: PASS n / FAIL n',
+      'State Seen (active tab, cards, badges, counts)',
+      'Any UI / UX or Bias Issues Found',
+      'Next Step URL + Pre-Click Checklist',
+    ].join('\n'),
+    locked: true,
   },
   {
     id: 'auction-sweeper',
-    starterNoteId: 'starter-auction-sweeper',
     icon: '🔭',
-    title: 'Whole-Page Auction Grid Sweeper',
+    title: 'Chrome Sidebar: Whole-Page Auction Grid Sweeper',
     summary:
       'Scans 24–50 ShopGoodwill, HiBid, or eBay search lots in Chrome Sidebar and ranks the Top 3–5 sleeper lots where 1 Anchor item recoups your bid.',
     destination: 'chrome_sidebar',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
       'Scan this entire auction search results page and rank the top 3-5 sleeper lots worth clicking for our booths, factoring in shipping drag, buyer premium, and 1-anchor cost recovery.',
+    masterPromptBody: [
+      '🌐 OPEN PAGE FIRST: the auction / search-results page (ShopGoodwill, HiBid, EstateSales.net, eBay search) with the full grid of lots visible. Scroll once so every lot loads BEFORE you press Enter (the sidebar reads the page at the moment you press Enter).',
+      '',
+      'You are my resale deal-hunting AI Ally for The Huckleberry Collective. Look at EVERY lot on this page and tell me which 3-5 are worth clicking into, and which to skip.',
+      '',
+      'My venues: a vintage-mall booth (goth, whimsigoth, TTRPG/RPG books, metaphysical, sci-fi, punk, horror, adventure, cosplay) and a small-collectibles booth (jewelry, pins, wands/arcana under 8 inches; NO apparel, NO large toys).',
+      "Rules: value ONLY from secondary-market sold comps, never retail MSRP. Prefer lots where ONE anchor item can recoup 80-120% of the landed cost. Include buyer's premium and shipping weight in landed cost. Do not invent items you cannot read in the photos or titles.",
+      '',
+      'For each pick give: lot title, why it is a sleeper, the likely anchor item, max bid ceiling, and the booth it fits. Then list 2-3 lots to SKIP (shipping traps, MSRP-priced, unclear photos).',
+      'End with 2 short questions about my budget and which booth needs stock, so we can refine.',
+      'Reply in a 5-line status block: URL | lots scanned | top picks | skips | next question.',
+    ].join('\n'),
+    locked: true,
   },
   {
     id: 'fbmp-coach',
-    starterNoteId: 'starter-fbmp-coach',
     icon: '🤝',
-    title: 'FBMP / Local Deal & Negotiation Coach',
+    title: 'Gemini App: Local Deal & Offer-Ladder Coach',
     summary:
       'Builds an Opening Anchor -> Walk-Away Offer Ladder, 3 non-tip-off seller questions, and 3 copy-paste DM negotiation scripts.',
     destination: 'gemini_app',
     bundles: ['rc-1-scout-vision', 'rc-3-booth-drops'],
     defaultGoal:
       'Evaluate a Facebook Marketplace / Craigslist local pickup listing, give me an Opening Anchor to Walk-Away Offer Ladder, 3 non-tip-off inspection questions, and 3 copy-paste DM scripts.',
+    masterPromptBody: [
+      'You are my resale negotiation AI Ally. I will paste a Facebook Marketplace / Craigslist / OfferUp listing (text, link, or screenshot).',
+      '',
+      'Do this, phone-friendly (short bullets):',
+      '1) What it likely is and a realistic cash resale range from sold comps (never MSRP). Say what you cannot verify from the photos.',
+      '2) OFFER LADDER: opening cash anchor, target price, hard walk-away ceiling. Pick the ceiling so one anchor item recoups 100% of my cash outlay.',
+      '3) THREE non-tip-off questions to ask the seller about condition/completeness.',
+      '4) THREE copy-paste DM scripts: "cash pickup today", "bundle both posts", and "condition counter-offer".',
+      '5) Red flags that mean walk away.',
+      '',
+      'My venues: a vintage-mall booth (goth, TTRPG, metaphysical, sci-fi, punk, horror) and a small-collectibles booth (under 8 inches, no apparel). Tell me which booth it fits.',
+      'Give your recommendation first, then ask me 1-2 sharp follow-ups.',
+    ].join('\n'),
+    locked: true,
   },
   {
     id: 'estate-triage',
     icon: '🧭',
-    title: 'Estate Table / Thrift Pile Triage',
+    title: 'Gemini App: Estate Table / Booth Pile Triage',
     summary:
       'Use your phone camera in Gemini App to scan a whole table or shelf of items, spot the highest-margin pieces, and suggest a bundle offer.',
     destination: 'gemini_app',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
       'I am at an estate sale / flea market looking at a table of items. Help me spot the highest-margin pieces from my photo, flag any reprints/traps, and suggest a single cash bundle offer for the pile.',
+    masterPromptBody: [
+      'You are my field-sourcing AI Ally for The Huckleberry Collective. I am uploading a photo of an estate sale table, thrift shelf, or flea market pile.',
+      '',
+      '1) Spot the top 2-4 highest-margin pieces visible in the photo (valued strictly from secondary-market sold comps, never retail MSRP).',
+      '2) Flag any common reproduction traps or condition risks to check in person before paying.',
+      '3) Suggest a single cash bundle offer for the group where 1 anchor piece recoups 100% of the outlay.',
+      '4) Tell me which booth each piece fits (Memory Den #0EJ vs. Dusty Tiger <8" collectibles).',
+    ].join('\n'),
+    locked: true,
   },
 ];
 
+/** Clones a Locked Master Template into a brand-new, freely editable VaultNote card. */
+export function clonePresetToNewNote(preset: PlaybookPresetItem): VaultNote {
+  const now = new Date().toISOString();
+  return {
+    id: newVaultNoteId(),
+    kind: 'prompt',
+    title: `${preset.icon} ${preset.title} (Custom Copy)`,
+    body: preset.masterPromptBody,
+    destination: preset.destination,
+    bundlesUsed: [...preset.bundles],
+    templateId: preset.id,
+    isLocked: false,
+    isMasterTemplate: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Opens a Master Template in Locked Governance Mode (for Founder inspection). */
+export function buildLockedMasterTemplateNote(preset: PlaybookPresetItem): VaultNote {
+  const now = new Date().toISOString();
+  return {
+    id: `master-template-${preset.id}`,
+    kind: 'prompt',
+    title: `${preset.icon} ${preset.title}`,
+    body: preset.masterPromptBody,
+    destination: preset.destination,
+    bundlesUsed: [...preset.bundles],
+    templateId: preset.id,
+    isLocked: true,
+    isMasterTemplate: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 /**
- * Builds the full Co-Pilot input brief from a VaultNote so the user's Issue Description (`body`),
- * Title, Root Cause, and Attached Scan Snapshot automatically feed the AI Prompt Builder.
+ * Builds the full AI Ally input brief from a VaultNote so the user's Issue Description (`body`),
+ * Title, Root Cause, and Attached Scan Snapshot automatically feed the Prompt Builder.
  */
 export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
   const title = (note.title || '').trim();
@@ -291,7 +383,9 @@ export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
   const lines: string[] = [];
 
   if (note.kind === 'report') {
-    lines.push('TASK: Analyze this reported Resale Command issue / feature request, run a 3-Point Anti-Bias Audit, and build a ready-to-paste prompt for the target surface.');
+    lines.push(
+      'TASK: Analyze this reported Resale Command issue / feature request, run a 3-Point Anti-Bias Audit, and build a ready-to-paste prompt for the target surface.'
+    );
     if (title) lines.push(`Card Title: ${title}`);
     if (note.surface) lines.push(`Reported Surface: ${AI_SURFACE_LABELS[note.surface]}`);
     if (note.issueType) lines.push(`Issue Category: ${AI_ISSUE_LABELS[note.issueType]}`);
@@ -314,7 +408,7 @@ export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
 
 /**
  * Inspects a VaultNote's description, surface, and kind to auto-recommend:
- * 1) Which Playbook Starter Template (`presetId`) matches best
+ * 1) Which Locked Master Template (`presetId`) matches best
  * 2) Which Target AI Surface (`antigravity_ide`, `ai_studio`, `chrome_sidebar`, `gemini_app`) to use
  * 3) Which Focused AI Studio Chat (#1–#5) and Skill Bundles apply
  * 4) Clear 1-2-3 Handoff Instructions on where & how to paste the generated prompt
@@ -367,7 +461,7 @@ export function recommendVaultTemplateAndSurface(
     aiStudioChatLabel = 'Chat 5: RC - Social Dropcast Studio';
   }
 
-  // 3. Auto-detect Playbook Starter Template & Target Surface
+  // 3. Auto-detect Playbook Master Template & Target Surface
   let recommendedPresetId = 'ide-surgical-builder';
   let detectedDestination: PromptTargetDestination = 'antigravity_ide';
 
@@ -383,12 +477,9 @@ export function recommendVaultTemplateAndSurface(
   } else if (/paired.*qa|chrome sidebar qa|live page qa|pre-click checklist/.test(combined)) {
     recommendedPresetId = 'paired-qa';
     detectedDestination = 'chrome_sidebar';
-  } else if (
-    note.kind === 'spec' ||
-    /onboarding|trial user|preview member|multi-stage|architecture|brainstorm/.test(combined)
-  ) {
-    recommendedPresetId = 'ai-studio-architect';
-    detectedDestination = note.kind === 'spec' ? 'product_spec' : 'ai_studio';
+  } else if (note.kind === 'spec') {
+    recommendedPresetId = 'ide-surgical-builder';
+    detectedDestination = 'product_spec';
   } else if (
     note.kind === 'report' ||
     /save|saved|track|estimate|card|drawer|button|bug|fix|broken|missing|prompt|bias|msrp|ui|ux/.test(combined)
@@ -449,7 +540,7 @@ export function recommendVaultTemplateAndSurface(
       aiStudioChatLabel,
       modelPickerBadge: '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Argon)',
       whyThisSurface:
-        'Best when the AI needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on alpha.resalecmd.com).',
+        'Best when your AI Ally needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on alpha.resalecmd.com).',
       handoffSteps: [
         '1. Open the target webpage in Chrome and complete the Pre-Click / Scroll step first (the sidebar snapshots the DOM when you press Enter).',
         '2. Open the Chrome Gemini Sidebar in the top-right of Chrome.',
@@ -486,7 +577,7 @@ export function recommendVaultTemplateAndSurface(
     aiStudioChatLabel,
     modelPickerBadge: '📱 GEMINI APP (Phone Camera / Voice / Quick Chat)',
     whyThisSurface:
-      'Phone-friendly interactive coach for evaluating deals in the field, negotiating FBMP/local pickups, or voice-brainstorming on the go.',
+      'Phone-friendly interactive AI Ally for evaluating deals in the field, negotiating FBMP/local pickups, or voice-brainstorming on the go.',
     handoffSteps: [
       '1. Click "📋 Copy Prompt" below.',
       '2. Open the Gemini App on your phone (or gemini.google.com/app) and paste the prompt.',
@@ -496,124 +587,17 @@ export function recommendVaultTemplateAndSurface(
   };
 }
 
-/** Ready-to-copy power prompts seeded into a brand-new vault. */
-export const STARTER_VAULT_NOTES: VaultNote[] = [
-  {
-    id: 'starter-ide-surgical-builder',
-    kind: 'prompt',
-    destination: 'antigravity_ide',
-    title: '🎯 Antigravity IDE: Surgical Bug Fix & Feature Prompt Template',
-    body: [
-      '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ Gemini 3.8 Flash for Read-Only Recon first)',
-      '',
-      'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
-      '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
-      '',
-      'STRICT CONSTRAINTS:',
-      '- ALLOWED FILES (MAX 3): Identify the exact 1-3 files first (e.g., `src/components/scout/ScoutView.vue`, `src/components/inventory/ItemDetailsTab.vue`, `src/types/inventory.ts`).',
-      '- MAX TOOL CALLS: 3 edit calls after targeted line-range reads.',
-      '- FORBIDDEN ACTIONS: Never run `astro build` or `npm run build` locally; never write `quantity: 0` or Base64 to Appwrite; never mutate unrelated functions.',
-      '- VERIFY & PUSH: Run `npm run verify` via `run_command` (`BypassSandbox: true`) and push to `origin HEAD` (`alpha-1`).',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-  {
-    id: 'starter-auction-sweeper',
-    kind: 'prompt',
-    destination: 'chrome_sidebar',
-    title: '🔭 Whole-Page Auction Grid Sweeper (Chrome Sidebar)',
-    body: [
-      '🌐 OPEN PAGE FIRST: the auction / search-results page (ShopGoodwill, HiBid, EstateSales.net, eBay search) with the full grid of lots visible. Scroll once so every lot loads BEFORE you press Enter (the sidebar reads the page at the moment you press Enter).',
-      '',
-      'You are my resale deal-hunting co-pilot for The Huckleberry Collective. Look at EVERY lot on this page and tell me which 3-5 are worth clicking into, and which to skip.',
-      '',
-      'My venues: a vintage-mall booth (goth, whimsigoth, TTRPG/RPG books, metaphysical, sci-fi, punk, horror, adventure, cosplay) and a small-collectibles booth (jewelry, pins, wands/arcana under 8 inches; NO apparel, NO large toys).',
-      "Rules: value ONLY from secondary-market sold comps, never retail MSRP. Prefer lots where ONE anchor item can recoup 80-120% of the landed cost. Include buyer's premium and shipping weight in landed cost. Do not invent items you cannot read in the photos or titles.",
-      '',
-      'For each pick give: lot title, why it is a sleeper, the likely anchor item, max bid ceiling, and the booth it fits. Then list 2-3 lots to SKIP (shipping traps, MSRP-priced, unclear photos).',
-      'End with 2 short questions about my budget and which booth needs stock, so we can refine.',
-      'Reply in a 5-line status block: URL | lots scanned | top picks | skips | next question.',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-  {
-    id: 'starter-fbmp-coach',
-    kind: 'prompt',
-    destination: 'gemini_app',
-    title: '🤝 FB Marketplace / Local Deal Evaluator & Negotiation Coach',
-    body: [
-      'You are my resale negotiation coach. I will paste a Facebook Marketplace / Craigslist / OfferUp listing (text, link, or screenshot).',
-      '',
-      'Do this, phone-friendly (short bullets):',
-      '1) What it likely is and a realistic cash resale range from sold comps (never MSRP). Say what you cannot verify from the photos.',
-      '2) OFFER LADDER: opening cash anchor, target price, hard walk-away ceiling. Pick the ceiling so one anchor item recoups 100% of my cash outlay.',
-      '3) THREE non-tip-off questions to ask the seller about condition/completeness.',
-      '4) THREE copy-paste DM scripts: "cash pickup today", "bundle both posts", and "condition counter-offer".',
-      '5) Red flags that mean walk away.',
-      '',
-      'My venues: a vintage-mall booth (goth, TTRPG, metaphysical, sci-fi, punk, horror) and a small-collectibles booth (under 8 inches, no apparel). Tell me which booth it fits.',
-      'Give your recommendation first, then ask me 1-2 sharp follow-ups. Keep a running "SAVED MASTER SPEC & IDE QUEUE" only if we are designing app features.',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-  {
-    id: 'starter-paired-qa-sidebar',
-    kind: 'prompt',
-    destination: 'chrome_sidebar',
-    title: '🧪 Paired Human-AI Live Page QA Tester (Chrome Sidebar)',
-    body: [
-      '🌐 OPEN PAGE FIRST: https://alpha.resalecmd.com/coop/vault',
-      '',
-      'You are my paired QA co-pilot for Resale Command on alpha.resalecmd.com. Report strictly what you SEE in the live DOM — never guess code.',
-      '',
-      'HOW THIS SESSION WORKS:',
-      '- Run ONE step at a time. For each step: (1) tell me the exact URL to open, (2) give me a short PRE-CLICK checklist of what to open/expand BEFORE pressing Enter, (3) grade what you see (PASS / FAIL / CANNOT TELL), and (4) give me the next step.',
-      '- Flag any clipped buttons, mobile overflow, or unverified AI price/edition claims.',
-      '',
-      'AFTER EACH STEP, OUTPUT THIS 4-LINE COPY-PASTE BLOCK:',
-      'URL | Step # | Checks: PASS n / FAIL n',
-      'State Seen (active tab, cards, badges, counts)',
-      'Any UI / UX or Bias Issues Found',
-      'Next Step URL + Pre-Click Checklist',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-  {
-    id: 'starter-preview-trial',
-    kind: 'prompt',
-    destination: 'ai_studio',
-    title: 'Gemini Starter: Preview Member & Trial User Design',
-    body: [
-      'You are the Principal Product Architect, Cooperative Economist (WSDE / Mondragon), and UX/IA Co-Pilot for The Huckleberry Collective (thehc.llc) & Resale Command (resalecmd.com).',
-      '',
-      'GOAL: Architect a 2-stage onboarding experience.',
-      '1. Preview Member: prospective partners explore the real dashboard, 70/30 waterfall and consignor simulators, labor pool and booth inventory read-only, switching between the 5 Member Hats (Founder, Curator, Promoter, Surplus Enabler, Consignor) with zero risk to production data. Clear "Apply to Join" CTA.',
-      '2. Trial User: hands-on test-drive of Quick Scout / Deep Scan (capped free credits), Lot Splitter and label preview in an isolated DEMO- sandbox that never touches HUCK-/PDXGL-/BB- inventory, Ricochet sync or the co-op ledger.',
-      'Define the upgrade path Guest > Preview Member > Trial User > Verified Co-op Member.',
-      '',
-      'RESPOND WITH: (1) permissions matrix + data isolation + AI quota protection, (2) top 3 UI components to build first, (3) 3 focused product questions. Keep it phone-friendly and end with a cumulative "SAVED MASTER SPEC & IDE QUEUE" block.',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-  {
-    id: 'starter-mobile-addon',
-    kind: 'prompt',
-    destination: 'gemini_app',
-    title: 'Gemini Mobile Add-On (paste at bottom of chat)',
-    body: [
-      'I am brainstorming from my phone and will execute IDE prompts later on my PC in Antigravity IDE.',
-      'Keep responses phone-screen friendly (short punchy bullets).',
-      'Whenever we lock a decision, maintain a cumulative "SAVED MASTER SPEC & IDE QUEUE" block at the bottom of your reply.',
-    ].join('\n'),
-    createdAt: '2026-11-07T00:00:00.000Z',
-    updatedAt: '2026-11-07T00:00:00.000Z',
-  },
-];
+/** Legacy auto-seeded starter IDs that should be pruned so they don't clutter the user's Vault Cards grid. */
+const LEGACY_CLUTTER_STARTER_IDS = new Set([
+  'starter-preview-trial',
+  'starter-mobile-addon',
+  'starter-auction-sweeper',
+  'starter-fbmp-coach',
+  'starter-paired-qa-sidebar',
+  'starter-ide-surgical-builder',
+]);
+
+export const STARTER_VAULT_NOTES: VaultNote[] = [];
 
 export function newVaultNoteId(): string {
   return `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -688,15 +672,21 @@ export const BLOAT_BADGE: Record<BloatRating, { icon: string; badge: string }> =
 // Persistence (Appwrite manifests doc + localStorage mirror)
 // ---------------------------------------------------------------------------
 
+function pruneLegacyStarterClutter(list: VaultNote[]): { cleaned: VaultNote[]; removedAny: boolean } {
+  const cleaned = list.filter((n) => !LEGACY_CLUTTER_STARTER_IDS.has(n.id));
+  return { cleaned, removedAny: cleaned.length !== list.length };
+}
+
 function readLocal(): VaultNote[] {
-  if (typeof window === 'undefined') return STARTER_VAULT_NOTES;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
-    if (!raw) return STARTER_VAULT_NOTES;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : STARTER_VAULT_NOTES;
+    if (!Array.isArray(parsed)) return [];
+    return pruneLegacyStarterClutter(parsed).cleaned;
   } catch {
-    return STARTER_VAULT_NOTES;
+    return [];
   }
 }
 
@@ -709,37 +699,31 @@ function writeLocal(notes: VaultNote[]): void {
   }
 }
 
-function withMissingStarters(existing: VaultNote[]): { notes: VaultNote[]; added: boolean } {
-  const ids = new Set(existing.map((n) => n.id));
-  const missing = STARTER_VAULT_NOTES.filter((s) => !ids.has(s.id));
-  return missing.length > 0 ? { notes: [...existing, ...missing], added: true } : { notes: existing, added: false };
-}
-
 export async function loadVaultNotes(): Promise<{ notes: VaultNote[]; synced: boolean }> {
   const local = readLocal();
   try {
     const doc: any = await databases.getDocument(getDatabaseId(), MANIFESTS_COL_ID, FOUNDER_VAULT_DOC_ID);
     const parsed = JSON.parse(doc.itemsSnapshot || '{}');
     const cloud: VaultNote[] = Array.isArray(parsed.notes) ? parsed.notes : local;
-    const merged = withMissingStarters(cloud);
-    writeLocal(merged.notes);
-    if (merged.added) {
-      const ok = await saveVaultNotes(merged.notes);
-      return { notes: merged.notes, synced: ok };
+    const { cleaned, removedAny } = pruneLegacyStarterClutter(cloud);
+    writeLocal(cleaned);
+    if (removedAny) {
+      const ok = await saveVaultNotes(cleaned);
+      return { notes: cleaned, synced: ok };
     }
-    return { notes: merged.notes, synced: true };
+    return { notes: cleaned, synced: true };
   } catch (err: any) {
     if (err?.code === 404) {
-      const seeded = withMissingStarters(local).notes;
-      const ok = await saveVaultNotes(seeded);
-      return { notes: seeded, synced: ok };
+      const ok = await saveVaultNotes(local);
+      return { notes: local, synced: ok };
     }
-    return { notes: withMissingStarters(local).notes, synced: false };
+    return { notes: local, synced: false };
   }
 }
 
 export async function saveVaultNotes(notes: VaultNote[]): Promise<boolean> {
-  writeLocal(notes);
+  const { cleaned } = pruneLegacyStarterClutter(notes);
+  writeLocal(cleaned);
   const dbId = getDatabaseId();
   const payload = {
     name: 'Founder Idea & Prompt Vault',
@@ -747,9 +731,9 @@ export async function saveVaultNotes(notes: VaultNote[]): Promise<boolean> {
     locationId: 'FOUNDER_VAULT',
     locationName: 'Founder Vault',
     status: 'vault_state',
-    itemsSnapshot: JSON.stringify({ notes, updatedAt: new Date().toISOString() }),
-    itemCount: notes.length,
-    notes: JSON.stringify({ noteCount: notes.length }),
+    itemsSnapshot: JSON.stringify({ notes: cleaned, updatedAt: new Date().toISOString() }),
+    itemCount: cleaned.length,
+    notes: JSON.stringify({ noteCount: cleaned.length }),
   };
   try {
     try {

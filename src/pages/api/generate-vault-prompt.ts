@@ -20,7 +20,7 @@ const SPECIALIST_CONTEXT_CHARS = 9000;
 
 const DESTINATION_INSTRUCTIONS: Record<PromptTargetDestination, string> = {
   gemini_app:
-    'Target: the Gemini mobile app / gemini.google.com/app. Phone-screen friendly (short punchy bullets). The prompt must tell Gemini to act as an interactive co-pilot: give a recommendation FIRST, then ask 1-2 sharp follow-up questions. If it involves designing app features, tell Gemini to maintain a cumulative "SAVED MASTER SPEC & IDE QUEUE" block at the bottom of each reply.',
+    'Target: the Gemini mobile app / gemini.google.com/app. Phone-screen friendly (short punchy bullets). The prompt must tell Gemini to act as an interactive AI Ally: give a recommendation FIRST, then ask 1-2 sharp follow-up questions. If it involves designing app features, tell Gemini to maintain a cumulative "SAVED MASTER SPEC & IDE QUEUE" block at the bottom of each reply.',
   chrome_sidebar:
     'Target: the Chrome Gemini sidebar reading the live page. The prompt MUST contain: (1) a first line "OPEN PAGE FIRST: <exact page URL or page type>", (2) a step-by-step pre-click checklist of what to open/scroll/expand BEFORE pressing Enter (the sidebar snapshots the DOM at that moment), (3) the task, and (4) a compact 4-5 line status-report template (URL | key counts | page state | pass/fail or picks).',
   ai_studio:
@@ -31,7 +31,7 @@ const DESTINATION_INSTRUCTIONS: Record<PromptTargetDestination, string> = {
     'Target: a mobile-scannable product spec: goal, user flow, data rules, acceptance criteria, test plan on the alpha branch, and an IDE task queue.',
 };
 
-const SYSTEM_RULES = `You are the Interactive Prompt Co-Pilot for The Huckleberry Collective & Resale Command.
+const SYSTEM_RULES = `You are the AI Ally for The Huckleberry Collective & Resale Command.
 You turn a rough idea or reported issue description into a ready-to-use prompt for the chosen destination, grounded ONLY in the provided skill context.
 
 HARD RULES:

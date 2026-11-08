@@ -22,11 +22,11 @@
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2.5">
-          <Icon icon="solar:magic-stick-3-bold-duotone" class="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
+          <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-7 h-7 sm:w-8 sm:h-8 text-primary shrink-0" />
           <span>AI Prompt Studio &amp; Governed Learning Vault</span>
         </h1>
         <p class="text-xs sm:text-sm text-base-content/60 font-medium mt-1 max-w-3xl leading-relaxed">
-          Tap any card to copy its prompt in 1 click, or open the Slide-Over Editor &amp; AI Co-Pilot Drawer to customize, audit bias, and vet community AI reports.
+          Tap any card to copy its prompt in 1 click, clone a 🔒 Locked Master Template, or open the Slide-Over Editor &amp; 🤝 AI Ally Drawer to customize, audit bias, and vet community AI reports.
         </p>
       </div>
 
@@ -47,8 +47,8 @@
           class="btn btn-sm btn-secondary gap-1.5 rounded-xl font-black h-10 px-4 shadow-xs"
           @click="openNewCardInDrawer('prompt', 'copilot')"
         >
-          <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4 shrink-0" />
-          <span>🪄 AI Prompt Co-Pilot</span>
+          <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4 shrink-0" />
+          <span>🤝 Ask AI Ally</span>
         </button>
 
         <button
@@ -70,23 +70,23 @@
       <div class="flex items-center justify-between gap-2">
         <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <Icon icon="solar:book-bookmark-bold-duotone" class="w-4 h-4" />
-          <span>Field Guide: Vault Cards, Slide-Over Drawer Editor &amp; AI Governance</span>
+          <span>Field Guide: 🔒 Locked Templates, Slide-Over Drawer &amp; 🤝 AI Ally</span>
         </div>
         <button type="button" class="btn btn-ghost btn-xs btn-circle" @click="showGuide = false">✕</button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
         <div class="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1.5">
-          <div class="font-black text-primary">📋 1. Main Grid = Fast Read &amp; 1-Tap Copy</div>
+          <div class="font-black text-primary">🔒 1. Locked Master Templates</div>
           <p class="text-base-content/80 leading-relaxed text-[11px]">
-            Cards on this page stay clean and read-only so you can tap <b>📋 Copy</b> on your phone without accidental edits or deletes. Click any card to open its full Slide-Over Drawer.
+            Master templates are locked by Co-op Governance so they can never be overwritten by mistake. Tap <b>📋 Copy</b> or <b>🌱 Use Template</b> to clone your own editable card.
           </p>
         </div>
 
         <div class="p-3.5 rounded-xl bg-secondary/5 border border-secondary/20 space-y-1.5">
-          <div class="font-black text-secondary">🗂️ 2. Slide-Over Drawer = Edit &amp; AI Co-Pilot</div>
+          <div class="font-black text-secondary">🤝 2. Slide-Over Drawer &amp; AI Ally</div>
           <p class="text-base-content/80 leading-relaxed text-[11px]">
-            Inside the drawer, switch between <b>✏️ Edit &amp; Details</b>, <b>🪄 AI Co-Pilot &amp; Skills</b> (with conversational follow-up chips that auto-save to the card), and <b>🛡️ Bias &amp; Ops Cost</b>.
+            Inside the drawer, switch between <b>✏️ Edit &amp; Details</b>, <b>🤝 AI Ally &amp; Skills</b> (auto-fed from your issue description + routing guide), and <b>🛡️ Bias &amp; Ops Cost</b>.
           </p>
         </div>
 
@@ -155,52 +155,55 @@
         @click="openNewCardInDrawer('prompt', 'copilot')"
       >
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
-          <Icon icon="solar:cpu-bolt-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
+          <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
         <div class="min-w-0">
-          <div class="text-[11px] uppercase font-bold opacity-60 truncate">AI Skill Co-Pilot</div>
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">🤝 AI Ally &amp; Skills</div>
           <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">6 Bundles</div>
-          <div class="text-[10px] font-semibold opacity-50 truncate">Tap to launch Co-Pilot →</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Tap to open AI Ally →</div>
         </div>
       </button>
     </div>
 
-    <!-- 3. 1-TAP DEV, IDE, QA & DEAL-HUNTER PLAYBOOK STARTER CARDS -->
+    <!-- 3. 🔒 LOCKED & GOVERNED CO-OP MASTER TEMPLATES -->
     <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <div>
           <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
-            <Icon icon="solar:bolt-circle-bold-duotone" class="w-4 h-4" />
-            <span>1-Tap Dev, IDE, Live QA &amp; Resale Playbook Starters</span>
+            <Icon icon="solar:shield-keyhole-bold-duotone" class="w-4 h-4" />
+            <span>🔒 Locked Co-op Master Templates (Founder-Governed)</span>
           </div>
           <p class="text-[11px] text-base-content/60">
-            Copy a ready-made playbook in 1 tap, or click the card to customize it inside the Slide-Over AI Co-Pilot Drawer.
+            Guarded master templates — tap <b>📋 Copy</b> to use right away, or <b>🌱 Use Template</b> to clone a fresh editable copy with your 🤝 AI Ally.
           </p>
         </div>
-        <span class="badge badge-ghost badge-xs font-mono">Powered by 70/30 Waterfall + Booth Skills</span>
+        <span class="badge badge-warning badge-outline badge-xs font-bold">🔒 Immutable Master Templates</span>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         <div
           v-for="preset in PLAYBOOK_PRESETS"
           :key="preset.id"
           class="group rounded-2xl border border-base-200 hover:border-primary/50 bg-base-100 hover:shadow-md p-3.5 transition-all flex flex-col justify-between gap-3 cursor-pointer"
-          @click="openPresetInDrawer(preset)"
+          @click="useTemplateAsNewCard(preset)"
         >
           <div class="space-y-1.5">
-            <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center justify-between gap-1.5 flex-wrap">
               <span class="text-lg leading-none">{{ preset.icon }}</span>
-              <span class="badge badge-ghost badge-xs font-semibold">
-                {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
-              </span>
+              <div class="flex items-center gap-1">
+                <span class="badge badge-warning badge-2xs font-bold">🔒 Master</span>
+                <span class="badge badge-ghost badge-2xs font-semibold">
+                  {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
+                </span>
+              </div>
             </div>
-            <div class="text-xs sm:text-sm font-black text-base-content group-hover:text-primary transition-colors">
+            <div class="text-xs sm:text-sm font-black text-base-content group-hover:text-primary transition-colors leading-snug">
               {{ preset.title }}
             </div>
             <p class="text-[11px] text-base-content/70 leading-relaxed line-clamp-3">{{ preset.summary }}</p>
           </div>
 
-          <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-base-200/70" @click.stop>
+          <div class="flex items-center justify-between gap-1 pt-2 border-t border-base-200/70 flex-wrap" @click.stop>
             <button
               type="button"
               class="btn btn-xs btn-primary rounded-lg font-bold gap-1"
@@ -209,14 +212,24 @@
               <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
               <span>Copy</span>
             </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost text-secondary font-bold gap-1"
-              @click="openPresetInDrawer(preset)"
-            >
-              <span>🪄 Customize in Drawer</span>
-              <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                v-if="isFounder"
+                type="button"
+                class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold"
+                title="Inspect Locked Master Template (Founder Governance Guard)"
+                @click="inspectLockedMasterTemplate(preset)"
+              >
+                🔒
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
+                @click="useTemplateAsNewCard(preset)"
+              >
+                <span>🌱 Use Template</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -305,7 +318,7 @@
       </div>
       <div class="text-sm font-black">No Vault cards match this filter yet</div>
       <p class="text-xs opacity-60 max-w-md mx-auto">
-        Tap <b>+ New Vault Card</b> or <b>🪄 AI Prompt Co-Pilot</b> to create one, or switch filter pills above.
+        Tap <b>+ New Vault Card</b>, <b>🤝 Ask AI Ally</b>, or <b>🌱 Use Template</b> above to create a card.
       </p>
     </div>
 
@@ -322,6 +335,9 @@
           <!-- Card Top Badge Strip -->
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <div class="flex items-center gap-1.5 flex-wrap">
+              <span v-if="note.isLocked" class="badge badge-warning badge-xs font-bold">
+                🔒 Locked
+              </span>
               <span class="badge badge-xs font-bold" :class="kindBadgeClass(note.kind)">
                 {{ KIND_META[note.kind].icon }} {{ KIND_META[note.kind].label }}
               </span>
@@ -551,8 +567,8 @@
           class="btn btn-xs sm:btn-sm btn-secondary rounded-xl font-black gap-1.5"
           @click="openNewCardInDrawer('prompt', 'copilot')"
         >
-          <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-          <span>🪄 AI Co-Pilot</span>
+          <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4" />
+          <span>🤝 AI Ally</span>
         </button>
 
         <button
@@ -566,7 +582,7 @@
       </template>
     </BottomActionDock>
 
-    <!-- 7. RIGHT-EDGE SLIDE-OVER EDITOR & CO-PILOT DRAWER -->
+    <!-- 7. RIGHT-EDGE SLIDE-OVER EDITOR & AI ALLY DRAWER -->
     <VaultNoteDrawer
       :is-open="isDrawerOpen"
       :note="activeDrawerNote"
@@ -601,8 +617,9 @@ import {
   estimateTokens,
   parseItemContextSummary,
   recommendVaultTemplateAndSurface,
+  clonePresetToNewNote,
+  buildLockedMasterTemplateNote,
   PLAYBOOK_PRESETS,
-  STARTER_VAULT_NOTES,
   VAULT_KIND_META,
   GOVERNANCE_META,
   DESTINATION_META,
@@ -746,6 +763,7 @@ function parsedSummary(note: VaultNote): ParsedItemContextSummary | null {
 }
 
 function canDelete(note: VaultNote): boolean {
+  if (note.isLocked || note.isMasterTemplate) return false;
   return isFounder.value || (!!note.author && note.author === memberName.value);
 }
 
@@ -762,7 +780,7 @@ function openNewCardInDrawer(kind: VaultNoteKind = 'prompt', tab: 'edit' | 'copi
     kind,
     title: '',
     body: '',
-    destination: 'gemini_app',
+    destination: 'antigravity_ide',
     author: memberName.value || undefined,
     createdAt: now,
     updatedAt: now,
@@ -771,39 +789,23 @@ function openNewCardInDrawer(kind: VaultNoteKind = 'prompt', tab: 'edit' | 'copi
   isDrawerOpen.value = true;
 }
 
-function openPresetInDrawer(preset: PlaybookPresetItem) {
-  const existing = preset.starterNoteId
-    ? notes.value.find((n) => n.id === preset.starterNoteId) ||
-      STARTER_VAULT_NOTES.find((n) => n.id === preset.starterNoteId)
-    : undefined;
-
-  if (existing) {
-    openCardInDrawer(existing, 'copilot');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  activeDrawerNote.value = {
-    id: newVaultNoteId(),
-    kind: 'prompt',
-    title: preset.title,
-    body: preset.defaultGoal,
-    destination: preset.destination,
-    bundlesUsed: [...preset.bundles],
-    author: memberName.value || undefined,
-    createdAt: now,
-    updatedAt: now,
-  };
+function useTemplateAsNewCard(preset: PlaybookPresetItem) {
+  const cloned = clonePresetToNewNote(preset);
+  cloned.author = memberName.value || undefined;
+  activeDrawerNote.value = cloned;
   activeDrawerTab.value = 'copilot';
+  isDrawerOpen.value = true;
+  addToast('Cloned master template into a new editable card with your AI Ally!', 'info');
+}
+
+function inspectLockedMasterTemplate(preset: PlaybookPresetItem) {
+  activeDrawerNote.value = buildLockedMasterTemplateNote(preset);
+  activeDrawerTab.value = 'edit';
   isDrawerOpen.value = true;
 }
 
 function copyPresetPrompt(preset: PlaybookPresetItem) {
-  const existing = preset.starterNoteId
-    ? notes.value.find((n) => n.id === preset.starterNoteId) ||
-      STARTER_VAULT_NOTES.find((n) => n.id === preset.starterNoteId)
-    : undefined;
-  copyText(existing ? existing.body : preset.defaultGoal);
+  copyText(preset.masterPromptBody);
 }
 
 async function persist() {
