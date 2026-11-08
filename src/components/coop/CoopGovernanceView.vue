@@ -173,6 +173,8 @@
       </div>
     </div>
 
+    <JoinRequestsPanel />
+
     <!-- 3-Tab Governance Workbench Switcher -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-base-200/80 border border-base-300 rounded-2xl shadow-xs">
       <button
@@ -977,6 +979,7 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import JoinRequestsPanel from './JoinRequestsPanel.vue';
 import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,

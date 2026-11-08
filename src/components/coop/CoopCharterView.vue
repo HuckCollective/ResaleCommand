@@ -192,37 +192,7 @@
           <h3 class="font-black text-lg">🤝 Connect with The Huckleberry Collective</h3>
           <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="showConnectModal = false">✕</button>
         </div>
-        <div class="space-y-2">
-          <div class="text-xs font-bold">Which hat fits you?</div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="hat in joinHats"
-              :key="hat.id"
-              type="button"
-              class="btn btn-sm rounded-xl gap-1.5"
-              :class="connectHats.includes(hat.id) ? 'btn-primary' : 'btn-ghost border border-base-300'"
-              @click="toggleConnectHat(hat.id)"
-            >
-              <span>{{ hat.icon }}</span>
-              <span>{{ hat.title }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="flex flex-col gap-1 w-full">
-          <label class="text-xs font-bold whitespace-normal">Your name</label>
-          <input v-model="connectName" type="text" class="input input-bordered input-sm rounded-xl w-full" placeholder="Name or shop" />
-        </div>
-        <div class="flex flex-col gap-1 w-full">
-          <label class="text-xs font-bold whitespace-normal">What do you curate, create or want to help with?</label>
-          <textarea v-model="connectNote" class="textarea textarea-bordered rounded-xl text-xs h-20 w-full" placeholder="Vintage TTRPG, jewelry, reels, booth restocking..."></textarea>
-        </div>
-        <p class="text-[11px] text-base-content/60">
-          Copy your intro and send it to any Collective member, or tell us in person at the booth. Members will reply with next steps.
-        </p>
-        <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="showConnectModal = false">Close</button>
-          <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" @click="copyConnectIntro">Copy My Intro</button>
-        </div>
+        <ConnectWithUsForm v-if="showConnectModal" :hats="joinHats" @close="showConnectModal = false" />
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="showConnectModal = false">close</button></form>
     </dialog>
@@ -1042,6 +1012,7 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
+import ConnectWithUsForm from './ConnectWithUsForm.vue';
 import { useAuth } from '../../composables/useAuth';
 import { loadCoopGovernanceState, DEFAULT_COOP_POLICY_CONFIG } from '../../lib/coopGovernance';
 
@@ -1127,29 +1098,6 @@ const joinHats = [
 
 const { isAuthenticated } = useAuth();
 const showConnectModal = ref(false);
-const connectHats = ref<string[]>([]);
-const connectName = ref('');
-const connectNote = ref('');
-
-const toggleConnectHat = (id: string) => {
-  connectHats.value = connectHats.value.includes(id)
-    ? connectHats.value.filter((h) => h !== id)
-    : [...connectHats.value, id];
-};
-
-const copyConnectIntro = async () => {
-  const names = joinHats
-    .filter((h) => connectHats.value.includes(h.id))
-    .map((h) => h.title)
-    .join(', ') || 'a way to be involved';
-  const text = `Hi Huckleberry Collective! I'm ${connectName.value.trim() || '(my name)'} and I'm interested in: ${names}.\n${connectNote.value.trim()}`.trim();
-  try {
-    await navigator.clipboard.writeText(text);
-    addToast({ type: 'success', message: 'Intro copied. Send it to any Collective member!' });
-  } catch {
-    addToast({ type: 'warning', message: 'Could not copy automatically. Please copy your intro manually.' });
-  }
-};
 
 // Interactive Simulator Reactive State (Live Policy Formula + Multi-Channel Shipping)
 const simSalePrice = ref<number>(60);

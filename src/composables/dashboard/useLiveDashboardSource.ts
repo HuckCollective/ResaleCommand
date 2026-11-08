@@ -24,6 +24,7 @@ import { getDatabaseId, resolveCollectionId } from '../../lib/appwriteEnv';
 import { coopExpensesApi } from '../../lib/coopExpenses';
 import { manifestsApi } from '../../lib/manifests';
 import { getSavedDropcasts } from '../../lib/dropcastModel';
+import { JOIN_REQUEST_LOCATION_ID, JOIN_REQUEST_STATUS } from '../../lib/joinRequests';
 import type { DashboardSource } from './useDashboardSource';
 
 /** Real dashboard data (signed-in members). The ONLY dashboard file that talks to Appwrite. */
@@ -41,6 +42,17 @@ export function useLiveDashboardSource(): DashboardSource {
   const expenses = ref<DashboardExpenseLite[]>([]);
   const drops = ref<DashboardDropLite[]>([]);
   const lastSyncAt = ref<string | null>(null);
+  const joinRequests = ref(0);
+
+  /** Pending "Connect With Us" requests (only members who can review them need the count). */
+  const loadJoinRequests = async () => {
+    const res = await databases.listDocuments(getDatabaseId(), 'manifests', [
+      Query.equal('locationId', JOIN_REQUEST_LOCATION_ID),
+      Query.equal('status', JOIN_REQUEST_STATUS.pending),
+      Query.limit(1),
+    ]);
+    joinRequests.value = res.total;
+  };
 
   /** Recent sales ledger docs. Owner comes from the inventory item that points at the sale (`saleId`). */
   const loadSales = async () => {
@@ -121,6 +133,7 @@ export function useLiveDashboardSource(): DashboardSource {
     expenses: expenses.value,
     drops: drops.value,
     lastSyncAt: lastSyncAt.value,
+    joinRequests: joinRequests.value,
   }));
 
   const loading = computed(() => initialLoading.value || inventoryLoading.value);
@@ -141,7 +154,7 @@ export function useLiveDashboardSource(): DashboardSource {
         })
       );
       loadDrops();
-      tasks.push(loadLastSync(), loadExpenses());
+      tasks.push(loadLastSync(), loadExpenses(), loadJoinRequests());
       await Promise.allSettled(tasks);
       // Sales need inventory loaded first so each sale can be tied to its owner
       await loadSales().catch((e) => console.warn('[Dashboard] Sales load failed:', e));
