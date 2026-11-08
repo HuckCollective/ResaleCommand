@@ -27,6 +27,7 @@
             <div class="flex flex-wrap gap-2 shrink-0">
                 <a href="/login" class="btn btn-xs btn-primary">Member Login</a>
                 <a href="/coop" class="btn btn-xs btn-outline">Connect With Us</a>
+                <a href="/demo" class="btn btn-xs btn-ghost border border-base-300">See the example dashboard</a>
             </div>
         </div>
 

@@ -3,9 +3,9 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
       <div class="min-w-0">
         <div class="text-[11px] font-extrabold uppercase tracking-wider text-primary">My Role in the Collective</div>
-        <div class="text-sm sm:text-base font-black truncate">
+        <div class="text-sm sm:text-base font-black break-words">
           {{ memberName }}
-          <span v-if="!member" class="text-xs font-semibold opacity-60">(showing all hats)</span>
+          <span v-if="showAllHatsNote" class="text-xs font-semibold opacity-60">(showing all hats)</span>
         </div>
       </div>
       <div class="flex flex-wrap gap-1.5">
@@ -34,8 +34,8 @@
       >
         <Icon :icon="action.icon" class="w-5 h-5 text-primary shrink-0" />
         <div class="min-w-0">
-          <div class="text-xs font-black truncate">{{ action.label }}</div>
-          <div class="text-[10px] opacity-60 truncate">{{ action.hint }}</div>
+          <div class="text-xs font-black break-words">{{ action.label }}</div>
+          <div class="text-[10px] opacity-60 break-words">{{ action.hint }}</div>
         </div>
       </a>
       <button
@@ -47,8 +47,8 @@
       >
         <Icon icon="solar:clock-circle-bold-duotone" class="w-5 h-5 text-primary shrink-0" />
         <div class="min-w-0">
-          <div class="text-xs font-black truncate">+ Log {{ META[activeHat].label }} Hours (1.5h)</div>
-          <div class="text-[10px] opacity-60 truncate">Counts toward the Labor &amp; Surplus Pool</div>
+          <div class="text-xs font-black break-words">+ Log {{ META[activeHat].label }} Hours (1.5h)</div>
+          <div class="text-[10px] opacity-60 break-words">Counts toward the Labor &amp; Surplus Pool</div>
         </div>
       </button>
     </div>
@@ -56,40 +56,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
-import {
-  loadCoopGovernanceState,
-  logSweatEquityLaborEntry,
-  normalizePolicyConfig,
-  DEFAULT_COOP_POLICY_CONFIG,
-  MEMBER_HAT_META,
-  type CoopMemberProfile,
-  type MemberHat,
-} from '../../lib/coopGovernance';
+import { MEMBER_HAT_META } from '../../lib/memberHats';
+import { useDashboardSource, useActiveHat } from '../../composables/dashboard/useDashboardSource';
 
 const META = MEMBER_HAT_META;
-const { user, currentTeam } = useAuth();
-
-const members = ref<CoopMemberProfile[]>(normalizePolicyConfig(DEFAULT_COOP_POLICY_CONFIG).members);
-const activeHat = ref<MemberHat>('founder');
+const source = useDashboardSource();
+const activeHat = useActiveHat();
 const logging = ref(false);
 
-const member = computed(() => {
-  const name = user.value?.name?.toLowerCase();
-  if (!name) return undefined;
-  return members.value.find((m) => m.name.toLowerCase().includes(name));
-});
-
-const memberName = computed(() => member.value?.name || user.value?.name || 'Member');
-
-const availableHats = computed<MemberHat[]>(() =>
-  member.value?.hats?.length ? member.value.hats : (Object.keys(META) as MemberHat[])
-);
-
-const prefix = computed(() => member.value?.inventoryPrefix || '');
+const member = source.member;
+const memberName = computed(() => member.value.name);
+const availableHats = computed(() => member.value.hats);
+const prefix = computed(() => member.value.inventoryPrefix || '');
+const showAllHatsNote = computed(() => source.mode === 'live' && !source.hasMemberProfile.value);
 
 const canLogHours = computed(() => activeHat.value === 'promoter' || activeHat.value === 'enabler');
 
@@ -132,33 +114,19 @@ const actions = computed(() => {
 });
 
 const logHours = async () => {
+  if (!source.logHours) {
+    addToast({ type: 'info', message: 'This is an example. Members can log hours here.' });
+    return;
+  }
   logging.value = true;
   try {
-    const hat = activeHat.value;
-    const { syncedToCloud } = await logSweatEquityLaborEntry(
-      {
-        member: member.value?.name,
-        partner: 'SWEAT',
-        category: hat === 'enabler' ? 'Booth Restock' : 'Social & Marketing',
-        hours: 1.5,
-        notes: `${META[hat].label} contribution logged from My Role dashboard`,
-      },
-      currentTeam.value?.$id || 'huck_collective'
-    );
-    addToast({ type: syncedToCloud ? 'success' : 'warning', message: syncedToCloud ? 'Logged 1.5h to the Labor Pool' : 'Logged locally; cloud sync failed' });
+    const { syncedToCloud } = await source.logHours(activeHat.value);
+    addToast({
+      type: syncedToCloud ? 'success' : 'warning',
+      message: syncedToCloud ? 'Logged 1.5h to the Labor Pool' : 'Logged locally; cloud sync failed',
+    });
   } finally {
     logging.value = false;
   }
 };
-
-onMounted(async () => {
-  try {
-    const { state } = await loadCoopGovernanceState([], currentTeam.value?.$id || 'huck_collective');
-    members.value = normalizePolicyConfig(state.policyConfig).members;
-  } catch (e) {
-    console.warn('[RoleHubCard] Could not load roster:', e);
-  }
-  activeHat.value = availableHats.value[0];
-});
 </script>
-

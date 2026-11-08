@@ -15,6 +15,7 @@
           Connect With Us
         </button>
         <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
+        <a href="/demo" class="btn btn-sm btn-ghost border border-base-300 rounded-xl font-bold">See the example dashboard</a>
       </div>
     </div>
 
@@ -755,6 +756,7 @@
           <div class="flex flex-wrap gap-2">
             <button type="button" class="btn btn-sm btn-primary rounded-xl font-bold" @click="showConnectModal = true">Connect With Us</button>
             <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
+        <a href="/demo" class="btn btn-sm btn-ghost border border-base-300 rounded-xl font-bold">See the example dashboard</a>
           </div>
         </div>
       </div>
@@ -1026,6 +1028,7 @@
             Connect With Us
           </button>
           <a href="/scout" class="btn btn-sm btn-outline font-bold">Try AI Scout Preview</a>
+          <a href="/demo" class="btn btn-sm btn-outline font-bold">See the example dashboard</a>
           <a href="/login" class="btn btn-sm btn-outline font-bold">Member Login</a>
         </template>
       </div>

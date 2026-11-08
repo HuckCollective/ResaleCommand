@@ -872,6 +872,65 @@ for (const contract of transportContracts) {
     }
 }
 
+// 14. DASHBOARD: role layouts, widget audiences, public /demo and the demo-sync guard
+{
+    const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+    const fail = (msg) => { console.error(`❌ [Dashboard] ${msg}`); hasErrors = true; };
+
+    // 14A. Every widget is in a layout and declares an audience
+    const widgetsSrc = read('src/lib/dashboardWidgets.ts');
+    const widgetIds = [...widgetsSrc.matchAll(/\{\s*id:\s*'([a-z_]+)',\s*title:/g)].map((m) => m[1]);
+    const layoutBlock = (widgetsSrc.split('export const ROLE_LAYOUTS')[1] || '').split('};')[0];
+    for (const id of widgetIds) {
+        if (!layoutBlock.includes(`'${id}'`)) fail(`Widget "${id}" in dashboardWidgets.ts is not used by any ROLE_LAYOUTS entry.`);
+    }
+    if ((widgetsSrc.match(/audience:\s*'/g) || []).length < widgetIds.length) {
+        fail('Every widget in DASHBOARD_WIDGETS must declare an audience.');
+    }
+    for (const collective of ['financials', 'radar', 'tax_tips', 'labor_week']) {
+        const row = widgetsSrc.split('\n').find((l) => l.includes(`id: '${collective}'`)) || '';
+        if (!row.includes("'voting_members'")) fail(`Widget "${collective}" shows collective data and must use the 'voting_members' audience.`);
+    }
+    const consignorLayout = (layoutBlock.match(/consignor:\s*\[([^\]]*)\]/) || [])[1] || '';
+    for (const banned of ['financials', 'radar', 'tax_tips', 'labor_week', 'admin_tools', 'ai_usage']) {
+        if (consignorLayout.includes(`'${banned}'`)) fail(`The consignor layout must not include "${banned}" (consignors only see their own statement).`);
+    }
+
+    // 14B. Demo sample data must cover every alert type, or the demo drifts from the real dashboard
+    const alertsSrc = read('src/lib/dashboardAlerts.ts');
+    const alertIds = [...alertsSrc.matchAll(/^\s*id:\s*'([a-z_0-9]+)',\s*category:/gm)].map((m) => m[1]);
+    const coverageBlock = (read('src/lib/demoDashboardData.ts').split('DEMO_ALERT_COVERAGE')[1] || '').split('};')[0];
+    for (const id of alertIds) {
+        if (!new RegExp(`\\b${id}:`).test(coverageBlock)) {
+            fail(`Alert type "${id}" has no entry in DEMO_ALERT_COVERAGE (add sample records in demoDashboardData.ts, then list it).`);
+        }
+    }
+
+    // 14C. Public demo exists and is reachable
+    if (!/'\/demo'/.test(read('src/lib/publicRoutes.ts'))) fail("'/demo' must be in the public allowlist (src/lib/publicRoutes.ts).");
+    if (!fs.existsSync('src/pages/demo.astro')) fail('src/pages/demo.astro is missing.');
+
+    // 14D. The public demo must never touch the database: demo-safe files may not import data/auth modules
+    const FORBIDDEN = /(lib\/appwrite|lib\/auth|useAuth|useInventory|usePurchases|coopGovernance|coopExpenses|lib\/manifests)['"]?$/;
+    const demoSafe = [
+        ...fs.readdirSync('src/components/dashboard').filter((f) => f.endsWith('.vue') && f !== 'AiUsageCard.vue').map((f) => `src/components/dashboard/${f}`),
+        ...fs.readdirSync('src/composables/dashboard').filter((f) => f !== 'useLiveDashboardSource.ts').map((f) => `src/composables/dashboard/${f}`),
+        'src/lib/dashboardAlerts.ts', 'src/lib/dashboardWidgets.ts', 'src/lib/demoDashboardData.ts',
+        'src/lib/dashboardTypes.ts', 'src/lib/memberHats.ts', 'src/pages/demo.astro',
+    ];
+    for (const file of demoSafe) {
+        const src = read(file);
+        for (const m of src.matchAll(/import\s+(type\s+)?[\s\S]*?\sfrom\s+['"]([^'"]+)['"]/g)) {
+            if (!m[1] && FORBIDDEN.test(m[2])) {
+                fail(`${file} imports "${m[2]}". Dashboard widgets and the public demo must read data only through useDashboardSource().`);
+            }
+        }
+        if (file.endsWith('.vue') && /\b(truncate|line-clamp-)/.test(src.split('<script')[0])) {
+            fail(`${file} uses truncate/line-clamp. Dashboard text must wrap fully.`);
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {

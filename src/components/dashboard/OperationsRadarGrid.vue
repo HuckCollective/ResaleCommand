@@ -16,14 +16,14 @@
                 </div>
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-1.5">
-                        <h3 class="font-extrabold text-sm sm:text-base text-base-content tracking-tight truncate">
+                        <h3 class="font-extrabold text-sm sm:text-base text-base-content tracking-tight break-words">
                             Operations &amp; Booth Restock Radar
                         </h3>
                         <span class="badge badge-2xs sm:badge-xs badge-secondary text-secondary-content font-bold whitespace-nowrap">
                             Live Queues
                         </span>
                     </div>
-                    <p class="text-[10px] sm:text-xs text-base-content/65 truncate">
+                    <p class="text-[10px] sm:text-xs text-base-content/65 break-words">
                         One-click triage queues, vibe-matched booth pulls, and spatial stock counts
                     </p>
                 </div>
@@ -103,7 +103,7 @@
                                 :checked="isCardVisible(card.id)"
                                 @change="toggleCardVisibility(card.id)"
                             />
-                            <span class="truncate">{{ card.title }}</span>
+                            <span class="break-words">{{ card.title }}</span>
                         </div>
                         <span class="badge badge-2xs badge-ghost font-mono shrink-0">{{ card.count }}</span>
                     </label>
@@ -186,7 +186,7 @@
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5 min-w-0">
-                                <h4 class="font-extrabold text-xs sm:text-sm text-base-content group-hover:text-primary transition-colors truncate">
+                                <h4 class="font-extrabold text-xs sm:text-sm text-base-content group-hover:text-primary transition-colors break-words">
                                     {{ card.title }}
                                 </h4>
                                 <span
@@ -196,7 +196,7 @@
                                     {{ card.badgeLabel }}
                                 </span>
                             </div>
-                            <p class="text-[10px] sm:text-[11px] text-base-content/60 leading-tight line-clamp-1 mt-0.5">
+                            <p class="text-[10px] sm:text-[11px] text-base-content/60 leading-tight mt-0.5">
                                 {{ card.subtitle }}
                             </p>
                         </div>

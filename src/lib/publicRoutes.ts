@@ -9,6 +9,7 @@ export const PUBLIC_EXACT_PATHS: ReadonlySet<string> = new Set([
   '/coop',
   '/coop/charter',
   '/scout', // Guest Preview Mode when logged out (limited, see ScoutView.vue)
+  '/demo', // Example Command Center with fictional data (never touches the database)
   '/login',
   '/logout',
   '/join',

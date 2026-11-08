@@ -1,5 +1,5 @@
 import { ref, computed, onMounted } from 'vue';
-import { useInventory } from '../useInventory';
+import { useDashboardSource } from './useDashboardSource';
 import {
     isWorkingStockItem,
     isUnassignedLocation,
@@ -29,7 +29,8 @@ export interface RadarCardItem {
 const STORAGE_KEY = 'hucks_dashboard_radar_config';
 
 export function useOperationsRadar() {
-    const { inventoryItems } = useInventory();
+    const { snapshot } = useDashboardSource();
+    const inventoryItems = computed(() => snapshot.value.items);
 
     // Default to 'queues' (Restock & Triage) so mobile users see the high-priority action queues first
     const activeCategory = ref<RadarCategory>('queues');
@@ -130,8 +131,7 @@ export function useOperationsRadar() {
                 accentClass: unassigned.count > 0 ? 'text-warning' : 'text-success',
                 borderClass: unassigned.count > 0 ? 'border-warning/50 hover:border-warning' : 'border-base-300 hover:border-primary/50',
                 link: '/inventory?location=__unassigned__',
-                ...unassigned,
-                isAlert: unassigned.count > 0
+                ...unassigned
             },
             {
                 id: 'q_md_restock',
@@ -167,8 +167,7 @@ export function useOperationsRadar() {
                 accentClass: needsMdSyncMetric.count > 0 ? 'text-warning' : 'text-success',
                 borderClass: needsMdSyncMetric.count > 0 ? 'border-warning/40 hover:border-warning' : 'border-base-300 hover:border-primary/50',
                 link: '/inventory?queue=needs_md_sync',
-                ...needsMdSyncMetric,
-                isAlert: needsMdSyncMetric.count > 0
+                ...needsMdSyncMetric
             },
             {
                 id: 'q_missing_0ej',
@@ -180,8 +179,7 @@ export function useOperationsRadar() {
                 accentClass: missing0ej.count > 0 ? 'text-warning' : 'text-success',
                 borderClass: missing0ej.count > 0 ? 'border-warning/40 hover:border-warning' : 'border-base-300 hover:border-primary/50',
                 link: '/inventory?queue=missing_booth_sku',
-                ...missing0ej,
-                isAlert: missing0ej.count > 0
+                ...missing0ej
             },
             {
                 id: 'q_booth_bins',

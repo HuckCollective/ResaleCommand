@@ -1,0 +1,13 @@
+---
+import Layout from '../layouts/Layout.astro';
+import DashboardShell from '../components/dashboard/DashboardShell.vue';
+---
+
+<Layout
+  title="Example Command Center | The Huckleberry Collective"
+  description="See what a worker-cooperative resale dashboard looks like for every kind of member. Example data only."
+>
+  <div class="rc-page-shell">
+    <DashboardShell client:only="vue" mode="demo" />
+  </div>
+</Layout>
