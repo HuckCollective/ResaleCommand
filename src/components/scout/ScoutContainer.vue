@@ -1,24 +1,30 @@
 <template>
   <div>
-    <!-- 1. DRAFT PURCHASES LANDING DASHBOARD -->
+    <!-- 0. Wait for the session check so guests never flash member-only trackers -->
+    <div v-if="authLoading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    <!-- 1. DRAFT PURCHASES LANDING DASHBOARD (members only) -->
     <ScoutPurchaseList 
-      v-if="currentView === 'list'"
+      v-else-if="currentView === 'list' && isAuthenticated"
       @start-purchase="handleStartPurchase"
       @resume-purchase="handleResumePurchase"
       @quick-scan="handleQuickScan"
     />
 
-    <!-- 2. SCOUT SCANNER COCKPIT -->
+    <!-- 2. SCOUT SCANNER COCKPIT (guests get the limited Guest Preview) -->
     <ScoutView 
       v-else
-      :initial-purchase-id="activePurchaseId"
+      :initial-purchase-id="isAuthenticated ? activePurchaseId : null"
       :is-quick-scan="isQuickScanMode"
       @back-to-list="handleBackToList"
       @purchase-completed="handlePurchaseCompleted"
     />
 
-    <!-- 3. EXPANDABLE ACTIVE / PAUSED PURCHASE MANIFEST TRAY -->
+    <!-- 3. EXPANDABLE ACTIVE / PAUSED PURCHASE MANIFEST TRAY (members only) -->
     <ScoutPurchaseTray 
+      v-if="isAuthenticated"
       :is-open="isTrayOpen" 
       :paused-tracker="pausedTracker"
       @toggle-tray="toggleTray(false)" 
@@ -30,11 +36,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import ScoutPurchaseList from './ScoutPurchaseList.vue';
 import ScoutView from './ScoutView.vue';
 import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
+import { useAuth } from '../../composables/useAuth';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
+
+const { isAuthenticated, loading: authLoading } = useAuth();
+
+const authReady = () =>
+  new Promise<void>((resolve) => {
+    if (!authLoading.value) return resolve();
+    const stop = watch(authLoading, (isLoading) => {
+      if (!isLoading) {
+        stop();
+        resolve();
+      }
+    });
+  });
 
 const getInitialView = () => {
   if (typeof window === 'undefined') return 'scout';
@@ -72,6 +92,15 @@ const {
 } = useScoutPurchase();
 
 onMounted(async () => {
+  await authReady();
+  if (!isAuthenticated.value) {
+    // Guest Preview: no trackers, no purchases — straight to the limited scanner.
+    currentView.value = 'scout';
+    activePurchaseId.value = null;
+    isQuickScanMode.value = true;
+    return;
+  }
+
   await loadDraftPurchases().catch(err => {
     console.warn('[ScoutContainer] Failed to load draft purchases:', err);
   });

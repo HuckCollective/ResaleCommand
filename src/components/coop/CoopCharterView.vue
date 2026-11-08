@@ -207,13 +207,13 @@
             </button>
           </div>
         </div>
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold text-xs">Your name</span></label>
-          <input v-model="connectName" type="text" class="input input-bordered input-sm rounded-xl" placeholder="Name or shop" />
+        <div class="flex flex-col gap-1 w-full">
+          <label class="text-xs font-bold whitespace-normal">Your name</label>
+          <input v-model="connectName" type="text" class="input input-bordered input-sm rounded-xl w-full" placeholder="Name or shop" />
         </div>
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold text-xs">What do you curate, create or want to help with?</span></label>
-          <textarea v-model="connectNote" class="textarea textarea-bordered rounded-xl text-xs h-20" placeholder="Vintage TTRPG, jewelry, reels, booth restocking..."></textarea>
+        <div class="flex flex-col gap-1 w-full">
+          <label class="text-xs font-bold whitespace-normal">What do you curate, create or want to help with?</label>
+          <textarea v-model="connectNote" class="textarea textarea-bordered rounded-xl text-xs h-20 w-full" placeholder="Vintage TTRPG, jewelry, reels, booth restocking..."></textarea>
         </div>
         <p class="text-[11px] text-base-content/60">
           Copy your intro and send it to any Collective member, or tell us in person at the booth. Members will reply with next steps.
