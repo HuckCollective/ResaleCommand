@@ -759,6 +759,21 @@ for (const contract of transportContracts) {
         }
     }
 
+    // 12D. Views that render <BottomActionDock> self-clear via its built-in spacer — ban stacked manual pb-24..pb-48 on the same file
+    const dockUserFiles = getFiles('src', ['.vue']).filter(
+        (f) => !f.endsWith('BottomActionDock.vue') && /<BottomActionDock\b/.test(fs.readFileSync(f, 'utf8'))
+    );
+    for (const f of dockUserFiles) {
+        const rel = path.relative(process.cwd(), f).replace(/\\/g, '/');
+        const src = fs.readFileSync(f, 'utf8');
+        if (/\bpb-(?:28|32|36|40|44|48)\b/.test(src.split('<script')[0]) && !/overflow-y-auto/.test(src.split('<script')[0].match(/class="[^"]*\bpb-(?:28|32|36|40|44|48)\b[^"]*"/)?.[0] || '')) {
+            console.error(
+                `❌ Stacked Dock Clearance in ${rel}: this view uses <BottomActionDock> (self-clearing spacer) — remove manual pb-28..pb-48 and use pb-6 sm:pb-8!`
+            );
+            hasErrors = true;
+        }
+    }
+
     const uiFiles = getFiles('src', ['.vue', '.astro']);
     const classAttrRegex = /\bclass="([^"]+)"/g;
 

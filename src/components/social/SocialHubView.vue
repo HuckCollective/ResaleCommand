@@ -10,7 +10,7 @@
     />
 
     <!-- VIEW 2: DROPCAST STUDIO (DETAIL DRILL-DOWN) -->
-    <div v-else-if="currentView === 'studio'" class="space-y-6 max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pb-36 sm:pb-44">
+    <div v-else-if="currentView === 'studio'" class="space-y-6 max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pb-6 sm:pb-8">
       
       <!-- STUDIO TOP BREADCRUMB, TITLE & STATUS BAR -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-base-100 p-4 sm:p-5 rounded-3xl border border-base-200 shadow-sm">

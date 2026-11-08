@@ -1,6 +1,6 @@
 <template>
   <div class="card bg-base-100 shadow-sm border border-base-200 w-full">
-    <div class="card-body p-4 sm:p-6 lg:p-8 pb-36 sm:pb-44 lg:pb-44">
+    <div class="card-body p-4 sm:p-6 lg:p-8 pb-6 sm:pb-8">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h2 class="card-title text-2xl font-bold flex items-center gap-2">

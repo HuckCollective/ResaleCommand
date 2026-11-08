@@ -2,7 +2,8 @@
   <!-- Automatic in-flow bottom clearance spacer so fixed viewport docks NEVER cover bottom card content -->
   <div
     v-if="visible && placement === 'viewport'"
-    class="h-24 sm:h-28 w-full shrink-0 pointer-events-none"
+    class="!mt-0 w-full shrink-0 pointer-events-none"
+    :class="$slots.top ? 'h-32 md:h-[100px]' : 'h-24 md:h-[72px]'"
     aria-hidden="true"
   ></div>
   <Teleport :to="teleportTo" :disabled="!teleport || placement !== 'viewport'">
