@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <!-- 1. TOP HEADER & PRIMARY ACTIONS (Canonical Co-op Ledger Archetype) -->
+    <!-- 1. TOP HEADER & PRIMARY ACTIONS -->
     <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
       <div>
         <div class="flex items-center gap-2 flex-wrap mb-1.5">
@@ -26,12 +26,13 @@
           <span>AI Prompt Studio &amp; Governed Learning Vault</span>
         </h1>
         <p class="text-xs sm:text-sm text-base-content/60 font-medium mt-1 max-w-3xl leading-relaxed">
-          Build deal-hunting, QA, and IDE prompts grounded in our collective skills, capture voice ideas on the go, and vet community AI reports before testing on <code class="font-mono text-xs">alpha-1</code>.
+          Tap any card to copy its prompt in 1 click, or open the Slide-Over Editor &amp; AI Co-Pilot Drawer to customize, audit bias, and vet community AI reports.
         </p>
       </div>
 
       <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
-        <AiFeedbackButton surface="quick_scout" @submitted="refreshVault" />
+        <AiFeedbackButton surface="quick_scout" @submitted="refreshVault('reports')" />
+
         <button
           type="button"
           class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
@@ -43,16 +44,25 @@
 
         <button
           type="button"
+          class="btn btn-sm btn-secondary gap-1.5 rounded-xl font-black h-10 px-4 shadow-xs"
+          @click="openNewCardInDrawer('prompt', 'copilot')"
+        >
+          <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4 shrink-0" />
+          <span>🪄 AI Prompt Co-Pilot</span>
+        </button>
+
+        <button
+          type="button"
           class="btn btn-sm btn-primary gap-1.5 rounded-xl font-black shadow-md shadow-primary/20 h-10 px-4"
-          @click="openQuickNoteModal('idea')"
+          @click="openNewCardInDrawer('idea', 'edit')"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
-          <span>+ Quick Note / Voice Idea</span>
+          <span>+ New Vault Card</span>
         </button>
       </div>
     </div>
 
-    <!-- Collapsible How-It-Works Guide Card -->
+    <!-- Collapsible Field Guide -->
     <div
       v-if="showGuide"
       class="card bg-base-100 border border-primary/30 shadow-sm rounded-2xl p-4 sm:p-5 space-y-4 animate-in fade-in duration-150"
@@ -60,36 +70,30 @@
       <div class="flex items-center justify-between gap-2">
         <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <Icon icon="solar:book-bookmark-bold-duotone" class="w-4 h-4" />
-          <span>Field Guide: Using the Prompt Co-Pilot, Phone Workflow &amp; AI Governance</span>
+          <span>Field Guide: Vault Cards, Slide-Over Drawer Editor &amp; AI Governance</span>
         </div>
         <button type="button" class="btn btn-ghost btn-xs btn-circle" @click="showGuide = false">✕</button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
         <div class="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1.5">
-          <div class="font-black text-primary flex items-center gap-1.5">
-            <span>🪄 1. Deal-Hunter &amp; QA Prompt Co-Pilot</span>
-          </div>
+          <div class="font-black text-primary">📋 1. Main Grid = Fast Read &amp; 1-Tap Copy</div>
           <p class="text-base-content/80 leading-relaxed text-[11px]">
-            Tap a starter card (like <b>Auction Sweeper</b> or <b>FBMP Negotiation Coach</b>) or dictate a custom goal. Pick where you'll paste it (<b>Phone Gemini App</b>, <b>Chrome Sidebar</b>, <b>AI Studio</b>, or <b>Antigravity IDE</b>), then tap the Co-Pilot's follow-up chips to refine.
+            Cards on this page stay clean and read-only so you can tap <b>📋 Copy</b> on your phone without accidental edits or deletes. Click any card to open its full Slide-Over Drawer.
           </p>
         </div>
 
         <div class="p-3.5 rounded-xl bg-secondary/5 border border-secondary/20 space-y-1.5">
-          <div class="font-black text-secondary flex items-center gap-1.5">
-            <span>📱 2. Phone-to-PC Sync Workflow</span>
-          </div>
+          <div class="font-black text-secondary">🗂️ 2. Slide-Over Drawer = Edit &amp; AI Co-Pilot</div>
           <p class="text-base-content/80 leading-relaxed text-[11px]">
-            Everything saved here syncs to Appwrite Cloud. Dictate ideas or save specs from your phone while out scouting; when you sit down at your PC, tell Antigravity: <i>"Read my latest Vault notes and build the top spec on alpha-1."</i>
+            Inside the drawer, switch between <b>✏️ Edit &amp; Details</b>, <b>🪄 AI Co-Pilot &amp; Skills</b> (with conversational follow-up chips that auto-save to the card), and <b>🛡️ Bias &amp; Ops Cost</b>.
           </p>
         </div>
 
         <div class="p-3.5 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5">
-          <div class="font-black text-warning flex items-center gap-1.5">
-            <span>🛡️ 3. Governed AI Reports &amp; Bias Guard</span>
-          </div>
+          <div class="font-black text-warning">🛡️ 3. Governed AI Review Queue</div>
           <p class="text-base-content/80 leading-relaxed text-[11px]">
-            Community <b>🚩 Report AI Issue</b> flags land in the Review Queue as <b>🟡 Pending Review</b> and <b>never</b> alter live scans. A Founder/Developer runs the <b>3-Point Anti-Bias &amp; Ops Cost Audit</b> and tests fixes on <code class="font-mono">alpha-1</code> first.
+            Community <b>🚩 Report AI Issue</b> flags stage here as <b>🟡 Pending Review</b>. Open any report card in the drawer to run the <b>3-Point Anti-Bias Audit</b> and save a vetted IDE fix prompt.
           </p>
         </div>
       </div>
@@ -99,8 +103,9 @@
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <button
         type="button"
-        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 hover:border-primary/40 shadow-sm flex items-center gap-3 sm:gap-4 text-left transition-all"
-        @click="activeTab = 'vault'; vaultFilter = 'prompt'"
+        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border transition-all shadow-sm flex items-center gap-3 sm:gap-4 text-left"
+        :class="activeFilter === 'prompt' ? 'border-primary ring-1 ring-primary/30' : 'border-base-200 hover:border-primary/40'"
+        @click="activeFilter = 'prompt'"
       >
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:magic-stick-3-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
@@ -108,14 +113,15 @@
         <div class="min-w-0">
           <div class="text-[11px] uppercase font-bold opacity-60 truncate">Ready Prompts</div>
           <div class="text-lg sm:text-2xl font-black font-mono text-base-content truncate">{{ promptsCount }}</div>
-          <div class="text-[10px] font-semibold opacity-50 truncate">Deal, QA &amp; IDE templates</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Deal, QA &amp; IDE cards</div>
         </div>
       </button>
 
       <button
         type="button"
-        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 hover:border-warning/50 shadow-sm flex items-center gap-3 sm:gap-4 text-left transition-all"
-        @click="activeTab = 'reports'; reportFilter = 'pending_review'"
+        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border transition-all shadow-sm flex items-center gap-3 sm:gap-4 text-left"
+        :class="activeFilter === 'pending_review' ? 'border-warning ring-1 ring-warning/30' : 'border-base-200 hover:border-warning/50'"
+        @click="activeFilter = 'pending_review'"
       >
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-warning/15 text-warning rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:flag-2-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
@@ -129,8 +135,9 @@
 
       <button
         type="button"
-        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 hover:border-success/50 shadow-sm flex items-center gap-3 sm:gap-4 text-left transition-all"
-        @click="activeTab = 'reports'; reportFilter = 'all'"
+        class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border transition-all shadow-sm flex items-center gap-3 sm:gap-4 text-left"
+        :class="activeFilter === 'vetted' ? 'border-success ring-1 ring-success/30' : 'border-base-200 hover:border-success/50'"
+        @click="activeFilter = 'vetted'"
       >
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-success/10 text-success rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:shield-check-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
@@ -145,757 +152,438 @@
       <button
         type="button"
         class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 hover:border-info/50 shadow-sm flex items-center gap-3 sm:gap-4 text-left transition-all"
-        @click="activeTab = 'studio'"
+        @click="openNewCardInDrawer('prompt', 'copilot')"
       >
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:cpu-bolt-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
         <div class="min-w-0">
-          <div class="text-[11px] uppercase font-bold opacity-60 truncate">Skill Library</div>
+          <div class="text-[11px] uppercase font-bold opacity-60 truncate">AI Skill Co-Pilot</div>
           <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">6 Bundles</div>
-          <div class="text-[10px] font-semibold opacity-50 truncate">$40/mo Cloud Credit Pool</div>
+          <div class="text-[10px] font-semibold opacity-50 truncate">Tap to launch Co-Pilot →</div>
         </div>
       </button>
     </div>
 
-    <!-- 3. SEGMENTED WORKSPACE TABS -->
-    <div class="bg-base-100 border border-base-200 rounded-2xl p-1.5 shadow-sm flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        class="btn btn-sm flex-1 min-w-[170px] rounded-xl gap-2 font-black h-10"
-        :class="activeTab === 'studio' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
-        @click="activeTab = 'studio'"
-      >
-        <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4 shrink-0" />
-        <span>1. Interactive Prompt Co-Pilot</span>
-      </button>
-
-      <button
-        type="button"
-        class="btn btn-sm flex-1 min-w-[170px] rounded-xl gap-2 font-black h-10"
-        :class="activeTab === 'vault' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
-        @click="activeTab = 'vault'"
-      >
-        <Icon icon="solar:notebook-bold-duotone" class="w-4 h-4 shrink-0" />
-        <span>2. Saved Prompts, Ideas &amp; Specs</span>
-        <span class="badge badge-xs font-mono" :class="activeTab === 'vault' ? 'badge-neutral' : 'badge-ghost'">
-          {{ nonReportNotesCount }}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        class="btn btn-sm flex-1 min-w-[170px] rounded-xl gap-2 font-black h-10"
-        :class="activeTab === 'reports' ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
-        @click="activeTab = 'reports'"
-      >
-        <Icon icon="solar:flag-2-bold-duotone" class="w-4 h-4 shrink-0" />
-        <span>3. AI Review Queue (Governance)</span>
-        <span
-          class="badge badge-xs font-mono"
-          :class="pendingReportsCount > 0 ? 'badge-warning' : 'badge-ghost'"
-        >
-          {{ reportsCount }}
-        </span>
-      </button>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 1: INTERACTIVE PROMPT CO-PILOT STUDIO                           -->
-    <!-- =================================================================== -->
-    <div v-if="activeTab === 'studio'" class="space-y-5">
-      <!-- 1-Tap Field Playbook & QA Starter Cards -->
-      <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <div>
-            <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <Icon icon="solar:bolt-circle-bold-duotone" class="w-4 h-4" />
-              <span>1-Tap Resale &amp; QA Playbook Starters (Or Write Your Own Below)</span>
-            </div>
-            <p class="text-[11px] text-base-content/60">
-              Tap any card to load a pre-built prompt or customize it with the Co-Pilot for your current hunt.
-            </p>
+    <!-- 3. 1-TAP DEAL-HUNTER & QA PLAYBOOK STARTER CARDS -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+        <div>
+          <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+            <Icon icon="solar:bolt-circle-bold-duotone" class="w-4 h-4" />
+            <span>1-Tap Resale &amp; Live QA Playbook Starters</span>
           </div>
-          <span class="badge badge-ghost badge-xs font-mono">Uses 70/30 Waterfall + Booth Rules</span>
+          <p class="text-[11px] text-base-content/60">
+            Copy a ready-made playbook in 1 tap, or click the card to customize it inside the Slide-Over AI Co-Pilot Drawer.
+          </p>
         </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <div
-            v-for="preset in PLAYBOOK_PRESETS"
-            :key="preset.id"
-            class="rounded-2xl border p-3.5 transition-all flex flex-col justify-between gap-3 bg-base-100 hover:border-primary/50 hover:shadow-sm"
-            :class="activePresetId === preset.id ? 'border-primary bg-primary/5 ring-1 ring-primary/30' : 'border-base-200'"
-          >
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-lg leading-none">{{ preset.icon }}</span>
-                <span class="badge badge-ghost badge-xs font-semibold">
-                  {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
-                </span>
-              </div>
-              <div class="text-xs sm:text-sm font-black text-base-content">{{ preset.title }}</div>
-              <p class="text-[11px] text-base-content/70 leading-relaxed">{{ preset.summary }}</p>
-            </div>
-
-            <div class="flex items-center gap-1.5 pt-1 border-t border-base-200/70">
-              <button
-                type="button"
-                class="btn btn-xs btn-primary flex-1 rounded-lg font-bold gap-1"
-                @click="loadPresetInstant(preset)"
-              >
-                <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
-                <span>Load Ready Prompt</span>
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold"
-                title="Customize with AI Co-Pilot"
-                @click="customizePresetWithAi(preset)"
-              >
-                🪄 Customize
-              </button>
-            </div>
-          </div>
-        </div>
+        <span class="badge badge-ghost badge-xs font-mono">Powered by 70/30 Waterfall + Booth Skills</span>
       </div>
 
-      <!-- 2-Column Studio Workspace -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        <!-- Left Column: Builder Controls (5 cols on lg) -->
-        <div class="lg:col-span-5 card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-4">
-          <div class="flex items-center justify-between gap-2 border-b border-base-200 pb-3">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4 h-4" />
-              </div>
-              <div>
-                <div class="text-sm font-black">Configure Prompt Target</div>
-                <div class="text-[11px] opacity-60">Pick where you will run this prompt</div>
-              </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div
+          v-for="preset in PLAYBOOK_PRESETS"
+          :key="preset.id"
+          class="group rounded-2xl border border-base-200 hover:border-primary/50 bg-base-100 hover:shadow-md p-3.5 transition-all flex flex-col justify-between gap-3 cursor-pointer"
+          @click="openPresetInDrawer(preset)"
+        >
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-lg leading-none">{{ preset.icon }}</span>
+              <span class="badge badge-ghost badge-xs font-semibold">
+                {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
+              </span>
             </div>
+            <div class="text-xs sm:text-sm font-black text-base-content group-hover:text-primary transition-colors">
+              {{ preset.title }}
+            </div>
+            <p class="text-[11px] text-base-content/70 leading-relaxed line-clamp-3">{{ preset.summary }}</p>
+          </div>
+
+          <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-base-200/70" @click.stop>
             <button
-              v-if="makerIdea || draft"
               type="button"
-              class="btn btn-ghost btn-xs rounded-lg"
-              @click="resetStudio"
+              class="btn btn-xs btn-primary rounded-lg font-bold gap-1"
+              @click="copyPresetPrompt(preset)"
             >
-              Reset
+              <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
+              <span>Copy</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost text-secondary font-bold gap-1"
+              @click="openPresetInDrawer(preset)"
+            >
+              <span>🪄 Customize in Drawer</span>
+              <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
             </button>
           </div>
-
-          <!-- Step A: Destination Cards -->
-          <div class="space-y-2">
-            <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70">
-              1. Where Will You Paste This Prompt?
-            </label>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                v-for="(meta, key) in DEST_META"
-                :key="key"
-                type="button"
-                class="p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5"
-                :class="
-                  destination === key
-                    ? 'border-primary bg-primary/10 text-base-content shadow-xs ring-1 ring-primary/30'
-                    : 'border-base-300 bg-base-100 hover:bg-base-200/60'
-                "
-                @click="destination = key"
-              >
-                <span class="text-base leading-none mt-0.5 shrink-0">{{ meta.icon }}</span>
-                <div class="min-w-0">
-                  <div class="text-xs font-black truncate">{{ meta.label }}</div>
-                  <div class="text-[10px] opacity-65 leading-snug">{{ DESTINATION_HINTS[key] }}</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <!-- Step B: Skill Bundles -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70">
-                2. Resale Command Skills to Include
-              </label>
-              <button
-                v-if="selectedBundles.length > 0"
-                type="button"
-                class="link link-primary text-[11px] font-bold"
-                @click="selectedBundles = []"
-              >
-                Switch to ✨ Auto-Match
-              </button>
-              <span v-else class="badge badge-primary badge-xs font-bold">✨ Auto-Matching by Keyword</span>
-            </div>
-
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="b in specialistBundles"
-                :key="b.id"
-                type="button"
-                class="btn btn-xs rounded-xl font-bold h-7 px-2.5"
-                :class="
-                  selectedBundles.includes(b.id)
-                    ? 'btn-secondary shadow-2xs'
-                    : 'btn-ghost border border-base-300 text-base-content/80'
-                "
-                @click="toggleBundle(b.id)"
-              >
-                <span>{{ b.label }}</span>
-              </button>
-            </div>
-            <p class="text-[10px] opacity-60">
-              Core DNA (<code class="font-mono">hucks-resale-core</code>: 70/30 waterfall + booth vibes + 7 laws) is always included automatically.
-            </p>
-          </div>
-
-          <!-- Step C: Goal / Idea Input -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70">
-                3. Your Goal or Deal-Hunting Scenario
-              </label>
-              <span class="text-[10px] opacity-60">🎙️ Phone mic friendly</span>
-            </div>
-            <textarea
-              v-model="makerIdea"
-              rows="4"
-              class="textarea textarea-bordered w-full text-sm rounded-xl leading-relaxed"
-              placeholder="Example: Help me scan a ShopGoodwill search page of vintage RPG books and tell me which 3 lots have an anchor book that recoups my bid, or help me negotiate a $120 FBMP goth jacket bundle down to $65 cash..."
-              @input="draftReportContext = ''"
-            ></textarea>
-          </div>
-
-          <button
-            type="button"
-            class="btn btn-primary w-full rounded-xl font-black gap-2 shadow-md shadow-primary/20 h-11"
-            :disabled="!makerIdea.trim() || making"
-            @click="runMaker(false)"
-          >
-            <Icon icon="solar:magic-stick-3-bold" class="w-5 h-5" />
-            <span>{{ making ? 'Co-Pilot Is Drafting with Skills…' : '✨ Generate Prompt with Skills' }}</span>
-          </button>
-
-          <div
-            v-if="makerError"
-            class="alert alert-error text-xs rounded-xl py-2.5 px-3 font-semibold"
-          >
-            <span>{{ makerError }}</span>
-          </div>
-        </div>
-
-        <!-- Right Column: Live Output Canvas, Ops Cost & Co-Pilot Refinement (7 cols on lg) -->
-        <div class="lg:col-span-7 card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-4">
-          <template v-if="draft">
-            <!-- Output Header & Primary Copy/Save Actions -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-base-200 pb-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-1.5 flex-wrap mb-1">
-                  <span class="badge badge-primary badge-xs font-bold">
-                    {{ DEST_META[destination].icon }} {{ DEST_META[destination].label }}
-                  </span>
-                  <span
-                    v-for="bid in draft.bundlesUsed"
-                    :key="bid"
-                    class="badge badge-ghost badge-xs font-mono"
-                  >
-                    {{ bid }}
-                  </span>
-                </div>
-                <h2 class="text-base sm:text-lg font-black text-base-content truncate">{{ draft.title }}</h2>
-              </div>
-
-              <div class="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 shadow-sm"
-                  @click="copyText(draft.promptText)"
-                >
-                  <Icon icon="solar:copy-bold" class="w-4 h-4" />
-                  <span>Copy Prompt</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline rounded-xl font-bold gap-1.5"
-                  @click="saveDraft"
-                >
-                  <Icon icon="solar:bookmark-square-minimalistic-bold-duotone" class="w-4 h-4" />
-                  <span>Save to Vault</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Ops Token & Cost Impact Bar -->
-            <div class="p-3 rounded-2xl bg-base-200/60 border border-base-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div class="flex items-center gap-2.5 flex-wrap">
-                <span class="badge badge-sm font-black py-2.5 px-2.5" :class="bloat.badge">
-                  {{ bloat.icon }} +{{ draft.opsImpact.addedTokens }} tokens
-                </span>
-                <span class="text-xs font-mono font-bold text-base-content">
-                  ~${{ draft.opsImpact.costPer1kScansUsd.toFixed(4) }} / 1k scans
-                </span>
-                <span class="text-[11px] opacity-70 font-semibold">
-                  ({{ draft.opsImpact.pctOfMonthlyCredit.toFixed(3) }}% of $40/mo Cloud Credit)
-                </span>
-              </div>
-              <span class="text-[11px] font-semibold opacity-75">{{ draft.opsImpact.recommendation }}</span>
-            </div>
-
-            <!-- 3-Point Anti-Bias Audit Callout (When Present) -->
-            <div
-              v-if="draft.antiBiasAudit"
-              class="p-3.5 rounded-2xl bg-warning/10 border border-warning/30 space-y-1 text-xs"
-            >
-              <div class="font-black text-warning flex items-center gap-1.5">
-                <Icon icon="solar:shield-warning-bold-duotone" class="w-4 h-4" />
-                <span>🛡️ 3-Point Anti-Bias &amp; Overfitting Audit</span>
-              </div>
-              <p class="text-base-content/85 whitespace-pre-wrap leading-relaxed">{{ draft.antiBiasAudit }}</p>
-            </div>
-
-            <!-- Editable / Copyable Prompt Canvas -->
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-between text-[11px] font-bold opacity-65">
-                <span>PROMPT CANVAS (YOU CAN EDIT DIRECTLY BEFORE COPYING OR SAVING)</span>
-                <span class="font-mono">{{ draft.promptText.length }} chars</span>
-              </div>
-              <textarea
-                v-model="draft.promptText"
-                rows="11"
-                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-2xl bg-base-200/40"
-              ></textarea>
-            </div>
-
-            <p v-if="draft.coPilotNotes" class="text-xs text-base-content/75 bg-primary/5 border border-primary/20 rounded-xl p-3">
-              <b class="text-primary">💬 Co-Pilot Strategy Note:</b> {{ draft.coPilotNotes }}
-            </p>
-
-            <!-- Interactive Co-Pilot Follow-Up Questions & Refinement Loop -->
-            <div class="p-4 rounded-2xl bg-base-200/50 border border-base-300 space-y-3">
-              <div class="flex items-center justify-between gap-2">
-                <div class="text-xs font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
-                  <Icon icon="solar:chat-round-dots-bold-duotone" class="w-4 h-4" />
-                  <span>Interactive Co-Pilot Refinement (Tap Chips or Reply to Dial It In)</span>
-                </div>
-                <span class="badge badge-secondary badge-xs font-bold">Conversational Loop</span>
-              </div>
-
-              <div v-if="draft.followUpQuestions?.length" class="space-y-2.5">
-                <div
-                  v-for="(q, qi) in draft.followUpQuestions"
-                  :key="qi"
-                  class="p-3 rounded-xl bg-base-100 border border-base-200 space-y-2"
-                >
-                  <div class="text-xs font-bold text-base-content">{{ qi + 1 }}. {{ q.question }}</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      v-for="chip in q.chips"
-                      :key="chip"
-                      type="button"
-                      class="btn btn-xs btn-outline border-base-300 hover:border-secondary hover:bg-secondary/10 rounded-lg font-semibold"
-                      @click="addRefinement(q.question, chip)"
-                    >
-                      + {{ chip }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="flex flex-col sm:flex-row gap-2 pt-1">
-                <textarea
-                  v-model="refinement"
-                  rows="2"
-                  class="textarea textarea-bordered flex-1 text-xs rounded-xl"
-                  placeholder="Tap answer chips above or type how you want to tweak this prompt (e.g., 'Add a $35 max bid cap and focus on Memory Den #0EJ TTRPG books')…"
-                ></textarea>
-                <button
-                  type="button"
-                  class="btn btn-secondary rounded-xl font-black gap-1.5 sm:self-stretch px-4"
-                  :disabled="!refinement.trim() || making"
-                  @click="runMaker(true)"
-                >
-                  <Icon icon="solar:refresh-circle-bold" class="w-4 h-4" />
-                  <span>{{ making ? 'Refining…' : '🔄 Refine Draft' }}</span>
-                </button>
-              </div>
-            </div>
-          </template>
-
-          <!-- Empty State When No Draft Is Loaded Yet -->
-          <div v-else class="py-12 px-4 text-center space-y-3">
-            <div class="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
-              <Icon icon="solar:magic-stick-3-bold-duotone" class="w-8 h-8" />
-            </div>
-            <div class="text-base font-black text-base-content">
-              Ready to Build Your Next Deal-Hunting, QA, or IDE Prompt
-            </div>
-            <p class="text-xs text-base-content/60 max-w-md mx-auto leading-relaxed">
-              Tap one of the <b>4 Playbook Starter Cards</b> above for an instant prompt, or describe your goal on the left and tap <b>✨ Generate Prompt with Skills</b>.
-            </p>
-            <div class="flex flex-wrap justify-center gap-2 pt-2">
-              <button
-                type="button"
-                class="btn btn-xs btn-outline rounded-xl font-bold"
-                @click="loadPresetInstant(PLAYBOOK_PRESETS[0])"
-              >
-                🔭 Load Auction Sweeper
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-outline rounded-xl font-bold"
-                @click="loadPresetInstant(PLAYBOOK_PRESETS[1])"
-              >
-                🤝 Load FBMP Negotiation Coach
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-outline rounded-xl font-bold"
-                @click="loadPresetInstant(PLAYBOOK_PRESETS[3])"
-              >
-                🧪 Load Sidebar QA Tester
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
 
-    <!-- =================================================================== -->
-    <!-- TAB 2: SAVED PROMPTS, IDEAS & SPECS VAULT                           -->
-    <!-- =================================================================== -->
-    <div v-if="activeTab === 'vault'" class="space-y-4">
-      <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3.5 sm:p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            v-for="f in VAULT_TAB_FILTERS"
-            :key="f.key"
-            type="button"
-            class="btn btn-xs sm:btn-sm rounded-xl font-bold"
-            :class="vaultFilter === f.key ? 'btn-primary shadow-2xs' : 'btn-ghost border border-base-300'"
-            @click="vaultFilter = f.key"
-          >
-            <span>{{ f.label }}</span>
-          </button>
-        </div>
-
-        <div class="flex items-center gap-2">
+    <!-- 4. OMNIBOX SEARCH + PIPELINE FILTER PILLS + VIEW SWITCHER (Catalog Archetype) -->
+    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3.5 sm:p-4 space-y-3">
+      <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <!-- Omnibox Search -->
+        <div class="relative flex-1">
+          <Icon
+            icon="solar:magnifer-linear"
+            class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"
+          />
           <input
             v-model="searchQuery"
             type="text"
-            class="input input-bordered input-sm rounded-xl w-full md:w-64 text-xs"
-            placeholder="Search saved prompts, ideas, specs…"
+            class="input input-bordered input-sm w-full pl-9 pr-8 rounded-xl text-xs h-9"
+            placeholder="Search prompts, ideas, specs, or AI reports by title, surface, or keyword..."
           />
           <button
+            v-if="searchQuery"
             type="button"
-            class="btn btn-sm btn-primary rounded-xl font-bold shrink-0"
-            @click="openQuickNoteModal('idea')"
+            class="btn btn-ghost btn-2xs btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+            @click="searchQuery = ''"
           >
-            + Add Note
+            ✕
           </button>
         </div>
-      </div>
 
-      <div v-if="loading" class="card bg-base-100 border border-base-200 rounded-2xl p-8 text-center text-sm opacity-60">
-        Loading cloud vault…
-      </div>
-      <div
-        v-else-if="!filteredVaultNotes.length"
-        class="card bg-base-100 border border-base-200 rounded-2xl p-8 text-center space-y-2"
-      >
-        <div class="text-sm font-black">No notes match this filter yet</div>
-        <p class="text-xs opacity-60">Tap "+ Add Note" or generate a prompt in the Studio tab.</p>
-      </div>
-
-      <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div
-          v-for="note in filteredVaultNotes"
-          :key="note.id"
-          class="card bg-base-100 border border-base-200 hover:border-primary/40 shadow-sm rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3 transition-all"
-          :class="note.done ? 'opacity-60' : ''"
-        >
-          <div class="space-y-2.5">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 space-y-1">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="badge badge-xs font-bold" :class="note.kind === 'prompt' ? 'badge-primary' : note.kind === 'spec' ? 'badge-secondary' : 'badge-accent'">
-                    {{ KIND_META[note.kind].icon }} {{ KIND_META[note.kind].label }}
-                  </span>
-                  <span v-if="note.destination" class="badge badge-ghost badge-xs font-semibold">
-                    {{ DEST_META[note.destination].icon }} {{ DEST_META[note.destination].label }}
-                  </span>
-                  <span class="text-[10px] opacity-50 font-mono">
-                    {{ new Date(note.updatedAt).toLocaleDateString() }}
-                  </span>
-                </div>
-                <h3 class="text-sm sm:text-base font-black text-base-content leading-snug" :class="note.done ? 'line-through' : ''">
-                  {{ note.title }}
-                </h3>
-              </div>
-
-              <div class="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  class="btn btn-xs btn-primary rounded-lg font-bold gap-1"
-                  @click="copyText(note.body)"
-                >
-                  <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-semibold"
-                  title="Open in Co-Pilot Studio to refine or convert"
-                  @click="loadNoteIntoStudio(note)"
-                >
-                  🪄 Studio
-                </button>
-              </div>
-            </div>
-
-            <pre class="text-xs whitespace-pre-wrap break-words font-sans max-h-52 overflow-y-auto bg-base-200/50 border border-base-300/60 rounded-xl p-3 leading-relaxed">{{ note.body }}</pre>
-          </div>
-
-          <div class="flex items-center justify-between gap-2 pt-2 border-t border-base-200 text-xs">
-            <span class="text-[11px] opacity-60 truncate">
-              {{ note.author ? `Saved by ${note.author}` : 'Collective Vault' }}
-            </span>
-            <div class="flex items-center gap-1.5">
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-semibold"
-                @click="toggleDone(note)"
-              >
-                {{ note.done ? '↩️ Reopen' : '✅ Mark Done' }}
-              </button>
-              <button
-                v-if="canDelete(note)"
-                type="button"
-                class="btn btn-xs btn-ghost text-error rounded-lg"
-                title="Delete note"
-                @click="removeNote(note)"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- =================================================================== -->
-    <!-- TAB 3: COMMUNITY AI REVIEW QUEUE (GOVERNANCE)                       -->
-    <!-- =================================================================== -->
-    <div v-if="activeTab === 'reports'" class="space-y-4">
-      <!-- Governance & Anti-Bias Safeguard Banner -->
-      <div class="card bg-base-100 border border-warning/40 shadow-sm rounded-2xl p-4 sm:p-5">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div class="space-y-1">
-            <div class="text-xs font-extrabold uppercase tracking-wider text-warning flex items-center gap-1.5">
-              <Icon icon="solar:shield-check-bold-duotone" class="w-4 h-4" />
-              <span>Governed AI Vetting Pipeline (Zero Auto-Mutation of Live Scans)</span>
-            </div>
-            <p class="text-xs text-base-content/75 leading-relaxed max-w-3xl">
-              Reports submitted via <b>🚩 Report AI Issue</b> in Quick Scout or Item Drawers are staged here in Appwrite. Members can <b>👍 Confirm (+1)</b> recurring issues. Only a <b>👑 Founder / Developer</b> can vet reports, run the <b>🛡️ 3-Point Anti-Bias Audit</b>, and test fixes on <code class="font-mono">alpha-1</code>.
-            </p>
-          </div>
-
-          <div class="flex flex-wrap gap-1.5 shrink-0">
+        <!-- View Switcher (Cards Grid vs Table Ledger) -->
+        <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+          <span class="text-xs font-mono opacity-60">{{ filteredNotes.length }} cards</span>
+          <div class="join border border-base-300 rounded-xl p-0.5 bg-base-200/50">
             <button
-              v-for="rf in REPORT_TAB_FILTERS"
-              :key="rf.key"
               type="button"
-              class="btn btn-xs rounded-xl font-bold"
-              :class="reportFilter === rf.key ? 'btn-neutral' : 'btn-ghost border border-base-300'"
-              @click="reportFilter = rf.key"
+              class="btn btn-xs join-item rounded-lg gap-1 font-bold border-0"
+              :class="viewMode === 'cards' ? 'btn-primary shadow-2xs' : 'btn-ghost'"
+              @click="viewMode = 'cards'"
             >
-              {{ rf.label }}
+              <Icon icon="solar:widget-2-bold-duotone" class="w-3.5 h-3.5" />
+              <span>Cards</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs join-item rounded-lg gap-1 font-bold border-0"
+              :class="viewMode === 'table' ? 'btn-primary shadow-2xs' : 'btn-ghost'"
+              @click="viewMode = 'table'"
+            >
+              <Icon icon="solar:list-bold-duotone" class="w-3.5 h-3.5" />
+              <span>Table</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div
-        v-if="!filteredReportNotes.length"
-        class="card bg-base-100 border border-base-200 rounded-2xl p-8 text-center space-y-2"
-      >
-        <div class="text-sm font-black">No AI reports in this status</div>
-        <p class="text-xs opacity-60">
-          Members can flag bad Quick Scout, Deep Scan, or Playbook outputs using the <b>🚩 Report AI Issue</b> button on any scan result or item drawer.
-        </p>
-      </div>
-
-      <div v-else class="space-y-3">
-        <div
-          v-for="note in filteredReportNotes"
-          :key="note.id"
-          class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3"
+      <!-- Horizontal Pipeline Filter Pills -->
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+        <button
+          v-for="f in PIPELINE_FILTERS"
+          :key="f.key"
+          type="button"
+          class="btn btn-xs rounded-xl font-bold shrink-0 gap-1.5 h-7 px-3"
+          :class="activeFilter === f.key ? 'btn-primary shadow-2xs' : 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/80'"
+          @click="activeFilter = f.key"
         >
-          <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div class="space-y-1.5 min-w-0">
-              <div class="flex items-center gap-1.5 flex-wrap">
+          <span>{{ f.label }}</span>
+          <span class="badge badge-2xs font-mono" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
+            {{ f.count }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 5. VAULT CARDS GRID OR TABLE VIEW (Read-Only + 1-Tap Copy; Click Opens Drawer) -->
+    <div v-if="loading" class="card bg-base-100 border border-base-200 rounded-2xl p-10 text-center text-sm opacity-60">
+      Loading Cloud Vault…
+    </div>
+
+    <div
+      v-else-if="!filteredNotes.length"
+      class="card bg-base-100 border border-base-200 rounded-2xl p-10 text-center space-y-3"
+    >
+      <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+        <Icon icon="solar:notebook-bold-duotone" class="w-6 h-6" />
+      </div>
+      <div class="text-sm font-black">No Vault cards match this filter yet</div>
+      <p class="text-xs opacity-60 max-w-md mx-auto">
+        Tap <b>+ New Vault Card</b> or <b>🪄 AI Prompt Co-Pilot</b> to create one, or switch filter pills above.
+      </p>
+    </div>
+
+    <!-- 5A. 3-COLUMN CLICKABLE CARDS GRID -->
+    <div v-else-if="viewMode === 'cards'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <article
+        v-for="note in filteredNotes"
+        :key="note.id"
+        class="group card bg-base-100 border border-base-200 hover:border-primary/60 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3.5 transition-all cursor-pointer select-none"
+        :class="note.done ? 'opacity-60' : ''"
+        @click="openCardInDrawer(note, 'edit')"
+      >
+        <div class="space-y-2.5">
+          <!-- Card Top Badge Strip -->
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="badge badge-xs font-bold" :class="kindBadgeClass(note.kind)">
+                {{ KIND_META[note.kind].icon }} {{ KIND_META[note.kind].label }}
+              </span>
+              <span v-if="note.destination" class="badge badge-ghost badge-xs font-semibold">
+                {{ DEST_META[note.destination].icon }} {{ DEST_META[note.destination].label }}
+              </span>
+              <span
+                v-if="statusOf(note)"
+                class="badge badge-xs font-bold"
+                :class="GOV[statusOf(note)!].badge"
+              >
+                {{ GOV[statusOf(note)!].icon }} {{ GOV[statusOf(note)!].label }}
+              </span>
+              <span v-if="note.surface && note.kind === 'report'" class="badge badge-outline badge-xs font-semibold">
+                {{ SURFACES[note.surface] }}
+              </span>
+            </div>
+
+            <span class="badge badge-ghost badge-xs font-mono opacity-75">
+              +{{ estimateTokens(note.draftedFixPrompt || note.body) }} tok
+            </span>
+          </div>
+
+          <!-- Card Title -->
+          <h3
+            class="text-sm sm:text-base font-black text-base-content group-hover:text-primary transition-colors leading-snug line-clamp-2"
+            :class="note.done ? 'line-through' : ''"
+          >
+            {{ note.title }}
+          </h3>
+
+          <!-- Clean 3-Line Preview (No Giant Raw Pre Box) -->
+          <p class="text-xs text-base-content/75 line-clamp-3 leading-relaxed whitespace-pre-line bg-base-200/40 rounded-xl p-2.5 border border-base-200">
+            {{ note.body }}
+          </p>
+
+          <!-- Clean Parsed Item Snapshot Pill (Instead of Raw JSON Dump!) -->
+          <div
+            v-if="parsedSummary(note)"
+            class="p-2.5 rounded-xl bg-secondary/5 border border-secondary/25 space-y-1 text-xs"
+          >
+            <div class="flex items-center justify-between gap-1.5 flex-wrap">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1">
+                <Icon icon="solar:box-minimalistic-bold-duotone" class="w-3.5 h-3.5" />
+                <span>Scan Snapshot</span>
+              </span>
+              <div class="flex items-center gap-1 flex-wrap">
+                <span v-if="parsedSummary(note)?.tier" class="badge badge-secondary badge-2xs font-bold uppercase">
+                  {{ parsedSummary(note)?.tier }}
+                </span>
+                <span v-if="parsedSummary(note)?.priceOrValue" class="badge badge-success badge-2xs font-mono font-bold">
+                  {{ parsedSummary(note)?.priceOrValue }}
+                </span>
+                <span v-if="parsedSummary(note)?.verdict" class="badge badge-warning badge-2xs font-mono font-bold">
+                  {{ parsedSummary(note)?.verdict }}
+                </span>
+              </div>
+            </div>
+            <div class="text-[11px] font-bold text-base-content truncate">
+              {{ parsedSummary(note)?.title }}
+            </div>
+          </div>
+
+          <!-- Saved Fix / Bias Audit Indicator Badges -->
+          <div v-if="note.draftedFixPrompt || note.antiBiasAudit" class="flex items-center gap-1.5 flex-wrap">
+            <span v-if="note.antiBiasAudit" class="badge badge-warning badge-outline badge-xs font-bold">
+              🛡️ Bias Audit Saved
+            </span>
+            <span v-if="note.draftedFixPrompt" class="badge badge-primary badge-outline badge-xs font-bold">
+              🎯 IDE Fix Saved
+            </span>
+          </div>
+        </div>
+
+        <!-- Card Footer: Read-Only Metadata + 1-Tap Copy + Open Drawer Cue -->
+        <div
+          class="flex items-center justify-between gap-2 pt-2.5 border-t border-base-200 text-xs"
+          @click.stop
+        >
+          <div class="flex items-center gap-1.5 min-w-0">
+            <button
+              v-if="statusOf(note)"
+              type="button"
+              class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold gap-1"
+              title="Confirm you have also seen this issue"
+              @click="upvoteById(note.id)"
+            >
+              <span>👍</span>
+              <span class="font-mono">{{ note.upvotedBy?.length || 0 }}</span>
+            </button>
+            <span class="text-[10px] opacity-55 truncate font-mono">
+              {{ new Date(note.updatedAt).toLocaleDateString() }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              class="btn btn-xs btn-primary rounded-lg font-bold gap-1 shadow-2xs"
+              title="Copy text to clipboard"
+              @click="copyText(note.draftedFixPrompt || note.body)"
+            >
+              <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
+              <span>Copy</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost border border-base-300 hover:border-primary rounded-lg font-bold gap-1"
+              title="Open in Slide-Over Drawer to edit or refine with AI"
+              @click="openCardInDrawer(note, 'edit')"
+            >
+              <span>Open</span>
+              <Icon icon="solar:alt-arrow-right-linear" class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- 5B. COMPACT TABLE LEDGER VIEW -->
+    <div v-else class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full text-xs">
+          <thead>
+            <tr class="bg-base-200/60 text-[11px] uppercase tracking-wider">
+              <th>Type</th>
+              <th>Title &amp; Preview</th>
+              <th>Target / Surface</th>
+              <th>Governance</th>
+              <th>Tokens</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="note in filteredNotes"
+              :key="note.id"
+              class="hover:bg-base-200/50 cursor-pointer transition-colors"
+              @click="openCardInDrawer(note, 'edit')"
+            >
+              <td class="whitespace-nowrap">
+                <span class="badge badge-xs font-bold" :class="kindBadgeClass(note.kind)">
+                  {{ KIND_META[note.kind].icon }} {{ KIND_META[note.kind].label }}
+                </span>
+              </td>
+              <td class="max-w-md">
+                <div class="font-black text-base-content truncate" :class="note.done ? 'line-through opacity-60' : ''">
+                  {{ note.title }}
+                </div>
+                <div class="text-[11px] opacity-65 truncate">{{ note.body }}</div>
+              </td>
+              <td class="whitespace-nowrap">
+                <span v-if="note.destination" class="badge badge-ghost badge-xs font-semibold">
+                  {{ DEST_META[note.destination].icon }} {{ DEST_META[note.destination].label }}
+                </span>
+                <span v-else-if="note.surface" class="badge badge-outline badge-xs">
+                  {{ SURFACES[note.surface] }}
+                </span>
+              </td>
+              <td class="whitespace-nowrap">
                 <span
                   v-if="statusOf(note)"
-                  class="badge badge-sm font-bold"
+                  class="badge badge-xs font-bold"
                   :class="GOV[statusOf(note)!].badge"
                 >
                   {{ GOV[statusOf(note)!].icon }} {{ GOV[statusOf(note)!].label }}
                 </span>
-                <span v-if="note.surface" class="badge badge-outline badge-xs font-bold">
-                  {{ SURFACES[note.surface] }}
-                </span>
-                <span v-if="note.rootCause" class="badge badge-ghost badge-xs font-semibold">
-                  {{ ROOT_CAUSES[note.rootCause] }}
-                </span>
-                <span class="text-[11px] opacity-55 font-mono">
-                  {{ new Date(note.updatedAt).toLocaleString() }}
-                  <template v-if="note.author"> · Reported by {{ note.author }}</template>
-                </span>
-              </div>
-              <h3 class="text-sm sm:text-base font-black text-base-content">{{ note.title }}</h3>
-            </div>
-
-            <div class="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                class="btn btn-xs btn-outline rounded-xl font-bold gap-1"
-                title="Confirm you have also seen this AI issue"
-                @click="upvote(note)"
-              >
-                <span>👍 Confirm Issue</span>
-                <span class="badge badge-xs badge-primary font-mono">{{ note.upvotedBy?.length || 0 }}</span>
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost border border-base-300 rounded-xl font-semibold"
-                @click="copyText(note.body)"
-              >
-                Copy
-              </button>
-              <button
-                v-if="canDelete(note)"
-                type="button"
-                class="btn btn-xs btn-ghost text-error rounded-xl"
-                @click="removeNote(note)"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <p class="text-xs sm:text-sm bg-base-200/50 border border-base-300/60 rounded-xl p-3 whitespace-pre-wrap leading-relaxed">
-            {{ note.body }}
-          </p>
-
-          <details v-if="note.itemContext" class="text-xs bg-base-200/30 border border-base-200 rounded-xl p-2.5">
-            <summary class="cursor-pointer font-bold text-base-content/75">
-              📎 View Attached Item &amp; Scan Context
-            </summary>
-            <pre class="text-[11px] whitespace-pre-wrap break-words font-mono opacity-80 mt-2 max-h-40 overflow-y-auto">{{ note.itemContext }}</pre>
-          </details>
-
-          <!-- Founder / Developer Vetting Action Bar -->
-          <div
-            v-if="isFounder"
-            class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-base-200"
-          >
-            <div class="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                class="btn btn-xs btn-secondary rounded-xl font-bold"
-                @click="setStatus(note, 'vetted_for_dev')"
-              >
-                🟣 Approve / Vet for Dev
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-success rounded-xl font-bold"
-                @click="setStatus(note, 'shipped')"
-              >
-                🟢 Mark Shipped in Git
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost border border-base-300 rounded-xl font-semibold"
-                @click="setStatus(note, 'rejected')"
-              >
-                ⚪ Archive / Photo Limit
-              </button>
-            </div>
-
-            <button
-              type="button"
-              class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5"
-              :disabled="making"
-              @click="auditAndDraft(note)"
-            >
-              <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-              <span>✨ Run Anti-Bias Audit &amp; Draft IDE Fix</span>
-            </button>
-          </div>
-          <div v-else class="text-[11px] opacity-60 pt-1 border-t border-base-200">
-            🔒 Only a Founder / Developer can change governance status or promote rules to <code class="font-mono">alpha-1</code>.
-          </div>
-        </div>
+                <span v-else class="opacity-40">—</span>
+              </td>
+              <td class="font-mono whitespace-nowrap">
+                +{{ estimateTokens(note.draftedFixPrompt || note.body) }} tok
+              </td>
+              <td class="text-right whitespace-nowrap" @click.stop>
+                <div class="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-primary rounded-lg font-bold"
+                    @click="copyText(note.draftedFixPrompt || note.body)"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold"
+                    @click="openCardInDrawer(note, 'edit')"
+                  >
+                    Open →
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- =================================================================== -->
-    <!-- QUICK NOTE / VOICE IDEA MODAL                                       -->
-    <!-- =================================================================== -->
-    <Teleport to="body">
-      <div
-        v-if="showQuickNoteModal"
-        class="fixed inset-0 z-500 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 animate-in fade-in duration-150"
-        @click.self="showQuickNoteModal = false"
-      >
-        <form
-          class="bg-base-100 border border-base-300 shadow-2xl w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 space-y-4"
-          @submit.prevent="addNote"
+    <!-- 6. STICKY VIEWPORT COMMAND DOCK (Canonical BottomActionDock) -->
+    <BottomActionDock placement="viewport">
+      <template #left>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="badge badge-primary badge-sm font-mono font-black">{{ filteredNotes.length }}</span>
+          <span class="font-bold text-base-content truncate">Vault Cards</span>
+          <span v-if="pendingReportsCount > 0" class="badge badge-warning badge-xs font-bold">
+            🟡 {{ pendingReportsCount }} Pending Review
+          </span>
+        </div>
+      </template>
+
+      <template #center>
+        <div class="hidden xl:flex items-center gap-1">
+          <button
+            v-for="qf in QUICK_DOCK_FILTERS"
+            :key="qf.key"
+            type="button"
+            class="btn btn-xs rounded-lg font-bold"
+            :class="activeFilter === qf.key ? 'btn-primary' : 'btn-ghost'"
+            @click="activeFilter = qf.key"
+          >
+            {{ qf.label }}
+          </button>
+        </div>
+      </template>
+
+      <template #right>
+        <AiFeedbackButton surface="quick_scout" @submitted="refreshVault('pending_review')" />
+
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-secondary rounded-xl font-black gap-1.5"
+          @click="openNewCardInDrawer('prompt', 'copilot')"
         >
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <h3 class="text-base sm:text-lg font-black">Save Quick Idea, Prompt or Spec</h3>
-              <p class="text-xs opacity-65">Syncs straight to Appwrite Cloud across your phone and PC.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="showQuickNoteModal = false">✕</button>
-          </div>
+          <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
+          <span>🪄 AI Co-Pilot</span>
+        </button>
 
-          <div class="flex flex-wrap gap-1.5">
-            <button
-              v-for="(meta, k) in KIND_META"
-              :key="k"
-              type="button"
-              class="btn btn-xs sm:btn-sm rounded-xl font-bold"
-              :class="draftKind === k ? 'btn-primary' : 'btn-ghost border border-base-300'"
-              @click="draftKind = k"
-            >
-              {{ meta.icon }} {{ meta.label }}
-            </button>
-          </div>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5 px-4 shadow-sm"
+          @click="openNewCardInDrawer('idea', 'edit')"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
+          <span>+ New Card</span>
+        </button>
+      </template>
+    </BottomActionDock>
 
-          <input
-            v-model="draftTitle"
-            class="input input-bordered w-full text-sm rounded-xl"
-            placeholder="Short title (optional — auto-filled from first line)"
-          />
-
-          <textarea
-            v-model="draftBody"
-            class="textarea textarea-bordered w-full text-sm rounded-xl leading-relaxed"
-            rows="5"
-            placeholder="Type or tap your phone keyboard microphone to dictate…"
-          ></textarea>
-
-          <div class="flex items-center justify-end gap-2 pt-1">
-            <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showQuickNoteModal = false">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-sm btn-primary rounded-xl font-black px-5" :disabled="!draftBody.trim()">
-              💾 Save to Cloud Vault
-            </button>
-          </div>
-        </form>
-      </div>
-    </Teleport>
+    <!-- 7. RIGHT-EDGE SLIDE-OVER EDITOR & CO-PILOT DRAWER -->
+    <VaultNoteDrawer
+      :is-open="isDrawerOpen"
+      :note="activeDrawerNote"
+      :initial-tab="activeDrawerTab"
+      :is-founder="isFounder"
+      :can-delete="activeDrawerNote ? canDelete(activeDrawerNote) : false"
+      :saving="savingCard"
+      :presets="PLAYBOOK_PRESETS"
+      @close="isDrawerOpen = false"
+      @save="handleSaveFromDrawer"
+      @delete="handleDeleteFromDrawer"
+      @copy="copyText"
+      @upvote="upvoteById"
+    />
   </div>
 </template>
 
@@ -904,26 +592,26 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
+import BottomActionDock from '../common/BottomActionDock.vue';
 import AiFeedbackButton from '../common/AiFeedbackButton.vue';
+import VaultNoteDrawer, { type PlaybookPresetItem } from './VaultNoteDrawer.vue';
 import {
   loadVaultNotes,
   saveVaultNotes,
   newVaultNoteId,
   effectiveStatus,
   toggleUpvote,
-  estimatePromptOpsImpact,
+  estimateTokens,
+  parseItemContextSummary,
   STARTER_VAULT_NOTES,
   VAULT_KIND_META,
   GOVERNANCE_META,
   DESTINATION_META,
   AI_SURFACE_LABELS,
-  AI_ROOT_CAUSE_LABELS,
-  BLOAT_BADGE,
   type VaultNote,
   type VaultNoteKind,
   type VaultGovernanceStatus,
-  type PromptTargetDestination,
-  type PromptOpsImpact,
+  type ParsedItemContextSummary,
 } from '../../lib/founderVault';
 import {
   loadCoopGovernanceState,
@@ -933,48 +621,29 @@ import {
   type CoopMemberProfile,
 } from '../../lib/coopGovernance';
 
-interface DraftResult {
-  title: string;
-  promptText: string;
-  coPilotNotes: string;
-  followUpQuestions: Array<{ question: string; chips: string[] }>;
-  antiBiasAudit: string;
-  bundlesUsed: string[];
-  opsImpact: PromptOpsImpact;
-}
-
-interface PlaybookPreset {
-  id: string;
-  starterNoteId?: string;
-  icon: string;
-  title: string;
-  summary: string;
-  destination: PromptTargetDestination;
-  bundles: string[];
-  defaultGoal: string;
-}
+type FilterKey =
+  | 'all'
+  | 'prompt'
+  | 'idea'
+  | 'spec'
+  | 'report'
+  | 'pending_review'
+  | 'vetted'
+  | 'done';
 
 const KIND_META = VAULT_KIND_META;
 const GOV = GOVERNANCE_META;
 const DEST_META = DESTINATION_META;
 const SURFACES = AI_SURFACE_LABELS;
-const ROOT_CAUSES = AI_ROOT_CAUSE_LABELS;
 
-const DESTINATION_HINTS: Record<PromptTargetDestination, string> = {
-  gemini_app: 'Short phone bullets + cumulative Spec block',
-  chrome_sidebar: 'Reads live browser tab DOM + 4-line report',
-  ai_studio: 'System Instructions + structured test prompt',
-  antigravity_ide: '1-shot surgical edit + ALLOWED FILES lock',
-  product_spec: 'UX flow, Appwrite rules & test checklist',
-};
-
-const PLAYBOOK_PRESETS: PlaybookPreset[] = [
+const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
   {
     id: 'auction-sweeper',
     starterNoteId: 'starter-auction-sweeper',
     icon: '🔭',
     title: 'Whole-Page Auction Grid Sweeper',
-    summary: 'Scans 24–50 ShopGoodwill, HiBid, or eBay search lots in Chrome Sidebar and ranks the Top 3–5 sleeper lots where 1 Anchor item recoups your bid.',
+    summary:
+      'Scans 24–50 ShopGoodwill, HiBid, or eBay search lots in Chrome Sidebar and ranks the Top 3–5 sleeper lots where 1 Anchor item recoups your bid.',
     destination: 'chrome_sidebar',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
@@ -985,7 +654,8 @@ const PLAYBOOK_PRESETS: PlaybookPreset[] = [
     starterNoteId: 'starter-fbmp-coach',
     icon: '🤝',
     title: 'FBMP / Local Deal & Negotiation Coach',
-    summary: 'Builds an Opening Anchor -> Walk-Away Offer Ladder, 3 non-tip-off seller questions, and 3 copy-paste DM negotiation scripts.',
+    summary:
+      'Builds an Opening Anchor -> Walk-Away Offer Ladder, 3 non-tip-off seller questions, and 3 copy-paste DM negotiation scripts.',
     destination: 'gemini_app',
     bundles: ['rc-1-scout-vision', 'rc-3-booth-drops'],
     defaultGoal:
@@ -995,7 +665,8 @@ const PLAYBOOK_PRESETS: PlaybookPreset[] = [
     id: 'estate-triage',
     icon: '🧭',
     title: 'Estate Table / Thrift Pile Triage',
-    summary: 'Use your phone camera in Gemini App to scan a whole table or shelf of items, spot the highest-margin pieces, and suggest a bundle offer.',
+    summary:
+      'Use your phone camera in Gemini App to scan a whole table or shelf of items, spot the highest-margin pieces, and suggest a bundle offer.',
     destination: 'gemini_app',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
@@ -1006,7 +677,8 @@ const PLAYBOOK_PRESETS: PlaybookPreset[] = [
     starterNoteId: 'starter-paired-qa-sidebar',
     icon: '🧪',
     title: 'Paired Human-AI Live Page QA Tester',
-    summary: 'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
+    summary:
+      'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
     destination: 'chrome_sidebar',
     bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
     defaultGoal:
@@ -1014,29 +686,12 @@ const PLAYBOOK_PRESETS: PlaybookPreset[] = [
   },
 ];
 
-const specialistBundles = [
-  { id: 'rc-1-scout-vision', label: '🔍 1. Scout & Valuation' },
-  { id: 'rc-2-inventory-splitter', label: '📦 2. Lots & Playbooks' },
-  { id: 'rc-3-booth-drops', label: '🏷️ 3. Booth & Labels' },
-  { id: 'rc-4-sales-coop', label: '🤝 4. Sales & Co-op' },
-  { id: 'rc-5-social-studio', label: '📱 5. Social & Mobile UX' },
-];
-
-const VAULT_TAB_FILTERS = [
-  { key: 'all', label: 'All Saved' },
+const QUICK_DOCK_FILTERS: Array<{ key: FilterKey; label: string }> = [
+  { key: 'all', label: 'All' },
   { key: 'prompt', label: '📋 Prompts' },
-  { key: 'idea', label: '💡 Ideas' },
-  { key: 'spec', label: '📌 Specs' },
-  { key: 'done', label: '✅ Completed' },
-] as const;
-
-const REPORT_TAB_FILTERS = [
-  { key: 'all', label: 'All Reports' },
-  { key: 'pending_review', label: '🟡 Pending Review' },
-  { key: 'vetted_for_dev', label: '🟣 Vetted for Dev' },
-  { key: 'shipped', label: '🟢 Shipped in Git' },
-  { key: 'rejected', label: '⚪ Archived' },
-] as const;
+  { key: 'report', label: '🚩 AI Reports' },
+  { key: 'pending_review', label: '🟡 Pending' },
+];
 
 const { user } = useAuth();
 const members = ref<CoopMemberProfile[]>(normalizePolicyConfig(DEFAULT_COOP_POLICY_CONFIG).members);
@@ -1044,27 +699,15 @@ const members = ref<CoopMemberProfile[]>(normalizePolicyConfig(DEFAULT_COOP_POLI
 const notes = ref<VaultNote[]>([]);
 const synced = ref(false);
 const loading = ref(true);
+const savingCard = ref(false);
 const showGuide = ref(false);
-const showQuickNoteModal = ref(false);
-
-const activeTab = ref<'studio' | 'vault' | 'reports'>('studio');
-const vaultFilter = ref<'all' | 'prompt' | 'idea' | 'spec' | 'done'>('all');
-const reportFilter = ref<'all' | VaultGovernanceStatus>('all');
+const viewMode = ref<'cards' | 'table'>('cards');
+const activeFilter = ref<FilterKey>('all');
 const searchQuery = ref('');
 
-const draftKind = ref<VaultNoteKind>('idea');
-const draftTitle = ref('');
-const draftBody = ref('');
-
-const activePresetId = ref<string>('auction-sweeper');
-const destination = ref<PromptTargetDestination>('chrome_sidebar');
-const selectedBundles = ref<string[]>([]);
-const makerIdea = ref('');
-const refinement = ref('');
-const making = ref(false);
-const makerError = ref('');
-const draft = ref<DraftResult | null>(null);
-const draftReportContext = ref('');
+const isDrawerOpen = ref(false);
+const activeDrawerNote = ref<VaultNote | null>(null);
+const activeDrawerTab = ref<'edit' | 'copilot' | 'audit'>('edit');
 
 const memberName = computed(() => user.value?.name || '');
 
@@ -1078,13 +721,12 @@ const isFounder = computed(
   () => !!user.value?.labels?.includes('admin') || canMemberEditGlobalFinancials(currentMember.value, false)
 );
 
-const bloat = computed(() => BLOAT_BADGE[draft.value?.opsImpact.bloatRating || 'lean']);
-
 const promptsCount = computed(() => notes.value.filter((n) => n.kind === 'prompt' && !n.done).length);
-const nonReportNotesCount = computed(() => notes.value.filter((n) => n.kind !== 'report' && !n.done).length);
-const reportsCount = computed(() => notes.value.filter((n) => n.kind === 'report').length);
+const ideasCount = computed(() => notes.value.filter((n) => n.kind === 'idea' && !n.done).length);
+const specsCount = computed(() => notes.value.filter((n) => n.kind === 'spec' && !n.done).length);
+const reportsCount = computed(() => notes.value.filter((n) => n.kind === 'report' && !n.done).length);
 const pendingReportsCount = computed(
-  () => notes.value.filter((n) => n.kind === 'report' && effectiveStatus(n) === 'pending_review').length
+  () => notes.value.filter((n) => n.kind === 'report' && !n.done && effectiveStatus(n) === 'pending_review').length
 );
 const vettedAndShippedCount = computed(
   () =>
@@ -1094,181 +736,178 @@ const vettedAndShippedCount = computed(
         (effectiveStatus(n) === 'vetted_for_dev' || effectiveStatus(n) === 'shipped')
     ).length
 );
+const doneCount = computed(() => notes.value.filter((n) => n.done).length);
 
-const filteredVaultNotes = computed(() => {
+const PIPELINE_FILTERS = computed<Array<{ key: FilterKey; label: string; count: number }>>(() => [
+  { key: 'all', label: 'All Active', count: notes.value.filter((n) => !n.done).length },
+  { key: 'prompt', label: '📋 Prompts', count: promptsCount.value },
+  { key: 'idea', label: '💡 Ideas', count: ideasCount.value },
+  { key: 'spec', label: '📌 Specs', count: specsCount.value },
+  { key: 'report', label: '🚩 AI Reports', count: reportsCount.value },
+  { key: 'pending_review', label: '🟡 Pending Review', count: pendingReportsCount.value },
+  { key: 'vetted', label: '🟣/🟢 Vetted & Shipped', count: vettedAndShippedCount.value },
+  { key: 'done', label: '✅ Completed', count: doneCount.value },
+]);
+
+const filteredNotes = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  const base = [...notes.value]
-    .filter((n) => n.kind !== 'report')
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const sorted = [...notes.value].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
-  const byKind =
-    vaultFilter.value === 'done'
-      ? base.filter((n) => n.done)
-      : vaultFilter.value === 'all'
-        ? base.filter((n) => !n.done)
-        : base.filter((n) => n.kind === vaultFilter.value && !n.done);
+  const byFilter = sorted.filter((n) => {
+    if (activeFilter.value === 'done') return !!n.done;
+    if (n.done) return false;
+    if (activeFilter.value === 'all') return true;
+    if (activeFilter.value === 'pending_review') {
+      return n.kind === 'report' && effectiveStatus(n) === 'pending_review';
+    }
+    if (activeFilter.value === 'vetted') {
+      const st = effectiveStatus(n);
+      return st === 'vetted_for_dev' || st === 'shipped';
+    }
+    return n.kind === activeFilter.value;
+  });
 
-  if (!q) return byKind;
-  return byKind.filter(
-    (n) => n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q)
+  if (!q) return byFilter;
+  return byFilter.filter(
+    (n) =>
+      n.title.toLowerCase().includes(q) ||
+      n.body.toLowerCase().includes(q) ||
+      (n.itemContext && n.itemContext.toLowerCase().includes(q))
   );
-});
-
-const filteredReportNotes = computed(() => {
-  const base = [...notes.value]
-    .filter((n) => n.kind === 'report')
-    .sort((a, b) => (b.upvotedBy?.length || 0) - (a.upvotedBy?.length || 0) || b.updatedAt.localeCompare(a.updatedAt));
-  if (reportFilter.value === 'all') return base;
-  return base.filter((n) => effectiveStatus(n) === reportFilter.value);
 });
 
 function statusOf(note: VaultNote): VaultGovernanceStatus | undefined {
   return effectiveStatus(note);
 }
 
+function kindBadgeClass(k: VaultNoteKind): string {
+  if (k === 'report') return 'badge-warning';
+  if (k === 'prompt') return 'badge-primary';
+  if (k === 'spec') return 'badge-secondary';
+  return 'badge-accent';
+}
+
+function parsedSummary(note: VaultNote): ParsedItemContextSummary | null {
+  return parseItemContextSummary(note.itemContext);
+}
+
 function canDelete(note: VaultNote): boolean {
   return isFounder.value || (!!note.author && note.author === memberName.value);
 }
 
-function toggleBundle(id: string) {
-  selectedBundles.value = selectedBundles.value.includes(id)
-    ? selectedBundles.value.filter((b) => b !== id)
-    : [...selectedBundles.value, id];
+function openCardInDrawer(note: VaultNote, tab: 'edit' | 'copilot' | 'audit' = 'edit') {
+  activeDrawerNote.value = note;
+  activeDrawerTab.value = tab;
+  isDrawerOpen.value = true;
 }
 
-function openQuickNoteModal(kind: VaultNoteKind = 'idea') {
-  draftKind.value = kind;
-  draftTitle.value = '';
-  draftBody.value = '';
-  showQuickNoteModal.value = true;
+function openNewCardInDrawer(kind: VaultNoteKind = 'prompt', tab: 'edit' | 'copilot' = 'edit') {
+  const now = new Date().toISOString();
+  activeDrawerNote.value = {
+    id: newVaultNoteId(),
+    kind,
+    title: '',
+    body: '',
+    destination: 'gemini_app',
+    author: memberName.value || undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+  activeDrawerTab.value = tab;
+  isDrawerOpen.value = true;
 }
 
-function loadPresetInstant(preset: PlaybookPreset) {
-  activePresetId.value = preset.id;
-  destination.value = preset.destination;
-  selectedBundles.value = [...preset.bundles];
-  makerIdea.value = preset.defaultGoal;
-
+function openPresetInDrawer(preset: PlaybookPresetItem) {
   const existing = preset.starterNoteId
     ? notes.value.find((n) => n.id === preset.starterNoteId) ||
       STARTER_VAULT_NOTES.find((n) => n.id === preset.starterNoteId)
     : undefined;
 
-  const text = existing ? existing.body : preset.defaultGoal;
-  draft.value = {
+  if (existing) {
+    openCardInDrawer(existing, 'copilot');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  activeDrawerNote.value = {
+    id: newVaultNoteId(),
+    kind: 'prompt',
     title: preset.title,
-    promptText: text,
-    coPilotNotes:
-      'Loaded instant Playbook template. You can copy it right now, or use the Interactive Co-Pilot chips below to tailor it to a specific auction site, budget, or booth.',
-    followUpQuestions: [
-      {
-        question: 'Which venue or channel are you hunting for today?',
-        chips: ['Memory Den #0EJ (Goth / TTRPG / Sci-Fi)', 'Dusty Tiger (<8in Smalls / Pins)', 'Online Grail Flip (eBay / Poshmark)'],
-      },
-      {
-        question: 'What is your target max cash outlay or bid ceiling per lot?',
-        chips: ['Under $25 fast turn', '$30–$65 Anchor Lot', '$75+ Grail / Hero Lot'],
-      },
-    ],
-    antiBiasAudit: '',
-    bundlesUsed: preset.bundles,
-    opsImpact: estimatePromptOpsImpact(text),
+    body: preset.defaultGoal,
+    destination: preset.destination,
+    bundlesUsed: [...preset.bundles],
+    author: memberName.value || undefined,
+    createdAt: now,
+    updatedAt: now,
   };
+  activeDrawerTab.value = 'copilot';
+  isDrawerOpen.value = true;
 }
 
-async function customizePresetWithAi(preset: PlaybookPreset) {
-  activePresetId.value = preset.id;
-  destination.value = preset.destination;
-  selectedBundles.value = [...preset.bundles];
-  makerIdea.value = preset.defaultGoal;
-  await runMaker(false);
-}
-
-function loadNoteIntoStudio(note: VaultNote) {
-  activeTab.value = 'studio';
-  if (note.destination) destination.value = note.destination;
-  makerIdea.value = note.title;
-  draft.value = {
-    title: note.title,
-    promptText: note.body,
-    coPilotNotes: 'Loaded from your saved Vault. Add a refinement below and tap 🔄 Refine Draft to iterate.',
-    followUpQuestions: [
-      {
-        question: 'How would you like to evolve this saved prompt or idea?',
-        chips: ['Make it shorter for mobile', 'Convert to Antigravity IDE prompt', 'Add stricter anti-hallucination rules'],
-      },
-    ],
-    antiBiasAudit: '',
-    bundlesUsed: selectedBundles.value,
-    opsImpact: estimatePromptOpsImpact(note.body),
-  };
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function resetStudio() {
-  makerIdea.value = '';
-  refinement.value = '';
-  draftReportContext.value = '';
-  draft.value = null;
-  makerError.value = '';
+function copyPresetPrompt(preset: PlaybookPresetItem) {
+  const existing = preset.starterNoteId
+    ? notes.value.find((n) => n.id === preset.starterNoteId) ||
+      STARTER_VAULT_NOTES.find((n) => n.id === preset.starterNoteId)
+    : undefined;
+  copyText(existing ? existing.body : preset.defaultGoal);
 }
 
 async function persist() {
   synced.value = await saveVaultNotes(notes.value);
 }
 
-async function refreshVault() {
+async function refreshVault(switchFilter?: 'reports' | 'pending_review') {
   const res = await loadVaultNotes();
   notes.value = res.notes;
   synced.value = res.synced;
-  activeTab.value = 'reports';
+  if (switchFilter === 'reports') activeFilter.value = 'report';
+  if (switchFilter === 'pending_review') activeFilter.value = 'pending_review';
 }
 
-async function addNote() {
-  const body = draftBody.value.trim();
-  if (!body) return;
-  const now = new Date().toISOString();
-  notes.value.push({
-    id: newVaultNoteId(),
-    kind: draftKind.value,
-    title: draftTitle.value.trim() || body.split('\n')[0].slice(0, 60),
-    body,
-    author: memberName.value || undefined,
-    createdAt: now,
-    updatedAt: now,
-  });
-  draftTitle.value = '';
-  draftBody.value = '';
-  showQuickNoteModal.value = false;
-  await persist();
-  addToast('Saved to Cloud Vault', 'success');
+async function handleSaveFromDrawer(updated: VaultNote) {
+  savingCard.value = true;
+  try {
+    const id = updated.id || newVaultNoteId();
+    const record: VaultNote = {
+      ...updated,
+      id,
+      updatedAt: new Date().toISOString(),
+    };
+    const idx = notes.value.findIndex((n) => n.id === id);
+    if (idx !== -1) {
+      notes.value[idx] = record;
+    } else {
+      notes.value.unshift(record);
+    }
+    activeDrawerNote.value = record;
+    await persist();
+    addToast('Saved to Cloud Vault', 'success');
+  } finally {
+    savingCard.value = false;
+  }
 }
 
-async function toggleDone(note: VaultNote) {
-  note.done = !note.done;
-  note.updatedAt = new Date().toISOString();
+async function handleDeleteFromDrawer(id: string) {
+  const target = notes.value.find((n) => n.id === id);
+  if (!target) {
+    isDrawerOpen.value = false;
+    return;
+  }
+  if (!window.confirm(`Delete "${target.title}" from the Vault?`)) return;
+  notes.value = notes.value.filter((n) => n.id !== id);
+  isDrawerOpen.value = false;
   await persist();
+  addToast('Deleted from Vault', 'info');
 }
 
-async function removeNote(note: VaultNote) {
-  if (!window.confirm(`Delete "${note.title}"?`)) return;
-  notes.value = notes.value.filter((n) => n.id !== note.id);
+async function upvoteById(id: string) {
+  const target = notes.value.find((n) => n.id === id);
+  if (!target) return;
+  toggleUpvote(target, memberName.value || 'member');
+  if (activeDrawerNote.value && activeDrawerNote.value.id === id) {
+    activeDrawerNote.value = { ...target, upvotedBy: [...(target.upvotedBy || [])] };
+  }
   await persist();
-}
-
-async function upvote(note: VaultNote) {
-  toggleUpvote(note, memberName.value || 'member');
-  await persist();
-}
-
-async function setStatus(note: VaultNote, status: VaultGovernanceStatus) {
-  if (!isFounder.value) return;
-  note.status = status;
-  note.vettedBy = memberName.value || undefined;
-  note.vettedAt = new Date().toISOString();
-  note.updatedAt = note.vettedAt;
-  await persist();
-  addToast(`Marked ${GOV[status].label}`, 'success');
 }
 
 async function copyText(text: string) {
@@ -1280,83 +919,17 @@ async function copyText(text: string) {
   }
 }
 
-function addRefinement(question: string, chip: string) {
-  refinement.value = `${refinement.value ? refinement.value + '\n' : ''}${question} → ${chip}`;
-}
-
-async function runMaker(isRefine = false) {
-  making.value = true;
-  makerError.value = '';
-  try {
-    const res = await fetch('/api/generate-vault-prompt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        idea: makerIdea.value,
-        destination: destination.value,
-        bundleIds: selectedBundles.value,
-        reportContext: draftReportContext.value,
-        currentDraft: isRefine ? draft.value?.promptText : undefined,
-        userRefinement: isRefine ? refinement.value : undefined,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || 'Generation failed');
-    draft.value = data as DraftResult;
-    if (isRefine) refinement.value = '';
-  } catch (err: any) {
-    makerError.value = err?.message || 'Generation failed';
-  } finally {
-    making.value = false;
-  }
-}
-
-async function saveDraft() {
-  if (!draft.value) return;
-  const now = new Date().toISOString();
-  notes.value.push({
-    id: newVaultNoteId(),
-    kind: destination.value === 'product_spec' ? 'spec' : 'prompt',
-    title: draft.value.title,
-    body: draft.value.promptText,
-    destination: destination.value,
-    author: memberName.value || undefined,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await persist();
-  addToast('Saved to Cloud Vault', 'success');
-}
-
-async function auditAndDraft(note: VaultNote) {
-  activeTab.value = 'studio';
-  destination.value = 'antigravity_ide';
-  makerIdea.value = `Run a 3-Point Anti-Bias Audit and draft a generalizable Antigravity IDE fix for this community AI report.\nTitle: ${note.title}\nReporter note: ${note.body}`;
-  draftReportContext.value = [
-    note.itemContext ? `Item context: ${note.itemContext}` : '',
-    note.rootCause ? `Reporter root cause: ${ROOT_CAUSES[note.rootCause]}` : '',
-    `Community confirmations: ${note.upvotedBy?.length || 0}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
-  await runMaker(false);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
 onMounted(async () => {
   const params = new URLSearchParams(window.location.search);
   const tabParam = params.get('tab');
-  if (tabParam === 'vault' || tabParam === 'reports' || tabParam === 'studio') {
-    activeTab.value = tabParam;
+  if (tabParam === 'reports') {
+    activeFilter.value = 'report';
   }
 
   const res = await loadVaultNotes();
   notes.value = res.notes;
   synced.value = res.synced;
   loading.value = false;
-
-  // Pre-load the Auction Sweeper starter into the right-hand canvas so the studio feels alive immediately
-  loadPresetInstant(PLAYBOOK_PRESETS[0]);
 
   try {
     const gov = await loadCoopGovernanceState();

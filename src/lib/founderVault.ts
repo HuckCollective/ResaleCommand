@@ -36,6 +36,64 @@ export interface VaultNote {
   vettedBy?: string;
   vettedAt?: string;
   destination?: PromptTargetDestination;
+  antiBiasAudit?: string;
+  draftedFixPrompt?: string;
+  coPilotNotes?: string;
+  followUpQuestions?: Array<{ question: string; chips: string[] }>;
+  bundlesUsed?: string[];
+}
+
+export interface ParsedItemContextSummary {
+  title: string;
+  tier?: string;
+  priceOrValue?: string;
+  verdict?: string;
+  whyPayUp?: string;
+  whyPass?: string;
+  rawText: string;
+}
+
+/** Parses raw Quick Scout / ItemDrawer context strings or JSON into human-readable summary fields. */
+export function parseItemContextSummary(raw?: string): ParsedItemContextSummary | null {
+  const text = (raw || '').trim();
+  if (!text) return null;
+
+  try {
+    const jsonStart = text.indexOf('{');
+    if (jsonStart !== -1) {
+      const prefix = text.slice(0, jsonStart).replace(/\|/g, '•').trim();
+      const parsed = JSON.parse(text.slice(jsonStart));
+      const firstItem = Array.isArray(parsed?.items) && parsed.items.length > 0 ? parsed.items[0] : parsed;
+      const title =
+        firstItem?.title ||
+        firstItem?.identity ||
+        firstItem?.name ||
+        prefix.split('•')[0]?.trim() ||
+        'Attached Scan Snapshot';
+      const tier = firstItem?.tier_label || firstItem?.tier || undefined;
+      const priceOrValue =
+        firstItem?.estimated_value ||
+        firstItem?.pricing_potential?.boutique ||
+        (firstItem?.resalePrice ? `$${firstItem.resalePrice}` : undefined);
+      const verdict = firstItem?.purchase_strategy?.verdict || parsed?.purchase_strategy?.verdict || undefined;
+      const whyPayUp = firstItem?.why_pay_up || firstItem?.reason || undefined;
+      const whyPass = firstItem?.why_pass || undefined;
+      return { title: String(title), tier, priceOrValue, verdict, whyPayUp, whyPass, rawText: text };
+    }
+  } catch {
+    // Fallback to pipe-delimited parsing below
+  }
+
+  const parts = text
+    .split('|')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return {
+    title: parts[0]?.slice(0, 120) || 'Attached Item Snapshot',
+    priceOrValue: parts[1]?.startsWith('$') || /^\d/.test(parts[1] || '') ? parts[1] : undefined,
+    whyPayUp: parts.slice(1).join(' • ').slice(0, 260) || undefined,
+    rawText: text,
+  };
 }
 
 export const FOUNDER_VAULT_DOC_ID = 'founder_vault_notes_v1';
