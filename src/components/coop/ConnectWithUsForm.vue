@@ -59,7 +59,15 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { JOIN_REQUEST_HATS, type JoinRequestHat } from '../../lib/joinRequests';
+import { databases } from '../../lib/appwrite';
+import { getDatabaseId } from '../../lib/appwriteEnv';
+import {
+  JOIN_REQUEST_HATS,
+  JOIN_REQUEST_LIMITS,
+  JOIN_REQUEST_LOCATION_ID,
+  JOIN_REQUEST_STATUS,
+  type JoinRequestHat,
+} from '../../lib/joinRequests';
 
 interface HatOption {
   id: string;
@@ -88,26 +96,75 @@ const toggleHat = (id: string) => {
     : [...selectedHats.value, id];
 };
 
+async function buildJoinDocId(cleanEmail: string): Promise<string> {
+  const bytes = new TextEncoder().encode(cleanEmail);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `join_${hex.slice(0, 28)}`;
+}
+
 const submitRequest = async () => {
   errorMsg.value = '';
   if (selectedHats.value.length === 0) return (errorMsg.value = 'Pick at least one hat.');
   if (!name.value.trim()) return (errorMsg.value = 'Please enter your name.');
   if (!/^\S+@\S+\.\S+$/.test(email.value.trim())) return (errorMsg.value = 'Please enter a valid email.');
+  if (website.value.trim()) {
+    step.value = 'done';
+    return;
+  }
+
   busy.value = true;
   try {
-    const res = await fetch('/api/join-request', {
+    const cleanName = name.value.trim().slice(0, JOIN_REQUEST_LIMITS.name);
+    const cleanEmail = email.value.trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
+    const cleanNote = note.value.trim().slice(0, JOIN_REQUEST_LIMITS.note);
+    const hats = selectedHats.value as JoinRequestHat[];
+
+    const docId = await buildJoinDocId(cleanEmail);
+    const docData = {
+      name: `Join request: ${cleanName}`.slice(0, 120),
+      tenantId: 'system',
+      locationId: JOIN_REQUEST_LOCATION_ID,
+      locationName: 'Join Requests',
+      status: JOIN_REQUEST_STATUS.pending,
+      itemCount: 0,
+      itemsSnapshot: JSON.stringify({
+        name: cleanName,
+        email: cleanEmail,
+        hats,
+        note: cleanNote,
+        requestedAt: new Date().toISOString(),
+      }),
+      notes: '',
+    };
+
+    const dbId = getDatabaseId();
+    try {
+      await databases.createDocument(dbId, 'manifests', docId, docData);
+    } catch (err: any) {
+      if (err?.code === 409) {
+        await databases.updateDocument(dbId, 'manifests', docId, docData);
+      } else {
+        throw err;
+      }
+    }
+
+    // Trigger server-side Appwrite Messaging (`coop-founders` Topic email via Porkbun SMTP)
+    fetch('/api/join-request', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: name.value.trim(),
-        email: email.value.trim(),
-        note: note.value.trim(),
-        hats: selectedHats.value as JoinRequestHat[],
+        name: cleanName,
+        email: cleanEmail,
+        note: cleanNote,
+        hats,
         website: website.value,
       }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || 'Could not save your request.');
+    }).catch(() => {});
+
     step.value = 'done';
   } catch (err: any) {
     errorMsg.value = err?.message || 'Could not save your request. Please try again.';

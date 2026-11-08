@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
-import { Client, Databases, ID, Messaging, Permission, Role } from 'node-appwrite';
+import { Client, Databases, ID, Messaging } from 'node-appwrite';
 import {
   COOP_MESSAGING_TOPICS,
   JOIN_REQUEST_HATS,
@@ -8,20 +8,18 @@ import {
   JOIN_REQUEST_LOCATION_ID,
   JOIN_REQUEST_STATUS,
 } from '../../lib/joinRequests';
+import { getDatabaseId, getEnvVar } from '../../lib/appwriteEnv';
 
 export const prerender = false;
 
 const MANIFESTS_COL_ID = 'manifests';
-const DAILY_LIMIT_PER_NETWORK = 10;
+const DAILY_LIMIT_PER_NETWORK = 15;
 
 const attempts = new Map<string, number>();
 let lastPruneDay = '';
 
 const json = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-
-const env = (key: string): string =>
-  (typeof import.meta !== 'undefined' && (import.meta.env as any)?.[key]) || process.env[key] || '';
 
 function allowAttempt(request: Request): boolean {
   const day = new Date().toISOString().slice(0, 10);
@@ -43,8 +41,9 @@ const escapeHtml = (s: string) =>
 
 /**
  * Direct 1-click "Connect With Us" join request endpoint.
- * 1) Saves the request to `manifests` (`locationId: 'JOIN_REQUESTS'`) for Dashboard Alert #20 & `JoinRequestsPanel.vue`.
- * 2) Publishes an Appwrite Messaging email to the `coop-founders` Topic (`Porkbun SMTP` / `admin@resalecmd.com`).
+ * 1) Saves the request to `manifests` (`locationId: 'JOIN_REQUESTS'`) using public project credentials
+ *    so it works on every deployment (even if `APPWRITE_API_KEY` is unset on a preview branch).
+ * 2) When `APPWRITE_API_KEY` is configured, publishes an instant email to `coop-founders` via Appwrite Messaging.
  */
 export const POST: APIRoute = async ({ request }) => {
   if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
@@ -61,11 +60,13 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: true, alreadyReviewed: false });
   }
 
-  const endpoint = env('PUBLIC_APPWRITE_ENDPOINT');
-  const project = env('PUBLIC_APPWRITE_PROJECT_ID');
-  const apiKey = env('APPWRITE_API_KEY');
-  const dbId = env('PUBLIC_APPWRITE_DB_ID');
-  if (!endpoint || !project || !apiKey || !dbId) return json({ error: 'Server is not configured.' }, 500);
+  const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT');
+  const project = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID');
+  const apiKey = getEnvVar('APPWRITE_API_KEY');
+  const dbId = getDatabaseId();
+  if (!endpoint || !project || !dbId) {
+    return json({ error: 'Appwrite endpoint or project ID is not configured.' }, 500);
+  }
 
   const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
   const email = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
@@ -77,9 +78,8 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
   }
 
-  const client = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-  const databases = new Databases(client);
-  const messaging = new Messaging(client);
+  const publicClient = new Client().setEndpoint(endpoint).setProject(project);
+  const databases = new Databases(publicClient);
 
   try {
     const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
@@ -96,37 +96,37 @@ export const POST: APIRoute = async ({ request }) => {
     };
 
     try {
-      await databases.createDocument(dbId, MANIFESTS_COL_ID, docId, docData, [
-        Permission.read(Role.users()),
-        Permission.update(Role.users()),
-        Permission.delete(Role.users()),
-      ]);
+      await databases.createDocument(dbId, MANIFESTS_COL_ID, docId, docData);
     } catch (err: any) {
       if (err?.code !== 409) throw err;
       await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
     }
 
-    // Publish instant email alert to the `coop-founders` Topic via Appwrite Messaging (Porkbun SMTP)
-    try {
-      await messaging.createEmail({
-        messageId: ID.unique(),
-        subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
-        content: [
-          `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) submitted a <strong>Connect With Us</strong> request on the Co-op Charter.</p>`,
-          `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
-          note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-          `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance to Approve or Reply</a></p>`,
-        ].join(''),
-        topics: [COOP_MESSAGING_TOPICS.founders],
-        html: true,
-      });
-    } catch (mailErr: any) {
-      console.warn('[join-request] Messaging topic notification skipped:', mailErr?.message || mailErr);
+    // Best-effort instant email alert to the `coop-founders` Topic when APPWRITE_API_KEY is available
+    if (apiKey) {
+      try {
+        const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
+        const messaging = new Messaging(keyClient);
+        await messaging.createEmail({
+          messageId: ID.unique(),
+          subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
+          content: [
+            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) submitted a <strong>Connect With Us</strong> request on the Co-op Charter.</p>`,
+            `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
+            note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
+            `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance to Approve or Reply</a></p>`,
+          ].join(''),
+          topics: [COOP_MESSAGING_TOPICS.founders],
+          html: true,
+        });
+      } catch (mailErr: any) {
+        console.warn('[join-request] Messaging topic notification skipped:', mailErr?.message || mailErr);
+      }
     }
 
     return json({ ok: true, alreadyReviewed: false });
   } catch (err: any) {
     console.error('[join-request]', err?.message || err);
-    return json({ error: 'Could not save your request. Please try again.' }, 500);
+    return json({ error: err?.message || 'Could not save your request. Please try again.' }, 500);
   }
 };
