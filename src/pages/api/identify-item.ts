@@ -5,6 +5,7 @@ import { speedScoutResponseSchema } from '../../lib/ai/schemas/speed-scout.schem
 import { SPEED_SCOUT_SYSTEM_INSTRUCTION } from '../../lib/ai/instructions/system-instructions';
 import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-builders';
 import { parsePriceValue } from '../../lib/lot-strategy';
+import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -621,6 +622,21 @@ export const ALL: APIRoute = async ({ request }) => {
     let scrapedListingContext = "";
     let shippingSummary = "";
 
+    // GUEST PREVIEW: unauthenticated visitors get a limited scan (daily quota, max photos, no URLs/locations).
+    const isGuest = isGuestRequest(request);
+    if (isGuest) {
+        const quota = consumeGuestScan(request);
+        if (!quota.allowed) {
+            return new Response(JSON.stringify({
+                error: "Guest preview limit reached",
+                details: `You've used all ${quota.limit} free preview scans for today. Log in as a Collective member for unlimited scouting, or come back tomorrow.`,
+                guest: quota
+            }), { status: 429, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+        }
+    }
+    const guestBlocked = (details: string) => new Response(JSON.stringify({
+        error: "Members only", details
+    }), { status: 403, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
     try {
         if (!model) {
             console.error("Gemini model not initialized.");
@@ -817,6 +833,16 @@ export const ALL: APIRoute = async ({ request }) => {
             // Option 2: JSON payload
             try {
                 const json = JSON.parse(rawBody);
+
+                if (isGuest) {
+                    const hasRemote = Boolean(json.imageUrl) || (Array.isArray(json.remoteImageUrls) && json.remoteImageUrls.length > 0);
+                    if (hasRemote || /https?:\/\//i.test(String(json.notes || ''))) {
+                        return guestBlocked("Online listing / auction URL scouting is reserved for Collective members. Upload up to 2 photos instead.");
+                    }
+                    if (Array.isArray(json.images)) {
+                        json.images = json.images.slice(0, GUEST_MAX_PHOTOS_PER_SCAN);
+                    }
+                }
                 
                 // Extract User Notes if present
                 if (json.notes) {
@@ -876,8 +902,8 @@ export const ALL: APIRoute = async ({ request }) => {
                 }
                 
                 // Auto-load organization locations with niches & watch tags (e.g. Memory Den, DustyTiger)
-                let targetLocations = Array.isArray(json.locations) && json.locations.length > 0 ? json.locations : [];
-                if (targetLocations.length === 0) {
+                let targetLocations = !isGuest && Array.isArray(json.locations) && json.locations.length > 0 ? json.locations : [];
+                if (!isGuest && targetLocations.length === 0) {
                     try {
                         const endpoint = process.env.PUBLIC_APPWRITE_ENDPOINT || import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
                         const projectId = process.env.PUBLIC_APPWRITE_PROJECT_ID || import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '';
@@ -915,6 +941,12 @@ export const ALL: APIRoute = async ({ request }) => {
         } 
 
         // 3. Smart URL Handling (The "Scout Link" Feature)
+        if (isGuest) {
+            imageParts = imageParts.slice(0, GUEST_MAX_PHOTOS_PER_SCAN);
+            if (/https?:\/\//i.test(userNotes)) {
+                return guestBlocked("Online listing / auction URL scouting is reserved for Collective members.");
+            }
+        }
         // 3. Smart URL Handling (Deep Listing Analysis)
         if (userNotes) {
             const urlMatch = userNotes.match(/https?:\/\/[^\s]+/);

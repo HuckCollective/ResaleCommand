@@ -1,0 +1,88 @@
+---
+// Zero-hydration cookie consent banner (native Astro, semantic daisyUI only).
+// Stores 'granted' | 'denied' in localStorage under `cookie_consent` and fires
+// a `cookie-consent-updated` window event. Re-open from anywhere with any element
+// that has the `data-cookie-settings` attribute (see Footer.astro).
+---
+
+<div
+  id="cookie-consent-banner"
+  class="toast toast-bottom toast-center sm:toast-end z-[200] hidden w-full max-w-full sm:w-auto p-3 sm:p-4"
+  role="dialog"
+  aria-live="polite"
+  aria-label="Cookie consent"
+>
+  <div class="card bg-base-200 text-base-content border border-base-300 shadow-xl w-full sm:max-w-md">
+    <div class="card-body p-4 gap-3">
+      <h2 class="card-title text-base font-bold whitespace-normal break-words">🍪 Cookies &amp; Privacy</h2>
+      <p class="text-sm leading-relaxed whitespace-normal break-words">
+        We use essential cookies to keep you signed in and to enforce the free daily Scout preview limit. With your
+        permission we also remember display preferences such as your theme. We never sell your data or run
+        third-party ad trackers.
+      </p>
+      <div class="card-actions flex-col sm:flex-row sm:justify-end gap-2">
+        <button
+          id="cookie-consent-decline"
+          type="button"
+          class="btn btn-ghost btn-sm h-auto min-h-9 py-2 whitespace-normal w-full sm:w-auto"
+        >
+          Decline
+        </button>
+        <button
+          id="cookie-consent-accept"
+          type="button"
+          class="btn btn-primary btn-sm h-auto min-h-9 py-2 whitespace-normal w-full sm:w-auto"
+        >
+          Accept All
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  (function () {
+    var KEY = 'cookie_consent';
+    var banner = document.getElementById('cookie-consent-banner');
+    if (!banner) return;
+
+    var stored = null;
+    try {
+      stored = window.localStorage.getItem(KEY);
+    } catch (e) {
+      stored = null;
+    }
+
+    function show() {
+      banner.classList.remove('hidden');
+    }
+    function hide() {
+      banner.classList.add('hidden');
+    }
+
+    if (stored !== 'granted' && stored !== 'denied') show();
+
+    function save(value) {
+      try {
+        window.localStorage.setItem(KEY, value);
+      } catch (e) {}
+      hide();
+      window.dispatchEvent(new CustomEvent('cookie-consent-updated', { detail: { consent: value } }));
+    }
+
+    var accept = document.getElementById('cookie-consent-accept');
+    var decline = document.getElementById('cookie-consent-decline');
+    if (accept) accept.addEventListener('click', function () { save('granted'); });
+    if (decline) decline.addEventListener('click', function () { save('denied'); });
+
+    // Re-open from any trigger (e.g. footer "Privacy & Cookie Settings").
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (t && t.closest && t.closest('[data-cookie-settings]')) {
+        ev.preventDefault();
+        show();
+      }
+    });
+  })();
+</script>
+

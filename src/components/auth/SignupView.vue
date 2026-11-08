@@ -2,9 +2,20 @@
   <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
     <div class="card w-full max-w-md bg-base-100 shadow-2xl">
       <div class="card-body">
-        <h2 class="card-title text-3xl font-bold justify-center mb-6">Create your account</h2>
+        <h2 class="card-title text-3xl font-bold justify-center mb-6">{{ hasInvite ? 'Create your account' : 'Membership is by invitation' }}</h2>
+
+        <div v-if="!hasInvite" class="space-y-4 text-center">
+          <p class="text-sm leading-relaxed">
+            The Huckleberry Collective welcomes new members by invitation. Ask any member to send you an invite link,
+            or tell us how you'd like to be involved.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-2 justify-center">
+            <a href="/coop" class="btn btn-primary btn-sm">Connect With Us</a>
+            <a href="/login" class="btn btn-outline btn-sm">Member Login</a>
+          </div>
+        </div>
         
-        <form @submit.prevent="submit" class="space-y-4">
+        <form v-if="hasInvite" @submit.prevent="submit" class="space-y-4">
           <div class="form-control w-full">
             <label class="label">
               <span class="label-text font-medium">Full Name</span>
@@ -70,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 
 const auth = useAuth();
@@ -80,6 +91,12 @@ const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
+// Membership is by invitation: signup only works when arriving from a /join invite redirect.
+const hasInvite = ref(false);
+onMounted(() => {
+    const redirect = new URLSearchParams(window.location.search).get('redirect') || '';
+    hasInvite.value = redirect.includes('/join');
+});
 // Preserve redirect query parameter for login link
 const loginLink = computed(() => {
     if (typeof window !== 'undefined') {

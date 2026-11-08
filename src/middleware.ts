@@ -1,5 +1,6 @@
 import { defineMiddleware } from "astro:middleware";
 import { Client, Databases, Query } from "node-appwrite";
+import { isPublicPagePath, buildLoginRedirect } from "./lib/publicRoutes";
 
 // Simple local cache to prevent querying Appwrite on every single request
 const domainCache = new Map<string, { tenantId: string | null; expiry: number }>();
@@ -74,13 +75,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.rewrite(targetPath);
   }
 
-  // 4. Default authentication guards for primary application site
-  const protectedRoutes = ["/dashboard", "/inventory", "/partners"];
-  if (protectedRoutes.some(route => url.pathname.startsWith(route))) {
+  // 4. Default-DENY authentication guard for the primary application site.
+  // Only paths in src/lib/publicRoutes.ts are reachable without an account.
+  if (!isPublicPagePath(url.pathname)) {
     const authCookie = context.cookies.get("auth_session_indicator");
     if (!authCookie || !authCookie.value) {
       console.log(`[Middleware] Redirecting unauthenticated user from ${url.pathname} to /login`);
-      return context.redirect("/login", 302);
+      return context.redirect(buildLoginRedirect(url.pathname, url.search), 302);
     }
   }
 

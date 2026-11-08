@@ -4,6 +4,7 @@ import Footer from "@components/Footer.astro";
 import ToastContainer from "@components/ui/ToastContainer.vue";
 import ConfirmContainer from "@components/ui/ConfirmContainer.vue";
 import MarkdownModal from "@components/ui/MarkdownModal.astro";
+import CookieConsent from "@components/common/CookieConsent.astro";
 import HuckleberryLoader from "@components/common/HuckleberryLoader.vue";
 import { siteConfig } from "site-config";
 
@@ -55,6 +56,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     </div>
 
     <MarkdownModal />
+    <CookieConsent />
     <HuckleberryLoader client:only="vue" />
     <ToastContainer client:only="vue" />
     <ConfirmContainer client:only="vue" />

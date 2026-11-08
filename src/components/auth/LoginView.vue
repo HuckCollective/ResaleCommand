@@ -35,7 +35,8 @@
           </div>
 
           <div class="flex items-center justify-between text-sm mt-2">
-            <a :href="signupLink" class="link link-primary link-hover">Don't have an account? Sign up</a>
+            <a v-if="hasInviteRedirect" :href="signupLink" class="link link-primary link-hover">Have an invitation? Create your account</a>
+            <a v-else href="/coop" class="link link-primary link-hover">Membership is by invitation — learn about the Collective</a>
           </div>
 
           <div class="form-control mt-6">
@@ -60,16 +61,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect } from 'vue';
+import { ref, computed, watchEffect, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 
 const auth = useAuth();
-const email = ref(import.meta.env.PUBLIC_TEST_USER_EMAIL || '');
-const password = ref(import.meta.env.PUBLIC_TEST_USER_PASSWORD || '');
+const email = ref(import.meta.env.DEV ? (import.meta.env.PUBLIC_TEST_USER_EMAIL || '') : '');
+const password = ref(import.meta.env.DEV ? (import.meta.env.PUBLIC_TEST_USER_PASSWORD || '') : '');
 const loading = ref(false);
 const error = ref('');
 
-const isDevLogin = computed(() => !!import.meta.env.PUBLIC_TEST_USER_EMAIL);
+const isDevLogin = computed(() => import.meta.env.DEV && !!import.meta.env.PUBLIC_TEST_USER_EMAIL);
+
+// Membership is by invitation: only show "Sign up" when arriving from a /join invite link.
+const hasInviteRedirect = ref(false);
+onMounted(() => {
+    const redirect = new URLSearchParams(window.location.search).get('redirect') || '';
+    hasInviteRedirect.value = redirect.includes('/join');
+});
 
 // Auto-redirect if already logged in
 watchEffect(() => {

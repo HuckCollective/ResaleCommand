@@ -149,6 +149,13 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 8, 2026)
 
+## ✅ ACCESS LOCKDOWN, GUEST SCOUT PREVIEW & COOKIE CONSENT (Nov 8, 2026 — `alpha-1`)
+- **Default-Deny Routes (`src/lib/publicRoutes.ts` → `src/middleware.ts` + `initAuth()` in `src/lib/store.ts`)**: only `/`, `/coop`, `/coop/charter`, `/scout` (Guest Preview), `/login`, `/logout`, `/join`, `/signup`, `/404`, `/subsite*`, `/scripts/*` and static assets are public; every other page redirects to `/login?redirect=...` (server cookie hint + client session check). Add new public pages ONLY in `publicRoutes.ts`.
+- **Guest content sanitization**: `CoopCharterView.vue` hides member links (`/expenses`, `/sales/import`, `/settings`, `/coop/labor`), the live `<CoopGovernanceView>`, the labor logger, internal ledger KPIs and barcode prefixes for guests; `Navbar.vue` shows a `Preview` badge on Quick Scout and a guest mobile menu; `/signup` is invite-only (needs a `/join` redirect) and test-credential prefill is DEV-only.
+- **Guest Scout Preview (`ScoutView.vue` + `src/lib/guestScoutLimiter.ts` + `/api/identify-item`)**: 5 free scans/day, max 2 photos/scan, no URLs/auctions/trackers/saves/storage locations/booth channels/AI-issue button; Pro intel replaced by a locked card. Quota = `rc_guest_scout` cookie + `localStorage` (client) AND SHA-256(IP+UTC day) in-memory counter (server, 429 when reached). It is a fair-use limiter, not an auth boundary (members are recognised by the `auth_session_indicator` hint cookie).
+- **Cookie consent (`src/components/common/CookieConsent.astro`, mounted in `Layout.astro`, re-open via `data-cookie-settings` in `Footer.astro`)**: zero-hydration daisyUI banner, `localStorage.cookie_consent` = `granted|denied`, dispatches `cookie-consent-updated`.
+- **Linter**: `scripts/validate-templates.mjs` Check 13 enforces the above.
+
 ## ✅ MOBILE-FIRST PAGE SHELLS (`.rc-page-shell`), `.rc-card-grid` & LIVE SELF-CLEARING DOCK SPACERS (`useDockClearance.ts` — Nov 8, 2026 — `alpha-1` ➔ `main`)
 - **Semantic Tailwind v4 / PostCSS Component Classes (`src/styles/global.css`)**:
   - Added `.rc-page-shell` (`96rem` / `--breakpoint-2xl` aligned 1:1 with `Navbar.vue`), `.rc-page-shell-narrow` (`64rem` / `max-w-5xl` for single-task forms & scanners), `.rc-card-grid` (`1 -> 2 -> 3 -> 4 -> 5` retail catalog columns), and `.rc-dock-spacer` (`height: calc(var(--rc-dock-height, 4.25rem) + 1rem)` with `margin-top: 0 !important`).

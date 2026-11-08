@@ -47,6 +47,7 @@
         <!-- Quick Action Buttons -->
         <div class="flex flex-wrap items-center gap-2.5 shrink-0">
           <a 
+            v-if="isAuthenticated"
             href="/expenses" 
             class="btn btn-sm btn-secondary gap-2 shadow-sm font-bold"
             title="Upload invoice PDFs and view Commons Expense Ledger"
@@ -438,7 +439,7 @@
             </div>
 
             <!-- Settlement Importer Quick Action Banner -->
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-base-200/90 border border-base-300">
+            <div v-if="isAuthenticated" class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-base-200/90 border border-base-300">
               <div class="space-y-0.5">
                 <div class="font-bold text-xs text-base-content flex items-center gap-1.5">
                   <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
@@ -517,7 +518,7 @@
           <div class="space-y-3 pt-1">
             <h3 class="font-extrabold text-sm text-base-content flex items-center gap-2">
               <Icon icon="solar:document-text-bold" class="w-4 h-4 text-primary" />
-              Real Monthly Statement: $2,500 Gross Sales at Memory Den (Booth 0EJ)
+              {{ isAuthenticated ? 'Real Monthly Statement: $2,500 Gross Sales at Memory Den (Booth 0EJ)' : 'Sample Monthly Statement: $2,500 Gross Sales at a Partner Venue' }}
             </h3>
 
             <div class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100">
@@ -526,8 +527,8 @@
                   <tr>
                     <th>Line Item</th>
                     <th class="text-center font-bold">Total Booth Pool</th>
-                    <th class="text-center text-primary font-bold">Huck Collective (A)</th>
-                    <th class="text-center text-secondary font-bold">PDX Game Library (B)</th>
+                    <th class="text-center text-primary font-bold">{{ isAuthenticated ? 'Huck Collective (A)' : 'Partner A' }}</th>
+                    <th class="text-center text-secondary font-bold">{{ isAuthenticated ? 'PDX Game Library (B)' : 'Partner B' }}</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-base-200">
@@ -645,6 +646,7 @@
 
             <!-- Single Clean Button: Push to Expenses -->
             <a 
+              v-if="isAuthenticated"
               href="/expenses" 
               class="btn btn-primary rounded-2xl font-black text-sm gap-2 h-12 px-6 shadow-md shadow-primary/25 whitespace-nowrap active:scale-95 transition-all"
             >
@@ -653,8 +655,8 @@
             </a>
           </div>
 
-          <!-- Top KPI Overview (Commons Pool Status) -->
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <!-- Top KPI Overview (Commons Pool Status) — members only (internal ledger figures) -->
+          <div v-if="isAuthenticated" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div class="p-4 rounded-2xl bg-base-200/60 border border-base-300 shadow-xs space-y-1">
               <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Total Commons Expenses</div>
               <div class="text-xl sm:text-2xl font-black text-base-content font-mono">$2,819.54</div>
@@ -713,8 +715,8 @@
             </div>
           </div>
 
-          <!-- Bottom Action Banner -->
-          <div class="p-4 sm:p-5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <!-- Bottom Action Banner (members only) -->
+          <div v-if="isAuthenticated" class="p-4 sm:p-5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div class="space-y-0.5 text-center sm:text-left">
               <div class="font-bold text-sm text-base-content">Need to log a receipt or view full line-item history?</div>
               <div class="text-xs text-base-content/70">Access multi-PDF invoice uploads, AI receipt scanning, and approval workflows in the dedicated workspace.</div>
@@ -733,7 +735,29 @@
 
     <!-- MODULE 4: DEMOCRATIC GOVERNANCE & LOOMIO 4-SIGNAL CONSENT VOTING -->
     <div v-show="activeSection === 'governance'" class="space-y-6">
-      <CoopGovernanceView />
+      <CoopGovernanceView v-if="isAuthenticated" />
+      <div v-else class="card bg-base-100 border border-base-300 shadow-md">
+        <div class="card-body p-6 space-y-4">
+          <h2 class="text-xl font-black text-base-content tracking-tight">One Member, One Vote</h2>
+          <p class="text-sm text-base-content/80 leading-relaxed">
+            Every member has an equal voice. Proposals are decided by consent using four clear signals, and any
+            member can block a change they believe is unsafe for the collective.
+          </p>
+          <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <span class="p-1.5 rounded-lg bg-success/20 font-bold text-center">🟢 Agree</span>
+            <span class="p-1.5 rounded-lg bg-warning/20 font-bold text-center">🟡 Abstain</span>
+            <span class="p-1.5 rounded-lg bg-secondary/20 font-bold text-center">🟠 Disagree</span>
+            <span class="p-1.5 rounded-lg bg-error/20 font-bold text-center">🔴 Block (Veto)</span>
+          </div>
+          <p class="text-xs text-base-content/70 leading-relaxed">
+            Live proposals, votes and policy dials are visible to members after signing in.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-primary rounded-xl font-bold" @click="showConnectModal = true">Connect With Us</button>
+            <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- MODULE 5: LEGAL STRUCTURE, PARTNER AUTONOMY & LABOR -->
@@ -795,17 +819,20 @@
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div class="p-3 bg-base-100 rounded-xl border border-base-300">
-                <span class="badge badge-primary font-mono font-bold text-[10px] mb-1">HUCK- / PDXGL-</span>
+                <span v-if="isAuthenticated" class="badge badge-primary font-mono font-bold text-[10px] mb-1">HUCK- / PDXGL-</span>
+                <span v-else class="badge badge-primary font-bold text-[10px] mb-1">Curator Partners</span>
                 <div class="font-bold text-base-content">Curator Worker-Members</div>
                 <p class="text-base-content/65">Source inventory, earn 100% cost back + {{ liveCuratorPct }}% Net Surplus + Gate 4B Sweat-Equity hours + 1M1V vote.</p>
               </div>
               <div class="p-3 bg-accent/10 rounded-xl border border-accent/30">
-                <span class="badge badge-accent font-mono font-bold text-[10px] mb-1">SWEAT- ($0 Inventory)</span>
+                <span v-if="isAuthenticated" class="badge badge-accent font-mono font-bold text-[10px] mb-1">SWEAT- ($0 Inventory)</span>
+                <span v-else class="badge badge-accent font-bold text-[10px] mb-1">Promoters &amp; Enablers ($0 Inventory)</span>
                 <div class="font-bold text-base-content">Marketing, Social &amp; Enabling Workers</div>
                 <p class="text-base-content/75">Drive sales via Dropcast Reels, photography, online shipping &amp; pop-ups. Earn pro-rata Gate 4B Labor Pool dividends + full 1M1V vote with $0 inventory required!</p>
               </div>
               <div class="p-3 bg-base-100 rounded-xl border border-base-300">
-                <span class="badge badge-warning font-mono font-bold text-[10px] mb-1">BB-</span>
+                <span v-if="isAuthenticated" class="badge badge-warning font-mono font-bold text-[10px] mb-1">BB-</span>
+                <span v-else class="badge badge-warning font-bold text-[10px] mb-1">Straight Consignors</span>
                 <div class="font-bold text-base-content">Contractual Consignors</div>
                 <p class="text-base-content/65">Receive contractual inventory split only; do not hold General Assembly voting seats or Labor Pool draws.</p>
               </div>
@@ -813,7 +840,7 @@
           </div>
 
           <!-- Marketing Labor Recognition & Link to Full Ledger -->
-          <div class="p-4 rounded-2xl bg-base-200/70 border border-base-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div v-if="isAuthenticated" class="p-4 rounded-2xl bg-base-200/70 border border-base-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div class="space-y-1">
               <div class="font-bold text-base-content flex items-center gap-1.5">
                 <Icon icon="solar:camera-bold" class="w-4 h-4 text-accent" />
@@ -829,8 +856,8 @@
             </a>
           </div>
 
-          <!-- Simple Labor & Engagement Logger -->
-          <div class="card bg-base-200/50 border border-base-300 p-5 rounded-2xl space-y-4">
+          <!-- Simple Labor & Engagement Logger (members only) -->
+          <div v-if="isAuthenticated" class="card bg-base-200/50 border border-base-300 p-5 rounded-2xl space-y-4">
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-base-300 pb-3">
               <div>
                 <h3 class="font-bold text-sm text-base-content flex items-center gap-2">
@@ -982,16 +1009,25 @@
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <a href="/sales/import" class="btn btn-sm btn-outline gap-1.5 font-bold">
-          <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary" />
-          <span>Sales &amp; Settlements</span>
-        </a>
-        <a href="/settings" class="btn btn-sm btn-outline font-bold">
-          Partner Settings
-        </a>
-        <a href="/scout" class="btn btn-sm btn-primary font-bold">
-          Start Scouting Inventory
-        </a>
+        <template v-if="isAuthenticated">
+          <a href="/sales/import" class="btn btn-sm btn-outline gap-1.5 font-bold">
+            <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary" />
+            <span>Sales &amp; Settlements</span>
+          </a>
+          <a href="/settings" class="btn btn-sm btn-outline font-bold">
+            Partner Settings
+          </a>
+          <a href="/scout" class="btn btn-sm btn-primary font-bold">
+            Start Scouting Inventory
+          </a>
+        </template>
+        <template v-else>
+          <button type="button" class="btn btn-sm btn-primary font-bold" @click="showConnectModal = true">
+            Connect With Us
+          </button>
+          <a href="/scout" class="btn btn-sm btn-outline font-bold">Try AI Scout Preview</a>
+          <a href="/login" class="btn btn-sm btn-outline font-bold">Member Login</a>
+        </template>
       </div>
     </div>
 

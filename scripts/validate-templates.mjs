@@ -826,8 +826,54 @@ for (const contract of transportContracts) {
     }
 }
 
+// 13. ACCESS CONTROL: default-deny middleware allowlist, guest-gated member links, cookie consent, guest scout limiter
+{
+    const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+    const fail = (msg) => { console.error(`❌ [Access Control] ${msg}`); hasErrors = true; };
+
+    const middleware = read('src/middleware.ts');
+    if (!/isPublicPagePath\s*\(/.test(middleware) || /protectedRoutes\s*=/.test(middleware)) {
+        fail('src/middleware.ts must use the default-deny isPublicPagePath() allowlist (src/lib/publicRoutes.ts), not a protectedRoutes blocklist.');
+    }
+
+    const publicRoutes = read('src/lib/publicRoutes.ts');
+    for (const mustBeMemberOnly of ['/dashboard', '/inventory', '/sales', '/expenses', '/warehouse', '/purchases', '/settings', '/coop/vault', '/coop/settlements', '/item']) {
+        if (new RegExp(`['"]${mustBeMemberOnly}['"]`).test(publicRoutes.split('PUBLIC_PREFIXES')[0])) {
+            fail(`src/lib/publicRoutes.ts must NOT list ${mustBeMemberOnly} as a public path.`);
+        }
+    }
+
+    const store = read('src/lib/store.ts');
+    if (!/isPublicPagePath/.test(store)) {
+        fail('src/lib/store.ts initAuth() must redirect guests on member-only pages via isPublicPagePath().');
+    }
+
+    const charter = read('src/components/coop/CoopCharterView.vue');
+    if (/<CoopGovernanceView\s*\/>/.test(charter) && !/<CoopGovernanceView\s+v-if="isAuthenticated"/.test(charter)) {
+        fail('CoopCharterView.vue must mount <CoopGovernanceView> only when isAuthenticated.');
+    }
+
+    const navbar = read('src/components/nav/Navbar.vue');
+    if (/displayTrackedCount\s*>\s*0"/.test(navbar) && !/isAuthenticated\s*&&\s*displayTrackedCount\s*>\s*0/.test(navbar)) {
+        fail('Navbar.vue must only show the tracked-item count badge to authenticated users.');
+    }
+
+    const cookie = read('src/components/common/CookieConsent.astro');
+    if (!cookie || !/cookie-consent-updated/.test(cookie) || /\b(?:truncate|line-clamp-)/.test(cookie.split('<script')[0])) {
+        fail('src/components/common/CookieConsent.astro must exist, dispatch cookie-consent-updated, and never use truncate/line-clamp.');
+    }
+    if (!/<CookieConsent\s*\/>/.test(read('src/layouts/Layout.astro'))) {
+        fail('Layout.astro must mount <CookieConsent />.');
+    }
+
+    const identify = read('src/pages/api/identify-item.ts');
+    if (!/isGuestRequest\(/.test(identify) || !/consumeGuestScan\(/.test(identify)) {
+        fail('src/pages/api/identify-item.ts must enforce the guest preview limiter (isGuestRequest + consumeGuestScan).');
+    }
+}
+
 if (!hasErrors) {
-    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
+    console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {
     process.exit(1);
 }

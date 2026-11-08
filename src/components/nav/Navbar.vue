@@ -14,6 +14,14 @@
       </span>
     </div>
 
+    <!-- Desktop Center (guests): public pages only -->
+    <div v-if="!isAuthenticated && !loading" class="navbar-center hidden lg:flex items-center gap-1">
+      <a href="/coop" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold">
+        <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+        <span>Collective Charter</span>
+      </a>
+    </div>
+
     <!-- Desktop Center: 5-Pillar Lifecycle Navigation (Zero nested .menu-horizontal scrollbars) -->
     <div v-if="isAuthenticated" class="navbar-center hidden lg:flex items-center gap-1 overflow-visible">
       <a
@@ -281,10 +289,16 @@
       <!-- Single Quick Scout Pill -->
       <div class="indicator flex items-center">
         <span
-          v-if="displayTrackedCount > 0"
+          v-if="isAuthenticated && displayTrackedCount > 0"
           class="indicator-item badge badge-primary badge-xs sm:badge-sm text-primary-content font-black z-10 whitespace-nowrap shrink-0"
         >
           {{ displayTrackedCount }}
+        </span>
+        <span
+          v-else-if="!isAuthenticated"
+          class="indicator-item badge badge-secondary badge-xs text-secondary-content font-black z-10 whitespace-nowrap shrink-0"
+        >
+          Preview
         </span>
         <a
           href="/scout?quick=true"
@@ -641,6 +655,30 @@
                 </a>
               </div>
             </template>
+
+            <!-- Guest menu: public pages only -->
+            <div v-else class="space-y-1">
+              <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider px-2">Explore</span>
+              <a
+                href="/coop"
+                @click="openMobile = false"
+                class="flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm font-semibold hover:bg-base-200"
+              >
+                <Icon icon="solar:shield-star-bold-duotone" class="w-5 h-5 text-primary shrink-0" />
+                <span>Collective Charter</span>
+              </a>
+              <a
+                href="/scout"
+                @click="openMobile = false"
+                class="flex items-center justify-between gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm font-semibold hover:bg-base-200"
+              >
+                <span class="flex items-center gap-3">
+                  <Icon icon="solar:scanner-bold" class="w-5 h-5 text-primary shrink-0" />
+                  <span>AI Scout Preview</span>
+                </span>
+                <span class="badge badge-secondary badge-xs font-bold whitespace-nowrap">Preview</span>
+              </a>
+            </div>
           </div>
 
           <div class="p-4 bg-base-200/80 border-t border-base-300 space-y-3">

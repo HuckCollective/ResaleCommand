@@ -2,6 +2,7 @@ import { map } from 'nanostores';
 import type { Models } from 'appwrite';
 import { auth } from './auth';
 import { isAlphaMode } from '../stores/env';
+import { isPublicPagePath, buildLoginRedirect } from './publicRoutes';
 
 export interface AuthStoreState {
   user: Models.User<Models.Preferences> | null;
@@ -75,10 +76,21 @@ export async function initAuth() {
       } else {
         clearAuthCookie();
         authStore.setKey('loading', false);
+        redirectGuestToLogin();
       }
     } catch (error) {
       console.error("Auth init error:", error);
       authStore.setKey('loading', false);
+    }
+}
+
+// Client-side backstop for the server middleware: if the Appwrite session is gone
+// (expired / cleared) while on a member-only page, send the visitor to /login.
+function redirectGuestToLogin() {
+    if (typeof window === 'undefined') return;
+    const { pathname, search } = window.location;
+    if (!isPublicPagePath(pathname)) {
+        window.location.replace(buildLoginRedirect(pathname, search));
     }
 }
 

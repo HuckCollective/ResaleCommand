@@ -18,6 +18,18 @@
     <!-- MAIN CONTENT AREA (Intake Cockpit) -->
     <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto pb-60 sm:pb-72">
 
+        <!-- GUEST PREVIEW BANNER (logged-out visitors) -->
+        <div v-if="isGuest" class="rounded-2xl border border-secondary/40 bg-secondary/10 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="text-xs sm:text-sm leading-relaxed whitespace-normal break-words">
+                <span class="font-black">🧪 Guest Preview</span>
+                <span> — {{ guestRemaining }} of {{ GUEST_DAILY_LIMIT }} free scans left today (up to {{ GUEST_MAX_PHOTOS }} photos per scan). Web links, auctions and saving to inventory are for Collective members.</span>
+            </div>
+            <div class="flex flex-wrap gap-2 shrink-0">
+                <a href="/login" class="btn btn-xs btn-primary">Member Login</a>
+                <a href="/coop" class="btn btn-xs btn-outline">Connect With Us</a>
+            </div>
+        </div>
+
         <!-- 1. UNIFIED INTAKE SECTION (No Tabs) -->
         <div class="card bg-base-100 shadow-sm border border-base-200">
             <div class="card-body p-4 space-y-4">
@@ -26,7 +38,7 @@
                 <div class="form-control w-full flex flex-col">
                     <div class="mb-1.5 flex items-center justify-between gap-2 px-1">
                         <span class="text-xs font-semibold opacity-70">Additional Details (Optional) Size, Brand, Defects, etc.</span>
-                        <AiFeedbackButton surface="quick_scout" :item-context="userNotes || scoutUrl || ''" />
+                        <AiFeedbackButton v-if="isAuthenticated" surface="quick_scout" :item-context="userNotes || scoutUrl || ''" />
                     </div>
                     <textarea v-model="userNotes" class="textarea textarea-bordered w-full h-20 text-xs sm:text-sm leading-relaxed" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
                 </div>
@@ -36,7 +48,7 @@
                     <PhotoGalleryManager 
                         v-model:new-photos="images"
                         v-model:main-selection="mainPhotoSelection"
-                        :max-photos="10"
+                        :max-photos="isGuest ? 2 : 10"
                         :scanner-widget="scannerWidget"
                         output-format="object"
                         :show-header="false"
@@ -71,8 +83,8 @@
                 </div>
                 
                 <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-3 text-xs">
-                    <span class="opacity-70">Web Link Import requires login. </span>
-                    <a href="/login" class="link text-secondary font-bold">Log in to unlock access.</a>
+                    <span class="opacity-70">🔒 Online auction &amp; web link scouting is reserved for Collective members. </span>
+                    <a href="/login" class="link text-secondary font-bold">Member login</a>
                 </div>
 
             </div>
@@ -102,7 +114,7 @@
             </div>
             
             <div class="flex items-center gap-1.5">
-                <AiFeedbackButton surface="quick_scout" :item-context="JSON.stringify(result).slice(0, 1500)" />
+                <AiFeedbackButton v-if="isAuthenticated" surface="quick_scout" :item-context="JSON.stringify(result).slice(0, 1500)" />
                 <button type="button" @click="isResultsModalOpen = false" class="btn btn-sm btn-circle btn-ghost" title="Close Scouting Report">
                     ✕
                 </button>
@@ -137,6 +149,7 @@
                                 {{ item.identity || item.title || 'Identified Item' }}
                             </div>
                             <AiFeedbackButton
+                                v-if="isAuthenticated"
                                 surface="quick_scout"
                                 :item-context="[item.identity || item.title, item.estimated_value, item.condition, item.purchase_strategy?.verdict].filter(Boolean).join(' | ')"
                             />
@@ -200,7 +213,7 @@
 
                     <!-- ZONE 1: DECISIONAL HUD (AUCTION SNIPER vs THRIFT / FIXED PRICE) -->
                     <!-- 1A: AUCTION SNIPER HUD -->
-                    <div v-if="isAuctionItem(item)" 
+                    <div v-if="isAuthenticated && isAuctionItem(item)" 
                          class="rounded-2xl p-4 sm:p-5 mb-5 border-2 shadow-md transition-all relative overflow-hidden"
                          :class="{
                              'border-success bg-gradient-to-br from-success/15 via-base-100 to-success/5 shadow-success/10': ['BUY_NOW', 'CHASE_AUCTION'].includes(item.purchase_strategy?.verdict),
@@ -511,7 +524,7 @@
                     <!-- ZONE 2: TACTICAL EXIT PLAY & SOURCING INTEL -->
                     <div class="space-y-3 mb-5">
                         <!-- Unified Exit Play & Channel Comparison Card -->
-                        <div v-if="getScoutChannels(item).length > 0 || getScoutPlay(item)" 
+                        <div v-if="isAuthenticated && (getScoutChannels(item).length > 0 || getScoutPlay(item))" 
                              class="border border-primary/25 bg-primary/5 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
                             
                             <!-- Card Header -->
@@ -605,8 +618,23 @@
                         </div>
                     </div>
 
+                    <!-- GUEST: Pro Reseller Intel locked card (replaces Zones 3 & 5) -->
+                    <div v-if="isGuest" class="mb-5 rounded-2xl border border-dashed border-primary/40 bg-base-200/70 p-4 space-y-2">
+                        <div class="font-extrabold text-sm text-primary flex items-center gap-2">
+                            <Icon icon="solar:lock-keyhole-bold" class="w-5 h-5 shrink-0" />
+                            <span class="whitespace-normal break-words">Pro Reseller Intel — Collective Members Only</span>
+                        </div>
+                        <p class="text-xs leading-relaxed text-base-content/75 whitespace-normal break-words">
+                            Auction proxy-bid ceilings, lot split &amp; hero-anchor breakdown, channel margin comparisons and live market comps are unlocked for Collective members.
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <a href="/login" class="btn btn-xs btn-primary">Member Login</a>
+                            <a href="/coop" class="btn btn-xs btn-outline">Connect With Us</a>
+                        </div>
+                    </div>
+
                     <!-- ZONE 3: ELEVATED LOT BREAKDOWN (Anchor/Hero Extraction) -->
-                    <div v-if="item.lot_items && item.lot_items.length > 0" class="mb-5 bg-base-200/90 border border-base-300 rounded-2xl p-4 shadow-sm">
+                    <div v-if="isAuthenticated && item.lot_items && item.lot_items.length > 0" class="mb-5 bg-base-200/90 border border-base-300 rounded-2xl p-4 shadow-sm">
                         <div class="font-extrabold text-sm mb-3 flex items-center justify-between gap-2 flex-wrap text-primary">
                             <div class="flex items-center gap-2 min-w-0">
                                 <Icon icon="solar:box-bold" class="w-5 h-5 text-primary shrink-0" />
@@ -702,8 +730,8 @@
                             </button>
                         </div>
 
-                        <!-- Cost Basis ($) & Target Resale Price Inputs -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <!-- Cost Basis ($) & Target Resale Price Inputs (members only) -->
+                        <div v-if="isAuthenticated" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                             <!-- Cost Basis Input -->
                             <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
                                 <label class="label pt-0 pb-1">
@@ -733,8 +761,8 @@
                             </div>
                         </div>
 
-                        <!-- Intake Mode & Physical Storage Location -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <!-- Intake Mode & Physical Storage Location (members only) -->
+                        <div v-if="isAuthenticated" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                             <!-- Acquisition Mode Toggle -->
                             <div class="form-control bg-base-200/80 p-2.5 rounded-xl border border-base-300">
                                 <label class="label pt-0 pb-1 flex justify-between items-center">
@@ -832,7 +860,7 @@
                     </div>
 
                     <!-- ZONE 5: COLLAPSIBLE ASSETS DRAWER (Photos, Titles, Comps, Notes) -->
-                    <div class="card bg-base-200/70 border border-base-300 rounded-2xl overflow-hidden mb-3 transition-all duration-200 shadow-xs">
+                    <div v-if="isAuthenticated" class="card bg-base-200/70 border border-base-300 rounded-2xl overflow-hidden mb-3 transition-all duration-200 shadow-xs">
                         <!-- Toggle Header -->
                         <div 
                             @click="toggleAssetsDrawer(index)"
@@ -1025,7 +1053,7 @@
         <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, matching unified dock pattern) -->
         <div class="flex-none border-t border-base-300 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)] z-30">
             <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
-            <div v-if="activePurchase || (draftPurchases.length > 0 && pausedTracker)" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+            <div v-if="isAuthenticated && (activePurchase || (draftPurchases.length > 0 && pausedTracker))" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
                 <div class="max-w-xl w-full mx-auto">
                     <!-- State C: Active Buy Tracker Status Strip -->
                     <button 
@@ -1109,6 +1137,10 @@
                     </button>
 
                     <!-- Dock Item 3: Add to Tracker Button -->
+                    <a v-if="isGuest" href="/login" class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110" title="Log in or join to save to your inventory">
+                        <Icon icon="solar:user-plus-bold" class="w-4.5 h-4.5" />
+                        <span class="font-black uppercase text-[10px] leading-none text-center">Join / Login</span>
+                    </a>
                     <button 
                         type="button" 
                         @click="handleAddButtonClick" 
@@ -1120,6 +1152,7 @@
                         class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                         :disabled="savingAll || !canSaveReport"
                         :title="canSaveReport ? 'Save to Buy Tracker' : 'Saved to Tracker'"
+                        v-if="isAuthenticated"
                     >
                         <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
                         <template v-else-if="!canSaveReport">
@@ -1143,14 +1176,14 @@
     <ScannerWidget 
         ref="scannerWidget" 
         :photos="images" 
-        :max-photos="5"
+        :max-photos="isGuest ? 2 : 5"
         :hide-all-triggers="true"
         @photos-captured="handleCapturedPhotos"
         @remove-photo="removeImage"
     />
 
     <!-- ASSIGN TRACKER MODAL (Shown when untethered user adds item) -->
-    <ScoutAssignTrackerModal
+    <ScoutAssignTrackerModal v-if="isAuthenticated"
         :is-open="isAssignModalOpen"
         :draft-purchases="draftPurchases"
         :creating="creatingTracker"
@@ -1168,7 +1201,7 @@
         class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
     >
         <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
-        <div v-if="activePurchase || (draftPurchases.length > 0 && pausedTracker)" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+        <div v-if="isAuthenticated && (activePurchase || (draftPurchases.length > 0 && pausedTracker))" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
             <div class="max-w-xl w-full mx-auto">
                 <!-- State C: Active Buy Tracker Status Strip -->
                 <button 
@@ -1264,12 +1297,16 @@
                 <template v-else>
                     <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
                     <span class="font-black uppercase text-[11px] tracking-wide leading-none">
-                        {{ rescoutId ? 'Re-Identify' : 'Identify Item' }}
+                        {{ rescoutId ? 'Re-Identify' : 'Identify Item' }}{{ isGuest ? ` (${guestRemaining} left)` : '' }}
                     </span>
                 </template>
             </button>
 
             <!-- Dock Item 3: Add to Tracker Button -->
+                    <a v-if="isGuest" href="/login" class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110" title="Log in or join to save to your inventory">
+                        <Icon icon="solar:user-plus-bold" class="w-4.5 h-4.5" />
+                        <span class="font-black uppercase text-[10px] leading-none text-center">Join / Login</span>
+                    </a>
             <button 
                 type="button" 
                 @click="result && canSaveReport ? handleAddButtonClick() : null" 
@@ -1280,6 +1317,7 @@
                             : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none')"
                 class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                 :disabled="!result || savingAll || !canSaveReport"
+                v-if="isAuthenticated"
                 :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
             >
                 <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
@@ -1354,7 +1392,36 @@ import { BUCKET_ID, getCollectionId, generateAutoUpc, getSafeRawAnalysis, getSaf
 import { warehousesApi, type WarehouseDocument } from '../../lib/warehouses';
 
 // -- COMPOSABLES --
-const { isAuthenticated, currentTeam, user, updatePrefs } = useAuth();
+const { isAuthenticated, loading: authLoading, currentTeam, user, updatePrefs } = useAuth();
+
+// -- GUEST PREVIEW (logged-out visitors): limited scout, enforced again server-side in api/identify-item.ts --
+const GUEST_DAILY_LIMIT = 5;
+const GUEST_MAX_PHOTOS = 2;
+const GUEST_QUOTA_KEY = 'rc_guest_scout';
+const isGuest = computed(() => !authLoading.value && !isAuthenticated.value);
+const guestUsed = ref(0);
+const guestRemaining = computed(() => Math.max(0, GUEST_DAILY_LIMIT - guestUsed.value));
+const guestDay = () => new Date().toISOString().slice(0, 10);
+
+function readGuestUsed(): number {
+    let best = 0;
+    try {
+        const cookie = document.cookie.split('; ').find((c) => c.startsWith(GUEST_QUOTA_KEY + '='));
+        const fromCookie = cookie ? decodeURIComponent(cookie.split('=')[1] || '') : '';
+        const fromStorage = localStorage.getItem(GUEST_QUOTA_KEY) || '';
+        for (const raw of [fromCookie, fromStorage]) {
+            const [d, n] = raw.split(':');
+            if (d === guestDay()) best = Math.max(best, parseInt(n || '0', 10) || 0);
+        }
+    } catch (e) {}
+    return best;
+}
+
+function writeGuestUsed(n: number) {
+    const val = `${guestDay()}:${n}`;
+    try { localStorage.setItem(GUEST_QUOTA_KEY, val); } catch (e) {}
+    try { document.cookie = `${GUEST_QUOTA_KEY}=${encodeURIComponent(val)}; path=/; max-age=86400; SameSite=Lax`; } catch (e) {}
+}
 const availableWarehouses = ref<WarehouseDocument[]>([]);
 
 const { 
@@ -2340,7 +2407,7 @@ onMounted(async () => {
         currentTime.value = Date.now();
     }, 1000);
     await initCartCheck();
-    
+    guestUsed.value = readGuestUsed();
     // Check for ZIP code in localStorage first
     const savedZip = localStorage.getItem('scout_zip_code');
     if (savedZip) {
@@ -2440,7 +2507,7 @@ async function handleCapturedPhotos(files: File[]) {
     if (!storageLocation.value) storageLocation.value = 'HG';
     intakeAutoSource.value = 'in_person';
     for (const file of files) {
-        if (images.value.length >= 5) return;
+        if (images.value.length >= (isGuest.value ? GUEST_MAX_PHOTOS : 5)) return;
         await processFile(file);
     }
 }
@@ -2535,7 +2602,7 @@ function handleReceiptUpload(e: Event) {
 }
 
 async function processFile(file: File) {
-    if (images.value.length >= 5) return;
+    if (images.value.length >= (isGuest.value ? GUEST_MAX_PHOTOS : 5)) return;
     if (!file.type.startsWith('image/')) return;
 
     return new Promise<void>((resolve) => {
@@ -2629,7 +2696,7 @@ async function analyzeListing() {
             images: [], 
             notes: targetUrl + '\n\n' + userNotes.value,
             zipCode: zipCode.value,
-            locations: availableWarehouses.value
+            locations: isGuest.value ? [] : availableWarehouses.value
         });
 
         const response = await fetch(`/api/identify-item`, {
@@ -2640,6 +2707,10 @@ async function analyzeListing() {
 
         if (!response.ok) {
             const err = await response.json();
+            if (response.status === 429 && err?.guest) {
+                guestUsed.value = GUEST_DAILY_LIMIT;
+                writeGuestUsed(GUEST_DAILY_LIMIT);
+            }
             throw new Error(err.details || err.error || 'Server Error');
         }
 
@@ -2736,6 +2807,10 @@ async function analyzeImage() {
     const hasNotes = !!userNotes.value.trim();
 
     if (!hasLocalImages && !hasRemoteImages && !hasNotes) return;
+    if (isGuest.value && guestRemaining.value <= 0) {
+        error.value = `You've used all ${GUEST_DAILY_LIMIT} free preview scans for today. Log in as a Collective member for unlimited scouting.`;
+        return;
+    }
     loading.value = true;
     error.value = null;
     
@@ -2788,7 +2863,7 @@ async function analyzeImage() {
         }
 
         // On Re-Scout: If local images array is empty but we have fetched images from earlier scan, pass them to Gemini
-        if (images.value.length === 0 && result.value?.items?.[0]) {
+        if (!isGuest.value && images.value.length === 0 && result.value?.items?.[0]) {
             const firstItem = result.value.items[0];
             const uniqueUrls = new Set<string>();
             if (firstItem.fetched_image && typeof firstItem.fetched_image === 'string' && firstItem.fetched_image.startsWith('http')) {
@@ -2818,7 +2893,7 @@ async function analyzeImage() {
             remoteImageUrls,
             notes: combinedNotes,
             zipCode: zipCode.value,
-            locations: availableWarehouses.value
+            locations: isGuest.value ? [] : availableWarehouses.value
         });
 
         const response = await fetch(`/api/identify-item`, {
@@ -2829,6 +2904,10 @@ async function analyzeImage() {
 
         if (!response.ok) {
             const err = await response.json();
+            if (response.status === 429 && err?.guest) {
+                guestUsed.value = GUEST_DAILY_LIMIT;
+                writeGuestUsed(GUEST_DAILY_LIMIT);
+            }
             throw new Error(err.details || err.error || 'Server Error');
         }
 
@@ -2893,6 +2972,10 @@ async function analyzeImage() {
             }
         }
         result.value = data;
+        if (isGuest.value) {
+            guestUsed.value = Math.min(GUEST_DAILY_LIMIT, guestUsed.value + 1);
+            writeGuestUsed(guestUsed.value);
+        }
         isResultsModalOpen.value = true;
         
         nextTick(() => {
