@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
-import { Client, Databases, ID, Messaging, Permission, Role, Users } from 'node-appwrite';
+import { Client, Databases, ID, Messaging, Permission, Role } from 'node-appwrite';
 import {
+  COOP_MESSAGING_TOPICS,
   JOIN_REQUEST_HATS,
   JOIN_REQUEST_LIMITS,
   JOIN_REQUEST_LOCATION_ID,
@@ -43,8 +44,7 @@ const escapeHtml = (s: string) =>
 /**
  * Direct 1-click "Connect With Us" join request endpoint.
  * 1) Saves the request to `manifests` (`locationId: 'JOIN_REQUESTS'`) for Dashboard Alert #20 & `JoinRequestsPanel.vue`.
- * 2) Fires an Appwrite Messaging email via Porkbun SMTP (`admin@resalecmd.com`) to project admins (`label: admin`)
- *    and sends a polite confirmation email to the requester if they exist or via admin notification.
+ * 2) Publishes an Appwrite Messaging email to the `coop-founders` Topic (`Porkbun SMTP` / `admin@resalecmd.com`).
  */
 export const POST: APIRoute = async ({ request }) => {
   if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
@@ -80,7 +80,6 @@ export const POST: APIRoute = async ({ request }) => {
   const client = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
   const databases = new Databases(client);
   const messaging = new Messaging(client);
-  const users = new Users(client);
 
   try {
     const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
@@ -107,28 +106,22 @@ export const POST: APIRoute = async ({ request }) => {
       await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
     }
 
-    // Best-effort instant email alert to admin users via Appwrite Messaging (Porkbun SMTP)
+    // Publish instant email alert to the `coop-founders` Topic via Appwrite Messaging (Porkbun SMTP)
     try {
-      const userList = await users.list();
-      const adminIds = userList.users
-        .filter((u) => u.labels?.includes('admin') || u.email?.toLowerCase() === 'mlstanley@gmail.com')
-        .map((u) => u.$id);
-      if (adminIds.length > 0) {
-        await messaging.createEmail({
-          messageId: ID.unique(),
-          subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
-          content: [
-            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) submitted a <strong>Connect With Us</strong> request on the Co-op Charter.</p>`,
-            `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
-            note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-            `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance to Approve or Reply</a></p>`,
-          ].join(''),
-          users: adminIds,
-          html: true,
-        });
-      }
+      await messaging.createEmail({
+        messageId: ID.unique(),
+        subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
+        content: [
+          `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) submitted a <strong>Connect With Us</strong> request on the Co-op Charter.</p>`,
+          `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
+          note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
+          `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance to Approve or Reply</a></p>`,
+        ].join(''),
+        topics: [COOP_MESSAGING_TOPICS.founders],
+        html: true,
+      });
     } catch (mailErr: any) {
-      console.warn('[join-request] Messaging notification skipped:', mailErr?.message || mailErr);
+      console.warn('[join-request] Messaging topic notification skipped:', mailErr?.message || mailErr);
     }
 
     return json({ ok: true, alreadyReviewed: false });

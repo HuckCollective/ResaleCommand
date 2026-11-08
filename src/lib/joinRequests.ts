@@ -16,6 +16,15 @@ export type JoinRequestStatus = (typeof JOIN_REQUEST_STATUS)[keyof typeof JOIN_R
 export const JOIN_REQUEST_HATS = ['curator', 'promoter', 'enabler', 'consignor'] as const;
 export type JoinRequestHat = (typeof JOIN_REQUEST_HATS)[number];
 
+/** Canonical Appwrite Messaging Topics mapped to our WSDE Co-op Hats. */
+export const COOP_MESSAGING_TOPICS = {
+  founders: 'coop-founders',
+  voters: 'coop-voters',
+  curators: 'coop-curators',
+  consignors: 'coop-consignors',
+  promoters: 'coop-promoters',
+} as const;
+
 export const JOIN_REQUEST_LIMITS = { name: 80, note: 500, email: 254 } as const;
 
 export interface JoinRequest {
