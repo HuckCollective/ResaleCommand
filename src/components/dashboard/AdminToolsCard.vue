@@ -32,3 +32,4 @@ const tools = [
   { label: 'Enact a passed vote', hint: 'Apply policy presets', icon: 'solar:users-group-two-rounded-bold-duotone', href: '/coop/governance' },
 ];
 </script>
+

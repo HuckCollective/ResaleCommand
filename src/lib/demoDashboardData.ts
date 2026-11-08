@@ -164,3 +164,4 @@ export function buildDemoSnapshot(now = Date.now()): DashboardSnapshot {
     joinRequests: 3,
   };
 }
+

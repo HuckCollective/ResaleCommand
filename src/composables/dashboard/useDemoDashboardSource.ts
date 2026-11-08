@@ -22,3 +22,4 @@ export function useDemoDashboardSource(role: Ref<MemberHat>): DashboardSource {
     // logHours intentionally undefined: widgets show a "members get this live" hint instead
   };
 }
+

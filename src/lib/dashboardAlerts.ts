@@ -217,7 +217,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'stale_sync', category: 'sales', severity: 'warning', icon: 'solar:round-transfer-horizontal-bold-duotone',
     title: 'Register sync is stale', actionText: 'Open sync', href: '/warehouse/sync/MD',
-    hats: ['founder', 'enabler'], liveWired: false,
+    hats: ['founder', 'enabler'], liveWired: true,
     evaluate: ({ snap, cfg }) => {
       if (!snap.lastSyncAt) return { count: 0, detail: '' };
       const days = daysSince(snap.lastSyncAt, snap.now);
@@ -229,7 +229,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'new_sale_mine', category: 'sales', severity: 'success', icon: 'solar:dollar-minimalistic-bold-duotone',
     title: 'New sale on my items', actionText: 'See sales', href: '/sales',
-    hats: ['curator', 'consignor'], liveWired: false,
+    hats: ['curator', 'consignor'], liveWired: true,
     evaluate: ({ snap, member, cfg }) => {
       const rows = snap.sales.filter((s) => ownsPrefix(member, s.ownerPrefix) && daysSince(s.soldAt, snap.now) <= cfg.newSaleDays);
       return {
@@ -278,7 +278,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'pending_reimbursements', category: 'coop', severity: 'info', icon: 'solar:bill-list-bold-duotone',
     title: 'Expenses pending reimbursement', actionText: 'Review expenses', href: '/expenses',
-    hats: ['founder'], liveWired: false,
+    hats: ['founder'], liveWired: true,
     evaluate: ({ snap }) => {
       const rows = snap.expenses.filter((e) => e.status === 'pending' && e.scope !== 'personal_write_off');
       const total = rows.reduce((s, e) => s + e.amount, 0);
@@ -294,7 +294,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'drop_unannounced', category: 'marketing', severity: 'info', icon: 'solar:broadcast-bold-duotone',
     title: 'Booth drop ready, not announced', actionText: 'Open Dropcast Studio', href: '/social',
-    hats: ['promoter'], liveWired: false,
+    hats: ['promoter'], liveWired: true,
     evaluate: ({ snap }) => {
       const rows = snap.drops.filter((d) => d.status === 'ready');
       return {
@@ -374,3 +374,4 @@ export function buildAlertsForMember(
 export function itemsOwnedBy(items: any[], member: DashboardMember): any[] {
   return member.inventoryPrefix ? items.filter((i) => matchesPartnerPrefix(i, member.inventoryPrefix)) : [];
 }
+

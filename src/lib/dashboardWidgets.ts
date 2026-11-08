@@ -75,3 +75,4 @@ export function visibleWidgetIds(hats: readonly MemberHat[], leadHat: MemberHat,
     return !!def && widgetAllowed(def, hats, isAdmin);
   });
 }
+

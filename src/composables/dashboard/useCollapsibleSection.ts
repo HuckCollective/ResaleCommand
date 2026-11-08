@@ -42,3 +42,4 @@ export function useCollapsibleSection(key: string, defaultCollapsed: boolean, pe
 
   return { isCollapsed, toggle };
 }
+

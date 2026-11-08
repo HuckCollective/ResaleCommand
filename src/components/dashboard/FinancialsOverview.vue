@@ -70,3 +70,4 @@ const stats = computed(() => [
   { label: 'Orders Placed', value: String(totalPurchasesCount.value), hint: `$${totalSpentPurchases.value.toFixed(2)} total spent`, icon: 'solar:cart-large-minimalistic-bold-duotone', tone: 'text-secondary' },
 ]);
 </script>
+

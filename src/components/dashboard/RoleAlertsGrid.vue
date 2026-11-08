@@ -128,3 +128,4 @@ const categoryLabel: Record<AlertCategory, string> = {
   membership: 'Membership',
 };
 </script>
+

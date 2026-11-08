@@ -160,3 +160,4 @@ const rules: PlaybookRule[] = [
     body: 'Under the IRS De Minimis Safe Harbor election, tangible business equipment costing up to $2,500 per invoice (such as glass display showcases, chrome garment racks, mannequins, and thermal label printers) can be expensed immediately in Year 1 rather than depreciating over 5–7 years.' },
 ];
 </script>
+

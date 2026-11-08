@@ -67,3 +67,4 @@ export const MEMBER_HAT_META: Record<MemberHat, MemberHatMeta> = {
 export function canSeeCollectiveFinancials(hats?: readonly MemberHat[] | null): boolean {
   return !!hats?.some((h) => MEMBER_HAT_META[h]?.canVote);
 }
+

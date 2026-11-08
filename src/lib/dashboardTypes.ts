@@ -90,3 +90,4 @@ export function emptySnapshot(now = Date.now()): DashboardSnapshot {
     joinRequests: 0,
   };
 }
+

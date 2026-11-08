@@ -39,3 +39,4 @@ const myHours = computed(() => {
   return recent.value.filter((e) => e.member.trim().toLowerCase() === me).reduce((s, e) => s + (Number(e.hours) || 0), 0);
 });
 </script>
+
