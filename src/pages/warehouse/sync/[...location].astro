@@ -7,7 +7,7 @@ const initialLocation = rawLocation.split('/').filter(Boolean)[0] || '';
 ---
 
 <Layout title="Location Inventory & Sales Sync" hideFooter={true}>
-  <div class="p-4 md:p-8 max-w-[1600px] mx-auto pb-36 sm:pb-44">
+  <div class="px-4 pt-4 md:px-8 md:pt-8 max-w-[1600px] mx-auto pb-36 sm:pb-44">
     <LocationSyncView initialLocation={initialLocation} client:only="vue" />
   </div>
 </Layout>

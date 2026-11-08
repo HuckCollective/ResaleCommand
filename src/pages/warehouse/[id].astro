@@ -6,7 +6,7 @@ const { id } = Astro.params;
 ---
 
 <Layout title="Location Command Hub" hideFooter={true}>
-  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto pb-44 sm:pb-40">
+  <div class="px-4 pt-4 sm:px-6 sm:pt-6 md:px-8 md:pt-8 max-w-7xl mx-auto pb-44 sm:pb-40">
     <LocationDetailView locationId={id || ''} client:only="vue" />
   </div>
 </Layout>

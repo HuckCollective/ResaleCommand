@@ -1,4 +1,10 @@
 <template>
+  <!-- Automatic in-flow bottom clearance spacer so fixed viewport docks NEVER cover bottom card content -->
+  <div
+    v-if="visible && placement === 'viewport'"
+    class="h-24 sm:h-28 w-full shrink-0 pointer-events-none"
+    aria-hidden="true"
+  ></div>
   <Teleport :to="teleportTo" :disabled="!teleport || placement !== 'viewport'">
     <Transition :name="transition ? 'dock-slide-up' : ''">
       <div 

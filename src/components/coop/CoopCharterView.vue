@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 pb-32">
+  <div class="px-4 pt-4 sm:px-6 sm:pt-6 md:px-8 md:pt-8 max-w-7xl mx-auto space-y-6 pb-32">
     <!-- Guest banner: how to connect with the collective -->
     <div
       v-if="!isAuthenticated"

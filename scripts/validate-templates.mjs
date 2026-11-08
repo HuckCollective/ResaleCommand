@@ -737,6 +737,66 @@ for (const contract of transportContracts) {
     }
 }
 
+// =========================================================================
+// 12. DAISYUI V5 & TAILWIND ANTI-OVERLAP / ANTI-CLIPPING GUARDRAILS
+// =========================================================================
+{
+    // 12A. Ensure global.css enforces .badge { white-space: nowrap } and defines .badge-2xs / .btn-2xs
+    const globalCssPath = path.resolve('src/styles/global.css');
+    if (fs.existsSync(globalCssPath)) {
+        const globalCss = fs.readFileSync(globalCssPath, 'utf8');
+        if (!/\.badge\s*\{[^}]*white-space:\s*nowrap/s.test(globalCss)) {
+            console.error(
+                '❌ Global Badge Overflow Guard Missing in src/styles/global.css: .badge must enforce "white-space: nowrap" so badges never wrap onto 2 lines and overflow into card titles!'
+            );
+            hasErrors = true;
+        }
+        if (!/\.badge-2xs\s*\{/.test(globalCss) || !/\.btn-2xs\s*\{/.test(globalCss)) {
+            console.error(
+                '❌ Micro-Badge Utility Missing in src/styles/global.css: .badge-2xs and .btn-2xs must be defined in global.css so compact badges never fall back to badge-md height!'
+            );
+            hasErrors = true;
+        }
+    }
+
+    const uiFiles = getFiles('src', ['.vue', '.astro']);
+    const classAttrRegex = /\bclass="([^"]+)"/g;
+
+    for (const filePath of uiFiles) {
+        const relFile = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        const content = fs.readFileSync(filePath, 'utf8');
+
+        // Scan static class="..." attributes for CSS clipping / responsive padding traps
+        let cm;
+        while ((cm = classAttrRegex.exec(content)) !== null) {
+            const cls = cm[1];
+            const line = content.slice(0, cm.index).split('\n').length;
+
+            // 12B. Never combine line-clamp-* and vertical padding (p-*, py-*, pb-*) on the same element
+            // (overflow: hidden clips at the border box, so line N+1 renders inside bottom padding and gets sliced horizontally in half!)
+            if (/\bline-clamp-[1-6]\b/.test(cls) && /\b(?:p-\d+(?:\.\d+)?|py-\d+(?:\.\d+)?|pb-\d+(?:\.\d+)?)\b/.test(cls)) {
+                console.error(
+                    `❌ CSS Line-Clamp Clipping Bug in ${relFile}:${line}: Do not put "line-clamp-*" and vertical padding (p-*/py-*/pb-*) on the same element (line N+1 peeks into bottom padding and gets sliced in half). Put padding/border/bg on an outer <div> and line-clamp-* on an inner unpadded element!`
+                );
+                hasErrors = true;
+            }
+
+            // 12C. Never combine md:p-* / lg:p-* with a large pb-* dock-clearance class without md:pb-*
+            // (md:p-8 resets padding-bottom to 2rem on desktop, causing fixed bottom docks to overlap page content!)
+            if (
+                /\b(?:md|lg):p-\d+\b/.test(cls) &&
+                /\bpb-(?:24|28|32|36|40|44|48)\b/.test(cls) &&
+                !/\b(?:md|lg):pb-/.test(cls)
+            ) {
+                console.error(
+                    `❌ Responsive Dock-Clearance Override Bug in ${relFile}:${line}: "${cls}" uses md:p-* / lg:p-* which overrides pb-* at desktop breakpoints and causes BottomActionDock to cover bottom content. Use px-* pt-* sm:px-* sm:pt-* md:px-* md:pt-* pb-* instead!`
+                );
+                hasErrors = true;
+            }
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, and price-parsing invariants passed with ZERO errors!`);
 } else {

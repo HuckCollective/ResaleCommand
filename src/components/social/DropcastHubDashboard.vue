@@ -368,8 +368,10 @@
           </div>
 
           <!-- Caption Snippet Preview -->
-          <div v-if="cast.generatedCaption" class="bg-base-200/50 p-2.5 rounded-2xl border border-base-300/60 text-xs font-sans text-base-content/80 line-clamp-2 leading-relaxed">
-            {{ cast.generatedCaption }}
+          <div v-if="cast.generatedCaption" class="bg-base-200/50 p-2.5 rounded-2xl border border-base-300/60">
+            <p class="text-xs font-sans text-base-content/80 line-clamp-2 leading-relaxed">
+              {{ cast.generatedCaption }}
+            </p>
           </div>
         </div>
 

@@ -180,22 +180,22 @@
         <span class="badge badge-warning badge-outline badge-xs font-bold">🔒 Immutable Master Templates</span>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
         <div
           v-for="preset in PLAYBOOK_PRESETS"
           :key="preset.id"
-          class="group rounded-2xl border border-base-200 hover:border-primary/50 bg-base-100 hover:shadow-md p-3.5 transition-all flex flex-col justify-between gap-3 cursor-pointer"
+          class="group rounded-2xl border border-base-200 hover:border-primary/50 bg-base-100 hover:shadow-md p-4 transition-all flex flex-col justify-between gap-3 cursor-pointer"
           @click="useTemplateAsNewCard(preset)"
         >
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between gap-1.5 flex-wrap">
-              <span class="text-lg leading-none">{{ preset.icon }}</span>
-              <div class="flex items-center gap-1">
-                <span class="badge badge-warning badge-2xs font-bold">🔒 Master</span>
-                <span class="badge badge-ghost badge-2xs font-semibold">
-                  {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
-                </span>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-lg leading-none shrink-0">{{ preset.icon }}</span>
+                <span class="badge badge-warning badge-xs font-bold whitespace-nowrap shrink-0">🔒 Master</span>
               </div>
+              <span class="badge badge-ghost badge-xs font-semibold whitespace-nowrap shrink-0">
+                {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
+              </span>
             </div>
             <div class="text-xs sm:text-sm font-black text-base-content group-hover:text-primary transition-colors leading-snug">
               {{ preset.title }}
@@ -203,28 +203,28 @@
             <p class="text-[11px] text-base-content/70 leading-relaxed line-clamp-3">{{ preset.summary }}</p>
           </div>
 
-          <div class="flex items-center justify-between gap-1 pt-2 border-t border-base-200/70 flex-wrap" @click.stop>
+          <div class="flex items-center justify-between gap-2 pt-2.5 border-t border-base-200/70" @click.stop>
             <button
               type="button"
-              class="btn btn-xs btn-primary rounded-lg font-bold gap-1"
+              class="btn btn-xs btn-primary rounded-lg font-bold gap-1 whitespace-nowrap"
               @click="copyPresetPrompt(preset)"
             >
-              <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
+              <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 shrink-0" />
               <span>Copy</span>
             </button>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5 shrink-0">
               <button
                 v-if="isFounder"
                 type="button"
-                class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold"
+                class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold whitespace-nowrap"
                 title="Inspect Locked Master Template (Founder Governance Guard)"
                 @click="inspectLockedMasterTemplate(preset)"
               >
-                🔒
+                🔒 Inspect
               </button>
               <button
                 type="button"
-                class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
+                class="btn btn-xs btn-secondary rounded-lg font-bold gap-1 whitespace-nowrap"
                 @click="useTemplateAsNewCard(preset)"
               >
                 <span>🌱 Use Template</span>
@@ -297,7 +297,7 @@
           @click="activeFilter = f.key"
         >
           <span>{{ f.label }}</span>
-          <span class="badge badge-2xs font-mono" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
+          <span class="badge badge-xs font-mono whitespace-nowrap" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
             {{ f.count }}
           </span>
         </button>
@@ -369,10 +369,12 @@
             {{ note.title }}
           </h3>
 
-          <!-- Clean 3-Line Preview (No Giant Raw Pre Box) -->
-          <p class="text-xs text-base-content/75 line-clamp-3 leading-relaxed whitespace-pre-line bg-base-200/40 rounded-xl p-2.5 border border-base-200">
-            {{ note.body }}
-          </p>
+          <!-- Clean 3-Line Preview (Outer padded box + inner unpadded line-clamp-3 so line 4 never peeks into bottom padding!) -->
+          <div class="bg-base-200/40 rounded-xl p-2.5 border border-base-200">
+            <p class="text-xs text-base-content/75 line-clamp-3 leading-relaxed whitespace-pre-line">
+              {{ note.body }}
+            </p>
+          </div>
 
           <!-- Clean Parsed Item Snapshot Pill (Instead of Raw JSON Dump!) -->
           <div
@@ -385,13 +387,13 @@
                 <span>Scan Snapshot</span>
               </span>
               <div class="flex items-center gap-1 flex-wrap">
-                <span v-if="parsedSummary(note)?.tier" class="badge badge-secondary badge-2xs font-bold uppercase">
+                <span v-if="parsedSummary(note)?.tier" class="badge badge-secondary badge-xs font-bold uppercase whitespace-nowrap">
                   {{ parsedSummary(note)?.tier }}
                 </span>
-                <span v-if="parsedSummary(note)?.priceOrValue" class="badge badge-success badge-2xs font-mono font-bold">
+                <span v-if="parsedSummary(note)?.priceOrValue" class="badge badge-success badge-xs font-mono font-bold whitespace-nowrap">
                   {{ parsedSummary(note)?.priceOrValue }}
                 </span>
-                <span v-if="parsedSummary(note)?.verdict" class="badge badge-warning badge-2xs font-mono font-bold">
+                <span v-if="parsedSummary(note)?.verdict" class="badge badge-warning badge-xs font-mono font-bold whitespace-nowrap">
                   {{ parsedSummary(note)?.verdict }}
                 </span>
               </div>
