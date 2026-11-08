@@ -1,77 +1,125 @@
 <template>
   <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
-    <div class="card w-full max-w-md bg-base-100 shadow-2xl">
-      <div class="card-body">
-        <h2 class="card-title text-3xl font-bold justify-center mb-6">{{ hasInvite ? 'Create your account' : 'Membership is by invitation' }}</h2>
-
-        <div v-if="!hasInvite" class="space-y-4 text-center">
-          <p class="text-sm leading-relaxed">
-            The Huckleberry Collective welcomes new members by invitation. Ask any member to send you an invite link,
-            or tell us how you'd like to be involved.
+    <div class="card w-full max-w-lg bg-base-100 shadow-2xl border border-base-300 rounded-3xl">
+      <div class="card-body p-6 sm:p-8 space-y-4">
+        <div class="text-center space-y-1">
+          <div class="badge badge-primary badge-outline font-bold text-xs">
+            {{ hasValidInvite ? '✅ Invitation Verified' : '🤝 Invite-Only Cooperative' }}
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">
+            {{ hasValidInvite ? 'Create your Co-op Account' : 'Request an Invitation' }}
+          </h2>
+          <p v-if="!hasValidInvite && !checkingInvite" class="text-xs sm:text-sm text-base-content/70">
+            Accounts at The Huckleberry Collective are created by invitation only. Tell us which hat fits you below and a steward will email your personal sign-up link.
           </p>
-          <div class="flex flex-col sm:flex-row gap-2 justify-center">
-            <a href="/coop" class="btn btn-primary btn-sm">Connect With Us</a>
-            <a href="/login" class="btn btn-outline btn-sm">Member Login</a>
+        </div>
+
+        <!-- Checking invite spinner -->
+        <div v-if="checkingInvite" class="flex flex-col items-center justify-center py-8 gap-2">
+          <span class="loading loading-spinner loading-md text-primary"></span>
+          <span class="text-xs text-base-content/70">Verifying your invitation...</span>
+        </div>
+
+        <!-- Pending / unapproved invite banner -->
+        <div v-else-if="inviteStatusMsg" class="alert alert-warning text-xs rounded-2xl">
+          <span>{{ inviteStatusMsg }}</span>
+        </div>
+
+        <!-- WITHOUT INVITE: Embedded Request-an-Invite (ConnectWithUsForm) -->
+        <div v-if="!checkingInvite && !hasValidInvite" class="space-y-4">
+          <ConnectWithUsForm :hats="hatOptions" @close="goToLogin" />
+
+          <div class="divider text-xs text-base-content/50 my-1">Already have an invite link or account?</div>
+
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input
+              v-model="manualInviteInput"
+              type="text"
+              placeholder="Paste invite link or code (join_...)"
+              class="input input-bordered input-sm rounded-xl flex-1 text-xs"
+            />
+            <button type="button" class="btn btn-sm btn-outline rounded-xl font-bold" @click="applyManualInvite">
+              Unlock Sign-Up
+            </button>
+          </div>
+
+          <div class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs">
+            <a :href="loginLink" class="link link-primary font-bold">Already a member? Sign in →</a>
+            <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
           </div>
         </div>
-        
-        <form v-if="hasInvite" @submit.prevent="submit" class="space-y-4">
+
+        <!-- WITH VALID INVITE: Create Account Form -->
+        <form v-if="!checkingInvite && hasValidInvite" @submit.prevent="submit" class="space-y-4">
+          <div v-if="approvedInvite" class="rounded-2xl bg-success/10 border border-success/30 p-3 text-xs space-y-1">
+            <div class="font-bold text-success">
+              Approved Invitation for {{ approvedInvite.name }}
+            </div>
+            <div class="flex flex-wrap gap-1 pt-0.5">
+              <span v-for="hat in approvedInvite.hats" :key="hat" class="badge badge-xs badge-success badge-outline font-bold">
+                {{ hat }}
+              </span>
+            </div>
+          </div>
+
           <div class="form-control w-full">
-            <label class="label">
-              <span class="label-text font-medium">Full Name</span>
+            <label class="label py-1">
+              <span class="label-text font-bold text-xs">Full Name</span>
             </label>
-            <input 
-              type="text" 
-              v-model="name" 
-              required 
-              placeholder="Jane Doe" 
-              class="input input-bordered w-full" 
+            <input
+              type="text"
+              v-model="name"
+              required
+              placeholder="Jane Doe"
+              class="input input-bordered w-full rounded-xl"
             />
           </div>
 
           <div class="form-control w-full">
-            <label class="label">
-              <span class="label-text font-medium">Email address</span>
+            <label class="label py-1">
+              <span class="label-text font-bold text-xs">Invited Email Address</span>
             </label>
-            <input 
-              type="email" 
-              v-model="email" 
-              required 
-              placeholder="you@example.com" 
-              class="input input-bordered w-full" 
+            <input
+              type="email"
+              v-model="email"
+              required
+              :readonly="!!approvedInvite"
+              placeholder="you@example.com"
+              class="input input-bordered w-full rounded-xl"
+              :class="{ 'bg-base-200/70 cursor-not-allowed': !!approvedInvite }"
             />
           </div>
 
           <div class="form-control w-full">
-            <label class="label">
-              <span class="label-text font-medium">Password</span>
+            <label class="label py-1">
+              <span class="label-text font-bold text-xs">Choose a Password (min 8 characters)</span>
             </label>
-            <input 
-              type="password" 
-              v-model="password" 
-              required 
-              placeholder="••••••••" 
-              class="input input-bordered w-full" 
+            <input
+              type="password"
+              v-model="password"
+              required
+              minlength="8"
+              placeholder="••••••••"
+              class="input input-bordered w-full rounded-xl"
             />
           </div>
 
-          <div class="flex items-center justify-between text-sm mt-2">
-            <a :href="loginLink" class="link link-primary link-hover">Already have an account? Sign in</a>
+          <div class="flex items-center justify-between text-xs mt-2">
+            <a :href="loginLink" class="link link-primary link-hover font-bold">Already have an account? Sign in</a>
           </div>
 
-          <div class="form-control mt-6">
-            <button 
-              type="submit" 
-              class="btn btn-primary w-full" 
+          <div class="form-control mt-4">
+            <button
+              type="submit"
+              class="btn btn-primary w-full rounded-xl font-black"
               :disabled="loading"
             >
               <span v-if="loading" class="loading loading-spinner loading-sm"></span>
-              <span v-else>Sign up</span>
+              <span v-else>Accept Invite &amp; Create Account</span>
             </button>
           </div>
-          
-          <div v-if="error" class="alert alert-error shadow-lg mt-4 text-sm p-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+
+          <div v-if="error" class="alert alert-error shadow-lg mt-3 text-xs p-3 rounded-xl">
             <span>{{ error }}</span>
           </div>
         </form>
@@ -83,47 +131,130 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
+import { databases } from '../../lib/appwrite';
+import { getDatabaseId } from '../../lib/appwriteEnv';
+import ConnectWithUsForm from '../coop/ConnectWithUsForm.vue';
+import {
+  JOIN_REQUEST_HAT_OPTIONS,
+  JOIN_REQUEST_STATUS,
+  parseJoinRequestDoc,
+  type JoinRequest,
+} from '../../lib/joinRequests';
 
 const auth = useAuth();
+const hatOptions = JOIN_REQUEST_HAT_OPTIONS;
+
 const name = ref('');
 const email = ref('');
 const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
-// Membership is by invitation: signup only works when arriving from a /join invite redirect.
-const hasInvite = ref(false);
-onMounted(() => {
-    const redirect = new URLSearchParams(window.location.search).get('redirect') || '';
-    hasInvite.value = redirect.includes('/join');
-});
-// Preserve redirect query parameter for login link
+const checkingInvite = ref(true);
+const hasTeamRedirectInvite = ref(false);
+const approvedInvite = ref<JoinRequest | null>(null);
+const inviteStatusMsg = ref('');
+const manualInviteInput = ref('');
+
+const hasValidInvite = computed(() => hasTeamRedirectInvite.value || !!approvedInvite.value);
+
 const loginLink = computed(() => {
-    if (typeof window !== 'undefined') {
-        return '/login' + window.location.search;
+  if (typeof window !== 'undefined') {
+    return '/login' + window.location.search;
+  }
+  return '/login';
+});
+
+const goToLogin = () => {
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+};
+
+const verifyInviteCode = async (rawCode: string) => {
+  const clean = rawCode.trim();
+  if (!clean) return;
+  checkingInvite.value = true;
+  inviteStatusMsg.value = '';
+  try {
+    const doc = await databases.getDocument(getDatabaseId(), 'manifests', clean);
+    const parsed = parseJoinRequestDoc(doc);
+    if (!parsed) {
+      inviteStatusMsg.value = 'That invite code was not found. Request an invitation below.';
+      return;
     }
-    return '/login';
+    if (parsed.status === JOIN_REQUEST_STATUS.approved) {
+      approvedInvite.value = parsed;
+      name.value = parsed.name;
+      email.value = parsed.email;
+    } else if (parsed.status === JOIN_REQUEST_STATUS.pending) {
+      inviteStatusMsg.value = `Hi ${parsed.name} — your request is in our Co-op Governance queue and waiting for steward approval. We'll email you as soon as it is approved!`;
+    } else if (parsed.status === JOIN_REQUEST_STATUS.joined) {
+      inviteStatusMsg.value = 'This invitation has already been used to create an account. Please sign in!';
+    } else {
+      inviteStatusMsg.value = 'This invitation is no longer active.';
+    }
+  } catch {
+    inviteStatusMsg.value = 'Could not find that invitation code. You can request a fresh invitation below.';
+  } finally {
+    checkingInvite.value = false;
+  }
+};
+
+const applyManualInvite = async () => {
+  const raw = manualInviteInput.value.trim();
+  if (!raw) return;
+  const match = raw.match(/join_[a-f0-9]+/i);
+  const code = match ? match[0] : raw;
+  await verifyInviteCode(code);
+};
+
+onMounted(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get('redirect') || '';
+  const inviteParam = params.get('invite') || '';
+
+  if (redirect.includes('/join')) {
+    hasTeamRedirectInvite.value = true;
+    checkingInvite.value = false;
+    return;
+  }
+
+  if (inviteParam) {
+    await verifyInviteCode(inviteParam);
+  } else {
+    checkingInvite.value = false;
+  }
 });
 
 const submit = async () => {
-    loading.value = true;
-    error.value = '';
-    try {
-        await auth.register(email.value, password.value, name.value);
-        
-        // Handle redirect
-        const urlParams = new URLSearchParams(window.location.search);
-        const redirect = urlParams.get('redirect');
-        if (redirect) {
-            window.location.href = redirect;
-        } else {
-            window.location.href = '/dashboard';
-        }
-    } catch (err: any) {
-        console.error(err);
-        error.value = err.message || 'Registration failed. Please try again.';
-    } finally {
-        loading.value = false;
+  if (!hasValidInvite.value) {
+    error.value = 'An approved invitation is required to create an account.';
+    return;
+  }
+  loading.value = true;
+  error.value = '';
+  try {
+    await auth.register(email.value, password.value, name.value);
+
+    if (approvedInvite.value) {
+      try {
+        await databases.updateDocument(getDatabaseId(), 'manifests', approvedInvite.value.id, {
+          status: JOIN_REQUEST_STATUS.joined,
+        });
+      } catch {
+        // Non-blocking status update
+      }
     }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirect = urlParams.get('redirect');
+    window.location.href = redirect || '/dashboard';
+  } catch (err: any) {
+    console.error(err);
+    error.value = err.message || 'Registration failed. Please try again.';
+  } finally {
+    loading.value = false;
+  }
 };
 </script>

@@ -45,6 +45,8 @@
       </div>
     </div>
 
+    <JoinRequestsPanel />
+
     <!-- 4 Standalone Icon-Badge KPI Cards (Canonical Ledger Archetype) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
@@ -172,8 +174,6 @@
         </div>
       </div>
     </div>
-
-    <JoinRequestsPanel />
 
     <!-- 3-Tab Governance Workbench Switcher -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-base-200/80 border border-base-300 rounded-2xl shadow-xs">

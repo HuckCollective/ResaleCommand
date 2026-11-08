@@ -53,6 +53,9 @@
       </div>
     </div>
 
+    <!-- LIVE JOIN REQUESTS & INVITES TRAY -->
+    <JoinRequestsPanel v-if="mode === 'live'" />
+
     <!-- ROLE-ORDERED WIDGETS -->
     <div v-if="loading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary"></span>
@@ -87,6 +90,7 @@ import MyStatementCard from './MyStatementCard.vue';
 import LaborWeekCard from './LaborWeekCard.vue';
 import AdminToolsCard from './AdminToolsCard.vue';
 import AiUsageCard from './AiUsageCard.vue';
+import JoinRequestsPanel from '../coop/JoinRequestsPanel.vue';
 
 const props = defineProps<{ mode: 'live' | 'demo' }>();
 

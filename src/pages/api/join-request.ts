@@ -1,19 +1,21 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
-import { Client, Databases, ID, Messaging } from 'node-appwrite';
+import { Client, Databases, ID, Messaging, Users } from 'node-appwrite';
 import {
   COOP_MESSAGING_TOPICS,
   JOIN_REQUEST_HATS,
   JOIN_REQUEST_LIMITS,
   JOIN_REQUEST_LOCATION_ID,
   JOIN_REQUEST_STATUS,
+  buildInviteSignupUrl,
+  parseJoinRequestDoc,
 } from '../../lib/joinRequests';
 import { getDatabaseId, getEnvVar } from '../../lib/appwriteEnv';
 
 export const prerender = false;
 
 const MANIFESTS_COL_ID = 'manifests';
-const DAILY_LIMIT_PER_NETWORK = 15;
+const DAILY_LIMIT_PER_NETWORK = 25;
 
 const attempts = new Map<string, number>();
 let lastPruneDay = '';
@@ -40,11 +42,35 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
- * Direct 1-click "Connect With Us" join request endpoint.
- * 1) Saves the request to `manifests` (`locationId: 'JOIN_REQUESTS'`) using public project credentials
- *    so it works on every deployment (even if `APPWRITE_API_KEY` is unset on a preview branch).
- * 2) When `APPWRITE_API_KEY` is configured, publishes an instant email to `coop-founders` via Appwrite Messaging.
+ * Resolve or create an Appwrite Messaging email target for an approved invitee so
+ * Porkbun SMTP can email their personal `/signup?invite=...` link directly.
  */
+async function ensureEmailTargetId(keyClient: Client, email: string): Promise<string | null> {
+  try {
+    const users = new Users(keyClient);
+    const list = await users.list();
+    const hostUser = list.users.find((u) => u.labels?.includes('admin')) || list.users[0];
+    if (!hostUser) return null;
+
+    const existing = await users.listTargets(hostUser.$id);
+    const match = existing.targets.find(
+      (t) => t.providerType === 'email' && String(t.identifier || '').toLowerCase() === email.toLowerCase()
+    );
+    if (match) return match.$id;
+
+    const targetId = `inv_${createHash('sha256').update(email.toLowerCase()).digest('hex').slice(0, 24)}`;
+    try {
+      const created = await users.createTarget(hostUser.$id, targetId, 'email', email.toLowerCase());
+      return created.$id;
+    } catch {
+      return targetId;
+    }
+  } catch (err: any) {
+    console.warn('[join-request] ensureEmailTargetId skipped:', err?.message || err);
+    return null;
+  }
+}
+
 export const POST: APIRoute = async ({ request }) => {
   if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
 
@@ -55,17 +81,72 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Invalid request.' }, 400);
   }
 
-  // Honeypot trap for bots
-  if (String(body?.website || '').trim()) {
-    return json({ ok: true, alreadyReviewed: false });
-  }
-
   const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT');
   const project = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID');
   const apiKey = getEnvVar('APPWRITE_API_KEY');
   const dbId = getDatabaseId();
   if (!endpoint || !project || !dbId) {
     return json({ error: 'Appwrite endpoint or project ID is not configured.' }, 500);
+  }
+
+  const publicClient = new Client().setEndpoint(endpoint).setProject(project);
+  const databases = new Databases(publicClient);
+
+  // Branch A: Steward approves a request and emails the personal `/signup?invite=...` link
+  if (body?.action === 'approve') {
+    const docId = String(body?.id || '').trim();
+    if (!docId.startsWith('join_')) {
+      return json({ error: 'Invalid join request ID.' }, 400);
+    }
+    try {
+      const doc = await databases.getDocument(dbId, MANIFESTS_COL_ID, docId);
+      const req = parseJoinRequestDoc(doc);
+      if (!req) return json({ error: 'Join request not found.' }, 404);
+
+      await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, {
+        status: JOIN_REQUEST_STATUS.approved,
+      });
+
+      const origin = new URL(request.url).origin;
+      const inviteUrl = buildInviteSignupUrl(docId, origin);
+      let emailSent = false;
+
+      if (apiKey) {
+        try {
+          const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
+          const targetId = await ensureEmailTargetId(keyClient, req.email);
+          if (targetId) {
+            const messaging = new Messaging(keyClient);
+            await messaging.createEmail({
+              messageId: ID.unique(),
+              subject: `You're invited to join The Huckleberry Collective!`,
+              content: [
+                `<p>Hi <strong>${escapeHtml(req.name)}</strong>,</p>`,
+                `<p>Great news — your request to join <strong>The Huckleberry Collective</strong> (${escapeHtml(req.hats.join(', '))}) has been approved!</p>`,
+                `<p>Membership is by invitation only. Use your personal invite link below to create your password and activate your account:</p>`,
+                `<p style="margin:20px 0;"><a href="${escapeHtml(inviteUrl)}" style="background:#10b981;color:#ffffff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">Accept Invitation &amp; Create Account</a></p>`,
+                `<p style="font-size:12px;color:#666;">Or copy and paste this link:<br/><code>${escapeHtml(inviteUrl)}</code></p>`,
+                `<p>Welcome aboard,<br/><strong>The Huckleberry Collective</strong></p>`,
+              ].join(''),
+              targets: [targetId],
+              html: true,
+            });
+            emailSent = true;
+          }
+        } catch (mailErr: any) {
+          console.warn('[join-request] Invite email skipped:', mailErr?.message || mailErr);
+        }
+      }
+
+      return json({ ok: true, inviteUrl, emailSent });
+    } catch (err: any) {
+      return json({ error: err?.message || 'Could not approve request.' }, 500);
+    }
+  }
+
+  // Branch B: Visitor submits a "Connect With Us" / Invite Request
+  if (String(body?.website || '').trim()) {
+    return json({ ok: true, alreadyReviewed: false });
   }
 
   const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
@@ -77,9 +158,6 @@ export const POST: APIRoute = async ({ request }) => {
   if (!name || !/^\S+@\S+\.\S+$/.test(email) || hats.length === 0) {
     return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
   }
-
-  const publicClient = new Client().setEndpoint(endpoint).setProject(project);
-  const databases = new Databases(publicClient);
 
   try {
     const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
@@ -102,7 +180,6 @@ export const POST: APIRoute = async ({ request }) => {
       await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
     }
 
-    // Best-effort instant email alert to the `coop-founders` Topic when APPWRITE_API_KEY is available
     if (apiKey) {
       try {
         const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
@@ -111,10 +188,10 @@ export const POST: APIRoute = async ({ request }) => {
           messageId: ID.unique(),
           subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
           content: [
-            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) submitted a <strong>Connect With Us</strong> request on the Co-op Charter.</p>`,
+            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) requested an invitation to join the Collective.</p>`,
             `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
             note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-            `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance to Approve or Reply</a></p>`,
+            `<p><a href="https://resalecmd.com/coop/governance">Open Co-op Governance or Command Center to Approve &amp; Send Invite</a></p>`,
           ].join(''),
           topics: [COOP_MESSAGING_TOPICS.founders],
           html: true,

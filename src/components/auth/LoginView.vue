@@ -34,9 +34,12 @@
             />
           </div>
 
-          <div class="flex items-center justify-between text-sm mt-2">
-            <a v-if="hasInviteRedirect" :href="signupLink" class="link link-primary link-hover">Have an invitation? Create your account</a>
-            <a v-else href="/coop" class="link link-primary link-hover">Membership is by invitation — learn about the Collective</a>
+          <div class="flex flex-wrap items-center justify-between gap-2 text-sm mt-2">
+            <a v-if="hasInviteRedirect" :href="signupLink" class="link link-primary link-hover font-bold">Have an invitation? Create your account</a>
+            <template v-else>
+              <a :href="signupLink" class="link link-primary link-hover font-bold">Need an account? Request an invitation →</a>
+              <a href="/coop" class="link link-hover text-xs text-base-content/70">Collective Charter</a>
+            </template>
           </div>
 
           <div class="form-control mt-6">

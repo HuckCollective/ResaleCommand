@@ -321,8 +321,8 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'join_requests', category: 'membership', severity: 'info', icon: 'solar:user-plus-bold-duotone',
     title: 'Join requests waiting', actionText: 'Review requests', href: '/coop/governance',
-    hats: ['founder'], liveWired: true,
-    evaluate: ({ snap }) => ({ count: snap.joinRequests, detail: 'People who asked to join and confirmed their email.' }),
+    hats: VOTING_HATS, liveWired: true,
+    evaluate: ({ snap }) => ({ count: snap.joinRequests, detail: 'People who asked for an invitation to join the Co-op.' }),
   },
 ];
 
