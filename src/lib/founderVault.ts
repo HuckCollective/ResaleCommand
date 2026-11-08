@@ -18,6 +18,17 @@ export type AiSurface = 'quick_scout' | 'deep_scan' | 'playbook' | 'social' | 'g
 export type AiIssueType = 'bad_price' | 'wrong_id_ocr' | 'wrong_playbook' | 'wrong_booth' | 'missed_lot_items' | 'other';
 export type AiRootCause = 'missing_photo_info' | 'ignored_visible_clue' | 'msrp_or_comp_bias' | 'channel_mismatch';
 
+export interface VaultRoutingGuide {
+  recommendedPresetId: string;
+  recommendedPresetTitle: string;
+  recommendedDestination: PromptTargetDestination;
+  whereToPasteLabel: string;
+  aiStudioChatLabel: string;
+  modelPickerBadge: string;
+  whyThisSurface: string;
+  handoffSteps: string[];
+}
+
 export interface VaultNote {
   id: string;
   kind: VaultNoteKind;
@@ -41,6 +52,7 @@ export interface VaultNote {
   coPilotNotes?: string;
   followUpQuestions?: Array<{ question: string; chips: string[] }>;
   bundlesUsed?: string[];
+  routingGuide?: VaultRoutingGuide;
 }
 
 export interface ParsedItemContextSummary {
@@ -53,22 +65,42 @@ export interface ParsedItemContextSummary {
   rawText: string;
 }
 
-/** Parses raw Quick Scout / ItemDrawer context strings or JSON into human-readable summary fields. */
+function extractJsonFieldRegex(src: string, key: string): string | undefined {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`"${escaped}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i');
+  const m = src.match(re);
+  if (!m || !m[1]) return undefined;
+  return m[1]
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, ' ')
+    .replace(/\\\\/g, '\\')
+    .trim();
+}
+
+/**
+ * Parses raw Quick Scout / ItemDrawer context strings or JSON into human-readable summary fields.
+ * Resilient even when the 1,500-char snapshot truncated the trailing JSON payload.
+ */
 export function parseItemContextSummary(raw?: string): ParsedItemContextSummary | null {
   const text = (raw || '').trim();
   if (!text) return null;
 
-  try {
-    const jsonStart = text.indexOf('{');
-    if (jsonStart !== -1) {
-      const prefix = text.slice(0, jsonStart).replace(/\|/g, '•').trim();
-      const parsed = JSON.parse(text.slice(jsonStart));
+  const jsonStart = text.indexOf('{');
+  const prefixPart = (jsonStart !== -1 ? text.slice(0, jsonStart) : text)
+    .split('|')
+    .map((p) => p.trim())
+    .filter((p) => p && !/^\d+$/.test(p));
+
+  if (jsonStart !== -1) {
+    const jsonSlice = text.slice(jsonStart);
+    try {
+      const parsed = JSON.parse(jsonSlice);
       const firstItem = Array.isArray(parsed?.items) && parsed.items.length > 0 ? parsed.items[0] : parsed;
       const title =
         firstItem?.title ||
         firstItem?.identity ||
         firstItem?.name ||
-        prefix.split('•')[0]?.trim() ||
+        prefixPart[0] ||
         'Attached Scan Snapshot';
       const tier = firstItem?.tier_label || firstItem?.tier || undefined;
       const priceOrValue =
@@ -79,19 +111,36 @@ export function parseItemContextSummary(raw?: string): ParsedItemContextSummary 
       const whyPayUp = firstItem?.why_pay_up || firstItem?.reason || undefined;
       const whyPass = firstItem?.why_pass || undefined;
       return { title: String(title), tier, priceOrValue, verdict, whyPayUp, whyPass, rawText: text };
+    } catch {
+      // Truncated JSON at 1,500 chars: extract fields cleanly via regex without leaking raw JSON
+      const title =
+        extractJsonFieldRegex(jsonSlice, 'title') ||
+        extractJsonFieldRegex(jsonSlice, 'identity') ||
+        prefixPart[0] ||
+        'Attached Scan Snapshot';
+      const tier =
+        extractJsonFieldRegex(jsonSlice, 'tier_label') ||
+        extractJsonFieldRegex(jsonSlice, 'tier') ||
+        undefined;
+      const priceOrValue =
+        extractJsonFieldRegex(jsonSlice, 'estimated_value') ||
+        extractJsonFieldRegex(jsonSlice, 'boutique') ||
+        undefined;
+      const verdict = extractJsonFieldRegex(jsonSlice, 'verdict') || undefined;
+      const whyPayUp =
+        extractJsonFieldRegex(jsonSlice, 'why_pay_up') ||
+        extractJsonFieldRegex(jsonSlice, 'reason') ||
+        undefined;
+      const whyPass = extractJsonFieldRegex(jsonSlice, 'why_pass') || undefined;
+      return { title, tier, priceOrValue, verdict, whyPayUp, whyPass, rawText: text };
     }
-  } catch {
-    // Fallback to pipe-delimited parsing below
   }
 
-  const parts = text
-    .split('|')
-    .map((p) => p.trim())
-    .filter(Boolean);
   return {
-    title: parts[0]?.slice(0, 120) || 'Attached Item Snapshot',
-    priceOrValue: parts[1]?.startsWith('$') || /^\d/.test(parts[1] || '') ? parts[1] : undefined,
-    whyPayUp: parts.slice(1).join(' • ').slice(0, 260) || undefined,
+    title: prefixPart[0]?.slice(0, 120) || 'Attached Item Snapshot',
+    priceOrValue:
+      prefixPart[1]?.startsWith('$') || /^\d/.test(prefixPart[1] || '') ? prefixPart[1] : undefined,
+    whyPayUp: prefixPart.slice(1).join(' • ').slice(0, 260) || undefined,
     rawText: text,
   };
 }
@@ -146,8 +195,329 @@ export const AI_ROOT_CAUSE_LABELS: Record<AiRootCause, string> = {
   channel_mismatch: '🧭 Good item, wrong channel',
 };
 
+export interface PlaybookPresetItem {
+  id: string;
+  starterNoteId?: string;
+  icon: string;
+  title: string;
+  summary: string;
+  destination: PromptTargetDestination;
+  bundles: string[];
+  defaultGoal: string;
+}
+
+/** Canonical 6 Playbook Starters (Dev/IDE, AI Studio Architecture, Live QA, and Deal Hunting). */
+export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
+  {
+    id: 'ide-surgical-builder',
+    starterNoteId: 'starter-ide-surgical-builder',
+    icon: '🎯',
+    title: 'Antigravity IDE Surgical Bug Fix & Feature',
+    summary:
+      'Turns an AI Report, UI bug, or feature note (e.g., saving Quick Scout estimate range cards) into a 1-shot surgical Antigravity IDE prompt with Model Picker & 3-file lock.',
+    destination: 'antigravity_ide',
+    bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
+    defaultGoal:
+      'Turn this issue description into a surgical Antigravity IDE prompt (with Model Picker header, ALLOWED FILES max 3, MAX TOOL CALLS: 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
+  },
+  {
+    id: 'ai-studio-architect',
+    starterNoteId: 'starter-preview-trial',
+    icon: '🧪',
+    title: 'AI Studio Feature Architect & Spec Co-Pilot',
+    summary:
+      'Brainstorms multi-file features, UX flows, or prompt architecture in Google AI Studio Focused Chats (#1–#5) with a cumulative SAVED MASTER SPEC & IDE QUEUE.',
+    destination: 'ai_studio',
+    bundles: ['rc-2-inventory-splitter', 'rc-4-sales-coop'],
+    defaultGoal:
+      'Design a complete UX/IA and data architecture plan for this feature in Google AI Studio, ask 2-3 clarifying product questions, and maintain a cumulative SAVED MASTER SPEC & IDE QUEUE block.',
+  },
+  {
+    id: 'paired-qa',
+    starterNoteId: 'starter-paired-qa-sidebar',
+    icon: '🧪',
+    title: 'Paired Human-AI Live Page QA Tester',
+    summary:
+      'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
+    destination: 'chrome_sidebar',
+    bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
+    defaultGoal:
+      'Create a step-by-step Paired Human-AI Chrome Sidebar QA prompt to test our latest feature on alpha.resalecmd.com one page at a time.',
+  },
+  {
+    id: 'auction-sweeper',
+    starterNoteId: 'starter-auction-sweeper',
+    icon: '🔭',
+    title: 'Whole-Page Auction Grid Sweeper',
+    summary:
+      'Scans 24–50 ShopGoodwill, HiBid, or eBay search lots in Chrome Sidebar and ranks the Top 3–5 sleeper lots where 1 Anchor item recoups your bid.',
+    destination: 'chrome_sidebar',
+    bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
+    defaultGoal:
+      'Scan this entire auction search results page and rank the top 3-5 sleeper lots worth clicking for our booths, factoring in shipping drag, buyer premium, and 1-anchor cost recovery.',
+  },
+  {
+    id: 'fbmp-coach',
+    starterNoteId: 'starter-fbmp-coach',
+    icon: '🤝',
+    title: 'FBMP / Local Deal & Negotiation Coach',
+    summary:
+      'Builds an Opening Anchor -> Walk-Away Offer Ladder, 3 non-tip-off seller questions, and 3 copy-paste DM negotiation scripts.',
+    destination: 'gemini_app',
+    bundles: ['rc-1-scout-vision', 'rc-3-booth-drops'],
+    defaultGoal:
+      'Evaluate a Facebook Marketplace / Craigslist local pickup listing, give me an Opening Anchor to Walk-Away Offer Ladder, 3 non-tip-off inspection questions, and 3 copy-paste DM scripts.',
+  },
+  {
+    id: 'estate-triage',
+    icon: '🧭',
+    title: 'Estate Table / Thrift Pile Triage',
+    summary:
+      'Use your phone camera in Gemini App to scan a whole table or shelf of items, spot the highest-margin pieces, and suggest a bundle offer.',
+    destination: 'gemini_app',
+    bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
+    defaultGoal:
+      'I am at an estate sale / flea market looking at a table of items. Help me spot the highest-margin pieces from my photo, flag any reprints/traps, and suggest a single cash bundle offer for the pile.',
+  },
+];
+
+/**
+ * Builds the full Co-Pilot input brief from a VaultNote so the user's Issue Description (`body`),
+ * Title, Root Cause, and Attached Scan Snapshot automatically feed the AI Prompt Builder.
+ */
+export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
+  const title = (note.title || '').trim();
+  const body = (note.body || '').trim();
+  const lines: string[] = [];
+
+  if (note.kind === 'report') {
+    lines.push('TASK: Analyze this reported Resale Command issue / feature request, run a 3-Point Anti-Bias Audit, and build a ready-to-paste prompt for the target surface.');
+    if (title) lines.push(`Card Title: ${title}`);
+    if (note.surface) lines.push(`Reported Surface: ${AI_SURFACE_LABELS[note.surface]}`);
+    if (note.issueType) lines.push(`Issue Category: ${AI_ISSUE_LABELS[note.issueType]}`);
+    if (note.rootCause) lines.push(`Reporter Root Cause: ${AI_ROOT_CAUSE_LABELS[note.rootCause]}`);
+    if (body) lines.push(`User Issue Description & Expected Behavior:\n"${body}"`);
+    const parsed = parseItemContextSummary(note.itemContext);
+    if (parsed) {
+      lines.push(
+        `Attached Scan Snapshot: ${parsed.title}${parsed.tier ? ` (${parsed.tier})` : ''}${parsed.priceOrValue ? ` • Est: ${parsed.priceOrValue}` : ''}${parsed.verdict ? ` • Verdict: ${parsed.verdict}` : ''}`
+      );
+    }
+    return lines.join('\n');
+  }
+
+  if (title && body && body !== title) {
+    return `${title}\n\nDetails / Goal:\n${body}`;
+  }
+  return body || title;
+}
+
+/**
+ * Inspects a VaultNote's description, surface, and kind to auto-recommend:
+ * 1) Which Playbook Starter Template (`presetId`) matches best
+ * 2) Which Target AI Surface (`antigravity_ide`, `ai_studio`, `chrome_sidebar`, `gemini_app`) to use
+ * 3) Which Focused AI Studio Chat (#1–#5) and Skill Bundles apply
+ * 4) Clear 1-2-3 Handoff Instructions on where & how to paste the generated prompt
+ */
+export function recommendVaultTemplateAndSurface(
+  note: Partial<VaultNote>,
+  overrideDestination?: PromptTargetDestination
+): VaultRoutingGuide & { recommendedBundles: string[] } {
+  const combined = `${note.title || ''} ${note.body || ''} ${note.itemContext || ''}`.toLowerCase();
+
+  // 1. Auto-match Skill Bundles based on surface + keywords
+  const bundles = new Set<string>();
+  if (
+    note.surface === 'quick_scout' ||
+    note.surface === 'deep_scan' ||
+    /scout|scan|price|msrp|estimate|comp|valuation|ocr|vision|comic|tier/.test(combined)
+  ) {
+    bundles.add('rc-1-scout-vision');
+  }
+  if (
+    note.surface === 'playbook' ||
+    /track|saved|save|drawer|lot|split|bundle|card|inventory|item|range/.test(combined)
+  ) {
+    bundles.add('rc-2-inventory-splitter');
+  }
+  if (/booth|memory den|0ej|ricochet|dusty tiger|label|barcode|tag|huck-/.test(combined)) {
+    bundles.add('rc-3-booth-drops');
+  }
+  if (/sale|payout|ledger|coop|co-op|70\/30|waterfall|rent|expense|tax|charter|member/.test(combined)) {
+    bundles.add('rc-4-sales-coop');
+  }
+  if (note.surface === 'social' || /social|dropcast|mobile|layout|button|ux|ui|daisyui/.test(combined)) {
+    bundles.add('rc-5-social-studio');
+  }
+  if (bundles.size === 0) {
+    bundles.add('rc-1-scout-vision');
+    bundles.add('rc-2-inventory-splitter');
+  }
+  const recommendedBundles = Array.from(bundles).slice(0, 2);
+
+  // 2. Pick the matching Focused Google AI Studio Chat (#1-#5)
+  let aiStudioChatLabel = 'Chat 1: RC - AI Scout & Vision';
+  if (bundles.has('rc-2-inventory-splitter') && /track|save|drawer|card|lot|split|inventory/.test(combined)) {
+    aiStudioChatLabel = 'Chat 2: RC - Inventory, Drawer & Splitter';
+  } else if (bundles.has('rc-3-booth-drops')) {
+    aiStudioChatLabel = 'Chat 3: RC - Booth Drops & Theme Puller';
+  } else if (bundles.has('rc-4-sales-coop')) {
+    aiStudioChatLabel = 'Chat 4: RC - Sales & Co-op Ledger';
+  } else if (bundles.has('rc-5-social-studio')) {
+    aiStudioChatLabel = 'Chat 5: RC - Social Dropcast Studio';
+  }
+
+  // 3. Auto-detect Playbook Starter Template & Target Surface
+  let recommendedPresetId = 'ide-surgical-builder';
+  let detectedDestination: PromptTargetDestination = 'antigravity_ide';
+
+  if (/shopgoodwill|hibid|auction grid|whole-page|search results|lots on this page/.test(combined)) {
+    recommendedPresetId = 'auction-sweeper';
+    detectedDestination = 'chrome_sidebar';
+  } else if (/facebook marketplace|fbmp|craigslist|offerup|negotiate|offer ladder|dm script/.test(combined)) {
+    recommendedPresetId = 'fbmp-coach';
+    detectedDestination = 'gemini_app';
+  } else if (/estate sale|flea market|thrift pile|table of items/.test(combined)) {
+    recommendedPresetId = 'estate-triage';
+    detectedDestination = 'gemini_app';
+  } else if (/paired.*qa|chrome sidebar qa|live page qa|pre-click checklist/.test(combined)) {
+    recommendedPresetId = 'paired-qa';
+    detectedDestination = 'chrome_sidebar';
+  } else if (
+    note.kind === 'spec' ||
+    /onboarding|trial user|preview member|multi-stage|architecture|brainstorm/.test(combined)
+  ) {
+    recommendedPresetId = 'ai-studio-architect';
+    detectedDestination = note.kind === 'spec' ? 'product_spec' : 'ai_studio';
+  } else if (
+    note.kind === 'report' ||
+    /save|saved|track|estimate|card|drawer|button|bug|fix|broken|missing|prompt|bias|msrp|ui|ux/.test(combined)
+  ) {
+    recommendedPresetId = 'ide-surgical-builder';
+    detectedDestination = 'antigravity_ide';
+  }
+
+  const finalDestination = overrideDestination || detectedDestination;
+  const presetObj =
+    PLAYBOOK_PRESETS.find((p) => p.id === recommendedPresetId) || PLAYBOOK_PRESETS[0];
+
+  // 4. Build destination-specific Model Picker Badge & 1-2-3 Handoff Instructions
+  if (finalDestination === 'antigravity_ide') {
+    return {
+      recommendedPresetId: presetObj.id,
+      recommendedPresetTitle: presetObj.title,
+      recommendedDestination: 'antigravity_ide',
+      whereToPasteLabel: '🎯 Paste into Antigravity IDE (Active Branch: alpha-1)',
+      aiStudioChatLabel,
+      modelPickerBadge: '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ 3.8 Flash for Recon first)',
+      whyThisSurface:
+        'This issue describes app behavior, UI state, or scan persistence (e.g., saving Quick Scout estimate range cards when tracking an item) that can be fixed directly in the repo on alpha-1.',
+      handoffSteps: [
+        '1. Click "📋 Copy IDE Prompt" below.',
+        '2. In Antigravity IDE, start a fresh chat (or run /compact) and set the Model Picker to "Gemini 4 Argon Medium" (or "Gemini 3.8 Flash" for a read-only scout turn).',
+        `3. Paste and press Enter — or if you want to brainstorm UX options first, switch Target Surface to "🧪 AI Studio" and paste into "${aiStudioChatLabel}".`,
+      ],
+      recommendedBundles,
+    };
+  }
+
+  if (finalDestination === 'ai_studio') {
+    return {
+      recommendedPresetId: presetObj.id,
+      recommendedPresetTitle: presetObj.title,
+      recommendedDestination: 'ai_studio',
+      whereToPasteLabel: `🧪 Paste into Google AI Studio — ${aiStudioChatLabel}`,
+      aiStudioChatLabel,
+      modelPickerBadge: `🧪 OPEN AI STUDIO: ${aiStudioChatLabel} (Gemini Pro / Argon)`,
+      whyThisSurface:
+        'Best when you want to explore UX alternatives, co-design a multi-file workflow, and build up a SAVED MASTER SPEC & IDE QUEUE before writing code in Antigravity IDE.',
+      handoffSteps: [
+        `1. Open Google AI Studio and select "${aiStudioChatLabel}".`,
+        '2. Click "📋 Copy Prompt" below and paste it into the chat.',
+        '3. Answer the 2-3 follow-up questions, then copy the final IDE prompt block back into Antigravity IDE.',
+      ],
+      recommendedBundles,
+    };
+  }
+
+  if (finalDestination === 'chrome_sidebar') {
+    return {
+      recommendedPresetId: presetObj.id,
+      recommendedPresetTitle: presetObj.title,
+      recommendedDestination: 'chrome_sidebar',
+      whereToPasteLabel: '🌐 Paste into Chrome Gemini Sidebar (Reading Live Webpage)',
+      aiStudioChatLabel,
+      modelPickerBadge: '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Argon)',
+      whyThisSurface:
+        'Best when the AI needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on alpha.resalecmd.com).',
+      handoffSteps: [
+        '1. Open the target webpage in Chrome and complete the Pre-Click / Scroll step first (the sidebar snapshots the DOM when you press Enter).',
+        '2. Open the Chrome Gemini Sidebar in the top-right of Chrome.',
+        '3. Click "📋 Copy Prompt" and paste it into the sidebar.',
+      ],
+      recommendedBundles,
+    };
+  }
+
+  if (finalDestination === 'product_spec') {
+    return {
+      recommendedPresetId: presetObj.id,
+      recommendedPresetTitle: presetObj.title,
+      recommendedDestination: 'product_spec',
+      whereToPasteLabel: '📌 Keep in Vault as Master Spec (or Paste into Antigravity IDE)',
+      aiStudioChatLabel,
+      modelPickerBadge: '📌 MASTER SPEC + IDE TASK QUEUE',
+      whyThisSurface:
+        'Formats your idea into a clean, mobile-readable Product Spec with acceptance criteria and an ordered Antigravity IDE implementation queue.',
+      handoffSteps: [
+        '1. Review the generated Product Spec & Acceptance Criteria in the card.',
+        '2. Copy individual tasks from the IDE Task Queue at the bottom into Antigravity IDE (`Gemini 4 Argon Medium`).',
+        '3. Mark the card "Vetted for Dev" or "Shipped in Git" once verified on alpha-1.',
+      ],
+      recommendedBundles,
+    };
+  }
+
+  return {
+    recommendedPresetId: presetObj.id,
+    recommendedPresetTitle: presetObj.title,
+    recommendedDestination: 'gemini_app',
+    whereToPasteLabel: '📱 Paste into Gemini App (Phone or gemini.google.com/app)',
+    aiStudioChatLabel,
+    modelPickerBadge: '📱 GEMINI APP (Phone Camera / Voice / Quick Chat)',
+    whyThisSurface:
+      'Phone-friendly interactive coach for evaluating deals in the field, negotiating FBMP/local pickups, or voice-brainstorming on the go.',
+    handoffSteps: [
+      '1. Click "📋 Copy Prompt" below.',
+      '2. Open the Gemini App on your phone (or gemini.google.com/app) and paste the prompt.',
+      '3. Attach your listing screenshot or table photo and reply to the 1-2 follow-up questions.',
+    ],
+    recommendedBundles,
+  };
+}
+
 /** Ready-to-copy power prompts seeded into a brand-new vault. */
 export const STARTER_VAULT_NOTES: VaultNote[] = [
+  {
+    id: 'starter-ide-surgical-builder',
+    kind: 'prompt',
+    destination: 'antigravity_ide',
+    title: '🎯 Antigravity IDE: Surgical Bug Fix & Feature Prompt Template',
+    body: [
+      '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ Gemini 3.8 Flash for Read-Only Recon first)',
+      '',
+      'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
+      '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
+      '',
+      'STRICT CONSTRAINTS:',
+      '- ALLOWED FILES (MAX 3): Identify the exact 1-3 files first (e.g., `src/components/scout/ScoutView.vue`, `src/components/inventory/ItemDetailsTab.vue`, `src/types/inventory.ts`).',
+      '- MAX TOOL CALLS: 3 edit calls after targeted line-range reads.',
+      '- FORBIDDEN ACTIONS: Never run `astro build` or `npm run build` locally; never write `quantity: 0` or Base64 to Appwrite; never mutate unrelated functions.',
+      '- VERIFY & PUSH: Run `npm run verify` via `run_command` (`BypassSandbox: true`) and push to `origin HEAD` (`alpha-1`).',
+    ].join('\n'),
+    createdAt: '2026-11-07T00:00:00.000Z',
+    updatedAt: '2026-11-07T00:00:00.000Z',
+  },
   {
     id: 'starter-auction-sweeper',
     kind: 'prompt',
@@ -159,7 +529,7 @@ export const STARTER_VAULT_NOTES: VaultNote[] = [
       'You are my resale deal-hunting co-pilot for The Huckleberry Collective. Look at EVERY lot on this page and tell me which 3-5 are worth clicking into, and which to skip.',
       '',
       'My venues: a vintage-mall booth (goth, whimsigoth, TTRPG/RPG books, metaphysical, sci-fi, punk, horror, adventure, cosplay) and a small-collectibles booth (jewelry, pins, wands/arcana under 8 inches; NO apparel, NO large toys).',
-      'Rules: value ONLY from secondary-market sold comps, never retail MSRP. Prefer lots where ONE anchor item can recoup 80-120% of the landed cost. Include buyer\'s premium and shipping weight in landed cost. Do not invent items you cannot read in the photos or titles.',
+      "Rules: value ONLY from secondary-market sold comps, never retail MSRP. Prefer lots where ONE anchor item can recoup 80-120% of the landed cost. Include buyer's premium and shipping weight in landed cost. Do not invent items you cannot read in the photos or titles.",
       '',
       'For each pick give: lot title, why it is a sleeper, the likely anchor item, max bid ceiling, and the booth it fits. Then list 2-3 lots to SKIP (shipping traps, MSRP-priced, unclear photos).',
       'End with 2 short questions about my budget and which booth needs stock, so we can refine.',
@@ -319,28 +689,30 @@ export const BLOAT_BADGE: Record<BloatRating, { icon: string; badge: string }> =
 // ---------------------------------------------------------------------------
 
 function readLocal(): VaultNote[] {
+  if (typeof window === 'undefined') return STARTER_VAULT_NOTES;
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed : [];
+    if (!raw) return STARTER_VAULT_NOTES;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : STARTER_VAULT_NOTES;
   } catch {
-    return [];
+    return STARTER_VAULT_NOTES;
   }
 }
 
 function writeLocal(notes: VaultNote[]): void {
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
-  } catch (err) {
-    console.warn('[founderVault] localStorage mirror warning:', err);
+  } catch {
+    // ignore quota errors
   }
 }
 
-/** Adds any starter prompts the vault does not have yet (so existing vaults get the new Deal-Hunter prompts). */
-function withMissingStarters(notes: VaultNote[]): { notes: VaultNote[]; added: boolean } {
-  const have = new Set(notes.map((n) => n.id));
-  const missing = STARTER_VAULT_NOTES.filter((s) => !have.has(s.id));
-  return missing.length ? { notes: [...notes, ...missing], added: true } : { notes, added: false };
+function withMissingStarters(existing: VaultNote[]): { notes: VaultNote[]; added: boolean } {
+  const ids = new Set(existing.map((n) => n.id));
+  const missing = STARTER_VAULT_NOTES.filter((s) => !ids.has(s.id));
+  return missing.length > 0 ? { notes: [...existing, ...missing], added: true } : { notes: existing, added: false };
 }
 
 export async function loadVaultNotes(): Promise<{ notes: VaultNote[]; synced: boolean }> {
@@ -412,6 +784,16 @@ export async function submitAiFeedbackReport(input: {
 }): Promise<{ saved: boolean; synced: boolean }> {
   const { notes } = await loadVaultNotes();
   const now = new Date().toISOString();
+  const draftNote: Partial<VaultNote> = {
+    kind: 'report',
+    title: `${AI_SURFACE_LABELS[input.surface]}: ${AI_ISSUE_LABELS[input.issueType]}`,
+    body: input.note.trim(),
+    surface: input.surface,
+    issueType: input.issueType,
+    rootCause: input.rootCause,
+    itemContext: input.itemContext?.slice(0, 1500),
+  };
+  const routing = recommendVaultTemplateAndSurface(draftNote);
   const report: VaultNote = {
     id: newVaultNoteId(),
     kind: 'report',
@@ -423,6 +805,9 @@ export async function submitAiFeedbackReport(input: {
     rootCause: input.rootCause,
     author: input.author,
     itemContext: input.itemContext?.slice(0, 1500),
+    destination: routing.recommendedDestination,
+    bundlesUsed: routing.recommendedBundles,
+    routingGuide: routing,
     upvotedBy: input.author ? [input.author] : [],
     createdAt: now,
     updatedAt: now,

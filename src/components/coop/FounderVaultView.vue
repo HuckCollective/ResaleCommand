@@ -165,13 +165,13 @@
       </button>
     </div>
 
-    <!-- 3. 1-TAP DEAL-HUNTER & QA PLAYBOOK STARTER CARDS -->
+    <!-- 3. 1-TAP DEV, IDE, QA & DEAL-HUNTER PLAYBOOK STARTER CARDS -->
     <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <div>
           <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
             <Icon icon="solar:bolt-circle-bold-duotone" class="w-4 h-4" />
-            <span>1-Tap Resale &amp; Live QA Playbook Starters</span>
+            <span>1-Tap Dev, IDE, Live QA &amp; Resale Playbook Starters</span>
           </div>
           <p class="text-[11px] text-base-content/60">
             Copy a ready-made playbook in 1 tap, or click the card to customize it inside the Slide-Over AI Co-Pilot Drawer.
@@ -180,7 +180,7 @@
         <span class="badge badge-ghost badge-xs font-mono">Powered by 70/30 Waterfall + Booth Skills</span>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         <div
           v-for="preset in PLAYBOOK_PRESETS"
           :key="preset.id"
@@ -325,8 +325,8 @@
               <span class="badge badge-xs font-bold" :class="kindBadgeClass(note.kind)">
                 {{ KIND_META[note.kind].icon }} {{ KIND_META[note.kind].label }}
               </span>
-              <span v-if="note.destination" class="badge badge-ghost badge-xs font-semibold">
-                {{ DEST_META[note.destination].icon }} {{ DEST_META[note.destination].label }}
+              <span class="badge badge-ghost badge-xs font-semibold">
+                {{ DEST_META[effectiveDestination(note)].icon }} {{ DEST_META[effectiveDestination(note)].label }}
               </span>
               <span
                 v-if="statusOf(note)"
@@ -475,11 +475,8 @@
                 <div class="text-[11px] opacity-65 truncate">{{ note.body }}</div>
               </td>
               <td class="whitespace-nowrap">
-                <span v-if="note.destination" class="badge badge-ghost badge-xs font-semibold">
-                  {{ DEST_META[note.destination].icon }} {{ DEST_META[note.destination].label }}
-                </span>
-                <span v-else-if="note.surface" class="badge badge-outline badge-xs">
-                  {{ SURFACES[note.surface] }}
+                <span class="badge badge-ghost badge-xs font-semibold">
+                  {{ DEST_META[effectiveDestination(note)].icon }} {{ DEST_META[effectiveDestination(note)].label }}
                 </span>
               </td>
               <td class="whitespace-nowrap">
@@ -603,6 +600,8 @@ import {
   toggleUpvote,
   estimateTokens,
   parseItemContextSummary,
+  recommendVaultTemplateAndSurface,
+  PLAYBOOK_PRESETS,
   STARTER_VAULT_NOTES,
   VAULT_KIND_META,
   GOVERNANCE_META,
@@ -611,6 +610,7 @@ import {
   type VaultNote,
   type VaultNoteKind,
   type VaultGovernanceStatus,
+  type PromptTargetDestination,
   type ParsedItemContextSummary,
 } from '../../lib/founderVault';
 import {
@@ -636,55 +636,9 @@ const GOV = GOVERNANCE_META;
 const DEST_META = DESTINATION_META;
 const SURFACES = AI_SURFACE_LABELS;
 
-const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
-  {
-    id: 'auction-sweeper',
-    starterNoteId: 'starter-auction-sweeper',
-    icon: '🔭',
-    title: 'Whole-Page Auction Grid Sweeper',
-    summary:
-      'Scans 24–50 ShopGoodwill, HiBid, or eBay search lots in Chrome Sidebar and ranks the Top 3–5 sleeper lots where 1 Anchor item recoups your bid.',
-    destination: 'chrome_sidebar',
-    bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
-    defaultGoal:
-      'Scan this entire auction search results page and rank the top 3-5 sleeper lots worth clicking for our booths, factoring in shipping drag, buyer premium, and 1-anchor cost recovery.',
-  },
-  {
-    id: 'fbmp-coach',
-    starterNoteId: 'starter-fbmp-coach',
-    icon: '🤝',
-    title: 'FBMP / Local Deal & Negotiation Coach',
-    summary:
-      'Builds an Opening Anchor -> Walk-Away Offer Ladder, 3 non-tip-off seller questions, and 3 copy-paste DM negotiation scripts.',
-    destination: 'gemini_app',
-    bundles: ['rc-1-scout-vision', 'rc-3-booth-drops'],
-    defaultGoal:
-      'Evaluate a Facebook Marketplace / Craigslist local pickup listing, give me an Opening Anchor to Walk-Away Offer Ladder, 3 non-tip-off inspection questions, and 3 copy-paste DM scripts.',
-  },
-  {
-    id: 'estate-triage',
-    icon: '🧭',
-    title: 'Estate Table / Thrift Pile Triage',
-    summary:
-      'Use your phone camera in Gemini App to scan a whole table or shelf of items, spot the highest-margin pieces, and suggest a bundle offer.',
-    destination: 'gemini_app',
-    bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
-    defaultGoal:
-      'I am at an estate sale / flea market looking at a table of items. Help me spot the highest-margin pieces from my photo, flag any reprints/traps, and suggest a single cash bundle offer for the pile.',
-  },
-  {
-    id: 'paired-qa',
-    starterNoteId: 'starter-paired-qa-sidebar',
-    icon: '🧪',
-    title: 'Paired Human-AI Live Page QA Tester',
-    summary:
-      'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
-    destination: 'chrome_sidebar',
-    bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
-    defaultGoal:
-      'Create a step-by-step Paired Human-AI Chrome Sidebar QA prompt to test our latest feature on alpha.resalecmd.com one page at a time.',
-  },
-];
+function effectiveDestination(note: VaultNote): PromptTargetDestination {
+  return note.destination || recommendVaultTemplateAndSurface(note).recommendedDestination;
+}
 
 const QUICK_DOCK_FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: 'All' },

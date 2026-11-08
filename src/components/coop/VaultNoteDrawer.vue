@@ -63,10 +63,10 @@
               type="button"
               class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-bold gap-1.5 shadow-2xs"
               title="Copy prompt / note text to clipboard"
-              @click="emit('copy', form.body)"
+              @click="emit('copy', form.draftedFixPrompt || form.body)"
             >
               <Icon icon="solar:copy-bold" class="w-4 h-4" />
-              <span>Copy</span>
+              <span>{{ form.draftedFixPrompt ? 'Copy Prompt' : 'Copy' }}</span>
             </button>
             <button
               type="button"
@@ -86,7 +86,7 @@
               role="tab"
               class="tab flex-1 text-xs sm:text-sm py-2.5 gap-1.5"
               :class="{ 'tab-active text-primary font-black': drawerTab === 'edit' }"
-              @click="drawerTab = 'edit'"
+              @click="switchTab('edit')"
             >
               <Icon icon="solar:pen-new-square-bold-duotone" class="w-4 h-4" />
               <span>Edit &amp; Details</span>
@@ -95,7 +95,7 @@
               role="tab"
               class="tab flex-1 text-xs sm:text-sm py-2.5 gap-1.5"
               :class="{ 'tab-active text-secondary font-black': drawerTab === 'copilot' }"
-              @click="drawerTab = 'copilot'"
+              @click="switchTab('copilot')"
             >
               <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />
               <span>🪄 AI Co-Pilot &amp; Skills</span>
@@ -104,7 +104,7 @@
               role="tab"
               class="tab flex-1 text-xs sm:text-sm py-2.5 gap-1.5"
               :class="{ 'tab-active text-accent font-black': drawerTab === 'audit' }"
-              @click="drawerTab = 'audit'"
+              @click="switchTab('audit')"
             >
               <Icon icon="solar:shield-check-bold-duotone" class="w-4 h-4" />
               <span>🛡️ Bias &amp; Ops Cost</span>
@@ -144,15 +144,23 @@
               </div>
 
               <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-2.5">
-                <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 block">
-                  Target AI Surface (Where You Paste It)
-                </label>
+                <div class="flex items-center justify-between gap-1">
+                  <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 block">
+                    Target AI Surface (Where You Paste It)
+                  </label>
+                  <span
+                    class="badge badge-secondary badge-xs font-bold"
+                    title="Auto-recommended from your issue description"
+                  >
+                    ✨ Best: {{ DEST_META[detectedRecommendation.recommendedDestination].label }}
+                  </span>
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                   <button
                     v-for="(meta, key) in DEST_META"
                     :key="key"
                     type="button"
-                    class="p-2 rounded-xl border text-left transition-all flex items-center gap-2"
+                    class="p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5"
                     :class="
                       form.destination === key
                         ? 'border-secondary bg-secondary/10 text-secondary font-black shadow-2xs'
@@ -160,8 +168,16 @@
                     "
                     @click="form.destination = key"
                   >
-                    <span class="text-sm leading-none">{{ meta.icon }}</span>
-                    <span class="text-xs truncate">{{ meta.label }}</span>
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span class="text-sm leading-none">{{ meta.icon }}</span>
+                      <span class="text-xs truncate">{{ meta.label }}</span>
+                    </div>
+                    <span
+                      v-if="detectedRecommendation.recommendedDestination === key"
+                      class="badge badge-xs badge-secondary font-bold shrink-0"
+                    >
+                      Auto
+                    </span>
                   </button>
                 </div>
               </div>
@@ -219,20 +235,66 @@
 
             <!-- Main Editable Prompt / Note Body -->
             <div class="space-y-1.5">
-              <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
                 <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70">
-                  {{ form.kind === 'report' ? 'Reported AI Issue & Expected Behavior' : 'Prompt / Spec / Idea Content' }}
+                  {{ form.kind === 'report' ? 'Reported AI Issue & Expected Behavior (Feeds AI Co-Pilot Automatically)' : 'Prompt / Spec / Idea Content' }}
                 </label>
-                <span class="text-[11px] font-mono opacity-60">
-                  {{ form.body.length }} chars • ~{{ opsImpact.addedTokens }} tokens
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-mono opacity-60">
+                    {{ form.body.length }} chars • ~{{ opsImpact.addedTokens }} tokens
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
+                    @click="sendDescriptionToCoPilot"
+                  >
+                    <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5" />
+                    <span>Build Prompt from This Description →</span>
+                  </button>
+                </div>
               </div>
               <textarea
                 v-model="form.body"
-                rows="12"
+                rows="10"
                 class="textarea textarea-bordered w-full font-mono text-xs sm:text-sm leading-relaxed rounded-2xl bg-base-200/40"
-                placeholder="Write or paste your prompt, idea, spec, or AI report notes here..."
+                placeholder="Write or paste your issue description, expected behavior, idea, or prompt here..."
+                @input="handleBodyEdited"
               ></textarea>
+            </div>
+
+            <!-- 🧭 WHERE & HOW TO PASTE THIS PROMPT (Smart Routing & Handoff Guide) -->
+            <div
+              class="rounded-2xl border border-info/40 bg-info/5 p-4 space-y-3"
+            >
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="space-y-0.5">
+                  <div class="text-xs font-extrabold uppercase tracking-wider text-info flex items-center gap-1.5">
+                    <Icon icon="solar:compass-big-bold-duotone" class="w-4 h-4" />
+                    <span>🧭 Where &amp; How to Use This Prompt</span>
+                  </div>
+                  <div class="text-sm font-black text-base-content">
+                    {{ activeRoutingGuide.whereToPasteLabel }}
+                  </div>
+                </div>
+
+                <span class="badge badge-info badge-sm font-mono font-bold self-start sm:self-center">
+                  {{ activeRoutingGuide.modelPickerBadge }}
+                </span>
+              </div>
+
+              <p class="text-xs text-base-content/80 leading-relaxed">
+                <b>Why this surface:</b> {{ activeRoutingGuide.whyThisSurface }}
+              </p>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div
+                  v-for="step in activeRoutingGuide.handoffSteps"
+                  :key="step"
+                  class="p-2.5 rounded-xl bg-base-100 border border-base-200 text-xs font-semibold leading-snug"
+                >
+                  {{ step }}
+                </div>
+              </div>
             </div>
 
             <!-- Saved Drafted Fix Prompt (When an AI Report has had a fix drafted) -->
@@ -240,10 +302,10 @@
               v-if="form.draftedFixPrompt"
               class="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-2.5"
             >
-              <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
                   <Icon icon="solar:code-square-bold-duotone" class="w-4 h-4" />
-                  <span>Saved Vetted IDE Fix Prompt (Ready for Antigravity IDE)</span>
+                  <span>Saved Vetted Prompt (Ready for {{ DEST_META[form.destination || 'antigravity_ide'].label }})</span>
                 </div>
                 <button
                   type="button"
@@ -251,12 +313,12 @@
                   @click="emit('copy', form.draftedFixPrompt)"
                 >
                   <Icon icon="solar:copy-bold" class="w-3.5 h-3.5" />
-                  <span>Copy IDE Fix</span>
+                  <span>📋 Copy Generated Prompt</span>
                 </button>
               </div>
               <textarea
                 v-model="form.draftedFixPrompt"
-                rows="7"
+                rows="8"
                 class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100"
               ></textarea>
             </div>
@@ -311,27 +373,81 @@
           <!-- TAB B: INTERACTIVE AI CO-PILOT & SKILLS                       -->
           <!-- ============================================================= -->
           <div v-show="drawerTab === 'copilot'" class="space-y-5">
-            <!-- Quick Playbook Starters Bar -->
+            <!-- Auto-Detected Template & Surface Banner -->
+            <div class="rounded-2xl border border-secondary/35 bg-secondary/5 p-4 space-y-2.5">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="space-y-0.5">
+                  <div class="text-xs font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                    <Icon icon="solar:stars-bold-duotone" class="w-4 h-4" />
+                    <span>✨ Auto-Matched Starter &amp; Target Surface from Your Description</span>
+                  </div>
+                  <div class="text-xs sm:text-sm font-black text-base-content">
+                    Template: {{ detectedRecommendation.recommendedPresetTitle }} → {{ DEST_META[form.destination || detectedRecommendation.recommendedDestination].icon }} {{ DEST_META[form.destination || detectedRecommendation.recommendedDestination].label }}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  class="btn btn-xs btn-secondary rounded-lg font-bold gap-1 self-start sm:self-center"
+                  @click="applyRecommendedSetup"
+                >
+                  <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5" />
+                  <span>Apply Recommended Setup</span>
+                </button>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span class="text-[11px] font-bold opacity-70">Switch Target Chat:</span>
+                <button
+                  v-for="(meta, key) in DEST_META"
+                  :key="key"
+                  type="button"
+                  class="btn btn-xs rounded-lg font-bold gap-1"
+                  :class="form.destination === key ? 'btn-primary' : 'btn-ghost bg-base-100 border border-base-300'"
+                  @click="form.destination = key"
+                >
+                  <span>{{ meta.icon }}</span>
+                  <span>{{ meta.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 6 Playbook Starters Bar (With Auto-Matched Highlight) -->
             <div class="bg-base-200/50 rounded-2xl p-4 border border-base-300 space-y-2.5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-extrabold uppercase tracking-wider text-primary">
-                  1-Tap Resale &amp; QA Playbook Starters
+                  1-Tap Dev, IDE, QA &amp; Resale Playbook Starters
                 </span>
-                <span class="text-[10px] opacity-60">Loads template into Co-Pilot</span>
+                <span class="text-[10px] opacity-60">Tap any template to load into Co-Pilot</span>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   v-for="preset in presets"
                   :key="preset.id"
                   type="button"
-                  class="p-2.5 rounded-xl border border-base-300 bg-base-100 hover:border-primary/50 text-left transition-all flex items-center gap-2.5"
+                  class="p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5"
+                  :class="
+                    detectedRecommendation.recommendedPresetId === preset.id
+                      ? 'border-secondary bg-secondary/10 shadow-2xs'
+                      : 'border-base-300 bg-base-100 hover:border-primary/50'
+                  "
                   @click="applyPresetInDrawer(preset)"
                 >
-                  <span class="text-lg leading-none shrink-0">{{ preset.icon }}</span>
-                  <div class="min-w-0">
-                    <div class="text-xs font-black truncate">{{ preset.title }}</div>
-                    <div class="text-[10px] opacity-60 truncate">{{ DEST_META[preset.destination].label }}</div>
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="text-lg leading-none shrink-0">{{ preset.icon }}</span>
+                    <div class="min-w-0">
+                      <div class="text-xs font-black truncate">{{ preset.title }}</div>
+                      <div class="text-[10px] opacity-65 truncate">
+                        {{ DEST_META[preset.destination].icon }} {{ DEST_META[preset.destination].label }}
+                      </div>
+                    </div>
                   </div>
+                  <span
+                    v-if="detectedRecommendation.recommendedPresetId === preset.id"
+                    class="badge badge-secondary badge-xs font-bold shrink-0"
+                  >
+                    ✨ Best Fit
+                  </span>
                 </button>
               </div>
             </div>
@@ -346,9 +462,9 @@
                   v-if="selectedBundles.length > 0"
                   type="button"
                   class="link link-primary text-[11px] font-bold"
-                  @click="selectedBundles = []"
+                  @click="selectedBundles = [...detectedRecommendation.recommendedBundles]"
                 >
-                  Use ✨ Auto-Match
+                  Reset to ✨ Auto-Matched Bundles
                 </button>
                 <span v-else class="badge badge-primary badge-xs font-bold">✨ Auto-Matching by Keyword</span>
               </div>
@@ -371,16 +487,28 @@
               </div>
             </div>
 
-            <!-- Co-Pilot Goal / Instruction Box -->
+            <!-- Co-Pilot Goal / Instruction Box (Auto-Fed from Issue Description!) -->
             <div class="space-y-2">
-              <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/75 block">
-                What Should the AI Co-Pilot Build or Refine for This Card?
-              </label>
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/75 block">
+                  What Should the AI Co-Pilot Build or Refine for This Card? (Auto-Fed from Issue Description)
+                </label>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost border border-base-300 rounded-lg font-bold gap-1"
+                  @click="syncGoalFromCard(true)"
+                >
+                  <Icon icon="solar:refresh-bold" class="w-3.5 h-3.5" />
+                  <span>🔄 Pull Latest Issue Description</span>
+                </button>
+              </div>
+
               <textarea
                 v-model="coPilotGoal"
-                rows="3"
-                class="textarea textarea-bordered w-full text-sm rounded-xl leading-relaxed"
+                rows="5"
+                class="textarea textarea-bordered w-full text-xs sm:text-sm rounded-xl leading-relaxed font-mono bg-base-200/30"
                 placeholder="Describe what you want to generate or how to improve this card..."
+                @input="goalManuallyEdited = true"
               ></textarea>
 
               <div class="flex flex-wrap gap-2">
@@ -392,7 +520,13 @@
                 >
                   <span v-if="making" class="loading loading-spinner loading-xs"></span>
                   <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4" />
-                  <span>{{ making ? 'Drafting with Skills & Saving…' : '✨ Generate & Auto-Save to Card' }}</span>
+                  <span>
+                    {{
+                      making
+                        ? 'Drafting with Skills & Saving…'
+                        : `✨ Generate ${DEST_META[form.destination || detectedRecommendation.recommendedDestination].label} Prompt & Save`
+                    }}
+                  </span>
                 </button>
 
                 <button
@@ -403,7 +537,7 @@
                   @click="runReportAuditAndFix"
                 >
                   <Icon icon="solar:shield-check-bold" class="w-4 h-4" />
-                  <span>🛡️ Run Anti-Bias Audit &amp; Save IDE Fix</span>
+                  <span>🛡️ Run Anti-Bias Audit &amp; Draft Antigravity IDE Fix</span>
                 </button>
               </div>
 
@@ -412,13 +546,57 @@
               </div>
             </div>
 
+            <!-- 🧭 WHERE TO PASTE + GENERATED PROMPT PREVIEW RIGHT INSIDE CO-PILOT TAB -->
+            <div
+              v-if="form.draftedFixPrompt || form.coPilotNotes"
+              class="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3"
+            >
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div class="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                    <Icon icon="solar:compass-big-bold-duotone" class="w-4 h-4" />
+                    <span>{{ activeRoutingGuide.whereToPasteLabel }}</span>
+                  </div>
+                  <div class="text-[11px] font-mono font-bold text-secondary mt-0.5">
+                    {{ activeRoutingGuide.modelPickerBadge }}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5 self-start sm:self-center"
+                  @click="emit('copy', form.draftedFixPrompt || form.body)"
+                >
+                  <Icon icon="solar:copy-bold" class="w-4 h-4" />
+                  <span>📋 Copy Prompt to Paste</span>
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div
+                  v-for="step in activeRoutingGuide.handoffSteps"
+                  :key="step"
+                  class="p-2 rounded-xl bg-base-100 border border-base-200 text-[11px] font-semibold leading-snug"
+                >
+                  {{ step }}
+                </div>
+              </div>
+
+              <textarea
+                v-if="form.draftedFixPrompt"
+                v-model="form.draftedFixPrompt"
+                rows="7"
+                class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed rounded-xl bg-base-100"
+              ></textarea>
+            </div>
+
             <!-- Co-Pilot Strategy Note & Follow-Up Question Chips -->
             <div
               v-if="form.coPilotNotes || (form.followUpQuestions && form.followUpQuestions.length)"
               class="p-4 rounded-2xl bg-base-200/60 border border-base-300 space-y-3"
             >
               <p v-if="form.coPilotNotes" class="text-xs text-base-content/85 bg-primary/10 border border-primary/25 rounded-xl p-3">
-                <b class="text-primary">💬 Co-Pilot Note:</b> {{ form.coPilotNotes }}
+                <b class="text-primary">💬 Co-Pilot Routing &amp; Strategy Note:</b> {{ form.coPilotNotes }}
               </p>
 
               <div v-if="form.followUpQuestions?.length" class="space-y-2">
@@ -539,7 +717,7 @@
               <button
                 type="button"
                 class="btn btn-xs sm:btn-sm btn-secondary rounded-xl font-black gap-1.5"
-                @click="drawerTab = drawerTab === 'copilot' ? 'edit' : 'copilot'"
+                @click="switchTab(drawerTab === 'copilot' ? 'edit' : 'copilot')"
               >
                 <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
                 <span>{{ drawerTab === 'copilot' ? '✏️ Back to Editor' : '🪄 AI Co-Pilot' }}</span>
@@ -601,26 +779,18 @@ import {
   VAULT_KIND_META,
   GOVERNANCE_META,
   DESTINATION_META,
-  AI_ROOT_CAUSE_LABELS,
   BLOAT_BADGE,
   effectiveStatus,
   estimatePromptOpsImpact,
   parseItemContextSummary,
+  buildCoPilotBriefFromNote,
+  recommendVaultTemplateAndSurface,
+  type PlaybookPresetItem,
   type VaultNote,
   type VaultNoteKind,
-  type PromptTargetDestination,
 } from '../../lib/founderVault';
 
-export interface PlaybookPresetItem {
-  id: string;
-  starterNoteId?: string;
-  icon: string;
-  title: string;
-  summary: string;
-  destination: PromptTargetDestination;
-  bundles: string[];
-  defaultGoal: string;
-}
+export type { PlaybookPresetItem };
 
 const props = defineProps<{
   isOpen: boolean;
@@ -643,7 +813,6 @@ const emit = defineEmits<{
 const KIND_META = VAULT_KIND_META;
 const GOV_META = GOVERNANCE_META;
 const DEST_META = DESTINATION_META;
-const ROOT_CAUSES = AI_ROOT_CAUSE_LABELS;
 
 const specialistBundles = [
   { id: 'rc-1-scout-vision', label: '🔍 1. Scout & Valuation' },
@@ -656,6 +825,7 @@ const specialistBundles = [
 const drawerTab = ref<'edit' | 'copilot' | 'audit'>('edit');
 const selectedBundles = ref<string[]>([]);
 const coPilotGoal = ref('');
+const goalManuallyEdited = ref(false);
 const refinementInput = ref('');
 const making = ref(false);
 const coPilotError = ref('');
@@ -665,12 +835,49 @@ const emptyForm = (): VaultNote => ({
   kind: 'prompt',
   title: '',
   body: '',
-  destination: 'gemini_app',
+  destination: 'antigravity_ide',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
 
 const form = ref<VaultNote>(emptyForm());
+
+const detectedRecommendation = computed(() => recommendVaultTemplateAndSurface(form.value));
+const activeRoutingGuide = computed(() =>
+  recommendVaultTemplateAndSurface(form.value, form.value.destination)
+);
+
+function syncGoalFromCard(force = false) {
+  if (!force && goalManuallyEdited.value && coPilotGoal.value.trim()) return;
+  coPilotGoal.value = buildCoPilotBriefFromNote(form.value);
+  goalManuallyEdited.value = false;
+}
+
+function handleBodyEdited() {
+  if (!goalManuallyEdited.value) {
+    coPilotGoal.value = buildCoPilotBriefFromNote(form.value);
+  }
+}
+
+function switchTab(nextTab: 'edit' | 'copilot' | 'audit') {
+  if (nextTab === 'copilot') {
+    syncGoalFromCard(false);
+  }
+  drawerTab.value = nextTab;
+}
+
+function sendDescriptionToCoPilot() {
+  syncGoalFromCard(true);
+  applyRecommendedSetup();
+  drawerTab.value = 'copilot';
+}
+
+function applyRecommendedSetup() {
+  const rec = detectedRecommendation.value;
+  form.value.destination = rec.recommendedDestination;
+  selectedBundles.value = [...rec.recommendedBundles];
+  syncGoalFromCard(true);
+}
 
 watch(
   () => [props.isOpen, props.note, props.initialTab] as const,
@@ -679,15 +886,21 @@ watch(
     drawerTab.value = tab || 'edit';
     coPilotError.value = '';
     refinementInput.value = '';
+    goalManuallyEdited.value = false;
     if (incoming) {
+      const rec = recommendVaultTemplateAndSurface(incoming);
       form.value = {
         ...incoming,
+        destination: incoming.destination || rec.recommendedDestination,
         upvotedBy: [...(incoming.upvotedBy || [])],
         followUpQuestions: incoming.followUpQuestions ? [...incoming.followUpQuestions] : undefined,
         bundlesUsed: incoming.bundlesUsed ? [...incoming.bundlesUsed] : undefined,
       };
-      selectedBundles.value = incoming.bundlesUsed ? [...incoming.bundlesUsed] : [];
-      coPilotGoal.value = incoming.title || incoming.body.slice(0, 140);
+      selectedBundles.value =
+        incoming.bundlesUsed && incoming.bundlesUsed.length
+          ? [...incoming.bundlesUsed]
+          : [...rec.recommendedBundles];
+      coPilotGoal.value = buildCoPilotBriefFromNote(form.value);
     } else {
       form.value = emptyForm();
       selectedBundles.value = [];
@@ -718,12 +931,18 @@ function toggleBundle(id: string) {
 
 function applyPresetInDrawer(preset: PlaybookPresetItem) {
   form.value.destination = preset.destination;
-  form.value.title = preset.title;
+  if (!form.value.title.trim()) {
+    form.value.title = preset.title;
+  }
   selectedBundles.value = [...preset.bundles];
-  coPilotGoal.value = preset.defaultGoal;
-  if (!form.value.body.trim()) {
+  const existingDescription = form.value.body.trim();
+  if (existingDescription) {
+    coPilotGoal.value = `${preset.defaultGoal}\n\nCard Title: ${form.value.title}\nUser Issue / Context:\n${existingDescription}`;
+  } else {
+    coPilotGoal.value = preset.defaultGoal;
     form.value.body = preset.defaultGoal;
   }
+  goalManuallyEdited.value = true;
 }
 
 function appendRefinementChip(question: string, chip: string) {
@@ -738,11 +957,17 @@ async function runCoPilot(isRefine = false) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        idea: coPilotGoal.value || form.value.title || form.value.body,
-        destination: form.value.destination || 'gemini_app',
+        idea: coPilotGoal.value || buildCoPilotBriefFromNote(form.value),
+        cardTitle: form.value.title,
+        issueDescription: form.value.body,
+        kind: form.value.kind,
+        surface: form.value.surface,
+        issueType: form.value.issueType,
+        rootCause: form.value.rootCause,
+        destination: form.value.destination || detectedRecommendation.value.recommendedDestination,
         bundleIds: selectedBundles.value,
         reportContext: form.value.itemContext || '',
-        currentDraft: isRefine ? form.value.body : undefined,
+        currentDraft: isRefine ? form.value.draftedFixPrompt || form.value.body : undefined,
         userRefinement: isRefine ? refinementInput.value : undefined,
       }),
     });
@@ -761,12 +986,15 @@ async function runCoPilot(isRefine = false) {
     form.value.coPilotNotes = data.coPilotNotes || '';
     form.value.followUpQuestions = data.followUpQuestions || [];
     form.value.bundlesUsed = data.bundlesUsed || [];
+    if (data.routingGuide) {
+      form.value.routingGuide = data.routingGuide;
+    }
     form.value.updatedAt = new Date().toISOString();
     if (isRefine) refinementInput.value = '';
 
     // Immediately emit save so generated work is persisted to Appwrite Cloud right away!
     emit('save', { ...form.value });
-    addToast('Generated with Skills & saved to card!', 'success');
+    addToast('Prompt generated & saved to card!', 'success');
   } catch (err: any) {
     coPilotError.value = err?.message || 'Generation failed';
   } finally {
@@ -776,18 +1004,15 @@ async function runCoPilot(isRefine = false) {
 
 async function runReportAuditAndFix() {
   form.value.destination = 'antigravity_ide';
-  coPilotGoal.value = `Run a 3-Point Anti-Bias Audit and draft a generalizable Antigravity IDE fix for this AI report.\nTitle: ${form.value.title}\nReporter note: ${form.value.body}`;
-  if (form.value.rootCause) {
-    coPilotGoal.value += `\nReporter root cause: ${ROOT_CAUSES[form.value.rootCause]}`;
-  }
+  syncGoalFromCard(true);
   await runCoPilot(false);
-  drawerTab.value = 'edit';
 }
 
 function saveCard() {
   if (!form.value.title.trim()) {
     form.value.title = form.value.body.trim().split('\n')[0].slice(0, 60) || 'Untitled Vault Card';
   }
+  form.value.routingGuide = activeRoutingGuide.value;
   form.value.updatedAt = new Date().toISOString();
   emit('save', { ...form.value });
 }
