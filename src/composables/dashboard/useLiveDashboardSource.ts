@@ -4,10 +4,14 @@ import { usePurchases } from '../usePurchases';
 import { useLoader } from '../useLoader';
 import { useAuth } from '../useAuth';
 import {
+  DEFAULT_COOP_POLICY_CONFIG,
+  calculateConsignorSettlement,
+  findConsignorAgreement,
   loadCoopGovernanceState,
   logSweatEquityLaborEntry,
   normalizePolicyConfig,
   type CoopMemberProfile,
+  type CoopPolicyConfig,
   type CoopProposal,
   type CoopLaborEntry,
 } from '../../lib/coopGovernance';
@@ -18,6 +22,7 @@ import {
   type DashboardExpenseLite,
   type DashboardMember,
   type DashboardSaleLite,
+  type DashboardStatementLite,
 } from '../../lib/dashboardTypes';
 import { databases, Query } from '../../lib/appwrite';
 import { getDatabaseId, resolveCollectionId } from '../../lib/appwriteEnv';
@@ -25,6 +30,14 @@ import { coopExpensesApi } from '../../lib/coopExpenses';
 import { manifestsApi } from '../../lib/manifests';
 import { getSavedDropcasts } from '../../lib/dropcastModel';
 import { JOIN_REQUEST_LOCATION_ID, JOIN_REQUEST_STATUS } from '../../lib/joinRequests';
+import {
+  PREVERIFIED_MD_MULTI_QTY_BINS,
+  buildLockedMultiBinMap,
+  matchMemoryDenInventoryItem,
+  pacificMonthKey,
+  resolvePartnerBucketForSaleRow,
+  splitTrailingBoothSku,
+} from '../../lib/salesBucketing';
 import type { DashboardSource } from './useDashboardSource';
 
 /** Real dashboard data (signed-in members). The ONLY dashboard file that talks to Appwrite. */
@@ -35,10 +48,12 @@ export function useLiveDashboardSource(): DashboardSource {
   const { user, currentTeam, isAdmin } = useAuth();
 
   const roster = ref<CoopMemberProfile[]>([]);
+  const policyConfig = ref<CoopPolicyConfig>(DEFAULT_COOP_POLICY_CONFIG);
   const proposals = ref<CoopProposal[]>([]);
   const laborEntries = ref<CoopLaborEntry[]>([]);
   const initialLoading = ref(true);
   const sales = ref<DashboardSaleLite[]>([]);
+  const rawSalesDocs = ref<any[]>([]);
   const expenses = ref<DashboardExpenseLite[]>([]);
   const drops = ref<DashboardDropLite[]>([]);
   const lastSyncAt = ref<string | null>(null);
@@ -54,25 +69,52 @@ export function useLiveDashboardSource(): DashboardSource {
     joinRequests.value = res.total;
   };
 
-  /** Recent sales ledger docs. Owner comes from the inventory item that points at the sale (`saleId`). */
+  /** Recent sales ledger docs. Uses `salesBucketing.ts` (Law 3) so Booth Bins (`0EJ097`, `0EJ0OF`, etc.) and SKU matches count as matched. */
   const loadSales = async () => {
     const res = await databases.listDocuments(getDatabaseId(), resolveCollectionId('sales'), [
       Query.limit(100),
       Query.orderDesc('$id'),
     ]);
+    const activeItems = inventoryItems.value || [];
     const itemBySaleId = new Map<string, any>();
-    for (const i of inventoryItems.value || []) if (i.saleId) itemBySaleId.set(String(i.saleId), i);
-    sales.value = (res.documents as any[])
-      .filter((d) => String(d.status || '').toLowerCase() !== 'cancelled')
-      .map((d) => {
-        const item = itemBySaleId.get(d.$id);
+    for (const i of activeItems) if (i.saleId) itemBySaleId.set(String(i.saleId), i);
+    const claimed = new Map<string, string>();
+    const multiBins = buildLockedMultiBinMap(activeItems, claimed);
+
+    const validDocs = (res.documents as any[]).filter(
+      (d) => String(d.status || '').toLowerCase() !== 'cancelled'
+    );
+    rawSalesDocs.value = validDocs;
+    sales.value = validDocs.map((d) => {
+        const rawTitle = String(d.soNumber || d.orderId || '').trim();
+        const split = splitTrailingBoothSku(rawTitle);
+        const sku = String(d.sku || split.sku || '').trim().toUpperCase();
+        const isPreverifiedBin = Boolean(sku && PREVERIFIED_MD_MULTI_QTY_BINS[sku]);
+        const item =
+          itemBySaleId.get(d.$id) ||
+          matchMemoryDenInventoryItem({
+            sku,
+            upc: d.upc,
+            title: split.title || rawTitle,
+            price: Number(d.grossAmount || 0),
+            activeItems,
+            claimedItemIdToSku: claimed,
+            multiBinResolvedBySku: multiBins,
+          });
+        const bucket = resolvePartnerBucketForSaleRow({
+          sku,
+          upc: item?.upc || d.upc,
+          title: item?.title || rawTitle,
+        });
+        const inferredPrefix =
+          item?.upc || (bucket === 'BB' ? 'BB-' : bucket === 'PDXGL' ? 'PDXGL-' : 'HUCK-');
         return {
           id: d.$id,
-          title: item?.title || d.soNumber || 'Register sale',
+          title: item?.title || split.title || rawTitle || 'Register sale',
           soldAt: d.saleDate || d.$createdAt,
           amount: Number(d.grossAmount || 0),
-          matched: !!item,
-          ownerPrefix: item?.upc || undefined,
+          matched: Boolean(item || isPreverifiedBin),
+          ownerPrefix: inferredPrefix,
         };
       });
   };
@@ -123,6 +165,49 @@ export function useLiveDashboardSource(): DashboardSource {
     inventoryPrefix: profile.value?.inventoryPrefix,
   }));
 
+  const statement = computed<DashboardStatementLite | null>(() => {
+    const prefix = String(member.value.inventoryPrefix || 'HUCK-').toUpperCase();
+    const curMonth = pacificMonthKey(new Date().toISOString());
+    const monthSales = sales.value.filter(
+      (s) => pacificMonthKey(s.soldAt) === curMonth && String(s.ownerPrefix || '').toUpperCase().startsWith(prefix)
+    );
+    if (monthSales.length === 0) return null;
+    const rawById = new Map<string, any>();
+    for (const d of rawSalesDocs.value) rawById.set(d.$id, d);
+    const grossSales = Number(monthSales.reduce((acc, s) => acc + s.amount, 0).toFixed(2));
+    const venueFee = Number(
+      monthSales
+        .reduce((acc, s) => acc + Number(rawById.get(s.id)?.commissionFee || 0), 0)
+        .toFixed(2)
+    );
+    const netDeposit = Math.max(0, Number((grossSales - venueFee).toFixed(2)));
+    const agreement = findConsignorAgreement(policyConfig.value.consignors, prefix);
+    if (agreement) {
+      const settled = calculateConsignorSettlement(agreement, netDeposit, 0, 0, false);
+      return {
+        month: curMonth,
+        ready: settled.payout > 0,
+        grossSales,
+        venueFee,
+        rentOffset: Number((settled.rentDeduction + settled.coopCommission).toFixed(2)),
+        payout: settled.payout,
+        dealLabel: settled.formulaLabel,
+      };
+    }
+    const curatorShare = (Number(policyConfig.value.curatorSharePct) || 70) / 100;
+    const payout = Number((netDeposit * curatorShare).toFixed(2));
+    const rentOffset = Number((netDeposit - payout).toFixed(2));
+    return {
+      month: curMonth,
+      ready: payout > 0,
+      grossSales,
+      venueFee,
+      rentOffset,
+      payout,
+      dealLabel: `Co-op Waterfall (${policyConfig.value.curatorSharePct}% Curator / ${policyConfig.value.commonsSharePct}% Commons)`,
+    };
+  });
+
   const snapshot = computed(() => ({
     ...emptySnapshot(),
     items: inventoryItems.value || [],
@@ -133,6 +218,8 @@ export function useLiveDashboardSource(): DashboardSource {
     expenses: expenses.value,
     drops: drops.value,
     lastSyncAt: lastSyncAt.value,
+    statement: statement.value,
+    shortfall: Math.max(0, Number(policyConfig.value.carriedOverShortfall || 0)),
     joinRequests: joinRequests.value,
   }));
 
@@ -148,7 +235,9 @@ export function useLiveDashboardSource(): DashboardSource {
       if (purchases.value.length === 0) tasks.push(fetchPurchases());
       tasks.push(
         loadCoopGovernanceState([], currentTeam.value?.$id || 'huck_collective').then(({ state }) => {
-          roster.value = normalizePolicyConfig(state.policyConfig).members;
+          const normalized = normalizePolicyConfig(state.policyConfig);
+          policyConfig.value = normalized;
+          roster.value = normalized.members;
           proposals.value = state.proposals || [];
           laborEntries.value = state.laborEntries || [];
         })

@@ -111,3 +111,4 @@ const decline = async (req: JoinRequest) => {
 
 onMounted(load);
 </script>
+

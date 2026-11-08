@@ -204,7 +204,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'unlinked_tickets', category: 'sales', severity: 'warning', icon: 'solar:link-broken-bold-duotone',
     title: 'Unlinked register tickets', actionText: 'Link tickets', href: '/sales',
-    hats: ['founder'], liveWired: false,
+    hats: ['founder'], liveWired: true,
     evaluate: ({ snap }) => {
       const rows = snap.sales.filter((s) => !s.matched);
       return {
@@ -242,7 +242,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'payout_ready', category: 'sales', severity: 'success', icon: 'solar:hand-money-bold-duotone',
     title: 'Payout statement ready', actionText: 'View statement', href: '/coop/settlements',
-    hats: ['curator', 'consignor', 'founder'], liveWired: false,
+    hats: ['curator', 'consignor', 'founder'], liveWired: true,
     evaluate: ({ snap }) => snap.statement?.ready
       ? { count: 1, detail: `${snap.statement.month} statement is ready (${money(snap.statement.payout)} payout).` }
       : { count: 0, detail: '' },
@@ -270,7 +270,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'breakeven_shortfall', category: 'coop', severity: 'warning', icon: 'solar:graph-down-bold-duotone',
     title: 'Commons breakeven shortfall', actionText: 'Open settlements', href: '/coop/settlements',
-    hats: VOTING_HATS, liveWired: false,
+    hats: VOTING_HATS, liveWired: true,
     evaluate: ({ snap }) => snap.shortfall > 0
       ? { count: 1, detail: `${money(snap.shortfall)} short of covering this month's operating costs.` }
       : { count: 0, detail: '' },

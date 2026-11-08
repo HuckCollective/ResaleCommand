@@ -87,7 +87,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { account, ID } from '../../lib/appwrite';
 import { JOIN_REQUEST_HATS, type JoinRequestHat } from '../../lib/joinRequests';
 
 interface HatOption {
@@ -132,8 +131,19 @@ const sendCode = async () => {
   if (!/^\S+@\S+\.\S+$/.test(email.value.trim())) return (errorMsg.value = 'Please enter a valid email.');
   busy.value = true;
   try {
-    const token = await account.createEmailToken({ userId: ID.unique(), email: email.value.trim() });
-    tempUserId.value = token.userId;
+    const res = await fetch('/api/join-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'send_code',
+        email: email.value.trim(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.userId) {
+      throw new Error(data?.error || 'Could not send the code. Please try again.');
+    }
+    tempUserId.value = data.userId;
     step.value = 'code';
   } catch (err: any) {
     errorMsg.value = err?.message || 'Could not send the code. Please try again.';
@@ -146,26 +156,20 @@ const verifyAndSubmit = async () => {
   errorMsg.value = '';
   busy.value = true;
   try {
-    // Proves inbox ownership. The session is dropped right away: this visitor is not a member yet.
-    await account.createSession({ userId: tempUserId.value, secret: code.value.trim() });
-    try {
-      await account.deleteSession('current');
-    } catch {
-      // The server only needs the verified flag, not the session.
-    }
-
     const res = await fetch('/api/join-request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'verify',
         userId: tempUserId.value,
+        code: code.value.trim(),
         name: name.value,
         note: note.value,
         hats: selectedHats.value as JoinRequestHat[],
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || 'Could not save your request.');
+    if (!res.ok) throw new Error(data?.error || 'That code did not work. Please try again.');
     alreadyReviewed.value = !!data.alreadyReviewed;
     step.value = 'done';
   } catch (err: any) {
@@ -175,3 +179,4 @@ const verifyAndSubmit = async () => {
   }
 };
 </script>
+

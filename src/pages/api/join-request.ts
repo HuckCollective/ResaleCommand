@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
-import { Client, Databases, Users, Permission, Role } from 'node-appwrite';
+import { Account, Client, Databases, ID, Users, Permission, Role } from 'node-appwrite';
 import {
   JOIN_REQUEST_HATS,
   JOIN_REQUEST_LIMITS,
@@ -11,9 +11,7 @@ import {
 export const prerender = false;
 
 const MANIFESTS_COL_ID = 'manifests';
-/** A verified email-code user must have been created this recently to be accepted. */
-const MAX_VERIFIED_AGE_MS = 30 * 60 * 1000;
-const DAILY_LIMIT_PER_NETWORK = 5;
+const DAILY_LIMIT_PER_NETWORK = 10;
 
 const attempts = new Map<string, number>();
 let lastPruneDay = '';
@@ -40,9 +38,12 @@ function allowAttempt(request: Request): boolean {
 }
 
 /**
- * Saves a join request. The visitor proved they own the email by completing Appwrite's email-code login
- * (`createEmailToken` + `createSession`); we re-check that server-side, store the request, then delete the
- * temporary Appwrite user that only existed to carry the code.
+ * Two-step server-side Email OTP join request flow:
+ * 1) `action: 'send_code'` -> calls Appwrite `account.createEmailToken` from the server (bypasses browser CORS
+ *    on preview/alpha domains and never collides with an active browser session).
+ * 2) Default / `action: 'verify'` -> verifies the 6-digit `code` via a stateless server `account.createSession`
+ *    (or checks `tempUser.emailVerification`), writes the `JOIN_REQUESTS` manifest doc, and cleans up any
+ *    temporary 0-team user.
  */
 export const POST: APIRoute = async ({ request }) => {
   if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
@@ -54,7 +55,30 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Invalid request.' }, 400);
   }
 
+  const endpoint = env('PUBLIC_APPWRITE_ENDPOINT');
+  const project = env('PUBLIC_APPWRITE_PROJECT_ID');
+  const apiKey = env('APPWRITE_API_KEY');
+  const dbId = env('PUBLIC_APPWRITE_DB_ID');
+  if (!endpoint || !project || !apiKey || !dbId) return json({ error: 'Server is not configured.' }, 500);
+
+  if (body?.action === 'send_code') {
+    const rawEmail = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
+    if (!/^\S+@\S+\.\S+$/.test(rawEmail)) {
+      return json({ error: 'Please enter a valid email address.' }, 400);
+    }
+    try {
+      const anonClient = new Client().setEndpoint(endpoint).setProject(project);
+      const anonAccount = new Account(anonClient);
+      const token = await anonAccount.createEmailToken({ userId: ID.unique(), email: rawEmail });
+      return json({ ok: true, userId: token.userId });
+    } catch (err: any) {
+      console.error('[join-request send_code]', err?.message || err);
+      return json({ error: err?.message || 'Could not send verification email. Please check the address and try again.' }, 400);
+    }
+  }
+
   const userId = String(body?.userId || '').trim();
+  const code = String(body?.code || '').trim();
   const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
   const note = String(body?.note || '').trim().slice(0, JOIN_REQUEST_LIMITS.note);
   const hats = (Array.isArray(body?.hats) ? body.hats : []).filter((h: string) =>
@@ -64,20 +88,23 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Please add your name and pick at least one hat.' }, 400);
   }
 
-  const endpoint = env('PUBLIC_APPWRITE_ENDPOINT');
-  const project = env('PUBLIC_APPWRITE_PROJECT_ID');
-  const apiKey = env('APPWRITE_API_KEY');
-  const dbId = env('PUBLIC_APPWRITE_DB_ID');
-  if (!endpoint || !project || !apiKey || !dbId) return json({ error: 'Server is not configured.' }, 500);
-
   const client = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
   const users = new Users(client);
   const databases = new Databases(client);
 
   try {
+    if (code) {
+      const anonClient = new Client().setEndpoint(endpoint).setProject(project);
+      const anonAccount = new Account(anonClient);
+      try {
+        await anonAccount.createSession({ userId, secret: code });
+      } catch (err: any) {
+        return json({ error: 'That 6-digit code did not match or expired. Please request a new code.' }, 401);
+      }
+    }
+
     const tempUser = await users.get(userId);
-    const age = Date.now() - Date.parse(tempUser.$createdAt);
-    if (!tempUser.emailVerification || !(age >= 0 && age <= MAX_VERIFIED_AGE_MS)) {
+    if (!code && !tempUser.emailVerification) {
       return json({ error: 'Email was not verified. Please request a new code.' }, 401);
     }
     const email = String(tempUser.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
@@ -127,3 +154,4 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Could not save your request. Please try again.' }, 500);
   }
 };
+
