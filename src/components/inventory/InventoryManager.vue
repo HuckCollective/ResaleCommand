@@ -37,7 +37,7 @@
             </div>
         </div>
         <!-- MAIN INVENTORY SECTION -->
-        <div class="flex flex-col pb-44 pt-0 min-w-0 w-full">
+        <div class="flex flex-col pt-0 min-w-0 w-full">
                 <!-- RESPONSIVE STICKY HEADER (Row 1: Title & Controls, Row 2: Full-width Search, Row 3: Quick Filter Pills) -->
                 <!-- STREAMLINED COMPACT HEADER -->
                 <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2 mb-2 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-2xs">
@@ -254,11 +254,11 @@
                 <button class="btn btn-sm btn-outline" @click="clearAllFilters">Clear Filters</button>
             </div>
             
-            <div v-else class="pb-32">
+            <div v-else>
                 <!-- RESPONSIVE INVENTORY FEED / GRID -->
                 <div :class="isHorizontalCard 
                     ? 'grid gap-2.5 grid-cols-1' 
-                    : 'grid gap-3 sm:gap-3.5 md:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'">
+                    : 'rc-card-grid'">
                     <ItemCard 
                         v-for="item in displayedInventory" 
                         :key="item.$id" 

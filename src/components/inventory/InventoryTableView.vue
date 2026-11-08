@@ -1,5 +1,5 @@
 <template>
-    <div class="space-y-4 pb-36 sm:pb-44 w-full max-w-full min-w-0">
+    <div class="space-y-4 w-full max-w-full min-w-0">
         <!-- 1. STICKY TOP OMNIBAR & STATUS PIPELINE TABS -->
         <InventoryHeader 
             title="Inventory"

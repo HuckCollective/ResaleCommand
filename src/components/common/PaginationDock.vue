@@ -1,6 +1,8 @@
 <template>
+  <div class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
   <Teleport to="body">
     <div 
+      ref="dockEl"
       class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
     >
       <!-- ========================================================================= -->
@@ -128,6 +130,9 @@
 <script setup>
 import { ref, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useDockClearance } from '../../composables/useDockClearance';
+
+const { dockEl, dockHeightRem } = useDockClearance(6);
 
 const props = defineProps({
   currentPage: {

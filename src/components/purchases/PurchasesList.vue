@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 pb-36 sm:pb-44">
+  <div class="space-y-4">
     <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
     <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">

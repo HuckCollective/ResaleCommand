@@ -36,7 +36,7 @@ Watch out for these red flags in existing or new code, and refactor them to use 
 3. **Red Flag: Writing a `<video ref="...">` camera loop**
    👉 *Refactor To*: `<ScannerWidget>`.
 4. **Red Flag: Astro page with a dock showing a footer gap**
-   👉 *Fix*: Add `hideFooter={true}` to `<Layout>` and `pb-36 sm:pb-44` to the content container.
+   👉 *Fix*: Add `hideFooter={true}` to `<Layout>` and wrap content in `.rc-page-shell`; the dock self-clears via `.rc-dock-spacer` (never add manual `pb-*`).
 5. **Red Flag: Tiny inline table-cell search dropdowns (`<input placeholder="Search inventory to match..." />` inside a `<td>`)**
    👉 *FORBIDDEN UI ANTI-PATTERN*: Never place floating search autocomplete dropdowns inside table cells (they clip inside table containers, hide photos, and truncate titles). Always use a clean `🔍 Open Match Drawer` trigger button (`X suggested`) that opens the **Slide-Over Inventory Match Drawer** with photo thumbnails, full untruncated titles, price comparison badges, strict exclusion of items already assigned to other `0EJ` SKUs, and a 1-click `🔗 Link & Save to MD` button.
 
@@ -134,7 +134,7 @@ To ensure all pages implement this pattern identically with zero layout collisio
      - `#default`: Unconstrained custom layout when custom row structures are needed.
 - **Page Layout Invariant**: Any Astro page using a bottom action dock MUST:
   1. Pass `hideFooter={true}` to `<Layout>` so the static footer does not render.
-  2. Add bottom padding clearance to its content container (`pb-36 sm:pb-44`) so scrolled items are never obscured.
+  2. Do NOT add manual bottom padding: `BottomActionDock`, `PaginationDock` and `InventoryPaginationDock` render a self-measuring `.rc-dock-spacer` (via `useDockClearance`); mount the dock last inside the page container.
 
 ---
 

@@ -36,7 +36,7 @@ const MASTER_ARCHITECTURE_LAWS = `## Resale Command — 7 Immutable Architecture
    Zero static lookup dictionaries (no \`0EJxxx -> HUCK-xxxx\` tables, no baked JSON snapshots) in code. Lookup maps are built at runtime, in memory, from live \`resale_db\` documents: \`items\`, \`warehouses\`, \`sales\`, \`manifests\`. Staging/commit state lives in \`manifests\`; seed historical mappings into Appwrite documents (\`scripts/seed-md-booth-skus.mjs\`), never into source files. Never send an attribute that is not in the collection schema (Appwrite rejects unknown attributes with 400).
 
 5. **LAW 5 — Enterprise UX/IA Pattern.**
-   Primary canvas = Top KPIs ➔ full DataTable ➔ Sticky Bottom Action Bar (\`BottomActionDock\`, \`fixed bottom-0\`, \`backdrop-blur\`, \`z-50\`, page clearance \`pb-36 sm:pb-44\`, Astro page passes \`hideFooter={true}\`). Secondary inputs (manual CSV upload, demo loaders, paste drawers) live in right-edge Slide-Over Trays (\`SalesImportTray.vue\` pattern), triggered from the top toolbar — never as large cards in the page body.
+   Primary canvas = Top KPIs ➔ full DataTable ➔ Sticky Bottom Action Bar (\`BottomActionDock\`, \`fixed bottom-0\`, \`backdrop-blur\`, \`z-50\`, page clearance via \`.rc-page-shell\` + self-clearing \`.rc-dock-spacer\` (docks self-measure via \`useDockClearance\`; never add manual \`pb-36 sm:pb-44\`), Astro page passes \`hideFooter={true}\`). Secondary inputs (manual CSV upload, demo loaders, paste drawers) live in right-edge Slide-Over Trays (\`SalesImportTray.vue\` pattern), triggered from the top toolbar — never as large cards in the page body.
 
 6. **LAW 6 — 3-Tier Commit Idempotency.**
    Every money-moving commit must be safe to click twice, retry, or resume:

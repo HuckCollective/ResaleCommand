@@ -757,11 +757,17 @@ for (const contract of transportContracts) {
             );
             hasErrors = true;
         }
+        for (const cls of ['rc-page-shell', 'rc-page-shell-narrow', 'rc-card-grid', 'rc-dock-spacer']) {
+            if (!new RegExp(`\\.${cls}\\s*\\{`).test(globalCss)) {
+                console.error(`❌ Layout Primitive Missing in src/styles/global.css: .${cls} must be defined in @layer components!`);
+                hasErrors = true;
+            }
+        }
     }
 
     // 12D. Views that render <BottomActionDock> self-clear via its built-in spacer — ban stacked manual pb-24..pb-48 on the same file
     const dockUserFiles = getFiles('src', ['.vue']).filter(
-        (f) => !f.endsWith('BottomActionDock.vue') && /<BottomActionDock\b/.test(fs.readFileSync(f, 'utf8'))
+        (f) => !/(?:BottomActionDock|PaginationDock|InventoryPaginationDock)\.vue$/.test(f) && /<(?:BottomActionDock|PaginationDock|InventoryPaginationDock)\b/.test(fs.readFileSync(f, 'utf8'))
     );
     for (const f of dockUserFiles) {
         const rel = path.relative(process.cwd(), f).replace(/\\/g, '/');

@@ -2,14 +2,15 @@
   <!-- Automatic in-flow bottom clearance spacer so fixed viewport docks NEVER cover bottom card content -->
   <div
     v-if="visible && placement === 'viewport'"
-    class="!mt-0 w-full shrink-0 pointer-events-none"
-    :class="$slots.top ? 'h-32 md:h-[100px]' : 'h-24 md:h-[72px]'"
+    class="rc-dock-spacer"
+    :style="{ '--rc-dock-height': dockHeightRem }"
     aria-hidden="true"
   ></div>
   <Teleport :to="teleportTo" :disabled="!teleport || placement !== 'viewport'">
     <Transition :name="transition ? 'dock-slide-up' : ''">
       <div 
         v-if="visible"
+        ref="dockEl"
         class="bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
         :class="[
           placement === 'viewport' ? 'fixed bottom-0 inset-x-0' : 'sticky bottom-0 inset-x-0 w-full shrink-0',
@@ -71,6 +72,8 @@
 </template>
 
 <script setup lang="ts">
+import { useDockClearance } from '../../composables/useDockClearance';
+
 /**
  * BottomActionDock.vue
  * 
@@ -92,6 +95,8 @@ defineOptions({
   name: 'BottomActionDock',
   inheritAttrs: false
 });
+
+const { dockEl, dockHeightRem } = useDockClearance(4.5);
 
 withDefaults(
   defineProps<{
