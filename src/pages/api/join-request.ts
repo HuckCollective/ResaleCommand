@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
-import { Account, Client, Databases, ID, Users, Permission, Role } from 'node-appwrite';
+import { Client, Databases, Permission, Role } from 'node-appwrite';
 import {
   JOIN_REQUEST_HATS,
   JOIN_REQUEST_LIMITS,
@@ -38,12 +38,10 @@ function allowAttempt(request: Request): boolean {
 }
 
 /**
- * Two-step server-side Email OTP join request flow:
- * 1) `action: 'send_code'` -> calls Appwrite `account.createEmailToken` from the server (bypasses browser CORS
- *    on preview/alpha domains and never collides with an active browser session).
- * 2) Default / `action: 'verify'` -> verifies the 6-digit `code` via a stateless server `account.createSession`
- *    (or checks `tempUser.emailVerification`), writes the `JOIN_REQUESTS` manifest doc, and cleans up any
- *    temporary 0-team user.
+ * Direct 1-click "Connect With Us" join request endpoint.
+ * Does not depend on external SMTP/Email OTP providers (which are unconfigured in Appwrite Cloud);
+ * uses honeypot + per-network rate limiting + deterministic SHA-256 email doc IDs (`join_<hash>`)
+ * so every inquiry lands directly in the Founder's JoinRequestsPanel and Dashboard Alert #20.
  */
 export const POST: APIRoute = async ({ request }) => {
   if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
@@ -55,61 +53,31 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Invalid request.' }, 400);
   }
 
+  // Honeypot trap for bots
+  if (String(body?.website || '').trim()) {
+    return json({ ok: true, alreadyReviewed: false });
+  }
+
   const endpoint = env('PUBLIC_APPWRITE_ENDPOINT');
   const project = env('PUBLIC_APPWRITE_PROJECT_ID');
   const apiKey = env('APPWRITE_API_KEY');
   const dbId = env('PUBLIC_APPWRITE_DB_ID');
   if (!endpoint || !project || !apiKey || !dbId) return json({ error: 'Server is not configured.' }, 500);
 
-  if (body?.action === 'send_code') {
-    const rawEmail = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
-    if (!/^\S+@\S+\.\S+$/.test(rawEmail)) {
-      return json({ error: 'Please enter a valid email address.' }, 400);
-    }
-    try {
-      const anonClient = new Client().setEndpoint(endpoint).setProject(project);
-      const anonAccount = new Account(anonClient);
-      const token = await anonAccount.createEmailToken({ userId: ID.unique(), email: rawEmail });
-      return json({ ok: true, userId: token.userId });
-    } catch (err: any) {
-      console.error('[join-request send_code]', err?.message || err);
-      return json({ error: err?.message || 'Could not send verification email. Please check the address and try again.' }, 400);
-    }
-  }
-
-  const userId = String(body?.userId || '').trim();
-  const code = String(body?.code || '').trim();
   const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
+  const email = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
   const note = String(body?.note || '').trim().slice(0, JOIN_REQUEST_LIMITS.note);
   const hats = (Array.isArray(body?.hats) ? body.hats : []).filter((h: string) =>
     (JOIN_REQUEST_HATS as readonly string[]).includes(h)
   );
-  if (!userId || !name || hats.length === 0) {
-    return json({ error: 'Please add your name and pick at least one hat.' }, 400);
+  if (!name || !/^\S+@\S+\.\S+$/.test(email) || hats.length === 0) {
+    return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
   }
 
   const client = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-  const users = new Users(client);
   const databases = new Databases(client);
 
   try {
-    if (code) {
-      const anonClient = new Client().setEndpoint(endpoint).setProject(project);
-      const anonAccount = new Account(anonClient);
-      try {
-        await anonAccount.createSession({ userId, secret: code });
-      } catch (err: any) {
-        return json({ error: 'That 6-digit code did not match or expired. Please request a new code.' }, 401);
-      }
-    }
-
-    const tempUser = await users.get(userId);
-    if (!code && !tempUser.emailVerification) {
-      return json({ error: 'Email was not verified. Please request a new code.' }, 401);
-    }
-    const email = String(tempUser.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
-    if (!email) return json({ error: 'Email was not verified.' }, 401);
-
     const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
     const snapshot = JSON.stringify({ name, email, hats, note, requestedAt: new Date().toISOString() });
     const docData = {
@@ -123,7 +91,6 @@ export const POST: APIRoute = async ({ request }) => {
       notes: '',
     };
 
-    let alreadyReviewed = false;
     try {
       await databases.createDocument(dbId, MANIFESTS_COL_ID, docId, docData, [
         Permission.read(Role.users()),
@@ -132,26 +99,12 @@ export const POST: APIRoute = async ({ request }) => {
       ]);
     } catch (err: any) {
       if (err?.code !== 409) throw err;
-      const existing: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, docId);
-      if (existing.status === JOIN_REQUEST_STATUS.pending) {
-        await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
-      } else {
-        alreadyReviewed = true;
-      }
+      await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
     }
 
-    // The temp user only carried the email code. Never delete anyone who belongs to a team.
-    try {
-      const memberships = await users.listMemberships({ userId });
-      if (memberships.total === 0) await users.delete({ userId });
-    } catch (cleanupErr) {
-      console.warn('[join-request] Temp user cleanup skipped:', cleanupErr);
-    }
-
-    return json({ ok: true, alreadyReviewed });
+    return json({ ok: true, alreadyReviewed: false });
   } catch (err: any) {
-    console.error('[join-request] Failed:', err);
+    console.error('[join-request]', err?.message || err);
     return json({ error: 'Could not save your request. Please try again.' }, 500);
   }
 };
-

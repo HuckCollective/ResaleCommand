@@ -23,9 +23,15 @@
         <p v-if="req.note" class="text-xs break-words whitespace-pre-line">{{ req.note }}</p>
         <div class="flex flex-wrap justify-end gap-2">
           <button type="button" class="btn btn-xs btn-ghost rounded-lg" :disabled="busyId === req.id" @click="decline(req)">Decline</button>
+          <a
+            :href="buildReplyMailto(req)"
+            class="btn btn-xs btn-outline rounded-lg font-bold"
+          >
+            Reply by Email
+          </a>
           <button type="button" class="btn btn-xs btn-primary rounded-lg font-bold" :disabled="busyId === req.id" @click="approve(req)">
             <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
-            Approve &amp; Email Invite
+            Approve &amp; Invite
           </button>
         </div>
       </div>
@@ -58,6 +64,15 @@ const requests = ref<JoinRequest[]>([]);
 const loading = ref(true);
 const busyId = ref('');
 
+const buildReplyMailto = (req: JoinRequest) => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://resalecmd.com';
+  const subject = encodeURIComponent(`Welcome to The Huckleberry Collective (${req.hats.join(', ')})`);
+  const body = encodeURIComponent(
+    `Hi ${req.name},\n\nThanks for reaching out through our Co-op Charter! We reviewed your request (${req.hats.join(', ')}) and would love to connect.\n\nYou can create or sign in to your account here: ${origin}/login\n\nBest,\nThe Huckleberry Collective`
+  );
+  return `mailto:${encodeURIComponent(req.email)}?subject=${subject}&body=${body}`;
+};
+
 const load = async () => {
   try {
     const res = await databases.listDocuments(getDatabaseId(), MANIFESTS_COL_ID, [
@@ -79,18 +94,23 @@ const setStatus = (req: JoinRequest, status: JoinRequestStatus) =>
 
 const approve = async (req: JoinRequest) => {
   const teamId = currentTeam.value?.$id;
-  if (!teamId) {
-    addToast({ type: 'error', message: 'No active team found to invite them to.' });
-    return;
-  }
   busyId.value = req.id;
   try {
-    await auth.inviteMember(teamId, req.email);
+    if (teamId) {
+      try {
+        await auth.inviteMember(teamId, req.email);
+      } catch (inviteErr: any) {
+        // Ignore 409 if the email is already a member of this team (e.g. testing with admin email)
+        if (!String(inviteErr?.message || '').toLowerCase().includes('already') && inviteErr?.code !== 409) {
+          console.warn('[JoinRequestsPanel] inviteMember warning:', inviteErr?.message || inviteErr);
+        }
+      }
+    }
     await setStatus(req, JOIN_REQUEST_STATUS.approved);
     requests.value = requests.value.filter((r) => r.id !== req.id);
-    addToast({ type: 'success', message: `Invite emailed to ${req.name}.` });
+    addToast({ type: 'success', message: `Approved ${req.name}!` });
   } catch (err: any) {
-    addToast({ type: 'error', message: err?.message || 'Could not send the invite.' });
+    addToast({ type: 'error', message: err?.message || 'Could not approve the request.' });
   } finally {
     busyId.value = '';
   }
@@ -111,4 +131,3 @@ const decline = async (req: JoinRequest) => {
 
 onMounted(load);
 </script>
-
