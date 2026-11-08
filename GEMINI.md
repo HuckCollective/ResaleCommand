@@ -149,12 +149,14 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 8, 2026)
 
-## ✅ MOBILE-FIRST PAGE SHELLS (`.rc-page-shell`), `.rc-card-grid` & LIVE SELF-CLEARING DOCK SPACERS (`useDockClearance.ts` — Nov 8, 2026 — `alpha-1`)
+## ✅ MOBILE-FIRST PAGE SHELLS (`.rc-page-shell`), `.rc-card-grid` & LIVE SELF-CLEARING DOCK SPACERS (`useDockClearance.ts` — Nov 8, 2026 — `alpha-1` ➔ `main`)
 - **Semantic Tailwind v4 / PostCSS Component Classes (`src/styles/global.css`)**:
   - Added `.rc-page-shell` (`96rem` / `--breakpoint-2xl` aligned 1:1 with `Navbar.vue`), `.rc-page-shell-narrow` (`64rem` / `max-w-5xl` for single-task forms & scanners), `.rc-card-grid` (`1 -> 2 -> 3 -> 4 -> 5` retail catalog columns), and `.rc-dock-spacer` (`height: calc(var(--rc-dock-height, 4.25rem) + 1rem)` with `margin-top: 0 !important`).
-- **Shared Live `ResizeObserver` Dock Clearance Composable (`src/composables/useDockClearance.ts`)**:
-  - Measures any fixed bottom dock (`BottomActionDock.vue`, `PaginationDock.vue`, `InventoryPaginationDock.vue`, `LocationSyncView.vue`, `PurchaseEditor.vue`, `ScoutView.vue`, `ScoutPurchaseList.vue`) in real time using root `rem` sizing and sets `--rc-dock-height` on its in-flow `.rc-dock-spacer`.
+- **Shared Live `ResizeObserver` Dock Clearance Composable (`src/composables/useDockClearance.ts`, `src/layouts/Layout.astro`)**:
+  - Measures any fixed bottom dock (`BottomActionDock.vue`, `PaginationDock.vue`, `InventoryPaginationDock.vue`, `LocationSyncView.vue`, `PurchaseEditor.vue`, `ScoutView.vue`, `ScoutPurchaseList.vue`) in real time using root `rem` sizing (`requestAnimationFrame`-debounced + `Math.round()` change-only updates) and sets `--rc-dock-height` on its in-flow `.rc-dock-spacer`, while ignoring benign browser `ResizeObserver loop` notifications in `Layout.astro`'s global error banner listener.
   - Eliminated double/triple-stacked manual `pb-32` / `pb-36` / `pb-40` / `pb-44` across all `.astro` page wrappers (`inventory.astro`, `purchases/index.astro`, `purchases/[id].astro`, `purchases/new.astro`, `purchases/speed-entry.astro`, `sales.astro`, `sales/new.astro`, `sales/import/[...location].astro`, `expenses.astro`, `coop/*.astro`, `warehouse*.astro`, `scout.astro`, `settings.astro`, `dashboard.astro`, `profile.astro`, `labels/*.astro`) and Vue views (`InventoryManager.vue`, `InventoryTableView.vue`, `PurchasesList.vue`, `PurchaseEditor.vue`, `SalesList.vue`, `CoopExpensesLedger.vue`, `LocationSyncView.vue`, `ScoutPurchaseList.vue`).
+- **Manifest `itemsSnapshot` Array Normalization (`src/lib/manifests.ts`, `src/components/warehouses/LocationDetailView.vue`)**:
+  - Normalized `itemsSnapshot` parsing in `normalizeManifest()` and added `snapshotList()` in `LocationDetailView.vue` so non-array JSON objects stored in special report/sync `manifests` documents never throw `.map is not a function` on `/warehouse/[id]`.
 - **Automated Pre-Push Linter & AI Skill Governance (`scripts/validate-templates.mjs` Checks 12A–12E + `scripts/sync-ai-context.mjs`)**:
   - Enforces `.rc-page-shell`, `.rc-page-shell-narrow`, `.rc-card-grid`, and `.rc-dock-spacer` in `global.css`, bans manual `pb-28..pb-48` in views rendering self-clearing docks, bans arbitrary pixel hacks (`h-[72px]`, `h-[100px]`, `max-w-[1600px]`), and updated Law 5 + UI/Mobile skills so AI agents never re-introduce stacked bottom padding.
 
