@@ -212,6 +212,10 @@ const props = withDefaults(
   { surface: 'quick_scout', itemContext: '' }
 );
 
+const emit = defineEmits<{
+  (e: 'submitted'): void;
+}>();
+
 const SURFACES = AI_SURFACE_LABELS;
 const ISSUES = AI_ISSUE_LABELS;
 const CAUSES = AI_ROOT_CAUSE_LABELS;
@@ -255,6 +259,7 @@ async function submit() {
     );
     note.value = '';
     open.value = false;
+    emit('submitted');
   } catch (err) {
     console.warn('[AiFeedbackButton] submit failed:', err);
     addToast('Could not save report', 'error');

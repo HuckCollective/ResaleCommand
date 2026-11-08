@@ -1300,7 +1300,11 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            <AiFeedbackButton
+              :surface="isAcquiredItem ? 'deep_scan' : 'quick_scout'"
+              :item-context="[editForm?.title || item?.title, editForm?.resalePrice, scoutMdText?.slice(0, 700)].filter(Boolean).join(' | ')"
+            />
             <span
               v-if="scoutResult"
               class="badge badge-sm badge-success text-success-content font-black whitespace-nowrap px-2.5 py-0.5 shadow-xs"
@@ -1820,6 +1824,7 @@ import { deriveLotExitPlaybook } from '../../../lib/lot-strategy';
 import { isItemAcquired } from '../../../lib/inventory';
 import { resolveMultiQtyCost } from '../../../composables/useItemDrawerForm';
 import { KNOWN_FACILITY_CODES, getAllLocationSettingMetas } from '../../../lib/warehouses';
+import AiFeedbackButton from '../AiFeedbackButton.vue';
 
 const props = defineProps({
     editForm: {

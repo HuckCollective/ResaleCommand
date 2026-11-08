@@ -31,6 +31,7 @@
       </div>
 
       <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
+        <AiFeedbackButton surface="quick_scout" @submitted="refreshVault" />
         <button
           type="button"
           class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
@@ -903,6 +904,7 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
+import AiFeedbackButton from '../common/AiFeedbackButton.vue';
 import {
   loadVaultNotes,
   saveVaultNotes,
@@ -1213,6 +1215,13 @@ function resetStudio() {
 
 async function persist() {
   synced.value = await saveVaultNotes(notes.value);
+}
+
+async function refreshVault() {
+  const res = await loadVaultNotes();
+  notes.value = res.notes;
+  synced.value = res.synced;
+  activeTab.value = 'reports';
 }
 
 async function addNote() {

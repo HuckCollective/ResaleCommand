@@ -73,6 +73,10 @@
                         <Icon icon="solar:gift-bold" class="w-3.5 h-3.5" />
                         <span>🎁 Build Bundle</span>
                     </button>
+                    <AiFeedbackButton
+                        surface="playbook"
+                        :item-context="[item?.title, currentPlay?.name, currentPlay?.summary, currentPlay?.projectedYield].filter(Boolean).join(' | ')"
+                    />
                 </div>
             </div>
 
@@ -618,6 +622,7 @@
 import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../ItemThumbnail.vue';
+import AiFeedbackButton from '../AiFeedbackButton.vue';
 import { deriveLotExitPlaybook, deriveInventoryPlays, getLotSplitRecommendation, parsePriceValue } from '../../../lib/lot-strategy';
 import { getSubItemBoutique, getSubItemFair, getSubItemBuyRange, getSubItemCostBasis } from '../../../lib/bundle-pricing';
 import { usePlaybookLearning, detectItemCategory } from '../../../composables/usePlaybookLearning';

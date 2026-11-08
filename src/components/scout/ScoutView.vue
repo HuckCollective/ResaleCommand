@@ -24,7 +24,10 @@
                 
                 <!-- 1a. DETAILS ON TOP (Optional notes: size, brand, defect, etc.) -->
                 <div class="form-control w-full flex flex-col">
-                    <div class="mb-1 text-xs font-semibold opacity-70 px-1">Additional Details (Optional) Size, Brand, Defects, etc.</div>
+                    <div class="mb-1.5 flex items-center justify-between gap-2 px-1">
+                        <span class="text-xs font-semibold opacity-70">Additional Details (Optional) Size, Brand, Defects, etc.</span>
+                        <AiFeedbackButton surface="quick_scout" :item-context="userNotes || scoutUrl || ''" />
+                    </div>
                     <textarea v-model="userNotes" class="textarea textarea-bordered w-full h-20 text-xs sm:text-sm leading-relaxed" placeholder="e.g. Size Large, Nike tag from 2015, small tear on sleeve..."></textarea>
                 </div>
 
@@ -128,9 +131,15 @@
                             <div class="badge badge-neutral">#{{ Number(index) + 1 }}</div>
                         </div>
                         
-                        <!-- Quick Identity Preview -->
-                        <div class="text-xs font-bold text-base-content/70 truncate max-w-xs sm:max-w-md">
-                            {{ item.identity || item.title || 'Identified Item' }}
+                        <!-- Quick Identity Preview & AI Issue Flag -->
+                        <div class="flex items-center gap-2">
+                            <div class="text-xs font-bold text-base-content/70 truncate max-w-xs sm:max-w-md">
+                                {{ item.identity || item.title || 'Identified Item' }}
+                            </div>
+                            <AiFeedbackButton
+                                surface="quick_scout"
+                                :item-context="[item.identity || item.title, item.estimated_value, item.condition, item.purchase_strategy?.verdict].filter(Boolean).join(' | ')"
+                            />
                         </div>
                     </div>
 

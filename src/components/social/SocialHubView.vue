@@ -1090,6 +1090,11 @@
           <span class="sm:hidden">✨ Copy</span>
         </button>
 
+        <AiFeedbackButton
+          surface="social"
+          :item-context="[studioCastTitle, currentTargetLocation].filter(Boolean).join(' | ')"
+        />
+
         <!-- Save Cast -->
         <button 
           type="button" 
@@ -1970,6 +1975,7 @@ import {
 import ScannerWidget from '../common/ScannerWidget.vue';
 import SocialItemPickerModal from './SocialItemPickerModal.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
+import AiFeedbackButton from '../common/AiFeedbackButton.vue';
 import { logSweatEquityLaborEntry } from '../../lib/coopGovernance';
 import { useAuth } from '../../composables/useAuth';
 

@@ -16,6 +16,11 @@
                 </span>
                 <span class="sm:hidden">{{ analyzing ? 'Scouting...' : (isAcquired ? (hasScoutResult ? '🔍 Re-Scan' : '🔍 Deep Scan') : '⚡ Quick Scout') }}</span>
             </button>
+
+            <AiFeedbackButton
+                :surface="currentTab === 'lot' ? 'playbook' : (isAcquired ? 'deep_scan' : 'quick_scout')"
+                :item-context="[item?.title || editForm?.title, editForm?.resalePrice || editForm?.price, editForm?.quantity, String(item?.rawAnalysis || '').slice(0, 800)].filter(Boolean).join(' | ')"
+            />
         </div>
 
         <div class="flex items-center gap-2">
@@ -36,6 +41,7 @@
 
 <script setup>
 import { Icon } from '@iconify/vue';
+import AiFeedbackButton from '../AiFeedbackButton.vue';
 
 defineProps({
     currentTab: {
