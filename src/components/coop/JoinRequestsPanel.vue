@@ -16,6 +16,35 @@
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
       </div>
 
+      <!-- Non-Production Host Banner & Email Link Target Toggle -->
+      <div
+        v-if="isNonProdHost"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs"
+      >
+        <div class="font-bold">
+          ⚠️ Testing on <code class="font-mono">{{ currentHostLabel }}</code> — Email links will point to:
+          <code class="font-mono underline">{{ useProdOrigin ? prodHostLabel : currentHostLabel }}</code>
+        </div>
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold"
+            :class="!useProdOrigin ? 'btn-warning' : 'btn-ghost'"
+            @click="useProdOrigin = false"
+          >
+            🧪 {{ currentHostLabel }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs rounded-lg font-bold"
+            :class="useProdOrigin ? 'btn-primary' : 'btn-ghost'"
+            @click="useProdOrigin = true"
+          >
+            🌐 {{ prodHostLabel }}
+          </button>
+        </div>
+      </div>
+
       <!-- Pending & Needs-Info Join Requests -->
       <div v-for="req in activeRequests" :key="req.id" class="rounded-xl border border-base-300 bg-base-200/40 p-3 space-y-2.5">
         <div class="flex flex-wrap items-start justify-between gap-2">
@@ -88,7 +117,7 @@
           class="flex flex-wrap items-center justify-between gap-2 pt-1 bg-success/10 border border-success/40 rounded-xl p-2.5"
         >
           <div class="text-xs font-bold text-base-content">
-            Send official invite email &amp; password creation link to
+            Send official invite email &amp; password creation link (<code class="font-mono">{{ useProdOrigin ? prodHostLabel : currentHostLabel }}</code>) to
             <span class="underline">{{ req.name }}</span> ({{ req.email }})?
           </div>
           <div class="flex items-center gap-1.5">
@@ -277,6 +306,7 @@ import {
   type JoinRequestStatus,
 } from '../../lib/joinRequests';
 import { joinApi } from '../../lib/joinRequestsClient';
+import { siteConfig } from '../../site-config';
 
 const allRequests = ref<JoinRequest[]>([]);
 const unverifiedCount = ref(0);
@@ -285,6 +315,30 @@ const busyId = ref('');
 const questionOpenForId = ref('');
 const questionDraft = ref('');
 const confirmApproveId = ref('');
+const currentOrigin = ref('');
+const useProdOrigin = ref(false);
+
+const prodHostLabel = computed(() => {
+  try {
+    return new URL(siteConfig.siteUrl).host;
+  } catch {
+    return siteConfig.siteUrl;
+  }
+});
+
+const currentHostLabel = computed(() => {
+  if (!currentOrigin.value) return prodHostLabel.value;
+  try {
+    return new URL(currentOrigin.value).host;
+  } catch {
+    return currentOrigin.value;
+  }
+});
+
+const isNonProdHost = computed(() => {
+  if (!currentOrigin.value) return false;
+  return /^(localhost|127\.0\.0\.1|alpha\.)/i.test(currentHostLabel.value);
+});
 
 const activeRequests = computed(() =>
   allRequests.value.filter(
@@ -307,7 +361,11 @@ const formatExternalUrl = (raw: string) => {
 
 /** The personal invite link is signed server-side, so the panel asks the API for it (steward-only). */
 const copyInviteLink = async (req: JoinRequest) => {
-  const res = await joinApi<{ inviteUrl: string }>('link', { id: req.id }, { steward: true });
+  const res = await joinApi<{ inviteUrl: string }>(
+    'link',
+    { id: req.id, useProdOrigin: useProdOrigin.value },
+    { steward: true }
+  );
   if (!res.ok) {
     addToast({ type: 'error', message: res.data.error || 'Could not get the invite link.' });
     return;
@@ -352,7 +410,7 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
     const cleanQuestion = questionText.trim();
     const res = await joinApi<{ inviteUrl: string; emailSent: boolean; status: JoinRequestStatus }>(
       'decide',
-      { id: req.id, decision, question: cleanQuestion },
+      { id: req.id, decision, question: cleanQuestion, useProdOrigin: useProdOrigin.value },
       { steward: true }
     );
     if (!res.ok) {
@@ -409,5 +467,10 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
   }
 };
 
-onMounted(load);
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    currentOrigin.value = window.location.origin;
+  }
+  load();
+});
 </script>

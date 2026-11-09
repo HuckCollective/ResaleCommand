@@ -128,9 +128,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const action = String(body?.action || '');
   const reqOrigin = new URL(request.url).origin;
-  const emailOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(reqOrigin)
-    ? siteConfig.siteUrl
-    : reqOrigin;
+  const emailOrigin = body?.useProdOrigin === true ? siteConfig.siteUrl : reqOrigin;
   const id = String(body?.id || '').trim();
 
   try {
