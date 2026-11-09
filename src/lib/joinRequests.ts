@@ -3,6 +3,8 @@
  * Stored as `manifests` documents (`locationId: 'JOIN_REQUESTS'`).
  */
 
+import { siteConfig } from '../site-config';
+
 export const JOIN_REQUEST_LOCATION_ID = 'JOIN_REQUESTS';
 
 export const JOIN_REQUEST_STATUS = {
@@ -104,8 +106,8 @@ export interface JoinRequest {
 }
 
 /** Build the personal 1-click invite / application-status URL. */
-export function buildInviteSignupUrl(docId: string, origin = 'https://works.thehc.llc'): string {
-  const cleanOrigin = String(origin || 'https://works.thehc.llc').replace(/\/+$/, '');
+export function buildInviteSignupUrl(docId: string, origin: string = siteConfig.siteUrl): string {
+  const cleanOrigin = String(origin || siteConfig.siteUrl).replace(/\/+$/, '');
   return `${cleanOrigin}/signup?invite=${encodeURIComponent(docId)}`;
 }
 

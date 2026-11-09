@@ -217,6 +217,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { databases, Query } from '../../lib/appwrite';
+import { siteConfig } from '../../site-config';
 import { getDatabaseId } from '../../lib/appwriteEnv';
 import { addToast } from '../../stores/toast';
 import {
@@ -259,7 +260,7 @@ const formatExternalUrl = (raw: string) => {
 };
 
 const getInviteUrl = (req: JoinRequest) => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://resalecmd.com';
+  const origin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
   return buildInviteSignupUrl(req.id, origin);
 };
 

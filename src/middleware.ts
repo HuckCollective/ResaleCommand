@@ -1,6 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { Client, Databases, Query } from "node-appwrite";
 import { isPublicPagePath, buildLoginRedirect } from "./lib/publicRoutes";
+import { SYNC_FALLBACK_ORIGINS, TENANT_ROOT_DOMAIN } from "./site-config";
 
 // Simple local cache to prevent querying Appwrite on every single request
 const domainCache = new Map<string, { tenantId: string | null; expiry: number }>();
@@ -26,14 +27,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // 2. Identify if we are on a custom tenant domain or subdomain
-  const primaryDomain = "resalecmd.com";
+  const primaryDomain = TENANT_ROOT_DOMAIN;
   const RESERVED_APP_SUBDOMAINS = new Set(["www", "alpha", "dev", "staging", "preview"]);
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("localhost:4321");
   const isVercelPreview = host.endsWith(".vercel.app");
   
   let tenantId: string | null = null;
   
+  const isBrandHost = SYNC_FALLBACK_ORIGINS.some((origin) => new URL(origin).host === host);
+
   const isPrimary =
+    isBrandHost ||
     host === primaryDomain ||
     isVercelPreview ||
     (host.endsWith("." + primaryDomain) && RESERVED_APP_SUBDOMAINS.has(host.split(".")[0]));

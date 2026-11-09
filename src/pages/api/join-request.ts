@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createHash } from 'node:crypto';
+import { siteConfig } from '../../site-config';
 import { Client, Databases, ID, Messaging, Users } from 'node-appwrite';
 import {
   COOP_MESSAGING_TOPICS,
@@ -244,7 +245,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     if (apiKey) {
       try {
-        const reqOrigin = new URL(request.url).origin || 'https://works.thehc.llc';
+        const reqOrigin = new URL(request.url).origin || siteConfig.siteUrl;
         const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
         const messaging = new Messaging(keyClient);
         await messaging.createEmail({

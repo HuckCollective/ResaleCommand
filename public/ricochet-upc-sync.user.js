@@ -15,10 +15,8 @@
     new Set(
       [
         typeof window !== 'undefined' ? window.__RC_ORIGIN__ : '',
-        'https://works.thehc.llc',
-        'https://works.thehuckleberry.coop',
-        'https://www.resalecmd.com',
-        'https://resalecmd.com',
+        // Live list of brand domains injected by /scripts/rico-bookmarklet.js (from src/site-config.ts)
+        ...(typeof window !== 'undefined' && Array.isArray(window.__RC_ORIGINS__) ? window.__RC_ORIGINS__ : []),
         'http://localhost:4321',
       ]
         .map((o) => String(o || '').trim().replace(/\/+$/, ''))
@@ -3776,7 +3774,7 @@
     }
 
     let pushedData = null;
-    let targetOrigin = 'https://resalecmd.com';
+    let targetOrigin = RC_ORIGINS[0] || '';
     for (const endpoint of RC_SALES_SYNC_ENDPOINTS) {
       try {
         const res = await fetch(endpoint, {

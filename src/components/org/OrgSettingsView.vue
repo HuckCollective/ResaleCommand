@@ -205,9 +205,9 @@
                     <label class="label">
                         <span class="label-text font-bold">Custom Domain or Subdomain</span>
                     </label>
-                    <input type="text" v-model="tenantDomain.domain" placeholder="e.g. retro.resalecmd.com" class="input input-bordered w-full font-mono text-sm" />
+                    <input type="text" v-model="tenantDomain.domain" :placeholder="`e.g. retro.${siteConfig.tenantRootDomain}`" class="input input-bordered w-full font-mono text-sm" />
                     <label class="label">
-                        <span class="label-text-alt text-gray-400">Enter a subdomain like <code>vintage.resalecmd.com</code> or your own custom domain.</span>
+                        <span class="label-text-alt text-gray-400">Enter a subdomain like <code>vintage.{{ siteConfig.tenantRootDomain }}</code> or your own custom domain.</span>
                     </label>
                 </div>
 
@@ -272,6 +272,7 @@ import type { Models } from 'appwrite';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
+import { siteConfig } from '../../site-config';
 
 const { user, isAuthenticated, currentTeam, ownedTeam, loading } = useAuth();
 

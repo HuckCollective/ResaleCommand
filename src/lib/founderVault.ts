@@ -1,6 +1,7 @@
 import { databases } from './appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from './appwriteEnv';
+import { siteConfig } from '../site-config';
 
 export type VaultNoteKind = 'idea' | 'prompt' | 'spec' | 'report';
 
@@ -248,11 +249,11 @@ export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
     destination: 'chrome_sidebar',
     bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
     defaultGoal:
-      'Create a step-by-step Paired Human-AI Chrome Sidebar QA prompt to test our latest feature on alpha.resalecmd.com one page at a time.',
+      `Create a step-by-step Paired Human-AI Chrome Sidebar QA prompt to test our latest feature on ${siteConfig.alphaSiteUrl} one page at a time.`,
     masterPromptBody: [
-      '🌐 OPEN PAGE FIRST: https://alpha.resalecmd.com/coop/vault',
+      `🌐 OPEN PAGE FIRST: ${siteConfig.alphaSiteUrl}/coop/vault`,
       '',
-      'You are my paired QA AI Ally for Resale Command on alpha.resalecmd.com. Report strictly what you SEE in the live DOM — never guess code.',
+      `You are my paired QA AI Ally for ${siteConfig.title} on ${siteConfig.alphaSiteUrl}. Report strictly what you SEE in the live DOM — never guess code.`,
       '',
       'HOW THIS SESSION WORKS:',
       '- Run ONE step at a time. For each step: (1) tell me the exact URL to open, (2) give me a short PRE-CLICK checklist of what to open/expand BEFORE pressing Enter, (3) grade what you see (PASS / FAIL / CANNOT TELL), and (4) give me the next step.',
@@ -540,7 +541,7 @@ export function recommendVaultTemplateAndSurface(
       aiStudioChatLabel,
       modelPickerBadge: '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Argon)',
       whyThisSurface:
-        'Best when your AI Ally needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on alpha.resalecmd.com).',
+        `Best when your AI Ally needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on ${siteConfig.alphaSiteUrl}).`,
       handoffSteps: [
         '1. Open the target webpage in Chrome and complete the Pre-Click / Scroll step first (the sidebar snapshots the DOM when you press Enter).',
         '2. Open the Chrome Gemini Sidebar in the top-right of Chrome.',

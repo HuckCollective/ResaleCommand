@@ -2155,6 +2155,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { useAuth } from '../../composables/useAuth';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
@@ -2798,10 +2799,8 @@ const bookmarkletHref = computed(() => {
   const currentOrigin =
     typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
       ? window.location.origin
-      : 'https://works.thehc.llc';
-  const origins = Array.from(
-    new Set([currentOrigin, 'https://works.thehc.llc', 'https://works.thehuckleberry.coop', 'https://resalecmd.com'])
-  );
+      : siteConfig.siteUrl;
+  const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS]));
   const locCode = encodeURIComponent(activeLocationCode.value || 'MD');
   return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
 });
@@ -3380,7 +3379,7 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
     };
   });
 
-  for (const host of ['https://works.thehc.llc', 'https://works.thehuckleberry.coop', 'https://www.resalecmd.com', 'https://resalecmd.com']) {
+  for (const host of SYNC_FALLBACK_ORIGINS) {
     try {
       const r = await fetch(host + '/api/md-verify-report', {
         method: 'POST',

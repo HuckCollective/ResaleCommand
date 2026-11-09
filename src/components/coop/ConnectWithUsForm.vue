@@ -91,6 +91,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { databases } from '../../lib/appwrite';
+import { siteConfig } from '../../site-config';
 import { getDatabaseId } from '../../lib/appwriteEnv';
 import {
   JOIN_NICHE_CHIPS,
@@ -199,7 +200,7 @@ const submitRequest = async () => {
       }
     }
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://works.thehc.llc';
+    const origin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
     statusUrl.value = buildInviteSignupUrl(docId, origin);
 
     // Trigger server-side Appwrite Messaging (`coop-founders` Topic email via Google Workspace SMTP)
