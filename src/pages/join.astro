@@ -3,14 +3,14 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout title="Joining Team...">
-  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8" x-data="joinTeam">
+  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
     <div class="w-full max-w-md space-y-8 text-center">
       <h2 class="mt-6 text-3xl font-bold tracking-tight text-gray-900">Joining Team...</h2>
-      <div x-show="loading" class="loading loading-spinner loading-lg text-primary"></div>
-      <div x-show="error" class="text-red-500" x-text="error"></div>
-      <div x-show="success" class="text-green-500">
-        <p class="text-xl font-bold mb-2">Successfully joined <span x-text="teamName"></span>!</p>
-        <p class="text-sm text-gray-600 mb-4">Managed by: <span x-text="owners"></span></p>
+      <div id="join-loading" class="loading loading-spinner loading-lg text-primary"></div>
+      <div id="join-error" class="text-red-500 hidden"></div>
+      <div id="join-success" class="text-green-500 hidden">
+        <p class="text-xl font-bold mb-2">Successfully joined <span id="join-team-name"></span>!</p>
+        <p class="text-sm text-gray-600 mb-4">Managed by: <span id="join-owners"></span></p>
         <p class="text-xs text-gray-500 pt-2 border-t border-gray-200">
           Operates under the <a href="/coop" target="_blank" class="text-primary font-bold underline">Huckleberry Collective Charter</a>
         </p>
@@ -22,63 +22,64 @@ import Layout from "../layouts/Layout.astro";
 
 <script>
   import { auth } from "../lib/auth";
-  import Alpine from 'alpinejs';
 
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('joinTeam', () => ({
-      loading: true,
-      error: '',
-      success: false,
-      teamName: '',
-      owners: '',
+  const loadingEl = document.getElementById('join-loading') as HTMLElement;
+  const errorEl = document.getElementById('join-error') as HTMLElement;
+  const successEl = document.getElementById('join-success') as HTMLElement;
 
-      async init() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const teamId = urlParams.get('teamId');
-        const membershipId = urlParams.get('membershipId');
-        const userId = urlParams.get('userId');
-        const secret = urlParams.get('secret');
+  function showError(message: string) {
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+    loadingEl.classList.add('hidden');
+  }
 
-        if (!teamId || !membershipId || !userId || !secret) {
-          this.error = 'Invalid invitation link.';
-          this.loading = false;
-          return;
-        }
+  async function run() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const teamId = urlParams.get('teamId');
+    const membershipId = urlParams.get('membershipId');
+    const userId = urlParams.get('userId');
+    const secret = urlParams.get('secret');
 
-        // Check if user is logged in
-        const currentUser = await auth.getCurrentUser();
-        if (!currentUser) {
-            // Redirect to login preserving the current URL
-            const redirectUrl = encodeURIComponent(window.location.href);
-            window.location.href = `/login?redirect=${redirectUrl}`;
-            return;
-        }
+    if (!teamId || !membershipId || !userId || !secret) {
+      showError('Invalid invitation link.');
+      return;
+    }
 
-        try {
-          await auth.acceptInvite(teamId, membershipId, userId, secret);
-          
-          // Fetch Team Details to Show User
-          const { teams } = await import('../lib/appwrite'); // Dynamic import to avoid top-level issues if any
-          const team = await teams.get(teamId);
-          this.teamName = team.name;
+    // Check if user is logged in
+    const currentUser = await auth.getCurrentUser();
+    if (!currentUser) {
+      // Redirect to login preserving the current URL
+      const redirectUrl = encodeURIComponent(window.location.href);
+      window.location.href = `/login?redirect=${redirectUrl}`;
+      return;
+    }
 
-          // Fetch Owners
-          const members = await teams.listMemberships(teamId);
-          const owners = members.memberships.filter((m: any) => m.roles.includes('owner'));
-          this.owners = owners.map((o: any) => o.userName || o.name || o.userEmail || o.email).join(', ');
+    try {
+      await auth.acceptInvite(teamId, membershipId, userId, secret);
 
-          this.success = true;
-          this.loading = false;
-          
-          setTimeout(() => {
-             window.location.href = '/';
-          }, 3000);
-        } catch (err: any) {
-          console.error(err);
-          this.error = err.message || 'Failed to join team.';
-          this.loading = false;
-        }
-      }
-    }))
-  })
+      // Fetch Team Details to Show User
+      const { teams } = await import('../lib/appwrite'); // Dynamic import to avoid top-level issues if any
+      const team = await teams.get(teamId);
+      (document.getElementById('join-team-name') as HTMLElement).textContent = team.name;
+
+      // Fetch Owners
+      const members = await teams.listMemberships(teamId);
+      const owners = members.memberships.filter((m: any) => m.roles.includes('owner'));
+      (document.getElementById('join-owners') as HTMLElement).textContent = owners
+        .map((o: any) => o.userName || o.name || o.userEmail || o.email)
+        .join(', ');
+
+      loadingEl.classList.add('hidden');
+      successEl.classList.remove('hidden');
+
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 3000);
+    } catch (err: any) {
+      console.error(err);
+      showError(err.message || 'Failed to join team.');
+    }
+  }
+
+  run();
 </script>
