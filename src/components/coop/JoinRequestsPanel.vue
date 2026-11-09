@@ -59,13 +59,14 @@
         </div>
 
         <!-- Inline Ask 1 Question Drawer -->
-        <div v-if="questionOpenForId === req.id" class="flex flex-col sm:flex-row gap-2 pt-1">
+        <div v-if="questionOpenForId === req.id" class="flex flex-col sm:flex-row gap-2 pt-1 bg-info/10 border border-info/30 rounded-xl p-2.5">
           <input
             v-model="questionDraft"
             type="text"
             maxlength="280"
             placeholder="Ask 1 quick question (they answer on the site, not by email)..."
             class="input input-bordered input-xs rounded-lg flex-1 text-xs"
+            @keydown.enter.prevent="sendDecision(req, 'needs_info', questionDraft)"
           />
           <button
             type="button"
@@ -73,15 +74,41 @@
             :disabled="busyId === req.id || !questionDraft.trim()"
             @click="sendDecision(req, 'needs_info', questionDraft)"
           >
-            Send On-Page Question
+            <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
+            📨 Send On-Page Question
           </button>
           <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="questionOpenForId = ''">
             Cancel
           </button>
         </div>
 
-        <!-- 1-Click Automated Decision Bar (Zero Email Back-and-Forth) -->
-        <div class="flex flex-wrap items-center justify-end gap-1.5 pt-1">
+        <!-- Inline Confirm Approve & Send Invite Guard -->
+        <div
+          v-else-if="confirmApproveId === req.id"
+          class="flex flex-wrap items-center justify-between gap-2 pt-1 bg-success/10 border border-success/40 rounded-xl p-2.5"
+        >
+          <div class="text-xs font-bold text-base-content">
+            Send official invite email &amp; password creation link to
+            <span class="underline">{{ req.name }}</span> ({{ req.email }})?
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="btn btn-xs btn-success rounded-lg font-black"
+              :disabled="busyId === req.id"
+              @click="sendDecision(req, 'approve')"
+            >
+              <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
+              ✅ Yes, Confirm &amp; Send Invite
+            </button>
+            <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="confirmApproveId = ''">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- 1-Click Automated Decision Bar (Hidden while Question or Confirm box is open) -->
+        <div v-else class="flex flex-wrap items-center justify-end gap-1.5 pt-1">
           <button
             type="button"
             class="btn btn-xs btn-ghost rounded-lg text-base-content/60"
@@ -130,9 +157,8 @@
             type="button"
             class="btn btn-xs btn-primary rounded-lg font-black"
             :disabled="busyId === req.id"
-            @click="sendDecision(req, 'approve')"
+            @click="openConfirmApprove(req)"
           >
-            <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
             ✅ Approve &amp; Send Invite
           </button>
         </div>
@@ -153,22 +179,38 @@
             <span class="text-xs text-base-content/70 ml-1.5 break-all">({{ req.email }})</span>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              class="btn btn-xs btn-primary rounded-lg font-bold"
-              :disabled="busyId === req.id"
-              @click="sendDecision(req, 'approve')"
-            >
-              ✅ Approve &amp; Send Invite
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
-              :disabled="busyId === req.id"
-              @click="sendDecision(req, 'decline_silent')"
-            >
-              Remove
-            </button>
+            <template v-if="confirmApproveId === req.id">
+              <span class="text-xs font-bold">Send invite email to {{ req.name }}?</span>
+              <button
+                type="button"
+                class="btn btn-xs btn-success rounded-lg font-black"
+                :disabled="busyId === req.id"
+                @click="sendDecision(req, 'approve')"
+              >
+                ✅ Yes, Send Invite
+              </button>
+              <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="confirmApproveId = ''">
+                Cancel
+              </button>
+            </template>
+            <template v-else>
+              <button
+                type="button"
+                class="btn btn-xs btn-primary rounded-lg font-bold"
+                :disabled="busyId === req.id"
+                @click="openConfirmApprove(req)"
+              >
+                ✅ Approve &amp; Send Invite
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
+                :disabled="busyId === req.id"
+                @click="sendDecision(req, 'decline_silent')"
+              >
+                Remove
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -198,6 +240,15 @@
               @click="sendDecision(req, 'approve')"
             >
               Resend Invite Email
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline btn-info rounded-lg font-bold"
+              :disabled="busyId === req.id"
+              title="Move back to review queue without sending an email"
+              @click="sendDecision(req, 'reopen')"
+            >
+              ↩️ Back to Review
             </button>
             <button
               type="button"
@@ -233,6 +284,7 @@ const loading = ref(true);
 const busyId = ref('');
 const questionOpenForId = ref('');
 const questionDraft = ref('');
+const confirmApproveId = ref('');
 
 const activeRequests = computed(() =>
   allRequests.value.filter(
@@ -270,8 +322,14 @@ const copyInviteLink = async (req: JoinRequest) => {
 };
 
 const openQuestionBox = (req: JoinRequest) => {
+  confirmApproveId.value = '';
   questionOpenForId.value = req.id;
   questionDraft.value = req.stewardQuestion || 'What types of items or booth support are you looking to bring?';
+};
+
+const openConfirmApprove = (req: JoinRequest) => {
+  questionOpenForId.value = '';
+  confirmApproveId.value = req.id;
 };
 
 const load = async () => {
@@ -304,6 +362,7 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
 
     req.status = res.data.status;
     req.decisionKey = decision;
+    confirmApproveId.value = '';
     if (decision === 'needs_info') {
       req.stewardQuestion = cleanQuestion;
       questionOpenForId.value = '';
@@ -318,6 +377,11 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
       addToast({
         type: 'success',
         message: `Approved ${req.name}! Invite email sent & sign-up link copied.`,
+      });
+    } else if (decision === 'reopen') {
+      addToast({
+        type: 'info',
+        message: `Moved ${req.name} back to review queue.`,
       });
     } else if (decision === 'waitlist') {
       addToast({

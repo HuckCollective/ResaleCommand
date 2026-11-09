@@ -14,6 +14,7 @@ import {
   type JoinRequestStatus,
 } from '../../lib/joinRequests';
 import { hashEmail, verifyJoinToken } from '../../lib/joinLinkTokens';
+import { siteConfig } from '../../site-config';
 import {
   decisionEmail,
   getJoinServerContext,
@@ -126,7 +127,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (!ctx || !ctx.dbId) return json({ error: 'Appwrite is not configured.' }, 500);
 
   const action = String(body?.action || '');
-  const origin = new URL(request.url).origin;
+  const reqOrigin = new URL(request.url).origin;
+  const emailOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(reqOrigin)
+    ? siteConfig.siteUrl
+    : reqOrigin;
   const id = String(body?.id || '').trim();
 
   try {
@@ -140,7 +144,7 @@ export const POST: APIRoute = async ({ request }) => {
       if (action === 'link') {
         const target = await loadRequest(ctx, id);
         if (!target || !target.verifiedAt) return NOT_FOUND();
-        return json({ ok: true, inviteUrl: ownerStatusUrl(id, origin) });
+        return json({ ok: true, inviteUrl: ownerStatusUrl(id, emailOrigin) });
       }
 
       if (action === 'list' || action === 'count') {
@@ -174,6 +178,7 @@ export const POST: APIRoute = async ({ request }) => {
       let nextStatus: JoinRequestStatus = JOIN_REQUEST_STATUS.approved;
       if (decision === 'waitlist') nextStatus = JOIN_REQUEST_STATUS.waitlisted;
       else if (decision === 'needs_info') nextStatus = JOIN_REQUEST_STATUS.needs_info;
+      else if (decision === 'reopen') nextStatus = JOIN_REQUEST_STATUS.pending;
       else if (String(decision).startsWith('decline_')) nextStatus = JOIN_REQUEST_STATUS.declined;
 
       await saveRow(ctx, id, {
@@ -183,11 +188,11 @@ export const POST: APIRoute = async ({ request }) => {
       });
 
       let emailSent = false;
-      if (decision !== 'decline_silent') {
-        const mail = decisionEmail(req, decision, question, origin);
+      if (decision !== 'decline_silent' && decision !== 'reopen') {
+        const mail = decisionEmail(req, decision, question, emailOrigin);
         emailSent = await sendApplicantEmail(ctx, req.email, mail.subject, mail.html);
       }
-      return json({ ok: true, inviteUrl: ownerStatusUrl(id, origin), emailSent, status: nextStatus });
+      return json({ ok: true, inviteUrl: ownerStatusUrl(id, emailOrigin), emailSent, status: nextStatus });
     }
 
     // -----------------------------------------------------------------------
@@ -226,7 +231,7 @@ export const POST: APIRoute = async ({ request }) => {
       if (dup.total > 0) {
         const existing = rowToJoinRequest(dup.documents[0]);
         if (existing && cooldownRemaining(existing) === 0) {
-          const mail = existing.verifiedAt ? statusLinkEmail(existing, origin) : verificationEmail(existing, origin);
+          const mail = existing.verifiedAt ? statusLinkEmail(existing, emailOrigin) : verificationEmail(existing, emailOrigin);
           await sendApplicantEmail(ctx, existing.email, mail.subject, mail.html);
           await saveRow(ctx, existing.id, { lastEmailAt: new Date().toISOString() });
         }
@@ -263,10 +268,10 @@ export const POST: APIRoute = async ({ request }) => {
       await ctx.databases.createDocument(ctx.dbId, ctx.collectionId, newId, row);
       const created = rowToJoinRequest({ ...row, $id: newId });
       if (created) {
-        const mail = verificationEmail(created, origin);
+        const mail = verificationEmail(created, emailOrigin);
         await sendApplicantEmail(ctx, created.email, mail.subject, mail.html);
       }
-      return json({ ok: true, id: newId, statusUrl: viewerStatusUrl(newId, origin) });
+      return json({ ok: true, id: newId, statusUrl: viewerStatusUrl(newId, reqOrigin) });
     }
 
     // -----------------------------------------------------------------------
@@ -290,7 +295,7 @@ export const POST: APIRoute = async ({ request }) => {
         if (!req.verifiedAt && req.status === JOIN_REQUEST_STATUS.pending) {
           const verifiedAt = new Date().toISOString();
           await saveRow(ctx, id, { verifiedAt });
-          await notifyStewards(ctx, { ...req, verifiedAt }, origin, false);
+          await notifyStewards(ctx, { ...req, verifiedAt }, emailOrigin, false);
           return json({ ok: true, justVerified: true, request: publicView({ ...req, verifiedAt }, true) });
         }
         return json({ ok: true, justVerified: false, request: publicView(req, true) });
@@ -301,7 +306,7 @@ export const POST: APIRoute = async ({ request }) => {
         if (req.verifiedAt) return json({ error: 'Your email is already verified.' }, 400);
         const wait = cooldownRemaining(req);
         if (wait > 0) return json({ ok: false, cooldownRemainingMs: wait }, 429);
-        const mail = verificationEmail(req, origin);
+        const mail = verificationEmail(req, emailOrigin);
         await sendApplicantEmail(ctx, req.email, mail.subject, mail.html);
         const lastEmailAt = new Date().toISOString();
         await saveRow(ctx, id, { lastEmailAt });
@@ -342,10 +347,10 @@ export const POST: APIRoute = async ({ request }) => {
         await saveRow(ctx, id, patch);
         const updated = rowToJoinRequest({ ...req, ...patch, $id: id }) as JoinRequest;
         if (emailChanged) {
-          const mail = verificationEmail(updated, origin);
+          const mail = verificationEmail(updated, emailOrigin);
           await sendApplicantEmail(ctx, updated.email, mail.subject, mail.html);
         }
-        if (updated.verifiedAt) await notifyStewards(ctx, updated, origin, true);
+        if (updated.verifiedAt) await notifyStewards(ctx, updated, emailOrigin, true);
         return json({ ok: true, request: publicView(updated, ownerOk) });
       }
 

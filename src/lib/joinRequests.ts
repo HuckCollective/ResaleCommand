@@ -73,7 +73,7 @@ export const JOIN_DECISION_TEMPLATES = {
     message: '',
   },
 } as const;
-export type JoinDecisionKey = keyof typeof JOIN_DECISION_TEMPLATES | 'needs_info';
+export type JoinDecisionKey = keyof typeof JOIN_DECISION_TEMPLATES | 'needs_info' | 'reopen';
 
 /** Canonical Appwrite Messaging Topics mapped to our WSDE Co-op Hats. */
 export const COOP_MESSAGING_TOPICS = {
