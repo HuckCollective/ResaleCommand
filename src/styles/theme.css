@@ -1,5 +1,26 @@
 @plugin "daisyui" {
-  themes: emerald --default, light, dark, cupcake, bumblebee, corporate, synthwave, retro, cyberpunk, valentine, halloween, garden, forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury, dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter, dim, nord, sunset, caramellatte, abyss, silk;
+  themes: huckleberry --default, emerald, light, dark, cupcake, bumblebee, corporate, synthwave, retro, cyberpunk, valentine, halloween, garden, forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury, dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter, dim, nord, sunset, caramellatte, abyss, silk;
+}
+
+@plugin "daisyui/theme" {
+  name: "huckleberry";
+  default: true;
+  color-scheme: light;
+  --color-primary: #D4672A;
+  --color-primary-content: #F5E6C8;
+  --color-secondary: #4A7C59;
+  --color-secondary-content: #F5E6C8;
+  --color-accent: #D4A017;
+  --color-accent-content: #2C1810;
+  --color-neutral: #2C1810;
+  --color-neutral-content: #EDD9A3;
+  --color-base-100: #F5E6C8;
+  --color-base-200: #EDD9A3;
+  --color-base-300: #C9A87C;
+  --color-base-content: #2C1810;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.75rem;
 }
 
 /* Custom theme vars live here */

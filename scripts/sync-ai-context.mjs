@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -512,6 +513,17 @@ function main() {
   }
 
   console.log('\n✨ AI context & 6 bundled Gemini Web skills sync complete!');
+
+  // Tandem Mirror to sibling repo `thehcllc` (if present on disk)
+  const siblingHubDir = path.resolve(ROOT_DIR, '..', 'thehcllc');
+  const siblingSyncScript = path.join(siblingHubDir, 'scripts', 'sync-ai-context.mjs');
+  if (fs.existsSync(siblingSyncScript)) {
+    try {
+      execFileSync(process.execPath, [siblingSyncScript], { stdio: 'inherit', cwd: siblingHubDir });
+    } catch (err) {
+      console.warn('⚠️ Could not auto-mirror to sibling thehcllc repo:', err.message);
+    }
+  }
 }
 
 main();

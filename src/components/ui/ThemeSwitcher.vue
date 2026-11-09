@@ -25,7 +25,7 @@
 import { ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 
-const themes = [
+const otherThemes = [
   'emerald', 'light', 'dark', 'cupcake', 'bumblebee', 
   'corporate', 'synthwave', 'retro', 'cyberpunk', 'valentine',
   'halloween', 'garden', 'forest', 'aqua', 'lofi', 
@@ -35,16 +35,24 @@ const themes = [
   'nord', 'sunset', 'caramellatte', 'abyss', 'silk'
 ].sort();
 
-const currentTheme = ref('emerald');
+const themes = ['huckleberry', ...otherThemes];
+
+const currentTheme = ref('huckleberry');
 
 onMounted(() => {
+  if (!localStorage.getItem('rc_huckleberry_default_v1')) {
+    if (!localStorage.getItem('theme') || localStorage.getItem('theme') === 'emerald') {
+      localStorage.setItem('theme', 'huckleberry');
+    }
+    localStorage.setItem('rc_huckleberry_default_v1', '1');
+  }
   const stored = localStorage.getItem('theme');
   if (stored && themes.includes(stored)) {
     setTheme(stored); 
   } else {
-    // defaults to emerald on first load but verify against html tag
+    // defaults to huckleberry on first load but verify against html tag
     const current = document.documentElement.getAttribute('data-theme');
-    setTheme(current || 'emerald');
+    setTheme(current || 'huckleberry');
   }
 });
 

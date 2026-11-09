@@ -22,7 +22,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
 ---
 
 <!doctype html>
-<html lang="en" data-theme="emerald">
+<html lang="en" data-theme="huckleberry">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -33,7 +33,13 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
 
     <SEOmeta title={title} description={description} image={image} />
     <script is:inline>
-      const theme = localStorage.getItem('theme') || 'emerald';
+      if (!localStorage.getItem('rc_huckleberry_default_v1')) {
+        if (!localStorage.getItem('theme') || localStorage.getItem('theme') === 'emerald') {
+          localStorage.setItem('theme', 'huckleberry');
+        }
+        localStorage.setItem('rc_huckleberry_default_v1', '1');
+      }
+      const theme = localStorage.getItem('theme') || 'huckleberry';
       document.documentElement.setAttribute('data-theme', theme);
     </script>
   </head>
