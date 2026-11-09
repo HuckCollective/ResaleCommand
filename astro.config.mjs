@@ -5,12 +5,7 @@ import icon from "astro-icon";
 import tailwindcss from "@tailwindcss/vite";
 import vercel from "@astrojs/vercel";
 
-import alpinejs from "@astrojs/alpinejs";
-
-
 import vue from "@astrojs/vue";
-
-
 import os from "node:os";
 
 // https://astro.build/config
@@ -19,9 +14,9 @@ export default defineConfig({
   server: {
     host: true  // Listen on all interfaces: localhost + network (for mobile)
   },
-  site: "https://example.com",
+  site: process.env.PUBLIC_SITE_URL || "https://works.thehc.llc",
   trailingSlash: "never",
-  integrations: [mdx(), sitemap(), icon(), alpinejs(), vue()],
+  integrations: [mdx(), sitemap(), icon(), vue()],
   adapter: vercel({
     maxDuration: 300
   }),

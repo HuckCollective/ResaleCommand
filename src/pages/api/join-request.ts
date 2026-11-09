@@ -244,6 +244,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     if (apiKey) {
       try {
+        const reqOrigin = new URL(request.url).origin || 'https://works.thehc.llc';
         const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
         const messaging = new Messaging(keyClient);
         await messaging.createEmail({
@@ -255,7 +256,7 @@ export const POST: APIRoute = async ({ request }) => {
             niches.length ? `<p><strong>Niches:</strong> ${escapeHtml(niches.join(', '))}</p>` : '',
             socialUrl ? `<p><strong>Shop / Social Link:</strong> ${escapeHtml(socialUrl)}</p>` : '',
             note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-            `<p><a href="https://resalecmd.com/dashboard">Open Command Center for 1-Click Approve / Waitlist / Decline</a></p>`,
+            `<p><a href="${escapeHtml(reqOrigin)}/dashboard">Open Works@TheHC Command Center for 1-Click Approve / Waitlist / Decline</a></p>`,
           ].join(''),
           topics: [COOP_MESSAGING_TOPICS.founders],
           html: true,

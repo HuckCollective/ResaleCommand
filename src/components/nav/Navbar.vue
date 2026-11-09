@@ -2,9 +2,10 @@
   <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-8 border-b border-base-200/60 overflow-visible">
     <!-- Brand / Left -->
     <div class="navbar-start w-auto lg:w-1/4 flex items-center gap-1.5">
-      <a href="/" class="btn btn-ghost px-2 sm:px-3 text-lg sm:text-xl font-black tracking-tight text-primary gap-2">
+      <a href="/" class="btn btn-ghost px-2 sm:px-3 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5">
         <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 shrink-0" />
-        <span class="truncate">Resale Command</span>
+        <span class="truncate">{{ siteConfig.shortTitle }}</span>
+        <span class="badge badge-primary badge-outline badge-xs sm:badge-sm font-mono font-black tracking-normal shrink-0">{{ siteConfig.badgeText }}</span>
       </a>
       <span
         v-if="alphaMode"
@@ -495,9 +496,10 @@
           aria-label="Mobile Navigation Drawer"
         >
           <div class="px-5 py-4 flex justify-between items-center border-b border-base-200 sticky top-0 bg-base-100/95 backdrop-blur-md z-10">
-            <div class="flex items-center gap-2 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
               <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 text-primary shrink-0" />
-              <span class="text-lg font-black text-primary truncate">Resale Command</span>
+              <span class="text-lg font-black text-primary truncate">{{ siteConfig.shortTitle }}</span>
+              <span class="badge badge-primary badge-outline badge-xs font-mono font-black shrink-0">{{ siteConfig.badgeText }}</span>
             </div>
             <button
               @click="openMobile = false"
@@ -816,6 +818,7 @@ import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
 import { getAllLocationSettingMetas, resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
+import { siteConfig } from '../../site-config';
 import { Icon } from '@iconify/vue';
 
 const {

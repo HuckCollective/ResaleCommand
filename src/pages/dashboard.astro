@@ -1,9 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import DashboardMetrics from '../components/dashboard/DashboardMetrics.vue';
+import { siteConfig } from '../site-config';
 ---
 
-<Layout title="Command Center - Resale Command">
+<Layout title={`Command Center — ${siteConfig.title}`}>
   <div class="rc-page-shell">
     <DashboardMetrics client:only="vue" />
   </div>

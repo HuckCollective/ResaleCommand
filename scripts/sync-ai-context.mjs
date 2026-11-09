@@ -167,8 +167,11 @@ const GEMINI_WEB_BUNDLES = [
   {
     id: 'hucks-resale-core',
     description:
-      'Master system DNA, 3 Golden Rules, canonical Appwrite warehouse IDs (MD, DT, HG, HD, HH), co-op waterfall rules, and live ACTIVE_SESSION.md summary for Resale Command.',
-    sources: [{ type: 'skill', name: 'hucks-resale-core' }],
+      'Master system DNA, Works@TheHC brand & multi-domain identity (works.thehc.llc / .coop / .com), 3 Golden Rules, canonical Appwrite warehouse IDs (MD, DT, HG, HH), co-op waterfall rules, and live ACTIVE_SESSION.md summary.',
+    sources: [
+      { type: 'skill', name: 'hucks-resale-core' },
+      { type: 'skill', name: 'huckleberry-brand-and-domain-identity' },
+    ],
   },
   {
     id: 'rc-1-scout-vision',
@@ -271,14 +274,20 @@ function syncCoreDocsAndHucksSkill() {
   fs.writeFileSync(GEMINI_MD_PATH, combinedGeminiMd, 'utf8');
   console.log(`✅ Updated root GEMINI.md (${Buffer.byteLength(combinedGeminiMd, 'utf8')} bytes)`);
 
-  // 2. Embed live ACTIVE_SESSION.md into .agents/skills/hucks-resale-core/SKILL.md
+  // 2. Embed live AI_STUDIO_PLAYBOOK.md + ACTIVE_SESSION.md into .agents/skills/hucks-resale-core/SKILL.md
   fs.mkdirSync(path.dirname(HUCKS_CORE_SKILL_PATH), { recursive: true });
   const hucksCoreSkillContent = [
     HUCKS_CORE_SKILL_HEADER.trim(),
     '',
     '---',
     '',
-    '## 4. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)',
+    '## 4. Google AI Studio & Multi-Chat Playbook (`docs/AI_STUDIO_PLAYBOOK.md`)',
+    '',
+    playbook,
+    '',
+    '---',
+    '',
+    '## 5. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)',
     '',
     activeSession,
     '',

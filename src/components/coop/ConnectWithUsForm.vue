@@ -74,7 +74,7 @@
       <!-- Hidden honeypot -->
       <input v-model="website" type="text" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
       <p class="text-[11px] text-base-content/60">
-        Zero email tag: our stewards review applications right inside Resale Command and send a 1-click invite link or status update.
+        Zero email tag: our stewards review applications right inside Works@TheHC and send a 1-click invite link or status update.
       </p>
       <p v-if="errorMsg" class="text-xs text-error break-words">{{ errorMsg }}</p>
       <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
@@ -199,10 +199,10 @@ const submitRequest = async () => {
       }
     }
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://resalecmd.com';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://works.thehc.llc';
     statusUrl.value = buildInviteSignupUrl(docId, origin);
 
-    // Trigger server-side Appwrite Messaging (`coop-founders` Topic email via Porkbun SMTP)
+    // Trigger server-side Appwrite Messaging (`coop-founders` Topic email via Google Workspace SMTP)
     fetch('/api/join-request', {
       method: 'POST',
       credentials: 'same-origin',

@@ -2793,14 +2793,17 @@ const ricochetSkuMetaMap = computed(() => {
 
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
-// Permanent Live-Loader Bookmarklet (`⚡ Sync`) — Loads /scripts/rico-bookmarklet.js?location=...&t= with CORS + no-store!
+// Permanent Multi-Domain Live-Loader Bookmarklet (`⚡ Sync`) — Auto-fails over across .llc, .coop, and .com!
 const bookmarkletHref = computed(() => {
-  const origin =
+  const currentOrigin =
     typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
       ? window.location.origin
-      : 'https://resalecmd.com';
+      : 'https://works.thehc.llc';
+  const origins = Array.from(
+    new Set([currentOrigin, 'https://works.thehc.llc', 'https://works.thehuckleberry.coop', 'https://resalecmd.com'])
+  );
   const locCode = encodeURIComponent(activeLocationCode.value || 'MD');
-  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var s=document.createElement('script');s.src='${origin}/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();document.body.appendChild(s);})();`;
+  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
 });
 
 // =========================================================================
@@ -3377,14 +3380,19 @@ const copyPreloadedConsoleScript = (mode: 'full' | 'single' = 'full') => {
     };
   });
 
-  try {
-    await fetch('https://www.resalecmd.com/api/md-verify-report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp: new Date().toISOString(), rows: reportRows })
-    });
-    console.log('%c📡 Sent Live Verification Report to Resale Command!', 'color:#38bdf8;font-weight:bold;');
-  } catch (e) {}
+  for (const host of ['https://works.thehc.llc', 'https://works.thehuckleberry.coop', 'https://www.resalecmd.com', 'https://resalecmd.com']) {
+    try {
+      const r = await fetch(host + '/api/md-verify-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp: new Date().toISOString(), rows: reportRows })
+      });
+      if (r.ok) {
+        console.log('%c📡 Sent Live Verification Report to Works@TheHC (' + host + ')!', 'color:#38bdf8;font-weight:bold;');
+        break;
+      }
+    } catch (e) {}
+  }
 
   console.log('%c🎉 ' + (isTestMode ? 'Test Run Complete!' : 'Sync Finished!') + ' ' + success + ' verified/updated, ' + failed + ' failed.', 'color:#10b981;font-weight:bold;font-size:14px;');
 })();`;

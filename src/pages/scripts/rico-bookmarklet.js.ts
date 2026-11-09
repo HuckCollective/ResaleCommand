@@ -42,7 +42,7 @@ export const GET: APIRoute = async ({ url }) => {
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
 
-    const injectedBootstrap = `window.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
+    const injectedBootstrap = `window.__RC_ORIGIN__ = ${JSON.stringify(url.origin)};\nwindow.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
       code: locMeta.code,
       name: locMeta.shortName,
       fullName: locMeta.name,
@@ -59,7 +59,8 @@ export const GET: APIRoute = async ({ url }) => {
       headers: CORS_NO_STORE_HEADERS,
     });
   } catch (err: any) {
-    const fallbackLoader = `(function(){var s=document.createElement('script');s.src='https://resalecmd.com/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
+    const fallbackOrigin = url?.origin || 'https://works.thehc.llc';
+    const fallbackLoader = `(function(){window.__RC_ORIGIN__=${JSON.stringify(fallbackOrigin)};var s=document.createElement('script');s.src=${JSON.stringify(fallbackOrigin)}+'/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
     return new Response(fallbackLoader, {
       status: 200,
       headers: CORS_NO_STORE_HEADERS,

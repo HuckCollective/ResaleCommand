@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Resale Command ➔ Ricochet POS Auto-UPC Sync & Live Sales Reconciler
-// @namespace    https://resalecmd.com/
-// @version      4.2
-// @description  Evergreen Live-Fetch Bookmarklet, Multi-Partner (HUCK / PDXGL / B&B) Barcode Verifier & Live Sales/Payout Sync for Ricochet POS Booths.
-// @author       Huckleberry Collective
+// @name         Works@TheHC ➔ Ricochet POS Auto-UPC Sync & Live Sales Reconciler
+// @namespace    https://works.thehc.llc/
+// @version      5.0
+// @description  Multi-Domain (.llc / .coop / .com) Evergreen Live-Fetch Bookmarklet, Multi-Partner (HUCK / PDXGL / B&B) Barcode Verifier & Live Sales/Payout Sync for Ricochet POS Booths.
+// @author       The Huckleberry Collective
 // @match        *://*.ricoconsign.com/*
 // @grant        none
 // ==/UserScript==
@@ -11,19 +11,25 @@
 (function () {
   'use strict';
 
-  const RC_REPORT_ENDPOINTS = [
-    'https://www.resalecmd.com/api/md-verify-report',
-    'https://resalecmd.com/api/md-verify-report',
-    'http://localhost:4321/api/md-verify-report',
-  ];
+  const RC_ORIGINS = Array.from(
+    new Set(
+      [
+        typeof window !== 'undefined' ? window.__RC_ORIGIN__ : '',
+        'https://works.thehc.llc',
+        'https://works.thehuckleberry.coop',
+        'https://www.resalecmd.com',
+        'https://resalecmd.com',
+        'http://localhost:4321',
+      ]
+        .map((o) => String(o || '').trim().replace(/\/+$/, ''))
+        .filter(Boolean)
+    )
+  );
 
-  const RC_SALES_SYNC_ENDPOINTS = [
-    'https://www.resalecmd.com/api/sales/ricochet-sync',
-    'https://resalecmd.com/api/sales/ricochet-sync',
-    'http://localhost:4321/api/sales/ricochet-sync',
-  ];
+  const RC_REPORT_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/md-verify-report');
+  const RC_SALES_SYNC_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/sales/ricochet-sync');
 
-  const RC_SCRIPT_VERSION = 'v4.9';
+  const RC_SCRIPT_VERSION = 'v5.0';
 
   // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
@@ -37,11 +43,7 @@
   // ===== 📦 Outbound Drops tab (2-way manifest sync) =====
   // Self-injecting: adds a 3rd tab + view when the modal's tab bar mounts, so the existing
   // inventory / sales tab code is untouched. All location data comes from activeLocationCode.
-  const RC_DROP_SYNC_ENDPOINTS = [
-    'https://www.resalecmd.com/api/manifests/ricochet-drop-sync',
-    'https://resalecmd.com/api/manifests/ricochet-drop-sync',
-    'http://localhost:4321/api/manifests/ricochet-drop-sync',
-  ];
+  const RC_DROP_SYNC_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/manifests/ricochet-drop-sync');
   let dropManifests = [];
   let dropSelectedId = '';
   let dropStatus = { loading: false, deploying: false, done: 0, total: 0, error: '', finished: false };

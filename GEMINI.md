@@ -147,7 +147,18 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Nov 8, 2026)
+# Active Session Summary (Updated Nov 9, 2026)
+
+## ✅ `WORKS@THEHC` (`works.thehc.llc`) REBRAND, MULTI-DOMAIN (`.llc` / `.coop` / `.com`) BOOKMARKLETS, BRANDING SKILL & GOOGLE WORKSPACE SMTP (Nov 9, 2026 — `alpha-1` ➔ `main`)
+- **Central Brand & Multi-Domain Single Source of Truth (`src/site-config.ts`, `astro.config.mjs`, `src/components/SEOmeta.astro`, `src/components/nav/Navbar.vue`, `src/components/auth/LoginView.vue`, `src/pages/dashboard.astro`)**:
+  - Standardized app identity as **`The Works`** (`Works@TheHC` / `The Huckleberry Works`) under **The Huckleberry Collective** (`Huckleberry Collective LLC`), with primary production URL `https://works.thehc.llc` (`PUBLIC_SITE_URL` / `PUBLIC_BRAND_NAME` overridable).
+  - Removed unused Alpine.js (`@astrojs/alpinejs`, `alpinejs`, `@types/alpinejs`) and `@sendgrid/mail` packages plus starter agency SEO boilerplate.
+- **Multi-Domain Fail-Safe Bookmarklets & Ricochet Userscript (`src/components/warehouses/LocationSyncView.vue`, `src/pages/scripts/rico-bookmarklet.js.ts`, `public/ricochet-upc-sync.user.js`)**:
+  - Upgraded the dragged bookmarklet (`bookmarkletHref`) with an automatic `s.onerror` multi-domain loader (`[currentOrigin, 'https://works.thehc.llc', 'https://works.thehuckleberry.coop', 'https://resalecmd.com']`) and injected `window.__RC_ORIGIN__ = url.origin` in `rico-bookmarklet.js.ts` so bookmarks work across `.llc`, future `.coop`, and legacy `.com` domains without ever re-dragging.
+- **Google Workspace (`@thehc.llc`) Appwrite SMTP & Join Requests (`src/lib/joinRequests.ts`, `src/components/coop/ConnectWithUsForm.vue`, `src/pages/api/join-request.ts`)**:
+  - Switched Appwrite Messaging Provider (`6af1ee080027883f75b5` — `Google Workspace`) and invite URLs to `https://works.thehc.llc`.
+- **Dedicated Branding Skill & Consolidated AI Studio Playbook (`.agents/skills/huckleberry-brand-and-domain-identity/SKILL.md`, `scripts/sync-ai-context.mjs`)**:
+  - Created `huckleberry-brand-and-domain-identity` skill and embedded `docs/AI_STUDIO_PLAYBOOK.md` directly into `.agents/skills/hucks-resale-core/SKILL.md`.
 
 ## ✅ INVITE-ONLY `/signup`, PORKBUN SMTP + 5 CO-OP MESSAGING TOPICS & ZERO-EMAIL-PING-PONG ONBOARDING (Nov 8, 2026 — `alpha-1` ➔ `main`)
 - **Porkbun SMTP Provider + 5 Appwrite Messaging Topics (`src/lib/joinRequests.ts` -> `COOP_MESSAGING_TOPICS`)**:

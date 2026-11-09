@@ -2,10 +2,14 @@
   <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
     <div class="card w-full max-w-md bg-base-100 shadow-2xl">
       <div class="card-body">
-        <h2 class="card-title text-3xl font-bold justify-center mb-6">
-          Sign in to your account
+        <div class="text-center space-y-1 mb-5">
+          <div class="flex items-center justify-center gap-1.5">
+            <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-primary">{{ siteConfig.shortTitle }}</h2>
+            <span class="badge badge-primary badge-outline badge-sm font-mono font-black">{{ siteConfig.badgeText }}</span>
+          </div>
+          <p class="text-xs font-semibold text-base-content/70">{{ siteConfig.subtitle }}</p>
           <span v-if="isDevLogin" class="badge badge-primary badge-sm mt-1 absolute top-4 right-4">Dev Mode</span>
-        </h2>
+        </div>
         
         <form @submit.prevent="submit" class="space-y-4">
           <div class="form-control w-full">
@@ -66,6 +70,7 @@
 <script setup lang="ts">
 import { ref, computed, watchEffect, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
+import { siteConfig } from '../../site-config';
 
 const auth = useAuth();
 const email = ref(import.meta.env.DEV ? (import.meta.env.PUBLIC_TEST_USER_EMAIL || '') : '');

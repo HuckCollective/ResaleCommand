@@ -1,8 +1,8 @@
 {
-  "name": "resalecommand",
-  "homepage": "https://github.com/webvpro/resale-command",
+  "name": "works-at-thehc",
+  "homepage": "https://works.thehc.llc",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "scripts": {
     "dev": "astro dev",
     "inspect": "node scripts/inspect_schema.js",
@@ -16,7 +16,6 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/alpinejs": "^0.5.0",
     "@astrojs/mdx": "^5.0.3",
     "@astrojs/sitemap": "^3.7.2",
     "@astrojs/vercel": "^10.0.4",
@@ -25,10 +24,7 @@
     "@iconify-json/mdi": "^1.2.3",
     "@iconify/vue": "^5.0.0",
     "@nanostores/vue": "^0.10.0",
-    "@sendgrid/mail": "^8.1.6",
     "@tailwindcss/vite": "^4.1.13",
-    "@types/alpinejs": "^3.13.11",
-    "alpinejs": "^3.15.0",
     "appwrite": "^21.5.0",
     "astro": "^6.4.2",
     "astro-icon": "^1.1.5",

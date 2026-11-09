@@ -104,8 +104,8 @@ export interface JoinRequest {
 }
 
 /** Build the personal 1-click invite / application-status URL. */
-export function buildInviteSignupUrl(docId: string, origin = 'https://resalecmd.com'): string {
-  const cleanOrigin = String(origin || 'https://resalecmd.com').replace(/\/+$/, '');
+export function buildInviteSignupUrl(docId: string, origin = 'https://works.thehc.llc'): string {
+  const cleanOrigin = String(origin || 'https://works.thehc.llc').replace(/\/+$/, '');
   return `${cleanOrigin}/signup?invite=${encodeURIComponent(docId)}`;
 }
 
