@@ -32,8 +32,30 @@
           <span class="text-xs text-base-content/70">Checking your invitation status...</span>
         </div>
 
+        <!-- Onboarding progress (only when viewing an existing application) -->
+        <ul v-if="!checkingInvite && showStepper" class="steps steps-horizontal w-full text-[11px] font-semibold">
+          <li
+            v-for="(label, idx) in ONBOARDING_STEPS"
+            :key="label"
+            class="step"
+            :class="idx < stageIndex ? 'step-success' : idx === stageIndex ? 'step-primary' : ''"
+          >
+            {{ label }}
+          </li>
+        </ul>
+
+        <!-- Status banner (waitlist / pending / declined / joined) -->
+        <div
+          v-if="!checkingInvite && !needsInfoInvite && inviteStatusMsg"
+          class="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-xs sm:text-sm text-base-content space-y-1"
+          role="status"
+        >
+          <div v-if="statusBadge" class="badge badge-primary badge-sm font-bold">{{ statusBadge }}</div>
+          <p>{{ inviteStatusMsg }}</p>
+        </div>
+
         <!-- ON-PAGE Q&A PORTAL (When steward clicked 'Ask 1 Question') -->
-        <div v-else-if="needsInfoInvite" class="rounded-2xl border border-info/40 bg-info/5 p-4 space-y-3">
+        <div v-else-if="!checkingInvite && needsInfoInvite" class="rounded-2xl border border-info/40 bg-info/5 p-4 space-y-3">
           <div class="text-xs font-bold text-info uppercase tracking-wider">
             Message from a Co-op Steward for {{ needsInfoInvite.name }}
           </div>
@@ -59,14 +81,69 @@
           </div>
         </div>
 
-        <!-- Pending / Waitlisted / Declined status banner -->
-        <div v-else-if="inviteStatusMsg" class="alert alert-info text-xs rounded-2xl">
-          <span>{{ inviteStatusMsg }}</span>
+        <!-- Read-only Application Summary + progressive-disclosure Edit -->
+        <div v-if="!checkingInvite && canEditApplication && existingInvite" class="space-y-3">
+          <div v-if="!editing" class="rounded-2xl border border-base-300 bg-base-200/50 p-4 space-y-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm font-black truncate">{{ existingInvite.name }}</div>
+                <div class="text-xs text-base-content/70 truncate">{{ existingInvite.email }}</div>
+              </div>
+              <button type="button" class="btn btn-xs btn-outline rounded-xl font-bold shrink-0" @click="editing = true">
+                ✏️ Edit My Selections
+              </button>
+            </div>
+            <div class="space-y-1">
+              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Hats</div>
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="hat in existingHatOptions" :key="hat.id" class="badge badge-primary badge-outline badge-sm gap-1 font-semibold">
+                  <span>{{ hat.icon }}</span>{{ hat.title }}
+                </span>
+              </div>
+            </div>
+            <div v-if="existingInvite.niches.length" class="space-y-1">
+              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Focus / Specialty</div>
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="n in existingInvite.niches" :key="n" class="badge badge-secondary badge-outline badge-sm font-semibold">{{ n }}</span>
+              </div>
+            </div>
+            <div v-if="existingInvite.socialUrl" class="space-y-0.5">
+              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Shop / Social</div>
+              <div class="text-xs break-all">{{ existingInvite.socialUrl }}</div>
+            </div>
+            <div v-if="existingInvite.note" class="space-y-0.5">
+              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Notes</div>
+              <div class="text-xs whitespace-pre-line break-words">{{ existingInvite.note }}</div>
+            </div>
+          </div>
+
+          <ConnectWithUsForm
+            v-else
+            :hats="hatOptions"
+            :initial-request="existingInvite"
+            cancel-label="Cancel Edit"
+            @close="editing = false"
+            @saved="onApplicationSaved"
+          />
+
+          <div class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs">
+            <a :href="loginLink" class="link link-primary font-bold">Already a member? Sign in →</a>
+            <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
+          </div>
+        </div>
+
+        <!-- Closed application (declined / already joined): just sign-in links -->
+        <div
+          v-else-if="!checkingInvite && existingInvite && !hasValidInvite && !needsInfoInvite"
+          class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs"
+        >
+          <a :href="loginLink" class="link link-primary font-bold">Sign in →</a>
+          <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
         </div>
 
         <!-- WITHOUT INVITE: Embedded Request-an-Invite (ConnectWithUsForm) -->
-        <div v-if="!checkingInvite && !hasValidInvite && !needsInfoInvite" class="space-y-4">
-          <ConnectWithUsForm :hats="hatOptions" :initial-request="existingInvite" @close="goToLogin" />
+        <div v-else-if="!checkingInvite && !hasValidInvite && !needsInfoInvite" class="space-y-4">
+          <ConnectWithUsForm :hats="hatOptions" cancel-label="Back to Sign In" @close="goToLogin" />
 
           <div class="divider text-xs text-base-content/50 my-1">Already have an invite link or code?</div>
 
@@ -171,6 +248,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 import { databases } from '../../lib/appwrite';
+import { addToast } from '../../stores/toast';
 import { getDatabaseId } from '../../lib/appwriteEnv';
 import ConnectWithUsForm from '../coop/ConnectWithUsForm.vue';
 import {
@@ -201,6 +279,54 @@ const inviteStatusMsg = ref('');
 const manualInviteInput = ref('');
 
 const hasValidInvite = computed(() => hasTeamRedirectInvite.value || !!approvedInvite.value);
+
+const ONBOARDING_STEPS = ['Request Sent', 'Steward Review', 'Invite Approved', 'Account Active'] as const;
+const editing = ref(false);
+
+const stageIndex = computed(() => {
+  const status = existingInvite.value?.status;
+  if (status === JOIN_REQUEST_STATUS.joined) return 3;
+  if (status === JOIN_REQUEST_STATUS.approved) return 2;
+  return 1;
+});
+
+const showStepper = computed(
+  () => !!existingInvite.value && existingInvite.value.status !== JOIN_REQUEST_STATUS.declined
+);
+
+const canEditApplication = computed(() => {
+  const status = existingInvite.value?.status;
+  return (
+    !!existingInvite.value &&
+    !hasValidInvite.value &&
+    (status === JOIN_REQUEST_STATUS.pending || status === JOIN_REQUEST_STATUS.waitlisted)
+  );
+});
+
+const statusBadge = computed(() => {
+  switch (existingInvite.value?.status) {
+    case JOIN_REQUEST_STATUS.pending:
+      return '⏳ Waiting for Steward Review';
+    case JOIN_REQUEST_STATUS.waitlisted:
+      return '📋 Priority Waitlist';
+    case JOIN_REQUEST_STATUS.joined:
+      return '✅ Account Active';
+    case JOIN_REQUEST_STATUS.declined:
+      return 'Application Closed';
+    default:
+      return '';
+  }
+});
+
+const existingHatOptions = computed(() =>
+  hatOptions.filter((h) => (existingInvite.value?.hats as readonly string[] | undefined)?.includes(h.id))
+);
+
+const onApplicationSaved = (req: JoinRequest) => {
+  existingInvite.value = req;
+  editing.value = false;
+  addToast('Application updated — stewards will see your latest selections.', 'success');
+};
 
 const loginLink = computed(() => {
   if (typeof window !== 'undefined') {
@@ -269,6 +395,11 @@ const submitApplicantReply = async () => {
       itemsSnapshot: updatedSnap,
     });
     needsInfoInvite.value = null;
+    existingInvite.value = {
+      ...req,
+      applicantReply: cleanReply,
+      status: JOIN_REQUEST_STATUS.pending,
+    };
     inviteStatusMsg.value = 'Thank you! Your answer has been sent straight to our Co-op Governance queue.';
   } catch (err: any) {
     inviteStatusMsg.value = err?.message || 'Could not save your reply. Please try again.';

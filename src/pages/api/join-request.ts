@@ -215,7 +215,18 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
+    const isUpdate = body?.isUpdate === true;
     const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
+
+    // The browser writes the doc first, so it usually exists already: preserve steward-driven state
+    // (status, steward question, applicant reply, decision) instead of resetting it to "pending".
+    let existing: ReturnType<typeof parseJoinRequestDoc> = null;
+    try {
+      existing = parseJoinRequestDoc(await databases.getDocument(dbId, MANIFESTS_COL_ID, docId));
+    } catch {
+      existing = null;
+    }
+
     const snapshot = serializeJoinRequestSnapshot({
       name,
       email,
@@ -223,14 +234,17 @@ export const POST: APIRoute = async ({ request }) => {
       niches,
       socialUrl,
       note,
-      requestedAt: new Date().toISOString(),
+      requestedAt: existing?.requestedAt || new Date().toISOString(),
+      stewardQuestion: existing?.stewardQuestion,
+      applicantReply: existing?.applicantReply,
+      decisionKey: existing?.decisionKey,
     });
     const docData = {
       name: `Join request: ${name}`.slice(0, 120),
       tenantId: 'system',
       locationId: JOIN_REQUEST_LOCATION_ID,
       locationName: 'Join Requests',
-      status: JOIN_REQUEST_STATUS.pending,
+      status: existing?.status || JOIN_REQUEST_STATUS.pending,
       itemCount: 0,
       itemsSnapshot: snapshot,
       notes: '',
@@ -244,26 +258,65 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     if (apiKey) {
+      const reqOrigin = new URL(request.url).origin || siteConfig.siteUrl;
+      const statusUrl = buildInviteSignupUrl(docId, reqOrigin);
+      const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
+      const messaging = new Messaging(keyClient);
+
+      // 1. Notify Co-op Founders / Stewards Topic with 1-Click Dashboard + Direct Application Status Link
       try {
-        const reqOrigin = new URL(request.url).origin || siteConfig.siteUrl;
-        const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-        const messaging = new Messaging(keyClient);
         await messaging.createEmail({
           messageId: ID.unique(),
-          subject: `New Co-op Join Request: ${name} (${hats.join(', ')})`,
+          subject: `${isUpdate ? 'Updated' : 'New'} Co-op Join Request: ${name} (${hats.join(', ')})`,
           content: [
-            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) requested an invitation to join the Collective.</p>`,
+            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) ${isUpdate ? 'updated their application to join' : 'requested an invitation to join'} the Collective.</p>`,
             `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
             niches.length ? `<p><strong>Niches:</strong> ${escapeHtml(niches.join(', '))}</p>` : '',
             socialUrl ? `<p><strong>Shop / Social Link:</strong> ${escapeHtml(socialUrl)}</p>` : '',
             note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-            `<p><a href="${escapeHtml(reqOrigin)}/dashboard">Open Works@TheHC Command Center for 1-Click Approve / Waitlist / Decline</a></p>`,
+            `<p style="margin:18px 0;"><a href="${escapeHtml(reqOrigin)}/dashboard" style="background:#10b981;color:#ffffff;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">Open Works@TheHC Command Center (1-Click Review)</a></p>`,
+            `<p style="font-size:12px;color:#666;">Applicant Status Portal: <a href="${escapeHtml(statusUrl)}">${escapeHtml(statusUrl)}</a></p>`,
           ].join(''),
           topics: [COOP_MESSAGING_TOPICS.founders],
           html: true,
         });
       } catch (mailErr: any) {
         console.warn('[join-request] Messaging topic notification skipped:', mailErr?.message || mailErr);
+      }
+
+      // 2. Send Applicant Confirmation Email with their personal 1-Click Application Status Portal link
+      //    (only on a brand-new application, never when they merely edit their selections)
+      try {
+        const targetId = isUpdate ? null : await ensureEmailTargetId(keyClient, email);
+        if (targetId) {
+          await messaging.createEmail({
+            messageId: ID.unique(),
+            subject: 'We received your Huckleberry Collective application!',
+            content: [
+              `<p>Hi <strong>${escapeHtml(name)}</strong>,</p>`,
+              `<p>Thank you for connecting with <strong>The Huckleberry Collective</strong>! Your application is now in our Co-op Governance queue for steward review.</p>`,
+              `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:13px;">`,
+              `<p style="margin:0 0 6px 0;"><strong>Requested Hat(s):</strong> ${escapeHtml(hats.join(', '))}</p>`,
+              niches.length
+                ? `<p style="margin:0 0 6px 0;"><strong>Specialty Focus:</strong> ${escapeHtml(niches.join(', '))}</p>`
+                : '',
+              socialUrl
+                ? `<p style="margin:0 0 6px 0;"><strong>Shop / Social:</strong> ${escapeHtml(socialUrl)}</p>`
+                : '',
+              note ? `<p style="margin:0;"><strong>Notes:</strong> ${escapeHtml(note)}</p>` : '',
+              `</div>`,
+              `<p>You can check your live review status, answer any steward follow-up question, or update your selections anytime at your personal link below:</p>`,
+              `<p style="margin:20px 0;"><a href="${escapeHtml(statusUrl)}" style="background:#10b981;color:#ffffff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">View or Update My Application Status</a></p>`,
+              `<p style="font-size:12px;color:#666;">Or copy this link into your browser:<br/><code>${escapeHtml(statusUrl)}</code></p>`,
+              `<hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>`,
+              `<p style="font-size:11px;color:#888;">Automated confirmation from Works@TheHC (${escapeHtml(siteConfig.organization)}). No email reply is needed.</p>`,
+            ].join(''),
+            targets: [targetId],
+            html: true,
+          });
+        }
+      } catch (appMailErr: any) {
+        console.warn('[join-request] Applicant confirmation email skipped:', appMailErr?.message || appMailErr);
       }
     }
 

@@ -78,10 +78,12 @@
       </p>
       <p v-if="errorMsg" class="text-xs text-error break-words">{{ errorMsg }}</p>
       <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
-        <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="emit('close')">Close</button>
+        <button v-if="!hideCloseButton" type="button" class="btn btn-sm btn-ghost rounded-xl" @click="emit('close')">
+          {{ cancelLabel || 'Close' }}
+        </button>
         <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" :disabled="busy" @click="submitRequest">
           <span v-if="busy" class="loading loading-spinner loading-xs"></span>
-          {{ initialRequest ? 'Update Request' : 'Send Request' }}
+          {{ initialRequest ? 'Save Changes' : 'Send Request' }}
         </button>
       </div>
     </div>
@@ -114,8 +116,13 @@ interface HatOption {
 const props = defineProps<{
   hats: readonly HatOption[];
   initialRequest?: JoinRequest | null;
+  hideCloseButton?: boolean;
+  cancelLabel?: string;
 }>();
-const emit = defineEmits<{ (e: 'close'): void }>();
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'saved', req: JoinRequest): void;
+}>();
 
 const hatOptions = computed(() => props.hats.filter((h) => (JOIN_REQUEST_HATS as readonly string[]).includes(h.id)));
 const nicheChips = JOIN_NICHE_CHIPS;
@@ -187,13 +194,15 @@ const submitRequest = async () => {
     const hats = selectedHats.value as JoinRequestHat[];
     const niches = [...selectedNiches.value];
 
-    const docId = await buildJoinDocId(cleanEmail);
+    const requestedAt = props.initialRequest?.requestedAt || new Date().toISOString();
+    const nextStatus = props.initialRequest?.status || JOIN_REQUEST_STATUS.pending;
+    const docId = props.initialRequest?.id || (await buildJoinDocId(cleanEmail));
     const docData = {
       name: `Join request: ${cleanName}`.slice(0, 120),
       tenantId: 'system',
       locationId: JOIN_REQUEST_LOCATION_ID,
       locationName: 'Join Requests',
-      status: JOIN_REQUEST_STATUS.pending,
+      status: nextStatus,
       itemCount: 0,
       itemsSnapshot: serializeJoinRequestSnapshot({
         name: cleanName,
@@ -202,7 +211,10 @@ const submitRequest = async () => {
         niches,
         socialUrl: cleanSocial,
         note: cleanNote,
-        requestedAt: new Date().toISOString(),
+        requestedAt,
+        stewardQuestion: props.initialRequest?.stewardQuestion,
+        applicantReply: props.initialRequest?.applicantReply,
+        decisionKey: props.initialRequest?.decisionKey,
       }),
       notes: '',
     };
@@ -221,7 +233,7 @@ const submitRequest = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
     statusUrl.value = buildInviteSignupUrl(docId, origin);
 
-    // Trigger server-side Appwrite Messaging (`coop-founders` Topic email via Google Workspace SMTP)
+    // Trigger server-side Appwrite Messaging (`coop-founders` Topic + Applicant Confirmation Email via Google Workspace SMTP)
     fetch('/api/join-request', {
       method: 'POST',
       credentials: 'same-origin',
@@ -234,10 +246,28 @@ const submitRequest = async () => {
         note: cleanNote,
         hats,
         website: website.value,
+        isUpdate: !!props.initialRequest,
       }),
     }).catch(() => {});
 
-    step.value = 'done';
+    const savedReq: JoinRequest = {
+      id: docId,
+      name: cleanName,
+      email: cleanEmail,
+      hats,
+      niches,
+      socialUrl: cleanSocial,
+      note: cleanNote,
+      requestedAt,
+      status: nextStatus,
+      stewardQuestion: props.initialRequest?.stewardQuestion,
+      applicantReply: props.initialRequest?.applicantReply,
+      decisionKey: props.initialRequest?.decisionKey,
+    };
+    emit('saved', savedReq);
+    if (!props.initialRequest) {
+      step.value = 'done';
+    }
   } catch (err: any) {
     errorMsg.value = err?.message || 'Could not save your request. Please try again.';
   } finally {
