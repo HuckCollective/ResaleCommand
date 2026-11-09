@@ -9,13 +9,13 @@
         <span class="font-black">👋 Exploring The Huckleberry Collective?</span>
         <span class="text-base-content/75"> Tell us how you'd like to be part of it, or log in if you're already a member.</span>
       </div>
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex flex-wrap items-center gap-2">
         <button type="button" class="btn btn-sm btn-primary rounded-xl font-black gap-1.5" @click="showConnectModal = true">
-          <Icon icon="solar:hand-shake-bold" class="w-4 h-4" />
-          Connect With Us
+          <Icon icon="solar:hand-shake-bold" class="w-4 h-4 shrink-0" />
+          <span>Connect With Us</span>
         </button>
         <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
-        <a href="/demo" class="btn btn-sm btn-ghost border border-base-300 rounded-xl font-bold">See the example dashboard</a>
+        <a href="/demo" class="btn btn-sm btn-ghost border border-base-300 rounded-xl font-bold">Example Dashboard</a>
       </div>
     </div>
 

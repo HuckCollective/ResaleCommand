@@ -299,12 +299,6 @@
         >
           {{ displayTrackedCount }}
         </span>
-        <span
-          v-else-if="!isAuthenticated"
-          class="indicator-item badge badge-secondary badge-xs text-secondary-content font-black z-10 whitespace-nowrap shrink-0"
-        >
-          Preview
-        </span>
         <a
           href="/scout?quick=true"
           @click="handleScoutClick"
@@ -317,8 +311,14 @@
           title="Quick Scout & Camera OCR"
           aria-label="Quick Scout"
         >
-          <Icon icon="solar:scanner-bold" class="w-4 h-4" :class="isRouteActive('/scout') ? '' : 'text-primary'" />
+          <Icon icon="solar:scanner-bold" class="w-4 h-4 shrink-0" :class="isRouteActive('/scout') ? '' : 'text-primary'" />
           <span class="hidden sm:inline text-xs">Quick Scout</span>
+          <span
+            v-if="!isAuthenticated"
+            class="badge badge-secondary badge-xs text-secondary-content font-black whitespace-nowrap shrink-0"
+          >
+            Preview
+          </span>
         </a>
       </div>
 

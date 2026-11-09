@@ -5,14 +5,16 @@
   >
     <div class="p-4 space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-black text-sm flex items-center gap-2">
-          <Icon icon="solar:user-plus-bold-duotone" class="w-5 h-5 text-info shrink-0" />
-          <span>Co-op Join Requests &amp; 1-Click Decisions</span>
-          <span v-if="activeRequests.length > 0" class="badge badge-info badge-sm font-bold">{{ activeRequests.length }} waiting</span>
-          <span v-if="approvedRequests.length > 0" class="badge badge-success badge-outline badge-sm font-bold">{{ approvedRequests.length }} invited</span>
-          <span v-if="waitlistedRequests.length > 0" class="badge badge-warning badge-outline badge-sm font-bold">{{ waitlistedRequests.length }} waitlisted</span>
-          <span v-if="unverifiedCount > 0" class="text-[11px] font-semibold text-base-content/50">{{ unverifiedCount }} awaiting email verification</span>
-        </h3>
+        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+          <h3 class="font-black text-sm flex items-center gap-1.5">
+            <Icon icon="solar:user-plus-bold-duotone" class="w-5 h-5 text-info shrink-0" />
+            <span>Co-op Join Requests</span>
+          </h3>
+          <span v-if="activeRequests.length > 0" class="badge badge-info badge-sm font-bold whitespace-nowrap">{{ activeRequests.length }} waiting</span>
+          <span v-if="approvedRequests.length > 0" class="badge badge-success badge-outline badge-sm font-bold whitespace-nowrap">{{ approvedRequests.length }} invited</span>
+          <span v-if="waitlistedRequests.length > 0" class="badge badge-warning badge-outline badge-sm font-bold whitespace-nowrap">{{ waitlistedRequests.length }} waitlisted</span>
+          <span v-if="unverifiedCount > 0" class="text-[11px] font-semibold text-base-content/50 whitespace-nowrap">{{ unverifiedCount }} unverified</span>
+        </div>
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
       </div>
 
