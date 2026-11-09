@@ -49,3 +49,4 @@ Our cooperative operates across a 3-tier domain lifecycle:
    - Configure in **BOTH**:
      - **Appwrite Settings ➔ SMTP** (System Auth, password recovery, invites): Host `smtp.gmail.com`, Port `465` (`SSL`), Username `you@thehc.llc`, Password `<16-char App Password>`, Sender Name `The Works @ TheHC`.
      - **Appwrite Messaging ➔ Providers ➔ SMTP** (Powers [`/api/join-request.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/api/join-request.ts) applicant & `coop-founders` topic emails).
+
