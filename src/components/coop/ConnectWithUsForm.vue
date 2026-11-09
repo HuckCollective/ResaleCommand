@@ -81,7 +81,7 @@
         <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="emit('close')">Close</button>
         <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" :disabled="busy" @click="submitRequest">
           <span v-if="busy" class="loading loading-spinner loading-xs"></span>
-          Send Request
+          {{ initialRequest ? 'Update Request' : 'Send Request' }}
         </button>
       </div>
     </div>
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { databases } from '../../lib/appwrite';
 import { siteConfig } from '../../site-config';
 import { getDatabaseId } from '../../lib/appwriteEnv';
@@ -101,6 +101,7 @@ import {
   JOIN_REQUEST_STATUS,
   buildInviteSignupUrl,
   serializeJoinRequestSnapshot,
+  type JoinRequest,
   type JoinRequestHat,
 } from '../../lib/joinRequests';
 
@@ -110,7 +111,10 @@ interface HatOption {
   title: string;
 }
 
-const props = defineProps<{ hats: readonly HatOption[] }>();
+const props = defineProps<{
+  hats: readonly HatOption[];
+  initialRequest?: JoinRequest | null;
+}>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const hatOptions = computed(() => props.hats.filter((h) => (JOIN_REQUEST_HATS as readonly string[]).includes(h.id)));
@@ -121,13 +125,27 @@ const busy = ref(false);
 const errorMsg = ref('');
 const statusUrl = ref('');
 
-const selectedHats = ref<string[]>([]);
-const selectedNiches = ref<string[]>([]);
-const name = ref('');
-const email = ref('');
-const socialUrl = ref('');
-const note = ref('');
+const selectedHats = ref<string[]>(props.initialRequest?.hats ? [...props.initialRequest.hats] : []);
+const selectedNiches = ref<string[]>(props.initialRequest?.niches ? [...props.initialRequest.niches] : []);
+const name = ref(props.initialRequest?.name || '');
+const email = ref(props.initialRequest?.email || '');
+const socialUrl = ref(props.initialRequest?.socialUrl || '');
+const note = ref(props.initialRequest?.note || '');
 const website = ref('');
+
+watch(
+  () => props.initialRequest,
+  (req) => {
+    if (!req) return;
+    selectedHats.value = Array.isArray(req.hats) ? [...req.hats] : [];
+    selectedNiches.value = Array.isArray(req.niches) ? [...req.niches] : [];
+    name.value = req.name || '';
+    email.value = req.email || '';
+    socialUrl.value = req.socialUrl || '';
+    note.value = req.note || '';
+  },
+  { immediate: true }
+);
 
 const toggleHat = (id: string) => {
   selectedHats.value = selectedHats.value.includes(id)

@@ -7,10 +7,22 @@
             {{ hasValidInvite ? '✅ Invitation Verified' : '🤝 Invite-Only Cooperative' }}
           </div>
           <h2 class="text-2xl sm:text-3xl font-black tracking-tight">
-            {{ hasValidInvite ? 'Create your Co-op Account' : needsInfoInvite ? 'Quick Question on Your Application' : 'Request an Invitation' }}
+            {{
+              hasValidInvite
+                ? 'Create your Co-op Account'
+                : needsInfoInvite
+                  ? 'Quick Question on Your Application'
+                  : existingInvite
+                    ? 'Your Application Status'
+                    : 'Request an Invitation'
+            }}
           </h2>
           <p v-if="!hasValidInvite && !needsInfoInvite && !checkingInvite" class="text-xs sm:text-sm text-base-content/70">
-            Accounts at The Huckleberry Collective are created by invitation only. Tell us which hat fits you below and a steward will review your request right inside the app.
+            {{
+              existingInvite
+                ? 'Your saved selections are shown below — you can review or update your details anytime while waiting for steward review.'
+                : 'Accounts at The Huckleberry Collective are created by invitation only. Tell us which hat fits you below and a steward will review your request right inside the app.'
+            }}
           </p>
         </div>
 
@@ -54,7 +66,7 @@
 
         <!-- WITHOUT INVITE: Embedded Request-an-Invite (ConnectWithUsForm) -->
         <div v-if="!checkingInvite && !hasValidInvite && !needsInfoInvite" class="space-y-4">
-          <ConnectWithUsForm :hats="hatOptions" @close="goToLogin" />
+          <ConnectWithUsForm :hats="hatOptions" :initial-request="existingInvite" @close="goToLogin" />
 
           <div class="divider text-xs text-base-content/50 my-1">Already have an invite link or code?</div>
 
@@ -182,6 +194,7 @@ const checkingInvite = ref(true);
 const hasTeamRedirectInvite = ref(false);
 const approvedInvite = ref<JoinRequest | null>(null);
 const needsInfoInvite = ref<JoinRequest | null>(null);
+const existingInvite = ref<JoinRequest | null>(null);
 const applicantReplyDraft = ref('');
 const replyBusy = ref(false);
 const inviteStatusMsg = ref('');
@@ -209,6 +222,7 @@ const verifyInviteCode = async (rawCode: string) => {
   inviteStatusMsg.value = '';
   approvedInvite.value = null;
   needsInfoInvite.value = null;
+  existingInvite.value = null;
   try {
     const doc = await databases.getDocument(getDatabaseId(), 'manifests', clean);
     const parsed = parseJoinRequestDoc(doc);
@@ -216,6 +230,7 @@ const verifyInviteCode = async (rawCode: string) => {
       inviteStatusMsg.value = 'That invite code was not found. Request an invitation below.';
       return;
     }
+    existingInvite.value = parsed;
     if (parsed.status === JOIN_REQUEST_STATUS.approved) {
       approvedInvite.value = parsed;
       name.value = parsed.name;
