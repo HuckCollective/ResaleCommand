@@ -113,39 +113,14 @@
           </button>
         </div>
 
-        <!-- Inline Confirm Approve & Send Invite Guard -->
-        <div
-          v-else-if="confirmApproveId === req.id"
-          class="flex flex-wrap items-center justify-between gap-2 pt-1 bg-success/10 border border-success/40 rounded-xl p-2.5"
-        >
-          <div class="text-xs font-bold text-base-content">
-            Send official invite email &amp; password creation link (<code class="font-mono">{{ useProdOrigin ? prodHostLabel : currentHostLabel }}</code>) to
-            <span class="underline">{{ req.name }}</span> ({{ req.email }})?
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button
-              type="button"
-              class="btn btn-xs btn-success rounded-lg font-black"
-              :disabled="busyId === req.id"
-              @click="sendDecision(req, 'approve')"
-            >
-              <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
-              ✅ Yes, Confirm &amp; Send Invite
-            </button>
-            <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="confirmApproveId = ''">
-              Cancel
-            </button>
-          </div>
-        </div>
-
-        <!-- 1-Click Automated Decision Bar (Hidden while Question or Confirm box is open) -->
+        <!-- 1-Click Automated Decision Bar (Opens Confirmation Modal on Every Decision Except Ask 1 Question) -->
         <div v-else class="flex flex-wrap items-center justify-end gap-1.5 pt-1">
           <button
             type="button"
             class="btn btn-xs btn-ghost rounded-lg text-base-content/60"
             :disabled="busyId === req.id"
             title="Archive without sending any email"
-            @click="sendDecision(req, 'decline_silent')"
+            @click="promptDecision(req, 'decline_silent')"
           >
             Archive Silently
           </button>
@@ -154,7 +129,7 @@
             class="btn btn-xs btn-outline btn-error rounded-lg font-bold"
             :disabled="busyId === req.id"
             title="Sends polite 'Not a current category fit' template from the app"
-            @click="sendDecision(req, 'decline_category')"
+            @click="promptDecision(req, 'decline_category')"
           >
             ✖ Decline (Category Fit)
           </button>
@@ -163,7 +138,7 @@
             class="btn btn-xs btn-outline rounded-lg font-bold"
             :disabled="busyId === req.id"
             title="Sends polite 'Booth / Roster at capacity' template from the app"
-            @click="sendDecision(req, 'decline_capacity')"
+            @click="promptDecision(req, 'decline_capacity')"
           >
             ✖ Decline (Full Roster)
           </button>
@@ -172,7 +147,7 @@
             class="btn btn-xs btn-outline btn-warning rounded-lg font-bold"
             :disabled="busyId === req.id"
             title="Adds to waitlist & sends automated Waitlist email"
-            @click="sendDecision(req, 'waitlist')"
+            @click="promptDecision(req, 'waitlist')"
           >
             ⏳ Waitlist
           </button>
@@ -188,7 +163,7 @@
             type="button"
             class="btn btn-xs btn-primary rounded-lg font-black"
             :disabled="busyId === req.id"
-            @click="openConfirmApprove(req)"
+            @click="promptDecision(req, 'approve')"
           >
             ✅ Approve &amp; Send Invite
           </button>
@@ -210,38 +185,22 @@
             <span class="text-xs text-base-content/70 ml-1.5 break-all">({{ req.email }})</span>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
-            <template v-if="confirmApproveId === req.id">
-              <span class="text-xs font-bold">Send invite email to {{ req.name }}?</span>
-              <button
-                type="button"
-                class="btn btn-xs btn-success rounded-lg font-black"
-                :disabled="busyId === req.id"
-                @click="sendDecision(req, 'approve')"
-              >
-                ✅ Yes, Send Invite
-              </button>
-              <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="confirmApproveId = ''">
-                Cancel
-              </button>
-            </template>
-            <template v-else>
-              <button
-                type="button"
-                class="btn btn-xs btn-primary rounded-lg font-bold"
-                :disabled="busyId === req.id"
-                @click="openConfirmApprove(req)"
-              >
-                ✅ Approve &amp; Send Invite
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
-                :disabled="busyId === req.id"
-                @click="sendDecision(req, 'decline_silent')"
-              >
-                Remove
-              </button>
-            </template>
+            <button
+              type="button"
+              class="btn btn-xs btn-primary rounded-lg font-bold"
+              :disabled="busyId === req.id"
+              @click="promptDecision(req, 'approve')"
+            >
+              ✅ Approve &amp; Send Invite
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
+              :disabled="busyId === req.id"
+              @click="promptDecision(req, 'decline_silent')"
+            >
+              Remove
+            </button>
           </div>
         </div>
       </div>
@@ -268,7 +227,7 @@
               type="button"
               class="btn btn-xs btn-ghost rounded-lg font-bold"
               :disabled="busyId === req.id"
-              @click="sendDecision(req, 'approve')"
+              @click="promptDecision(req, 'approve')"
             >
               Resend Invite Email
             </button>
@@ -285,7 +244,7 @@
               type="button"
               class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
               :disabled="busyId === req.id"
-              @click="sendDecision(req, 'decline_silent')"
+              @click="promptDecision(req, 'decline_silent')"
             >
               Revoke
             </button>
@@ -293,6 +252,68 @@
         </div>
       </div>
     </div>
+
+    <!-- Decision Confirmation Modal -->
+    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': !!pendingConfirm }">
+      <div v-if="pendingConfirm" class="modal-box rounded-t-3xl sm:rounded-3xl border border-base-300 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">
+              Confirm Steward Decision
+            </div>
+            <h4 class="font-black text-base mt-0.5">{{ confirmModalMeta.title }}</h4>
+          </div>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="pendingConfirm = null">✕</button>
+        </div>
+
+        <div class="rounded-xl bg-base-200/70 border border-base-300 px-3.5 py-2.5 text-xs space-y-1">
+          <div>
+            <span class="font-bold">Applicant:</span> {{ pendingConfirm.req.name }}
+            <span class="text-base-content/70">({{ pendingConfirm.req.email }})</span>
+          </div>
+          <div v-if="pendingConfirm.req.hats.length">
+            <span class="font-bold">Hats:</span> {{ pendingConfirm.req.hats.join(', ') }}
+          </div>
+        </div>
+
+        <div class="rounded-xl border px-3.5 py-2.5 text-xs space-y-1.5" :class="confirmModalMeta.boxClass">
+          <div class="font-bold">{{ confirmModalMeta.summary }}</div>
+          <div v-if="confirmModalMeta.emailSubject" class="text-base-content/80">
+            <span class="font-semibold">Email Subject:</span> "{{ confirmModalMeta.emailSubject }}"
+          </div>
+          <div v-if="confirmModalMeta.emailPreview" class="text-base-content/75 italic">
+            "{{ confirmModalMeta.emailPreview }}"
+          </div>
+          <div v-if="confirmModalMeta.sendsEmail" class="pt-1 font-mono text-[11px] text-base-content/70">
+            Link host in email: <strong>{{ useProdOrigin ? prodHostLabel : currentHostLabel }}</strong>
+          </div>
+        </div>
+
+        <div class="modal-action mt-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost rounded-xl"
+            :disabled="!!busyId"
+            @click="pendingConfirm = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm rounded-xl font-black"
+            :class="confirmModalMeta.btnClass"
+            :disabled="!!busyId"
+            @click="confirmAndSendDecision"
+          >
+            <span v-if="busyId" class="loading loading-spinner loading-xs"></span>
+            {{ confirmModalMeta.cta }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="pendingConfirm = null">
+        <button type="button">close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -316,9 +337,84 @@ const loading = ref(true);
 const busyId = ref('');
 const questionOpenForId = ref('');
 const questionDraft = ref('');
-const confirmApproveId = ref('');
+const pendingConfirm = ref<{ req: JoinRequest; decision: JoinDecisionKey } | null>(null);
 const currentOrigin = ref('');
 const useProdOrigin = ref(false);
+
+const confirmModalMeta = computed(() => {
+  const item = pendingConfirm.value;
+  if (!item) {
+    return {
+      title: '',
+      summary: '',
+      emailSubject: '',
+      emailPreview: '',
+      sendsEmail: false,
+      boxClass: 'border-base-300 bg-base-200/40',
+      btnClass: 'btn-primary',
+      cta: 'Confirm',
+    };
+  }
+  const d = item.decision;
+  if (d === 'approve') {
+    return {
+      title: '✅ Approve & Send Official Invite?',
+      summary: 'Approves this applicant and emails their personal invite link to create a password.',
+      emailSubject: JOIN_DECISION_TEMPLATES.approve.subject,
+      emailPreview: JOIN_DECISION_TEMPLATES.approve.message,
+      sendsEmail: true,
+      boxClass: 'border-success/40 bg-success/10',
+      btnClass: 'btn-success',
+      cta: '✅ Yes, Approve & Send Email',
+    };
+  }
+  if (d === 'waitlist') {
+    return {
+      title: '⏳ Move to Priority Waitlist?',
+      summary: 'Places this applicant on the Priority Waitlist and emails the waitlist notification.',
+      emailSubject: JOIN_DECISION_TEMPLATES.waitlist.subject,
+      emailPreview: JOIN_DECISION_TEMPLATES.waitlist.message,
+      sendsEmail: true,
+      boxClass: 'border-warning/40 bg-warning/10',
+      btnClass: 'btn-warning',
+      cta: '⏳ Yes, Waitlist & Send Email',
+    };
+  }
+  if (d === 'decline_category') {
+    return {
+      title: '✖ Decline (Not a Category Fit)?',
+      summary: 'Declines this application and sends the polite category-fit response email.',
+      emailSubject: JOIN_DECISION_TEMPLATES.decline_category.subject,
+      emailPreview: JOIN_DECISION_TEMPLATES.decline_category.message,
+      sendsEmail: true,
+      boxClass: 'border-error/40 bg-error/10',
+      btnClass: 'btn-error',
+      cta: '✖ Yes, Decline & Send Email',
+    };
+  }
+  if (d === 'decline_capacity') {
+    return {
+      title: '✖ Decline (Full Roster)?',
+      summary: 'Declines this application and sends the polite roster-at-capacity response email.',
+      emailSubject: JOIN_DECISION_TEMPLATES.decline_capacity.subject,
+      emailPreview: JOIN_DECISION_TEMPLATES.decline_capacity.message,
+      sendsEmail: true,
+      boxClass: 'border-error/40 bg-error/10',
+      btnClass: 'btn-error',
+      cta: '✖ Yes, Decline & Send Email',
+    };
+  }
+  return {
+    title: 'Archive Silently (No Email)?',
+    summary: 'Archives this application immediately without sending any email to the applicant.',
+    emailSubject: '',
+    emailPreview: '',
+    sendsEmail: false,
+    boxClass: 'border-base-300 bg-base-200/50',
+    btnClass: 'btn-neutral',
+    cta: 'Yes, Archive Silently',
+  };
+});
 
 const prodHostLabel = computed(() => {
   try {
@@ -382,14 +478,21 @@ const copyInviteLink = async (req: JoinRequest) => {
 };
 
 const openQuestionBox = (req: JoinRequest) => {
-  confirmApproveId.value = '';
+  pendingConfirm.value = null;
   questionOpenForId.value = req.id;
   questionDraft.value = req.stewardQuestion || 'What types of items or booth support are you looking to bring?';
 };
 
-const openConfirmApprove = (req: JoinRequest) => {
+const promptDecision = (req: JoinRequest, decision: JoinDecisionKey) => {
   questionOpenForId.value = '';
-  confirmApproveId.value = req.id;
+  pendingConfirm.value = { req, decision };
+};
+
+const confirmAndSendDecision = async () => {
+  if (!pendingConfirm.value) return;
+  const { req, decision } = pendingConfirm.value;
+  await sendDecision(req, decision);
+  pendingConfirm.value = null;
 };
 
 const load = async () => {
@@ -422,7 +525,7 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
 
     req.status = res.data.status;
     req.decisionKey = decision;
-    confirmApproveId.value = '';
+    pendingConfirm.value = null;
     if (decision === 'needs_info') {
       req.stewardQuestion = cleanQuestion;
       questionOpenForId.value = '';
