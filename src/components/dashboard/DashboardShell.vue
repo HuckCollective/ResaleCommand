@@ -4,7 +4,7 @@
     <div v-if="mode === 'demo'" class="card bg-secondary/10 border border-secondary/40 rounded-2xl p-4 space-y-3">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div class="min-w-0">
-          <div class="text-sm font-black">🧪 Example Command Center — nothing here is real</div>
+          <div class="text-sm font-black">🧪 Example Works Hub — nothing here is real</div>
           <p class="text-xs text-base-content/75 leading-relaxed">
             This is what members see after signing in. Everything below is invented sample data. Pick a role to see how the dashboard changes for each kind of member.
           </p>
@@ -34,7 +34,7 @@
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="min-w-0">
         <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-base-content leading-tight">
-          {{ mode === 'demo' ? 'Example Command Center' : 'Command Center' }}
+          {{ mode === 'demo' ? 'Example Works Hub' : 'The Works' }}
         </h1>
         <p class="text-[11px] sm:text-xs text-base-content/65">Alerts, live restock radar, financials, and what needs you today</p>
       </div>
