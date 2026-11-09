@@ -29,7 +29,7 @@ import { getDatabaseId, resolveCollectionId } from '../../lib/appwriteEnv';
 import { coopExpensesApi } from '../../lib/coopExpenses';
 import { manifestsApi } from '../../lib/manifests';
 import { getSavedDropcasts } from '../../lib/dropcastModel';
-import { JOIN_REQUEST_LOCATION_ID, JOIN_REQUEST_STATUS } from '../../lib/joinRequests';
+import { joinApi } from '../../lib/joinRequestsClient';
 import {
   PREVERIFIED_MD_MULTI_QTY_BINS,
   buildLockedMultiBinMap,
@@ -59,14 +59,10 @@ export function useLiveDashboardSource(): DashboardSource {
   const lastSyncAt = ref<string | null>(null);
   const joinRequests = ref(0);
 
-  /** Pending "Connect With Us" requests (only members who can review them need the count). */
+  /** Verified "Connect With Us" requests waiting on stewards (non-stewards simply get 0). */
   const loadJoinRequests = async () => {
-    const res = await databases.listDocuments(getDatabaseId(), 'manifests', [
-      Query.equal('locationId', JOIN_REQUEST_LOCATION_ID),
-      Query.equal('status', JOIN_REQUEST_STATUS.pending),
-      Query.limit(1),
-    ]);
-    joinRequests.value = res.total;
+    const res = await joinApi<{ pending: number }>('count', {}, { steward: true });
+    joinRequests.value = res.ok ? res.data.pending || 0 : 0;
   };
 
   /** Recent sales ledger docs. Uses `salesBucketing.ts` (Law 3) so Booth Bins (`0EJ097`, `0EJ0OF`, etc.) and SKU matches count as matched. */

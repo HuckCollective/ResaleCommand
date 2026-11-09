@@ -1,33 +1,45 @@
 import type { APIRoute } from 'astro';
-import { createHash } from 'node:crypto';
-import { siteConfig } from '../../site-config';
-import { Client, Databases, ID, Messaging, Users } from 'node-appwrite';
+import { createHash, randomBytes } from 'node:crypto';
+import { Query } from 'node-appwrite';
 import {
-  COOP_MESSAGING_TOPICS,
-  JOIN_DECISION_TEMPLATES,
   JOIN_REQUEST_HATS,
   JOIN_REQUEST_LIMITS,
-  JOIN_REQUEST_LOCATION_ID,
+  JOIN_REQUEST_POLICY,
   JOIN_REQUEST_STATUS,
-  buildInviteSignupUrl,
-  parseJoinRequestDoc,
-  serializeJoinRequestSnapshot,
+  isDisposableEmail,
+  maskEmail,
+  rowToJoinRequest,
   type JoinDecisionKey,
+  type JoinRequest,
   type JoinRequestStatus,
 } from '../../lib/joinRequests';
-import { getDatabaseId, getEnvVar } from '../../lib/appwriteEnv';
+import { hashEmail, verifyJoinToken } from '../../lib/joinLinkTokens';
+import {
+  decisionEmail,
+  getJoinServerContext,
+  requireSteward,
+  sendApplicantEmail,
+  sendStewardEmail,
+  statusLinkEmail,
+  stewardNewRequestEmail,
+  verificationEmail,
+  viewerStatusUrl,
+  ownerStatusUrl,
+  type JoinServerContext,
+} from '../../lib/joinRequestsServer';
 
 export const prerender = false;
 
-const MANIFESTS_COL_ID = 'manifests';
 const DAILY_LIMIT_PER_NETWORK = 30;
-
 const attempts = new Map<string, number>();
 let lastPruneDay = '';
 
 const json = (body: Record<string, unknown>, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
+const NOT_FOUND = () => json({ error: 'Application not found.' }, 404);
+
+/** Best-effort per-instance throttle (the real limits are per-email cooldowns + the pending cap). */
 function allowAttempt(request: Request): boolean {
   const day = new Date().toISOString().slice(0, 10);
   if (lastPruneDay !== day) {
@@ -43,42 +55,66 @@ function allowAttempt(request: Request): boolean {
   return true;
 }
 
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/**
- * Resolve or create an Appwrite Messaging email target for an applicant so
- * Porkbun SMTP can deliver automated 1-way status templates (Approve, Waitlist, Decline, Needs Info).
- */
-async function ensureEmailTargetId(keyClient: Client, email: string): Promise<string | null> {
+async function loadRequest(ctx: JoinServerContext, id: string): Promise<JoinRequest | null> {
+  if (!/^join_[a-f0-9]{10,64}$/i.test(id)) return null;
   try {
-    const users = new Users(keyClient);
-    const list = await users.list();
-    const hostUser = list.users.find((u) => u.labels?.includes('admin')) || list.users[0];
-    if (!hostUser) return null;
-
-    const existing = await users.listTargets(hostUser.$id);
-    const match = existing.targets.find(
-      (t) => t.providerType === 'email' && String(t.identifier || '').toLowerCase() === email.toLowerCase()
-    );
-    if (match) return match.$id;
-
-    const targetId = `inv_${createHash('sha256').update(email.toLowerCase()).digest('hex').slice(0, 24)}`;
-    try {
-      const created = await users.createTarget(hostUser.$id, targetId, 'email', email.toLowerCase());
-      return created.$id;
-    } catch {
-      return targetId;
-    }
-  } catch (err: any) {
-    console.warn('[join-request] ensureEmailTargetId skipped:', err?.message || err);
+    return rowToJoinRequest(await ctx.databases.getDocument(ctx.dbId, ctx.collectionId, id));
+  } catch {
     return null;
   }
 }
 
-export const POST: APIRoute = async ({ request }) => {
-  if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
+const saveRow = (ctx: JoinServerContext, id: string, data: Record<string, unknown>) =>
+  ctx.databases.updateDocument(ctx.dbId, ctx.collectionId, id, data);
 
+const cooldownRemaining = (req: JoinRequest) => {
+  const last = req.lastEmailAt ? Date.parse(req.lastEmailAt) : 0;
+  return Math.max(0, last + JOIN_REQUEST_POLICY.emailCooldownMs - Date.now());
+};
+
+/** Applicant-facing payload (never leaks internal fields). */
+function publicView(req: JoinRequest, isOwner: boolean) {
+  const verified = !!req.verifiedAt;
+  const open = req.status === JOIN_REQUEST_STATUS.pending || req.status === JOIN_REQUEST_STATUS.waitlisted;
+  return {
+    id: req.id,
+    name: req.name,
+    email: !verified || isOwner ? req.email : '',
+    emailMasked: maskEmail(req.email),
+    hats: req.hats,
+    niches: req.niches,
+    socialUrl: req.socialUrl,
+    note: req.note,
+    requestedAt: req.requestedAt,
+    status: req.status,
+    stewardQuestion: req.stewardQuestion,
+    applicantReply: req.applicantReply,
+    verified,
+    isOwner,
+    canEdit: open && (isOwner || !verified),
+    cooldownRemainingMs: cooldownRemaining(req),
+  };
+}
+
+function cleanFields(body: any) {
+  const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
+  const email = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
+  const note = String(body?.note || '').trim().slice(0, JOIN_REQUEST_LIMITS.note);
+  const socialUrl = String(body?.socialUrl || '').trim().slice(0, JOIN_REQUEST_LIMITS.socialUrl);
+  const niches = (Array.isArray(body?.niches) ? body.niches : []).map((n: any) => String(n).slice(0, 60)).slice(0, 8);
+  const hats = (Array.isArray(body?.hats) ? body.hats : []).filter((h: string) =>
+    (JOIN_REQUEST_HATS as readonly string[]).includes(h)
+  );
+  const valid = !!name && /^\S+@\S+\.\S+$/.test(email) && hats.length > 0;
+  return { name, email, note, socialUrl, niches, hats, valid };
+}
+
+async function notifyStewards(ctx: JoinServerContext, req: JoinRequest, origin: string, isUpdate: boolean) {
+  const mail = stewardNewRequestEmail(req, origin, isUpdate);
+  await sendStewardEmail(ctx, mail.subject, mail.html);
+}
+
+export const POST: APIRoute = async ({ request }) => {
   let body: any;
   try {
     body = await request.json();
@@ -86,243 +122,257 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Invalid request.' }, 400);
   }
 
-  const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT');
-  const project = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID');
-  const apiKey = getEnvVar('APPWRITE_API_KEY');
-  const dbId = getDatabaseId();
-  if (!endpoint || !project || !dbId) {
-    return json({ error: 'Appwrite endpoint or project ID is not configured.' }, 500);
-  }
+  const ctx = getJoinServerContext();
+  if (!ctx || !ctx.dbId) return json({ error: 'Appwrite is not configured.' }, 500);
 
-  const publicClient = new Client().setEndpoint(endpoint).setProject(project);
-  const databases = new Databases(publicClient);
+  const action = String(body?.action || '');
+  const origin = new URL(request.url).origin;
+  const id = String(body?.id || '').trim();
 
-  // Branch A: Steward 1-Click Decision (Approve, Waitlist, Polite Decline, or Ask 1 On-Page Question)
-  if (body?.action === 'decide' || body?.action === 'approve') {
-    const docId = String(body?.id || '').trim();
-    const decision: JoinDecisionKey =
-      body?.action === 'approve' ? 'approve' : (body?.decision as JoinDecisionKey) || 'approve';
-    const question = String(body?.question || '').trim().slice(0, JOIN_REQUEST_LIMITS.question);
+  try {
+    // -----------------------------------------------------------------------
+    // Steward actions (Appwrite JWT required)
+    // -----------------------------------------------------------------------
+    if (action === 'list' || action === 'count' || action === 'decide' || action === 'link') {
+      const stewardId = await requireSteward(request, ctx);
+      if (!stewardId) return json({ error: 'Steward access required.' }, 403);
 
-    if (!docId.startsWith('join_')) {
-      return json({ error: 'Invalid join request ID.' }, 400);
-    }
+      if (action === 'link') {
+        const target = await loadRequest(ctx, id);
+        if (!target || !target.verifiedAt) return NOT_FOUND();
+        return json({ ok: true, inviteUrl: ownerStatusUrl(id, origin) });
+      }
 
-    try {
-      const doc = await databases.getDocument(dbId, MANIFESTS_COL_ID, docId);
-      const req = parseJoinRequestDoc(doc);
-      if (!req) return json({ error: 'Join request not found.' }, 404);
+      if (action === 'list' || action === 'count') {
+        const res = await ctx.databases.listDocuments(ctx.dbId, ctx.collectionId, [
+          Query.orderDesc('$createdAt'),
+          Query.limit(100),
+        ]);
+        const all = res.documents.map(rowToJoinRequest).filter((r): r is JoinRequest => !!r);
+        const verified = all.filter((r) => !!r.verifiedAt);
+        const unverifiedCount = all.filter(
+          (r) => !r.verifiedAt && r.status === JOIN_REQUEST_STATUS.pending
+        ).length;
+        if (action === 'count') {
+          return json({
+            ok: true,
+            pending: verified.filter((r) => r.status === JOIN_REQUEST_STATUS.pending).length,
+            unverifiedCount,
+          });
+        }
+        return json({ ok: true, requests: verified, unverifiedCount });
+      }
+
+      // decide
+      const req = await loadRequest(ctx, id);
+      if (!req) return NOT_FOUND();
+      if (!req.verifiedAt) return json({ error: 'This applicant has not verified their email yet.' }, 409);
+
+      const decision: JoinDecisionKey = (body?.decision as JoinDecisionKey) || 'approve';
+      const question = String(body?.question || '').trim().slice(0, JOIN_REQUEST_LIMITS.question);
 
       let nextStatus: JoinRequestStatus = JOIN_REQUEST_STATUS.approved;
       if (decision === 'waitlist') nextStatus = JOIN_REQUEST_STATUS.waitlisted;
       else if (decision === 'needs_info') nextStatus = JOIN_REQUEST_STATUS.needs_info;
-      else if (decision.startsWith('decline_')) nextStatus = JOIN_REQUEST_STATUS.declined;
+      else if (String(decision).startsWith('decline_')) nextStatus = JOIN_REQUEST_STATUS.declined;
 
-      const updatedSnapshot = serializeJoinRequestSnapshot({
-        ...req,
-        stewardQuestion: decision === 'needs_info' ? question : req.stewardQuestion,
-        decisionKey: decision,
-      });
-
-      await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, {
+      await saveRow(ctx, id, {
         status: nextStatus,
-        itemsSnapshot: updatedSnapshot,
+        decisionKey: decision,
+        stewardQuestion: decision === 'needs_info' ? question : req.stewardQuestion || '',
       });
 
-      const origin = new URL(request.url).origin;
-      const statusUrl = buildInviteSignupUrl(docId, origin);
       let emailSent = false;
+      if (decision !== 'decline_silent') {
+        const mail = decisionEmail(req, decision, question, origin);
+        emailSent = await sendApplicantEmail(ctx, req.email, mail.subject, mail.html);
+      }
+      return json({ ok: true, inviteUrl: ownerStatusUrl(id, origin), emailSent, status: nextStatus });
+    }
 
-      if (apiKey && decision !== 'decline_silent') {
-        try {
-          const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-          const targetId = await ensureEmailTargetId(keyClient, req.email);
-          if (targetId) {
-            const messaging = new Messaging(keyClient);
-            let subject = '';
-            let htmlBody = '';
+    // -----------------------------------------------------------------------
+    // Public: submit a new application
+    // -----------------------------------------------------------------------
+    if (action === 'submit') {
+      if (!allowAttempt(request)) return json({ error: 'Too many requests today. Please try again tomorrow.' }, 429);
 
-            if (decision === 'approve') {
-              subject = JOIN_DECISION_TEMPLATES.approve.subject;
-              htmlBody = [
-                `<p>Hi <strong>${escapeHtml(req.name)}</strong>,</p>`,
-                `<p>${escapeHtml(JOIN_DECISION_TEMPLATES.approve.message)}</p>`,
-                `<p style="margin:20px 0;"><a href="${escapeHtml(statusUrl)}" style="background:#10b981;color:#ffffff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">Accept Invitation &amp; Create Account</a></p>`,
-                `<p style="font-size:12px;color:#666;">Or copy this link into your browser:<br/><code>${escapeHtml(statusUrl)}</code></p>`,
-                `<hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>`,
-                `<p style="font-size:11px;color:#888;">Automated notification from The Huckleberry Collective. No email reply is needed.</p>`,
-              ].join('');
-            } else if (decision === 'needs_info') {
-              subject = 'Quick question about your Huckleberry Collective application';
-              htmlBody = [
-                `<p>Hi <strong>${escapeHtml(req.name)}</strong>,</p>`,
-                `<p>A co-op steward reviewed your application and posted a quick question for you:</p>`,
-                `<blockquote style="border-left:4px solid #0ea5e9;padding:10px 14px;background:#f8fafc;margin:16px 0;"><strong>${escapeHtml(question || 'Could you share a bit more detail about what you curate or want to help with?')}</strong></blockquote>`,
-                `<p>Please answer directly on your application status page (do not reply by email):</p>`,
-                `<p style="margin:20px 0;"><a href="${escapeHtml(statusUrl)}" style="background:#0ea5e9;color:#ffffff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">Answer on Application Page</a></p>`,
-                `<hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>`,
-                `<p style="font-size:11px;color:#888;">Automated notification from The Huckleberry Collective. Please use the button above rather than replying by email.</p>`,
-              ].join('');
-            } else {
-              const tpl =
-                JOIN_DECISION_TEMPLATES[decision as keyof typeof JOIN_DECISION_TEMPLATES] ||
-                JOIN_DECISION_TEMPLATES.decline_category;
-              subject = tpl.subject;
-              htmlBody = [
-                `<p>Hi <strong>${escapeHtml(req.name)}</strong>,</p>`,
-                `<p>${escapeHtml(tpl.message)}</p>`,
-                `<p style="font-size:12px;color:#666;">You can check your application status anytime at:<br/><a href="${escapeHtml(statusUrl)}">${escapeHtml(statusUrl)}</a></p>`,
-                `<hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>`,
-                `<p style="font-size:11px;color:#888;">Automated status update from The Huckleberry Collective. No email reply is needed.</p>`,
-              ].join('');
-            }
-
-            await messaging.createEmail({
-              messageId: ID.unique(),
-              subject,
-              content: htmlBody,
-              targets: [targetId],
-              html: true,
-            });
-            emailSent = true;
-          }
-        } catch (mailErr: any) {
-          console.warn('[join-request] Decision email skipped:', mailErr?.message || mailErr);
-        }
+      // Bot traps answer with the same generic success so they learn nothing.
+      const openedAt = Number(body?.formOpenedAt || 0);
+      const elapsed = Date.now() - openedAt;
+      if (
+        String(body?.website || '').trim() ||
+        !Number.isFinite(openedAt) ||
+        elapsed < JOIN_REQUEST_POLICY.minFormTimeMs ||
+        elapsed > 24 * 60 * 60 * 1000
+      ) {
+        return json({ ok: true, existing: true });
       }
 
-      return json({ ok: true, inviteUrl: statusUrl, emailSent, status: nextStatus });
-    } catch (err: any) {
-      return json({ error: err?.message || 'Could not update request.' }, 500);
-    }
-  }
+      const f = cleanFields(body);
+      if (!f.valid) {
+        return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
+      }
+      if (isDisposableEmail(f.email)) {
+        return json({ error: 'Please use a permanent email address (not a temporary inbox).' }, 400);
+      }
 
-  // Branch B: Visitor submits a "Connect With Us" / Invite Request
-  if (String(body?.website || '').trim()) {
-    return json({ ok: true, alreadyReviewed: false });
-  }
+      const emailHash = hashEmail(f.email);
+      const dup = await ctx.databases.listDocuments(ctx.dbId, ctx.collectionId, [
+        Query.equal('emailHash', emailHash),
+        Query.limit(1),
+      ]);
 
-  const name = String(body?.name || '').trim().slice(0, JOIN_REQUEST_LIMITS.name);
-  const email = String(body?.email || '').trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
-  const note = String(body?.note || '').trim().slice(0, JOIN_REQUEST_LIMITS.note);
-  const socialUrl = String(body?.socialUrl || '').trim().slice(0, JOIN_REQUEST_LIMITS.socialUrl);
-  const niches = (Array.isArray(body?.niches) ? body.niches : []).map((n: any) => String(n)).slice(0, 8);
-  const hats = (Array.isArray(body?.hats) ? body.hats : []).filter((h: string) =>
-    (JOIN_REQUEST_HATS as readonly string[]).includes(h)
-  );
-  if (!name || !/^\S+@\S+\.\S+$/.test(email) || hats.length === 0) {
-    return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
-  }
+      // Same email already applied: never touch the record; just re-send the owner their link (cooldown-limited).
+      if (dup.total > 0) {
+        const existing = rowToJoinRequest(dup.documents[0]);
+        if (existing && cooldownRemaining(existing) === 0) {
+          const mail = existing.verifiedAt ? statusLinkEmail(existing, origin) : verificationEmail(existing, origin);
+          await sendApplicantEmail(ctx, existing.email, mail.subject, mail.html);
+          await saveRow(ctx, existing.id, { lastEmailAt: new Date().toISOString() });
+        }
+        return json({ ok: true, existing: true });
+      }
 
-  try {
-    const isUpdate = body?.isUpdate === true;
-    const docId = `join_${createHash('sha256').update(email).digest('hex').slice(0, 28)}`;
+      const waiting = await ctx.databases.listDocuments(ctx.dbId, ctx.collectionId, [
+        Query.equal('status', JOIN_REQUEST_STATUS.pending),
+        Query.limit(1),
+      ]);
+      if (waiting.total >= JOIN_REQUEST_POLICY.maxUnreviewed) {
+        return json({ error: 'We are not accepting new applications right now. Please check back soon.' }, 503);
+      }
 
-    // The browser writes the doc first, so it usually exists already: preserve steward-driven state
-    // (status, steward question, applicant reply, decision) instead of resetting it to "pending".
-    let existing: ReturnType<typeof parseJoinRequestDoc> = null;
-    try {
-      existing = parseJoinRequestDoc(await databases.getDocument(dbId, MANIFESTS_COL_ID, docId));
-    } catch {
-      existing = null;
-    }
-
-    const snapshot = serializeJoinRequestSnapshot({
-      name,
-      email,
-      hats,
-      niches,
-      socialUrl,
-      note,
-      requestedAt: existing?.requestedAt || new Date().toISOString(),
-      stewardQuestion: existing?.stewardQuestion,
-      applicantReply: existing?.applicantReply,
-      decisionKey: existing?.decisionKey,
-    });
-    const docData = {
-      name: `Join request: ${name}`.slice(0, 120),
-      tenantId: 'system',
-      locationId: JOIN_REQUEST_LOCATION_ID,
-      locationName: 'Join Requests',
-      status: existing?.status || JOIN_REQUEST_STATUS.pending,
-      itemCount: 0,
-      itemsSnapshot: snapshot,
-      notes: '',
-    };
-
-    try {
-      await databases.createDocument(dbId, MANIFESTS_COL_ID, docId, docData);
-    } catch (err: any) {
-      if (err?.code !== 409) throw err;
-      await databases.updateDocument(dbId, MANIFESTS_COL_ID, docId, docData);
+      const newId = `join_${randomBytes(14).toString('hex')}`;
+      const now = new Date().toISOString();
+      const row = {
+        email: f.email,
+        emailHash,
+        name: f.name,
+        hats: f.hats,
+        niches: f.niches,
+        socialUrl: f.socialUrl,
+        note: f.note,
+        status: JOIN_REQUEST_STATUS.pending,
+        stewardQuestion: '',
+        applicantReply: '',
+        decisionKey: '',
+        requestedAt: now,
+        verifiedAt: '',
+        lastEmailAt: now,
+        remindedAt: '',
+      };
+      await ctx.databases.createDocument(ctx.dbId, ctx.collectionId, newId, row);
+      const created = rowToJoinRequest({ ...row, $id: newId });
+      if (created) {
+        const mail = verificationEmail(created, origin);
+        await sendApplicantEmail(ctx, created.email, mail.subject, mail.html);
+      }
+      return json({ ok: true, id: newId, statusUrl: viewerStatusUrl(newId, origin) });
     }
 
-    if (apiKey) {
-      const reqOrigin = new URL(request.url).origin || siteConfig.siteUrl;
-      const statusUrl = buildInviteSignupUrl(docId, reqOrigin);
-      const keyClient = new Client().setEndpoint(endpoint).setProject(project).setKey(apiKey);
-      const messaging = new Messaging(keyClient);
+    // -----------------------------------------------------------------------
+    // Public actions that act on one application (id + signed token)
+    // -----------------------------------------------------------------------
+    if (['status', 'verify', 'update', 'resend', 'reply', 'accept'].includes(action)) {
+      const t = body?.t;
+      const v = body?.v;
+      const ownerOk = verifyJoinToken(id, 'verify', v);
+      const viewOk = verifyJoinToken(id, 'view', t);
+      // A valid verify token also proves access to the mailbox; otherwise a view token is required.
+      if (!viewOk && !(action === 'verify' && ownerOk)) return NOT_FOUND();
 
-      // 1. Notify Co-op Founders / Stewards Topic with 1-Click Dashboard + Direct Application Status Link
-      try {
-        await messaging.createEmail({
-          messageId: ID.unique(),
-          subject: `${isUpdate ? 'Updated' : 'New'} Co-op Join Request: ${name} (${hats.join(', ')})`,
-          content: [
-            `<p><strong>${escapeHtml(name)}</strong> (<code>${escapeHtml(email)}</code>) ${isUpdate ? 'updated their application to join' : 'requested an invitation to join'} the Collective.</p>`,
-            `<p><strong>Hats:</strong> ${escapeHtml(hats.join(', '))}</p>`,
-            niches.length ? `<p><strong>Niches:</strong> ${escapeHtml(niches.join(', '))}</p>` : '',
-            socialUrl ? `<p><strong>Shop / Social Link:</strong> ${escapeHtml(socialUrl)}</p>` : '',
-            note ? `<p><strong>Note:</strong><br/>${escapeHtml(note)}</p>` : '',
-            `<p style="margin:18px 0;"><a href="${escapeHtml(reqOrigin)}/dashboard" style="background:#10b981;color:#ffffff;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">Open Works@TheHC Command Center (1-Click Review)</a></p>`,
-            `<p style="font-size:12px;color:#666;">Applicant Status Portal: <a href="${escapeHtml(statusUrl)}">${escapeHtml(statusUrl)}</a></p>`,
-          ].join(''),
-          topics: [COOP_MESSAGING_TOPICS.founders],
-          html: true,
+      const req = await loadRequest(ctx, id);
+      if (!req) return NOT_FOUND();
+
+      if (action === 'status') return json({ ok: true, request: publicView(req, ownerOk) });
+
+      if (action === 'verify') {
+        if (!ownerOk) return NOT_FOUND();
+        if (!req.verifiedAt && req.status === JOIN_REQUEST_STATUS.pending) {
+          const verifiedAt = new Date().toISOString();
+          await saveRow(ctx, id, { verifiedAt });
+          await notifyStewards(ctx, { ...req, verifiedAt }, origin, false);
+          return json({ ok: true, justVerified: true, request: publicView({ ...req, verifiedAt }, true) });
+        }
+        return json({ ok: true, justVerified: false, request: publicView(req, true) });
+      }
+
+      if (action === 'resend') {
+        if (!allowAttempt(request)) return json({ error: 'Too many requests today.' }, 429);
+        if (req.verifiedAt) return json({ error: 'Your email is already verified.' }, 400);
+        const wait = cooldownRemaining(req);
+        if (wait > 0) return json({ ok: false, cooldownRemainingMs: wait }, 429);
+        const mail = verificationEmail(req, origin);
+        await sendApplicantEmail(ctx, req.email, mail.subject, mail.html);
+        const lastEmailAt = new Date().toISOString();
+        await saveRow(ctx, id, { lastEmailAt });
+        return json({ ok: true, cooldownRemainingMs: JOIN_REQUEST_POLICY.emailCooldownMs });
+      }
+
+      if (action === 'update') {
+        const open = req.status === JOIN_REQUEST_STATUS.pending || req.status === JOIN_REQUEST_STATUS.waitlisted;
+        if (!open) return json({ error: 'This application can no longer be edited.' }, 409);
+        if (req.verifiedAt && !ownerOk) {
+          return json({ error: 'Open the link from your verification email to edit a verified application.' }, 403);
+        }
+        const f = cleanFields(body);
+        if (!f.valid) return json({ error: 'Please enter your name, a valid email, and pick at least one hat.' }, 400);
+
+        const patch: Record<string, unknown> = {
+          name: f.name,
+          hats: f.hats,
+          niches: f.niches,
+          socialUrl: f.socialUrl,
+          note: f.note,
+        };
+        let emailChanged = false;
+        if (f.email !== req.email) {
+          if (req.verifiedAt) return json({ error: 'Email cannot be changed after verification.' }, 409);
+          if (isDisposableEmail(f.email)) return json({ error: 'Please use a permanent email address.' }, 400);
+          const emailHash = hashEmail(f.email);
+          const clash = await ctx.databases.listDocuments(ctx.dbId, ctx.collectionId, [
+            Query.equal('emailHash', emailHash),
+            Query.limit(1),
+          ]);
+          if (clash.total > 0) return json({ error: "That email can't be used for this application." }, 409);
+          patch.email = f.email;
+          patch.emailHash = emailHash;
+          emailChanged = true;
+        }
+        if (emailChanged) patch.lastEmailAt = new Date().toISOString();
+        await saveRow(ctx, id, patch);
+        const updated = rowToJoinRequest({ ...req, ...patch, $id: id }) as JoinRequest;
+        if (emailChanged) {
+          const mail = verificationEmail(updated, origin);
+          await sendApplicantEmail(ctx, updated.email, mail.subject, mail.html);
+        }
+        if (updated.verifiedAt) await notifyStewards(ctx, updated, origin, true);
+        return json({ ok: true, request: publicView(updated, ownerOk) });
+      }
+
+      // reply / accept need proof of mailbox ownership (v)
+      if (!ownerOk) return json({ error: 'Open the link from your email to continue.' }, 403);
+
+      if (action === 'reply') {
+        if (req.status !== JOIN_REQUEST_STATUS.needs_info) return json({ error: 'No question is waiting for an answer.' }, 409);
+        const reply = String(body?.reply || '').trim().slice(0, JOIN_REQUEST_LIMITS.note);
+        if (!reply) return json({ error: 'Please type your answer.' }, 400);
+        await saveRow(ctx, id, { applicantReply: reply, status: JOIN_REQUEST_STATUS.pending });
+        return json({
+          ok: true,
+          request: publicView({ ...req, applicantReply: reply, status: JOIN_REQUEST_STATUS.pending }, true),
         });
-      } catch (mailErr: any) {
-        console.warn('[join-request] Messaging topic notification skipped:', mailErr?.message || mailErr);
       }
 
-      // 2. Send Applicant Confirmation Email with their personal 1-Click Application Status Portal link
-      //    (only on a brand-new application, never when they merely edit their selections)
-      try {
-        const targetId = isUpdate ? null : await ensureEmailTargetId(keyClient, email);
-        if (targetId) {
-          await messaging.createEmail({
-            messageId: ID.unique(),
-            subject: 'We received your Huckleberry Collective application!',
-            content: [
-              `<p>Hi <strong>${escapeHtml(name)}</strong>,</p>`,
-              `<p>Thank you for connecting with <strong>The Huckleberry Collective</strong>! Your application is now in our Co-op Governance queue for steward review.</p>`,
-              `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:13px;">`,
-              `<p style="margin:0 0 6px 0;"><strong>Requested Hat(s):</strong> ${escapeHtml(hats.join(', '))}</p>`,
-              niches.length
-                ? `<p style="margin:0 0 6px 0;"><strong>Specialty Focus:</strong> ${escapeHtml(niches.join(', '))}</p>`
-                : '',
-              socialUrl
-                ? `<p style="margin:0 0 6px 0;"><strong>Shop / Social:</strong> ${escapeHtml(socialUrl)}</p>`
-                : '',
-              note ? `<p style="margin:0;"><strong>Notes:</strong> ${escapeHtml(note)}</p>` : '',
-              `</div>`,
-              `<p>You can check your live review status, answer any steward follow-up question, or update your selections anytime at your personal link below:</p>`,
-              `<p style="margin:20px 0;"><a href="${escapeHtml(statusUrl)}" style="background:#10b981;color:#ffffff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">View or Update My Application Status</a></p>`,
-              `<p style="font-size:12px;color:#666;">Or copy this link into your browser:<br/><code>${escapeHtml(statusUrl)}</code></p>`,
-              `<hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>`,
-              `<p style="font-size:11px;color:#888;">Automated confirmation from Works@TheHC (${escapeHtml(siteConfig.organization)}). No email reply is needed.</p>`,
-            ].join(''),
-            targets: [targetId],
-            html: true,
-          });
-        }
-      } catch (appMailErr: any) {
-        console.warn('[join-request] Applicant confirmation email skipped:', appMailErr?.message || appMailErr);
+      if (action === 'accept') {
+        if (req.status !== JOIN_REQUEST_STATUS.approved) return json({ error: 'This invitation is not approved.' }, 409);
+        await saveRow(ctx, id, { status: JOIN_REQUEST_STATUS.joined });
+        return json({ ok: true });
       }
     }
 
-    return json({ ok: true, id: docId, alreadyReviewed: false });
+    return json({ error: 'Unknown action.' }, 400);
   } catch (err: any) {
-    console.error('[join-request]', err?.message || err);
-    return json({ error: err?.message || 'Could not save your request. Please try again.' }, 500);
+    console.error('[join-request]', action, err?.message || err);
+    return json({ error: 'Something went wrong. Please try again.' }, 500);
   }
 };

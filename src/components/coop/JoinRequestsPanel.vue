@@ -11,6 +11,7 @@
           <span v-if="activeRequests.length > 0" class="badge badge-info badge-sm font-bold">{{ activeRequests.length }} waiting</span>
           <span v-if="approvedRequests.length > 0" class="badge badge-success badge-outline badge-sm font-bold">{{ approvedRequests.length }} invited</span>
           <span v-if="waitlistedRequests.length > 0" class="badge badge-warning badge-outline badge-sm font-bold">{{ waitlistedRequests.length }} waitlisted</span>
+          <span v-if="unverifiedCount > 0" class="text-[11px] font-semibold text-base-content/50">{{ unverifiedCount }} awaiting email verification</span>
         </h3>
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
       </div>
@@ -216,25 +217,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
-import { databases, Query } from '../../lib/appwrite';
-import { siteConfig } from '../../site-config';
-import { getDatabaseId } from '../../lib/appwriteEnv';
 import { addToast } from '../../stores/toast';
 import {
   JOIN_DECISION_TEMPLATES,
-  JOIN_REQUEST_LOCATION_ID,
   JOIN_REQUEST_STATUS,
-  buildInviteSignupUrl,
-  parseJoinRequestDoc,
-  serializeJoinRequestSnapshot,
   type JoinDecisionKey,
   type JoinRequest,
   type JoinRequestStatus,
 } from '../../lib/joinRequests';
-
-const MANIFESTS_COL_ID = 'manifests';
+import { joinApi } from '../../lib/joinRequestsClient';
 
 const allRequests = ref<JoinRequest[]>([]);
+const unverifiedCount = ref(0);
 const loading = ref(true);
 const busyId = ref('');
 const questionOpenForId = ref('');
@@ -259,13 +253,14 @@ const formatExternalUrl = (raw: string) => {
   return `https://${s}`;
 };
 
-const getInviteUrl = (req: JoinRequest) => {
-  const origin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
-  return buildInviteSignupUrl(req.id, origin);
-};
-
+/** The personal invite link is signed server-side, so the panel asks the API for it (steward-only). */
 const copyInviteLink = async (req: JoinRequest) => {
-  const url = getInviteUrl(req);
+  const res = await joinApi<{ inviteUrl: string }>('link', { id: req.id }, { steward: true });
+  if (!res.ok) {
+    addToast({ type: 'error', message: res.data.error || 'Could not get the invite link.' });
+    return;
+  }
+  const url = res.data.inviteUrl;
   try {
     await navigator.clipboard.writeText(url);
     addToast({ type: 'success', message: `Copied invite link for ${req.name}!` });
@@ -281,12 +276,11 @@ const openQuestionBox = (req: JoinRequest) => {
 
 const load = async () => {
   try {
-    const res = await databases.listDocuments(getDatabaseId(), MANIFESTS_COL_ID, [
-      Query.equal('locationId', JOIN_REQUEST_LOCATION_ID),
-      Query.orderDesc('$createdAt'),
-      Query.limit(50),
-    ]);
-    allRequests.value = res.documents.map(parseJoinRequestDoc).filter((r): r is JoinRequest => !!r);
+    const res = await joinApi<{ requests: JoinRequest[]; unverifiedCount: number }>('list', {}, { steward: true });
+    if (res.ok) {
+      allRequests.value = res.data.requests || [];
+      unverifiedCount.value = res.data.unverifiedCount || 0;
+    }
   } catch (err) {
     console.warn('[JoinRequestsPanel] Could not load join requests:', err);
   } finally {
@@ -297,24 +291,19 @@ const load = async () => {
 const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questionText = '') => {
   busyId.value = req.id;
   try {
-    let nextStatus: JoinRequestStatus = JOIN_REQUEST_STATUS.approved;
-    if (decision === 'waitlist') nextStatus = JOIN_REQUEST_STATUS.waitlisted;
-    else if (decision === 'needs_info') nextStatus = JOIN_REQUEST_STATUS.needs_info;
-    else if (decision.startsWith('decline_')) nextStatus = JOIN_REQUEST_STATUS.declined;
-
     const cleanQuestion = questionText.trim();
-    const updatedSnap = serializeJoinRequestSnapshot({
-      ...req,
-      stewardQuestion: decision === 'needs_info' ? cleanQuestion : req.stewardQuestion,
-      decisionKey: decision,
-    });
+    const res = await joinApi<{ inviteUrl: string; emailSent: boolean; status: JoinRequestStatus }>(
+      'decide',
+      { id: req.id, decision, question: cleanQuestion },
+      { steward: true }
+    );
+    if (!res.ok) {
+      addToast({ type: 'error', message: res.data.error || 'Could not update the request.' });
+      return;
+    }
 
-    await databases.updateDocument(getDatabaseId(), MANIFESTS_COL_ID, req.id, {
-      status: nextStatus,
-      itemsSnapshot: updatedSnap,
-    });
-
-    req.status = nextStatus;
+    req.status = res.data.status;
+    req.decisionKey = decision;
     if (decision === 'needs_info') {
       req.stewardQuestion = cleanQuestion;
       questionOpenForId.value = '';
@@ -322,26 +311,10 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
 
     if (decision === 'approve') {
       try {
-        await navigator.clipboard.writeText(getInviteUrl(req));
+        await navigator.clipboard.writeText(res.data.inviteUrl);
       } catch {
         // Ignore clipboard errors
       }
-    }
-
-    // Trigger server-side automated template email via Porkbun SMTP
-    fetch('/api/join-request', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'decide',
-        id: req.id,
-        decision,
-        question: cleanQuestion,
-      }),
-    }).catch(() => {});
-
-    if (decision === 'approve') {
       addToast({
         type: 'success',
         message: `Approved ${req.name}! Invite email sent & sign-up link copied.`,

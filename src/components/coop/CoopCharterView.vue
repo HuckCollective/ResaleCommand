@@ -185,17 +185,14 @@
       </div>
     </div>
 
-    <!-- CONNECT WITH US MODAL (guests) -->
-    <dialog :class="{ 'modal modal-open': showConnectModal }" class="modal">
-      <div class="modal-box max-w-lg rounded-3xl p-6 space-y-4">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <h3 class="font-black text-lg">🤝 Connect with The Huckleberry Collective</h3>
-          <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="showConnectModal = false">✕</button>
-        </div>
-        <ConnectWithUsForm v-if="showConnectModal" :hats="joinHats" @close="showConnectModal = false" />
-      </div>
-      <form method="dialog" class="modal-backdrop"><button @click="showConnectModal = false">close</button></form>
-    </dialog>
+    <!-- CONNECT WITH US DRAWER (guests) -->
+    <SlideOverDrawer
+      v-model="showConnectModal"
+      title="🤝 Connect with The Huckleberry Collective"
+      subtitle="Tell us how you'd like to be part of it — we'll email you a link to verify."
+    >
+      <ConnectWithUsForm v-if="showConnectModal" :hats="joinHats" @close="showConnectModal = false" />
+    </SlideOverDrawer>
 
 
     <!-- MODULE 1: THE 70/30 PROFIT ENGINE & LIVE CALCULATOR -->
@@ -1013,6 +1010,7 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import CoopGovernanceView from './CoopGovernanceView.vue';
 import ConnectWithUsForm from './ConnectWithUsForm.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
 import { loadCoopGovernanceState, DEFAULT_COOP_POLICY_CONFIG } from '../../lib/coopGovernance';
 

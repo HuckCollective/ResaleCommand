@@ -1,17 +1,13 @@
 <template>
   <div class="space-y-4">
-    <!-- Done state -->
+    <!-- Done state (only reached for "already applied" / bot-trap generic answers; new applications redirect to the status page) -->
     <div v-if="step === 'done'" class="space-y-3 text-center py-4">
-      <div class="text-4xl">🎉</div>
-      <h4 class="font-black text-base">Request received!</h4>
+      <div class="text-4xl">📧</div>
+      <h4 class="font-black text-base">Check your email</h4>
       <p class="text-sm text-base-content/70 break-words">
-        Your request is in our Co-op Governance queue. When a steward approves, waitlists, or posts a follow-up question, we'll send an automated update and you can check your status anytime at your personal link below.
+        If this address is new to us, we just sent a verification link to finish your application. If you've already applied,
+        we re-sent your personal status link. Give it a minute and check spam / Promotions too.
       </p>
-      <div v-if="statusUrl" class="flex flex-wrap items-center justify-center gap-2 pt-1">
-        <a :href="statusUrl" class="btn btn-xs btn-outline rounded-xl font-bold">
-          Open My Application Status Page
-        </a>
-      </div>
       <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" @click="emit('close')">Done</button>
     </div>
 
@@ -57,7 +53,16 @@
         </div>
         <div class="flex flex-col gap-1 w-full">
           <label class="text-xs font-bold whitespace-normal">Your email</label>
-          <input v-model="email" type="email" autocomplete="email" class="input input-bordered input-sm rounded-xl w-full" placeholder="you@example.com" />
+          <input
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            :readonly="emailLocked"
+            class="input input-bordered input-sm rounded-xl w-full"
+            :class="{ 'bg-base-200/70 cursor-not-allowed': emailLocked }"
+            placeholder="you@example.com"
+          />
+          <span v-if="emailLocked" class="text-[10px] text-base-content/60">Your email is verified and can't be changed.</span>
         </div>
       </div>
 
@@ -74,7 +79,7 @@
       <!-- Hidden honeypot -->
       <input v-model="website" type="text" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
       <p class="text-[11px] text-base-content/60">
-        Zero email tag: our stewards review applications right inside Works@TheHC and send a 1-click invite link or status update.
+        Zero email tag: after you send this we'll email you a link to verify your address; stewards review verified applications right inside {{ siteConfig.title }}.
       </p>
       <p v-if="errorMsg" class="text-xs text-error break-words">{{ errorMsg }}</p>
       <div class="flex justify-end gap-2 pt-3 border-t border-base-200">
@@ -91,21 +96,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { databases } from '../../lib/appwrite';
+import { ref, computed, watch, onMounted } from 'vue';
 import { siteConfig } from '../../site-config';
-import { getDatabaseId } from '../../lib/appwriteEnv';
-import {
-  JOIN_NICHE_CHIPS,
-  JOIN_REQUEST_HATS,
-  JOIN_REQUEST_LIMITS,
-  JOIN_REQUEST_LOCATION_ID,
-  JOIN_REQUEST_STATUS,
-  buildInviteSignupUrl,
-  serializeJoinRequestSnapshot,
-  type JoinRequest,
-  type JoinRequestHat,
-} from '../../lib/joinRequests';
+import { JOIN_NICHE_CHIPS, JOIN_REQUEST_HATS, type JoinRequest, type JoinRequestHat } from '../../lib/joinRequests';
+import { joinApi, type JoinStatusView } from '../../lib/joinRequestsClient';
 
 interface HatOption {
   id: string;
@@ -115,13 +109,16 @@ interface HatOption {
 
 const props = defineProps<{
   hats: readonly HatOption[];
+  /** When set the form edits this application (needs `tokens`). */
   initialRequest?: JoinRequest | null;
+  /** Signed link tokens from the status URL (`t` = view, `v` = verify/owner). */
+  tokens?: { t?: string; v?: string };
   hideCloseButton?: boolean;
   cancelLabel?: string;
 }>();
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'saved', req: JoinRequest): void;
+  (e: 'saved', view: JoinStatusView): void;
 }>();
 
 const hatOptions = computed(() => props.hats.filter((h) => (JOIN_REQUEST_HATS as readonly string[]).includes(h.id)));
@@ -130,15 +127,21 @@ const nicheChips = JOIN_NICHE_CHIPS;
 const step = ref<'form' | 'done'>('form');
 const busy = ref(false);
 const errorMsg = ref('');
-const statusUrl = ref('');
+const formOpenedAt = ref(Date.now());
 
-const selectedHats = ref<string[]>(props.initialRequest?.hats ? [...props.initialRequest.hats] : []);
-const selectedNiches = ref<string[]>(props.initialRequest?.niches ? [...props.initialRequest.niches] : []);
-const name = ref(props.initialRequest?.name || '');
-const email = ref(props.initialRequest?.email || '');
-const socialUrl = ref(props.initialRequest?.socialUrl || '');
-const note = ref(props.initialRequest?.note || '');
+const selectedHats = ref<string[]>([]);
+const selectedNiches = ref<string[]>([]);
+const name = ref('');
+const email = ref('');
+const socialUrl = ref('');
+const note = ref('');
 const website = ref('');
+
+const emailLocked = computed(() => !!props.initialRequest?.verifiedAt && !!props.tokens?.v);
+
+onMounted(() => {
+  formOpenedAt.value = Date.now();
+});
 
 watch(
   () => props.initialRequest,
@@ -166,110 +169,53 @@ const toggleNiche = (chip: string) => {
     : [...selectedNiches.value, chip];
 };
 
-async function buildJoinDocId(cleanEmail: string): Promise<string> {
-  const bytes = new TextEncoder().encode(cleanEmail);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const hex = Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `join_${hex.slice(0, 28)}`;
-}
-
 const submitRequest = async () => {
   errorMsg.value = '';
   if (selectedHats.value.length === 0) return (errorMsg.value = 'Pick at least one hat.');
   if (!name.value.trim()) return (errorMsg.value = 'Please enter your name.');
   if (!/^\S+@\S+\.\S+$/.test(email.value.trim())) return (errorMsg.value = 'Please enter a valid email.');
-  if (website.value.trim()) {
-    step.value = 'done';
-    return;
-  }
 
   busy.value = true;
   try {
-    const cleanName = name.value.trim().slice(0, JOIN_REQUEST_LIMITS.name);
-    const cleanEmail = email.value.trim().toLowerCase().slice(0, JOIN_REQUEST_LIMITS.email);
-    const cleanSocial = socialUrl.value.trim().slice(0, JOIN_REQUEST_LIMITS.socialUrl);
-    const cleanNote = note.value.trim().slice(0, JOIN_REQUEST_LIMITS.note);
-    const hats = selectedHats.value as JoinRequestHat[];
-    const niches = [...selectedNiches.value];
-
-    const requestedAt = props.initialRequest?.requestedAt || new Date().toISOString();
-    const nextStatus = props.initialRequest?.status || JOIN_REQUEST_STATUS.pending;
-    const docId = props.initialRequest?.id || (await buildJoinDocId(cleanEmail));
-    const docData = {
-      name: `Join request: ${cleanName}`.slice(0, 120),
-      tenantId: 'system',
-      locationId: JOIN_REQUEST_LOCATION_ID,
-      locationName: 'Join Requests',
-      status: nextStatus,
-      itemCount: 0,
-      itemsSnapshot: serializeJoinRequestSnapshot({
-        name: cleanName,
-        email: cleanEmail,
-        hats,
-        niches,
-        socialUrl: cleanSocial,
-        note: cleanNote,
-        requestedAt,
-        stewardQuestion: props.initialRequest?.stewardQuestion,
-        applicantReply: props.initialRequest?.applicantReply,
-        decisionKey: props.initialRequest?.decisionKey,
-      }),
-      notes: '',
+    const fields = {
+      name: name.value.trim(),
+      email: email.value.trim().toLowerCase(),
+      socialUrl: socialUrl.value.trim(),
+      note: note.value.trim(),
+      niches: [...selectedNiches.value],
+      hats: selectedHats.value as JoinRequestHat[],
     };
 
-    const dbId = getDatabaseId();
-    try {
-      await databases.createDocument(dbId, 'manifests', docId, docData);
-    } catch (err: any) {
-      if (err?.code === 409) {
-        await databases.updateDocument(dbId, 'manifests', docId, docData);
-      } else {
-        throw err;
+    if (props.initialRequest) {
+      const res = await joinApi<{ request: JoinStatusView }>('update', {
+        id: props.initialRequest.id,
+        t: props.tokens?.t,
+        v: props.tokens?.v,
+        ...fields,
+      });
+      if (!res.ok) {
+        errorMsg.value = res.data.error || 'Could not save your changes. Please try again.';
+        return;
       }
+      emit('saved', res.data.request);
+      return;
     }
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
-    statusUrl.value = buildInviteSignupUrl(docId, origin);
-
-    // Trigger server-side Appwrite Messaging (`coop-founders` Topic + Applicant Confirmation Email via Google Workspace SMTP)
-    fetch('/api/join-request', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: cleanName,
-        email: cleanEmail,
-        socialUrl: cleanSocial,
-        niches,
-        note: cleanNote,
-        hats,
-        website: website.value,
-        isUpdate: !!props.initialRequest,
-      }),
-    }).catch(() => {});
-
-    const savedReq: JoinRequest = {
-      id: docId,
-      name: cleanName,
-      email: cleanEmail,
-      hats,
-      niches,
-      socialUrl: cleanSocial,
-      note: cleanNote,
-      requestedAt,
-      status: nextStatus,
-      stewardQuestion: props.initialRequest?.stewardQuestion,
-      applicantReply: props.initialRequest?.applicantReply,
-      decisionKey: props.initialRequest?.decisionKey,
-    };
-    emit('saved', savedReq);
-    if (!props.initialRequest) {
-      step.value = 'done';
+    const res = await joinApi<{ statusUrl?: string; existing?: boolean }>('submit', {
+      ...fields,
+      website: website.value,
+      formOpenedAt: formOpenedAt.value,
+    });
+    if (!res.ok) {
+      errorMsg.value = res.data.error || 'Could not send your request. Please try again.';
+      return;
     }
-  } catch (err: any) {
-    errorMsg.value = err?.message || 'Could not save your request. Please try again.';
+    if (res.data.statusUrl) {
+      // Straight to the personal status page (it shows the "verify your email" card).
+      window.location.href = res.data.statusUrl;
+      return;
+    }
+    step.value = 'done';
   } finally {
     busy.value = false;
   }

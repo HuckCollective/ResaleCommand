@@ -6,258 +6,234 @@
           <div class="badge badge-primary badge-outline font-bold text-xs">
             {{ hasValidInvite ? '✅ Invitation Verified' : '🤝 Invite-Only Cooperative' }}
           </div>
-          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">
-            {{
-              hasValidInvite
-                ? 'Create your Co-op Account'
-                : needsInfoInvite
-                  ? 'Quick Question on Your Application'
-                  : existingInvite
-                    ? 'Your Application Status'
-                    : 'Request an Invitation'
-            }}
-          </h2>
-          <p v-if="!hasValidInvite && !needsInfoInvite && !checkingInvite" class="text-xs sm:text-sm text-base-content/70">
-            {{
-              existingInvite
-                ? 'Your saved selections are shown below — you can review or update your details anytime while waiting for steward review.'
-                : 'Accounts at The Huckleberry Collective are created by invitation only. Tell us which hat fits you below and a steward will review your request right inside the app.'
-            }}
-          </p>
+          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">{{ heading }}</h2>
+          <p v-if="subheading && !checking" class="text-xs sm:text-sm text-base-content/70">{{ subheading }}</p>
         </div>
 
-        <!-- Checking invite spinner -->
-        <div v-if="checkingInvite" class="flex flex-col items-center justify-center py-8 gap-2">
+        <!-- Checking spinner -->
+        <div v-if="checking" class="flex flex-col items-center justify-center py-8 gap-2">
           <span class="loading loading-spinner loading-md text-primary"></span>
-          <span class="text-xs text-base-content/70">Checking your invitation status...</span>
+          <span class="text-xs text-base-content/70">Checking your application...</span>
         </div>
 
-        <!-- Onboarding progress (only when viewing an existing application) -->
-        <ul v-if="!checkingInvite && showStepper" class="steps steps-horizontal w-full text-[11px] font-semibold">
-          <li
-            v-for="(label, idx) in ONBOARDING_STEPS"
-            :key="label"
-            class="step"
-            :class="idx < stageIndex ? 'step-success' : idx === stageIndex ? 'step-primary' : ''"
+        <template v-else>
+          <!-- Link problem -->
+          <div v-if="loadError" class="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-xs sm:text-sm" role="alert">
+            {{ loadError }}
+          </div>
+
+          <!-- VERIFY YOUR EMAIL (shown every visit until verified) -->
+          <div
+            v-if="view && !view.verified"
+            class="rounded-2xl border border-warning/50 bg-warning/10 p-4 space-y-3"
+            role="status"
           >
-            {{ label }}
-          </li>
-        </ul>
-
-        <!-- Status banner (waitlist / pending / declined / joined) -->
-        <div
-          v-if="!checkingInvite && !needsInfoInvite && inviteStatusMsg"
-          class="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-xs sm:text-sm text-base-content space-y-1"
-          role="status"
-        >
-          <div v-if="statusBadge" class="badge badge-primary badge-sm font-bold">{{ statusBadge }}</div>
-          <p>{{ inviteStatusMsg }}</p>
-        </div>
-
-        <!-- ON-PAGE Q&A PORTAL (When steward clicked 'Ask 1 Question') -->
-        <div v-else-if="!checkingInvite && needsInfoInvite" class="rounded-2xl border border-info/40 bg-info/5 p-4 space-y-3">
-          <div class="text-xs font-bold text-info uppercase tracking-wider">
-            Message from a Co-op Steward for {{ needsInfoInvite.name }}
-          </div>
-          <p class="text-sm font-bold text-base-content">
-            "{{ needsInfoInvite.stewardQuestion || 'Could you share a bit more detail about what you curate or want to help with?' }}"
-          </p>
-          <textarea
-            v-model="applicantReplyDraft"
-            maxlength="500"
-            class="textarea textarea-bordered rounded-xl text-xs w-full h-24"
-            placeholder="Type your answer here (no email needed)..."
-          ></textarea>
-          <div class="flex justify-end">
-            <button
-              type="button"
-              class="btn btn-sm btn-primary rounded-xl font-black"
-              :disabled="replyBusy || !applicantReplyDraft.trim()"
-              @click="submitApplicantReply"
-            >
-              <span v-if="replyBusy" class="loading loading-spinner loading-xs"></span>
-              Send Answer to Co-op Stewards
-            </button>
-          </div>
-        </div>
-
-        <!-- Read-only Application Summary + progressive-disclosure Edit -->
-        <div v-if="!checkingInvite && canEditApplication && existingInvite" class="space-y-3">
-          <div v-if="!editing" class="rounded-2xl border border-base-300 bg-base-200/50 p-4 space-y-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="text-sm font-black truncate">{{ existingInvite.name }}</div>
-                <div class="text-xs text-base-content/70 truncate">{{ existingInvite.email }}</div>
+            <div class="flex items-start gap-3">
+              <span class="text-2xl leading-none">📧</span>
+              <div class="space-y-1 min-w-0">
+                <div class="text-sm font-black">Check your inbox to finish</div>
+                <p class="text-xs text-base-content/80">
+                  We sent a verification link to <span class="font-mono font-bold">{{ view.emailMasked }}</span>. Stewards won't see
+                  your application until you click it.
+                </p>
+                <p class="text-[11px] text-base-content/60">Check spam / Promotions — mail comes from noreply@thehc.llc.</p>
               </div>
-              <button type="button" class="btn btn-xs btn-outline rounded-xl font-bold shrink-0" @click="editing = true">
-                ✏️ Edit My Selections
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-xs btn-outline rounded-xl font-bold"
+                :disabled="resendBusy || cooldownMs > 0"
+                @click="resend"
+              >
+                <span v-if="resendBusy" class="loading loading-spinner loading-xs"></span>
+                {{ cooldownMs > 0 ? `Resend available in ${cooldownLabel}` : 'Resend email' }}
+              </button>
+              <button type="button" class="btn btn-xs btn-ghost rounded-xl" @click="editOpen = true">Wrong email?</button>
+            </div>
+            <p v-if="resendMsg" class="text-[11px] text-base-content/70">{{ resendMsg }}</p>
+          </div>
+
+          <!-- Onboarding progress -->
+          <ul v-if="showStepper" class="steps steps-horizontal w-full text-[11px] font-semibold">
+            <li
+              v-for="(label, idx) in ONBOARDING_STEPS"
+              :key="label"
+              class="step"
+              :class="idx < stageIndex ? 'step-success' : idx === stageIndex ? 'step-primary' : ''"
+            >
+              {{ label }}
+            </li>
+          </ul>
+
+          <!-- Status banner -->
+          <div
+            v-if="statusMessage"
+            class="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-xs sm:text-sm text-base-content space-y-1"
+            role="status"
+          >
+            <div v-if="statusBadge" class="badge badge-primary badge-sm font-bold">{{ statusBadge }}</div>
+            <p>{{ statusMessage }}</p>
+          </div>
+
+          <!-- ON-PAGE Q&A PORTAL (steward asked 1 question; owner only) -->
+          <div
+            v-if="view && view.status === JOIN_REQUEST_STATUS.needs_info && view.isOwner"
+            class="rounded-2xl border border-info/40 bg-info/5 p-4 space-y-3"
+          >
+            <div class="text-xs font-bold text-info uppercase tracking-wider">Message from a Co-op Steward for {{ view.name }}</div>
+            <p class="text-sm font-bold text-base-content">
+              "{{ view.stewardQuestion || 'Could you share a bit more detail about what you curate or want to help with?' }}"
+            </p>
+            <textarea
+              v-model="applicantReplyDraft"
+              maxlength="500"
+              class="textarea textarea-bordered rounded-xl text-xs w-full h-24"
+              placeholder="Type your answer here (no email needed)..."
+            ></textarea>
+            <div class="flex justify-end">
+              <button
+                type="button"
+                class="btn btn-sm btn-primary rounded-xl font-black"
+                :disabled="replyBusy || !applicantReplyDraft.trim()"
+                @click="submitApplicantReply"
+              >
+                <span v-if="replyBusy" class="loading loading-spinner loading-xs"></span>
+                Send Answer to Co-op Stewards
               </button>
             </div>
-            <div class="space-y-1">
-              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Hats</div>
-              <div class="flex flex-wrap gap-1.5">
-                <span v-for="hat in existingHatOptions" :key="hat.id" class="badge badge-primary badge-outline badge-sm gap-1 font-semibold">
-                  <span>{{ hat.icon }}</span>{{ hat.title }}
+          </div>
+
+          <!-- Read-only Application Summary + drawer edit -->
+          <div v-if="view && showSummary" class="space-y-3">
+            <div class="rounded-2xl border border-base-300 bg-base-200/50 p-4 space-y-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="text-sm font-black truncate">{{ view.name }}</div>
+                  <div class="text-xs text-base-content/70 truncate">{{ view.email || view.emailMasked }}</div>
+                </div>
+                <button
+                  v-if="view.canEdit"
+                  type="button"
+                  class="btn btn-xs btn-outline rounded-xl font-bold shrink-0"
+                  @click="editOpen = true"
+                >
+                  ✏️ Edit My Selections
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Hats</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="hat in viewHatOptions" :key="hat.id" class="badge badge-primary badge-outline badge-sm gap-1 font-semibold">
+                    <span>{{ hat.icon }}</span>{{ hat.title }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="view.niches.length" class="space-y-1">
+                <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Focus / Specialty</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="n in view.niches" :key="n" class="badge badge-secondary badge-outline badge-sm font-semibold">{{ n }}</span>
+                </div>
+              </div>
+              <div v-if="view.socialUrl" class="space-y-0.5">
+                <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Shop / Social</div>
+                <div class="text-xs break-all">{{ view.socialUrl }}</div>
+              </div>
+              <div v-if="view.note" class="space-y-0.5">
+                <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Notes</div>
+                <div class="text-xs whitespace-pre-line break-words">{{ view.note }}</div>
+              </div>
+              <p v-if="editHint" class="text-[11px] text-base-content/60">{{ editHint }}</p>
+            </div>
+          </div>
+
+          <!-- Sign-in / charter links -->
+          <div v-if="!hasValidInvite" class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs">
+            <a :href="loginLink" class="link link-primary font-bold">Already a member? Sign in →</a>
+            <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
+          </div>
+
+          <!-- WITHOUT AN APPLICATION: Request-an-Invite form -->
+          <div v-if="!view && !hasValidInvite" class="space-y-4">
+            <ConnectWithUsForm :hats="hatOptions" cancel-label="Back to Sign In" @close="goToLogin" />
+          </div>
+
+          <!-- WITH VALID INVITE: Create Account Form -->
+          <form v-if="hasValidInvite" @submit.prevent="submit" class="space-y-4">
+            <div v-if="approvedInvite" class="rounded-2xl bg-success/10 border border-success/30 p-3 text-xs space-y-1">
+              <div class="font-bold text-success">Approved Invitation for {{ approvedInvite.name }}</div>
+              <div class="flex flex-wrap gap-1 pt-0.5">
+                <span v-for="hat in approvedInvite.hats" :key="hat" class="badge badge-xs badge-success badge-outline font-bold">
+                  {{ hat }}
                 </span>
               </div>
             </div>
-            <div v-if="existingInvite.niches.length" class="space-y-1">
-              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Focus / Specialty</div>
-              <div class="flex flex-wrap gap-1.5">
-                <span v-for="n in existingInvite.niches" :key="n" class="badge badge-secondary badge-outline badge-sm font-semibold">{{ n }}</span>
-              </div>
+
+            <div class="form-control w-full">
+              <label class="label py-1"><span class="label-text font-bold text-xs">Full Name</span></label>
+              <input type="text" v-model="name" required placeholder="Jane Doe" class="input input-bordered w-full rounded-xl" />
             </div>
-            <div v-if="existingInvite.socialUrl" class="space-y-0.5">
-              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Shop / Social</div>
-              <div class="text-xs break-all">{{ existingInvite.socialUrl }}</div>
+
+            <div class="form-control w-full">
+              <label class="label py-1"><span class="label-text font-bold text-xs">Invited Email Address</span></label>
+              <input
+                type="email"
+                v-model="email"
+                required
+                :readonly="!!approvedInvite"
+                placeholder="you@example.com"
+                class="input input-bordered w-full rounded-xl"
+                :class="{ 'bg-base-200/70 cursor-not-allowed': !!approvedInvite }"
+              />
             </div>
-            <div v-if="existingInvite.note" class="space-y-0.5">
-              <div class="text-[11px] font-extrabold uppercase tracking-wider opacity-60">Notes</div>
-              <div class="text-xs whitespace-pre-line break-words">{{ existingInvite.note }}</div>
+
+            <div class="form-control w-full">
+              <label class="label py-1"><span class="label-text font-bold text-xs">Choose a Password (min 8 characters)</span></label>
+              <input type="password" v-model="password" required minlength="8" placeholder="••••••••" class="input input-bordered w-full rounded-xl" />
             </div>
-          </div>
 
-          <ConnectWithUsForm
-            v-else
-            :hats="hatOptions"
-            :initial-request="existingInvite"
-            cancel-label="Cancel Edit"
-            @close="editing = false"
-            @saved="onApplicationSaved"
-          />
-
-          <div class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs">
-            <a :href="loginLink" class="link link-primary font-bold">Already a member? Sign in →</a>
-            <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
-          </div>
-        </div>
-
-        <!-- Closed application (declined / already joined): just sign-in links -->
-        <div
-          v-else-if="!checkingInvite && existingInvite && !hasValidInvite && !needsInfoInvite"
-          class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs"
-        >
-          <a :href="loginLink" class="link link-primary font-bold">Sign in →</a>
-          <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
-        </div>
-
-        <!-- WITHOUT INVITE: Embedded Request-an-Invite (ConnectWithUsForm) -->
-        <div v-else-if="!checkingInvite && !hasValidInvite && !needsInfoInvite" class="space-y-4">
-          <ConnectWithUsForm :hats="hatOptions" cancel-label="Back to Sign In" @close="goToLogin" />
-
-          <div class="divider text-xs text-base-content/50 my-1">Already have an invite link or code?</div>
-
-          <div class="flex flex-col sm:flex-row gap-2">
-            <input
-              v-model="manualInviteInput"
-              type="text"
-              placeholder="Paste invite link or code (join_...)"
-              class="input input-bordered input-sm rounded-xl flex-1 text-xs"
-            />
-            <button type="button" class="btn btn-sm btn-outline rounded-xl font-bold" @click="applyManualInvite">
-              Check / Unlock
-            </button>
-          </div>
-
-          <div class="text-center pt-1 flex flex-wrap items-center justify-center gap-4 text-xs">
-            <a :href="loginLink" class="link link-primary font-bold">Already a member? Sign in →</a>
-            <a href="/coop" class="link link-hover text-base-content/70">Read the Collective Charter</a>
-          </div>
-        </div>
-
-        <!-- WITH VALID INVITE: Create Account Form -->
-        <form v-if="!checkingInvite && hasValidInvite" @submit.prevent="submit" class="space-y-4">
-          <div v-if="approvedInvite" class="rounded-2xl bg-success/10 border border-success/30 p-3 text-xs space-y-1">
-            <div class="font-bold text-success">
-              Approved Invitation for {{ approvedInvite.name }}
+            <div class="flex items-center justify-between text-xs mt-2">
+              <a :href="loginLink" class="link link-primary link-hover font-bold">Already have an account? Sign in</a>
             </div>
-            <div class="flex flex-wrap gap-1 pt-0.5">
-              <span v-for="hat in approvedInvite.hats" :key="hat" class="badge badge-xs badge-success badge-outline font-bold">
-                {{ hat }}
-              </span>
+
+            <div class="form-control mt-4">
+              <button type="submit" class="btn btn-primary w-full rounded-xl font-black" :disabled="loading">
+                <span v-if="loading" class="loading loading-spinner loading-sm"></span>
+                <span v-else>Accept Invite &amp; Create Account</span>
+              </button>
             </div>
-          </div>
 
-          <div class="form-control w-full">
-            <label class="label py-1">
-              <span class="label-text font-bold text-xs">Full Name</span>
-            </label>
-            <input
-              type="text"
-              v-model="name"
-              required
-              placeholder="Jane Doe"
-              class="input input-bordered w-full rounded-xl"
-            />
-          </div>
-
-          <div class="form-control w-full">
-            <label class="label py-1">
-              <span class="label-text font-bold text-xs">Invited Email Address</span>
-            </label>
-            <input
-              type="email"
-              v-model="email"
-              required
-              :readonly="!!approvedInvite"
-              placeholder="you@example.com"
-              class="input input-bordered w-full rounded-xl"
-              :class="{ 'bg-base-200/70 cursor-not-allowed': !!approvedInvite }"
-            />
-          </div>
-
-          <div class="form-control w-full">
-            <label class="label py-1">
-              <span class="label-text font-bold text-xs">Choose a Password (min 8 characters)</span>
-            </label>
-            <input
-              type="password"
-              v-model="password"
-              required
-              minlength="8"
-              placeholder="••••••••"
-              class="input input-bordered w-full rounded-xl"
-            />
-          </div>
-
-          <div class="flex items-center justify-between text-xs mt-2">
-            <a :href="loginLink" class="link link-primary link-hover font-bold">Already have an account? Sign in</a>
-          </div>
-
-          <div class="form-control mt-4">
-            <button
-              type="submit"
-              class="btn btn-primary w-full rounded-xl font-black"
-              :disabled="loading"
-            >
-              <span v-if="loading" class="loading loading-spinner loading-sm"></span>
-              <span v-else>Accept Invite &amp; Create Account</span>
-            </button>
-          </div>
-
-          <div v-if="error" class="alert alert-error shadow-lg mt-3 text-xs p-3 rounded-xl">
-            <span>{{ error }}</span>
-          </div>
-        </form>
+            <div v-if="error" class="alert alert-error shadow-lg mt-3 text-xs p-3 rounded-xl">
+              <span>{{ error }}</span>
+            </div>
+          </form>
+        </template>
       </div>
     </div>
+
+    <!-- Edit drawer -->
+    <SlideOverDrawer v-model="editOpen" title="Edit My Application" subtitle="Update your hats, focus and links.">
+      <ConnectWithUsForm
+        v-if="editOpen && view"
+        :hats="hatOptions"
+        :initial-request="viewRequest"
+        :tokens="{ t: tokenT, v: tokenV }"
+        cancel-label="Cancel"
+        @close="editOpen = false"
+        @saved="onApplicationSaved"
+      />
+    </SlideOverDrawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useAuth } from '../../composables/useAuth';
-import { databases } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
-import { getDatabaseId } from '../../lib/appwriteEnv';
 import ConnectWithUsForm from '../coop/ConnectWithUsForm.vue';
-import {
-  JOIN_REQUEST_HAT_OPTIONS,
-  JOIN_REQUEST_STATUS,
-  parseJoinRequestDoc,
-  serializeJoinRequestSnapshot,
-  type JoinRequest,
-} from '../../lib/joinRequests';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import { JOIN_REQUEST_HAT_OPTIONS, JOIN_REQUEST_STATUS } from '../../lib/joinRequests';
+import { joinApi, statusViewToRequest, type JoinStatusView } from '../../lib/joinRequestsClient';
 
 const auth = useAuth();
 const hatOptions = JOIN_REQUEST_HAT_OPTIONS;
@@ -268,47 +244,88 @@ const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
-const checkingInvite = ref(true);
+const checking = ref(true);
 const hasTeamRedirectInvite = ref(false);
-const approvedInvite = ref<JoinRequest | null>(null);
-const needsInfoInvite = ref<JoinRequest | null>(null);
-const existingInvite = ref<JoinRequest | null>(null);
+const loadError = ref('');
+
+const inviteId = ref('');
+const tokenT = ref('');
+const tokenV = ref('');
+const view = ref<JoinStatusView | null>(null);
+
+const editOpen = ref(false);
 const applicantReplyDraft = ref('');
 const replyBusy = ref(false);
-const inviteStatusMsg = ref('');
-const manualInviteInput = ref('');
+const replyMsg = ref('');
 
+const resendBusy = ref(false);
+const resendMsg = ref('');
+const cooldownMs = ref(0);
+let cooldownTimer: ReturnType<typeof setInterval> | null = null;
+
+const ONBOARDING_STEPS = ['Verify Email', 'Steward Review', 'Invite Approved', 'Account Active'] as const;
+
+const approvedInvite = computed(() =>
+  view.value && view.value.status === JOIN_REQUEST_STATUS.approved && view.value.isOwner ? view.value : null
+);
 const hasValidInvite = computed(() => hasTeamRedirectInvite.value || !!approvedInvite.value);
 
-const ONBOARDING_STEPS = ['Request Sent', 'Steward Review', 'Invite Approved', 'Account Active'] as const;
-const editing = ref(false);
+const viewRequest = computed(() => (view.value ? statusViewToRequest(view.value) : null));
+const viewHatOptions = computed(() => hatOptions.filter((h) => (view.value?.hats as readonly string[] | undefined)?.includes(h.id)));
+
+const heading = computed(() => {
+  if (hasValidInvite.value) return 'Create your Co-op Account';
+  if (view.value?.status === JOIN_REQUEST_STATUS.needs_info && view.value.isOwner) return 'Quick Question on Your Application';
+  if (view.value) return 'Your Application Status';
+  return 'Request an Invitation';
+});
+
+const subheading = computed(() => {
+  if (hasValidInvite.value) return '';
+  if (view.value) {
+    return view.value.canEdit
+      ? 'Your saved selections are shown below — you can review or update them anytime while waiting for steward review.'
+      : '';
+  }
+  return 'Accounts at The Huckleberry Collective are created by invitation only. Tell us which hat fits you below and we will email you a link to verify your address.';
+});
 
 const stageIndex = computed(() => {
-  const status = existingInvite.value?.status;
-  if (status === JOIN_REQUEST_STATUS.joined) return 3;
-  if (status === JOIN_REQUEST_STATUS.approved) return 2;
+  const v = view.value;
+  if (!v) return 0;
+  if (!v.verified) return 0;
+  if (v.status === JOIN_REQUEST_STATUS.joined) return 3;
+  if (v.status === JOIN_REQUEST_STATUS.approved) return 2;
   return 1;
 });
 
-const showStepper = computed(
-  () => !!existingInvite.value && existingInvite.value.status !== JOIN_REQUEST_STATUS.declined
-);
+const showStepper = computed(() => !!view.value && view.value.status !== JOIN_REQUEST_STATUS.declined);
 
-const canEditApplication = computed(() => {
-  const status = existingInvite.value?.status;
-  return (
-    !!existingInvite.value &&
-    !hasValidInvite.value &&
-    (status === JOIN_REQUEST_STATUS.pending || status === JOIN_REQUEST_STATUS.waitlisted)
-  );
+const showSummary = computed(() => {
+  const v = view.value;
+  if (!v) return false;
+  return v.status === JOIN_REQUEST_STATUS.pending || v.status === JOIN_REQUEST_STATUS.waitlisted || v.status === JOIN_REQUEST_STATUS.needs_info;
+});
+
+const editHint = computed(() => {
+  const v = view.value;
+  if (!v || v.canEdit) return '';
+  if (v.verified && !v.isOwner && (v.status === JOIN_REQUEST_STATUS.pending || v.status === JOIN_REQUEST_STATUS.waitlisted)) {
+    return 'To edit, open the link from your verification email.';
+  }
+  return '';
 });
 
 const statusBadge = computed(() => {
-  switch (existingInvite.value?.status) {
+  const v = view.value;
+  if (!v || !v.verified) return '';
+  switch (v.status) {
     case JOIN_REQUEST_STATUS.pending:
       return '⏳ Waiting for Steward Review';
     case JOIN_REQUEST_STATUS.waitlisted:
       return '📋 Priority Waitlist';
+    case JOIN_REQUEST_STATUS.approved:
+      return '✅ Approved';
     case JOIN_REQUEST_STATUS.joined:
       return '✅ Account Active';
     case JOIN_REQUEST_STATUS.declined:
@@ -318,120 +335,167 @@ const statusBadge = computed(() => {
   }
 });
 
-const existingHatOptions = computed(() =>
-  hatOptions.filter((h) => (existingInvite.value?.hats as readonly string[] | undefined)?.includes(h.id))
-);
+const statusMessage = computed(() => {
+  const v = view.value;
+  if (!v) return '';
+  if (replyMsg.value) return replyMsg.value;
+  if (!v.verified) return '';
+  switch (v.status) {
+    case JOIN_REQUEST_STATUS.pending:
+      return `Hi ${v.name} — your request is in our Co-op Governance queue and waiting for steward review. We'll send an automated update as soon as a steward reviews it!`;
+    case JOIN_REQUEST_STATUS.waitlisted:
+      return `Hi ${v.name} — your application is on our Priority Waitlist while booth shelf space is full. We'll automatically email your invite link as soon as a spot opens!`;
+    case JOIN_REQUEST_STATUS.approved:
+      return v.isOwner ? '' : 'Your invitation is approved! Open the link in your approval email to create your account.';
+    case JOIN_REQUEST_STATUS.needs_info:
+      return v.isOwner ? '' : 'A steward left you a question. Open the link in your email to answer it.';
+    case JOIN_REQUEST_STATUS.joined:
+      return 'This invitation has already been used to create an account. Please sign in!';
+    default:
+      return 'Thank you for your interest in The Huckleberry Collective. Our current roster and category mix are full at this time.';
+  }
+});
 
-const onApplicationSaved = (req: JoinRequest) => {
-  existingInvite.value = req;
-  editing.value = false;
-  addToast('Application updated — stewards will see your latest selections.', 'success');
-};
+const cooldownLabel = computed(() => {
+  const total = Math.ceil(cooldownMs.value / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+});
 
 const loginLink = computed(() => {
-  if (typeof window !== 'undefined') {
-    return '/login' + window.location.search;
-  }
+  if (typeof window !== 'undefined') return '/login' + window.location.search;
   return '/login';
 });
 
 const goToLogin = () => {
-  if (typeof window !== 'undefined') {
-    window.location.href = '/login';
-  }
+  if (typeof window !== 'undefined') window.location.href = '/login';
 };
 
-const verifyInviteCode = async (rawCode: string) => {
-  const clean = rawCode.trim();
-  if (!clean) return;
-  checkingInvite.value = true;
-  inviteStatusMsg.value = '';
-  approvedInvite.value = null;
-  needsInfoInvite.value = null;
-  existingInvite.value = null;
+const startCooldown = (ms: number) => {
+  cooldownMs.value = Math.max(0, ms);
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  if (cooldownMs.value <= 0) return;
+  cooldownTimer = setInterval(() => {
+    cooldownMs.value = Math.max(0, cooldownMs.value - 1000);
+    if (cooldownMs.value <= 0 && cooldownTimer) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  }, 1000);
+};
+
+const applyView = (next: JoinStatusView) => {
+  view.value = next;
+  if (next.isOwner && next.status === JOIN_REQUEST_STATUS.approved) {
+    name.value = next.name;
+    email.value = next.email;
+  }
+  if (!next.verified) startCooldown(next.cooldownRemainingMs);
+  else startCooldown(0);
+};
+
+const resend = async () => {
+  if (!view.value) return;
+  resendBusy.value = true;
+  resendMsg.value = '';
   try {
-    const doc = await databases.getDocument(getDatabaseId(), 'manifests', clean);
-    const parsed = parseJoinRequestDoc(doc);
-    if (!parsed) {
-      inviteStatusMsg.value = 'That invite code was not found. Request an invitation below.';
-      return;
-    }
-    existingInvite.value = parsed;
-    if (parsed.status === JOIN_REQUEST_STATUS.approved) {
-      approvedInvite.value = parsed;
-      name.value = parsed.name;
-      email.value = parsed.email;
-    } else if (parsed.status === JOIN_REQUEST_STATUS.needs_info) {
-      needsInfoInvite.value = parsed;
-      applicantReplyDraft.value = parsed.applicantReply || '';
-    } else if (parsed.status === JOIN_REQUEST_STATUS.waitlisted) {
-      inviteStatusMsg.value = `Hi ${parsed.name} — your application is on our Priority Waitlist while booth shelf space is full. We'll automatically email your invite link as soon as a spot opens!`;
-    } else if (parsed.status === JOIN_REQUEST_STATUS.pending) {
-      inviteStatusMsg.value = `Hi ${parsed.name} — your request is in our Co-op Governance queue and waiting for steward review. We'll send an automated update as soon as a steward reviews it!`;
-    } else if (parsed.status === JOIN_REQUEST_STATUS.joined) {
-      inviteStatusMsg.value = 'This invitation has already been used to create an account. Please sign in!';
+    const res = await joinApi<{ cooldownRemainingMs?: number }>('resend', { id: inviteId.value, t: tokenT.value });
+    if (res.ok) {
+      resendMsg.value = 'Sent! Give it a minute and check spam / Promotions too.';
+      startCooldown(res.data.cooldownRemainingMs ?? 3600000);
+    } else if (res.status === 429 && res.data.cooldownRemainingMs) {
+      startCooldown(res.data.cooldownRemainingMs);
     } else {
-      inviteStatusMsg.value = 'Thank you for your interest in The Huckleberry Collective. Our current roster and category mix are full at this time.';
+      resendMsg.value = res.data.error || 'Could not resend right now.';
     }
-  } catch {
-    inviteStatusMsg.value = 'Could not find that invitation code. You can request a fresh invitation below.';
   } finally {
-    checkingInvite.value = false;
+    resendBusy.value = false;
   }
 };
 
 const submitApplicantReply = async () => {
-  if (!needsInfoInvite.value || !applicantReplyDraft.value.trim()) return;
+  if (!view.value || !applicantReplyDraft.value.trim()) return;
   replyBusy.value = true;
   try {
-    const req = needsInfoInvite.value;
-    const cleanReply = applicantReplyDraft.value.trim().slice(0, 500);
-    const updatedSnap = serializeJoinRequestSnapshot({
-      ...req,
-      applicantReply: cleanReply,
+    const res = await joinApi<{ request: JoinStatusView }>('reply', {
+      id: inviteId.value,
+      t: tokenT.value,
+      v: tokenV.value,
+      reply: applicantReplyDraft.value.trim(),
     });
-    await databases.updateDocument(getDatabaseId(), 'manifests', req.id, {
-      status: JOIN_REQUEST_STATUS.pending,
-      itemsSnapshot: updatedSnap,
-    });
-    needsInfoInvite.value = null;
-    existingInvite.value = {
-      ...req,
-      applicantReply: cleanReply,
-      status: JOIN_REQUEST_STATUS.pending,
-    };
-    inviteStatusMsg.value = 'Thank you! Your answer has been sent straight to our Co-op Governance queue.';
-  } catch (err: any) {
-    inviteStatusMsg.value = err?.message || 'Could not save your reply. Please try again.';
+    if (res.ok) {
+      applyView(res.data.request);
+      replyMsg.value = 'Thank you! Your answer has been sent straight to our Co-op Governance queue.';
+    } else {
+      replyMsg.value = res.data.error || 'Could not save your reply. Please try again.';
+    }
   } finally {
     replyBusy.value = false;
   }
 };
 
-const applyManualInvite = async () => {
-  const raw = manualInviteInput.value.trim();
-  if (!raw) return;
-  const match = raw.match(/join_[a-f0-9]+/i);
-  const code = match ? match[0] : raw;
-  await verifyInviteCode(code);
+const onApplicationSaved = (next: JoinStatusView) => {
+  applyView(next);
+  editOpen.value = false;
+  addToast('Application updated.', 'success');
 };
 
 onMounted(async () => {
   const params = new URLSearchParams(window.location.search);
   const redirect = params.get('redirect') || '';
-  const inviteParam = params.get('invite') || '';
 
   if (redirect.includes('/join')) {
     hasTeamRedirectInvite.value = true;
-    checkingInvite.value = false;
+    checking.value = false;
     return;
   }
 
-  if (inviteParam) {
-    await verifyInviteCode(inviteParam);
-  } else {
-    checkingInvite.value = false;
+  inviteId.value = params.get('invite') || '';
+  tokenT.value = params.get('t') || '';
+  tokenV.value = params.get('v') || '';
+
+  if (!inviteId.value) {
+    checking.value = false;
+    return;
   }
+  if (!tokenT.value && !tokenV.value) {
+    loadError.value = 'This application link is out of date. Request a fresh invitation below.';
+    checking.value = false;
+    return;
+  }
+
+  try {
+    // Clicking the emailed link (v) proves mailbox ownership: verify first, then show the page.
+    if (tokenV.value) {
+      const verified = await joinApi<{ request: JoinStatusView; justVerified?: boolean }>('verify', {
+        id: inviteId.value,
+        t: tokenT.value,
+        v: tokenV.value,
+      });
+      if (verified.ok) {
+        applyView(verified.data.request);
+        if (verified.data.justVerified) addToast('Email verified — stewards can now review your application.', 'success');
+        return;
+      }
+    }
+    const res = await joinApi<{ request: JoinStatusView }>('status', {
+      id: inviteId.value,
+      t: tokenT.value,
+      v: tokenV.value,
+    });
+    if (res.ok) {
+      applyView(res.data.request);
+    } else {
+      loadError.value = "We couldn't find that application. Request a fresh invitation below.";
+    }
+  } finally {
+    checking.value = false;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (cooldownTimer) clearInterval(cooldownTimer);
 });
 
 const submit = async () => {
@@ -445,13 +509,8 @@ const submit = async () => {
     await auth.register(email.value, password.value, name.value);
 
     if (approvedInvite.value) {
-      try {
-        await databases.updateDocument(getDatabaseId(), 'manifests', approvedInvite.value.id, {
-          status: JOIN_REQUEST_STATUS.joined,
-        });
-      } catch {
-        // Non-blocking status update
-      }
+      // Non-blocking: mark the invitation as used.
+      await joinApi('accept', { id: inviteId.value, t: tokenT.value, v: tokenV.value });
     }
 
     const urlParams = new URLSearchParams(window.location.search);
