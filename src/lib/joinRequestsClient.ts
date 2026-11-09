@@ -74,3 +74,4 @@ export function statusViewToRequest(view: JoinStatusView): JoinRequest {
     verifiedAt: view.verified ? 'verified' : '',
   };
 }
+

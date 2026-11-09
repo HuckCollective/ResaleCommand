@@ -38,3 +38,4 @@ export function verifyJoinToken(docId: string, purpose: JoinTokenPurpose, token:
 export function hashEmail(email: string): string {
   return createHash('sha256').update(String(email || '').trim().toLowerCase()).digest('hex');
 }
+

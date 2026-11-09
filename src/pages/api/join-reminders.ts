@@ -55,3 +55,4 @@ export const GET: APIRoute = async ({ request }) => {
 
   return json({ ok: true, scanned: res.documents.length, reminded, expired });
 };
+

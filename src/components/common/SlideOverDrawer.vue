@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport v-if="mounted" to="body">
     <Transition name="rc-drawer">
       <div v-if="modelValue" class="fixed inset-0 z-400" role="dialog" aria-modal="true" :aria-label="title">
         <!-- Backdrop (solid, no blur — avoids GPU scroll lag) -->
@@ -38,7 +38,13 @@
  * Use for focused create/edit forms that should keep page context visible (e.g. Connect With Us,
  * Edit My Application). Esc and backdrop click close it; focus moves into the panel when it opens.
  */
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+
+// Teleport targets don't exist during SSR; mount it client-side only to avoid hydration mismatches.
+const mounted = ref(false);
+onMounted(() => {
+  mounted.value = true;
+});
 
 const props = defineProps<{
   modelValue: boolean;
@@ -100,3 +106,4 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 </style>
+
