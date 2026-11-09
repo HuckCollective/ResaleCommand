@@ -135,9 +135,20 @@ export const POST: APIRoute = async ({ request }) => {
     // -----------------------------------------------------------------------
     // Steward actions (Appwrite JWT required)
     // -----------------------------------------------------------------------
-    if (action === 'list' || action === 'count' || action === 'decide' || action === 'link') {
+    if (action === 'list' || action === 'count' || action === 'decide' || action === 'link' || action === 'steward_update') {
       const stewardId = await requireSteward(request, ctx);
       if (!stewardId) return json({ error: 'Steward access required.' }, 403);
+
+      // Stewards may fix typos in applicant-editable fields (never email, status, or decisions).
+      if (action === 'steward_update') {
+        const target = await loadRequest(ctx, id);
+        if (!target) return NOT_FOUND();
+        const f = cleanFields({ ...body, email: target.email });
+        if (!f.valid) return json({ error: 'Please keep a name and at least one hat.' }, 400);
+        const patch = { name: f.name, hats: f.hats, niches: f.niches, socialUrl: f.socialUrl, note: f.note };
+        await saveRow(ctx, id, patch);
+        return json({ ok: true, request: { ...target, ...patch } });
+      }
 
       if (action === 'link') {
         const target = await loadRequest(ctx, id);

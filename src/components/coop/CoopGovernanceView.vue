@@ -49,7 +49,7 @@
 
     <!-- 4 Standalone Icon-Badge KPI Cards (Canonical Ledger Archetype) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:chat-round-dots-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-success/10 text-success rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:check-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -71,7 +71,7 @@
         </div>
       </div>
 
-      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-error/10 text-error rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:forbidden-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:shield-check-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -547,8 +547,46 @@
 
     <!-- Proposals List (TAB 1) -->
     <div v-show="activeGovTab === 'proposals'" class="space-y-4">
+      <!-- Compact proposal rows: tap to open the full deliberation & voting drawer -->
+      <button
+        v-for="p in proposals"
+        :key="`row-${p.id}`"
+        type="button"
+        class="w-full text-left card bg-base-100 border shadow-sm rounded-2xl p-3.5 sm:p-4 hover:shadow-md transition-all space-y-2"
+        :class="getProposalCardBorderClass(p)"
+        @click="openProposalDrawer(p)"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 space-y-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="badge badge-xs font-semibold" :class="getCategoryBadgeClass(p.category)">{{ p.category }}</span>
+              <span class="text-[11px] text-base-content/60 font-mono">Closing {{ p.deadline }}</span>
+            </div>
+            <div class="text-sm sm:text-base font-black leading-snug break-words">{{ p.title }}</div>
+          </div>
+          <span class="px-2.5 py-1 rounded-xl font-black text-[11px] flex items-center gap-1 shrink-0" :class="getStatusPillClass(p)">
+            <Icon :icon="getStatusPillIcon(p)" class="w-3.5 h-3.5 shrink-0" />
+            <span>{{ p.status === 'passed' ? 'Enacted' : getProposalStatusLabel(p) }}</span>
+          </span>
+        </div>
+        <div class="w-full h-2 rounded-full bg-base-300 overflow-hidden flex">
+          <div class="bg-success" :style="{ width: `${getSignalPercent(p, 'agree')}%` }"></div>
+          <div class="bg-warning" :style="{ width: `${getSignalPercent(p, 'abstain')}%` }"></div>
+          <div class="bg-secondary" :style="{ width: `${getSignalPercent(p, 'disagree')}%` }"></div>
+          <div class="bg-error" :style="{ width: `${getSignalPercent(p, 'block')}%` }"></div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span class="text-base-content/70 font-semibold">
+            {{ getVoteCount(p) }} votes · your vote:
+            <strong class="capitalize">{{ getUserVote(p)?.signal || 'not voted yet' }}</strong>
+          </span>
+          <span class="font-bold text-primary">🗳️ Review &amp; Vote →</span>
+        </div>
+      </button>
+
+      <SlideOverDrawer v-model="proposalDrawerOpen" :title="selectedProposalTitle" subtitle="Deliberate and cast your signal">
       <div 
-        v-for="proposal in proposals" 
+        v-for="proposal in drawerProposals" 
         :key="proposal.id"
         class="card bg-base-100 border shadow-sm rounded-3xl overflow-hidden transition-all"
         :class="getProposalCardBorderClass(proposal)"
@@ -850,21 +888,58 @@
           </div>
         </div>
       </div>
+      </SlideOverDrawer>
     </div>
 
-    <!-- CREATE PROPOSAL MODAL -->
-    <dialog :class="{ 'modal modal-open': isNewProposalModalOpen }" class="modal">
-      <div class="modal-box max-w-lg rounded-3xl p-6 sm:p-7 space-y-5">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div class="flex items-center gap-2.5">
-            <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <Icon icon="solar:document-add-bold-duotone" class="w-5 h-5" />
-            </div>
-            <h3 class="font-black text-lg text-base-content">Create Collective Proposal</h3>
+    <!-- Proposal queue bottom sheet tray (opened from the KPI cards) -->
+    <Teleport v-if="trayMounted" to="body">
+      <div v-if="proposalTrayOpen" class="fixed inset-0 z-[390] bg-black/60 flex flex-col justify-end" @click.self="proposalTrayOpen = false">
+        <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
+          <div class="w-12 h-1.5 bg-base-content/20 rounded-full mx-auto mt-2.5 mb-1 shrink-0"></div>
+          <div class="px-4 py-2.5 border-b border-base-300 flex items-center justify-between gap-2 shrink-0">
+            <h4 class="font-black text-sm">Proposals</h4>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" aria-label="Close" @click="proposalTrayOpen = false">✕</button>
           </div>
-          <button type="button" @click="isNewProposalModalOpen = false" class="btn btn-ghost btn-sm btn-circle">✕</button>
+          <div class="px-3 pt-2 grid grid-cols-4 gap-1.5 shrink-0">
+            <button
+              v-for="b in proposalBuckets"
+              :key="b.id"
+              type="button"
+              class="btn btn-xs h-8 rounded-xl font-bold px-1"
+              :class="proposalTrayTab === b.id ? 'btn-primary' : 'btn-ghost border border-base-300'"
+              @click="proposalTrayTab = b.id"
+            >
+              {{ b.label }} ({{ b.items.length }})
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+            <button
+              v-for="p in proposalTrayItems"
+              :key="p.id"
+              type="button"
+              class="w-full text-left rounded-xl border bg-base-200/40 hover:bg-base-200 px-3 py-2.5 space-y-1"
+              :class="getProposalCardBorderClass(p)"
+              @click="openProposalDrawer(p)"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="font-bold text-sm break-words min-w-0">{{ p.title }}</div>
+                <span class="text-[11px] font-bold text-primary whitespace-nowrap shrink-0">Review &amp; Vote →</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-base-content/70">
+                <span class="badge badge-xs font-semibold" :class="getCategoryBadgeClass(p.category)">{{ p.category }}</span>
+                <span>{{ getVoteCount(p) }} votes</span>
+                <span class="font-semibold">{{ getProposalStatusLabel(p) }}</span>
+              </div>
+            </button>
+            <div v-if="proposalTrayItems.length === 0" class="text-center text-xs text-base-content/50 italic py-8">Nothing here right now.</div>
+          </div>
         </div>
+      </div>
+    </Teleport>
 
+    <!-- CREATE PROPOSAL DRAWER -->
+    <SlideOverDrawer v-model="isNewProposalModalOpen" title="Create Collective Proposal" subtitle="Publish for member voting">
+      <div class="space-y-5">
         <form @submit.prevent="createProposal" class="space-y-4 text-xs">
           <!-- Proposer & Partner -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -967,10 +1042,7 @@
           </div>
         </form>
       </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="isNewProposalModalOpen = false">close</button>
-      </form>
-    </dialog>
+    </SlideOverDrawer>
   </div>
 </template>
 
@@ -980,6 +1052,7 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
 import JoinRequestsPanel from './JoinRequestsPanel.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import {
   loadCoopGovernanceState,
   saveCoopGovernanceState,
@@ -997,6 +1070,41 @@ const { user, currentTeam } = useAuth();
 const activeGovTab = ref<'proposals' | 'rules' | 'roster'>('proposals');
 const activeVotingMember = ref(DEFAULT_COOP_POLICY_CONFIG.members[0]?.name || 'Mike (HUCK)');
 const isNewProposalModalOpen = ref(false);
+
+// Proposal queue tray (opened from the KPI cards) + proposal review/vote drawer
+type ProposalBucket = 'all' | 'active' | 'consensus' | 'blocked';
+const proposalTrayOpen = ref(false);
+const proposalTrayTab = ref<ProposalBucket>('all');
+const selectedProposalId = ref('');
+const trayMounted = ref(false);
+onMounted(() => {
+  trayMounted.value = true;
+});
+
+const openProposalTray = (tab: ProposalBucket = 'all') => {
+  proposalTrayTab.value = tab;
+  proposalTrayOpen.value = true;
+};
+const openProposalDrawer = (p: { id: string }) => {
+  selectedProposalId.value = p.id;
+  proposalTrayOpen.value = false;
+};
+const proposalDrawerOpen = computed({
+  get: () => !!selectedProposalId.value && proposals.value.some((p) => p.id === selectedProposalId.value),
+  set: (open: boolean) => {
+    if (!open) selectedProposalId.value = '';
+  },
+});
+/** The drawer renders the full deliberation card for exactly the selected proposal. */
+const drawerProposals = computed(() => proposals.value.filter((p) => p.id === selectedProposalId.value));
+const selectedProposalTitle = computed(() => drawerProposals.value[0]?.title || 'Proposal');
+const proposalBuckets = computed(() => [
+  { id: 'all' as ProposalBucket, label: 'All', items: proposals.value },
+  { id: 'active' as ProposalBucket, label: 'Active', items: proposals.value.filter((p) => !hasBlock(p)) },
+  { id: 'consensus' as ProposalBucket, label: 'Consensus', items: proposals.value.filter((p) => !hasBlock(p) && getSignalCount(p, 'agree') >= 2) },
+  { id: 'blocked' as ProposalBucket, label: 'Blocked', items: proposals.value.filter((p) => hasBlock(p)) },
+]);
+const proposalTrayItems = computed(() => proposalBuckets.value.find((b) => b.id === proposalTrayTab.value)?.items ?? []);
 const isCloudSynced = ref(false);
 const isSavingCloud = ref(false);
 const activeSurplusPolicyMode = ref<SurplusPolicyMode>('patronage_90_10');

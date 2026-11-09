@@ -10,9 +10,6 @@
             <Icon icon="solar:user-plus-bold-duotone" class="w-5 h-5 text-info shrink-0" />
             <span>Co-op Join Requests</span>
           </h3>
-          <span v-if="activeRequests.length > 0" class="badge badge-info badge-sm font-bold whitespace-nowrap">{{ activeRequests.length }} waiting</span>
-          <span v-if="approvedRequests.length > 0" class="badge badge-success badge-outline badge-sm font-bold whitespace-nowrap">{{ approvedRequests.length }} invited</span>
-          <span v-if="waitlistedRequests.length > 0" class="badge badge-warning badge-outline badge-sm font-bold whitespace-nowrap">{{ waitlistedRequests.length }} waitlisted</span>
           <span v-if="unverifiedCount > 0" class="text-[11px] font-semibold text-base-content/50 whitespace-nowrap">{{ unverifiedCount }} unverified</span>
         </div>
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
@@ -47,214 +44,219 @@
         </div>
       </div>
 
-      <!-- Pending & Needs-Info Join Requests -->
-      <div v-for="req in activeRequests" :key="req.id" class="rounded-xl border border-base-300 bg-base-200/40 p-3 space-y-2.5">
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span class="font-bold text-sm break-words">{{ req.name }}</span>
-              <span v-if="req.status === JOIN_REQUEST_STATUS.needs_info" class="badge badge-warning badge-xs font-bold">
-                Waiting for On-Page Reply
-              </span>
-              <span v-else-if="req.applicantReply" class="badge badge-info badge-xs font-bold">
-                Answered Question
-              </span>
-            </div>
-            <div class="text-xs text-base-content/70 break-all">{{ req.email }}</div>
-            <a
-              v-if="req.socialUrl"
-              :href="formatExternalUrl(req.socialUrl)"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-xs link link-primary font-bold break-all"
-            >
-              🔗 {{ req.socialUrl }}
-            </a>
-          </div>
-          <div class="flex flex-wrap gap-1">
-            <span v-for="hat in req.hats" :key="hat" class="badge badge-sm badge-primary badge-outline font-bold">{{ hat }}</span>
-            <span v-for="niche in req.niches" :key="niche" class="badge badge-sm badge-outline">{{ niche }}</span>
-          </div>
-        </div>
-
-        <p v-if="req.note" class="text-xs break-words whitespace-pre-line bg-base-100/70 rounded-lg p-2 border border-base-300/60">
-          {{ req.note }}
-        </p>
-
-        <!-- Steward Question & Applicant On-Page Reply -->
-        <div v-if="req.stewardQuestion" class="rounded-lg bg-info/10 border border-info/30 p-2 text-xs space-y-1">
-          <div><span class="font-bold">Steward Question:</span> {{ req.stewardQuestion }}</div>
-          <div v-if="req.applicantReply" class="text-success font-bold">
-            Applicant Reply: {{ req.applicantReply }}
-          </div>
-        </div>
-
-        <!-- Inline Ask 1 Question Drawer -->
-        <div v-if="questionOpenForId === req.id" class="flex flex-col sm:flex-row gap-2 pt-1 bg-info/10 border border-info/30 rounded-xl p-2.5">
-          <input
-            v-model="questionDraft"
-            type="text"
-            maxlength="280"
-            placeholder="Ask 1 quick question (they answer on the site, not by email)..."
-            class="input input-bordered input-xs rounded-lg flex-1 text-xs"
-            @keydown.enter.prevent="sendDecision(req, 'needs_info', questionDraft)"
-          />
-          <button
-            type="button"
-            class="btn btn-xs btn-info rounded-lg font-bold"
-            :disabled="busyId === req.id || !questionDraft.trim()"
-            @click="sendDecision(req, 'needs_info', questionDraft)"
-          >
-            <span v-if="busyId === req.id" class="loading loading-spinner loading-xs"></span>
-            📨 Send On-Page Question
-          </button>
-          <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="questionOpenForId = ''">
-            Cancel
-          </button>
-        </div>
-
-        <!-- 1-Click Automated Decision Bar (Opens Confirmation Modal on Every Decision Except Ask 1 Question) -->
-        <div v-else class="flex flex-wrap items-center justify-end gap-1.5 pt-1">
-          <button
-            type="button"
-            class="btn btn-xs btn-ghost rounded-lg text-base-content/60"
-            :disabled="busyId === req.id"
-            title="Archive without sending any email"
-            @click="promptDecision(req, 'decline_silent')"
-          >
-            Archive Silently
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs btn-outline btn-error rounded-lg font-bold"
-            :disabled="busyId === req.id"
-            title="Sends polite 'Not a current category fit' template from the app"
-            @click="promptDecision(req, 'decline_category')"
-          >
-            ✖ Decline (Category Fit)
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs btn-outline rounded-lg font-bold"
-            :disabled="busyId === req.id"
-            title="Sends polite 'Booth / Roster at capacity' template from the app"
-            @click="promptDecision(req, 'decline_capacity')"
-          >
-            ✖ Decline (Full Roster)
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs btn-outline btn-warning rounded-lg font-bold"
-            :disabled="busyId === req.id"
-            title="Adds to waitlist & sends automated Waitlist email"
-            @click="promptDecision(req, 'waitlist')"
-          >
-            ⏳ Waitlist
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs btn-outline btn-info rounded-lg font-bold"
-            :disabled="busyId === req.id"
-            @click="openQuestionBox(req)"
-          >
-            💬 Ask 1 Question
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs btn-primary rounded-lg font-black"
-            :disabled="busyId === req.id"
-            @click="promptDecision(req, 'approve')"
-          >
-            ✅ Approve &amp; Send Invite
-          </button>
-        </div>
-      </div>
-
-      <!-- Waitlisted Applicants (1-Click Promote to Invite) -->
-      <div v-if="waitlistedRequests.length > 0" class="pt-1 space-y-1.5">
-        <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">
-          Priority Waitlist (1-Click Promote When Space Opens)
-        </div>
-        <div
-          v-for="req in waitlistedRequests"
-          :key="req.id"
-          class="rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+      <!-- 3 Summary Cards (tap to open the queue tray) -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <button
+          v-for="b in buckets"
+          :key="b.id"
+          type="button"
+          class="text-left rounded-2xl border p-3 transition-all hover:shadow-md active:scale-[0.99] flex flex-col gap-1.5 min-w-0"
+          :class="b.cardClass"
+          @click="openTray(b.id)"
         >
-          <div class="min-w-0">
-            <span class="font-bold text-xs">{{ req.name }}</span>
-            <span class="text-xs text-base-content/70 ml-1.5 break-all">({{ req.email }})</span>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[11px] font-extrabold uppercase tracking-wider opacity-70 truncate">{{ b.icon }} {{ b.label }}</span>
+            <span class="badge font-black shrink-0" :class="b.badgeClass">{{ b.items.length }}</span>
           </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              class="btn btn-xs btn-primary rounded-lg font-bold"
-              :disabled="busyId === req.id"
-              @click="promptDecision(req, 'approve')"
-            >
-              ✅ Approve &amp; Send Invite
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
-              :disabled="busyId === req.id"
-              @click="promptDecision(req, 'decline_silent')"
-            >
-              Remove
-            </button>
+          <div v-if="b.items.length" class="text-xs font-semibold truncate">
+            {{ b.items.slice(0, 3).map((r) => r.name).join(', ') }}<span v-if="b.items.length > 3"> +{{ b.items.length - 3 }}</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Approved Invites Waiting for Account Creation -->
-      <div v-if="approvedRequests.length > 0" class="pt-1 space-y-1.5">
-        <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">
-          Approved Invites (Waiting to Create Password)
-        </div>
-        <div
-          v-for="req in approvedRequests"
-          :key="req.id"
-          class="rounded-xl border border-success/30 bg-success/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2"
-        >
-          <div class="min-w-0">
-            <span class="font-bold text-xs">{{ req.name }}</span>
-            <span class="text-xs text-base-content/70 ml-1.5 break-all">({{ req.email }})</span>
-          </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <button type="button" class="btn btn-xs btn-outline rounded-lg font-bold" @click="copyInviteLink(req)">
-              Copy Invite Link
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost rounded-lg font-bold"
-              :disabled="busyId === req.id"
-              @click="promptDecision(req, 'approve')"
-            >
-              Resend Invite Email
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-outline btn-info rounded-lg font-bold"
-              :disabled="busyId === req.id"
-              title="Move back to review queue without sending an email"
-              @click="sendDecision(req, 'reopen')"
-            >
-              ↩️ Back to Review
-            </button>
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost text-base-content/60 rounded-lg"
-              :disabled="busyId === req.id"
-              @click="promptDecision(req, 'decline_silent')"
-            >
-              Revoke
-            </button>
-          </div>
-        </div>
+          <div v-else class="text-xs opacity-50 italic">{{ b.empty }}</div>
+          <div class="text-[11px] font-bold text-primary">Open list →</div>
+        </button>
       </div>
     </div>
 
+    <!-- Queue Bottom Sheet Tray -->
+    <Teleport v-if="mounted" to="body">
+      <div v-if="trayOpen" class="fixed inset-0 z-[390] bg-black/60 flex flex-col justify-end" @click.self="trayOpen = false">
+        <div class="bg-base-100 border-t border-base-300 rounded-t-3xl max-w-2xl mx-auto w-full max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
+          <div class="w-12 h-1.5 bg-base-content/20 rounded-full mx-auto mt-2.5 mb-1 shrink-0"></div>
+          <div class="px-4 py-2.5 border-b border-base-300 flex items-center justify-between gap-2 shrink-0">
+            <h4 class="font-black text-sm">Join Queue</h4>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" aria-label="Close" @click="trayOpen = false">✕</button>
+          </div>
+          <div class="px-3 pt-2 grid grid-cols-3 gap-1.5 shrink-0">
+            <button
+              v-for="b in buckets"
+              :key="b.id"
+              type="button"
+              class="btn btn-xs h-8 rounded-xl font-bold px-1"
+              :class="trayTab === b.id ? 'btn-primary' : 'btn-ghost border border-base-300'"
+              @click="trayTab = b.id"
+            >
+              {{ b.icon }} {{ b.short }} ({{ b.items.length }})
+            </button>
+          </div>
+          <div v-if="isNonProdHost" class="px-4 pt-2 text-[11px] font-mono text-warning shrink-0">
+            ⚠️ Email links → {{ useProdOrigin ? prodHostLabel : currentHostLabel }}
+          </div>
+          <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+            <button
+              v-for="req in trayItems"
+              :key="req.id"
+              type="button"
+              class="w-full text-left rounded-xl border border-base-300 bg-base-200/40 hover:bg-base-200 px-3 py-2.5 space-y-1"
+              @click="openDrawer(req)"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="font-bold text-sm break-words">{{ req.name }}</div>
+                  <div class="text-xs text-base-content/70 break-all">{{ req.email }}</div>
+                </div>
+                <div class="flex flex-col items-end gap-1 shrink-0">
+                  <span v-if="req.status === JOIN_REQUEST_STATUS.needs_info" class="badge badge-warning badge-xs font-bold">Awaiting reply</span>
+                  <span v-else-if="req.applicantReply" class="badge badge-info badge-xs font-bold">Answered</span>
+                  <span class="text-[11px] font-bold text-primary whitespace-nowrap">Review →</span>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="hat in req.hats" :key="hat" class="badge badge-xs badge-primary badge-outline font-bold">{{ hat }}</span>
+                <span v-for="niche in req.niches" :key="niche" class="badge badge-xs badge-outline">{{ niche }}</span>
+              </div>
+            </button>
+            <div v-if="trayItems.length === 0" class="text-center text-xs text-base-content/50 italic py-8">Nothing here right now.</div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Applicant Review & Decision Drawer -->
+    <SlideOverDrawer
+      v-model="drawerOpen"
+      :title="selected?.name || 'Applicant'"
+      :subtitle="selected?.email || ''"
+    >
+      <div v-if="selected" class="space-y-4">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="badge badge-sm font-bold" :class="statusBadgeClass">{{ statusLabel }}</span>
+          <span v-if="selected.applicantReply && selected.status !== JOIN_REQUEST_STATUS.needs_info" class="badge badge-info badge-sm font-bold">Answered Question</span>
+        </div>
+
+        <!-- Read view -->
+        <div v-if="!editing" class="space-y-3">
+          <div class="flex justify-end">
+            <button type="button" class="btn btn-xs btn-outline rounded-lg font-bold" :disabled="!!busyId" @click="startEdit">✏️ Edit Details</button>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <span v-for="hat in selected.hats" :key="hat" class="badge badge-sm badge-primary badge-outline font-bold">{{ hat }}</span>
+            <span v-for="niche in selected.niches" :key="niche" class="badge badge-sm badge-outline">{{ niche }}</span>
+          </div>
+          <a
+            v-if="selected.socialUrl"
+            :href="formatExternalUrl(selected.socialUrl)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs link link-primary font-bold break-all block"
+          >
+            🔗 {{ selected.socialUrl }}
+          </a>
+          <p v-if="selected.note" class="text-xs break-words whitespace-pre-line bg-base-200/60 rounded-lg p-2.5 border border-base-300/60">{{ selected.note }}</p>
+          <div v-if="selected.stewardQuestion" class="rounded-lg bg-info/10 border border-info/30 p-2.5 text-xs space-y-1">
+            <div><span class="font-bold">Steward Question:</span> {{ selected.stewardQuestion }}</div>
+            <div v-if="selected.applicantReply" class="text-success font-bold">Applicant Reply: {{ selected.applicantReply }}</div>
+          </div>
+        </div>
+
+        <!-- Edit view -->
+        <div v-else class="space-y-3 text-xs">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold text-xs">Name</span></label>
+            <input v-model="editDraft.name" type="text" maxlength="80" class="input input-bordered input-sm rounded-xl" />
+          </div>
+          <div>
+            <div class="label-text font-bold text-xs py-1">Hats</div>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="h in hatOptions"
+                :key="h.id"
+                type="button"
+                class="btn btn-xs rounded-lg font-bold"
+                :class="editDraft.hats.includes(h.id) ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                @click="toggleEditHat(h.id)"
+              >
+                {{ h.icon }} {{ h.title }}
+              </button>
+            </div>
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold text-xs">Focus / Specialty (comma separated)</span></label>
+            <input v-model="editDraft.niches" type="text" class="input input-bordered input-sm rounded-xl" />
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold text-xs">Shop / Social</span></label>
+            <input v-model="editDraft.socialUrl" type="text" class="input input-bordered input-sm rounded-xl" />
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold text-xs">Notes</span></label>
+            <textarea v-model="editDraft.note" rows="4" class="textarea textarea-bordered rounded-xl text-xs"></textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-sm btn-ghost rounded-xl" :disabled="savingEdit" @click="editing = false">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary rounded-xl font-black" :disabled="savingEdit || !editDraft.name.trim() || editDraft.hats.length === 0" @click="saveEdit">
+              <span v-if="savingEdit" class="loading loading-spinner loading-xs"></span>
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div v-if="selected" class="space-y-2">
+          <!-- Ask 1 Question box -->
+          <div v-if="questionOpen" class="flex flex-col gap-2 bg-info/10 border border-info/30 rounded-xl p-2.5">
+            <input
+              v-model="questionDraft"
+              type="text"
+              maxlength="280"
+              placeholder="Ask 1 quick question (they answer on the site, not by email)..."
+              class="input input-bordered input-xs rounded-lg text-xs"
+              @keydown.enter.prevent="sendDecision(selected, 'needs_info', questionDraft)"
+            />
+            <div class="flex gap-2 justify-end">
+              <button type="button" class="btn btn-xs btn-ghost rounded-lg" @click="questionOpen = false">Cancel</button>
+              <button
+                type="button"
+                class="btn btn-xs btn-info rounded-lg font-bold"
+                :disabled="busyId === selected.id || !questionDraft.trim()"
+                @click="sendDecision(selected, 'needs_info', questionDraft)"
+              >
+                <span v-if="busyId === selected.id" class="loading loading-spinner loading-xs"></span>
+                📨 Send On-Page Question
+              </button>
+            </div>
+          </div>
+
+          <!-- Pending / needs info -->
+          <div v-else-if="isActive(selected)" class="flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" class="btn btn-xs btn-ghost rounded-lg text-base-content/60" :disabled="busyId === selected.id" @click="promptDecision(selected, 'decline_silent')">Archive Silently</button>
+            <button type="button" class="btn btn-xs btn-outline btn-error rounded-lg font-bold" :disabled="busyId === selected.id" @click="promptDecision(selected, 'decline_category')">✖ Decline (Category Fit)</button>
+            <button type="button" class="btn btn-xs btn-outline rounded-lg font-bold" :disabled="busyId === selected.id" @click="promptDecision(selected, 'decline_capacity')">✖ Decline (Full Roster)</button>
+            <button type="button" class="btn btn-xs btn-outline btn-warning rounded-lg font-bold" :disabled="busyId === selected.id" @click="promptDecision(selected, 'waitlist')">⏳ Waitlist</button>
+            <button type="button" class="btn btn-xs btn-outline btn-info rounded-lg font-bold" :disabled="busyId === selected.id" @click="openQuestionBox(selected)">💬 Ask 1 Question</button>
+            <button type="button" class="btn btn-xs btn-primary rounded-lg font-black" :disabled="busyId === selected.id" @click="promptDecision(selected, 'approve')">✅ Approve &amp; Send Invite</button>
+          </div>
+
+          <!-- Waitlisted -->
+          <div v-else-if="selected.status === JOIN_REQUEST_STATUS.waitlisted" class="flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" class="btn btn-xs btn-ghost text-base-content/60 rounded-lg" :disabled="busyId === selected.id" @click="promptDecision(selected, 'decline_silent')">Remove</button>
+            <button type="button" class="btn btn-xs btn-outline btn-info rounded-lg font-bold" :disabled="busyId === selected.id" @click="sendDecision(selected, 'reopen')">↩️ Back to Review</button>
+            <button type="button" class="btn btn-xs btn-primary rounded-lg font-bold" :disabled="busyId === selected.id" @click="promptDecision(selected, 'approve')">✅ Approve &amp; Send Invite</button>
+          </div>
+
+          <!-- Approved (waiting to create password) -->
+          <div v-else-if="selected.status === JOIN_REQUEST_STATUS.approved" class="flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" class="btn btn-xs btn-ghost text-base-content/60 rounded-lg" :disabled="busyId === selected.id" @click="promptDecision(selected, 'decline_silent')">Revoke</button>
+            <button type="button" class="btn btn-xs btn-outline btn-info rounded-lg font-bold" :disabled="busyId === selected.id" title="Move back to review queue without sending an email" @click="sendDecision(selected, 'reopen')">↩️ Back to Review</button>
+            <button type="button" class="btn btn-xs btn-ghost rounded-lg font-bold" :disabled="busyId === selected.id" @click="promptDecision(selected, 'approve')">Resend Invite Email</button>
+            <button type="button" class="btn btn-xs btn-outline rounded-lg font-bold" @click="copyInviteLink(selected)">Copy Invite Link</button>
+          </div>
+        </div>
+      </template>
+    </SlideOverDrawer>
+
     <!-- Decision Confirmation Modal -->
-    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': !!pendingConfirm }">
+    <dialog class="modal modal-bottom sm:modal-middle z-[500]" :class="{ 'modal-open': !!pendingConfirm }">
       <div v-if="pendingConfirm" class="modal-box rounded-t-3xl sm:rounded-3xl border border-base-300 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -321,25 +323,39 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import {
   JOIN_DECISION_TEMPLATES,
+  JOIN_REQUEST_HAT_OPTIONS,
   JOIN_REQUEST_STATUS,
   type JoinDecisionKey,
   type JoinRequest,
+  type JoinRequestHat,
   type JoinRequestStatus,
 } from '../../lib/joinRequests';
 import { joinApi } from '../../lib/joinRequestsClient';
 import { siteConfig } from '../../site-config';
 
+type BucketId = 'waiting' | 'waitlist' | 'invited';
+
+const hatOptions = JOIN_REQUEST_HAT_OPTIONS;
+const mounted = ref(false);
 const allRequests = ref<JoinRequest[]>([]);
 const unverifiedCount = ref(0);
 const loading = ref(true);
 const busyId = ref('');
-const questionOpenForId = ref('');
+const questionOpen = ref(false);
 const questionDraft = ref('');
 const pendingConfirm = ref<{ req: JoinRequest; decision: JoinDecisionKey } | null>(null);
 const currentOrigin = ref('');
 const useProdOrigin = ref(false);
+
+const trayOpen = ref(false);
+const trayTab = ref<BucketId>('waiting');
+const selectedId = ref('');
+const editing = ref(false);
+const savingEdit = ref(false);
+const editDraft = ref({ name: '', hats: [] as JoinRequestHat[], niches: '', socialUrl: '', note: '' });
 
 const confirmModalMeta = computed(() => {
   const item = pendingConfirm.value;
@@ -446,15 +462,146 @@ const activeRequests = computed(() =>
 const waitlistedRequests = computed(() =>
   allRequests.value.filter((r) => r.status === JOIN_REQUEST_STATUS.waitlisted)
 );
+// Approved people leave this list automatically once they create their account (status becomes `joined`).
 const approvedRequests = computed(() =>
   allRequests.value.filter((r) => r.status === JOIN_REQUEST_STATUS.approved)
 );
+
+const buckets = computed(() => [
+  {
+    id: 'waiting' as BucketId,
+    icon: '📬',
+    label: 'Join Requests',
+    short: 'Waiting',
+    empty: 'No one waiting',
+    items: activeRequests.value,
+    cardClass: 'border-info/40 bg-info/5',
+    badgeClass: 'badge-info',
+  },
+  {
+    id: 'waitlist' as BucketId,
+    icon: '⏳',
+    label: 'Priority Waitlist',
+    short: 'Waitlist',
+    empty: 'Waitlist is empty',
+    items: waitlistedRequests.value,
+    cardClass: 'border-warning/40 bg-warning/5',
+    badgeClass: 'badge-warning',
+  },
+  {
+    id: 'invited' as BucketId,
+    icon: '✅',
+    label: 'Approved Invites',
+    short: 'Invited',
+    empty: 'No open invites',
+    items: approvedRequests.value,
+    cardClass: 'border-success/40 bg-success/5',
+    badgeClass: 'badge-success',
+  },
+]);
+
+const trayItems = computed(() => buckets.value.find((b) => b.id === trayTab.value)?.items ?? []);
+
+const selected = computed(() => allRequests.value.find((r) => r.id === selectedId.value) || null);
+const drawerOpen = computed({
+  get: () => !!selected.value,
+  set: (open: boolean) => {
+    if (!open) {
+      selectedId.value = '';
+      editing.value = false;
+      questionOpen.value = false;
+    }
+  },
+});
+
+const isActive = (r: JoinRequest) =>
+  r.status === JOIN_REQUEST_STATUS.pending || r.status === JOIN_REQUEST_STATUS.needs_info;
+
+const statusLabel = computed(() => {
+  const s = selected.value?.status;
+  if (s === JOIN_REQUEST_STATUS.needs_info) return 'Waiting for On-Page Reply';
+  if (s === JOIN_REQUEST_STATUS.waitlisted) return 'Waitlisted';
+  if (s === JOIN_REQUEST_STATUS.approved) return 'Invited — waiting to create password';
+  return 'Waiting for review';
+});
+const statusBadgeClass = computed(() => {
+  const s = selected.value?.status;
+  if (s === JOIN_REQUEST_STATUS.needs_info || s === JOIN_REQUEST_STATUS.waitlisted) return 'badge-warning';
+  if (s === JOIN_REQUEST_STATUS.approved) return 'badge-success';
+  return 'badge-info';
+});
 
 const formatExternalUrl = (raw: string) => {
   const s = raw.trim();
   if (/^https?:\/\//i.test(s)) return s;
   if (s.startsWith('@')) return `https://instagram.com/${s.slice(1)}`;
   return `https://${s}`;
+};
+
+const openTray = (id: BucketId) => {
+  trayTab.value = id;
+  trayOpen.value = true;
+};
+
+const openDrawer = (req: JoinRequest) => {
+  editing.value = false;
+  questionOpen.value = false;
+  selectedId.value = req.id;
+};
+
+const startEdit = () => {
+  const r = selected.value;
+  if (!r) return;
+  editDraft.value = {
+    name: r.name,
+    hats: [...r.hats],
+    niches: r.niches.join(', '),
+    socialUrl: r.socialUrl || '',
+    note: r.note || '',
+  };
+  editing.value = true;
+};
+
+const toggleEditHat = (id: JoinRequestHat) => {
+  const hats = editDraft.value.hats;
+  editDraft.value.hats = hats.includes(id) ? hats.filter((h) => h !== id) : [...hats, id];
+};
+
+const saveEdit = async () => {
+  const r = selected.value;
+  if (!r) return;
+  savingEdit.value = true;
+  try {
+    const niches = editDraft.value.niches
+      .split(',')
+      .map((n) => n.trim())
+      .filter(Boolean);
+    const res = await joinApi(
+      'steward_update',
+      {
+        id: r.id,
+        name: editDraft.value.name,
+        hats: editDraft.value.hats,
+        niches,
+        socialUrl: editDraft.value.socialUrl,
+        note: editDraft.value.note,
+      },
+      { steward: true }
+    );
+    if (!res.ok) {
+      addToast({ type: 'error', message: res.data.error || 'Could not save changes.' });
+      return;
+    }
+    r.name = editDraft.value.name.trim();
+    r.hats = [...editDraft.value.hats];
+    r.niches = niches;
+    r.socialUrl = editDraft.value.socialUrl.trim();
+    r.note = editDraft.value.note.trim();
+    editing.value = false;
+    addToast({ type: 'success', message: `Saved changes for ${r.name}.` });
+  } finally {
+    savingEdit.value = false;
+  }
 };
 
 /** The personal invite link is signed server-side, so the panel asks the API for it (steward-only). */
@@ -479,12 +626,12 @@ const copyInviteLink = async (req: JoinRequest) => {
 
 const openQuestionBox = (req: JoinRequest) => {
   pendingConfirm.value = null;
-  questionOpenForId.value = req.id;
+  questionOpen.value = true;
   questionDraft.value = req.stewardQuestion || 'What types of items or booth support are you looking to bring?';
 };
 
 const promptDecision = (req: JoinRequest, decision: JoinDecisionKey) => {
-  questionOpenForId.value = '';
+  questionOpen.value = false;
   pendingConfirm.value = { req, decision };
 };
 
@@ -526,10 +673,11 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
     req.status = res.data.status;
     req.decisionKey = decision;
     pendingConfirm.value = null;
-    if (decision === 'needs_info') {
-      req.stewardQuestion = cleanQuestion;
-      questionOpenForId.value = '';
-    }
+    // The decision moves the person to another queue, so close their drawer.
+    selectedId.value = '';
+    editing.value = false;
+    questionOpen.value = false;
+    if (decision === 'needs_info') req.stewardQuestion = cleanQuestion;
 
     if (decision === 'approve') {
       try {
@@ -573,6 +721,7 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
 };
 
 onMounted(() => {
+  mounted.value = true;
   if (typeof window !== 'undefined') {
     currentOrigin.value = window.location.origin;
   }

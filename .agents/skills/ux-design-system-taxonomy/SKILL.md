@@ -326,3 +326,14 @@ Thermal label printing involves physical hardware tolerances, continuous feed ca
   - `⚡ Quick Scout` (fast pre-buy identification)
 * **Lazy-Mounted Drawer Tabs**: Heavy `ItemDrawer` tabs (`Verify`, `Playbook` / `Lot`) mount with `v-if`, so they don't compute or fetch until opened. The light `Listing Details` tab uses `v-show` so form state is preserved. New heavy tabs MUST use `v-if`.
 * **Live "Before ➔ After" Financial Preview Pattern**: Any action that changes money or stock (restock, split, combine) shows a live preview of `Current ➔ + Adding Now ➔ New Total` (units, total cost, per-unit cost) and a profit-per-sale check before the Confirm button. When required input (e.g. a selected Backstock item) is missing, hide the preview and show a prompt instead of a misleading placeholder like `+1 unit | +$0.00`.
+
+
+---
+
+## 9. Ledger Queue Pattern: Summary Cards ➔ Bottom Sheet Tray ➔ SlideOverDrawer
+
+For any queue of people/decisions (Join Requests, Waitlist, Approved Invites, Governance Proposals) never stack full inline cards with button rows on the page. Use three tiers:
+1. **Summary Cards** (count + 2–3 preview names) that open the tray; for Join Requests: `📬 Join Requests`, `⏳ Priority Waitlist`, `✅ Approved Invites` ([`JoinRequestsPanel.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/JoinRequestsPanel.vue)); for governance the KPI cards open the proposals tray ([`CoopGovernanceView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopGovernanceView.vue)).
+2. **Bottom Sheet Tray** (`rounded-t-3xl`, drag pill, bucket tabs, scannable rows, `z-[390]`).
+3. **`SlideOverDrawer.vue`** for details, edit, voting, and decision buttons (sticky `#footer`). Create/edit forms use the drawer, not a centered `<dialog>`. Destructive or emailing decisions still go through a confirmation modal with an email preview.
+Approved invites leave the queue automatically when the applicant creates their account (`accept` ➔ `join_request_joined`).
