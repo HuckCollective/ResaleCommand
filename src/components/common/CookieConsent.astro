@@ -1,37 +1,131 @@
 ---
-// Zero-hydration cookie consent banner (native Astro, semantic daisyUI only).
-// Stores 'granted' | 'denied' in localStorage under `cookie_consent` and fires
-// a `cookie-consent-updated` window event. Re-open from anywhere with any element
-// that has the `data-cookie-settings` attribute (see Footer.astro).
+// EU GDPR (Art. 7) & ePrivacy Directive compliant zero-hydration Cookie Manager.
+// - Equal-prominence first-layer choices: Customize, Essential Only, Accept All (plus Save Choices when customizing)
+// - Granular opt-in categories (unchecked by default until chosen)
+// - Cross-subdomain sync across *.thehc.llc via first-party cookie `hc_cookie_consent` + `localStorage` (`hc_cookie_prefs_v1`)
+// - Global `window.openCookiePreferences()` hook so consent is as easy to withdraw as to give (GDPR Art. 7(3))
 ---
 
 <div
   id="cookie-consent-banner"
-  class="toast toast-bottom toast-center sm:toast-end z-[200] hidden w-full max-w-full sm:w-auto p-3 sm:p-4"
+  class="fixed inset-x-0 bottom-0 z-[220] hidden p-3 sm:p-4 pointer-events-none"
   role="dialog"
-  aria-live="polite"
-  aria-label="Cookie consent"
+  aria-modal="false"
+  aria-labelledby="hc-cookie-title"
+  aria-describedby="hc-cookie-desc"
 >
-  <div class="card bg-base-200 text-base-content border border-base-300 shadow-xl w-full sm:max-w-md">
-    <div class="card-body p-4 gap-3">
-      <h2 class="card-title text-base font-bold whitespace-normal break-words">🍪 Cookies &amp; Privacy</h2>
-      <p class="text-sm leading-relaxed whitespace-normal break-words">
-        We use essential cookies to keep you signed in and to enforce the free daily Scout preview limit. With your
-        permission we also remember display preferences such as your theme. We never sell your data or run
-        third-party ad trackers.
-      </p>
-      <div class="card-actions flex-col sm:flex-row sm:justify-end gap-2">
+  <div class="pointer-events-auto mx-auto w-full max-w-2xl rounded-2xl bg-base-100 text-base-content border border-base-300 shadow-2xl p-4 sm:p-5 space-y-4">
+    <div class="flex items-start justify-between gap-3">
+      <div class="space-y-1">
+        <h2 id="hc-cookie-title" class="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+          <span aria-hidden="true">🍪</span>
+          <span>Privacy &amp; Cookie Preferences</span>
+        </h2>
+        <p id="hc-cookie-desc" class="text-xs sm:text-sm text-base-content/80 leading-relaxed">
+          We respect your privacy. We use strictly necessary cookies for cooperative sign-in, security, and saving your
+          privacy choices across <span class="font-mono font-semibold">thehc.llc</span> and
+          <span class="font-mono font-semibold">works.thehc.llc</span>. Optional categories stay off unless you opt in,
+          and we never sell your data or run third-party ad trackers.
+        </p>
+      </div>
+      <button
+        id="hc-cookie-close-x"
+        type="button"
+        class="btn btn-ghost btn-xs btn-circle shrink-0 hidden"
+        aria-label="Close cookie preferences without changing saved settings"
+      >
+        ✕
+      </button>
+    </div>
+
+    <!-- Expandable Granular Category Toggles -->
+    <div
+      id="hc-cookie-customize-panel"
+      class="hidden rounded-xl bg-base-200/70 border border-base-300 p-3.5 space-y-3 text-xs"
+    >
+      <!-- Category 1: Strictly Necessary (Locked On) -->
+      <div class="flex items-start justify-between gap-3 pb-2.5 border-b border-base-300/70">
+        <div class="space-y-0.5">
+          <div class="font-extrabold text-base-content flex items-center gap-2 flex-wrap">
+            <span>Strictly Necessary &amp; Co-op Auth</span>
+            <span class="badge badge-xs badge-neutral font-bold">Always Active</span>
+          </div>
+          <p class="text-base-content/70 leading-snug">
+            Required for Appwrite session authentication, CSRF/rate-limit security, theme display, and storing your
+            privacy consent choice.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          checked
+          disabled
+          class="toggle toggle-sm toggle-primary shrink-0 mt-0.5 opacity-80"
+          aria-label="Strictly Necessary and Co-op Auth cookies (always active)"
+        />
+      </div>
+
+      <!-- Category 2: Interactive Maps & Booth Embeds -->
+      <label for="hc-cookie-maps" class="flex items-start justify-between gap-3 pb-2.5 border-b border-base-300/70 cursor-pointer">
+        <div class="space-y-0.5">
+          <div class="font-extrabold text-base-content">Interactive Maps &amp; Booth Embeds</div>
+          <p class="text-base-content/70 leading-snug">
+            Enables interactive venue directions and booth embeds for Memory Den Booth #0EJ and Dusty Tiger.
+          </p>
+        </div>
+        <input
+          id="hc-cookie-maps"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0 mt-0.5"
+        />
+      </label>
+
+      <!-- Category 3: Social Tools & Drop Attribution -->
+      <label for="hc-cookie-social" class="flex items-start justify-between gap-3 cursor-pointer">
+        <div class="space-y-0.5">
+          <div class="font-extrabold text-base-content">Social Tools &amp; Drop Attribution</div>
+          <p class="text-base-content/70 leading-snug">
+            Enables embedded social share previews and first-party referral attribution for collective drops.
+          </p>
+        </div>
+        <input
+          id="hc-cookie-social"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0 mt-0.5"
+        />
+      </label>
+    </div>
+
+    <!-- Equal-Prominence First-Layer Action Buttons (GDPR / EDPB Standard) -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+      <button
+        id="hc-cookie-customize-btn"
+        type="button"
+        aria-expanded="false"
+        aria-controls="hc-cookie-customize-panel"
+        class="btn btn-sm btn-outline border-base-300 text-base-content font-bold min-h-9 rounded-xl w-full sm:w-auto"
+      >
+        Customize
+      </button>
+
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
         <button
-          id="cookie-consent-decline"
+          id="hc-cookie-essential-btn"
           type="button"
-          class="btn btn-ghost btn-sm h-auto min-h-9 py-2 whitespace-normal w-full sm:w-auto"
+          class="btn btn-sm btn-outline border-base-content/30 text-base-content font-bold min-h-9 rounded-xl w-full sm:w-auto"
         >
-          Decline
+          Essential Only
         </button>
         <button
-          id="cookie-consent-accept"
+          id="hc-cookie-save-btn"
           type="button"
-          class="btn btn-primary btn-sm h-auto min-h-9 py-2 whitespace-normal w-full sm:w-auto"
+          class="btn btn-sm btn-outline border-primary text-primary font-bold min-h-9 rounded-xl w-full sm:w-auto hidden"
+        >
+          Save Choices
+        </button>
+        <button
+          id="hc-cookie-accept-btn"
+          type="button"
+          class="btn btn-sm btn-outline border-base-content/30 bg-base-200/70 hover:bg-base-300 text-base-content font-bold min-h-9 rounded-xl w-full sm:w-auto"
         >
           Accept All
         </button>
@@ -42,47 +136,206 @@
 
 <script is:inline>
   (function () {
-    var KEY = 'cookie_consent';
+    var PREFS_KEY = 'hc_cookie_prefs_v1';
+    var LEGACY_RC_KEY = 'rc_cookie_consent_accepted';
+    var LEGACY_KEY = 'cookie_consent';
+    var COOKIE_NAME = 'hc_cookie_consent';
+    var MAX_AGE = 31536000; // 12 months
+
     var banner = document.getElementById('cookie-consent-banner');
+    var customizePanel = document.getElementById('hc-cookie-customize-panel');
+    var customizeBtn = document.getElementById('hc-cookie-customize-btn');
+    var essentialBtn = document.getElementById('hc-cookie-essential-btn');
+    var saveBtn = document.getElementById('hc-cookie-save-btn');
+    var acceptBtn = document.getElementById('hc-cookie-accept-btn');
+    var closeXBtn = document.getElementById('hc-cookie-close-x');
+    var mapsToggle = document.getElementById('hc-cookie-maps');
+    var socialToggle = document.getElementById('hc-cookie-social');
+
     if (!banner) return;
 
-    var stored = null;
-    try {
-      stored = window.localStorage.getItem(KEY);
-    } catch (e) {
-      stored = null;
+    function readCookie(name) {
+      var prefix = name + '=';
+      var parts = (document.cookie || '').split(';');
+      for (var i = 0; i < parts.length; i++) {
+        var c = parts[i].trim();
+        if (c.indexOf(prefix) === 0) {
+          try {
+            return decodeURIComponent(c.substring(prefix.length));
+          } catch (e) {
+            return c.substring(prefix.length);
+          }
+        }
+      }
+      return null;
     }
 
-    function show() {
-      banner.classList.remove('hidden');
+    function writeConsentCookie(serialized) {
+      var encoded = encodeURIComponent(serialized);
+      var isHttps = window.location.protocol === 'https:';
+      var secureAttr = isHttps ? '; Secure' : '';
+      document.cookie = COOKIE_NAME + '=' + encoded + '; Path=/; Max-Age=' + MAX_AGE + '; SameSite=Lax' + secureAttr;
+
+      var host = (window.location.hostname || '').toLowerCase();
+      if (host === 'thehc.llc' || host.slice(-10) === '.thehc.llc') {
+        document.cookie =
+          COOKIE_NAME +
+          '=' +
+          encoded +
+          '; Domain=.thehc.llc; Path=/; Max-Age=' +
+          MAX_AGE +
+          '; SameSite=Lax; Secure';
+      }
     }
-    function hide() {
+
+    function parsePrefs(raw) {
+      if (!raw) return null;
+      try {
+        var obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && obj.version === 1) {
+          return {
+            version: 1,
+            essential: true,
+            maps: Boolean(obj.maps),
+            social: Boolean(obj.social),
+            updatedAt: obj.updatedAt || new Date().toISOString(),
+          };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function loadSavedPrefs() {
+      var localRaw = null;
+      try {
+        localRaw = window.localStorage.getItem(PREFS_KEY);
+      } catch (e) {}
+      var fromLocal = parsePrefs(localRaw);
+      var fromCookie = parsePrefs(readCookie(COOKIE_NAME));
+
+      // Prefer the newest timestamp when both exist so cross-subdomain updates win cleanly
+      var resolved = fromLocal;
+      if (fromCookie && (!fromLocal || String(fromCookie.updatedAt) > String(fromLocal.updatedAt))) {
+        resolved = fromCookie;
+      }
+
+      if (resolved) {
+        try {
+          window.localStorage.setItem(PREFS_KEY, JSON.stringify(resolved));
+          window.localStorage.setItem(LEGACY_RC_KEY, 'true');
+          window.localStorage.setItem(LEGACY_KEY, resolved.maps || resolved.social ? 'granted' : 'denied');
+        } catch (e) {}
+      }
+      return resolved;
+    }
+
+    function setExpandedState(expanded) {
+      if (!customizePanel || !customizeBtn || !saveBtn) return;
+      if (expanded) {
+        customizePanel.classList.remove('hidden');
+        saveBtn.classList.remove('hidden');
+        customizeBtn.setAttribute('aria-expanded', 'true');
+        customizeBtn.textContent = 'Hide Options';
+      } else {
+        customizePanel.classList.add('hidden');
+        saveBtn.classList.add('hidden');
+        customizeBtn.setAttribute('aria-expanded', 'false');
+        customizeBtn.textContent = 'Customize';
+      }
+    }
+
+    function syncTogglesFromPrefs(prefs) {
+      if (mapsToggle) mapsToggle.checked = Boolean(prefs && prefs.maps);
+      if (socialToggle) socialToggle.checked = Boolean(prefs && prefs.social);
+    }
+
+    function hideBanner() {
       banner.classList.add('hidden');
     }
 
-    if (stored !== 'granted' && stored !== 'denied') show();
-
-    function save(value) {
-      try {
-        window.localStorage.setItem(KEY, value);
-      } catch (e) {}
-      hide();
-      window.dispatchEvent(new CustomEvent('cookie-consent-updated', { detail: { consent: value } }));
+    function showBanner(expandCustomize) {
+      var existing = loadSavedPrefs();
+      syncTogglesFromPrefs(existing);
+      if (closeXBtn) {
+        if (existing) closeXBtn.classList.remove('hidden');
+        else closeXBtn.classList.add('hidden');
+      }
+      setExpandedState(Boolean(expandCustomize));
+      banner.classList.remove('hidden');
     }
 
-    var accept = document.getElementById('cookie-consent-accept');
-    var decline = document.getElementById('cookie-consent-decline');
-    if (accept) accept.addEventListener('click', function () { save('granted'); });
-    if (decline) decline.addEventListener('click', function () { save('denied'); });
+    function persistPrefs(mapsAllowed, socialAllowed) {
+      var prefs = {
+        version: 1,
+        essential: true,
+        maps: Boolean(mapsAllowed),
+        social: Boolean(socialAllowed),
+        updatedAt: new Date().toISOString(),
+      };
+      var serialized = JSON.stringify(prefs);
+      try {
+        window.localStorage.setItem(PREFS_KEY, serialized);
+        window.localStorage.setItem(LEGACY_RC_KEY, 'true');
+        window.localStorage.setItem(LEGACY_KEY, prefs.maps || prefs.social ? 'granted' : 'denied');
+      } catch (e) {}
+      writeConsentCookie(serialized);
+      hideBanner();
 
-    // Re-open from any trigger (e.g. footer "Privacy & Cookie Settings").
+      var legacyState = prefs.maps || prefs.social ? 'granted' : 'denied';
+      window.dispatchEvent(new CustomEvent('hc:cookie-consent', { detail: prefs }));
+      window.dispatchEvent(
+        new CustomEvent('cookie-consent-updated', { detail: { consent: legacyState, prefs: prefs } })
+      );
+    }
+
+    // Expose global GDPR Art. 7(3) withdrawal / preference manager opener
+    window.openCookiePreferences = function () {
+      showBanner(true);
+    };
+    window.getHcCookiePreferences = loadSavedPrefs;
+
+    if (customizeBtn) {
+      customizeBtn.addEventListener('click', function () {
+        var isExpanded = customizeBtn.getAttribute('aria-expanded') === 'true';
+        setExpandedState(!isExpanded);
+      });
+    }
+
+    if (essentialBtn) {
+      essentialBtn.addEventListener('click', function () {
+        persistPrefs(false, false);
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function () {
+        persistPrefs(mapsToggle && mapsToggle.checked, socialToggle && socialToggle.checked);
+      });
+    }
+
+    if (acceptBtn) {
+      acceptBtn.addEventListener('click', function () {
+        persistPrefs(true, true);
+      });
+    }
+
+    if (closeXBtn) {
+      closeXBtn.addEventListener('click', function () {
+        hideBanner();
+      });
+    }
+
     document.addEventListener('click', function (ev) {
       var t = ev.target;
       if (t && t.closest && t.closest('[data-cookie-settings]')) {
         ev.preventDefault();
-        show();
+        showBanner(true);
       }
     });
+
+    var initialPrefs = loadSavedPrefs();
+    if (!initialPrefs) {
+      showBanner(false);
+    }
   })();
 </script>
-

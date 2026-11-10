@@ -46,6 +46,53 @@ export const siteConfig = {
   tenantRootDomain: TENANT_ROOT_DOMAIN,
   alphaSiteUrl: ALPHA_SITE_URL,
   githubRepo: "webvpro/resale-command",
+  supportEmail: "hello@thehc.llc",
+
+  // Configurable Social Thumbnails (Open Graph / Discord / iMessage / Twitter Cards & On-Page Share Cards)
+  socialMeta: {
+    defaultImage: "/images/mt-hoodoutline-sign.png",
+    defaultImageAlt: "The Huckleberry Collective — Pacific Northwest Vintage, Booth #0EJ & The Works",
+    logoImage: "/images/badge-qr-sticker-fullname.png",
+    themeColor: "#D4672A",
+    pages: {
+      home: {
+        title: "The Huckleberry Collective | PNW Co-op, Vintage & Works@TheHC",
+        description:
+          "The Huckleberry Collective is a Pacific Northwest hub for thrift adventures, Booth #0EJ, and The Works (works.thehc.llc) — the cooperative AI resale, booth sync, and WSDE settlement platform.",
+        image: "/images/mt-hoodoutline-sign.png",
+        imageAlt: "The Huckleberry Collective — Built on the road, rooted in the PNW",
+      },
+      works: {
+        title: "The Huckleberry Works (Works@TheHC) — Cooperative Resale & Booth OS",
+        description:
+          "AI Quick Scout, Multi-Item Photo Slicer, Antique Mall Booth Sync & Democratic 70/30 Co-op OS at works.thehc.llc.",
+        image: "/images/mt-hoodoutline-sign.png",
+        badgeImage: "/images/SpaceHCBadge.png",
+        imageAlt: "The Huckleberry Works (Works@TheHC) — From Thrift Haul to Booth Payout",
+        shareUrl: "https://works.thehc.llc",
+        shareText:
+          "Explore Works@TheHC by The Huckleberry Collective — AI Quick Scout, Vintage Booth Sync & Democratic 70/30 Co-op OS:",
+      },
+      huckfinds: {
+        title: "HuckFinds & Huck's Adventures Outfitter | The Huckleberry Collective",
+        description:
+          "HuckFinds is the reselling & Adventurer Outfitter arm of The Huckleberry Collective. Visit Booth #0EJ inside The Memory Den in Portland, OR, or follow our live drops.",
+        image: "/images/hucks-sign.png",
+        imageAlt: "HuckFinds & Huck's Adventures Outfitter — Booth #0EJ at The Memory Den",
+      },
+    },
+  },
+
+  socialProfiles: [
+    "https://works.thehc.llc",
+    "https://www.tiktok.com/@stormbringer288",
+    "https://www.instagram.com/huckleberryfind",
+    "https://www.facebook.com/profile.php?id=61588276871946",
+    "https://www.youtube.com/channel/UCcfa92ZxvDRqyOLmZtoW1Vw",
+    "https://whatnot.com/invite/huckfinds",
+    "https://www.depop.com/huckfinds/",
+    "https://district.net/u/pdxstormbringer",
+  ],
 };
 
 // Navigation menu items

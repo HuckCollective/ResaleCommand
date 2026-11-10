@@ -1,18 +1,27 @@
 ---
+import { siteConfig } from "site-config";
 ---
 
 <footer class="mt-8 py-6 border-t border-base-300/40">
-  <div class="text-center text-xs text-base-content/60 space-y-1">
-    <p class="flex flex-wrap items-center justify-center gap-3">
+  <div class="text-center text-xs text-base-content/60 space-y-1.5">
+    <p class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
       <span>
-        Copyright © {new Date().getFullYear()} Huckleberry Collective LLC
+        Copyright © {new Date().getFullYear()} {siteConfig.legalEntity}
       </span>
+      <span class="opacity-40" aria-hidden="true">•</span>
+      <a href={siteConfig.parentSiteUrl} class="link link-hover opacity-80">
+        {siteConfig.organization}
+      </a>
+      <span class="opacity-40" aria-hidden="true">•</span>
+      <button
+        type="button"
+        data-cookie-settings
+        onclick="window.openCookiePreferences && window.openCookiePreferences()"
+        class="link link-hover text-xs opacity-85 cursor-pointer"
+      >
+        🍪 Cookie Preferences
+      </button>
     </p>
     <div class="text-[11px] opacity-75">Made by Huckleberry Productions</div>
-    <div>
-      <button type="button" data-cookie-settings class="link link-hover text-[11px] opacity-75">
-        🍪 Privacy &amp; Cookie Settings
-      </button>
-    </div>
   </div>
 </footer>
