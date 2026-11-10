@@ -1,86 +1,46 @@
 <template>
   <div class="space-y-6">
-    <!-- Settlement Header & Period Filter Controls -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-4 sm:p-5">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="badge badge-primary font-black text-xs px-2.5 py-1">
-              70 / 30 WSDE Model
-            </span>
-            <span class="badge badge-outline font-mono text-xs">
-              {{ filteredSales.length }} Sales Included
-            </span>
-          </div>
-          <h2 class="text-xl sm:text-2xl font-black text-base-content tracking-tight mt-1 flex items-center gap-2">
-            <Icon icon="solar:hand-money-bold-duotone" class="w-6 h-6 text-primary shrink-0" />
-            <span>Co-op Settlements &amp; Partner Statements</span>
-          </h2>
-          <p class="text-xs text-base-content/70 mt-0.5">
-            Calculated directly from committed sales in your database. 100% cost recoupment, 70% curator net profits, and 30% commons pool.
-          </p>
-        </div>
+    <!-- Compact Action & Statement Export Bar (Scope is controlled by the Unified Global Scope Bar above) -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-base-100 border border-base-200 shadow-2xs rounded-2xl px-4 py-3">
+      <div class="flex items-center gap-2 flex-wrap text-xs">
+        <span class="badge badge-primary font-black text-xs px-2.5 py-1">
+          70 / 30 Payout Waterfall
+        </span>
+        <span class="badge badge-outline font-mono font-bold text-xs">
+          {{ filteredSales.length }} {{ filteredSales.length === 1 ? 'sale' : 'sales' }} in scope
+        </span>
+        <span class="text-base-content/65 font-medium hidden sm:inline">
+          100% item cost paid back first, then 70% Partner / 30% Rent &amp; Ops Pool.
+        </span>
+      </div>
 
-        <div class="flex items-center gap-2.5 w-full sm:w-auto flex-wrap justify-end">
-          <!-- Link to Payout CSV Importer -->
-          <a 
-            href="/sales/import" 
-            class="btn btn-sm btn-primary gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs shadow-sm"
-            title="Upload Memory Den or register payout CSV to import and reconcile sales"
-          >
-            <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
-            <span>Upload Payout CSV</span>
-          </a>
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+        <a 
+          href="/expenses" 
+          class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs bg-base-100"
+          title="View shared commons expenses, receipts & reimbursements"
+        >
+          <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+          <span>Commons Expenses</span>
+        </a>
 
-          <!-- Link to Shared Commons Expense Ledger -->
-          <a 
-            href="/expenses" 
-            class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs bg-base-100"
-            title="View shared commons expenses, receipts & reimbursements"
-          >
-            <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-            <span>Commons Expenses</span>
-          </a>
-
-          <!-- Location / Channel Selector (100% Driven by Central Location Settings) -->
-          <div class="form-control">
-            <select v-model="selectedLocation" class="select select-bordered select-sm font-bold text-xs h-9 min-h-9 rounded-xl">
-              <option v-for="loc in boothLocationMetas" :key="loc.code" :value="loc.code">
-                {{ loc.icon }} {{ loc.shortName }} ({{ loc.code }} · {{ loc.feePct }}% fee)
-              </option>
-              <option value="all">🌐 All Channels &amp; Locations</option>
-            </select>
-          </div>
-
-          <!-- Dynamic Time Period Selector -->
-          <div class="form-control">
-            <select v-model="selectedPeriod" @change="emit('update:period', selectedPeriod)" class="select select-bordered select-sm font-bold text-xs h-9 min-h-9 rounded-xl font-mono">
-              <option v-for="m in availableMonths" :key="m.key" :value="m.key">
-                {{ m.label }} ({{ m.count }} sales)
-              </option>
-              <option value="all">All Time Realized ({{ sales.length }} sales)</option>
-            </select>
-          </div>
-
-          <!-- Download All Button -->
-          <button 
-            type="button" 
-            class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm rounded-xl h-9 min-h-9 px-3.5"
-            :disabled="partnerSettlements.length === 0"
-            @click="exportAllPartnerPdfs"
-            title="Download official PDF settlement statements for all partners"
-          >
-            <Icon icon="solar:file-download-bold" class="w-4 h-4 shrink-0" />
-            <span>Download All Statements (PDF)</span>
-          </button>
-        </div>
+        <button 
+          type="button" 
+          class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm rounded-xl h-9 min-h-9 px-3.5"
+          :disabled="partnerSettlements.length === 0"
+          @click="exportAllPartnerPdfs"
+          title="Download official PDF settlement statements for all partners"
+        >
+          <Icon icon="solar:file-download-bold" class="w-4 h-4 shrink-0" />
+          <span>Download All Statements (PDF)</span>
+        </button>
       </div>
     </div>
 
-    <!-- The 4 Core Guarantee Summary KPI Cards -->
+    <!-- Single 4-Card Plain-English Money Waterfall -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-base-200 shadow-sm space-y-1">
-        <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">Gross Realized Sales</div>
+        <div class="text-[11px] font-bold text-base-content/60 uppercase tracking-wider">1. Register Gross Sales</div>
         <div class="text-2xl font-black text-base-content font-mono">${{ settlementSummary.totalGross.toFixed(2) }}</div>
         <div class="text-xs text-base-content/50 font-medium">
           Venue Cut ({{ settlementSummary.venueFeePct }}%): -${{ settlementSummary.totalVenueFee.toFixed(2) }}
@@ -89,27 +49,27 @@
 
       <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-success/30 shadow-sm space-y-1 bg-success/5">
         <div class="text-[11px] font-bold text-success uppercase tracking-wider flex items-center gap-1">
-          <span>🛡️ Guarantee 1</span>
+          <span>🛡️ 2. Cost Paid Back First</span>
         </div>
         <div class="text-2xl font-black text-success font-mono">+${{ settlementSummary.totalCostBasis.toFixed(2) }}</div>
         <div class="text-xs text-base-content/70 font-medium">
-          100% Capital Recouped First
+          100% Out-of-Pocket Capital Recouped
         </div>
       </div>
 
       <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-primary/30 shadow-sm space-y-1 bg-primary/5">
         <div class="text-[11px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
-          <span>💎 Guarantee 2</span>
+          <span>💎 3. Partner Payout Checks</span>
         </div>
         <div class="text-2xl font-black text-primary font-mono">+${{ settlementSummary.totalCuratorPayouts.toFixed(2) }}</div>
         <div class="text-xs text-base-content/70 font-medium">
-          Curator Net Checks (Cost + 70% Profit)
+          Cost Recoup + 70% Net Profit Share
         </div>
       </div>
 
       <div class="card bg-base-100 p-4 sm:p-5 rounded-2xl border border-warning/30 shadow-sm space-y-1.5 bg-warning/5">
         <div class="text-[11px] font-bold text-warning uppercase tracking-wider flex items-center justify-between gap-1">
-          <span>🤝 Guarantee 3</span>
+          <span>🤝 4. Rent &amp; Ops Pool (30%)</span>
           <a href="/expenses" class="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5" title="View all receipts & reimbursements">
             <span>Expenses</span>
             <Icon icon="solar:arrow-right-linear" class="w-3 h-3" />
@@ -132,185 +92,30 @@
           </div>
         </div>
         <div class="text-xs font-bold pt-1 border-t border-warning/20" :class="settlementSummary.isCommonsFullyCovered ? 'text-success' : 'text-warning'">
-          {{ settlementSummary.isMonthInProgress ? 'Month in progress - rent is billed by Memory Den at month end' : settlementSummary.isCommonsFullyCovered ? `✅ Over Operating Costs (+$${settlementSummary.commonsNetBalance.toFixed(2)} Surplus)` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
+          {{ settlementSummary.isMonthInProgress ? 'Month in progress — booth rent bills at month end' : settlementSummary.isCommonsFullyCovered ? `✅ Over Operating Costs (+$${settlementSummary.commonsNetBalance.toFixed(2)} Surplus)` : `⚠️ Shortfall: -$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} (Carried Over)` }}
         </div>
       </div>
     </div>
 
-    <!-- Operating Costs Breakeven & Partner Profit-Sharing Policy Card (Up for Co-op Vote) -->
-    <div v-if="partnerSettlements.length > 0" class="card bg-base-100 border border-primary/25 shadow-sm rounded-2xl p-4 sm:p-5 space-y-4">
-      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-base-200 pb-3">
-        <div class="space-y-1">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="badge badge-sm badge-primary text-primary-content font-black whitespace-nowrap shrink-0">
-              Gate 3 ➔ Gate 4 Breakeven
-            </span>
-            <span
-              class="badge badge-sm font-bold whitespace-nowrap shrink-0"
-              :class="settlementSummary.commonsNetBalance > 0 ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
-            >
-              {{
-                settlementSummary.isMonthInProgress
-                  ? '⏳ Month In Progress'
-                  : settlementSummary.commonsNetBalance > 0
-                    ? `🎉 +$${settlementSummary.commonsNetBalance.toFixed(2)} Over Operating Costs`
-                    : `$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} Until Operating Breakeven`
-              }}
-            </span>
-            <a
-              href="/coop/governance?tab=rules"
-              class="badge badge-sm badge-secondary text-secondary-content font-bold gap-1 hover:brightness-110 whitespace-nowrap shrink-0"
-              title="Open Co-op Governance & Policy Sliders to configure Gate 3 and Gate 4B rules"
-            >
-              <Icon icon="solar:user-hand-up-bold" class="w-3 h-3" />
-              <span>Configure Sliders ({{ policyConfig.reserveSharePct }}/{{ policyConfig.salesPatronagePct }}/{{ policyConfig.laborPatronagePct }}) ➔</span>
-            </a>
-            <a
-              href="/coop/labor"
-              class="badge badge-sm badge-outline border-accent/40 text-accent font-mono font-bold gap-1 hover:bg-accent/10 whitespace-nowrap shrink-0"
-              title="Log or review verified Sweat-Equity Labor hours"
-            >
-              <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
-              <span>Labor: {{ periodLaborHours.HUCK + periodLaborHours.PDXGL + periodLaborHours.SWEAT }}h logged</span>
-            </a>
-          </div>
-          <h3 class="text-base sm:text-lg font-black text-base-content">
-            Multi-Channel Operating Breakeven, Mondragon ICAs &amp; Partner Profit Sharing
-          </h3>
-          <p class="text-xs text-base-content/70">
-            Once the {{ policyConfig.commonsSharePct }}% Commons Pool covers 100% of Monthly Operating Costs (Net Booth Rent + Tech Ops + Supplies + Prior Shortfall Carryover), excess surplus distributes across Reserve ({{ policyConfig.reserveSharePct }}%), Sales Patronage ({{ policyConfig.salesPatronagePct }}%), and Sweat-Equity Labor ({{ policyConfig.laborPatronagePct }}%).
-          </p>
+    <!-- ABOVE-THE-FOLD PARTNER PAYOUT CHECK SUMMARY TABLE -->
+    <div v-if="partnerSettlements.length > 0" class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-base-200 flex items-center justify-between gap-2 flex-wrap bg-base-200/40">
+        <div class="flex items-center gap-2">
+          <Icon icon="solar:wad-of-money-bold-duotone" class="w-5 h-5 text-success" />
+          <h3 class="text-sm sm:text-base font-black text-base-content">Partner Payout Check Summary</h3>
         </div>
-
-        <!-- Policy Mode & Partner Split Switchers -->
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-          <div class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300">
-            <button
-              type="button"
-              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
-              :class="surplusPolicyMode === 'patronage_90_10' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
-              @click="setSurplusPolicyMode('patronage_90_10')"
-              title="10% to Rainy-Day Reserve, 90% distributed to Co-op Partners"
-            >
-              ⚖️ 90/10 Dividend
-            </button>
-            <button
-              type="button"
-              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
-              :class="surplusPolicyMode === 'cap_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
-              @click="setSurplusPolicyMode('cap_100')"
-              title="Cap Commons at Operating Costs; 100% of excess goes to Co-op Partners"
-            >
-              🚀 100% Over Ops
-            </button>
-            <button
-              type="button"
-              class="join-item btn btn-xs font-bold rounded-lg px-2.5"
-              :class="surplusPolicyMode === 'reserve_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
-              @click="setSurplusPolicyMode('reserve_100')"
-              title="Keep 100% of excess in the Collective Rainy-Day Reserve"
-            >
-              🛡️ 100% Reserve
-            </button>
-          </div>
-
-          <div
-            v-if="surplusPolicyMode !== 'reserve_100'"
-            class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300"
-          >
-            <button
-              type="button"
-              class="join-item btn btn-xs font-bold rounded-lg px-2"
-              :class="surplusSplitBasis === 'volume' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
-              @click="setSurplusSplitBasis('volume')"
-              title="Split excess surplus proportional to each partner's contributed net surplus"
-            >
-              📊 Pro-Rata Sales
-            </button>
-            <button
-              type="button"
-              class="join-item btn btn-xs font-bold rounded-lg px-2"
-              :class="surplusSplitBasis === 'equal' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
-              @click="setSurplusSplitBasis('equal')"
-              title="Split excess surplus equally (50/50) among active Co-op Partners"
-            >
-              🤝 Equal Split
-            </button>
-          </div>
-        </div>
+        <span class="text-[11px] text-base-content/60 font-medium">
+          Side-by-side breakdown before issuing monthly checks
+        </span>
       </div>
-
-      <!-- Visual Operating Costs Breakeven Progress Bar -->
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between text-xs flex-wrap gap-2">
-          <span class="font-bold text-base-content/80">
-            {{ policyConfig.commonsSharePct }}% Commons Pool Collected:
-            <strong class="font-mono text-warning">${{ settlementSummary.totalCommonsPool.toFixed(2) }}</strong>
-            <span class="opacity-60 mx-1">vs.</span>
-            Operating Hurdle:
-            <strong class="font-mono text-base-content">${{ settlementSummary.totalCommonsOverhead.toFixed(2) }}</strong>
-            <span class="opacity-60 text-[11px]">
-              (Rent ${{ settlementSummary.netBoothRentForCoop.toFixed(2) }} + Tech ${{ settlementSummary.techOps.toFixed(2) }} + Supplies ${{ settlementSummary.supplies.toFixed(2) }}<template v-if="settlementSummary.carriedOverShortfall > 0"> + Prior Shortfall ${{ settlementSummary.carriedOverShortfall.toFixed(2) }}</template>)
-            </span>
-          </span>
-          <span class="font-mono font-black text-xs" :class="settlementSummary.distributablePartnerBonusPool > 0 ? 'text-success' : 'text-base-content/60'">
-            Partner Bonus Pool: +${{ settlementSummary.distributablePartnerBonusPool.toFixed(2) }} | Reserve Added: +${{ settlementSummary.reserveAddition.toFixed(2) }}
-          </span>
-        </div>
-        <div class="w-full h-3 rounded-full bg-base-300 overflow-hidden flex shadow-inner">
-          <div
-            class="transition-all duration-300"
-            :class="settlementSummary.isCommonsFullyCovered ? 'bg-success' : 'bg-warning'"
-            :style="{ width: `${settlementSummary.breakevenProgressPct}%` }"
-          ></div>
-        </div>
-      </div>
-
-      <!-- Individual Marketing / Social & Sweat-Equity Worker Dividend + Mondragon ICA Strip -->
-      <div v-if="periodMemberLaborShares.length > 0" class="p-3.5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
-        <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
-          <span class="font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
-            <Icon icon="solar:users-group-rounded-bold" class="w-4 h-4" />
-            <span>Gate 4B Sweat-Equity &amp; Marketing Worker Dividend Breakdown ({{ policyConfig.laborPatronagePct }}% Labor Pool = ${{ settlementSummary.laborBonusPool.toFixed(2) }})</span>
-          </span>
-          <span class="badge badge-xs badge-outline font-mono font-bold">
-            Mondragon ICA Target Yield: {{ policyConfig.icaAnnualYieldRatePct || 7 }}%/yr
-          </span>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-          <div
-            v-for="worker in periodMemberLaborShares"
-            :key="worker.member"
-            class="p-2.5 rounded-xl bg-base-100 border border-base-300 flex items-center justify-between gap-2"
-          >
-            <div class="min-w-0">
-              <div class="font-bold text-base-content truncate">{{ worker.member }}</div>
-              <div class="text-[10px] text-base-content/60 flex items-center gap-1">
-                <span class="badge badge-xs font-mono font-bold" :class="worker.partner === 'SWEAT' ? 'badge-secondary' : worker.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'">
-                  {{ worker.partner }}-
-                </span>
-                <span class="truncate">{{ worker.roleLabel }}</span>
-              </div>
-            </div>
-            <div class="text-right shrink-0 font-mono">
-              <div class="font-black text-success">
-                +${{ ((settlementSummary.laborBonusPool * worker.sharePct) / 100).toFixed(2) }}
-              </div>
-              <div class="text-[10px] text-base-content/60">{{ worker.hours.toFixed(1) }}h ({{ worker.sharePct }}%)</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Side-by-Side Partner Profit-Sharing Summary Table -->
-      <div class="overflow-x-auto border border-base-200 rounded-xl">
-        <table class="table table-xs">
+      <div class="overflow-x-auto">
+        <table class="table table-xs sm:table-sm">
           <thead>
             <tr class="bg-base-200/70 text-base-content/70 font-bold">
               <th>Partner</th>
               <th>Role</th>
               <th class="text-right">Gross Sales</th>
-              <th class="text-right">15% Venue Fee</th>
+              <th class="text-right">Venue Fee</th>
               <th class="text-right">100% Cost Recoup</th>
               <th class="text-right">Base Profit ({{ policyConfig.curatorSharePct }}%)</th>
               <th class="text-right">Ops / Rent Share</th>
@@ -346,6 +151,174 @@
         </table>
       </div>
     </div>
+
+    <!-- SAFE COLLAPSIBLE ACCORDION: RENT BREAKEVEN, LABOR DIVIDENDS & POLICY SIMULATOR (ZERO ACCIDENTAL CLICKS, ZERO INFO LOSS) -->
+    <details v-if="partnerSettlements.length > 0" class="collapse collapse-arrow bg-base-100 border border-primary/20 rounded-2xl shadow-2xs">
+      <summary class="collapse-title font-bold text-xs sm:text-sm flex items-center justify-between gap-2 flex-wrap pr-10">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span>⚙️ Rent Breakeven Progress, Sweat-Equity Labor &amp; Policy Simulator</span>
+          <span
+            class="badge badge-xs font-bold"
+            :class="settlementSummary.commonsNetBalance > 0 ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
+          >
+            {{
+              settlementSummary.isMonthInProgress
+                ? '⏳ Month In Progress'
+                : settlementSummary.commonsNetBalance > 0
+                  ? `+$${settlementSummary.commonsNetBalance.toFixed(2)} Over Ops`
+                  : `$${Math.abs(settlementSummary.commonsNetBalance).toFixed(2)} Until Breakeven`
+            }}
+          </span>
+          <span class="badge badge-xs badge-outline font-mono">
+            Labor: {{ periodLaborHours.HUCK + periodLaborHours.PDXGL + periodLaborHours.SWEAT }}h
+          </span>
+        </div>
+      </summary>
+      <div class="collapse-content space-y-4 pt-2 border-t border-base-200/70">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <a
+                href="/coop/governance?tab=rules"
+                class="badge badge-sm badge-secondary text-secondary-content font-bold gap-1 hover:brightness-110 whitespace-nowrap shrink-0"
+                title="Open Co-op Governance & Policy Sliders"
+              >
+                <Icon icon="solar:user-hand-up-bold" class="w-3 h-3" />
+                <span>Configure Sliders ({{ policyConfig.reserveSharePct }}/{{ policyConfig.salesPatronagePct }}/{{ policyConfig.laborPatronagePct }}) ➔</span>
+              </a>
+              <a
+                href="/coop/labor"
+                class="badge badge-sm badge-outline border-accent/40 text-accent font-mono font-bold gap-1 hover:bg-accent/10 whitespace-nowrap shrink-0"
+                title="Log or review verified Sweat-Equity Labor hours"
+              >
+                <Icon icon="solar:clock-circle-bold" class="w-3 h-3" />
+                <span>Manage Labor Hours ➔</span>
+              </a>
+            </div>
+            <p class="text-xs text-base-content/70">
+              Once the {{ policyConfig.commonsSharePct }}% Rent &amp; Ops Pool covers 100% of Monthly Operating Costs, excess surplus distributes across Reserve ({{ policyConfig.reserveSharePct }}%), Sales Patronage ({{ policyConfig.salesPatronagePct }}%), and Sweat-Equity Labor ({{ policyConfig.laborPatronagePct }}%).
+            </p>
+          </div>
+
+          <!-- Policy Mode & Partner Split Switchers -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+            <div class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300">
+              <button
+                type="button"
+                class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+                :class="surplusPolicyMode === 'patronage_90_10' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+                @click="setSurplusPolicyMode('patronage_90_10')"
+                title="10% to Rainy-Day Reserve, 90% distributed to Co-op Partners"
+              >
+                ⚖️ 90/10 Dividend
+              </button>
+              <button
+                type="button"
+                class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+                :class="surplusPolicyMode === 'cap_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+                @click="setSurplusPolicyMode('cap_100')"
+                title="Cap Commons at Operating Costs; 100% of excess goes to Co-op Partners"
+              >
+                🚀 100% Over Ops
+              </button>
+              <button
+                type="button"
+                class="join-item btn btn-xs font-bold rounded-lg px-2.5"
+                :class="surplusPolicyMode === 'reserve_100' ? 'btn-primary text-primary-content' : 'btn-ghost opacity-75'"
+                @click="setSurplusPolicyMode('reserve_100')"
+                title="Keep 100% of excess in the Collective Rainy-Day Reserve"
+              >
+                🛡️ 100% Reserve
+              </button>
+            </div>
+
+            <div
+              v-if="surplusPolicyMode !== 'reserve_100'"
+              class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300"
+            >
+              <button
+                type="button"
+                class="join-item btn btn-xs font-bold rounded-lg px-2"
+                :class="surplusSplitBasis === 'volume' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
+                @click="setSurplusSplitBasis('volume')"
+              >
+                📊 Pro-Rata Sales
+              </button>
+              <button
+                type="button"
+                class="join-item btn btn-xs font-bold rounded-lg px-2"
+                :class="surplusSplitBasis === 'equal' ? 'btn-secondary text-secondary-content' : 'btn-ghost opacity-75'"
+                @click="setSurplusSplitBasis('equal')"
+              >
+                🤝 Equal Split
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Operating Costs Breakeven Progress Bar -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-xs flex-wrap gap-2">
+            <span class="font-bold text-base-content/80">
+              {{ policyConfig.commonsSharePct }}% Pool Collected:
+              <strong class="font-mono text-warning">${{ settlementSummary.totalCommonsPool.toFixed(2) }}</strong>
+              <span class="opacity-60 mx-1">vs.</span>
+              Operating Hurdle:
+              <strong class="font-mono text-base-content">${{ settlementSummary.totalCommonsOverhead.toFixed(2) }}</strong>
+              <span class="opacity-60 text-[11px]">
+                (Rent ${{ settlementSummary.netBoothRentForCoop.toFixed(2) }} + Tech ${{ settlementSummary.techOps.toFixed(2) }} + Supplies ${{ settlementSummary.supplies.toFixed(2) }}<template v-if="settlementSummary.carriedOverShortfall > 0"> + Prior Shortfall ${{ settlementSummary.carriedOverShortfall.toFixed(2) }}</template>)
+              </span>
+            </span>
+            <span class="font-mono font-black text-xs" :class="settlementSummary.distributablePartnerBonusPool > 0 ? 'text-success' : 'text-base-content/60'">
+              Partner Bonus Pool: +${{ settlementSummary.distributablePartnerBonusPool.toFixed(2) }} | Reserve Added: +${{ settlementSummary.reserveAddition.toFixed(2) }}
+            </span>
+          </div>
+          <div class="w-full h-3 rounded-full bg-base-300 overflow-hidden flex shadow-inner">
+            <div
+              class="transition-all duration-300"
+              :class="settlementSummary.isCommonsFullyCovered ? 'bg-success' : 'bg-warning'"
+              :style="{ width: `${settlementSummary.breakevenProgressPct}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Sweat-Equity Worker Dividend Strip -->
+        <div v-if="periodMemberLaborShares.length > 0" class="p-3.5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
+          <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
+            <span class="font-extrabold uppercase tracking-wider text-secondary flex items-center gap-1.5">
+              <Icon icon="solar:users-group-rounded-bold" class="w-4 h-4" />
+              <span>Sweat-Equity &amp; Marketing Worker Dividend ({{ policyConfig.laborPatronagePct }}% Labor Pool = ${{ settlementSummary.laborBonusPool.toFixed(2) }})</span>
+            </span>
+            <span class="badge badge-xs badge-outline font-mono font-bold">
+              Mondragon ICA Target Yield: {{ policyConfig.icaAnnualYieldRatePct || 7 }}%/yr
+            </span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+            <div
+              v-for="worker in periodMemberLaborShares"
+              :key="worker.member"
+              class="p-2.5 rounded-xl bg-base-100 border border-base-300 flex items-center justify-between gap-2"
+            >
+              <div class="min-w-0">
+                <div class="font-bold text-base-content truncate">{{ worker.member }}</div>
+                <div class="text-[10px] text-base-content/60 flex items-center gap-1">
+                  <span class="badge badge-xs font-mono font-bold" :class="worker.partner === 'SWEAT' ? 'badge-secondary' : worker.partner === 'PDXGL' ? 'badge-accent' : 'badge-primary'">
+                    {{ worker.partner }}-
+                  </span>
+                  <span class="truncate">{{ worker.roleLabel }}</span>
+                </div>
+              </div>
+              <div class="text-right shrink-0 font-mono">
+                <div class="font-black text-success">
+                  +${{ ((settlementSummary.laborBonusPool * worker.sharePct) / 100).toFixed(2) }}
+                </div>
+                <div class="text-[10px] text-base-content/60">{{ worker.hours.toFixed(1) }}h ({{ worker.sharePct }}%)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <!-- Member / Partner Payout Statements: directly under the 4 waterfall cards -->
     <!-- Empty State -->
@@ -478,7 +451,17 @@
                 <td class="font-mono text-xs font-semibold">{{ cleanSkuDisplay(it.sku) }}</td>
                 <td class="max-w-xs">
                   <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="truncate font-medium">{{ it.title }}</span>
+                    <button
+                      v-if="it.rawSale?.itemId"
+                      type="button"
+                      @click="$emit('inspect-item', it.rawSale.itemId)"
+                      class="truncate font-medium text-left hover:text-primary cursor-pointer inline-flex items-center gap-1 max-w-full"
+                      title="Inspect item in Side Drawer"
+                    >
+                      <span class="truncate">{{ it.title }}</span>
+                      <Icon icon="solar:eye-linear" class="w-3 h-3 text-primary shrink-0" />
+                    </button>
+                    <span v-else class="truncate font-medium">{{ it.title }}</span>
                     <span
                       v-if="isUnlinkedRow(it)"
                       class="badge badge-xs badge-warning font-black"
@@ -931,6 +914,8 @@ const props = defineProps<{
   sales: SaleItem[];
   /** Month filter shared with the /sales page ('YYYY-MM' or 'all'). */
   period?: string;
+  /** Location / Venue filter shared with the /sales page ('all' | 'MD' | 'DT'). */
+  location?: string;
   /** Partner filter shared with the /sales page ('all' | 'HUCK' | 'BB' | 'PDXGL'). */
   partnerFilter?: string;
   /** Monthly booth rent from the live Appwrite `warehouses` document (never hardcoded). */
@@ -941,10 +926,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:period', value: string): void;
+  (e: 'update:location', value: string): void;
   (e: 'link-sale', sale: any): void;
+  (e: 'inspect-item', itemId: string): void;
 }>();
 
 const isUnlinkedRow = (it: any): boolean => {
+  const rawOrd = String(it?.rawSale?.orderId || '').trim().toUpperCase();
+  if (rawOrd.includes('-SHEET') || rawOrd.startsWith('ONLINE') || rawOrd.startsWith('EBAY') || rawOrd.startsWith('POSH') || rawOrd.startsWith('POPUP')) {
+    return false;
+  }
   const title = String(it?.title || '').trim();
   const sku = String(it?.sku || '').trim();
   return /^ticket\s*#/i.test(title) || /^order\s+/i.test(title) || /^SO-/i.test(sku);
@@ -952,7 +943,7 @@ const isUnlinkedRow = (it: any): boolean => {
 
 const { currentTeam } = useAuth();
 const selectedPeriod = ref<string>('all');
-const selectedLocation = ref<string>('MD');
+const selectedLocation = ref<string>(props.location || 'all');
 
 const boothLocationMetas = computed(() =>
   getAllLocationSettingMetas(props.warehouses).filter((m) => m.monthlyRent > 0 || m.commissionRate > 0)
@@ -1108,9 +1099,13 @@ const saveDeal = async () => {
   }
 };
 
-// Keep this view's month in sync with the /sales page filter
+// Keep this view's month and venue in sync with the Unified Global Scope Bar on /sales
 watch(() => props.period, (p) => {
   if (p && p !== selectedPeriod.value) selectedPeriod.value = p;
+}, { immediate: true });
+
+watch(() => props.location, (loc) => {
+  if (loc && loc !== selectedLocation.value) selectedLocation.value = loc;
 }, { immediate: true });
 
 // Shared Commons Expenses State
@@ -1398,7 +1393,19 @@ const effectiveMonthlyRent = computed(() => {
   if (activeLocationMeta.value) {
     return Number(activeLocationMeta.value.monthlyRent ?? props.monthlyRent ?? 0);
   }
-  return Number(props.monthlyRent ?? 0);
+  // When 'all' venues are selected, sum monthlyRent only for booth venues that have sales in filteredSales
+  const activeVenueCodes = new Set<string>();
+  for (const s of filteredSales.value) {
+    const code = resolveCanonicalLocationCode((s as any).warehouseId || s.locationName || '', props.warehouses);
+    if (code) activeVenueCodes.add(code);
+  }
+  let summed = 0;
+  for (const meta of boothLocationMetas.value) {
+    if (activeVenueCodes.has(meta.code)) {
+      summed += Number(meta.monthlyRent || 0);
+    }
+  }
+  return summed > 0 ? Number(summed.toFixed(2)) : Number(props.monthlyRent ?? 0);
 });
 
 const partnerSettlements = computed(() => {

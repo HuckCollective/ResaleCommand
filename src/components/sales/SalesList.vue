@@ -1,36 +1,61 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
+    <!-- Header: Clean Title + 2 Mistake-Proof Actions -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight flex items-center gap-3">
           <Icon icon="solar:dollar-bold-duotone" class="w-8 h-8 sm:w-9 h-9 text-success shrink-0" />
-          <span>Sales & Realized Revenue</span>
+          <span>Sales &amp; Partner Settlements</span>
         </h1>
         <p class="text-sm text-base-content/70 mt-1">
-          Track sold items, calculate platform commissions, and monitor net payouts across all locations.
+          One unified workspace for register sales, paper sheets, and 70/30 co-op payout checks.
         </p>
       </div>
-      <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
-        <a href="/sales/import/MD" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-md shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]" title="Upload & Reconcile Memory Den / POS Payout CSV">
-          <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
-          <span>Upload Payout CSV</span>
-        </a>
-        <a href="/warehouse/sync/MD" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]">
-          <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 shrink-0" />
-          <span>Location Sync</span>
-        </a>
-        <a href="/sales/new?location=DT" class="btn btn-sm sm:btn-md btn-outline btn-warning gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Record a Dusty Tiger (DT · 10% fee · $75/mo rent) paper sales sheet entry">
-          <span>🐯 Dusty Tiger Sale</span>
-        </a>
-        <a href="/sales/new?channel=online" class="btn btn-sm sm:btn-md btn-outline btn-info gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]" title="Record an eBay, Poshmark, Direct Online, or Pop-Up Market sale with 100% postage recoupment">
-          <Icon icon="solar:globus-bold-duotone" class="w-4 h-4 shrink-0" />
-          <span>Online / Pop-Up</span>
-        </a>
-        <a href="/sales/new" class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-lg shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]">
-          <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+      <div class="flex items-center gap-2.5 w-full md:w-auto">
+        <!-- 1. Unified Sync / Import Menu -->
+        <div class="dropdown dropdown-end flex-1 sm:flex-initial">
+          <label tabindex="0" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 font-bold w-full min-h-[40px] rounded-xl cursor-pointer">
+            <Icon icon="solar:import-bold-duotone" class="w-4 h-4 shrink-0" />
+            <span>Import / Sync</span>
+            <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-70" />
+          </label>
+          <ul tabindex="0" class="dropdown-content menu p-2 shadow-xl bg-base-100 border border-base-300 rounded-2xl w-68 z-50 text-xs font-bold space-y-1 mt-1.5">
+            <li>
+              <a href="/sales/import/MD" class="rounded-xl py-2.5 gap-2.5">
+                <Icon icon="solar:file-check-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                <div>
+                  <div class="font-black text-base-content">Import Payout CSV / Live Sync</div>
+                  <div class="text-[10px] font-normal opacity-65">Reconcile Memory Den checks &amp; live POS</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a href="/warehouse/sync/MD" class="rounded-xl py-2.5 gap-2.5">
+                <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
+                <div>
+                  <div class="font-black text-base-content">Booth Catalog &amp; Barcode Sync</div>
+                  <div class="text-[10px] font-normal opacity-65">Verify 0EJ SKUs &amp; HUCK- tags</div>
+                </div>
+              </a>
+            </li>
+            <li class="border-t border-base-200 pt-1">
+              <button type="button" @click="exportSalesCsv" class="rounded-xl py-2 gap-2.5">
+                <Icon icon="solar:file-download-bold" class="w-4 h-4 text-success shrink-0" />
+                <span>Export Filtered Ledger (CSV)</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 2. Hero Primary Action: Opens Shopping Cart Record Sale Tray -->
+        <button
+          type="button"
+          @click="isRecordDrawerOpen = true"
+          class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-md shadow-primary/20 font-black flex-1 sm:flex-initial min-h-[40px] rounded-xl"
+        >
+          <Icon icon="solar:cart-plus-bold" class="w-4 h-4 shrink-0" />
           <span>Record Sale</span>
-        </a>
+        </button>
       </div>
     </div>
 
@@ -48,89 +73,208 @@
     </div>
 
     <!-- Main Content when loaded -->
-    <div v-else class="space-y-6">
-      
-      <!-- Metrics Overview Cards -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-          <div class="flex items-center gap-2.5 sm:gap-3">
-            <div class="p-2.5 sm:p-3 bg-success/10 text-success rounded-xl shrink-0">
-              <Icon icon="solar:dollar-bold" class="w-5 h-5 sm:w-6 h-6" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] uppercase font-bold opacity-60 truncate">Gross Sales</div>
-              <div class="text-lg sm:text-2xl font-black font-mono text-success truncate">{{ formatCurrency(totalGross) }}</div>
-              <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
+    <div v-else class="space-y-5">
+      <!-- UNIFIED GLOBAL SCOPE BAR (CONTROLS BOTH TABS IN LOCKSTEP — ZERO SPLIT-BRAIN) -->
+      <div class="card bg-base-100/95 shadow-sm border border-base-200 rounded-2xl p-3 space-y-3">
+        <!-- Top Row: View Switcher + Month + Venue Pills -->
+        <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+          <!-- View Switcher -->
+          <div class="join bg-base-200/90 p-1 rounded-xl shadow-inner w-full lg:w-auto">
+            <button
+              type="button"
+              class="btn btn-sm join-item gap-2 flex-1 lg:flex-initial rounded-lg text-xs font-bold transition-all"
+              :class="salesViewTab === 'ledger' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
+              @click="salesViewTab = 'ledger'"
+            >
+              <Icon icon="solar:list-check-bold" class="w-4 h-4" />
+              <span>Sales Ledger ({{ scopedSales.length }})</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm join-item gap-2 flex-1 lg:flex-initial rounded-lg text-xs font-bold transition-all"
+              :class="salesViewTab === 'coop' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
+              @click="salesViewTab = 'coop'"
+            >
+              <Icon icon="solar:hand-money-bold-duotone" class="w-4 h-4 text-warning" />
+              <span>Partner Payouts &amp; 70/30</span>
+            </button>
+          </div>
+
+          <!-- Month + Venue Scope Controls -->
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Month Filter -->
+            <select
+              v-model="monthFilter"
+              class="select select-bordered text-xs font-bold h-9 min-h-9 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary pr-8"
+              title="Filter both Sales Ledger and Partner Payouts by month"
+            >
+              <option v-for="m in monthOptions" :key="m.key" :value="m.key">{{ m.label }} ({{ m.count }})</option>
+              <option value="all">All-Time ({{ consolidatedSales.length }})</option>
+            </select>
+
+            <!-- Venue Filter Pills -->
+            <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner flex-wrap" role="group" aria-label="Filter by venue">
+              <button
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+                :class="locationFilter === 'all' ? 'btn-neutral shadow-xs' : 'btn-ghost opacity-75'"
+                @click="locationFilter = 'all'"
+              >All Venues</button>
+              <button
+                v-for="loc in boothLocationMetas"
+                :key="loc.code"
+                type="button"
+                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+                :class="locationFilter === loc.code ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
+                @click="locationFilter = loc.code"
+              >{{ loc.icon }} {{ loc.shortName }} ({{ loc.code }})</button>
             </div>
           </div>
         </div>
 
-        <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-          <div class="flex items-center gap-2.5 sm:gap-3">
-            <div class="p-2.5 sm:p-3 bg-primary/10 text-primary rounded-xl shrink-0">
-              <Icon icon="solar:wallet-money-bold" class="w-5 h-5 sm:w-6 h-6" />
+        <!-- Bottom Row: Partner Attribution Pills + Search Omnibox -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-base-200/70">
+          <!-- Partner Pills -->
+          <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by co-op partner">
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+              :class="partnerFilter === 'all' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="partnerFilter = 'all'"
+            >All Co-op <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.all }}</span></button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+              :class="partnerFilter === 'HUCK' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="partnerFilter = 'HUCK'"
+            >🫐 Huck <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.HUCK }}</span></button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+              :class="partnerFilter === 'BB' ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
+              @click="partnerFilter = 'BB'"
+            >👗 B&amp;B <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.BB }}</span></button>
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+              :class="partnerFilter === 'PDXGL' ? 'btn-accent shadow-xs' : 'btn-ghost opacity-75'"
+              @click="partnerFilter = 'PDXGL'"
+            >🎲 PDXGL <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.PDXGL }}</span></button>
+          </div>
+
+          <!-- Search Omnibox (Shown on Ledger Tab) -->
+          <div v-if="salesViewTab === 'ledger'" class="flex items-center gap-2 flex-1 max-w-md ml-auto w-full">
+            <div class="relative flex-1">
+              <Icon icon="solar:magnifer-linear" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
+              <input
+                type="text"
+                v-model="searchQuery"
+                placeholder="Search title, HUCK- tag, 0EJ SKU, SO#..."
+                class="input input-bordered w-full pl-9 pr-15 text-xs sm:text-sm h-9 min-h-9 rounded-xl bg-base-200/50 focus:bg-base-100 border-base-300 focus:border-primary"
+              />
+              <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                <button
+                  v-if="searchQuery"
+                  type="button"
+                  @click="searchQuery = ''"
+                  class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-0"
+                  title="Clear search"
+                >✕</button>
+                <button
+                  type="button"
+                  @click="showBarcodeScanner = true"
+                  class="btn btn-ghost btn-circle btn-xs text-primary w-7 h-7 min-h-0"
+                  title="Scan tag with camera"
+                >
+                  <Icon icon="solar:camera-linear" class="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] uppercase font-bold opacity-60 truncate">Net Payout</div>
-              <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">{{ formatCurrency(totalNet) }}</div>
-              <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-            </div>
+            <span class="badge badge-sm badge-ghost font-mono opacity-70 shrink-0">
+              {{ displayedSales.length }}
+            </span>
+          </div>
+          <div v-else class="text-xs font-semibold text-base-content/60 ml-auto flex items-center gap-2">
+            <span>Scope: <strong class="text-base-content">{{ scopeLabel }}</strong></span>
           </div>
         </div>
 
-        <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-          <div class="flex items-center gap-2.5 sm:gap-3">
-            <div class="p-2.5 sm:p-3 bg-error/10 text-error rounded-xl shrink-0">
-              <Icon icon="solar:ticket-sale-bold" class="w-5 h-5 sm:w-6 h-6" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] uppercase font-bold opacity-60 truncate">Total Fees</div>
-              <div class="text-lg sm:text-2xl font-black font-mono text-error truncate">{{ formatCurrency(totalFees) }}</div>
-              <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-          <div class="flex items-center gap-2.5 sm:gap-3">
-            <div class="p-2.5 sm:p-3 bg-info/10 text-info rounded-xl shrink-0">
-              <Icon icon="solar:box-bold" class="w-5 h-5 sm:w-6 h-6" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] uppercase font-bold opacity-60 truncate">Items Sold</div>
-              <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">{{ scopedSales.length }}</div>
-              <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- VIEW TAB SWITCHER (SALES LEDGER VS CO-OP SETTLEMENTS) -->
-      <div class="flex items-center justify-between gap-3 border-b border-base-200 pb-2">
-        <div class="join bg-base-200/90 p-1 rounded-2xl shadow-inner w-full sm:w-auto">
-          <button 
-            type="button" 
-            class="btn btn-sm join-item gap-2 flex-1 sm:flex-initial rounded-xl text-xs font-bold transition-all"
-            :class="salesViewTab === 'ledger' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
-            @click="salesViewTab = 'ledger'"
-          >
-            <Icon icon="solar:list-check-bold" class="w-4 h-4" />
-            <span>Sales Ledger ({{ scopedSales.length }})</span>
+        <!-- Mobile Sort Pills (Ledger Tab Only) -->
+        <div v-if="salesViewTab === 'ledger'" class="flex md:hidden items-center gap-1.5 flex-wrap pt-1 text-xs">
+          <span class="font-bold opacity-60 mr-1 flex items-center gap-1 whitespace-nowrap shrink-0">
+            <Icon icon="solar:sort-vertical-linear" class="w-3.5 h-3.5 shrink-0" /> Sort:
+          </span>
+          <button type="button" class="btn btn-xs rounded-lg font-bold gap-1" :class="sortBy === 'date' ? 'btn-primary' : 'btn-ghost opacity-75'" @click="toggleSort('date')">
+            ⚡ Date <span v-if="sortBy === 'date'">{{ sortDesc ? '↓' : '↑' }}</span>
           </button>
-          <button 
-            type="button" 
-            class="btn btn-sm join-item gap-2 flex-1 sm:flex-initial rounded-xl text-xs font-bold transition-all"
-            :class="salesViewTab === 'coop' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
-            @click="salesViewTab = 'coop'"
-          >
-            <Icon icon="solar:hand-money-bold-duotone" class="w-4 h-4 text-warning" />
-            <span>Co-op Settlements (70/30)</span>
+          <button type="button" class="btn btn-xs rounded-lg font-bold gap-1" :class="sortBy === 'so' ? 'btn-primary' : 'btn-ghost opacity-75'" @click="toggleSort('so')">
+            # SO# <span v-if="sortBy === 'so'">{{ sortDesc ? '↓' : '↑' }}</span>
+          </button>
+          <button type="button" class="btn btn-xs rounded-lg font-bold gap-1" :class="sortBy === 'net' ? 'btn-primary' : 'btn-ghost opacity-75'" @click="toggleSort('net')">
+            💲 Net <span v-if="sortBy === 'net'">{{ sortDesc ? '↓' : '↑' }}</span>
+          </button>
+          <button type="button" class="btn btn-xs rounded-lg font-bold gap-1" :class="sortBy === 'gross' ? 'btn-primary' : 'btn-ghost opacity-75'" @click="toggleSort('gross')">
+            💲 Gross <span v-if="sortBy === 'gross'">{{ sortDesc ? '↓' : '↑' }}</span>
           </button>
         </div>
       </div>
 
       <!-- 1. SALES LEDGER TAB -->
-      <div v-show="salesViewTab === 'ledger'" class="space-y-6">
+      <div v-show="salesViewTab === 'ledger'" class="space-y-5">
+        <!-- Ledger 4-Card KPI Strip (Shown ONLY on Ledger tab so Payouts tab never double-stacks 8 boxes!) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+              <div class="p-2.5 sm:p-3 bg-success/10 text-success rounded-xl shrink-0">
+                <Icon icon="solar:dollar-bold" class="w-5 h-5 sm:w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Gross Sales</div>
+                <div class="text-lg sm:text-2xl font-black font-mono text-success truncate">{{ formatCurrency(totalGross) }}</div>
+                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+              <div class="p-2.5 sm:p-3 bg-primary/10 text-primary rounded-xl shrink-0">
+                <Icon icon="solar:wallet-money-bold" class="w-5 h-5 sm:w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Net Payout</div>
+                <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">{{ formatCurrency(totalNet) }}</div>
+                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+              <div class="p-2.5 sm:p-3 bg-error/10 text-error rounded-xl shrink-0">
+                <Icon icon="solar:ticket-sale-bold" class="w-5 h-5 sm:w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Total Fees</div>
+                <div class="text-lg sm:text-2xl font-black font-mono text-error truncate">{{ formatCurrency(totalFees) }}</div>
+                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
+            <div class="flex items-center gap-2.5 sm:gap-3">
+              <div class="p-2.5 sm:p-3 bg-info/10 text-info rounded-xl shrink-0">
+                <Icon icon="solar:box-bold" class="w-5 h-5 sm:w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Items Sold</div>
+                <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">{{ scopedSales.length }}</div>
+                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
       <!-- Unlinked Tickets Quick-Filter Banner -->
       <div
@@ -153,150 +297,6 @@
         </button>
       </div>
 
-      <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
-      <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
-          
-          <!-- Left: Constrained Omnibox Search Input + Location Dropdown -->
-          <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 flex-1">
-            <!-- Search Input -->
-            <div class="relative flex-1 w-full">
-              <Icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40 pointer-events-none" />
-              <input 
-                type="text" 
-                v-model="searchQuery" 
-                placeholder="Search sale by item title, UPC, SKU, SO#..." 
-                class="input input-bordered w-full pl-10 pr-16 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
-              />
-              <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                <button 
-                  v-if="searchQuery" 
-                  type="button"
-                  @click="searchQuery = ''" 
-                  class="btn btn-ghost btn-circle btn-xs opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
-                  title="Clear search"
-                >
-                  ✕
-                </button>
-                <button 
-                  type="button"
-                  @click="showBarcodeScanner = true"
-                  class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10 transition-colors w-7 h-7 min-h-7 flex items-center justify-center"
-                  title="Scan Barcode or Mini QR with Camera"
-                  aria-label="Scan barcode or QR with camera"
-                >
-                  <Icon icon="solar:camera-linear" class="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Month Filter -->
-            <div class="relative shrink-0">
-              <select v-model="monthFilter" class="select select-bordered text-xs font-bold h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary w-full sm:w-auto pr-8 shadow-2xs" title="Filter the ledger, KPI cards and settlements by month">
-                <option v-for="m in monthOptions" :key="m.key" :value="m.key">{{ m.label }} ({{ m.count }})</option>
-                <option value="all">All-Time ({{ consolidatedSales.length }})</option>
-              </select>
-            </div>
-
-            <!-- Partner / Member Filter (1-click) -->
-            <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by co-op partner">
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="partnerFilter === 'all' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
-                @click="partnerFilter = 'all'"
-              >All Co-op <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.all }}</span></button>
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="partnerFilter === 'HUCK' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'"
-                @click="partnerFilter = 'HUCK'"
-              >🫐 Huck (HUCK-) <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.HUCK }}</span></button>
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="partnerFilter === 'BB' ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
-                @click="partnerFilter = 'BB'"
-              >👗 B&amp;B (BB-) <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.BB }}</span></button>
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="partnerFilter === 'PDXGL' ? 'btn-accent shadow-xs' : 'btn-ghost opacity-75'"
-                @click="partnerFilter = 'PDXGL'"
-              >🎲 PDXGL (PDXGL-) <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.PDXGL }}</span></button>
-            </div>
-
-            <!-- 1-Click Canonical Location Filter Pills (MD / DT / All) -->
-            <div class="join bg-base-200/70 p-0.5 rounded-xl shadow-inner shrink-0 flex-wrap" role="group" aria-label="Filter by location">
-              <button
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="locationFilter === 'all' ? 'btn-neutral shadow-xs' : 'btn-ghost opacity-75'"
-                @click="locationFilter = 'all'"
-              >All Venues</button>
-              <button
-                v-for="loc in boothLocationMetas"
-                :key="loc.code"
-                type="button"
-                class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap transition-all"
-                :class="locationFilter === loc.code ? 'btn-secondary shadow-xs' : 'btn-ghost opacity-75'"
-                @click="locationFilter = loc.code"
-              >{{ loc.icon }} {{ loc.shortName }} ({{ loc.code }})</button>
-            </div>
-          </div>
-
-          <!-- Right Side: Count Summary -->
-          <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
-            <span class="badge badge-sm badge-ghost font-mono opacity-70">
-              {{ displayedSales.length }} record{{ displayedSales.length === 1 ? '' : 's' }}
-            </span>
-          </div>
-        </div>
-
-          <!-- Sort Control Pills (Mobile Only - Table View uses Column Headers) -->
-          <div class="flex md:hidden items-center gap-1.5 flex-wrap pt-1 text-xs">
-            <span class="font-bold opacity-60 mr-1 flex items-center gap-1 whitespace-nowrap shrink-0">
-              <Icon icon="solar:sort-vertical-linear" class="w-3.5 h-3.5 shrink-0" /> Sort:
-            </span>
-            <button 
-              type="button" 
-              class="btn btn-xs rounded-lg font-bold gap-1 transition-all whitespace-nowrap shrink-0" 
-              :class="sortBy === 'date' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'" 
-              @click="toggleSort('date')"
-            >
-              ⚡ Date
-              <span v-if="sortBy === 'date'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-xs rounded-lg font-bold gap-1 transition-all whitespace-nowrap shrink-0" 
-              :class="sortBy === 'so' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'" 
-              @click="toggleSort('so')"
-            >
-              # SO#
-              <span v-if="sortBy === 'so'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-xs rounded-lg font-bold gap-1 transition-all whitespace-nowrap shrink-0" 
-              :class="sortBy === 'net' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'" 
-              @click="toggleSort('net')"
-            >
-              💲 Net
-              <span v-if="sortBy === 'net'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-xs rounded-lg font-bold gap-1 transition-all whitespace-nowrap shrink-0" 
-              :class="sortBy === 'gross' ? 'btn-primary shadow-xs' : 'btn-ghost opacity-75'" 
-              @click="toggleSort('gross')"
-            >
-              💲 Gross
-              <span v-if="sortBy === 'gross'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </button>
-          </div>
-        </div>
-
       <!-- Empty State -->
       <div v-if="displayedSales.length === 0" class="card bg-base-100 shadow-xl border border-base-200">
         <div class="card-body text-center py-16">
@@ -307,11 +307,11 @@
           </div>
           <h3 class="text-xl font-bold">No Sales Matching Filter</h3>
           <p class="opacity-70 mt-2 max-w-md mx-auto text-sm">
-            {{ searchQuery || locationFilter !== 'all' ? 'Try adjusting your search query or location filter.' : 'Start recording sales or sync from your location booth CSV.' }}
+            {{ searchQuery || locationFilter !== 'all' ? 'Try adjusting your search query or venue filter.' : 'Record a sale or import your booth payout CSV.' }}
           </p>
           <div class="mt-6 flex justify-center gap-3">
-            <a href="/warehouse/sync" class="btn btn-outline btn-secondary font-bold">Sync Location CSV</a>
-            <a href="/sales/new" class="btn btn-primary font-bold">Record First Sale</a>
+            <a href="/sales/import/MD" class="btn btn-outline btn-secondary font-bold">Import Payout CSV</a>
+            <button type="button" @click="isRecordDrawerOpen = true" class="btn btn-primary font-bold">Record Sale</button>
           </div>
         </div>
       </div>
@@ -420,15 +420,16 @@
               <span>Edit Sale</span>
             </a>
 
-            <a 
-              v-if="sale.itemUrl"
-              :href="sale.itemUrl" 
+            <button 
+              v-if="sale.itemId"
+              type="button"
+              @click="openItemInspectorById(sale.itemId)" 
               class="btn btn-sm btn-outline btn-secondary font-bold rounded-xl gap-1.5 min-h-[38px] px-3 shrink-0"
-              title="View Item Details"
+              title="Inspect Item in Side Drawer"
             >
-              <Icon icon="solar:box-minimalistic-linear" class="w-4 h-4 shrink-0" />
+              <Icon icon="solar:eye-bold" class="w-4 h-4 shrink-0" />
               <span>Item</span>
-            </a>
+            </button>
           </div>
         </div>
       </div>
@@ -559,14 +560,15 @@
                     >
                       <Icon icon="solar:pen-bold" class="w-3 h-3 shrink-0" />
                     </a>
-                    <a
-                      v-if="sale.itemUrl"
-                      :href="sale.itemUrl"
-                      class="btn btn-xs btn-ghost btn-square text-base-content/70 hover:text-base-content rounded-lg h-7 w-7"
-                      title="View Item"
+                    <button
+                      v-if="sale.itemId"
+                      type="button"
+                      @click="openItemInspectorById(sale.itemId)"
+                      class="btn btn-xs btn-ghost btn-square text-base-content/70 hover:text-primary rounded-lg h-7 w-7"
+                      title="Inspect Item in Side Drawer"
                     >
-                      <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5 shrink-0" />
-                    </a>
+                      <Icon icon="solar:eye-linear" class="w-3.5 h-3.5 shrink-0" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -588,17 +590,7 @@
         @scroll-top="scrollToTop"
       >
         <template #dock>
-          <!-- Dock Item 1: Location Sync -->
-          <a 
-            href="/warehouse/sync" 
-            class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer"
-            title="Sync location CSV & sales reports"
-          >
-            <Icon icon="solar:round-transfer-horizontal-bold" class="w-4.5 h-4.5 text-secondary" />
-            <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Sync</span>
-          </a>
-
-          <!-- Dock Item 2: Export CSV -->
+          <!-- Dock Item 1: Export CSV -->
           <button 
             type="button"
             @click="exportSalesCsv"
@@ -609,15 +601,16 @@
             <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Export CSV</span>
           </button>
 
-          <!-- Dock Item 3: Record Sale (Solid Elevated Hero Action) -->
-          <a 
-            href="/sales/new" 
+          <!-- Dock Item 2: Record Sale (Opens Shopping Cart Slide-Over Tray) -->
+          <button 
+            type="button"
+            @click="isRecordDrawerOpen = true" 
             class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
-            title="Record a new completed sale"
+            title="Open Record Sale Cart Tray"
           >
-            <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+            <Icon icon="solar:cart-plus-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
             <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Record Sale</span>
-          </a>
+          </button>
         </template>
       </PaginationDock>
       </div>
@@ -627,11 +620,14 @@
         <CoopSettlementView
           :sales="consolidatedSales"
           :period="monthFilter"
+          :location="locationFilter"
           :partner-filter="partnerFilter"
           :monthly-rent="boothMonthlyRent"
           :warehouses="warehouses"
           @update:period="monthFilter = $event"
+          @update:location="locationFilter = $event"
           @link-sale="openLinkTicketModal"
+          @inspect-item="openItemInspectorById"
         />
       </div>
 
@@ -655,6 +651,28 @@
         @updated="handleSaleLinkedOrReassigned"
       />
 
+      <!-- Shopping Cart Record Sale Slide-Over Tray -->
+      <RecordSaleDrawer
+        v-model="isRecordDrawerOpen"
+        :initial-location="locationFilter"
+        :warehouses="warehouses"
+        :inventory-items="inventoryItems"
+        :tenant-id="currentTeam?.$id"
+        @inspect-item="inspectedItem = $event"
+        @saved="handleRecordedSalesSaved"
+      />
+
+      <!-- Canonical Item Side Drawer (Mounted after RecordSaleDrawer so inspecting from Cart stacks cleanly on top!) -->
+      <ItemDrawer
+        v-if="inspectedItem"
+        :item="inspectedItem"
+        :isOpen="!!inspectedItem"
+        :inventoryItems="inventoryItems"
+        @close="closeItemInspector"
+        @saved="handleItemInspectorSaved"
+        @save="handleItemInspectorSaved"
+      />
+
     </div>
   </div>
 </template>
@@ -664,6 +682,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import CoopSettlementView from './CoopSettlementView.vue';
 import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
+import RecordSaleDrawer from './RecordSaleDrawer.vue';
+import ItemDrawer from '../common/ItemDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
@@ -707,10 +727,55 @@ const salesViewTab = ref<'ledger' | 'coop'>(props.initialTab || 'ledger');
 const isLinkTicketModalOpen = ref(false);
 const activeSaleForLinking = ref<any | null>(null);
 const onlyUnlinkedFilter = ref(false);
+const isRecordDrawerOpen = ref(false);
+const inspectedItem = ref<any | null>(null);
+
+const openItemInspectorById = (itemId: string) => {
+  if (!itemId) return;
+  const found = (inventoryItems.value || []).find((i: any) => i.$id === itemId);
+  if (found) inspectedItem.value = found;
+};
+
+const closeItemInspector = () => {
+  inspectedItem.value = null;
+  if (isRecordDrawerOpen.value && typeof document !== 'undefined') {
+    document.body.style.overflow = 'hidden';
+  }
+};
+
+const handleItemInspectorSaved = async () => {
+  if (currentTeam.value?.$id) {
+    await fetchInventory(currentTeam.value.$id).catch(() => {});
+  }
+  closeItemInspector();
+};
+
+const handleRecordedSalesSaved = async ({ sales: newSales }: { sales: SaleDocument[]; linkedItemIds: string[] }) => {
+  for (const created of newSales) {
+    if (!sales.value.find((s) => s.$id === created.$id)) {
+      sales.value.unshift(created);
+    }
+  }
+  if (currentTeam.value?.$id) {
+    await fetchInventory(currentTeam.value.$id).catch(() => {});
+  }
+};
+
+const isIntentionalNoSkuSale = (sale: any): boolean => {
+  const ord = String(sale?.orderId || '').trim().toUpperCase();
+  return (
+    ord.includes('-SHEET') ||
+    ord.startsWith('ONLINE') ||
+    ord.startsWith('EBAY') ||
+    ord.startsWith('POSH') ||
+    ord.startsWith('POPUP')
+  );
+};
 
 const isUnlinkedTicketSale = (sale: any): boolean => {
   if (!sale) return false;
   if (sale.partner === 'COMMONS') return false;
+  if (isIntentionalNoSkuSale(sale)) return false;
   const title = String(sale.title || '').trim();
   const so = String(sale.soNumber || '').trim();
   if (/^SO-/i.test(so)) {
@@ -979,10 +1044,14 @@ const consolidatedSales = computed(() => {
     const isPDXGL = !isCommons && (soUpper.startsWith('PDXGL-') || soUpper.startsWith('PDXGL') || (linkedItem?.upc && linkedItem.upc.toUpperCase().startsWith('PDXGL')));
     const fallbackUpc = (soUpper.startsWith('HUCK-') || soUpper.startsWith('PDXGL-') || soUpper.startsWith('BB-') || soUpper.startsWith('COMMONS-')) ? soUpper : '';
 
+    const inlineCostMatch = String(sale.orderId || '').match(/\[COST:(\d+(?:\.\d+)?)\]/i);
+    const inlineManualCost = inlineCostMatch ? Number(inlineCostMatch[1]) : 0;
+
     let displayTitle = linkedItem?.title;
     if (!displayTitle) {
       if (sale.orderId && !sale.orderId.startsWith('MD-PAYOUT') && !sale.orderId.startsWith('SYNC-')) {
-        displayTitle = sale.orderId.includes('•') ? sale.orderId.split('•')[1].trim() : sale.orderId;
+        const rawPart = sale.orderId.includes('•') ? sale.orderId.split('•')[1].trim() : sale.orderId;
+        displayTitle = rawPart.replace(/\s*\[COST:\d+(?:\.\d+)?\]\s*/gi, ' ').trim();
       } else if (isCommons) {
         displayTitle = `[COMMONS] Unclaimed Booth Item (${sale.soNumber})`;
       } else if (isBB) {
@@ -997,7 +1066,7 @@ const consolidatedSales = computed(() => {
     }
 
     const partner: PartnerKey = isCommons ? 'COMMONS' : (isBB ? 'BB' : (isPDXGL ? 'PDXGL' : 'HUCK'));
-    // Cost basis per sale: single-unit = item cost; multi-qty bin = verified per-unit cost basis ($2.61, $0.81, $4.46, $4.16, etc.); B&B = $0
+    // Cost basis per sale: single-unit = item cost; multi-qty bin = verified per-unit cost basis ($2.61, $0.81, $4.46, $4.16, etc.); No-SKU quick tag = inlineManualCost; B&B = $0
     let costBasis = 0;
     if (isBB) {
       costBasis = 0;
@@ -1011,6 +1080,8 @@ const consolidatedSales = computed(() => {
           ? resolveMultiQtyCost(rawCost, itemQty, (linkedItem as any).resalePrice || 0).unitCost
           : rawCost;
       }
+    } else if (inlineManualCost > 0) {
+      costBasis = inlineManualCost;
     }
     const netPayoutVal = Number(sale.netPayout !== undefined ? sale.netPayout : (sale.grossAmount - comm));
 
