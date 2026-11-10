@@ -147,6 +147,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     const aiResponse = await generateContentWithBackoff(prompt);
     const raw: string = aiResponse?.response?.text?.() || '';
+    const modelVersion = String(aiResponse?.response?.modelVersion || 'gemini-flash-latest');
     const parsed = extractJson(raw);
 
     const promptText = String(parsed?.promptText || raw).trim();
@@ -164,6 +165,7 @@ export const POST: APIRoute = async ({ request }) => {
       bundlesUsed: specialistIds,
       routingGuide,
       opsImpact: estimatePromptOpsImpact(promptText),
+      modelVersion,
     };
     return json(result);
   } catch (err: any) {

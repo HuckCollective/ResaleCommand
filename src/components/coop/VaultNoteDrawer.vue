@@ -663,8 +663,15 @@
                     <Icon icon="solar:compass-big-bold-duotone" class="w-4 h-4" />
                     <span>{{ activeRoutingGuide.whereToPasteLabel }}</span>
                   </div>
-                  <div class="text-[11px] font-mono font-bold text-secondary mt-0.5">
-                    {{ activeRoutingGuide.modelPickerBadge }}
+                  <div class="text-[11px] font-mono font-bold text-secondary mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>{{ activeRoutingGuide.modelPickerBadge }}</span>
+                    <span
+                      v-if="lastModelVersion"
+                      class="badge badge-xs badge-outline font-mono opacity-80"
+                      title="Exact Gemini runtime model served behind gemini-flash-latest"
+                    >
+                      ⚡ Drafted via {{ lastModelVersion }}
+                    </span>
                   </div>
                 </div>
 
@@ -951,6 +958,7 @@ const goalManuallyEdited = ref(false);
 const refinementInput = ref('');
 const making = ref(false);
 const coPilotError = ref('');
+const lastModelVersion = ref('');
 const founderUnlockedSession = ref(false);
 const showUnlockConfirm = ref(false);
 
@@ -1155,6 +1163,7 @@ async function runCoPilot(isRefine = false) {
       }
     }
     if (data.antiBiasAudit) form.value.antiBiasAudit = data.antiBiasAudit;
+    if (data.modelVersion) lastModelVersion.value = String(data.modelVersion);
     form.value.coPilotNotes = data.coPilotNotes || '';
     form.value.followUpQuestions = data.followUpQuestions || [];
     form.value.bundlesUsed = data.bundlesUsed || [];

@@ -66,7 +66,11 @@ export const THINKING_BUDGET_PRESETS = {
 export function getGenAiClient(): GoogleGenAI {
     const key = getApiKey();
     if (!key) throw new Error("Gemini API key not configured (GEMINI_API_KEY)");
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenAI({
+        apiKey: key,
+        apiVersion: "v1beta",
+        httpOptions: { apiVersion: "v1beta" },
+    });
 }
 
 function wrapGenAiResponse(res: any) {
@@ -176,7 +180,13 @@ export const getModel = (modelName = DEFAULT_GEMINI_MODEL) => {
     };
 };
 
-export const genAI = getApiKey() ? new GoogleGenAI({ apiKey: getApiKey() }) : null;
+export const genAI = getApiKey()
+    ? new GoogleGenAI({
+          apiKey: getApiKey(),
+          apiVersion: "v1beta",
+          httpOptions: { apiVersion: "v1beta" },
+      })
+    : null;
 export const model = getApiKey() ? getModel() : null;
 
 // Helper to provide robust exponential backoff for generateContent calls with automatic fallback models
@@ -223,6 +233,7 @@ export const generateContentWithBackoff = async (
             "gemini-flash-latest",
             "gemini-flash-lite-latest",
             "gemini-pro-latest",
+            "gemini-2.5-flash",
         ])
     );
     let modelIdx = 0;

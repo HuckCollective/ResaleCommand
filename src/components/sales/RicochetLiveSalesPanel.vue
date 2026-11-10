@@ -41,6 +41,26 @@
       </div>
 
       <div class="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
+        <a
+          v-if="locationMeta.usesRicochet"
+          :href="bookmarkletHref"
+          @click.prevent="notifyDragBookmarklet"
+          class="btn btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click on Ricochet! (' + locationMeta.shortName + ' Sync)'"
+        >
+          <span>⬆️ Drag Bookmarklet: ⚡ {{ locationMeta.shortName }} Sync</span>
+        </a>
+
+        <button
+          v-if="locationMeta.usesRicochet"
+          type="button"
+          class="btn btn-sm btn-ghost border border-base-300 font-bold gap-1"
+          @click="copyBookmarkletHref"
+          title="Copy Bookmarklet URL to Clipboard"
+        >
+          <span>📋 Copy BML</span>
+        </button>
+
         <button
           type="button"
           class="btn btn-sm btn-outline btn-primary font-bold gap-1.5"
@@ -610,7 +630,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { resolvePartnerBucketForSaleRow } from '../../lib/salesBucketing';
-import type { LocationSettingMeta } from '../../lib/warehouses';
+import { buildRicochetBookmarkletHref, type LocationSettingMeta } from '../../lib/warehouses';
+import { addToast } from '../../stores/toast';
 import BottomActionDock from '../common/BottomActionDock.vue';
 
 const props = defineProps<{
@@ -674,6 +695,29 @@ type PartnerFilterMode = 'all' | 'HUCK' | 'PDXGL' | 'BB';
 
 const matchFilter = ref<MatchFilterMode>('all');
 const partnerFilter = ref<PartnerFilterMode>('all');
+
+const bookmarkletHref = computed(() =>
+  buildRicochetBookmarkletHref(props.locationMeta?.code || 'MD')
+);
+
+const notifyDragBookmarklet = () => {
+  addToast({
+    type: 'info',
+    message: `Drag "⚡ ${props.locationMeta.shortName} Sync" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!`,
+  });
+};
+
+const copyBookmarkletHref = async () => {
+  try {
+    await navigator.clipboard.writeText(bookmarkletHref.value);
+    addToast({
+      type: 'success',
+      message: `Copied ${props.locationMeta.shortName} Sync bookmarklet URL to clipboard!`,
+    });
+  } catch {
+    addToast({ type: 'error', message: 'Failed to copy bookmarklet URL.' });
+  }
+};
 
 const isRowMatched = (r: any): boolean => {
   return Boolean(

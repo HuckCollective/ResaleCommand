@@ -96,6 +96,46 @@
       </div>
     </div>
 
+    <!-- Always-Visible Inline Draggable Bookmarklet Install Bar (No Modal Click Required!) -->
+    <div
+      v-if="activeCanonicalLocationMeta.usesRicochet"
+      class="bg-warning/10 border border-warning/40 rounded-2xl p-3 sm:px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+    >
+      <div class="flex items-center gap-2.5 flex-wrap text-xs">
+        <span class="badge badge-sm badge-warning text-warning-content font-black font-mono">
+          ✅ Live Auto-Updated Script
+        </span>
+        <span class="font-bold text-base-content">
+          ⬆️ Install Bookmarklet: Drag this yellow button to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>):
+        </span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <a
+          :href="bookmarkletHref"
+          @click.prevent="addToast({ type: 'info', message: `Drag this button up to your browser Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
+          class="btn btn-xs sm:btn-sm btn-warning text-warning-content font-black shadow-sm border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+          :title="'Drag me to your Chrome Bookmarks Bar! (' + activeCanonicalLocationMeta.shortName + ' Sync)'"
+        >
+          <span>⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span>
+        </a>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
+          @click="copyBookmarkletUrl"
+          title="Copy Bookmarklet JavaScript URL to Clipboard"
+        >
+          <span>📋 Copy Bookmarklet URL</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-outline btn-warning font-bold gap-1"
+          @click="showBrowserSyncModal = true"
+        >
+          <span>📖 Full Setup Guide</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
     <div
       v-if="!isLocationLocked"
@@ -2169,6 +2209,7 @@ import {
   getLocationSettingMeta,
   getAllLocationSettingMetas,
   getLocationManifestDocIds,
+  buildRicochetBookmarkletHref,
 } from '../../lib/warehouses';
 import { salesApi } from '../../lib/sales';
 import { client, databases, ID } from '../../lib/appwrite';
@@ -2795,15 +2836,7 @@ const ricochetSkuMetaMap = computed(() => {
 const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePayloadMap.value).length);
 
 // Permanent Multi-Domain Live-Loader Bookmarklet (`⚡ Sync`) — Auto-fails over across .llc, .coop, and .com!
-const bookmarkletHref = computed(() => {
-  const currentOrigin =
-    typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')
-      ? window.location.origin
-      : siteConfig.siteUrl;
-  const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS]));
-  const locCode = encodeURIComponent(activeLocationCode.value || 'MD');
-  return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
-});
+const bookmarkletHref = computed(() => buildRicochetBookmarkletHref(activeLocationCode.value || 'MD'));
 
 // =========================================================================
 // 4. METHODS, WATCHERS & LIFECYCLE (All refs & computeds are now initialized)

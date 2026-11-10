@@ -27,6 +27,16 @@
 
         <a 
           v-if="warehouse && activeLocationMeta.usesRicochet" 
+          :href="bookmarkletHref" 
+          @click.prevent="addToast({ type: 'info', message: `Drag '⚡ ${activeLocationMeta.shortName} Sync' up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
+          class="btn btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B)! (' + activeLocationMeta.shortName + ' Sync)'"
+        >
+          <span>⬆️ Drag Bookmarklet: ⚡ {{ activeLocationMeta.shortName }} Sync</span>
+        </a>
+
+        <a 
+          v-if="warehouse && activeLocationMeta.usesRicochet" 
           :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
@@ -1171,7 +1181,7 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta } from '../../lib/warehouses';
+import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta, buildRicochetBookmarkletHref } from '../../lib/warehouses';
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
@@ -1306,6 +1316,7 @@ const handleUnverifyDrop = async (drop: ManifestDocument) => {
 
 const warehouse = ref<WarehouseDocument | null>(null);
 const activeLocationMeta = computed(() => getLocationSettingMeta(warehouse.value || props.locationId));
+const bookmarkletHref = computed(() => buildRicochetBookmarkletHref(activeLocationMeta.value.code || 'MD'));
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
 const error = ref('');
