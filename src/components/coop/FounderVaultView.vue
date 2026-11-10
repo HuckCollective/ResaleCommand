@@ -19,6 +19,15 @@
           <span class="badge badge-neutral font-bold text-xs">
             {{ isFounder ? '👑 Founder / Dev Vetting' : '👀 Member View' }}
           </span>
+          <button
+            type="button"
+            class="badge badge-outline font-mono text-xs cursor-pointer hover:border-primary transition-colors"
+            :class="devRosterFreshness.isStale ? 'badge-warning' : ''"
+            :title="`Single source: src/lib/devAiRouting.ts (last reviewed ${devRosterFreshness.lastReviewed}) — click to view 4-tier guide`"
+            @click="showGuide = !showGuide"
+          >
+            🛠️ {{ DEV_AI_ROSTER_SUMMARY_PILL }} • {{ devRosterFreshness.isStale ? 'Review Picker' : devRosterFreshness.reviewMonthLabel }}
+          </button>
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2.5">
@@ -95,6 +104,23 @@
           <p class="text-base-content/80 leading-relaxed text-[11px]">
             Community <b>🚩 Report AI Issue</b> flags stage here as <b>🟡 Pending Review</b>. Open any report card in the drawer to run the <b>3-Point Anti-Bias Audit</b> and save a vetted IDE fix prompt.
           </p>
+        </div>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-base-200/70 border border-base-300 space-y-2 text-xs">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="font-black text-base-content">🛠️ 4-Tier Dev AI Picker Rule (<code class="font-mono text-[11px]">src/lib/devAiRouting.ts</code>)</div>
+          <span class="badge badge-ghost badge-xs font-mono">Reviewed {{ devRosterFreshness.lastReviewed }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+          <div
+            v-for="tier in DEV_AI_TIERS"
+            :key="tier.id"
+            class="p-2.5 rounded-lg bg-base-100 border border-base-300 space-y-0.5"
+          >
+            <div class="font-black text-base-content">{{ tier.icon }} {{ tier.pickerModel }} ({{ tier.thinkingLevels }})</div>
+            <p class="text-base-content/75 leading-snug">{{ tier.whenToUse }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -633,12 +659,19 @@ import {
   type ParsedItemContextSummary,
 } from '../../lib/founderVault';
 import {
+  DEV_AI_TIERS,
+  DEV_AI_ROSTER_SUMMARY_PILL,
+  getDevAiRosterFreshness,
+} from '../../lib/devAiRouting';
+import {
   loadCoopGovernanceState,
   DEFAULT_COOP_POLICY_CONFIG,
   normalizePolicyConfig,
   canMemberEditGlobalFinancials,
   type CoopMemberProfile,
 } from '../../lib/coopGovernance';
+
+const devRosterFreshness = getDevAiRosterFreshness();
 
 type FilterKey =
   | 'all'

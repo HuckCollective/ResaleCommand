@@ -4,6 +4,11 @@ import type { APIRoute } from 'astro';
 import { generateContentWithBackoff } from '../../lib/gemini';
 import { SKILL_BUNDLES, CORE_BUNDLE_ID, matchSkillBundlesForIdea } from '../../lib/generatedSkillBundles';
 import {
+  DEV_AI_HEADER_FLASH,
+  DEV_AI_HEADER_ARGON,
+  DEV_AI_HEADER_CARBON,
+} from '../../lib/devAiRouting';
+import {
   estimatePromptOpsImpact,
   DESTINATION_META,
   recommendVaultTemplateAndSurface,
@@ -26,7 +31,7 @@ const DESTINATION_INSTRUCTIONS: Record<PromptTargetDestination, string> = {
   ai_studio:
     'Target: Google AI Studio Focused Chat (#1-#5). Output ONE prompt block that can be pasted directly into the matching Google AI Studio chat to explore UX/data options, answer 2-3 clarifying questions, and maintain a cumulative "SAVED MASTER SPEC & IDE QUEUE" block.',
   antigravity_ide:
-    'Target: Antigravity IDE. Output a single surgical prompt that begins with a model-picker header line (use "🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium" for multi-file work or "⚡ PICK IN ANTIGRAVITY: Gemini 3.8 Flash" for reads/docs), then ALLOWED FILES (MAX 3) with paths, MAX TOOL CALLS: 3, the exact bug fix or feature implementation addressing the User Issue Description, and a FORBIDDEN ACTIONS list (no unrelated refactors, no extra file reads, no local astro build / npm run build, no schema violations). Finish with: run npm run verify then git add/commit and git push origin HEAD (never push main unless explicitly asked). Use only file paths you are confident exist; otherwise say "locate with a read-only scout first".',
+    `Target: Antigravity IDE. Output a single surgical prompt that begins with a model-picker header line (use "${DEV_AI_HEADER_ARGON}" for standard 1-3 file UI/feature work, "${DEV_AI_HEADER_CARBON}" for /plan architecture or tricky multi-store/API adapters, or "${DEV_AI_HEADER_FLASH}" for reads/docs/verify), then ALLOWED FILES (MAX 3) with paths, MAX TOOL CALLS: 3, the exact bug fix or feature implementation addressing the User Issue Description, and a FORBIDDEN ACTIONS list (no unrelated refactors, no extra file reads, no local astro build / npm run build, no schema violations). Finish with: run npm run verify then git add/commit and git push origin HEAD (never push main unless explicitly asked). Use only file paths you are confident exist; otherwise say "locate with a read-only scout first".`,
   product_spec:
     'Target: a mobile-scannable product spec: goal, user flow, data rules, acceptance criteria, test plan on the alpha branch, and an IDE task queue.',
 };

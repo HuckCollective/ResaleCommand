@@ -2,6 +2,11 @@ import { databases } from './appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from './appwriteEnv';
 import { siteConfig } from '../site-config';
+import {
+  DEV_AI_IDE_PICKER_BADGE,
+  DEV_AI_CHROME_SIDEBAR_BADGE,
+  DEV_AI_STUDIO_MODELS_LABEL,
+} from './devAiRouting';
 
 export type VaultNoteKind = 'idea' | 'prompt' | 'spec' | 'report';
 
@@ -227,7 +232,7 @@ export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
     defaultGoal:
       'Turn this issue description into a surgical Antigravity IDE prompt (with Model Picker header, ALLOWED FILES max 3, MAX TOOL CALLS: 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
     masterPromptBody: [
-      '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ Gemini 3.8 Flash for Read-Only Recon first)',
+      DEV_AI_IDE_PICKER_BADGE,
       '',
       'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
       '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
@@ -501,12 +506,12 @@ export function recommendVaultTemplateAndSurface(
       recommendedDestination: 'antigravity_ide',
       whereToPasteLabel: '🎯 Paste into Antigravity IDE (Active Branch: alpha-1)',
       aiStudioChatLabel,
-      modelPickerBadge: '🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon Medium (or ⚡ 3.8 Flash for Recon first)',
+      modelPickerBadge: DEV_AI_IDE_PICKER_BADGE,
       whyThisSurface:
         'This issue describes app behavior, UI state, or scan persistence (e.g., saving Quick Scout estimate range cards when tracking an item) that can be fixed directly in the repo on alpha-1.',
       handoffSteps: [
         '1. Click "📋 Copy IDE Prompt" below.',
-        '2. In Antigravity IDE, start a fresh chat (or run /compact) and set the Model Picker to "Gemini 4 Argon Medium" (or "Gemini 3.8 Flash" for a read-only scout turn).',
+        '2. In Antigravity IDE, start a fresh chat (or run /compact) and pick "Gemini 4 Argon (Medium)" for standard edits, "Gemini 4 Carbon (Medium/High)" for /plan or tricky multi-file code, or "Gemini 3.8 Flash" for read-only recon.',
         `3. Paste and press Enter — or if you want to brainstorm UX options first, switch Target Surface to "🧪 AI Studio" and paste into "${aiStudioChatLabel}".`,
       ],
       recommendedBundles,
@@ -520,7 +525,7 @@ export function recommendVaultTemplateAndSurface(
       recommendedDestination: 'ai_studio',
       whereToPasteLabel: `🧪 Paste into Google AI Studio — ${aiStudioChatLabel}`,
       aiStudioChatLabel,
-      modelPickerBadge: `🧪 OPEN AI STUDIO: ${aiStudioChatLabel} (Gemini Pro / Argon)`,
+      modelPickerBadge: `🧪 OPEN AI STUDIO: ${aiStudioChatLabel} (${DEV_AI_STUDIO_MODELS_LABEL})`,
       whyThisSurface:
         'Best when you want to explore UX alternatives, co-design a multi-file workflow, and build up a SAVED MASTER SPEC & IDE QUEUE before writing code in Antigravity IDE.',
       handoffSteps: [
@@ -539,7 +544,7 @@ export function recommendVaultTemplateAndSurface(
       recommendedDestination: 'chrome_sidebar',
       whereToPasteLabel: '🌐 Paste into Chrome Gemini Sidebar (Reading Live Webpage)',
       aiStudioChatLabel,
-      modelPickerBadge: '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Argon)',
+      modelPickerBadge: DEV_AI_CHROME_SIDEBAR_BADGE,
       whyThisSurface:
         `Best when your AI Ally needs to inspect the live browser DOM (either sweeping 24-50 auction lots or running Paired Human-AI QA on ${siteConfig.alphaSiteUrl}).`,
       handoffSteps: [
@@ -560,10 +565,10 @@ export function recommendVaultTemplateAndSurface(
       aiStudioChatLabel,
       modelPickerBadge: '📌 MASTER SPEC + IDE TASK QUEUE',
       whyThisSurface:
-        'Formats your idea into a clean, mobile-readable Product Spec with acceptance criteria and an ordered Antigravity IDE implementation queue.',
+        'Formats your idea into a clean, mobile-scannable Product Spec with acceptance criteria and an ordered Antigravity IDE implementation queue.',
       handoffSteps: [
         '1. Review the generated Product Spec & Acceptance Criteria in the card.',
-        '2. Copy individual tasks from the IDE Task Queue at the bottom into Antigravity IDE (`Gemini 4 Argon Medium`).',
+        '2. Copy individual tasks from the IDE Task Queue at the bottom into Antigravity IDE (`Gemini 4 Argon (Medium)` or `Gemini 4 Carbon (Medium)`).',
         '3. Mark the card "Vetted for Dev" or "Shipped in Git" once verified on alpha-1.',
       ],
       recommendedBundles,

@@ -9,18 +9,21 @@ This skill serves as the canonical system reference for all artificial intellige
 
 ---
 
-## 1. Core Architectural Foundation: Single Source of Truth
+## 1. Core Architectural Foundation: Single Source of Truth & Two-World Boundary
 
-All AI services in Resale Command MUST route through [`src/lib/gemini.ts`](file:///Users/michaelstanley/Projects/ResaleCommand/src/lib/gemini.ts).
+All live app runtime AI services in Resale Command MUST route through [`src/lib/gemini.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/gemini.ts) (**World 1: Reseller Runtime AI** on the $40/mo Google Cloud credit pool). Developer/IDE model routing (**World 2: Dev & Architecture AI** on Google AI Ultra) lives strictly separately in [`src/lib/devAiRouting.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/devAiRouting.ts).
 
 ### Invariants:
-1. **Dynamic Model Pointer (`DEFAULT_GEMINI_MODEL`)**:
-   - Primary: `gemini-flash-latest` (Google-maintained stable alias, ~1.5–3s latency, lowest cost per token).
+1. **Official Unified `@google/genai` SDK (`GoogleGenAI`) + Drop-In Adapter**:
+   - `src/lib/gemini.ts` wraps Google's unified `@google/genai` SDK (`ai.models.generateContent(...)`) behind a 100% backward-compatible `{ response: { text(), candidates, usageMetadata } }` adapter so all 15 API routes work seamlessly.
+   - Supports `thinkingConfig: { thinkingBudget }` (`thinkingBudget` in `generationConfig` or top-level request payload) so structured JSON / OCR endpoints avoid wasting hidden reasoning tokens while complex lot synthesis keeps dynamic reasoning.
+2. **Dynamic Model Pointer (`DEFAULT_GEMINI_MODEL`)**:
+   - Primary: `gemini-flash-latest` (Google-maintained rolling alias, ~1.5–3s latency, lowest cost per token).
    - Configurable: Can be overridden at runtime via `.env` (`GEMINI_MODEL=gemini-pro-latest` or specific versions).
-2. **Automated Exponential Backoff & Tiered Fallback**:
-   - `generateContentWithBackoff()` automatically cascades across `[DEFAULT_GEMINI_MODEL, "gemini-flash-latest", "gemini-pro-latest"]`.
+3. **Automated Exponential Backoff & Tiered Fallback**:
+   - `generateContentWithBackoff()` automatically cascades across `[DEFAULT_GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]`.
    - Transient failures (429 Rate Limits, 503 Overloads, network interruptions) back off automatically with jitter before trying the next tier.
-3. **Robust Sanitized Parsers**:
+4. **Robust Sanitized Parsers**:
    - `parseAiJson<T>()`: Extracts JSON objects/arrays, strips markdown fences, sanitizes trailing commas and control characters.
    - `parseAiPlainText()`: Strips conversational preambles ("Sure! Here is...") and excess markdown wrappers for copy-paste listing ready text.
 

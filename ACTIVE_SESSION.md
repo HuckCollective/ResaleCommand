@@ -1,4 +1,10 @@
-# Active Session Summary (Updated Nov 9, 2026)
+# Active Session Summary (Updated Nov 10, 2026)
+
+## ✅ TWO-WORLD AI ARCHITECTURE SEPARATION: 1-FILE DEV AI ROUTING (`src/lib/devAiRouting.ts` + `Gemini 4 Carbon`) + UNIFIED `@google/genai` RUNTIME SDK UPGRADE (Nov 10, 2026 — `alpha-1`)
+- **Strict Two-World AI Boundary (`src/lib/devAiRouting.ts` vs. `src/lib/gemini.ts`)**:
+  - **World 2 — Dev & Architecture AI Tooling (`src/lib/devAiRouting.ts`, `docs/AI_STUDIO_PLAYBOOK.md`, `scripts/sync-ai-context.mjs`, `FounderVaultView.vue`)**: Centralized all Antigravity IDE / AI Studio / Chrome Sidebar model names into a single source of truth (`src/lib/devAiRouting.ts`) with the 4-tier Google AI Ultra decision matrix (`⚡ Gemini 3.8 Flash` recon/push, `🟢 Gemini 4 Argon (Medium)` fast 1–3 file UI/features, `🔥 Gemini 4 Carbon (Medium / High)` `/plan` architecture & multi-store/API surgery before touching Claude, and `🟣 Claude Sonnet 5.5` emergency tie-breaker).
+  - **Pre-Proceed `/plan` Model Gate & Zero-Guesswork Freshness**: Enforced stamping `🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:` at Line 1 of every `implementation_plan.md` + chat reply, wired `/coop/vault` (`founderVault.ts`, `generate-vault-prompt.ts`, `FounderVaultView.vue`) to display the live clickable **Dev AI Roster** pill + 4-tier guide card, and added a non-blocking 30-day review check (`DEV_AI_ROSTER_LAST_REVIEWED`) in `npm run verify` + tandem sync to `thehcllc/GEMINI.md`.
+  - **World 1 — App Runtime SDK Upgrade (`package.json`, `src/lib/gemini.ts`, `.agents/skills/ai-architecture-and-cost-optimization/SKILL.md`)**: Installed official `@google/genai` (`v3.0.0`) and upgraded `src/lib/gemini.ts` internally to `GoogleGenAI` (`ai.models.generateContent`) behind a 100% backward-compatible drop-in adapter (`getModel`, `generateContentWithBackoff`, `result.response.text()`, `usageMetadata`) supporting all 15 API routes, rolling `'gemini-flash-latest'` fallbacks, and `thinkingConfig: { thinkingBudget }` cost control (`THINKING_BUDGET_PRESETS`).
 
 ## ✅ CARDS ➔ BOTTOM TRAY ➔ SLIDE-OVER DRAWER QUEUE PATTERN FOR JOIN REQUESTS & GOVERNANCE PROPOSALS + TANDEM `huckleberry` THEME SYNC (Nov 9, 2026 — `alpha-1`)
 - **3-Card Steward Join Queue (`src/components/coop/JoinRequestsPanel.vue`, `src/pages/api/join-request.ts`)**:
