@@ -49,7 +49,7 @@
 
     <!-- 4 Standalone Icon-Badge KPI Cards (Canonical Ledger Archetype) -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open active deliberations" @click="openProposalTray('active')" @keydown.enter="openProposalTray('active')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:chat-round-dots-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open consensus proposals" @click="openProposalTray('consensus')" @keydown.enter="openProposalTray('consensus')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-success/10 text-success rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:check-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -71,7 +71,7 @@
         </div>
       </div>
 
-      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open blocked proposals" @click="openProposalTray('blocked')" @keydown.enter="openProposalTray('blocked')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-error/10 text-error rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:forbidden-circle-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open proposal list" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
+      <div role="button" tabindex="0" class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm flex items-center gap-3 sm:gap-4 cursor-pointer hover:shadow-md transition-shadow" title="Open all proposals" @click="openProposalTray('all')" @keydown.enter="openProposalTray('all')">
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
           <Icon icon="solar:shield-check-bold-duotone" class="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
@@ -547,42 +547,44 @@
 
     <!-- Proposals List (TAB 1) -->
     <div v-show="activeGovTab === 'proposals'" class="space-y-4">
-      <!-- Compact proposal rows: tap to open the full deliberation & voting drawer -->
-      <button
-        v-for="p in proposals"
-        :key="`row-${p.id}`"
-        type="button"
-        class="w-full text-left card bg-base-100 border shadow-sm rounded-2xl p-3.5 sm:p-4 hover:shadow-md transition-all space-y-2"
-        :class="getProposalCardBorderClass(p)"
-        @click="openProposalDrawer(p)"
-      >
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 space-y-1">
-            <div class="flex items-center gap-1.5 flex-wrap">
+      <!-- Compact grid of proposal cards: tap to open the full deliberation & voting drawer -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <button
+          v-for="p in proposals"
+          :key="`row-${p.id}`"
+          type="button"
+          class="text-left card bg-base-100 border shadow-sm rounded-2xl p-3.5 hover:shadow-md transition-all flex flex-col justify-between gap-2.5 h-full"
+          :class="getProposalCardBorderClass(p)"
+          @click="openProposalDrawer(p)"
+        >
+          <div class="space-y-1.5 min-w-0">
+            <div class="flex items-center justify-between gap-1.5 flex-wrap">
               <span class="badge badge-xs font-semibold" :class="getCategoryBadgeClass(p.category)">{{ p.category }}</span>
-              <span class="text-[11px] text-base-content/60 font-mono">Closing {{ p.deadline }}</span>
+              <span class="px-2 py-0.5 rounded-lg font-black text-[10px] flex items-center gap-1 shrink-0" :class="getStatusPillClass(p)">
+                <Icon :icon="getStatusPillIcon(p)" class="w-3 h-3 shrink-0" />
+                <span>{{ p.status === 'passed' ? 'Enacted' : getProposalStatusLabel(p) }}</span>
+              </span>
             </div>
-            <div class="text-sm sm:text-base font-black leading-snug break-words">{{ p.title }}</div>
+            <div class="text-sm font-black leading-snug line-clamp-2 break-words">{{ p.title }}</div>
+            <div class="text-[10px] text-base-content/55 font-mono">Closing {{ p.deadline }} · {{ p.proposer }}</div>
           </div>
-          <span class="px-2.5 py-1 rounded-xl font-black text-[11px] flex items-center gap-1 shrink-0" :class="getStatusPillClass(p)">
-            <Icon :icon="getStatusPillIcon(p)" class="w-3.5 h-3.5 shrink-0" />
-            <span>{{ p.status === 'passed' ? 'Enacted' : getProposalStatusLabel(p) }}</span>
-          </span>
-        </div>
-        <div class="w-full h-2 rounded-full bg-base-300 overflow-hidden flex">
-          <div class="bg-success" :style="{ width: `${getSignalPercent(p, 'agree')}%` }"></div>
-          <div class="bg-warning" :style="{ width: `${getSignalPercent(p, 'abstain')}%` }"></div>
-          <div class="bg-secondary" :style="{ width: `${getSignalPercent(p, 'disagree')}%` }"></div>
-          <div class="bg-error" :style="{ width: `${getSignalPercent(p, 'block')}%` }"></div>
-        </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-          <span class="text-base-content/70 font-semibold">
-            {{ getVoteCount(p) }} votes · your vote:
-            <strong class="capitalize">{{ getUserVote(p)?.signal || 'not voted yet' }}</strong>
-          </span>
-          <span class="font-bold text-primary">🗳️ Review &amp; Vote →</span>
-        </div>
-      </button>
+
+          <div class="space-y-1.5 pt-1 border-t border-base-200/70">
+            <div class="w-full h-1.5 rounded-full bg-base-300 overflow-hidden flex">
+              <div class="bg-success" :style="{ width: `${getSignalPercent(p, 'agree')}%` }"></div>
+              <div class="bg-warning" :style="{ width: `${getSignalPercent(p, 'abstain')}%` }"></div>
+              <div class="bg-secondary" :style="{ width: `${getSignalPercent(p, 'disagree')}%` }"></div>
+              <div class="bg-error" :style="{ width: `${getSignalPercent(p, 'block')}%` }"></div>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+              <span class="text-base-content/70 font-semibold truncate">
+                {{ getVoteCount(p) }} votes · <strong class="capitalize">{{ getUserVote(p)?.signal || 'not voted' }}</strong>
+              </span>
+              <span class="font-bold text-primary shrink-0">🗳️ Vote →</span>
+            </div>
+          </div>
+        </button>
+      </div>
 
       <SlideOverDrawer v-model="proposalDrawerOpen" :title="selectedProposalTitle" subtitle="Deliberate and cast your signal">
       <div 
