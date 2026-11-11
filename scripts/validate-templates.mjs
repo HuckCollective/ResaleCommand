@@ -780,6 +780,14 @@ for (const contract of transportContracts) {
         }
     }
 
+    const layoutSrc = fs.existsSync('src/layouts/Layout.astro') ? fs.readFileSync('src/layouts/Layout.astro', 'utf8') : '';
+    if (/<(?:CoopMessagesTray|ToastContainer|ConfirmContainer|HuckleberryLoader)\b[^>]*\bclient:(?:load|idle|visible)\b/.test(layoutSrc)) {
+        console.error(
+            `❌ SSR <Teleport to="body"> Hydration Wipeout Bug in src/layouts/Layout.astro: Global body-teleported overlays (CoopMessagesTray, ToastContainer, ConfirmContainer, HuckleberryLoader) MUST use client:only="vue", never client:load/idle/visible!`
+        );
+        hasErrors = true;
+    }
+
     const uiFiles = getFiles('src', ['.vue', '.astro']);
     const classAttrRegex = /\bclass="([^"]+)"/g;
 

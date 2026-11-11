@@ -11,9 +11,8 @@
       <span class="sm:hidden">AI Flag</span>
     </button>
 
-    <Teleport to="body">
+    <Teleport v-if="open" to="body">
       <div
-        v-if="open"
         class="fixed inset-0 z-500 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 animate-in fade-in duration-150"
         @click.self="open = false"
       >

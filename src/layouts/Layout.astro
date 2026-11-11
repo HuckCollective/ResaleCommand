@@ -65,7 +65,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     <MarkdownModal />
     <CookieConsent />
     <HuckleberryLoader client:only="vue" />
-    <CoopMessagesTray client:idle />
+    <CoopMessagesTray client:only="vue" />
     <ToastContainer client:only="vue" />
     <ConfirmContainer client:only="vue" />
     <script is:inline>

@@ -1,5 +1,6 @@
 <template>
-  <Teleport to="body">
+  <div>
+  <Teleport v-if="isMounted" to="body">
     <div
       v-if="isOpen"
       class="fixed inset-0 z-450 flex items-end justify-center bg-black/60 p-0 sm:px-4"
@@ -421,6 +422,7 @@
       </div>
     </div>
   </Teleport>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -447,6 +449,7 @@ import {
 
 const { user, isAuthenticated, ownedTeam } = useAuth();
 
+const isMounted = ref(false);
 const isOpen = ref(false);
 const loading = ref(false);
 const viewMode = ref<'list' | 'detail' | 'compose'>('list');
@@ -714,10 +717,9 @@ function handleOpenTrayEvent(ev: Event) {
 }
 
 onMounted(() => {
+  isMounted.value = true;
   if (typeof window !== 'undefined') {
     window.addEventListener('open-coop-messages-tray', handleOpenTrayEvent as EventListener);
-    // Prime count quietly in background so governance dock shows live count immediately
-    refreshFeed().catch(() => {});
   }
 });
 
