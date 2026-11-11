@@ -165,6 +165,66 @@ export interface SellerCluster {
 }
 
 /**
+ * Formats ShopGoodwill / auction seller metadata into a clean, human-readable regional store label
+ * (e.g. "Goodwill of the Columbia Willamette" + "Hillsboro", "OR" -> "Goodwill Columbia Willamette (Hillsboro, OR)").
+ */
+export function formatReadableSellerLabel(input: {
+    sellerName?: string | null;
+    sellerCompanyName?: string | null;
+    pickupCity?: string | null;
+    pickupState?: string | null;
+    location?: string | null;
+    sourcingLocation?: string | null;
+    sellerId?: string | number | null;
+    platform?: MarketplacePlatform;
+}): string {
+    const rawCompany = String(
+        input.sellerCompanyName ||
+        input.sellerName ||
+        input.location ||
+        ''
+    ).trim();
+
+    // Ignore generic placeholder strings like "ShopGoodwill" or "Seller #123" when richer info exists
+    const isGenericLabel =
+        !rawCompany ||
+        /^seller\s*#?\d+$/i.test(rawCompany) ||
+        /^shopgoodwill(?:\.com)?$/i.test(rawCompany);
+
+    const city = String(input.pickupCity || '').trim();
+    const state = String(input.pickupState || '').trim();
+    const cityState = city && state ? `${city}, ${state}` : city || state;
+
+    if (!isGenericLabel) {
+        const shortened = rawCompany
+            .replace(/^Goodwill\s+Industries\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+            .replace(/^Goodwill\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+            .replace(/,\s*Inc\.?$/i, '')
+            .trim();
+        if (cityState && !shortened.toLowerCase().includes(city.toLowerCase() || '__none__')) {
+            return `${shortened} (${cityState})`;
+        }
+        return shortened;
+    }
+
+    if (cityState) {
+        return `Goodwill — ${cityState}`;
+    }
+
+    const srcLoc = String(input.sourcingLocation || '').trim();
+    if (srcLoc && !/^shopgoodwill(?:\.com)?$/i.test(srcLoc) && !/^https?:/i.test(srcLoc)) {
+        return srcLoc;
+    }
+
+    if (input.sellerId) {
+        const platPrefix = input.platform === 'shopgoodwill' || !input.platform ? 'Goodwill Store' : 'Seller';
+        return `${platPrefix} #${input.sellerId}`;
+    }
+
+    return 'Regional Goodwill Store';
+}
+
+/**
  * Detect platform from item URL, seller info, or raw data
  */
 export function detectPlatform(item: any): MarketplacePlatform {
@@ -422,7 +482,13 @@ export function evaluateSellerClusters(items: any[]): SellerCluster[] {
     for (const [key, clusterItems] of map.entries()) {
         const platform = detectPlatform(clusterItems[0]);
         const policy = MARKETPLACE_POLICIES[platform] || MARKETPLACE_POLICIES.shopgoodwill;
-        const displayName = clusterItems[0].sellerName || `Seller #${key}`;
+        const namedItem = clusterItems.find((i) => i.sellerName && !/^seller\s*#?\d+$/i.test(String(i.sellerName).trim()));
+        const displayName = formatReadableSellerLabel({
+            sellerName: namedItem?.sellerName || clusterItems[0].sellerName,
+            sourcingLocation: clusterItems[0].sourcingLocation,
+            sellerId: clusterItems[0].sellerId || key,
+            platform,
+        });
         
         const totalWeight = Math.round(clusterItems.reduce((sum, i) => sum + getItemWeight(i), 0) * 10) / 10;
         const weightLimit = policy.maxWeightLbs || 20.0;
@@ -490,5 +556,10 @@ export function evaluateSellerClusters(items: any[]): SellerCluster[] {
         });
     }
 
-    return clusters;
+    // Sort multi-item bundles and overweight/warning boxes first
+    return clusters.sort((a, b) => {
+        if (b.totalItemCount !== a.totalItemCount) return b.totalItemCount - a.totalItemCount;
+        if (a.isOverWeightLimit !== b.isOverWeightLimit) return a.isOverWeightLimit ? -1 : 1;
+        return b.totalWeight - a.totalWeight;
+    });
 }

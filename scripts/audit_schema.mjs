@@ -95,6 +95,29 @@ const WAREHOUSES_ATTRIBUTES = [
     { key: 'tenantId', type: 'string', size: 255, required: true }
 ];
 
+const COOP_PROPOSALS_ATTRIBUTES = [
+    { key: 'title', type: 'string', size: 255, required: true },
+    { key: 'proposer', type: 'string', size: 128, required: true },
+    { key: 'proposerPartner', type: 'string', size: 32, required: true },
+    { key: 'proposerUserId', type: 'string', size: 128, required: false },
+    { key: 'proposerEmail', type: 'string', size: 255, required: false },
+    { key: 'category', type: 'string', size: 128, required: true },
+    { key: 'status', type: 'string', size: 32, required: true },
+    { key: 'deadline', type: 'string', size: 32, required: false },
+    { key: 'financialImpact', type: 'string', size: 500, required: false },
+    { key: 'description', type: 'string', size: 65000, required: true },
+    { key: 'rationale', type: 'string', size: 65000, required: false },
+    { key: 'mdFileId', type: 'string', size: 128, required: false },
+    { key: 'imageId', type: 'string', size: 255, required: false },
+    { key: 'galleryImageIds', type: 'string', size: 255, array: true, required: false },
+    { key: 'votesJson', type: 'string', size: 65000, required: false },
+    { key: 'presetAction', type: 'string', size: 64, required: false },
+    { key: 'lastEditKind', type: 'string', size: 32, required: false },
+    { key: 'createdAt', type: 'string', size: 64, required: false },
+    { key: 'updatedAt', type: 'string', size: 64, required: false },
+    { key: 'tenantId', type: 'string', size: 128, required: true }
+];
+
 const EXPECTED_SCHEMAS = {
     'items_dev': { name: 'Resale Items (Development)', attributes: ITEM_ATTRIBUTES },
     'items': { name: 'Resale Items (Production)', attributes: ITEM_ATTRIBUTES },
@@ -102,14 +125,16 @@ const EXPECTED_SCHEMAS = {
     'sales': { name: 'Sales Orders (Production)', attributes: SALES_ATTRIBUTES },
     'purchases_dev': { name: 'Purchases (Development)', attributes: PURCHASES_ATTRIBUTES },
     'purchases': { name: 'Purchases (Production)', attributes: PURCHASES_ATTRIBUTES },
-    'warehouses': { name: 'Warehouses / Selling Locations', attributes: WAREHOUSES_ATTRIBUTES }
+    'warehouses': { name: 'Warehouses / Selling Locations', attributes: WAREHOUSES_ATTRIBUTES },
+    'coop_proposals': { name: 'Co-op Governance Proposals', attributes: COOP_PROPOSALS_ATTRIBUTES }
 };
 
 const EXPECTED_BUCKETS = [
     { id: 'item_images', name: 'Item Images (Production)' },
     { id: 'item_images_dev', name: 'Item Images (Development)' },
     { id: 'reports', name: 'Scout Reports (Production)' },
-    { id: 'reports_dev', name: 'Scout Reports (Development)' }
+    { id: 'reports_dev', name: 'Scout Reports (Development)' },
+    { id: 'coop_media', name: 'Co-op Proposals, Bug Screenshots & Markdown Docs' }
 ];
 
 async function generateAuditReport() {
@@ -157,7 +182,7 @@ async function generateAuditReport() {
             'items_dev', 'items',
             'sales_dev', 'sales',
             'purchases_dev', 'purchases',
-            'warehouses'
+            'warehouses', 'coop_proposals'
         ];
 
         // Add any remaining live collections to order

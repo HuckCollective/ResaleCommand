@@ -1,6 +1,7 @@
-import { databases } from './appwrite';
+import { databases, Query } from './appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from './appwriteEnv';
+import { cleanEscapedCurrency } from './safeMarkdown';
 
 export type LoomioSignal = 'agree' | 'abstain' | 'disagree' | 'block';
 export type SurplusPolicyMode = 'patronage_90_10' | 'cap_100' | 'reserve_100';
@@ -19,6 +20,8 @@ export interface CoopProposal {
   title: string;
   proposer: string;
   proposerPartner: string;
+  proposerUserId?: string;
+  proposerEmail?: string;
   category:
     | 'Booth & Physical Footprint'
     | 'Inventory & Consignment'
@@ -33,7 +36,63 @@ export interface CoopProposal {
   deadline: string;
   status: 'active' | 'passed' | 'blocked';
   createdAt: string;
+  updatedAt?: string;
+  lastEditKind?: 'formatting' | 'amendment';
+  imageId?: string;
+  galleryImageIds?: string[];
+  mdFileId?: string;
   votes: Record<string, ProposalVote>;
+}
+
+/**
+ * Author & Steward Ownership Guard:
+ * Allows the original proposer (matched by Appwrite User ID, email, or member persona name)
+ * OR a Founder/Steward hat to unlock and edit/amend a proposal.
+ */
+export function canUserEditProposal(
+  proposal: CoopProposal | null | undefined,
+  opts: {
+    userId?: string;
+    userEmail?: string;
+    userName?: string;
+    activeVotingMember?: string;
+    isSteward?: boolean;
+  }
+): boolean {
+  if (!proposal) return false;
+  if (opts.isSteward) return true;
+
+  if (proposal.proposerUserId && opts.userId && proposal.proposerUserId === opts.userId) {
+    return true;
+  }
+  if (
+    proposal.proposerEmail &&
+    opts.userEmail &&
+    proposal.proposerEmail.trim().toLowerCase() === opts.userEmail.trim().toLowerCase()
+  ) {
+    return true;
+  }
+
+  const normalizeName = (raw?: string) =>
+    String(raw || '')
+      .replace(/\(.*?\)/g, '')
+      .trim()
+      .toLowerCase();
+
+  const propName = normalizeName(proposal.proposer);
+  if (!propName) return false;
+
+  const candidateNames = [normalizeName(opts.userName), normalizeName(opts.activeVotingMember)].filter(Boolean);
+  for (const cand of candidateNames) {
+    if (cand === propName) return true;
+    const firstWordProp = propName.split(/\s+/)[0];
+    const firstWordCand = cand.split(/\s+/)[0];
+    if (firstWordProp && firstWordProp.length >= 3 && firstWordProp === firstWordCand) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Member hats live in ./memberHats (pure, no Appwrite) so the dashboard and public demo can share them.
@@ -311,12 +370,93 @@ export const DEFAULT_COOP_LABOR_ENTRIES: CoopLaborEntry[] = [
 ];
 
 export const COOP_GOVERNANCE_DOC_ID = 'coop_governance_proposals_v1';
+export const COOP_PROPOSALS_COL_ID = 'coop_proposals';
 const MANIFESTS_COL_ID = 'manifests';
 const LOCAL_STORAGE_PROPOSALS_KEY = 'huck_coop_proposals_v1';
 const LOCAL_STORAGE_POLICY_MODE_KEY = 'rc_coop_surplus_policy_mode';
 const LOCAL_STORAGE_SPLIT_BASIS_KEY = 'rc_coop_surplus_split_basis';
 const LOCAL_STORAGE_POLICY_CONFIG_KEY = 'rc_coop_policy_config_v1';
 const LOCAL_STORAGE_LABOR_KEY = 'huck_coop_labor_logs';
+
+function sanitizeStorageIds(ids?: string[]): string[] {
+  if (!Array.isArray(ids)) return [];
+  return ids
+    .map((v) => String(v || '').trim())
+    .filter((v) => v.length > 0 && !v.startsWith('data:') && !v.startsWith('blob:'));
+}
+
+function docToCoopProposal(doc: any): CoopProposal {
+  let votes: Record<string, ProposalVote> = {};
+  if (typeof doc.votesJson === 'string' && doc.votesJson.trim().startsWith('{')) {
+    try {
+      votes = JSON.parse(doc.votesJson);
+    } catch {
+      votes = {};
+    }
+  } else if (doc.votes && typeof doc.votes === 'object') {
+    votes = doc.votes;
+  }
+
+  const gallery = sanitizeStorageIds(doc.galleryImageIds);
+  const cover =
+    typeof doc.imageId === 'string' && doc.imageId.trim() && !doc.imageId.startsWith('data:')
+      ? doc.imageId.trim()
+      : gallery[0] || undefined;
+
+  return {
+    id: String(doc.$id || doc.id),
+    title: cleanEscapedCurrency(doc.title || 'Untitled Proposal'),
+    proposer: String(doc.proposer || 'Member'),
+    proposerPartner: String(doc.proposerPartner || 'HUCK'),
+    proposerUserId: doc.proposerUserId ? String(doc.proposerUserId) : undefined,
+    proposerEmail: doc.proposerEmail ? String(doc.proposerEmail) : undefined,
+    category: (doc.category as CoopProposal['category']) || 'Policy & Membership',
+    description: cleanEscapedCurrency(doc.description || ''),
+    rationale: cleanEscapedCurrency(doc.rationale || ''),
+    financialImpact: doc.financialImpact ? cleanEscapedCurrency(doc.financialImpact) : undefined,
+    presetAction: doc.presetAction ? (doc.presetAction as CoopProposal['presetAction']) : undefined,
+    deadline: String(doc.deadline || new Date().toISOString().slice(0, 10)),
+    status: doc.status === 'passed' || doc.status === 'blocked' ? doc.status : 'active',
+    createdAt: String(doc.createdAt || doc.$createdAt || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    updatedAt: doc.updatedAt || doc.$updatedAt || undefined,
+    lastEditKind: doc.lastEditKind === 'formatting' || doc.lastEditKind === 'amendment' ? doc.lastEditKind : undefined,
+    imageId: cover,
+    galleryImageIds: gallery,
+    mdFileId: doc.mdFileId ? String(doc.mdFileId) : undefined,
+    votes,
+  };
+}
+
+function proposalToDocPayload(proposal: CoopProposal, tenantId = 'huck_collective') {
+  const gallery = sanitizeStorageIds(proposal.galleryImageIds);
+  const cover =
+    proposal.imageId && !proposal.imageId.startsWith('data:') && !proposal.imageId.startsWith('blob:')
+      ? proposal.imageId
+      : gallery[0] || null;
+
+  return {
+    title: cleanEscapedCurrency(proposal.title || 'Untitled Proposal').slice(0, 500),
+    proposer: String(proposal.proposer || 'Member').slice(0, 128),
+    proposerPartner: String(proposal.proposerPartner || 'HUCK').slice(0, 64),
+    proposerUserId: proposal.proposerUserId ? String(proposal.proposerUserId).slice(0, 128) : null,
+    proposerEmail: proposal.proposerEmail ? String(proposal.proposerEmail).slice(0, 255) : null,
+    category: String(proposal.category || 'Policy & Membership').slice(0, 128),
+    status: String(proposal.status || 'active').slice(0, 32),
+    deadline: String(proposal.deadline || '').slice(0, 64),
+    financialImpact: proposal.financialImpact ? cleanEscapedCurrency(proposal.financialImpact).slice(0, 1000) : null,
+    description: cleanEscapedCurrency(proposal.description || '').slice(0, 65000),
+    rationale: cleanEscapedCurrency(proposal.rationale || '').slice(0, 65000),
+    mdFileId: proposal.mdFileId ? String(proposal.mdFileId).slice(0, 128) : null,
+    imageId: cover ? String(cover).slice(0, 255) : null,
+    galleryImageIds: gallery,
+    votesJson: JSON.stringify(proposal.votes || {}).slice(0, 65000),
+    presetAction: proposal.presetAction ? String(proposal.presetAction).slice(0, 64) : null,
+    lastEditKind: proposal.lastEditKind ? String(proposal.lastEditKind).slice(0, 32) : null,
+    createdAt: String(proposal.createdAt || new Date().toISOString().slice(0, 10)).slice(0, 64),
+    updatedAt: new Date().toISOString(),
+    tenantId: String(tenantId || 'huck_collective').slice(0, 64),
+  };
+}
 
 function inferPartnerFromMemberName(member: string, explicit?: string): 'HUCK' | 'PDXGL' | 'SWEAT' {
   if (explicit === 'SWEAT' || /social|sweat|marketing|enabler/i.test(member)) return 'SWEAT';
@@ -571,64 +711,176 @@ export async function loadCoopGovernanceState(
   const localState = readLocalGovernanceFallback(defaultProposals);
   const dbId = getDatabaseId();
 
+  let parsedSnapshot: Partial<CoopGovernanceCloudState> = {};
+  let manifestLoaded = false;
+  let manifestUpdatedAt = '';
+
   try {
     const doc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, COOP_GOVERNANCE_DOC_ID);
-    let parsedSnapshot: Partial<CoopGovernanceCloudState> = {};
-
+    manifestLoaded = true;
+    manifestUpdatedAt = doc.$updatedAt || '';
     if (typeof doc.itemsSnapshot === 'string' && doc.itemsSnapshot.trim().startsWith('{')) {
       parsedSnapshot = JSON.parse(doc.itemsSnapshot);
     } else if (typeof doc.notes === 'string' && doc.notes.trim().startsWith('{')) {
       parsedSnapshot = JSON.parse(doc.notes);
     }
-
-    let proposals =
-      Array.isArray(parsedSnapshot.proposals) && parsedSnapshot.proposals.length > 0
-        ? parsedSnapshot.proposals
-        : localState.proposals;
-
-    if (defaultProposals.length > 0 && !proposals.some((p) => p.id === 'prop-surplus-policy')) {
-      proposals = [defaultProposals[0], ...proposals];
-    }
-
-    const surplusPolicyMode: SurplusPolicyMode =
-      parsedSnapshot.surplusPolicyMode === 'patronage_90_10' ||
-      parsedSnapshot.surplusPolicyMode === 'cap_100' ||
-      parsedSnapshot.surplusPolicyMode === 'reserve_100'
-        ? parsedSnapshot.surplusPolicyMode
-        : localState.surplusPolicyMode;
-
-    const surplusSplitBasis: SurplusSplitBasis =
-      parsedSnapshot.surplusSplitBasis === 'volume' || parsedSnapshot.surplusSplitBasis === 'equal'
-        ? parsedSnapshot.surplusSplitBasis
-        : localState.surplusSplitBasis;
-
-    const policyConfig = parsedSnapshot.policyConfig
-      ? normalizePolicyConfig(parsedSnapshot.policyConfig)
-      : localState.policyConfig;
-
-    const laborEntries =
-      Array.isArray(parsedSnapshot.laborEntries) && parsedSnapshot.laborEntries.length > 0
-        ? normalizeLaborEntries(parsedSnapshot.laborEntries)
-        : localState.laborEntries;
-
-    const cloudState: CoopGovernanceCloudState = {
-      proposals,
-      surplusPolicyMode,
-      surplusSplitBasis,
-      policyConfig,
-      laborEntries,
-      updatedAt: doc.$updatedAt || parsedSnapshot.updatedAt || new Date().toISOString(),
-    };
-
-    mirrorToLocalStorage(cloudState);
-    return { state: cloudState, syncedFromCloud: true };
   } catch (err: any) {
     if (err?.code === 404 && defaultProposals.length > 0) {
-      const seeded = await saveCoopGovernanceState(localState, tenantId);
-      return { state: localState, syncedFromCloud: seeded };
+      await saveCoopGovernanceState(localState, tenantId);
     }
-    return { state: localState, syncedFromCloud: false };
   }
+
+  let legacyProposals: CoopProposal[] =
+    Array.isArray(parsedSnapshot.proposals) && parsedSnapshot.proposals.length > 0
+      ? parsedSnapshot.proposals.map((p) => docToCoopProposal({ ...p, $id: p.id }))
+      : localState.proposals;
+
+  if (defaultProposals.length > 0 && !legacyProposals.some((p) => p.id === 'prop-surplus-policy')) {
+    legacyProposals = [defaultProposals[0], ...legacyProposals];
+  }
+
+  let collectionProposals: CoopProposal[] = [];
+  let collectionLoaded = false;
+
+  try {
+    const res = await databases.listDocuments(dbId, COOP_PROPOSALS_COL_ID, [
+      Query.orderDesc('$id'),
+      Query.limit(100),
+    ]);
+    collectionLoaded = true;
+    collectionProposals = (res.documents || []).map((doc) => docToCoopProposal(doc));
+
+    // Zero-loss forward sync: if any legacy proposal in manifests is missing from coop_proposals, migrate it
+    const existingIds = new Set(collectionProposals.map((p) => p.id));
+    for (const legacyProp of legacyProposals) {
+      if (legacyProp?.id && !existingIds.has(legacyProp.id)) {
+        collectionProposals.push(legacyProp);
+        existingIds.add(legacyProp.id);
+        saveSingleCoopProposal(legacyProp, tenantId).catch(() => {});
+      }
+    }
+  } catch (colErr) {
+    console.warn('[coopGovernance] coop_proposals list fallback to manifest/local:', colErr);
+  }
+
+  const mergedProposals = (collectionLoaded && collectionProposals.length > 0 ? collectionProposals : legacyProposals)
+    .slice()
+    .sort((a, b) => {
+      // Keep newest createdAt proposals first; preserve prop-surplus-policy near top if tied
+      const dateCmp = String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      if (dateCmp !== 0) return dateCmp;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+
+  const surplusPolicyMode: SurplusPolicyMode =
+    parsedSnapshot.surplusPolicyMode === 'patronage_90_10' ||
+    parsedSnapshot.surplusPolicyMode === 'cap_100' ||
+    parsedSnapshot.surplusPolicyMode === 'reserve_100'
+      ? parsedSnapshot.surplusPolicyMode
+      : localState.surplusPolicyMode;
+
+  const surplusSplitBasis: SurplusSplitBasis =
+    parsedSnapshot.surplusSplitBasis === 'volume' || parsedSnapshot.surplusSplitBasis === 'equal'
+      ? parsedSnapshot.surplusSplitBasis
+      : localState.surplusSplitBasis;
+
+  const policyConfig = parsedSnapshot.policyConfig
+    ? normalizePolicyConfig(parsedSnapshot.policyConfig)
+    : localState.policyConfig;
+
+  const laborEntries =
+    Array.isArray(parsedSnapshot.laborEntries) && parsedSnapshot.laborEntries.length > 0
+      ? normalizeLaborEntries(parsedSnapshot.laborEntries)
+      : localState.laborEntries;
+
+  const cloudState: CoopGovernanceCloudState = {
+    proposals: mergedProposals,
+    surplusPolicyMode,
+    surplusSplitBasis,
+    policyConfig,
+    laborEntries,
+    updatedAt: manifestUpdatedAt || parsedSnapshot.updatedAt || new Date().toISOString(),
+  };
+
+  mirrorToLocalStorage(cloudState);
+  return { state: cloudState, syncedFromCloud: collectionLoaded || manifestLoaded };
+}
+
+/**
+ * Atomic per-proposal cloud upsert in `resale_db.coop_proposals` (prevents multi-voter overwrite races).
+ */
+export async function saveSingleCoopProposal(
+  proposal: CoopProposal,
+  tenantId = 'huck_collective'
+): Promise<boolean> {
+  const dbId = getDatabaseId();
+  const docId = String(proposal.id || `prop-${Date.now()}`).slice(0, 36);
+  const normalized: CoopProposal = {
+    ...proposal,
+    id: docId,
+    title: cleanEscapedCurrency(proposal.title),
+    description: cleanEscapedCurrency(proposal.description),
+    rationale: cleanEscapedCurrency(proposal.rationale),
+    financialImpact: proposal.financialImpact ? cleanEscapedCurrency(proposal.financialImpact) : undefined,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Update local cache immediately
+  const local = readLocalGovernanceFallback([]);
+  const idx = local.proposals.findIndex((p) => p.id === docId);
+  const nextLocalProposals =
+    idx >= 0
+      ? local.proposals.map((p, i) => (i === idx ? normalized : p))
+      : [normalized, ...local.proposals];
+  mirrorToLocalStorage({ proposals: nextLocalProposals });
+
+  const payload = proposalToDocPayload(normalized, tenantId);
+
+  try {
+    try {
+      await databases.updateDocument(dbId, COOP_PROPOSALS_COL_ID, docId, payload);
+    } catch (updateErr: any) {
+      if (updateErr?.code === 404) {
+        await databases.createDocument(dbId, COOP_PROPOSALS_COL_ID, docId, payload, [
+          Permission.read(Role.any()),
+          Permission.update(Role.users()),
+          Permission.delete(Role.users()),
+        ]);
+      } else {
+        throw updateErr;
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('[coopGovernance] saveSingleCoopProposal fallback to manifest:', err);
+    return saveCoopGovernanceState({ proposals: nextLocalProposals }, tenantId);
+  }
+}
+
+export async function deleteCoopProposal(
+  proposalId: string,
+  tenantId = 'huck_collective'
+): Promise<boolean> {
+  const dbId = getDatabaseId();
+  const local = readLocalGovernanceFallback([]);
+  const nextLocalProposals = local.proposals.filter((p) => p.id !== proposalId);
+  mirrorToLocalStorage({ proposals: nextLocalProposals });
+
+  let deletedFromCol = false;
+  try {
+    await databases.deleteDocument(dbId, COOP_PROPOSALS_COL_ID, proposalId);
+    deletedFromCol = true;
+  } catch (err: any) {
+    if (err?.code === 404) {
+      deletedFromCol = true;
+    } else {
+      console.warn('[coopGovernance] deleteCoopProposal warning:', err);
+    }
+  }
+
+  // Also prune from legacy manifest snapshot so auto-migration doesn't resurrect a deleted proposal
+  await saveCoopGovernanceState({ proposals: nextLocalProposals }, tenantId).catch(() => {});
+  return deletedFromCol;
 }
 
 export async function saveCoopGovernanceState(

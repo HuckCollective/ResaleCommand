@@ -350,6 +350,32 @@
                 placeholder="Write or paste your issue description, expected behavior, idea, or prompt here..."
                 @input="handleBodyEdited"
               ></textarea>
+
+              <!-- Page Route & Screenshot Attachments (coop_media) -->
+              <div v-if="form.pageUrl || form.deviceSummary" class="flex flex-wrap items-center gap-2 pt-1">
+                <span v-if="form.pageUrl" class="badge badge-ghost badge-xs font-mono">
+                  📍 Page: {{ form.pageUrl }}
+                </span>
+                <span v-if="form.deviceSummary" class="badge badge-ghost badge-xs font-mono">
+                  🖥️ {{ form.deviceSummary }}
+                </span>
+              </div>
+
+              <div v-if="!isCardLocked || existingVaultImages.length > 0" class="pt-2">
+                <PhotoGalleryManager
+                  :existing-images="existingVaultImages"
+                  :new-photos="newVaultPhotos"
+                  :bucket-id="COOP_MEDIA_BUCKET_ID"
+                  :max-photos="6"
+                  :allow-paste="!isCardLocked"
+                  :allow-camera="!isCardLocked"
+                  :allow-upload="!isCardLocked"
+                  title="Attached Bug / Report Screenshots"
+                  dropzone-subtitle="Paste screenshots (Ctrl+V) or attach reference photos"
+                  @update:existing-images="existingVaultImages = $event"
+                  @update:new-photos="newVaultPhotos = $event"
+                />
+              </div>
             </div>
 
             <!-- 🧭 WHERE & HOW TO PASTE THIS PROMPT (Smart Routing & Handoff Guide) -->
@@ -902,7 +928,9 @@
 import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import BottomActionDock from '../common/BottomActionDock.vue';
+import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
 import { addToast } from '../../stores/toast';
+import { COOP_MEDIA_BUCKET_ID, uploadCoopMediaFiles } from '../../lib/coopMedia';
 import {
   VAULT_KIND_META,
   GOVERNANCE_META,
@@ -961,6 +989,8 @@ const coPilotError = ref('');
 const lastModelVersion = ref('');
 const founderUnlockedSession = ref(false);
 const showUnlockConfirm = ref(false);
+const existingVaultImages = ref<string[]>([]);
+const newVaultPhotos = ref<any[]>([]);
 
 const emptyForm = (): VaultNote => ({
   id: '',
@@ -1072,6 +1102,14 @@ watch(
         followUpQuestions: incoming.followUpQuestions ? [...incoming.followUpQuestions] : undefined,
         bundlesUsed: incoming.bundlesUsed ? [...incoming.bundlesUsed] : undefined,
       };
+      existingVaultImages.value = Array.from(
+        new Set(
+          [incoming.imageId, ...(incoming.galleryImageIds || [])].filter((id): id is string =>
+            Boolean(id && !id.startsWith('data:'))
+          )
+        )
+      );
+      newVaultPhotos.value = [];
       selectedBundles.value =
         incoming.bundlesUsed && incoming.bundlesUsed.length
           ? [...incoming.bundlesUsed]
@@ -1079,6 +1117,8 @@ watch(
       coPilotGoal.value = buildCoPilotBriefFromNote(form.value);
     } else {
       form.value = emptyForm();
+      existingVaultImages.value = [];
+      newVaultPhotos.value = [];
       selectedBundles.value = [];
       coPilotGoal.value = '';
     }
@@ -1189,11 +1229,22 @@ async function runReportAuditAndFix() {
   await runCoPilot(false);
 }
 
-function saveCard() {
+async function saveCard() {
   if (isCardLocked.value) return;
   if (!form.value.title.trim()) {
     form.value.title = form.value.body.trim().split('\n')[0].slice(0, 60) || 'Untitled Vault Card';
   }
+  if (newVaultPhotos.value.length > 0) {
+    try {
+      const uploaded = await uploadCoopMediaFiles(newVaultPhotos.value, 'vault');
+      existingVaultImages.value = [...existingVaultImages.value, ...uploaded];
+      newVaultPhotos.value = [];
+    } catch (err) {
+      console.warn('[VaultNoteDrawer] photo upload warning:', err);
+    }
+  }
+  form.value.imageId = existingVaultImages.value[0] || undefined;
+  form.value.galleryImageIds = [...existingVaultImages.value];
   form.value.routingGuide = activeRoutingGuide.value;
   form.value.updatedAt = new Date().toISOString();
   emit('save', { ...form.value });

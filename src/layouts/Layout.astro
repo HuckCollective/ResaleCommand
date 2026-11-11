@@ -6,6 +6,7 @@ import ConfirmContainer from "@components/ui/ConfirmContainer.vue";
 import MarkdownModal from "@components/ui/MarkdownModal.astro";
 import CookieConsent from "@components/common/CookieConsent.astro";
 import HuckleberryLoader from "@components/common/HuckleberryLoader.vue";
+import CoopMessagesTray from "@components/coop/CoopMessagesTray.vue";
 import { siteConfig } from "site-config";
 
 import "../styles/global.css";
@@ -64,6 +65,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
     <MarkdownModal />
     <CookieConsent />
     <HuckleberryLoader client:only="vue" />
+    <CoopMessagesTray client:idle />
     <ToastContainer client:only="vue" />
     <ConfirmContainer client:only="vue" />
     <script is:inline>

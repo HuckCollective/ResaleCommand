@@ -2,6 +2,7 @@ import { databases } from './appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from './appwriteEnv';
 import { siteConfig } from '../site-config';
+import { getCoopMediaUrl } from './coopMedia';
 import {
   DEV_AI_IDE_PICKER_BADGE,
   DEV_AI_CHROME_SIDEBAR_BADGE,
@@ -9,6 +10,7 @@ import {
 } from './devAiRouting';
 
 export type VaultNoteKind = 'idea' | 'prompt' | 'spec' | 'report';
+export type CoopMessageKind = 'bug' | 'ai_report' | 'message';
 
 /** Governance lifecycle. Nothing here ever alters live scan prompts — shipping happens only via Git on alpha-1. */
 export type VaultGovernanceStatus = 'pending_review' | 'vetted_for_dev' | 'shipped' | 'rejected';
@@ -51,6 +53,12 @@ export interface VaultNote {
   issueType?: AiIssueType;
   rootCause?: AiRootCause;
   author?: string;
+  authorEmail?: string;
+  messageKind?: CoopMessageKind;
+  pageUrl?: string;
+  deviceSummary?: string;
+  imageId?: string;
+  galleryImageIds?: string[];
   upvotedBy?: string[];
   itemContext?: string;
   vettedBy?: string;
@@ -158,11 +166,45 @@ const MANIFESTS_COL_ID = 'manifests';
 const LOCAL_KEY = 'rc_founder_vault_v1';
 
 export const VAULT_KIND_META: Record<VaultNoteKind, { icon: string; label: string }> = {
-  report: { icon: '🚩', label: 'AI Report' },
-  idea: { icon: '💡', label: 'Idea' },
+  report: { icon: '🚩', label: 'AI / Bug Report' },
+  idea: { icon: '💡', label: 'Idea / Message' },
   prompt: { icon: '📋', label: 'Prompt' },
   spec: { icon: '📌', label: 'Spec' },
 };
+
+export const COOP_MESSAGE_KIND_META: Record<CoopMessageKind, { icon: string; label: string; badge: string }> = {
+  bug: { icon: '🐞', label: 'UI / App Bug', badge: 'badge-error' },
+  ai_report: { icon: '🤖', label: 'AI Scan Flag', badge: 'badge-warning' },
+  message: { icon: '💬', label: 'Steward Message', badge: 'badge-info' },
+};
+
+export function resolveNoteMessageKind(note: Partial<VaultNote>): CoopMessageKind {
+  if (note.messageKind) return note.messageKind;
+  if (note.kind === 'report') {
+    if (/^🐞|bug:/i.test(note.title || '')) return 'bug';
+    return 'ai_report';
+  }
+  return 'message';
+}
+
+export function canUserEditVaultNote(
+  note: Partial<VaultNote> | null | undefined,
+  opts: { userEmail?: string; userName?: string; isFounder?: boolean }
+): boolean {
+  if (!note) return false;
+  if (opts.isFounder) return true;
+  if (
+    note.authorEmail &&
+    opts.userEmail &&
+    note.authorEmail.trim().toLowerCase() === opts.userEmail.trim().toLowerCase()
+  ) {
+    return true;
+  }
+  const clean = (s?: string) => String(s || '').replace(/\(.*?\)/g, '').trim().toLowerCase();
+  const a = clean(note.author);
+  const u = clean(opts.userName);
+  return Boolean(a && u && (a === u || a.split(/\s+/)[0] === u.split(/\s+/)[0]));
+}
 
 export const GOVERNANCE_META: Record<VaultGovernanceStatus, { icon: string; label: string; badge: string }> = {
   pending_review: { icon: '🟡', label: 'Pending Review', badge: 'badge-warning' },
@@ -388,11 +430,18 @@ export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
   const body = (note.body || '').trim();
   const lines: string[] = [];
 
+  const mediaIds = Array.from(
+    new Set([note.imageId, ...(note.galleryImageIds || [])].filter((id): id is string => Boolean(id && !id.startsWith('data:'))))
+  );
+  const mediaUrls = mediaIds.map((id) => getCoopMediaUrl(id, { preview: false })).filter(Boolean);
+
   if (note.kind === 'report') {
     lines.push(
       'TASK: Analyze this reported Resale Command issue / feature request, run a 3-Point Anti-Bias Audit, and build a ready-to-paste prompt for the target surface.'
     );
     if (title) lines.push(`Card Title: ${title}`);
+    if (note.pageUrl) lines.push(`Page Route: ${note.pageUrl}`);
+    if (note.deviceSummary) lines.push(`Viewport / Device: ${note.deviceSummary}`);
     if (note.surface) lines.push(`Reported Surface: ${AI_SURFACE_LABELS[note.surface]}`);
     if (note.issueType) lines.push(`Issue Category: ${AI_ISSUE_LABELS[note.issueType]}`);
     if (note.rootCause) lines.push(`Reporter Root Cause: ${AI_ROOT_CAUSE_LABELS[note.rootCause]}`);
@@ -403,13 +452,23 @@ export function buildCoPilotBriefFromNote(note: Partial<VaultNote>): string {
         `Attached Scan Snapshot: ${parsed.title}${parsed.tier ? ` (${parsed.tier})` : ''}${parsed.priceOrValue ? ` • Est: ${parsed.priceOrValue}` : ''}${parsed.verdict ? ` • Verdict: ${parsed.verdict}` : ''}`
       );
     }
+    if (mediaUrls.length > 0) {
+      lines.push(`Attached Screenshots (${mediaUrls.length}):\n${mediaUrls.map((u, idx) => `  [${idx + 1}] ${u}`).join('\n')}`);
+    }
     return lines.join('\n');
   }
 
+  const extraFooter = [
+    note.pageUrl ? `Page Route: ${note.pageUrl}` : '',
+    mediaUrls.length > 0 ? `Attached Screenshots:\n${mediaUrls.join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   if (title && body && body !== title) {
-    return `${title}\n\nDetails / Goal:\n${body}`;
+    return `${title}\n\nDetails / Goal:\n${body}${extraFooter ? `\n\n${extraFooter}` : ''}`;
   }
-  return body || title;
+  return `${body || title}${extraFooter ? `\n\n${extraFooter}` : ''}`;
 }
 
 /**
@@ -769,31 +828,61 @@ export async function submitAiFeedbackReport(input: {
   issueType: AiIssueType;
   rootCause: AiRootCause;
   note: string;
+  title?: string;
+  messageKind?: CoopMessageKind;
+  pageUrl?: string;
+  deviceSummary?: string;
+  imageId?: string;
+  galleryImageIds?: string[];
   itemContext?: string;
   author?: string;
-}): Promise<{ saved: boolean; synced: boolean }> {
+  authorEmail?: string;
+}): Promise<{ saved: boolean; synced: boolean; note: VaultNote }> {
   const { notes } = await loadVaultNotes();
   const now = new Date().toISOString();
+  const cleanGallery = (input.galleryImageIds || []).filter((id) => Boolean(id && !id.startsWith('data:')));
+  const coverId = input.imageId && !input.imageId.startsWith('data:') ? input.imageId : cleanGallery[0];
+  const msgKind: CoopMessageKind = input.messageKind || 'ai_report';
+  const defaultTitle =
+    msgKind === 'bug'
+      ? `🐞 Bug${input.pageUrl ? ` (${input.pageUrl})` : ''}: ${input.note.trim().split('\n')[0].slice(0, 64)}`
+      : msgKind === 'message'
+        ? `💬 Message: ${input.note.trim().split('\n')[0].slice(0, 68)}`
+        : `${AI_SURFACE_LABELS[input.surface]}: ${AI_ISSUE_LABELS[input.issueType]}`;
+  const finalTitle = (input.title || '').trim() || defaultTitle;
+  const noteKind: VaultNoteKind = msgKind === 'message' ? 'idea' : 'report';
+
   const draftNote: Partial<VaultNote> = {
-    kind: 'report',
-    title: `${AI_SURFACE_LABELS[input.surface]}: ${AI_ISSUE_LABELS[input.issueType]}`,
+    kind: noteKind,
+    messageKind: msgKind,
+    title: finalTitle,
     body: input.note.trim(),
     surface: input.surface,
     issueType: input.issueType,
     rootCause: input.rootCause,
+    pageUrl: input.pageUrl,
+    deviceSummary: input.deviceSummary,
+    imageId: coverId,
+    galleryImageIds: cleanGallery,
     itemContext: input.itemContext?.slice(0, 1500),
   };
   const routing = recommendVaultTemplateAndSurface(draftNote);
   const report: VaultNote = {
     id: newVaultNoteId(),
-    kind: 'report',
-    title: `${AI_SURFACE_LABELS[input.surface]}: ${AI_ISSUE_LABELS[input.issueType]}`,
+    kind: noteKind,
+    messageKind: msgKind,
+    title: finalTitle,
     body: input.note.trim(),
     status: 'pending_review',
     surface: input.surface,
-    issueType: input.issueType,
-    rootCause: input.rootCause,
+    issueType: msgKind === 'ai_report' ? input.issueType : undefined,
+    rootCause: msgKind === 'ai_report' ? input.rootCause : undefined,
+    pageUrl: input.pageUrl,
+    deviceSummary: input.deviceSummary,
+    imageId: coverId,
+    galleryImageIds: cleanGallery,
     author: input.author,
+    authorEmail: input.authorEmail,
     itemContext: input.itemContext?.slice(0, 1500),
     destination: routing.recommendedDestination,
     bundlesUsed: routing.recommendedBundles,
@@ -802,6 +891,42 @@ export async function submitAiFeedbackReport(input: {
     createdAt: now,
     updatedAt: now,
   };
-  const synced = await saveVaultNotes([...notes, report]);
-  return { saved: true, synced };
+  const synced = await saveVaultNotes([report, ...notes]);
+  return { saved: true, synced, note: report };
+}
+
+/**
+ * Convenience helper for submitting a UI/App Bug Report or Co-op Steward Message (with optional screenshots)
+ * from the Bottom-Sheet Detent List Tray (`CoopMessagesTray.vue`) or Navbar.
+ */
+export async function submitCoopBugOrMessage(input: {
+  messageKind: CoopMessageKind;
+  title?: string;
+  body: string;
+  pageUrl?: string;
+  deviceSummary?: string;
+  imageId?: string;
+  galleryImageIds?: string[];
+  surface?: AiSurface;
+  issueType?: AiIssueType;
+  rootCause?: AiRootCause;
+  itemContext?: string;
+  author?: string;
+  authorEmail?: string;
+}): Promise<{ saved: boolean; synced: boolean; note: VaultNote }> {
+  return submitAiFeedbackReport({
+    surface: input.surface || 'general',
+    issueType: input.issueType || 'other',
+    rootCause: input.rootCause || 'ignored_visible_clue',
+    note: input.body,
+    title: input.title,
+    messageKind: input.messageKind,
+    pageUrl: input.pageUrl,
+    deviceSummary: input.deviceSummary,
+    imageId: input.imageId,
+    galleryImageIds: input.galleryImageIds,
+    itemContext: input.itemContext,
+    author: input.author,
+    authorEmail: input.authorEmail,
+  });
 }

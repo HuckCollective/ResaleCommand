@@ -142,40 +142,63 @@
             <p class="text-xs max-w-xs mx-auto">Scan photos or paste screenshots in Scout to tally items here!</p>
           </div>
 
-          <!-- ShopGoodwill Shipment Clusters & 20-lb Weight Guard -->
-          <div v-if="sellerClusters.length > 0" class="space-y-2 mb-3">
-            <div v-for="cluster in sellerClusters" :key="cluster.sellerKey"
-                 class="rounded-2xl p-3 border shadow-xs transition-all"
-                 :class="cluster.isOver20Lbs ? 'bg-error/10 border-error/40' : 'bg-base-200/70 border-base-300'">
+          <!-- Combined-Shipping Bundles & 20-lb Weight Guard (Only shown for 2+ item bundles or overweight/warning shipments) -->
+          <div v-if="combinedShipmentBundles.length > 0" class="space-y-2 mb-3">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider opacity-60 px-1 flex items-center justify-between">
+              <span>📦 Combined-Shipping Bundles ({{ combinedShipmentBundles.length }})</span>
+              <span>20.0 lb ShopGoodwill Box Cap</span>
+            </div>
+            <div
+              v-for="cluster in combinedShipmentBundles"
+              :key="cluster.sellerKey"
+              class="rounded-2xl p-3 border shadow-xs transition-all space-y-2"
+              :class="cluster.isOverWeightLimit ? 'bg-error/10 border-error/40' : 'bg-success/5 border-success/30'"
+            >
               <div class="flex items-center justify-between gap-2 text-xs flex-wrap">
-                <div class="flex items-center gap-1.5 font-bold">
-                  <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
-                  <span class="truncate max-w-[200px]">{{ cluster.sellerName }}</span>
-                  <span class="badge badge-neutral badge-xs font-mono font-bold">{{ cluster.items.length }} {{ cluster.items.length === 1 ? 'item' : 'items' }}</span>
+                <div class="flex items-center gap-1.5 font-black min-w-0">
+                  <Icon icon="solar:box-minimalistic-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                  <span class="truncate max-w-60">{{ cluster.sellerName }}</span>
+                  <span class="badge badge-primary badge-xs font-mono font-bold shrink-0">
+                    {{ cluster.items.length }} {{ cluster.items.length === 1 ? 'item' : 'items' }}
+                  </span>
                 </div>
                 <div v-if="cluster.estSavings > 0" class="badge badge-success text-success-content badge-xs font-mono font-bold">
                   +${{ cluster.estSavings.toFixed(2) }} Saved on Shipping
                 </div>
               </div>
 
+              <!-- Matched Items Inside This Combined Box -->
+              <div class="flex flex-wrap gap-1">
+                <button
+                  v-for="cItem in cluster.items"
+                  :key="cItem.$id"
+                  type="button"
+                  class="badge badge-ghost badge-xs font-medium hover:badge-primary cursor-pointer max-w-52 truncate"
+                  :title="cleanItemTitle(cItem.title)"
+                  @click.stop="openEdit(cItem)"
+                >
+                  • {{ cleanItemTitle(cItem.title) }}
+                </button>
+              </div>
+
               <!-- 20-lb Weight Progress Bar -->
-              <div class="mt-2 space-y-1">
-                <div class="flex items-center justify-between text-[10px] font-mono opacity-80">
-                  <span>Weight: <strong>{{ cluster.totalWeight }} lbs</strong> / 20.0 lbs limit</span>
-                  <span :class="cluster.isOver20Lbs ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
-                    {{ cluster.isOver20Lbs ? '🚨 OVER 20 LBS (SPLIT SHIPMENT!)' : `${cluster.remainingWeight} lbs headroom` }}
+              <div class="space-y-1">
+                <div class="flex items-center justify-between text-[10px] font-mono opacity-85">
+                  <span>Box Weight: <strong>{{ cluster.totalWeight }} lbs</strong> / 20.0 lbs</span>
+                  <span :class="cluster.isOverWeightLimit ? 'text-error font-black animate-pulse' : 'text-success font-bold'">
+                    {{ cluster.isOverWeightLimit ? '🚨 OVER 20 LBS (SPLITS INTO 2 BOXES!)' : `${cluster.remainingWeight} lbs headroom` }}
                   </span>
                 </div>
-                <progress 
+                <progress
                   class="progress w-full h-2 rounded-full"
                   :class="cluster.isOverWeightLimit ? 'progress-error' : (cluster.totalWeight > 15 ? 'progress-warning' : 'progress-success')"
-                  :value="cluster.weightPercentage" 
+                  :value="cluster.weightPercentage"
                   max="100"
                 ></progress>
               </div>
 
               <!-- Cluster Warnings (7-day window, 20 items, penny notice) -->
-              <div v-if="cluster.warnings && cluster.warnings.length > 0" class="mt-2 pt-1.5 border-t border-base-300/60 space-y-1">
+              <div v-if="cluster.warnings && cluster.warnings.length > 0" class="pt-1.5 border-t border-base-300/60 space-y-1">
                 <div v-for="(warn, wIdx) in cluster.warnings" :key="wIdx" class="flex items-start gap-1 text-[11px] opacity-90 leading-tight">
                   <Icon icon="solar:info-circle-bold" class="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
                   <span>{{ warn }}</span>
@@ -225,6 +248,9 @@
                 </span>
                 <span v-if="item.isLot" class="badge badge-xs badge-outline badge-secondary font-bold whitespace-nowrap">
                   {{ item.lotItemsCount || 0 }} Items In Lot
+                </span>
+                <span v-if="getItemSellerBadge(item)" class="badge badge-xs badge-ghost font-semibold max-w-44 truncate" :title="getItemSellerBadge(item)">
+                  🏬 {{ getItemSellerBadge(item) }}
                 </span>
                 <span v-if="item.shippingWeight" class="badge badge-xs badge-ghost font-mono">
                   ⚖️ {{ item.shippingWeight }} lbs
@@ -594,7 +620,7 @@ import { addToast } from '../../stores/toast';
 import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
-import { evaluateSellerClusters, type SellerCluster } from '../../lib/shipping-rules';
+import { evaluateSellerClusters, formatReadableSellerLabel, type SellerCluster } from '../../lib/shipping-rules';
 
 const emit = defineEmits<{
   (e: 'toggle-tray'): void;
@@ -723,6 +749,22 @@ const sortedManifestItems = computed(() => {
 const sellerClusters = computed<SellerCluster[]>(() => {
   return evaluateSellerClusters(purchaseItems.value);
 });
+
+// Only show top combined-shipping box cards when 2+ items combine OR when a single item exceeds 20 lbs / triggers a shipping warning
+const combinedShipmentBundles = computed<SellerCluster[]>(() => {
+  return sellerClusters.value.filter(
+    (c) => c.items.length >= 2 || c.isOverWeightLimit || (c.warnings && c.warnings.length > 0)
+  );
+});
+
+const getItemSellerBadge = (item: ScoutPurchaseItem): string => {
+  if (!item.sellerName && !item.sellerId && !item.sourcingLocation) return '';
+  return formatReadableSellerLabel({
+    sellerName: item.sellerName,
+    sourcingLocation: item.sourcingLocation,
+    sellerId: item.sellerId,
+  });
+};
 
 // -- 1-TAP COPY MAX BID --
 const copyMaxBid = async (item: ScoutPurchaseItem) => {

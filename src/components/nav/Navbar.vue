@@ -446,6 +446,14 @@
                 <Icon icon="solar:settings-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
                 <span>Workspace Settings</span>
               </a>
+              <button
+                type="button"
+                class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-warning hover:bg-warning/10"
+                @click="openCoopMessages('new_bug')"
+              >
+                <Icon icon="solar:bug-bold-duotone" class="w-4 h-4 text-warning shrink-0" />
+                <span>Report Bug / Messages</span>
+              </button>
 
               <div class="divider my-1"></div>
 
@@ -718,6 +726,16 @@
               <span class="text-xs font-bold opacity-70">Theme</span>
               <ThemeSwitcher />
             </div>
+
+            <button
+              v-if="isAuthenticated"
+              type="button"
+              class="btn btn-outline btn-warning btn-sm w-full rounded-xl font-bold gap-1.5"
+              @click="openCoopMessages('list')"
+            >
+              <Icon icon="solar:bug-bold-duotone" class="w-4 h-4" />
+              <span>Messages &amp; Report Bug</span>
+            </button>
 
             <div class="grid grid-cols-2 gap-2 pt-1">
               <a
@@ -1063,6 +1081,13 @@ const handleInvite = async () => {
     } else {
       addToast({ type: 'error', message: e.message });
     }
+  }
+};
+
+const openCoopMessages = (mode: 'list' | 'new_bug' | 'new_message' = 'list') => {
+  openMobile.value = false;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('open-coop-messages-tray', { detail: { mode } }));
   }
 };
 </script>

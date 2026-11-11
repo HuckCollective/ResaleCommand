@@ -1,7 +1,7 @@
 # 🛡️ Appwrite Complete Schema & Storage Audit Report
 
 > **Audit Type:** 100% Read-Only Full Database Inspection (Zero changes made)
-> **Last Audited:** Saturday, September 26, 2026 at 5:26:51 PM PDT
+> **Last Audited:** Tuesday, November 10, 2026 at 4:10:58 PM PST
 > **Endpoint:** `https://sfo.cloud.appwrite.io/v1`
 > **Project ID:** `69714b35003a8adab6bb`
 > **Database ID:** `resale_db`
@@ -10,7 +10,7 @@
 
 ## 1. Database Collections Overview
 
-Found **16** total collections in database `resale_db`:
+Found **18** total collections in database `resale_db`:
 
 | Collection ID | Name | Document Security | Status |
 |---|---|---|---|
@@ -29,7 +29,9 @@ Found **16** total collections in database `resale_db`:
 | `purchases` | Purchases | DLS Enabled | ✅ Active |
 | `sales` | Sales | DLS Enabled | ✅ Active |
 | `warehouses` | Warehouses | DLS Enabled | ✅ Active |
-| `manifests` | Outbound Manifests | Standard | ✅ Active |
+| `manifests` | Outbound Manifests | DLS Enabled | ✅ Active |
+| `join_requests` | Join Requests (server-only) | Standard | ✅ Active |
+| `coop_proposals` | Co-op Governance Proposals | Standard | ✅ Active |
 
 ---
 
@@ -64,6 +66,7 @@ Found **16** total collections in database `resale_db`:
 | `marketDescription` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
 | `rawAnalysis` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
 | `cartId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `orderId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
 | `sourcingLocation` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
 | `redFlags` | `string[]` | 255 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `commissionPaid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
@@ -73,10 +76,14 @@ Found **16** total collections in database `resale_db`:
 | `countryOfOrigin` | `string` | 50 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `purchaseId` | `string` | 255 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `locationId` | `string` | 255 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `auctionEndsAt` | `string` | 64 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `maxBid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `currentBid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `soldDate` | `string` | 64 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 
-**Collection Summary:** ✅ **26** matched | ➕ **0** missing | ℹ️ **8** extra custom attributes
+**Collection Summary:** ✅ **27** matched | ➕ **0** missing | ℹ️ **12** extra custom attributes
 
-**Indexes (5 active):**
+**Indexes (9 active):**
 
 | Index Key | Type | Attributes | Status |
 |---|---|---|---|
@@ -85,6 +92,10 @@ Found **16** total collections in database `resale_db`:
 | `idx_saleId` | `key` | `saleId` | ✅ available |
 | `idx_warehouseId` | `key` | `warehouseId` | ✅ available |
 | `parentLotId_idx` | `key` | `parentLotId` | ✅ available |
+| `idx_orderId` | `key` | `orderId` | ✅ available |
+| `idx_locationSku` | `key` | `locationSku` | ✅ available |
+| `idx_upc` | `key` | `upc` | ✅ available |
+| `idx_soldDate` | `key` | `soldDate` | ✅ available |
 
 ---
 
@@ -117,6 +128,7 @@ Found **16** total collections in database `resale_db`:
 | `marketDescription` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
 | `rawAnalysis` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
 | `cartId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `orderId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
 | `sourcingLocation` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
 | `redFlags` | `string[]` | 255 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `commissionPaid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
@@ -126,16 +138,24 @@ Found **16** total collections in database `resale_db`:
 | `purchaseId` | `string` | 64 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `countryOfOrigin` | `string` | 50 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `locationId` | `string` | 255 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `auctionEndsAt` | `string` | 64 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `maxBid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `currentBid` | `double` | - | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `soldDate` | `string` | 64 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 
-**Collection Summary:** ✅ **26** matched | ➕ **0** missing | ℹ️ **8** extra custom attributes
+**Collection Summary:** ✅ **27** matched | ➕ **0** missing | ℹ️ **12** extra custom attributes
 
-**Indexes (3 active):**
+**Indexes (7 active):**
 
 | Index Key | Type | Attributes | Status |
 |---|---|---|---|
 | `idx_identity` | `key` | `identity` | ✅ available |
 | `purchaseId_idx` | `key` | `purchaseId` | ✅ available |
 | `parentLotId_idx` | `key` | `parentLotId` | ✅ available |
+| `idx_orderId` | `key` | `orderId` | ✅ available |
+| `idx_locationSku` | `key` | `locationSku` | ✅ available |
+| `idx_upc` | `key` | `upc` | ✅ available |
+| `idx_soldDate` | `key` | `soldDate` | ✅ available |
 
 ---
 
@@ -266,14 +286,51 @@ Found **16** total collections in database `resale_db`:
 | `tenantId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
 | `code` | `string` | 16 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 | `categories` | `string` | 500 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
+| `labelConfig` | `string` | 5000 | ℹ️ *Extra DB Field* | ⚪ Keep (Existing) |
 
-**Collection Summary:** ✅ **5** matched | ➕ **0** missing | ℹ️ **2** extra custom attributes
+**Collection Summary:** ✅ **5** matched | ➕ **0** missing | ℹ️ **3** extra custom attributes
 
 **Indexes (1 active):**
 
 | Index Key | Type | Attributes | Status |
 |---|---|---|---|
 | `idx_name` | `key` | `name` | ✅ available |
+
+---
+
+### 📁 Collection: `coop_proposals` (Co-op Governance Proposals)
+
+| Attribute Key | Expected Type | Expected Size / Array | Live Appwrite Status | Action Needed |
+|---|---|---|---|---|
+| `title` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `proposer` | `string` | 128 | ✅ Active (Status: available) | ⚪ Synced |
+| `proposerPartner` | `string` | 32 | ✅ Active (Status: available) | ⚪ Synced |
+| `proposerUserId` | `string` | 128 | ✅ Active (Status: available) | ⚪ Synced |
+| `proposerEmail` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `category` | `string` | 128 | ✅ Active (Status: available) | ⚪ Synced |
+| `status` | `string` | 32 | ✅ Active (Status: available) | ⚪ Synced |
+| `deadline` | `string` | 32 | ✅ Active (Status: available) | ⚪ Synced |
+| `financialImpact` | `string` | 500 | ✅ Active (Status: available) | ⚪ Synced |
+| `description` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
+| `rationale` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
+| `mdFileId` | `string` | 128 | ✅ Active (Status: available) | ⚪ Synced |
+| `imageId` | `string` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `galleryImageIds` | `string[]` | 255 | ✅ Active (Status: available) | ⚪ Synced |
+| `votesJson` | `string` | 65000 | ✅ Active (Status: available) | ⚪ Synced |
+| `presetAction` | `string` | 64 | ✅ Active (Status: available) | ⚪ Synced |
+| `lastEditKind` | `string` | 32 | ✅ Active (Status: available) | ⚪ Synced |
+| `createdAt` | `string` | 64 | ✅ Active (Status: available) | ⚪ Synced |
+| `updatedAt` | `string` | 64 | ✅ Active (Status: available) | ⚪ Synced |
+| `tenantId` | `string` | 128 | ✅ Active (Status: available) | ⚪ Synced |
+
+**Collection Summary:** ✅ **20** matched | ➕ **0** missing | ℹ️ **0** extra custom attributes
+
+**Indexes (2 active):**
+
+| Index Key | Type | Attributes | Status |
+|---|---|---|---|
+| `idx_tenantId` | `key` | `tenantId` | ✅ available |
+| `idx_status` | `key` | `status` | ✅ available |
 
 ---
 
@@ -484,6 +541,39 @@ Found **16** total collections in database `resale_db`:
 
 ---
 
+### 📁 Collection: `join_requests` (Join Requests (server-only))
+
+*Auxiliary / Custom Collection (No strict blueprint assigned)*
+
+| Attribute Key | Live Type | Size / Format | Required | Status |
+|---|---|---|---|---|
+| `email` | `string` | 254 | No | ✅ available |
+| `emailHash` | `string` | 64 | No | ✅ available |
+| `name` | `string` | 80 | No | ✅ available |
+| `socialUrl` | `string` | 200 | No | ✅ available |
+| `note` | `string` | 500 | No | ✅ available |
+| `status` | `string` | 40 | No | ✅ available |
+| `stewardQuestion` | `string` | 280 | No | ✅ available |
+| `applicantReply` | `string` | 500 | No | ✅ available |
+| `decisionKey` | `string` | 40 | No | ✅ available |
+| `requestedAt` | `string` | 40 | No | ✅ available |
+| `verifiedAt` | `string` | 40 | No | ✅ available |
+| `lastEmailAt` | `string` | 40 | No | ✅ available |
+| `remindedAt` | `string` | 40 | No | ✅ available |
+| `hats` | `string[]` | 20 | No | ✅ available |
+| `niches` | `string[]` | 60 | No | ✅ available |
+
+**Total Attributes:** 15
+
+**Indexes (2 active):**
+
+| Index Key | Type | Attributes | Status |
+|---|---|---|---|
+| `idx_emailHash` | `key` | `emailHash` | ✅ available |
+| `idx_status` | `key` | `status` | ✅ available |
+
+---
+
 ## 3. Storage Buckets Audit
 
 | Bucket ID | Description | Live Cloud Status | File Security | Allowed Extensions |
@@ -492,6 +582,7 @@ Found **16** total collections in database `resale_db`:
 | `item_images_dev` | Item Images (Development) | ✅ Online (Enabled: true) | Public Read | `jpg, jpeg, png, webp, gif, json, txt` |
 | `reports` | Scout Reports (Production) | ✅ Online (Enabled: true) | Public Read | `md, json, txt, html` |
 | `reports_dev` | Scout Reports (Development) | ✅ Online (Enabled: true) | Public Read | `json, md, txt` |
+| `coop_media` | Co-op Proposals, Bug Screenshots & Markdown Docs | ✅ Online (Enabled: true) | Public Read | `jpg, jpeg, png, webp, gif, md, txt, json, pdf` |
 
 ---
 

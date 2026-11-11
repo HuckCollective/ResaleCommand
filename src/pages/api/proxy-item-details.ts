@@ -21,6 +21,23 @@ export const POST = async ({ request }: { request: Request }) => {
             try {
                 const data = await response.json();
                 if (data && (data.itemId || data.title)) {
+                    const rawCompany = data.sellerCompanyName || data.sellerName || data.seller_name || '';
+                    const pickupCity = data.pickupCity || data.sellerCity || '';
+                    const pickupState = data.pickupState || data.sellerState || '';
+                    const cityState = pickupCity && pickupState ? `${pickupCity}, ${pickupState}` : (pickupCity || pickupState || '');
+                    const cleanCompany = String(rawCompany || '')
+                        .replace(/^Goodwill\s+Industries\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+                        .replace(/^Goodwill\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+                        .replace(/,\s*Inc\.?$/i, '')
+                        .trim();
+                    data.sellerName = cleanCompany
+                        ? (cityState && !cleanCompany.toLowerCase().includes(String(pickupCity).toLowerCase() || '__none__')
+                            ? `${cleanCompany} (${cityState})`
+                            : cleanCompany)
+                        : (cityState ? `Goodwill — ${cityState}` : (data.sellerName || null));
+                    data.shippingWeight = parseFloat(data.shippingWeight || data.weight || data.dimensionalWeight || 0) || 0;
+                    data.canCombineShipping = data.canCombineShipping !== undefined ? Boolean(data.canCombineShipping) : true;
+
                     // Check for invalid main image (Logo/Placeholder)
                     if (data.imageURL && (data.imageURL.includes('Logo.svg') || data.imageURL.includes('General/'))) {
                          console.log(`[Proxy] API returned Logo as main image. Checking alternatives...`);

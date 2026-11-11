@@ -280,6 +280,7 @@ const props = withDefaults(defineProps<{
   scannerWidget?: any;
   outputFormat?: 'file' | 'object';
   dropzoneSubtitle?: string;
+  bucketId?: string;
 }>(), {
   existingImages: () => [],
   newPhotos: () => [],
@@ -292,7 +293,8 @@ const props = withDefaults(defineProps<{
   showHeader: true,
   scannerWidget: null,
   outputFormat: 'file',
-  dropzoneSubtitle: 'High-res photos or screenshots will attach to this item'
+  dropzoneSubtitle: 'High-res photos or screenshots will attach to this item',
+  bucketId: undefined,
 });
 
 const emit = defineEmits<{
@@ -315,22 +317,24 @@ const internalSelection = ref<MainSelection>({ ...props.mainSelection });
 const objectUrlMap = new WeakMap<File, string>();
 
 const getExistingThumbUrl = (id: string): string => {
+  const bucket = props.bucketId || BUCKET_ID;
   if (directViewFallbackIds.value[id]) {
-    return getAssetUrl(id, { preview: false });
+    return getAssetUrl(id, { preview: false, bucket });
   }
-  return getAssetUrl(id, { preview: true, width: 220, height: 220, quality: 80 });
+  return getAssetUrl(id, { preview: true, width: 220, height: 220, quality: 80, bucket });
 };
 
 const getExistingCoverUrl = (id: string): string => {
+  const bucket = props.bucketId || BUCKET_ID;
   if (directViewFallbackIds.value[id]) {
-    return getAssetUrl(id, { preview: false });
+    return getAssetUrl(id, { preview: false, bucket });
   }
-  return getAssetUrl(id, { preview: true, width: 900, height: 675, quality: 85 });
+  return getAssetUrl(id, { preview: true, width: 900, height: 675, quality: 85, bucket });
 };
 
 const getPhotoUrl = (item: any): string => {
   if (!item) return '';
-  if (typeof item === 'string') return getAssetUrl(item);
+  if (typeof item === 'string') return getAssetUrl(item, { bucket: props.bucketId || BUCKET_ID });
   if (item.url) return item.url;
   if (item instanceof File) {
     if (!objectUrlMap.has(item)) {

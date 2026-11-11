@@ -1,0 +1,37 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../../../layouts/Layout.astro';
+import CoopSubNav from '../../../components/coop/CoopSubNav.vue';
+import CoopGovernanceView from '../../../components/coop/CoopGovernanceView.vue';
+
+export const prerender = false;
+
+const { id } = Astro.params;
+const rawDocs = await getCollection('coopDocs');
+const strategyDocs = rawDocs
+  .sort((a, b) => (a.data.order ?? 10) - (b.data.order ?? 10))
+  .map((doc) => ({
+    slug: doc.id,
+    title: doc.data.title,
+    summary: doc.data.summary,
+    category: doc.data.category,
+    updatedDate: doc.data.updatedDate,
+    hatTags: doc.data.hatTags || [],
+    bodyPreview: (doc.body || '').slice(0, 1200),
+  }));
+---
+
+<Layout
+  title={`Proposal ${id || ''} | Co-op Governance | Works@TheHC`}
+  description="Inspect and vote on a Huckleberry Collective WSDE governance proposal."
+  hideFooter={true}
+>
+  <div class="rc-page-shell">
+    <CoopSubNav client:only="vue" activeTab="governance" />
+    <CoopGovernanceView
+      client:only="vue"
+      strategyDocs={strategyDocs}
+      initialProposalId={id || ''}
+    />
+  </div>
+</Layout>

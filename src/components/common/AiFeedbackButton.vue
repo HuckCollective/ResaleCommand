@@ -48,6 +48,26 @@
 
           <!-- Modal Scroll Body -->
           <div class="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+            <!-- Report Mode Switcher: AI Scan Issue vs. General UI Bug vs. Steward Message -->
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="(meta, k) in KIND_MODES"
+                :key="k"
+                type="button"
+                class="p-2 rounded-xl border text-left transition-all flex items-center gap-1.5"
+                :class="
+                  reportKind === k
+                    ? 'border-primary bg-primary/10 text-primary font-black shadow-2xs'
+                    : 'border-base-300 bg-base-100 hover:bg-base-200/60 font-semibold text-xs'
+                "
+                @click="reportKind = k"
+              >
+                <span class="text-sm leading-none">{{ meta.icon }}</span>
+                <span class="text-xs truncate">{{ meta.label }}</span>
+              </button>
+            </div>
+
+            <template v-if="reportKind === 'ai_report'">
             <!-- Step 1: AI Surface -->
             <div class="space-y-2">
               <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 flex items-center gap-1.5">
@@ -138,19 +158,45 @@
                 💡 Note: When a copyright date, tag, or hallmark isn't visible in the photo, changing AI rules would cause hallucinations. Retaking a closeup photo or adding an Authoritative Reseller Note solves this immediately!
               </p>
             </div>
+            </template>
 
             <!-- Step 4: Member Correction Note -->
             <div class="space-y-1.5">
               <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/70 flex items-center justify-between">
-                <span>What Should the AI Have Done Instead?</span>
-                <span class="text-[10px] font-normal opacity-60">Voice mic supported</span>
+                <span>{{ reportKind === 'bug' ? 'What Happened & What Should Work Instead?' : reportKind === 'message' ? 'Steward Message / Idea' : 'What Should the AI Have Done Instead?' }}</span>
+                <span class="text-[10px] font-normal opacity-60">Markdown &amp; Voice mic supported</span>
               </label>
               <textarea
                 v-model="note"
                 rows="3"
                 class="textarea textarea-bordered w-full text-sm rounded-xl leading-relaxed"
-                placeholder="Example: Priced modern 5e reprint at $45 like a 1st print; should be $15–$18 in our booth bin based on © 2018 copyright on page 2."
+                :placeholder="
+                  reportKind === 'bug'
+                    ? 'Describe what broke or looks off on this screen — paste or snap a screenshot below!'
+                    : 'Example: Priced modern 5e reprint at $45 like a 1st print; should be $15–$18 in our booth bin based on © 2018 copyright on page 2.'
+                "
               ></textarea>
+            </div>
+
+            <!-- Screenshot / Photo Uploader (Gated to Signed-In Members) -->
+            <div class="space-y-1.5">
+              <PhotoGalleryManager
+                v-if="isAuthenticated"
+                :existing-images="existingImages"
+                :new-photos="newPhotos"
+                :bucket-id="COOP_MEDIA_BUCKET_ID"
+                :max-photos="6"
+                title="Screenshots & Photo Proof (Optional)"
+                dropzone-subtitle="Press Ctrl+V to paste a screenshot, tap Camera, or drag images here"
+                @update:existing-images="existingImages = $event"
+                @update:new-photos="newPhotos = $event"
+              />
+              <div
+                v-else
+                class="rounded-xl border border-base-300 bg-base-200/40 px-3 py-2 text-[11px] opacity-70"
+              >
+                🔒 Sign in to attach screenshots or camera photos to reports.
+              </div>
             </div>
 
             <!-- Captured Item Context Preview -->
@@ -192,13 +238,17 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import PhotoGalleryManager from './PhotoGalleryManager.vue';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
+import { COOP_MEDIA_BUCKET_ID, uploadCoopMediaFiles } from '../../lib/coopMedia';
 import {
   submitAiFeedbackReport,
+  COOP_MESSAGE_KIND_META,
   AI_SURFACE_LABELS,
   AI_ISSUE_LABELS,
   AI_ROOT_CAUSE_LABELS,
+  type CoopMessageKind,
   type AiSurface,
   type AiIssueType,
   type AiRootCause,
@@ -216,17 +266,21 @@ const emit = defineEmits<{
   (e: 'submitted'): void;
 }>();
 
+const KIND_MODES = COOP_MESSAGE_KIND_META;
 const SURFACES = AI_SURFACE_LABELS;
 const ISSUES = AI_ISSUE_LABELS;
 const CAUSES = AI_ROOT_CAUSE_LABELS;
 
-const { user } = useAuth();
+const { user, isAuthenticated } = useAuth();
 const open = ref(false);
 const saving = ref(false);
+const reportKind = ref<CoopMessageKind>('ai_report');
 const surfaceModel = ref<AiSurface>(props.surface);
 const issue = ref<AiIssueType>('bad_price');
 const cause = ref<AiRootCause>('ignored_visible_clue');
 const note = ref('');
+const existingImages = ref<string[]>([]);
+const newPhotos = ref<any[]>([]);
 
 watch(
   () => props.surface,
@@ -237,27 +291,46 @@ watch(
 
 function openModal() {
   surfaceModel.value = props.surface || 'quick_scout';
+  reportKind.value = 'ai_report';
   open.value = true;
 }
 
 async function submit() {
   saving.value = true;
   try {
+    let uploadedIds: string[] = [];
+    if (isAuthenticated.value && newPhotos.value.length > 0) {
+      uploadedIds = await uploadCoopMediaFiles(newPhotos.value, reportKind.value);
+    }
+    const galleryIds = [...existingImages.value, ...uploadedIds];
+    const pageUrl =
+      typeof window !== 'undefined' ? window.location.pathname + (window.location.search || '') : undefined;
+    const deviceSummary =
+      typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}px` : undefined;
+
     const res = await submitAiFeedbackReport({
       surface: surfaceModel.value,
       issueType: issue.value,
       rootCause: cause.value,
       note: note.value,
+      messageKind: reportKind.value,
+      pageUrl,
+      deviceSummary,
+      imageId: galleryIds[0] || undefined,
+      galleryImageIds: galleryIds,
       itemContext: props.itemContext,
       author: user.value?.name || undefined,
+      authorEmail: user.value?.email || undefined,
     });
     addToast(
       res.synced
-        ? 'Submitted to the Co-op AI Review Queue (Pending Dev Vetting)'
+        ? 'Submitted to the Co-op Review Queue (Synced with AI Vault)!'
         : 'Saved locally on this device (cloud sync offline)',
       res.synced ? 'success' : 'warning'
     );
     note.value = '';
+    existingImages.value = [];
+    newPhotos.value = [];
     open.value = false;
     emit('submitted');
   } catch (err) {

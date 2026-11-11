@@ -1013,7 +1013,21 @@ export const ALL: APIRoute = async ({ request }) => {
 
                         if (parsedData) {
                              const sellerId = parsedData.sellerId || parsedData.seller_id || null;
-                             const sellerName = parsedData.sellerName || parsedData.seller_name || parsedData.location || null;
+                             const rawCompany = parsedData.sellerCompanyName || parsedData.sellerName || parsedData.seller_name || parsedData.seller?.companyName || '';
+                             const pickupCity = parsedData.pickupCity || parsedData.sellerCity || '';
+                             const pickupState = parsedData.pickupState || parsedData.sellerState || '';
+                             const cityState = pickupCity && pickupState ? `${pickupCity}, ${pickupState}` : (pickupCity || pickupState || '');
+                             const cleanCompany = String(rawCompany || '')
+                                 .replace(/^Goodwill\s+Industries\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+                                 .replace(/^Goodwill\s+of\s+(?:the\s+)?/i, 'Goodwill ')
+                                 .replace(/,\s*Inc\.?$/i, '')
+                                 .trim();
+                             const sellerName = cleanCompany
+                                 ? (cityState && !cleanCompany.toLowerCase().includes(String(pickupCity).toLowerCase() || '__none__')
+                                     ? `${cleanCompany} (${cityState})`
+                                     : cleanCompany)
+                                 : (cityState ? `Goodwill — ${cityState}` : (parsedData.location || null));
+                             parsedData.sellerName = sellerName;
                              const canCombineShipping = parsedData.canCombineShipping !== undefined ? Boolean(parsedData.canCombineShipping) : true;
                              const shippingWeight = parseFloat(parsedData.shippingWeight || parsedData.weight || parsedData.dimensionalWeight || 0) || 0;
 

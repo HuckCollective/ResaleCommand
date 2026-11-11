@@ -465,6 +465,86 @@ export function useScoutPurchase() {
         }
     };
 
+    const sgwSellerHydrateCache = new Map<string, { sellerName?: string; sellerId?: any; shippingWeight?: number }>();
+
+    /**
+     * Automatically backfills human-readable regional Goodwill store names (e.g. "Goodwill Columbia Willamette")
+     * for existing tracker items that only stored numeric `sellerId` (`Seller #115`).
+     */
+    const hydrateMissingShopGoodwillSellers = async (items: ScoutPurchaseItem[]) => {
+        if (typeof window === 'undefined' || !Array.isArray(items)) return;
+
+        const extractSgwItemId = (item: ScoutPurchaseItem): string | null => {
+            const haystack = `${item.sourcingLocation || ''} ${item.conditionNotes || ''} ${item.rawAnalysis || ''}`;
+            const m = haystack.match(/shopgoodwill\.com\/item\/(\d{6,12})/i);
+            return m ? m[1] : null;
+        };
+
+        const candidates = items
+            .filter((it) => {
+                const currentName = String(it.sellerName || '').trim();
+                const missingRealName = !currentName || /^(?:seller|goodwill store)\s*#?\d+$/i.test(currentName);
+                return missingRealName && Boolean(extractSgwItemId(it));
+            })
+            .slice(0, 8);
+
+        if (candidates.length === 0) return;
+
+        let mutated = false;
+        for (const item of candidates) {
+            const sgwId = extractSgwItemId(item);
+            if (!sgwId) continue;
+
+            let meta = sgwSellerHydrateCache.get(sgwId);
+            if (!meta) {
+                try {
+                    const res = await fetch('/api/proxy-item-details', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ itemId: sgwId }),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        meta = {
+                            sellerName: data?.sellerName || undefined,
+                            sellerId: data?.sellerId || item.sellerId || undefined,
+                            shippingWeight: data?.shippingWeight || item.shippingWeight || 0,
+                        };
+                        sgwSellerHydrateCache.set(sgwId, meta);
+                    }
+                } catch {
+                    // Ignore transient network errors
+                }
+            }
+
+            if (meta?.sellerName) {
+                item.sellerName = meta.sellerName;
+                if (meta.sellerId && !item.sellerId) item.sellerId = meta.sellerId;
+                if (meta.shippingWeight && !item.shippingWeight) item.shippingWeight = meta.shippingWeight;
+                mutated = true;
+
+                // Persist into rawAnalysis quietly so future loads don't need to re-fetch
+                try {
+                    const parsedRaw = item.rawAnalysis ? JSON.parse(item.rawAnalysis) : {};
+                    parsedRaw.sellerName = meta.sellerName;
+                    if (meta.sellerId) parsedRaw.sellerId = meta.sellerId;
+                    if (meta.shippingWeight) parsedRaw.shippingWeight = meta.shippingWeight;
+                    const updatedRaw = getSafeRawAnalysis(parsedRaw);
+                    if (updatedRaw) {
+                        databases.updateDocument(DB_ID, getItemsCollectionId(), item.$id, {
+                            rawAnalysis: updatedRaw,
+                        }).catch(() => {});
+                    }
+                } catch {}
+            }
+        }
+
+        if (mutated) {
+            purchaseItems.value = [...purchaseItems.value];
+            cartItems.value = purchaseItems.value as unknown as CartItem[];
+        }
+    };
+
     /**
      * Fetch all items and lots attached to a purchase
      */
@@ -517,7 +597,9 @@ export function useScoutPurchase() {
                 if (doc.rawAnalysis) {
                     try {
                         const parsed = JSON.parse(doc.rawAnalysis);
-                        parsedTarget = Array.isArray(parsed) ? parsed[0] : parsed;
+                        parsedTarget = Array.isArray(parsed)
+                            ? parsed[0]
+                            : (Array.isArray(parsed?.items) && parsed.items.length > 0 ? { ...parsed, ...parsed.items[0] } : parsed);
                         if (parsedTarget?.boutiquePrice && !isNaN(Number(parsedTarget.boutiquePrice))) {
                             bPrice = Number(parsedTarget.boutiquePrice);
                         }
@@ -536,10 +618,10 @@ export function useScoutPurchase() {
                     boutiquePrice: bPrice || doc.resalePrice || 0,
                     isLot,
                     lotItemsCount: lotCount,
-                    sellerId: doc.sellerId || parsedTarget?.sellerId || parsedTarget?.seller_id || parsedTarget?.seller_info?.seller_id || null,
-                    sellerName: doc.sellerName || parsedTarget?.sellerName || parsedTarget?.seller_name || parsedTarget?.seller_info?.seller_name || null,
-                    shippingWeight: doc.shippingWeight || parsedTarget?.shippingWeight || parsedTarget?.shipping_weight || parsedTarget?.seller_info?.shipping_weight || 0,
-                    canCombineShipping: doc.canCombineShipping !== undefined ? doc.canCombineShipping : (parsedTarget?.canCombineShipping !== undefined ? parsedTarget.canCombineShipping : (parsedTarget?.seller_info?.can_combine_shipping !== undefined ? parsedTarget.seller_info.can_combine_shipping : true)),
+                    sellerId: doc.sellerId || parsedTarget?.sellerId || parsedTarget?.seller_id || parsedTarget?.auction_meta?.seller_id || parsedTarget?.seller_info?.seller_id || null,
+                    sellerName: doc.sellerName || parsedTarget?.sellerName || parsedTarget?.seller_name || parsedTarget?.auction_meta?.seller_name || parsedTarget?.seller_info?.seller_name || null,
+                    shippingWeight: doc.shippingWeight || parsedTarget?.shippingWeight || parsedTarget?.shipping_weight || parsedTarget?.auction_meta?.shipping_weight || parsedTarget?.seller_info?.shipping_weight || 0,
+                    canCombineShipping: doc.canCombineShipping !== undefined ? doc.canCombineShipping : (parsedTarget?.canCombineShipping !== undefined ? parsedTarget.canCombineShipping : (parsedTarget?.auction_meta?.can_combine_shipping !== undefined ? parsedTarget.auction_meta.can_combine_shipping : (parsedTarget?.seller_info?.can_combine_shipping !== undefined ? parsedTarget.seller_info.can_combine_shipping : true))),
                     auctionEndsAt: doc.auctionEndsAt || parsedTarget?.auctionEndsAt || parsedTarget?.auction_meta?.end_time || null,
                     maxBid: doc.maxBid || parsedTarget?.maxBid || null,
                     currentBid: doc.currentBid || parsedTarget?.currentBid || null,
@@ -555,6 +637,9 @@ export function useScoutPurchase() {
 
             // Sync with global cartItems
             cartItems.value = purchaseItems.value as unknown as CartItem[];
+
+            // Background-hydrate readable store names on legacy ShopGoodwill tracker items missing sellerName
+            hydrateMissingShopGoodwillSellers(purchaseItems.value).catch(() => {});
 
             // Sync item count and subtotal on active and draft purchases so inactives stay accurate
             const currentCount = purchaseItems.value.length;
@@ -707,8 +792,16 @@ export function useScoutPurchase() {
             const purchaseItem: ScoutPurchaseItem = {
                 ...(doc as unknown as ScoutPurchaseItem),
                 boutiquePrice: cleanBoutique,
-                isLot: false,
-                lotItemsCount: 0
+                isLot: Boolean(rawObj.isLot || (Array.isArray(rawObj.lot_items) && rawObj.lot_items.length > 0)),
+                lotItemsCount: Array.isArray(rawObj.lot_items) ? rawObj.lot_items.length : 0,
+                sellerId: itemData.sellerId ?? rawObj.sellerId ?? null,
+                sellerName: itemData.sellerName ?? rawObj.sellerName ?? null,
+                shippingWeight: itemData.shippingWeight ?? rawObj.shippingWeight ?? 0,
+                canCombineShipping: itemData.canCombineShipping !== undefined ? itemData.canCombineShipping : true,
+                auctionEndsAt: itemData.auctionEndsAt || rawObj.auctionEndsAt || null,
+                maxBid: cleanMaxBid,
+                currentBid: cleanCurrentBid,
+                auctionStatus: rawObj.auctionStatus || 'watching'
             };
 
             purchaseItems.value.unshift(purchaseItem);

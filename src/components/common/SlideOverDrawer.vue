@@ -5,11 +5,12 @@
         <!-- Backdrop (solid, no blur — avoids GPU scroll lag) -->
         <div class="absolute inset-0 bg-black/60" @click="close"></div>
 
-        <!-- Panel: full-width on mobile, 480px on desktop -->
+        <!-- Panel: full-width on mobile, md (480px) or lg (640px–780px) on desktop -->
         <aside
           ref="panelRef"
           tabindex="-1"
-          class="rc-drawer-panel absolute inset-y-0 right-0 w-full sm:w-120 max-w-full bg-base-100 shadow-2xl flex flex-col outline-none"
+          class="rc-drawer-panel absolute inset-y-0 right-0 w-full max-w-full bg-base-100 shadow-2xl flex flex-col outline-none"
+          :class="size === 'lg' ? 'sm:w-160 lg:w-195' : 'sm:w-120'"
         >
           <header class="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 pb-3 border-b border-base-200 flex-none">
             <div class="min-w-0">
@@ -46,11 +47,17 @@ onMounted(() => {
   mounted.value = true;
 });
 
-const props = defineProps<{
-  modelValue: boolean;
-  title: string;
-  subtitle?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    title: string;
+    subtitle?: string;
+    size?: 'md' | 'lg';
+  }>(),
+  {
+    size: 'md',
+  }
+);
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'close'): void }>();
 
 const panelRef = ref<HTMLElement | null>(null);

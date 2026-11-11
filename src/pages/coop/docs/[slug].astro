@@ -1,0 +1,108 @@
+---
+import { getEntry, getCollection, render } from 'astro:content';
+import Layout from '../../../layouts/Layout.astro';
+import CoopSubNav from '../../../components/coop/CoopSubNav.vue';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+const entry = slug ? await getEntry('coopDocs', slug) : undefined;
+
+if (!entry) {
+  return Astro.redirect('/coop/governance?tab=docs');
+}
+
+const { Content } = await render(entry);
+const allDocs = (await getCollection('coopDocs')).sort((a, b) => (a.data.order ?? 10) - (b.data.order ?? 10));
+const draftHref = `/coop/governance?draftFromDoc=${encodeURIComponent(entry.id)}&draftTitle=${encodeURIComponent(entry.data.title)}`;
+---
+
+<Layout
+  title={`${entry.data.title} | Co-op Strategy Docs`}
+  description={entry.data.summary}
+  hideFooter={true}
+>
+  <div class="rc-page-shell space-y-5 pb-16">
+    <CoopSubNav client:only="vue" activeTab="governance" />
+
+    <!-- Top Breadcrumb & Action Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-base-100 border border-base-300 rounded-2xl p-4 shadow-xs print:hidden">
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <a href="/coop/governance?tab=docs" class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-bold gap-1">
+          ← All Strategy Docs
+        </a>
+        <span class="badge badge-primary badge-sm font-bold">{entry.data.category}</span>
+        <span class="text-xs font-mono opacity-60">Updated {entry.data.updatedDate}</span>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onclick="window.print()"
+          class="btn btn-xs sm:btn-sm btn-outline rounded-xl font-bold"
+        >
+          🖨️ Print / Save PDF
+        </button>
+        <a
+          href={draftHref}
+          class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5 shadow-xs"
+        >
+          ✨ Draft Proposal from This Doc
+        </a>
+      </div>
+    </div>
+
+    <!-- Main Document Reader + Sibling Sidebar -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <article class="lg:col-span-8 xl:col-span-9 bg-base-100 border border-base-300 rounded-3xl p-6 sm:p-8 lg:p-10 shadow-sm space-y-5">
+        <header class="border-b border-base-200 pb-5 space-y-3">
+          <div class="flex flex-wrap items-center gap-1.5">
+            {entry.data.hatTags.map((hat) => (
+              <span class="badge badge-secondary badge-outline badge-xs font-bold">{hat}</span>
+            ))}
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content leading-tight">
+            {entry.data.title}
+          </h1>
+          <p class="text-sm text-base-content/75 leading-relaxed">
+            {entry.data.summary}
+          </p>
+        </header>
+
+        <div class="prose prose-sm sm:prose-base max-w-none text-base-content prose-headings:font-black prose-headings:tracking-tight prose-table:text-xs sm:prose-table:text-sm prose-th:bg-base-200/70 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-blockquote:border-primary prose-blockquote:bg-primary/5 prose-blockquote:rounded-r-xl prose-blockquote:py-2 prose-blockquote:px-4">
+          <Content />
+        </div>
+      </article>
+
+      <!-- Sibling Strategy Docs Quick Switcher -->
+      <aside class="lg:col-span-4 xl:col-span-3 bg-base-100 border border-base-300 rounded-2xl p-4 space-y-3 print:hidden">
+        <div class="text-xs font-black uppercase tracking-wider opacity-70 px-1">
+          📚 Co-op Strategy Library ({allDocs.length})
+        </div>
+        <div class="space-y-1.5">
+          {allDocs.map((doc) => {
+            const active = doc.id === entry.id;
+            return (
+              <a
+                href={`/coop/docs/${doc.id}`}
+                class:list={[
+                  'block rounded-xl p-3 border transition-all space-y-1',
+                  active
+                    ? 'border-primary bg-primary/10 text-primary font-bold shadow-2xs'
+                    : 'border-base-200 hover:border-base-300 hover:bg-base-200/50',
+                ]}
+              >
+                <div class="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
+                  {doc.data.category}
+                </div>
+                <div class="text-xs font-black leading-snug text-base-content">
+                  {doc.data.title}
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      </aside>
+    </div>
+  </div>
+</Layout>
