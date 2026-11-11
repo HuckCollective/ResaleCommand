@@ -35,8 +35,8 @@
                     <label class="label cursor-pointer justify-start gap-4">
                         <input type="checkbox" v-model="updateExisting" class="checkbox checkbox-secondary checkbox-sm" />
                         <div class="flex flex-col">
-                            <span class="label-text font-bold text-sm">Update Existing Items & Orders</span>
-                            <span class="label-text-alt opacity-70 text-xs">Re-syncs costs, tracking, and PO links for items already in inventory</span>
+                            <span class="label-text font-bold text-sm">Update Already-Acquired Items & Orders</span>
+                            <span class="label-text-alt opacity-70 text-xs">Re-syncs costs, tracking, and PO links for previously imported items (tracked auction items auto-graduate to acquired)</span>
                         </div>
                     </label>
                 </div>
@@ -609,15 +609,20 @@ const processRows = async (rows) => {
 
         if (isDuplicate) {
             const itemLabel = matchedDoc?.title ? `"${matchedDoc.title.substring(0, 32)}..." (${itemId})` : itemId;
+            const isTrackedItem = matchedDoc?.status === 'tracked';
             
-            if (updateExisting.value && matchedDoc) {
+            if ((isTrackedItem || updateExisting.value) && matchedDoc) {
                 try {
                     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
                     const COL_ID = getCollectionId();
                     const dbPurchaseId = await ensurePurchaseOrder(orderId, row);
                     
                     const itemUpdates = {};
-                    if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price)) {
+                    if (isTrackedItem) {
+                        itemUpdates.status = 'acquired';
+                        itemUpdates.auctionStatus = 'won';
+                    }
+                    if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price || isTrackedItem)) {
                         itemUpdates.cost = parseFloat(price) || 0;
                     }
                     if (dbPurchaseId && (!matchedDoc.purchaseId || matchedDoc.purchaseId !== dbPurchaseId)) {
@@ -634,9 +639,18 @@ const processRows = async (rows) => {
                     const safeUpdates = sanitizeItemPayload(itemUpdates, { isUpdate: true });
                     if (Object.keys(safeUpdates).length > 0) {
                         await databases.updateDocument(DB_ID, COL_ID, matchedDoc.$id, safeUpdates);
-                        logs.value.push(`🔄 Updated existing item: ${itemLabel} (Linked to PO ${orderId || ''})`);
+                        if (isTrackedItem) {
+                            logs.value.push(`🎯 Graduated tracked item to Acquired: ${itemLabel} (Won & Linked to PO #${orderId || ''})`);
+                        } else {
+                            logs.value.push(`🔄 Updated existing item: ${itemLabel} (Linked to PO #${orderId || ''})`);
+                        }
                     } else {
                         logs.value.push(`✓ Item verified: ${itemLabel}`);
+                    }
+
+                    if (!currentImportBatch.items.includes(matchedDoc.$id)) {
+                        currentImportBatch.items.push(matchedDoc.$id);
+                        persistBatch();
                     }
                 } catch (updErr) {
                     logs.value.push(`⚠️ Failed updating existing item ${itemId}: ${updErr.message}`);

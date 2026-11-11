@@ -158,6 +158,16 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 11, 2026)
 
+## ✅ AUTO-GRADUATION OF TRACKED ITEMS TO ACQUIRED ON SGW SHIPPED CSV IMPORT (`BulkImport.vue`) (Nov 11, 2026 — `alpha-1`)
+- **Seamless Pre-Buy Auction to Inventory Pipeline (`src/components/inventory/BulkImport.vue`)**:
+  - Configured `BulkImport.vue` so whenever an imported SGW Shipped CSV row matches an existing item with `status === 'tracked'`, it **automatically graduates it** without needing the "Update Already-Acquired Items" checkbox.
+  - Automatically updates:
+    - **Status Promotion**: Sets `status: 'acquired'` and `auctionStatus: 'won'` (marking the auction as officially won and clearing it from active watch countdowns).
+    - **Landed Cost Recoupment**: Updates `cost` with the winning bid + allocated shipping/handling from the shipped order.
+    - **PO & Order Linkage**: Generates/finds the Purchase Order, sets `purchaseId` and `orderId`, and appends the landed cost shipping breakdown to notes.
+    - **Batch Undo Support**: Registers the graduated item ID into `currentImportBatch.items` so the undo batch function accounts for it.
+  - Keeps previously acquired/placed/sold items protected from accidental overwrite when "Update Already-Acquired Items" is unchecked.
+
 ## ✅ GLOBAL DAISYUI V5 PILL PADDING & BORDER RECOVERY + 4-PILLAR TAILWIND V4 & VITE STYLE STACK ARCHITECTURE (Nov 11, 2026 — `alpha-1`)
 - **Root-Cause Resolution (Missing DaisyUI v5 Tokens in `huckleberry` Theme — `src/styles/theme.css`)**:
   - Identified why every pill/badge across the app had `0px` inner horizontal padding: DaisyUI v5 (`node_modules/daisyui/components/badge.css`) computes badge padding via `padding-inline: calc(var(--size) / 2 - var(--border))`. Custom `@plugin "daisyui/theme"` blocks do not inherit structural tokens from `light`.
