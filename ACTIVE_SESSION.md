@@ -1,5 +1,11 @@
 # Active Session Summary (Updated Nov 11, 2026)
 
+## ✅ TERMINAL LOG AUTO-SCROLL TO BOTTOM & 1-TAP RESUME IN `BulkImport.vue` (Nov 11, 2026 — `alpha-1`)
+- **Sticky Terminal Log Auto-Scroll (`src/components/inventory/BulkImport.vue`)**:
+  - Bound `ref="logContainerRef"` + `watch(() => logs.value.length)` with `nextTick` to smoothly pin the terminal scroll position to the bottom (`scrollTop = scrollHeight`) whenever a new CSV row processes.
+  - Implemented smart user-scroll detection (`handleLogScroll`): if the user scrolls up $>40\text{px}$ to inspect previous item lines, auto-scrolling cleanly pauses so their reading position isn't abruptly yanked away.
+  - Surfaced a subtle floating animated **`↓ Latest`** button at the bottom-right of the terminal box when scrolled up, allowing 1-tap re-snapping to the live stream and automatic resumption of auto-scroll.
+
 ## ✅ AUTO-GRADUATION OF TRACKED ITEMS TO ACQUIRED ON SGW SHIPPED CSV IMPORT (`BulkImport.vue`) (Nov 11, 2026 — `alpha-1`)
 - **Seamless Pre-Buy Auction to Inventory Pipeline (`src/components/inventory/BulkImport.vue`)**:
   - Configured `BulkImport.vue` so whenever an imported SGW Shipped CSV row matches an existing item with `status === 'tracked'`, it **automatically graduates it** without needing the "Update Already-Acquired Items" checkbox.

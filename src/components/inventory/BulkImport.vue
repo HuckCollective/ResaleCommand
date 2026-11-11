@@ -96,10 +96,28 @@
                     </div>
                 </div>
 
-                <div class="bg-neutral text-neutral-content rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto space-y-1.5 border border-base-300 shadow-inner mt-1">
-                    <div v-for="(log, idx) in logs" :key="idx" :class="{'text-error font-bold': log.startsWith('❌'), 'text-success font-semibold': log.startsWith('✅'), 'text-info': log.startsWith('ℹ️'), 'text-warning': log.startsWith('⚠️'), 'text-neutral-content/85': !log.match(/^[❌✅ℹ️⚠️]/)}">
-                        {{ log }}
+                <div class="relative">
+                    <div 
+                        ref="logContainerRef"
+                        @scroll="handleLogScroll"
+                        class="bg-neutral text-neutral-content rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto space-y-1.5 border border-base-300 shadow-inner mt-1 scroll-smooth"
+                    >
+                        <div v-for="(log, idx) in logs" :key="idx" :class="{'text-error font-bold': log.startsWith('❌'), 'text-success font-semibold': log.startsWith('✅'), 'text-info': log.startsWith('ℹ️'), 'text-warning': log.startsWith('⚠️'), 'text-neutral-content/85': !log.match(/^[❌✅ℹ️⚠️]/)}">
+                            {{ log }}
+                        </div>
                     </div>
+
+                    <!-- 1-Tap Floating Snap to Bottom Pill (Appears if user scrolled up during import) -->
+                    <button
+                        v-if="isScrolledUp && processing"
+                        type="button"
+                        @click="scrollToBottom(true)"
+                        class="absolute bottom-3 right-3 btn btn-xs btn-primary text-primary-content shadow-md font-bold gap-1 rounded-lg animate-bounce"
+                        title="Jump to live processing log"
+                    >
+                        <Icon icon="solar:arrow-down-linear" class="w-3.5 h-3.5" />
+                        <span>Latest</span>
+                    </button>
                 </div>
             </div>
             
@@ -117,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import { saveItemToInventory, sanitizeItemPayload, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
@@ -142,6 +160,27 @@ const { setExternalLoaderActive } = useLoader();
 
 const processing = ref(false);
 const logs = ref([]);
+const logContainerRef = ref(null);
+const isScrolledUp = ref(false);
+
+const handleLogScroll = () => {
+    if (!logContainerRef.value) return;
+    const { scrollTop, scrollHeight, clientHeight } = logContainerRef.value;
+    isScrolledUp.value = scrollHeight - (scrollTop + clientHeight) > 40;
+};
+
+const scrollToBottom = async (force = false) => {
+    await nextTick();
+    if (!logContainerRef.value) return;
+    if (force || !isScrolledUp.value) {
+        logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight;
+        if (force) isScrolledUp.value = false;
+    }
+};
+
+watch(() => logs.value.length, () => {
+    scrollToBottom(false);
+});
 
 watch([processing, () => logs.value.length], ([isProc, logLen]) => {
     setExternalLoaderActive(Boolean(isProc || logLen > 0));
