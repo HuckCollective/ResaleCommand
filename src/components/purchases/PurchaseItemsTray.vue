@@ -382,7 +382,6 @@ import {
   getItemsByPurchaseId,
   searchItems,
   linkItemToPurchase,
-  unlinkItemFromPurchase,
   updateInventoryItem,
   saveItemToInventory,
   getCollectionId,
@@ -678,7 +677,7 @@ const unlinkItem = async (item: any) => {
 
   unlinkingItemId.value = item.$id;
   try {
-    await unlinkItemFromPurchase(item.$id);
+    await linkItemToPurchase(item.$id, null);
     items.value = items.value.filter((i) => i.$id !== item.$id);
     addToast(`Unlinked "${item.title}"`, 'info');
     await syncPoStatusAfterItemChange();
@@ -806,3 +805,4 @@ const quickCreateItem = async () => {
   }
 };
 </script>
+
