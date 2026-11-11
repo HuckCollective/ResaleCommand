@@ -1,4 +1,6 @@
 
+import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
+
 export const POST = async ({ request }: { request: Request }) => {
     try {
         const body = await request.json();
@@ -37,6 +39,9 @@ export const POST = async ({ request }: { request: Request }) => {
                         : (cityState ? `Goodwill — ${cityState}` : (data.sellerName || null));
                     data.shippingWeight = parseFloat(data.shippingWeight || data.weight || data.dimensionalWeight || 0) || 0;
                     data.canCombineShipping = data.canCombineShipping !== undefined ? Boolean(data.canCombineShipping) : true;
+                    if (data.endTime) {
+                        data.endTimeIso = parsePacificDateToIso(data.endTime);
+                    }
 
                     // Check for invalid main image (Logo/Placeholder)
                     if (data.imageURL && (data.imageURL.includes('Logo.svg') || data.imageURL.includes('General/'))) {

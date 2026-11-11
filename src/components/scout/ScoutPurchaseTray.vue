@@ -131,6 +131,17 @@
             <span v-if="lotItems.length > 0" class="badge badge-outline badge-sm font-bold whitespace-nowrap gap-1">
               📦 Lots: {{ lotItems.length }}
             </span>
+            <button
+              v-if="hasActiveAuctions"
+              type="button"
+              @click="resyncAllAuctions"
+              :disabled="isResyncingAll"
+              class="btn btn-xs btn-outline btn-info font-bold gap-1 rounded-full h-6 px-2.5"
+              title="Re-check live bid and end times for all tracked auctions"
+            >
+              <Icon icon="solar:refresh-circle-bold" class="w-3.5 h-3.5" :class="{'animate-spin': isResyncingAll}" />
+              <span>{{ isResyncingAll ? 'Syncing...' : 'Sync All' }}</span>
+            </button>
           </div>
         </div>
 
@@ -168,12 +179,16 @@
             <!-- Title & Details -->
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <!-- Auction Countdown Badge -->
-                <span v-if="isAuctionItem(item) && item.auctionStatus !== 'won'"
-                      class="badge badge-xs font-mono font-bold"
-                      :class="formatItemCountdown(item.auctionEndsAt).ended ? 'badge-warning text-warning-content font-black animate-pulse' : (formatItemCountdown(item.auctionEndsAt).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral')">
-                  {{ formatItemCountdown(item.auctionEndsAt).ended ? '⏰ ENDED — WON OR LOST?' : formatItemCountdown(item.auctionEndsAt).text }}
-                </span>
+                <!-- Auction Countdown Badge (Click to edit closing datetime or fix offset) -->
+                <button v-if="isAuctionItem(item) && item.auctionStatus !== 'won'"
+                      type="button"
+                      @click.stop="toggleEndTimeEditor(item)"
+                      class="badge badge-xs font-mono font-bold cursor-pointer hover:opacity-80 transition-opacity gap-1"
+                      :class="formatItemCountdown(item.auctionEndsAt).ended ? 'badge-warning text-warning-content font-black animate-pulse' : (formatItemCountdown(item.auctionEndsAt).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral')"
+                      title="Click to adjust auction closing date/time">
+                  <span>{{ formatItemCountdown(item.auctionEndsAt).ended ? '⏰ ENDED — WON OR LOST?' : formatItemCountdown(item.auctionEndsAt).text }}</span>
+                  <Icon icon="solar:calendar-mark-bold" class="w-2.5 h-2.5 opacity-80" />
+                </button>
                 <!-- Won Badge -->
                 <span v-if="item.auctionStatus === 'won'" class="badge badge-xs badge-success text-success-content font-bold">
                   🏆 Won (${{ (item.cost || 0).toFixed(2) }})
@@ -214,6 +229,33 @@
                   </button>
                 </template>
               </div>
+
+              <!-- Inline End-Time Quick Editor Popover -->
+              <div v-if="editingEndTimeId === item.$id" @click.stop class="mt-2 p-2.5 rounded-xl bg-base-100 border border-primary/30 shadow-xs space-y-2 text-xs">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <span class="font-bold text-[11px] flex items-center gap-1 text-primary">
+                    <Icon icon="solar:calendar-date-bold" class="w-3.5 h-3.5" />
+                    Closes: {{ formatPacificDateDisplay(item.auctionEndsAt) }}
+                  </span>
+                  <button
+                    type="button"
+                    @click.stop="applyEightHourOffsetFix(item)"
+                    class="btn btn-xs btn-warning text-warning-content font-bold h-6 px-2 text-[10px] gap-1"
+                    title="Shift closing time forward by 8 hours (fixes UTC vs Pacific offset)"
+                  >
+                    ⚡ Fix +8h PT Offset
+                  </button>
+                </div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <input
+                    type="datetime-local"
+                    v-model="editingEndTimeValue"
+                    class="input input-xs input-bordered font-mono text-[11px] h-7 flex-1 min-w-40"
+                  />
+                  <button type="button" @click.stop="saveCustomEndTime(item)" class="btn btn-xs btn-primary font-bold h-7 px-2.5">Save</button>
+                  <button type="button" @click.stop="editingEndTimeId = null" class="btn btn-xs btn-ghost h-7 px-2">Cancel</button>
+                </div>
+              </div>
             </div>
 
             <!-- Action buttons: Won / Lost quick-actions or Delete icon -->
@@ -232,6 +274,16 @@
                   <Icon icon="solar:link-linear" class="w-3.5 h-3.5" />
                   <span>Auction</span>
                 </a>
+                <button
+                  type="button"
+                  @click.stop="resyncAuctionItem(item)"
+                  :disabled="Boolean(resyncingIds[item.$id])"
+                  class="btn btn-ghost btn-xs text-info hover:bg-info/10 px-2 h-7 font-bold gap-1 text-[11px]"
+                  title="Re-check live bid & closing time from auction"
+                >
+                  <Icon icon="solar:refresh-circle-bold" class="w-3.5 h-3.5" :class="{'animate-spin text-primary': resyncingIds[item.$id]}" />
+                  <span>Sync</span>
+                </button>
                 <button 
                   type="button"
                   @click.stop="openWinModal(item)"
@@ -241,15 +293,6 @@
                 >
                   <Icon icon="solar:cup-star-bold" class="w-3.5 h-3.5" />
                   <span>Won</span>
-                </button>
-                <button 
-                  type="button"
-                  @click.stop="itemPendingLoss = item"
-                  class="btn btn-ghost btn-xs text-error/70 hover:text-error hover:bg-error/10 px-1.5 h-7"
-                  :class="{'font-bold text-error bg-error/10': formatItemCountdown(item.auctionEndsAt).ended}"
-                  title="Mark outbid / remove from tracker"
-                >
-                  ✕
                 </button>
               </template>
               
@@ -556,6 +599,7 @@ import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import { evaluateSellerClusters, formatReadableSellerLabel, type SellerCluster } from '../../lib/shipping-rules';
+import { parsePacificDateToIso, formatPacificDateDisplay, isoToDatetimeLocal, datetimeLocalToIso } from '../../lib/dateTimeUtils';
 
 const emit = defineEmits<{
   (e: 'toggle-tray'): void;
@@ -637,6 +681,201 @@ const getItemSourceUrl = (item: any): string | null => {
 
 const isAuctionItem = (item: ScoutPurchaseItem): boolean => {
   return Boolean(item.auctionEndsAt || item.maxBid || item.currentBid);
+};
+
+const hasActiveAuctions = computed(() => {
+  return purchaseItems.value.some(i => isAuctionItem(i) && i.auctionStatus !== 'won' && i.auctionStatus !== 'lost');
+});
+
+// -- INLINE END-TIME EDITOR & +8h PT OFFSET FIX --
+const editingEndTimeId = ref<string | null>(null);
+const editingEndTimeValue = ref<string>('');
+
+const toggleEndTimeEditor = (item: ScoutPurchaseItem) => {
+  if (editingEndTimeId.value === item.$id) {
+    editingEndTimeId.value = null;
+    return;
+  }
+  editingEndTimeId.value = item.$id;
+  editingEndTimeValue.value = isoToDatetimeLocal(item.auctionEndsAt) || isoToDatetimeLocal(new Date(Date.now() + 3600 * 1000).toISOString());
+};
+
+const saveCustomEndTime = async (item: ScoutPurchaseItem) => {
+  const newIso = datetimeLocalToIso(editingEndTimeValue.value);
+  if (!newIso) {
+    addToast({ type: 'warning', message: 'Please enter a valid closing date and time.' });
+    return;
+  }
+  try {
+    await updateInventoryItem(item.$id, { auctionEndsAt: newIso });
+    item.auctionEndsAt = newIso;
+    editingEndTimeId.value = null;
+    addToast({ type: 'success', message: `📅 Closing time updated to ${formatPacificDateDisplay(newIso)}` });
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to update closing time: ' + err.message });
+  }
+};
+
+const applyEightHourOffsetFix = async (item: ScoutPurchaseItem) => {
+  let fixedIso: string | null = null;
+  // First check if rawAnalysis has the original un-offset Pacific time_left_text
+  if (item.rawAnalysis) {
+    try {
+      const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+      const target = Array.isArray(raw) ? raw[0] : raw;
+      const rawText = target?.auction_meta?.time_left_text;
+      if (rawText) {
+        fixedIso = parsePacificDateToIso(rawText);
+      }
+    } catch {}
+  }
+  if (!fixedIso && item.auctionEndsAt) {
+    const d = new Date(item.auctionEndsAt);
+    if (!isNaN(d.getTime())) {
+      fixedIso = new Date(d.getTime() + 8 * 3600 * 1000).toISOString();
+    }
+  }
+  if (!fixedIso) {
+    addToast({ type: 'warning', message: 'Could not compute +8h fix for this item.' });
+    return;
+  }
+  try {
+    await updateInventoryItem(item.$id, { auctionEndsAt: fixedIso });
+    item.auctionEndsAt = fixedIso;
+    editingEndTimeValue.value = isoToDatetimeLocal(fixedIso);
+    editingEndTimeId.value = null;
+    addToast({ type: 'success', message: `⚡ Fixed! Closes at ${formatPacificDateDisplay(fixedIso)}` });
+  } catch (err: any) {
+    addToast({ type: 'error', message: 'Failed to apply +8h fix: ' + err.message });
+  }
+};
+
+// -- 1-CLICK LIVE AUCTION RESYNC ("RECYST") --
+const resyncingIds = ref<Record<string, boolean>>({});
+const isResyncingAll = ref(false);
+
+const extractShopGoodwillItemId = (item: ScoutPurchaseItem): string | null => {
+  const url = getItemSourceUrl(item) || item.sourcingLocation || '';
+  const urlMatch = url.match(/shopgoodwill\.com\/item\/(\d+)/i);
+  if (urlMatch) return urlMatch[1];
+  const pureNum = String(item.sourcingLocation || '').trim().match(/^(\d{7,10})$/);
+  if (pureNum) return pureNum[1];
+  if (item.rawAnalysis) {
+    try {
+      const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+      const target = Array.isArray(raw) ? raw[0] : raw;
+      if (target?.itemId && /^\d+$/.test(String(target.itemId))) return String(target.itemId);
+      const rawUrl = target?.sourcingLocation || target?.source_url || target?.url || '';
+      const m = String(rawUrl).match(/shopgoodwill\.com\/item\/(\d+)/i);
+      if (m) return m[1];
+    } catch {}
+  }
+  return null;
+};
+
+const resyncAuctionItem = async (item: ScoutPurchaseItem, silentToast = false): Promise<boolean> => {
+  const sgwId = extractShopGoodwillItemId(item);
+  if (!sgwId) {
+    // If not a ShopGoodwill item with a direct API ID, open the inline editor
+    toggleEndTimeEditor(item);
+    if (!silentToast) {
+      addToast({ type: 'info', message: 'Opened closing time editor (no direct ShopGoodwill item ID found).' });
+    }
+    return false;
+  }
+
+  resyncingIds.value[item.$id] = true;
+  try {
+    const res = await fetch('/api/proxy-item-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: sgwId })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || (!data.itemId && !data.title && !data.currentPrice && !data.endTime)) {
+      throw new Error('Could not retrieve live listing data');
+    }
+
+    const latestBid = parseFloat(String(data.currentPrice ?? data.minimumBid ?? item.currentBid ?? item.cost ?? 0)) || 0;
+    const latestEndIso = data.endTimeIso || parsePacificDateToIso(data.endTime) || item.auctionEndsAt || null;
+    const bidCount = data.bidCount !== undefined ? Number(data.bidCount) : null;
+
+    const updates: Record<string, any> = {};
+    if (latestBid > 0) {
+      updates.currentBid = latestBid;
+      updates.cost = latestBid;
+    }
+    if (latestEndIso) {
+      updates.auctionEndsAt = latestEndIso;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await updateInventoryItem(item.$id, updates);
+      if (latestBid > 0) {
+        item.currentBid = latestBid;
+        item.cost = latestBid;
+      }
+      if (latestEndIso) {
+        item.auctionEndsAt = latestEndIso;
+      }
+    }
+
+    if (!silentToast) {
+      const countdown = formatItemCountdown(latestEndIso);
+      if (item.maxBid && latestBid > item.maxBid) {
+        addToast({
+          type: 'error',
+          message: `🚨 OUTBID on "${cleanItemTitle(item.title)}"! Live bid: $${latestBid.toFixed(2)} (Max: $${item.maxBid.toFixed(2)})`
+        });
+      } else {
+        addToast({
+          type: 'success',
+          message: `✅ Synced: $${latestBid.toFixed(2)}${bidCount !== null ? ` (${bidCount} bids)` : ''} • ${countdown.text}`
+        });
+      }
+    }
+    return true;
+  } catch (err: any) {
+    if (!silentToast) {
+      addToast({ type: 'error', message: `Sync failed: ${err.message}` });
+    }
+    return false;
+  } finally {
+    resyncingIds.value[item.$id] = false;
+  }
+};
+
+const resyncAllAuctions = async () => {
+  const targets = purchaseItems.value.filter(i => isAuctionItem(i) && i.auctionStatus !== 'won' && i.auctionStatus !== 'lost');
+  if (targets.length === 0) return;
+  isResyncingAll.value = true;
+  let syncedCount = 0;
+  let outbidCount = 0;
+  try {
+    for (const item of targets) {
+      const ok = await resyncAuctionItem(item, true);
+      if (ok) {
+        syncedCount++;
+        if (item.maxBid && (item.currentBid || item.cost || 0) > item.maxBid) {
+          outbidCount++;
+        }
+      }
+    }
+    if (outbidCount > 0) {
+      addToast({
+        type: 'warning',
+        message: `🔄 Synced ${syncedCount} auctions — 🚨 ${outbidCount} item(s) exceed your Max Bid!`
+      });
+    } else {
+      addToast({
+        type: 'success',
+        message: `🔄 Synced ${syncedCount} active auction(s) with live bids & Pacific closing times!`
+      });
+    }
+  } finally {
+    isResyncingAll.value = false;
+  }
 };
 
 const formatItemCountdown = (endTimeStr?: string | null): { text: string; urgent: boolean; ended: boolean } => {

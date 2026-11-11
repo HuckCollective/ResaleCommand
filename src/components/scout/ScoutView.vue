@@ -229,12 +229,18 @@
                                     <Icon :icon="getAuctionPlatform(item).icon" class="w-4 h-4" />
                                     {{ getAuctionPlatform(item).name }}
                                 </span>
-                                <!-- Live Countdown Pill -->
-                                <span v-if="getAuctionEndTime(item)" 
-                                      class="badge badge-sm sm:badge-md font-mono font-black gap-1 shadow-xs transition-colors"
-                                      :class="formatAuctionCountdown(getAuctionEndTime(item)).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral'">
+                                <!-- Live Countdown Pill & Click-to-Edit Closing Time -->
+                                <button type="button"
+                                        @click="toggleScoutEndTimeEditor(item, index)"
+                                        class="badge badge-sm sm:badge-md font-mono font-black gap-1 shadow-xs transition-colors cursor-pointer hover:opacity-85"
+                                        :class="getAuctionEndTime(item) ? (formatAuctionCountdown(getAuctionEndTime(item)).urgent ? 'badge-error text-error-content animate-pulse' : 'badge-neutral') : 'badge-outline badge-primary'"
+                                        title="Click to capture or edit exact auction closing date & time">
                                     <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5" />
-                                    {{ formatAuctionCountdown(getAuctionEndTime(item)).text }}
+                                    <span>{{ getAuctionEndTime(item) ? formatAuctionCountdown(getAuctionEndTime(item)).text : '+ Set Closing Time' }}</span>
+                                    <Icon icon="solar:pen-bold" class="w-3 h-3 opacity-75" />
+                                </button>
+                                <span v-if="getAuctionEndTime(item)" class="text-[11px] font-mono font-bold opacity-75 hidden sm:inline">
+                                    ({{ formatPacificDateDisplay(getAuctionEndTime(item)) }})
                                 </span>
                                 <!-- Local Pickup Badge -->
                                 <span v-if="getAuctionFinancials(item).isLocalPickup" class="badge badge-sm sm:badge-md badge-warning text-warning-content font-bold gap-1 shadow-xs">
@@ -265,6 +271,27 @@
                                             ? 'WATCH (AGGRESSIVE 1.7x ONLY)'
                                             : 'IN PLAY (ROOM TO BID)'
                                 }}
+                            </div>
+                        </div>
+
+                        <!-- Inline Auction Closing Datetime Capture & Presets -->
+                        <div v-if="editingScoutEndTimeIdx === index" class="bg-base-100 dark:bg-base-200 rounded-2xl p-3 border border-primary/40 shadow-xs mb-3 space-y-2">
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <span class="text-xs font-black uppercase text-primary flex items-center gap-1.5">
+                                    <Icon icon="solar:calendar-mark-bold" class="w-4 h-4" />
+                                    Auction Closing Date &amp; Time
+                                </span>
+                                <div class="flex items-center gap-1 flex-wrap">
+                                    <button type="button" @click="applyScoutEndTimePreset(item, 'plus1h')" class="btn btn-xs btn-outline h-6 px-2 text-[10px]">+1 Hr</button>
+                                    <button type="button" @click="applyScoutEndTimePreset(item, 'tonight5pm')" class="btn btn-xs btn-outline h-6 px-2 text-[10px]">Tonight 5 PM</button>
+                                    <button type="button" @click="applyScoutEndTimePreset(item, 'tonight6pm')" class="btn btn-xs btn-outline h-6 px-2 text-[10px]">Tonight 6 PM</button>
+                                    <button type="button" @click="applyScoutEndTimePreset(item, 'tomorrow5pm')" class="btn btn-xs btn-outline h-6 px-2 text-[10px]">Tomorrow 5 PM</button>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <input type="datetime-local" v-model="scoutEndTimeInput" class="input input-sm input-bordered font-mono text-xs flex-1 min-w-48" />
+                                <button type="button" @click="saveScoutEndTime(item)" class="btn btn-sm btn-primary font-bold">Set Closing Time</button>
+                                <button type="button" @click="editingScoutEndTimeIdx = null" class="btn btn-sm btn-ghost">Close</button>
                             </div>
                         </div>
 
@@ -1796,8 +1823,59 @@ async function copyMaxBid(amount: number, itemKey: string) {
     }
 }
 
+import { formatPacificDateDisplay, isoToDatetimeLocal, datetimeLocalToIso } from '../../lib/dateTimeUtils';
+
+const editingScoutEndTimeIdx = ref<number | null>(null);
+const scoutEndTimeInput = ref<string>('');
+
 function getAuctionEndTime(item: any): string | null {
     return item?.auctionEndsAt || item?.auction_meta?.end_time || null;
+}
+
+function toggleScoutEndTimeEditor(item: any, idx: number) {
+    if (editingScoutEndTimeIdx.value === idx) {
+        editingScoutEndTimeIdx.value = null;
+        return;
+    }
+    editingScoutEndTimeIdx.value = idx;
+    const currentIso = getAuctionEndTime(item) || new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+    scoutEndTimeInput.value = isoToDatetimeLocal(currentIso);
+}
+
+function saveScoutEndTime(item: any) {
+    const newIso = datetimeLocalToIso(scoutEndTimeInput.value);
+    if (!newIso) {
+        addToast({ type: 'warning', message: 'Please enter a valid closing date & time.' });
+        return;
+    }
+    item.auctionEndsAt = newIso;
+    if (!item.auction_meta) item.auction_meta = { is_auction: true };
+    item.auction_meta.end_time = newIso;
+    editingScoutEndTimeIdx.value = null;
+    addToast({ type: 'success', message: `📅 Closing time set to ${formatPacificDateDisplay(newIso)}` });
+}
+
+function applyScoutEndTimePreset(item: any, preset: 'plus1h' | 'tonight5pm' | 'tonight6pm' | 'tomorrow5pm') {
+    const now = new Date();
+    let target = new Date();
+    if (preset === 'plus1h') {
+        target = new Date(now.getTime() + 3600 * 1000);
+    } else if (preset === 'tonight5pm') {
+        target.setHours(17, 0, 0, 0);
+        if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+    } else if (preset === 'tonight6pm') {
+        target.setHours(18, 0, 0, 0);
+        if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+    } else if (preset === 'tomorrow5pm') {
+        target.setDate(target.getDate() + 1);
+        target.setHours(17, 0, 0, 0);
+    }
+    const iso = target.toISOString();
+    scoutEndTimeInput.value = isoToDatetimeLocal(iso);
+    item.auctionEndsAt = iso;
+    if (!item.auction_meta) item.auction_meta = { is_auction: true };
+    item.auction_meta.end_time = iso;
+    addToast({ type: 'success', message: `📅 Closing time set to ${formatPacificDateDisplay(iso)}` });
 }
 
 function isAuctionItem(item: any): boolean {

@@ -1,5 +1,6 @@
 import { ref, reactive, computed, watch } from 'vue';
 import { addToast } from '../stores/toast';
+import { isoToDatetimeLocal } from '../lib/dateTimeUtils';
 
 export const getNoteValue = (notes, key, isCurrency = false) => {
     if (!notes) return null;
@@ -94,7 +95,8 @@ export function useItemDrawerForm() {
         sellingLocations: [],
         keywords: [],
         countryOfOrigin: '',
-        redFlags: []
+        redFlags: [],
+        auctionEndsAt: ''
     });
 
     // Auto-calculate ROI / Margin % (Calculated per-unit so multi-quantity batches reflect accurate margins)
@@ -147,6 +149,7 @@ export function useItemDrawerForm() {
         editForm.keywords = [];
         editForm.countryOfOrigin = '';
         editForm.redFlags = [];
+        editForm.auctionEndsAt = '';
         isAcquisitionUnlocked.value = true;
     };
 
@@ -212,6 +215,7 @@ export function useItemDrawerForm() {
             editForm.sellingLocations = Array.isArray(item.sellingLocations) ? [...item.sellingLocations] : [];
             editForm.keywords = Array.isArray(item.keywords) ? [...item.keywords] : [];
             editForm.countryOfOrigin = item.countryOfOrigin || '';
+            editForm.auctionEndsAt = isoToDatetimeLocal(item.auctionEndsAt || '');
         } else {
             resetForm();
         }

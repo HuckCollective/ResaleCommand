@@ -8,6 +8,7 @@ import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
 import { getItemsByPurchaseId, getSafeRawAnalysis, getSafeComponents, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
 import { getDefaultStorageLocation } from '../lib/warehouses';
 import { parsePriceValue } from '../lib/lot-strategy';
+import { parsePacificDateToIso } from '../lib/dateTimeUtils';
 
 const PURCHASES_COL = getPurchasesCollectionId();
 const getItemsCollectionId = () => getCollectionId();
@@ -613,6 +614,13 @@ export function useScoutPurchase() {
                     const match = doc.conditionNotes.match(/\[Boutique:\s*\$([0-9.]+)\]/i);
                     if (match) bPrice = parseFloat(match[1]);
                 }
+                let resolvedAuctionEndsAt = doc.auctionEndsAt || parsedTarget?.auctionEndsAt || parsedTarget?.auction_meta?.end_time || null;
+                const rawTimeText = parsedTarget?.auction_meta?.time_left_text;
+                if (rawTimeText && resolvedAuctionEndsAt && String(resolvedAuctionEndsAt).startsWith(String(rawTimeText).trim())) {
+                    // Self-heal legacy items where Pacific local string was saved directly with .000Z UTC suffix
+                    const healedIso = parsePacificDateToIso(rawTimeText);
+                    if (healedIso) resolvedAuctionEndsAt = healedIso;
+                }
                 return {
                     ...doc,
                     boutiquePrice: bPrice || doc.resalePrice || 0,
@@ -622,7 +630,7 @@ export function useScoutPurchase() {
                     sellerName: doc.sellerName || parsedTarget?.sellerName || parsedTarget?.seller_name || parsedTarget?.auction_meta?.seller_name || parsedTarget?.seller_info?.seller_name || null,
                     shippingWeight: doc.shippingWeight || parsedTarget?.shippingWeight || parsedTarget?.shipping_weight || parsedTarget?.auction_meta?.shipping_weight || parsedTarget?.seller_info?.shipping_weight || 0,
                     canCombineShipping: doc.canCombineShipping !== undefined ? doc.canCombineShipping : (parsedTarget?.canCombineShipping !== undefined ? parsedTarget.canCombineShipping : (parsedTarget?.auction_meta?.can_combine_shipping !== undefined ? parsedTarget.auction_meta.can_combine_shipping : (parsedTarget?.seller_info?.can_combine_shipping !== undefined ? parsedTarget.seller_info.can_combine_shipping : true))),
-                    auctionEndsAt: doc.auctionEndsAt || parsedTarget?.auctionEndsAt || parsedTarget?.auction_meta?.end_time || null,
+                    auctionEndsAt: resolvedAuctionEndsAt,
                     maxBid: doc.maxBid || parsedTarget?.maxBid || null,
                     currentBid: doc.currentBid || parsedTarget?.currentBid || null,
                     auctionStatus: parsedTarget?.auctionStatus || 'watching'

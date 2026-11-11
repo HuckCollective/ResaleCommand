@@ -404,6 +404,26 @@
           </div>
           <div class="form-control">
             <label class="label py-0.5 flex items-center justify-between">
+              <span class="label-text text-xs font-bold flex items-center gap-1">
+                <Icon icon="solar:calendar-mark-bold" class="w-3.5 h-3.5 text-primary" />
+                Auction Closing Date &amp; Time
+              </span>
+              <button
+                v-if="editForm.auctionEndsAt"
+                type="button"
+                @click="editForm.auctionEndsAt = ''"
+                class="text-[10px] text-error font-bold hover:underline"
+              >
+                Clear
+              </button>
+            </label>
+            <input
+              type="datetime-local"
+              v-model="editForm.auctionEndsAt"
+              class="input input-bordered input-sm w-full font-mono text-xs bg-base-100" />
+          </div>
+          <div class="form-control">
+            <label class="label py-0.5 flex items-center justify-between">
               <span class="label-text text-xs font-bold">Parent Lot ID</span>
               <span
                 v-if="editForm.parentLotId"

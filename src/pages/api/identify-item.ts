@@ -6,6 +6,7 @@ import { SPEED_SCOUT_SYSTEM_INSTRUCTION } from '../../lib/ai/instructions/system
 import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-builders';
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
+import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -1109,13 +1110,7 @@ export const ALL: APIRoute = async ({ request }) => {
                              }
                              
                              if (parsedData.endTime) {
-                                 let parsedIso: string | null = null;
-                                 try {
-                                     const d = new Date(parsedData.endTime);
-                                     if (!isNaN(d.getTime())) {
-                                         parsedIso = d.toISOString();
-                                     }
-                                 } catch {}
+                                 const parsedIso = parsePacificDateToIso(parsedData.endTime);
                                  scrapedAuctionMeta = {
                                      is_auction: true,
                                      end_time: parsedIso,
@@ -1445,7 +1440,9 @@ export const ALL: APIRoute = async ({ request }) => {
                 }
                 if (target.auction_meta) {
                     if (target.auction_meta.end_time) {
-                        target.auctionEndsAt = target.auction_meta.end_time;
+                        const normalizedIso = parsePacificDateToIso(target.auction_meta.end_time) || target.auction_meta.end_time;
+                        target.auction_meta.end_time = normalizedIso;
+                        target.auctionEndsAt = normalizedIso;
                     }
                     if (target.auction_meta.current_bid !== undefined && target.auction_meta.current_bid !== null) {
                         target.currentBid = target.auction_meta.current_bid;

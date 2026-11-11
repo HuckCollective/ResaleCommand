@@ -1501,8 +1501,13 @@ const saveEdit = async () => {
         const finalStorageLoc = String(editForm.storageLocation || '').trim() || getDefaultStorageLocation();
         rememberStorageLocation(finalStorageLoc);
 
+        const normalizedEndIso = editForm.auctionEndsAt
+            ? (new Date(editForm.auctionEndsAt).getTime() ? new Date(editForm.auctionEndsAt).toISOString() : null)
+            : null;
+
         const payload = {
             ...editForm,
+            auctionEndsAt: normalizedEndIso,
             storageLocation: finalStorageLoc,
             conditionNotes: editForm.condition_notes,
             imageId: actualMainPhoto.value?.id || null,

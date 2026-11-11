@@ -1,5 +1,16 @@
 # Active Session Summary (Updated Nov 11, 2026)
 
+## ✅ AUCTION TRACKER PACIFIC TIMEZONE FIX, DATETIME CAPTURE & 1-CLICK LIVE RESYNC ("RECYST") (Nov 11, 2026 — `alpha-1`)
+- **Universal Pacific Timezone Parser (`src/lib/dateTimeUtils.ts`, `src/pages/api/identify-item.ts`, `src/pages/api/proxy-item-details.ts`)**:
+  - Resolved the 8-hour UTC shift bug where ShopGoodwill's un-offset Pacific closing times (e.g. `"2026-11-11T18:01:00"`) were parsed as 6:01 PM UTC (10:01 AM Pacific) instead of 6:01 PM Pacific (`-08:00` PST / `-07:00` PDT).
+  - Created `parsePacificDateToIso`, `formatPacificDateDisplay`, `isoToDatetimeLocal`, and `datetimeLocalToIso` in `src/lib/dateTimeUtils.ts` and wired them into `/api/identify-item` and `/api/proxy-item-details`.
+  - Added automatic read-time self-healing in `src/composables/useScoutPurchase.ts` so existing tracked items whose `auctionEndsAt` was saved with a naive `.000Z` UTC shift immediately display their true Pacific closing countdown.
+- **1-Click Live Auction Resync ("Recyst") & Inline End-Time Editor (`src/components/scout/ScoutPurchaseTray.vue`)**:
+  - Replaced the redundant `✕` button on active auction rows with a **`🔄 Sync`** button (plus a header **`🔄 Sync All`** button) that queries `/api/proxy-item-details` for the live current bid, bid count, and Pacific closing time, persists updates to Appwrite `resale_db.items`, and alerts immediately if outbid (`🚨 OUTBID`).
+  - Made the countdown badge on each tray row clickable to open an inline closing-time editor with `<input type="datetime-local">` and a 1-click **`⚡ Fix +8h PT Offset`** button.
+- **Quick Scout Datetime Capture & Item Drawer Field (`src/components/scout/ScoutView.vue`, `src/components/common/drawer/ItemDetailsTab.vue`, `src/composables/useItemDrawerForm.ts`, `src/components/common/ItemDrawer.vue`)**:
+  - Added click-to-edit closing time capture with quick presets (`+1 Hr`, `Tonight 5 PM`, `Tonight 6 PM`, `Tomorrow 5 PM`) in `ScoutView.vue` and an explicit `Auction Closing Date & Time` `<input type="datetime-local">` field in `ItemDetailsTab.vue`.
+
 ## ✅ TERMINAL LOG AUTO-SCROLL TO BOTTOM & 1-TAP RESUME IN `BulkImport.vue` (Nov 11, 2026 — `alpha-1`)
 - **Sticky Terminal Log Auto-Scroll (`src/components/inventory/BulkImport.vue`)**:
   - Bound `ref="logContainerRef"` + `watch(() => logs.value.length)` with `nextTick` to smoothly pin the terminal scroll position to the bottom (`scrollTop = scrollHeight`) whenever a new CSV row processes.
