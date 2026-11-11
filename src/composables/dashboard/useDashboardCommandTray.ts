@@ -229,3 +229,4 @@ export function useDashboardCommandTray(): DashboardCommandTrayController {
   }
   return ctx;
 }
+

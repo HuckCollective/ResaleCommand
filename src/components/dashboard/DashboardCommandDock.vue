@@ -708,3 +708,4 @@ onUnmounted(() => {
   window.removeEventListener('rc:open-join-queue-tray', handleExternalSheetOpen);
 });
 </script>
+
