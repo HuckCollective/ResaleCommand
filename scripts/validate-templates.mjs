@@ -741,7 +741,41 @@ for (const contract of transportContracts) {
 // 12. DAISYUI V5 & TAILWIND ANTI-OVERLAP / ANTI-CLIPPING GUARDRAILS
 // =========================================================================
 {
-    // 12A. Ensure global.css enforces .badge { white-space: nowrap } and defines .badge-2xs / .btn-2xs
+    // 12A. Verify Complete 29-Token DaisyUI v5 Theme Contract in src/styles/theme.css
+    const themeCssPath = path.resolve('src/styles/theme.css');
+    if (fs.existsSync(themeCssPath)) {
+        const themeCss = fs.readFileSync(themeCssPath, 'utf8');
+        const requiredThemeTokens = [
+            '--border:',
+            '--size-selector:',
+            '--size-field:',
+            '--depth:',
+            '--noise:',
+            '--radius-selector:',
+            '--radius-field:',
+            '--radius-box:',
+            '--color-info:',
+            '--color-success:',
+            '--color-warning:',
+            '--color-error:'
+        ];
+        for (const token of requiredThemeTokens) {
+            if (!themeCss.includes(token)) {
+                console.error(`❌ DaisyUI v5 Theme Token Contract Violation in src/styles/theme.css: missing "${token}" in huckleberry theme! Without this, DaisyUI's calc() expressions become invalid and collapse badge/button inner padding.`);
+                hasErrors = true;
+            }
+        }
+    }
+
+    // 12B. Ban Legacy PostCSS & Tailwind v3 Config Files in Root
+    for (const forbiddenConfig of ['postcss.config.js', 'postcss.config.mjs', 'postcss.config.cjs', 'tailwind.config.js', 'tailwind.config.mjs', 'tailwind.config.ts']) {
+        if (fs.existsSync(path.resolve(forbiddenConfig))) {
+            console.error(`❌ Forbidden Legacy Config File: "${forbiddenConfig}" found! Resale Command runs Tailwind v4 via @tailwindcss/vite in astro.config.mjs (Rust Oxide + Lightning CSS). Having PostCSS configs causes duplicate CSS passes and breaks DaisyUI v5 cascade layers.`);
+            hasErrors = true;
+        }
+    }
+
+    // 12C. Ensure global.css enforces .badge { white-space: nowrap } and defines utilities inside @layer utilities
     const globalCssPath = path.resolve('src/styles/global.css');
     if (fs.existsSync(globalCssPath)) {
         const globalCss = fs.readFileSync(globalCssPath, 'utf8');
@@ -751,9 +785,9 @@ for (const contract of transportContracts) {
             );
             hasErrors = true;
         }
-        if (!/\.badge-2xs\s*\{/.test(globalCss) || !/\.btn-2xs\s*\{/.test(globalCss)) {
+        if (!/@layer\s+utilities\s*\{[\s\S]*?\.badge-2xs/m.test(globalCss) || !/@layer\s+utilities\s*\{[\s\S]*?\.btn-2xs/m.test(globalCss)) {
             console.error(
-                '❌ Micro-Badge Utility Missing in src/styles/global.css: .badge-2xs and .btn-2xs must be defined in global.css so compact badges never fall back to badge-md height!'
+                '❌ CSS Cascade Layer Violation in src/styles/global.css: .badge-2xs and .btn-2xs must be defined inside @layer utilities so standard Tailwind utilities can properly override them!'
             );
             hasErrors = true;
         }
@@ -827,6 +861,33 @@ for (const contract of transportContracts) {
             if (/\b(?:h-\[72px\]|h-\[100px\]|max-w-\[1600px\])\b/.test(cls)) {
                 console.error(
                     `❌ Arbitrary Pixel Shell/Dock Hack in ${relFile}:${line}: "${cls}" uses hardcoded pixel utilities (h-[72px]/h-[100px]/max-w-[1600px]). Use .rc-page-shell (96rem) and .rc-dock-spacer (useDockClearance) instead!`
+                );
+                hasErrors = true;
+            }
+
+            // 12F. Ban p-0 / px-0 on .badge elements (strips horizontal padding and causes text to touch borders)
+            if (/\bbadge\b/.test(cls) && /\b(?:p-0|px-0)\b/.test(cls)) {
+                console.error(
+                    `❌ Stripped Badge Padding Bug in ${relFile}:${line}: "${cls}" applies p-0/px-0 to a .badge element! Badges require their proportional DaisyUI inner padding to prevent text/numbers from colliding with borders.`
+                );
+                hasErrors = true;
+            }
+        }
+
+        // 12G. Style block @apply & @reference verification in Tailwind v4
+        const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/g;
+        let sm;
+        while ((sm = styleRegex.exec(content)) !== null) {
+            const styleBody = sm[1];
+            if (/@apply\b/.test(styleBody) && !/@reference\b/.test(styleBody)) {
+                console.error(
+                    `❌ Tailwind v4 @apply Missing @reference in ${relFile}: Component <style> blocks using @apply must include @reference "../.../styles/global.css"; at the top so Vite and @tailwindcss/vite can resolve utility classes!`
+                );
+                hasErrors = true;
+            }
+            if (/@import\s+['"]tailwindcss['"]/.test(styleBody)) {
+                console.error(
+                    `❌ Duplicate Tailwind Bundle in ${relFile}: Do NOT use @import "tailwindcss" inside a component <style> block! Use @reference instead to avoid bundle duplication.`
                 );
                 hasErrors = true;
             }

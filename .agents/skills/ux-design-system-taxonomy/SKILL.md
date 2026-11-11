@@ -44,6 +44,11 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    👉 *STRICT SPATIAL INVARIANT*:
    - **Tray (`*Tray.vue`)** = **Bottom-Sheet Detent Tray** that slides **UP from the bottom** (`fixed inset-0 flex flex-col justify-end` ➔ `rounded-t-3xl max-w-5xl mx-auto w-full max-h-[82dvh]`) with a centered drag-handle pill, 4-card KPI strip, wide horizontal list/table for batch operations (`Receive`, `Unlink`, `Receive All`), and sticky bottom action bar.
    - **Drawer (`ItemDrawer.vue` / `SlideOverDrawer.vue`)** = **Right-Side Slide-Over Inspector** (`fixed inset-y-0 right-0`) that slides in **from the right** (`z-450` stacked above any open `z-400` Bottom Tray) when inspecting or editing a single item (`Update`). Never use `SlideOverDrawer` when the user asks for a **Tray**!
+7. **Red Flag: Collapsing pill/badge horizontal padding or writing un-layered root utilities**
+   👉 *STRICT STYLE STACK INVARIANT*:
+   - In DaisyUI v5, badges compute horizontal padding with `padding-inline: calc(var(--size) / 2 - var(--border))`. Custom themes in `src/styles/theme.css` MUST define `--border: 1px`, `--size-selector: 0.25rem`, `--size-field: 0.25rem`, `--depth: 1`, and `--noise: 0` so padding never collapses to 0px.
+   - All custom utilities in `src/styles/global.css` MUST live inside `@layer utilities` or `@layer components` (zero un-layered CSS).
+   - Component `<style>` blocks using `@apply` MUST declare `@reference "../../styles/global.css";` at line 1. Never apply `p-0` or `px-0` to `.badge` elements.
 
 ---
 

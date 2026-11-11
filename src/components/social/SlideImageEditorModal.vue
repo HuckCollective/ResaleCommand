@@ -32,7 +32,7 @@
             :title="`Jump to Slide ${sIdx + 1}`"
           >
             <img :src="slide.url" class="w-full h-full object-cover" alt="Slide thumb" />
-            <span class="absolute bottom-0.5 right-0.5 badge badge-2xs font-mono font-bold bg-black/80 text-white text-[7px] px-0.5 py-0 border-none">
+            <span class="absolute bottom-0.5 right-0.5 badge badge-2xs font-mono font-bold bg-black/80 text-white text-[7px] border-none">
               {{ sIdx + 1 }}
             </span>
           </button>
@@ -63,7 +63,7 @@
           :class="selectedSlideIndex === sIdx ? 'border-primary ring-2 ring-primary/50 scale-105' : 'border-base-300/80 opacity-60'"
         >
           <img :src="slide.url" class="w-full h-full object-cover" alt="Slide thumb" />
-          <span class="absolute bottom-0 right-0 badge badge-2xs font-mono font-bold bg-black/80 text-white text-[7px] px-0.5 py-0 border-none">
+          <span class="absolute bottom-0 right-0 badge badge-2xs font-mono font-bold bg-black/80 text-white text-[7px] border-none">
             {{ sIdx + 1 }}
           </span>
         </button>

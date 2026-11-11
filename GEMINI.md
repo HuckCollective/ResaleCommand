@@ -158,6 +158,19 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 11, 2026)
 
+## ✅ GLOBAL DAISYUI V5 PILL PADDING & BORDER RECOVERY + 4-PILLAR TAILWIND V4 & VITE STYLE STACK ARCHITECTURE (Nov 11, 2026 — `alpha-1`)
+- **Root-Cause Resolution (Missing DaisyUI v5 Tokens in `huckleberry` Theme — `src/styles/theme.css`)**:
+  - Identified why every pill/badge across the app had `0px` inner horizontal padding: DaisyUI v5 (`node_modules/daisyui/components/badge.css`) computes badge padding via `padding-inline: calc(var(--size) / 2 - var(--border))`. Custom `@plugin "daisyui/theme"` blocks do not inherit structural tokens from `light`.
+  - Completed the official 29-token DaisyUI v5 theme specification in `src/styles/theme.css` for `huckleberry`, restoring `--border: 1px`, `--size-selector: 0.25rem`, `--size-field: 0.25rem`, `--depth: 1`, `--noise: 0`, and the 8 status colors (`--color-info/content`, `--color-success/content`, `--color-warning/content`, `--color-error/content`).
+  - Restored native DaisyUI v5 horizontal padding across all badges (`7px` on `badge-xs`, `9px` on `badge-sm`, `11px` on `badge-md`, `13px` on `badge-lg`) and restored `1px` borders across all buttons and inputs.
+- **CSS Cascade Layer Discipline & Native DaisyUI Variables (`src/styles/global.css`)**:
+  - Moved `.badge-2xs`, `.btn-2xs`, `.input-2xs`, `.select-2xs`, `.pb-safe`, and `.pt-safe` inside `@layer utilities` so standard Tailwind utilities (`px-3`, `sm:h-8`) can properly override them (zero un-layered CSS rules).
+  - Defined `.badge-2xs` using DaisyUI's native `--size: calc(var(--size-selector, 0.25rem) * 3.5);` token so DaisyUI's own formula automatically calculates proportional inner padding and line-height.
+- **Vite `@tailwindcss/vite` Pipeline vs. PostCSS & `@apply` Standards (`scripts/validate-templates.mjs`, `.agents/skills/daisyui/SKILL.md`, `.agents/skills/ux-design-system-taxonomy/SKILL.md`)**:
+  - Codified that Resale Command runs Tailwind v4 natively via `@tailwindcss/vite` (Rust Oxide + Lightning CSS engine in `astro.config.mjs`) with zero `postcss.config.*` or `tailwind.config.*` files.
+  - Enforced that if any `.vue` or `.astro` `<style>` block uses `@apply`, it MUST declare `@reference "../../styles/global.css";` at line 1 so Vite resolves utility tokens without bundle duplication.
+  - Banned `p-0` / `px-0` on `.badge` elements in `validate-templates.mjs`, automatically caught and cleaned legacy `px-0.5 py-0` in `SlideImageEditorModal.vue`, and synced `GEMINI.md`.
+
 ## ✅ `/purchases` WARM PARCHMENT LOADER THEME, SINGLE-LOADER LOCK & IN-PLACE PO ITEMS TRAY (`PurchaseItemsTray.vue` + `ItemDrawer.vue`) (Nov 11, 2026 — `alpha-1`)
 - **Warm Parchment `BulkImport.vue` Loader & Single-Loader Lock (`src/composables/useLoader.ts`, `src/components/inventory/BulkImport.vue`, `src/components/purchases/PurchasesList.vue`)**:
   - Restyled `BulkImport.vue`'s full-screen progress overlay from solid sage-green (`bg-secondary/90`) to the **Huckleberry Warm Parchment theme** (`bg-base-100/92 backdrop-blur-md text-base-content`, `bg-base-100 border-2 border-base-300 shadow-2xl` progress card, `text-primary`/`text-secondary` 3D box & falling item icons, `bg-primary` progress bar, and dark `bg-neutral` terminal log box).
