@@ -3661,6 +3661,38 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
 
             const liveBid = item.currentBid || item.auction_meta?.current_bid || parsePrice(item.purchase_strategy?.current_asking_price);
             const maxBidCeiling = item.maxBid || item.purchase_strategy?.max_bid;
+            const splitRecRescout = getLotSplitRecommendation(item);
+            let rescoutRawObj: any = getSafeRawAnalysis(item);
+            if (typeof rescoutRawObj === 'string') {
+                try { rescoutRawObj = JSON.parse(rescoutRawObj); } catch (e) {}
+            }
+            if (rescoutRawObj && typeof rescoutRawObj === 'object') {
+                const fairStr = rescoutRawObj.pricing_potential?.fair || rescoutRawObj.price_breakdown?.fair || rescoutRawObj.estimated_value;
+                const boutiqueStr = rescoutRawObj.pricing_potential?.boutique || rescoutRawObj.price_breakdown?.boutique_premium || formatBoutiquePriceDisplay(item);
+                rescoutRawObj.pricing_potential = {
+                    ...(rescoutRawObj.pricing_potential || {}),
+                    ...(fairStr ? { fair: fairStr } : {}),
+                    ...(boutiqueStr ? { boutique: boutiqueStr } : {})
+                };
+                rescoutRawObj.price_breakdown = {
+                    ...(rescoutRawObj.price_breakdown || {}),
+                    ...(fairStr ? { fair: fairStr } : {}),
+                    ...(boutiqueStr ? { boutique_premium: boutiqueStr } : {})
+                };
+                if (splitRecRescout) {
+                    rescoutRawObj.exit_strategy = {
+                        ...(rescoutRawObj.exit_strategy || {}),
+                        recommended_play: splitRecRescout.pillText,
+                        strategy_type: splitRecRescout.type,
+                        split_yield: splitRecRescout.splitYield,
+                        bulk_yield: splitRecRescout.bulkYield,
+                        upside: splitRecRescout.upside,
+                        tactical_note: splitRecRescout.tacticalExecutionNote,
+                        ebay_note: splitRecRescout.ebayExecutionNote
+                    };
+                }
+            }
+            const safeRescoutComponents = item.lot_items ? getSafeComponents(item.lot_items) : undefined;
 
             const updatePayload: any = {
                 identity: item.identity,
@@ -3668,13 +3700,14 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                 conditionNotes: noteDetails,
                 redFlags: item.red_flags || [],
                 cost: cost.value ? parseFloat(parseFloat(cost.value).toFixed(2)) : (liveBid > 0 ? liveBid : 0.0),
-                resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                resalePrice: item.selected_resale_price || parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair) || 0.0,
                 maxBuyPrice: calculateMaxBuy(item) || 0.0,
                 sourcingLocation: sourcingLocation.value || '',
                 storageLocation: String(storageLocation.value || '').trim() || 'HG',
                 status: (isAcquired.value || allowStandaloneSave.value || (cost.value && Number(cost.value) > 0) || (!item.auctionEndsAt && !item.auction_meta?.end_time)) ? (storageLocation.value ? 'received' : 'acquired') : 'tracked',
                 keywords: item.keywords || [],
-                rawAnalysis: getSafeRawAnalysis(item) || undefined
+                rawAnalysis: getSafeRawAnalysis(rescoutRawObj || item) || undefined,
+                components: safeRescoutComponents || undefined
             };
             if (liveBid > 0) updatePayload.currentBid = liveBid;
             if (maxBidCeiling > 0) updatePayload.maxBid = maxBidCeiling;
@@ -3890,10 +3923,22 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
              if (typeof rawAnalysisObj === 'string') {
                  try { rawAnalysisObj = JSON.parse(rawAnalysisObj); } catch(e){}
              }
+             if (!rawAnalysisObj || typeof rawAnalysisObj !== 'object') {
+                 rawAnalysisObj = {};
+             }
+             const fairStr = rawAnalysisObj.pricing_potential?.fair || rawAnalysisObj.price_breakdown?.fair || rawAnalysisObj.estimated_value;
+             const boutiqueStr = rawAnalysisObj.pricing_potential?.boutique || rawAnalysisObj.price_breakdown?.boutique_premium || formatBoutiquePriceDisplay(item);
+             rawAnalysisObj.pricing_potential = {
+                 ...(rawAnalysisObj.pricing_potential || {}),
+                 ...(fairStr ? { fair: fairStr } : {}),
+                 ...(boutiqueStr ? { boutique: boutiqueStr } : {})
+             };
+             rawAnalysisObj.price_breakdown = {
+                 ...(rawAnalysisObj.price_breakdown || {}),
+                 ...(fairStr ? { fair: fairStr } : {}),
+                 ...(boutiqueStr ? { boutique_premium: boutiqueStr } : {})
+             };
              if (splitRec) {
-                 if (!rawAnalysisObj || typeof rawAnalysisObj !== 'object') {
-                     rawAnalysisObj = {};
-                 }
                  rawAnalysisObj.exit_strategy = {
                      ...(rawAnalysisObj.exit_strategy || {}),
                      recommended_play: splitRec.pillText,
@@ -3915,7 +3960,7 @@ async function handleSaveItem(item: any, index: number, isBatch = false) {
                  conditionNotes: noteDetails,
                  redFlags: item.red_flags || [],
                  cost: cost.value ? parseFloat(Number(cost.value).toFixed(2)) : (item.currentBid || 0.0),
-                 resalePrice: item.selected_resale_price || parsePrice(item.price_breakdown?.fair) || 0.0,
+                 resalePrice: item.selected_resale_price || parsePrice(item.pricing_potential?.fair || item.price_breakdown?.fair) || 0.0,
                  maxBuyPrice: calculateMaxBuy(item) || 0.0,
                  maxBid: calculateMaxBid(item) || undefined,
                  currentBid: item.currentBid || parsePrice(item.purchase_strategy?.current_asking_price) || undefined,

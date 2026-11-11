@@ -158,6 +158,13 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 10, 2026)
 
+## ✅ INTERACTIVE QUICK SCOUT REPORT ON SAVED ITEMS (`PRICING ESTIMATES`, `SHIPPING TOGGLE` & `BUNDLE COMPONENTS` WITH LIVE UNIT `SPLIT COST`) + STRICT `ACQUIRED+` DEEP SCAN GUARD (Nov 10, 2026 — `alpha-1`)
+- **Strict `Tracked` vs. `Acquired+` Lifecycle Guard (`src/lib/inventory.ts`, `src/components/common/ItemDrawer.vue`, `src/components/common/drawer/ItemDetailsTab.vue`)**:
+  - Kept `isItemAcquired(status)` strictly `false` for `status === 'tracked'` so `🔍 Deep Scan` (`/api/inspect-lot`) and physical `✂️ Split Lot` (`handleOpenSplitter` / `deconstructAiLot`) are **never** allowed on `tracked` items (only `acquired`, `received`, `placed`, `sold`, `combined`, `deconstructed`). Re-scanning a `tracked` item strictly runs **`⚡ Quick Scout` (`/api/identify-item`)**.
+- **Full Quick Scout Report Persistence & Live Unit-Cost Playground (`src/components/scout/ScoutView.vue`, `src/components/common/ItemDrawer.vue`, `src/components/common/drawer/ItemDetailsTab.vue`)**:
+  - Normalized `pricing_potential` (`fair`, `boutique`) and `price_breakdown` (`fair`, `boutique_premium`, `mint`, `poor`), `shipping_info`, `exit_strategy`, and `components` (`lot_items`) on both initial Quick Scout saves and `rescoutId` updates in `ScoutView.vue`, and updated `analyzeExistingItem` in `ItemDrawer.vue` so re-running `⚡ Quick Scout` refreshes `parsedComponents.value`.
+  - Rendered inside `ItemDetailsTab.vue` (`AI Scout & Valuation Intelligence` card) the **4-Card Interactive Pricing Estimates Grid** (`FAIR MARKET`, `BOUTIQUE`, `MINT / NEW`, `POOR / AS-IS` — 1-tap updates `List Price` & `Comps Range`), the **Shipping Breakdown & "Add to Cost" Toggle**, and the **Elevated Bundle Components (`1..N`) List** (`👑 Hero Anchor` badge + `Boutique | Fair | Buy Range | Split Cost` where `Split Cost` dynamically recalculates per unit as `editForm.cost` changes).
+
 ## ✅ `/dashboard` PRIORITY-FIRST UX/IA REFACTOR + CONTEXTUAL `BottomActionDock` & 3-TAB DETENT TRAY STACK (Nov 10, 2026 — `alpha-1`)
 - **Priority-First Information Architecture (`src/lib/dashboardWidgets.ts`, `src/lib/dashboardAlerts.ts`, `src/components/dashboard/DashboardShell.vue`, `src/components/dashboard/RoleAlertsGrid.vue`, `src/components/dashboard/FinancialsOverview.vue`, `src/components/dashboard/RoleHubCard.vue`)**:
   - Re-ordered `ROLE_LAYOUTS` so urgent triage (`alerts`) + live operational metrics (`financials` / `my_inventory` / `my_statement` / `radar`) render **first above the fold** across both `/dashboard` and `/demo`.

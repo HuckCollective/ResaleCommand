@@ -950,23 +950,33 @@ const scoutTotalRange = computed(() => {
     let boutiqueLow = 0, boutiqueHigh = 0;
 
     scoutItemsArray.value.forEach(resItem => {
-        const mint = parseLowHigh(resItem.price_breakdown?.mint);
-        mintLow += mint.low;
-        mintHigh += mint.high;
-
-        const fair = parseLowHigh(resItem.price_breakdown?.fair || resItem.estimated_value);
+        const fair = parseLowHigh(resItem.pricing_potential?.fair || resItem.price_breakdown?.fair || resItem.estimated_value);
         fairLow += fair.low;
         fairHigh += fair.high;
 
-        const poor = parseLowHigh(resItem.price_breakdown?.poor);
-        poorLow += poor.low;
-        poorHigh += poor.high;
+        const mint = parseLowHigh(resItem.price_breakdown?.mint);
+        if (mint.low > 0 || mint.high > 0) {
+            mintLow += mint.low;
+            mintHigh += mint.high;
+        } else if (fair.high > 0) {
+            mintLow += Math.max(fair.high + 5, Math.round(fair.high * 1.35));
+            mintHigh += Math.max(fair.high + 15, Math.round(fair.high * 1.65));
+        }
 
-        if (resItem.price_breakdown?.boutique_premium || resItem.pricing_potential?.boutique) {
-            const b = parseLowHigh(resItem.price_breakdown?.boutique_premium || resItem.pricing_potential?.boutique);
+        const poor = parseLowHigh(resItem.price_breakdown?.poor);
+        if (poor.low > 0 || poor.high > 0) {
+            poorLow += poor.low;
+            poorHigh += poor.high;
+        } else if (fair.low > 0) {
+            poorLow += Math.max(1, Math.round(fair.low * 0.35));
+            poorHigh += Math.max(2, Math.round(fair.low * 0.55));
+        }
+
+        if (resItem.pricing_potential?.boutique || resItem.price_breakdown?.boutique_premium) {
+            const b = parseLowHigh(resItem.pricing_potential?.boutique || resItem.price_breakdown?.boutique_premium);
             boutiqueLow += b.low;
             boutiqueHigh += b.high;
-        } else {
+        } else if (fair.low > 0 || fair.high > 0) {
             boutiqueLow += Math.max(fair.low + 2, Math.round(fair.low * 1.35));
             boutiqueHigh += Math.max(fair.high + 5, Math.round(fair.high * 1.50));
         }
@@ -1074,16 +1084,25 @@ const parsePriceRange = (p) => {
 
 const applyPriceTier = (priceVal) => {
     const p = parsePrice(priceVal);
+    const range = typeof priceVal === 'object' && priceVal !== null && (priceVal.low || priceVal.high)
+        ? { low: Number(priceVal.low || 0), high: Number(priceVal.high || priceVal.low || 0) }
+        : parsePriceRange(priceVal);
     if (p > 0) {
         const qty = Math.max(1, Number(editForm.quantity) || 1);
         let unitPrice = p;
+        let unitLow = range.low;
+        let unitHigh = range.high;
         if (scoutTotalRange.value && qty > 1 && scoutItemsArray.value.length > 1) {
             const avgFairUnit = (scoutTotalRange.value.fair.high + scoutTotalRange.value.fair.low) / (2 * qty);
             if (p > avgFairUnit * 2) {
                 unitPrice = p / qty;
+                unitLow = unitLow / qty;
+                unitHigh = unitHigh / qty;
             }
         }
         editForm.resalePrice = Number(unitPrice ?? 0).toFixed(2);
+        if (unitLow > 0) editForm.estLow = Number(unitLow).toFixed(2);
+        if (unitHigh > 0) editForm.estHigh = Number(unitHigh).toFixed(2);
         addToast({ type: 'success', message: `Applied List Price: $${Number(unitPrice ?? 0).toFixed(2)}${qty > 1 ? '/ea' : ''}` });
     }
 };
@@ -2013,6 +2032,9 @@ const analyzeExistingItem = async () => {
             } else {
                 scoutResult.value = data.items[0];
                 const item = scoutResult.value;
+                if (item.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 0) {
+                    parsedComponents.value = item.lot_items;
+                }
 
                 if ((!editForm.title || editForm.title.trim().toLowerCase() === 'untitled item') && (item.title || item.identity)) {
                     const rawTitle = item.title || item.identity;

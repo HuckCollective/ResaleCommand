@@ -1334,7 +1334,11 @@
         </div>
 
         <!-- Report Contents -->
-        <div v-else-if="scoutResult" class="space-y-4">
+        <div
+          v-else-if="
+            scoutResult || (parsedComponents && parsedComponents.length > 0)
+          "
+          class="space-y-4">
           <!-- RESELLER EXIT PLAYBOOK BANNER (Acquired Inventory) -->
           <div
             v-if="isAcquiredItem && exitPlaybook"
@@ -1634,30 +1638,302 @@
             </p>
           </div>
 
-          <!-- Fallback lot summary (only when the merged Exit Playbook card above is not shown) -->
+          <!-- 1-TAP PRICING ESTIMATES & TARGETS -->
           <div
             v-if="
-              parsedComponents &&
-              parsedComponents.length > 1 &&
-              !(isAcquiredItem && exitPlaybook)
+              scoutTotalRange &&
+              (scoutTotalRange.fair?.high > 0 ||
+                scoutTotalRange.boutique?.high > 0)
             "
-            @click="$emit('open-lot-tab')"
-            class="p-2.5 bg-secondary/10 border border-secondary/30 rounded-xl flex items-center justify-between text-xs font-medium cursor-pointer hover:bg-secondary/15 transition-all">
-            <span class="text-base-content font-bold flex items-center gap-1.5">
-              <span>📦</span>
-              <span>{{ parsedComponents.length }} Bundle Components</span>
-              <span class="opacity-40">•</span>
-              <span class="text-secondary font-mono"
-                >Sliced Yield: ${{
-                  Number(exitPlaybook?.projectedSplitYield || 0).toFixed(2)
-                }}</span
+            class="space-y-2.5 bg-base-200/50 border border-base-300 rounded-2xl p-3">
+            <div class="flex items-center justify-between px-0.5">
+              <span
+                class="text-xs font-bold uppercase tracking-wider opacity-75 flex items-center gap-1.5">
+                <Icon
+                  icon="solar:graph-up-linear"
+                  class="w-4 h-4 text-primary" />
+                Pricing Estimates
+              </span>
+              <span class="text-[10px] opacity-60 font-semibold"
+                >Tap to select target price</span
               >
-            </span>
-            <button
-              type="button"
-              class="btn btn-xs btn-secondary text-secondary-content font-bold gap-1 shadow-2xs">
-              <span>Open Playbook &amp; Split Lot ➔</span>
-            </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <!-- Fair Market -->
+              <button
+                type="button"
+                @click="$emit('apply-price-tier', scoutTotalRange.fair)"
+                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-primary"
+                :class="
+                  isTierSelected(scoutTotalRange.fair)
+                    ? 'border-primary bg-primary/15 ring-2 ring-primary/30'
+                    : 'border-base-300 bg-base-100'
+                ">
+                <span class="badge badge-primary badge-xs font-bold mb-1"
+                  >FAIR MARKET</span
+                >
+                <span
+                  class="font-mono font-extrabold text-sm md:text-base text-primary"
+                  >{{ scoutTotalRange.fair?.formatted || "-" }}</span
+                >
+                <span class="text-[9px] opacity-60 font-medium mt-0.5"
+                  >Online Comps</span
+                >
+              </button>
+              <!-- Boutique Retail -->
+              <button
+                type="button"
+                @click="$emit('apply-price-tier', scoutTotalRange.boutique)"
+                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-secondary"
+                :class="
+                  isTierSelected(scoutTotalRange.boutique)
+                    ? 'border-secondary bg-secondary/15 ring-2 ring-secondary/30'
+                    : 'border-base-300 bg-base-100'
+                ">
+                <span class="badge badge-secondary badge-xs font-bold mb-1"
+                  >BOUTIQUE</span
+                >
+                <span
+                  class="font-mono font-extrabold text-sm md:text-base text-secondary"
+                  >{{ scoutTotalRange.boutique?.formatted || "-" }}</span
+                >
+                <span class="text-[9px] opacity-60 font-medium mt-0.5"
+                  >Booth Retail</span
+                >
+              </button>
+              <!-- Mint -->
+              <button
+                type="button"
+                @click="$emit('apply-price-tier', scoutTotalRange.mint)"
+                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-success"
+                :class="
+                  isTierSelected(scoutTotalRange.mint)
+                    ? 'border-success bg-success/15 ring-2 ring-success/30'
+                    : 'border-base-300 bg-base-100/80'
+                ">
+                <span class="badge badge-success badge-xs font-bold mb-1"
+                  >MINT / NEW</span
+                >
+                <span
+                  class="font-mono font-bold text-xs md:text-sm text-base-content"
+                  >{{ scoutTotalRange.mint?.formatted || "-" }}</span
+                >
+                <span class="text-[9px] opacity-50 font-medium mt-0.5"
+                  >Pristine</span
+                >
+              </button>
+              <!-- Poor -->
+              <button
+                type="button"
+                @click="$emit('apply-price-tier', scoutTotalRange.poor)"
+                class="p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs hover:border-warning"
+                :class="
+                  isTierSelected(scoutTotalRange.poor)
+                    ? 'border-warning bg-warning/15 ring-2 ring-warning/30'
+                    : 'border-base-300 bg-base-100/80'
+                ">
+                <span class="badge badge-warning badge-xs font-bold mb-1"
+                  >POOR / AS-IS</span
+                >
+                <span
+                  class="font-mono font-bold text-xs md:text-sm text-base-content/80"
+                  >{{ scoutTotalRange.poor?.formatted || "-" }}</span
+                >
+                <span class="text-[9px] opacity-50 font-medium mt-0.5"
+                  >Damaged</span
+                >
+              </button>
+            </div>
+          </div>
+
+          <!-- Shipping Info Breakdown & Add-to-Cost Toggle -->
+          <div
+            v-if="scoutShippingInfo && Number(scoutShippingInfo.total) > 0"
+            class="bg-base-200 border border-base-300 rounded-xl p-3 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 bg-primary/10 text-primary rounded-xl shrink-0">
+                <Icon icon="solar:delivery-linear" class="text-lg" />
+              </div>
+              <div>
+                <div
+                  class="font-bold text-xs sm:text-sm text-base-content flex items-center gap-1.5">
+                  Shipping via
+                  {{ scoutShippingInfo.carrier || "Estimated FedEx/USPS" }}
+                </div>
+                <div class="text-[11px] opacity-65 font-medium">
+                  <span v-if="scoutShippingInfo.zipCode"
+                    >Calculated to ZIP {{ scoutShippingInfo.zipCode }} &bull;
+                  </span>
+                  <span v-if="scoutShippingInfo.shipping !== undefined"
+                    >Ship: ${{
+                      Number(scoutShippingInfo.shipping || 0).toFixed(2)
+                    }}</span
+                  >
+                  <span v-if="scoutShippingInfo.handling !== undefined">
+                    &bull; Handle: ${{
+                      Number(scoutShippingInfo.handling || 0).toFixed(2)
+                    }}</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 border-base-300 pt-2 sm:pt-0">
+              <div class="text-right">
+                <span
+                  class="text-[9px] uppercase font-bold opacity-50 block leading-none"
+                  >Total Shipping</span
+                >
+                <span class="text-base font-black text-primary font-mono"
+                  >${{ Number(scoutShippingInfo.total || 0).toFixed(2) }}</span
+                >
+              </div>
+              <div class="form-control">
+                <label class="label cursor-pointer gap-2 p-0">
+                  <span class="label-text text-xs font-bold opacity-75"
+                    >Add to Cost</span
+                  >
+                  <input
+                    type="checkbox"
+                    :checked="includeShippingInCost"
+                    @change="toggleShippingInCost"
+                    class="toggle toggle-primary toggle-sm" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- ELEVATED BUNDLE COMPONENTS (Anchor/Hero Extraction + Live Unit Split Cost) -->
+          <div
+            v-if="parsedComponents && parsedComponents.length > 0"
+            class="bg-base-200/90 border border-base-300 rounded-2xl p-3.5 shadow-sm">
+            <div
+              class="font-extrabold text-sm mb-3 flex items-center justify-between gap-2 flex-wrap text-primary">
+              <div class="flex items-center gap-2 min-w-0">
+                <Icon
+                  icon="solar:box-bold"
+                  class="w-5 h-5 text-primary shrink-0" />
+                <span class="truncate"
+                  >Bundle Components ({{ parsedComponents.length }} Items)</span
+                >
+              </div>
+              <span
+                v-if="lotSplitRec"
+                class="badge badge-sm font-black text-xs gap-1 shadow-2xs py-1 px-2.5 h-auto whitespace-normal text-left"
+                :class="
+                  lotSplitRec.badgeClass ||
+                  'badge-primary text-primary-content'
+                ">
+                {{ lotSplitRec.pillText }}
+              </span>
+              <span
+                v-else
+                class="badge badge-primary badge-outline text-[10px] font-bold"
+                >Lot Sourcing Strategy</span
+              >
+            </div>
+
+            <ul class="space-y-2 text-xs font-medium">
+              <li
+                v-for="(subItem, subIdx) in getSortedLotItems(parsedComponents)"
+                :key="subIdx"
+                class="bg-base-100 p-3 rounded-xl border border-base-300 flex flex-col gap-1.5 shadow-2xs transition-all"
+                :class="
+                  isHeroAnchor(subItem, parsedComponents)
+                    ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30'
+                    : ''
+                ">
+                <div class="flex justify-between items-start gap-3 w-full">
+                  <div class="flex items-start gap-2 min-w-0">
+                    <span
+                      class="badge badge-sm font-mono font-bold shrink-0 mt-0.5"
+                      :class="
+                        isHeroAnchor(subItem, parsedComponents)
+                          ? 'badge-warning text-warning-content'
+                          : 'badge-neutral'
+                      ">
+                      {{ subIdx + 1 }}
+                    </span>
+                    <div class="flex flex-col min-w-0">
+                      <span
+                        class="text-base-content font-bold leading-snug text-left break-words">
+                        {{
+                          subItem.name ||
+                          subItem.title ||
+                          subItem.identity ||
+                          subItem.item
+                        }}
+                      </span>
+                      <span
+                        v-if="isHeroAnchor(subItem, parsedComponents)"
+                        class="text-[10px] font-black text-warning flex items-center gap-1 mt-0.5">
+                        <Icon
+                          icon="solar:crown-star-bold"
+                          class="w-3.5 h-3.5" />
+                        Hero Anchor (Recoups Lot Basis)
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    class="text-[11px] font-semibold text-warning text-right shrink-0 max-w-[48%] leading-snug">
+                    {{
+                      subItem.condition_notes || subItem.condition || "Used"
+                    }}
+                  </span>
+                </div>
+                <div
+                  class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-85 border-t border-base-200/80 pt-2 mt-0.5">
+                  <span
+                    >Boutique:
+                    <strong class="text-secondary font-mono">{{
+                      getSubItemBoutique(subItem)
+                    }}</strong></span
+                  >
+                  <span class="opacity-30">|</span>
+                  <span
+                    >Fair:
+                    <strong class="text-primary font-mono">{{
+                      getSubItemFair(subItem)
+                    }}</strong></span
+                  >
+                  <span class="opacity-30">|</span>
+                  <span
+                    >Buy Range:
+                    <strong class="text-success font-mono">{{
+                      getSubItemBuyRange(subItem)
+                    }}</strong></span
+                  >
+                  <span class="opacity-30">|</span>
+                  <span
+                    >Split Cost:
+                    <strong class="text-warning font-mono">{{
+                      getSubItemCostBasis(
+                        subItem,
+                        parsedComponents.length,
+                        editForm.cost,
+                      )
+                    }}</strong></span
+                  >
+                </div>
+              </li>
+            </ul>
+
+            <!-- Physical Split Action (Acquired+ Only — Never on Tracked Items) -->
+            <div
+              v-if="isAcquiredItem && parsedComponents.length > 1"
+              class="mt-3 pt-2.5 border-t border-base-300 flex items-center justify-between gap-2">
+              <span class="text-[11px] font-semibold opacity-75">
+                Ready to unpack into individual inventory items?
+              </span>
+              <button
+                type="button"
+                @click="$emit('open-lot-tab')"
+                class="btn btn-xs btn-secondary text-secondary-content font-bold gap-1 shadow-2xs">
+                <span>✂️ Split Lot ({{ parsedComponents.length }}) ➔</span>
+              </button>
+            </div>
           </div>
 
           <!-- AI Found Image Thumbnail (Single Item) -->
@@ -1820,7 +2096,11 @@ import {
     calculateMaxBuyPrice,
     calculateSubItemMaxBidPrice
 } from '../../../lib/bundle-pricing';
-import { deriveLotExitPlaybook } from '../../../lib/lot-strategy';
+import {
+    deriveLotExitPlaybook,
+    parsePriceValue,
+    getLotSplitRecommendation
+} from '../../../lib/lot-strategy';
 import { isItemAcquired } from '../../../lib/inventory';
 import { resolveMultiQtyCost } from '../../../composables/useItemDrawerForm';
 import { KNOWN_FACILITY_CODES, getAllLocationSettingMetas } from '../../../lib/warehouses';
@@ -2174,6 +2454,103 @@ const exitPlaybook = computed(() => {
         ? { ...base, components: props.parsedComponents }
         : base;
     return deriveLotExitPlaybook(strategyItem, props.scoutResult);
+});
+
+const scoutAuctionMeta = computed(() => {
+    const first = props.scoutItemsArray?.[0];
+    return first?.auction_meta || props.parsedRawAnalysis?.auction_meta || null;
+});
+
+const scoutShippingInfo = computed(() => {
+    const first = props.scoutItemsArray?.[0];
+    if (first?.shipping_info && Number(first.shipping_info.total) > 0) {
+        return first.shipping_info;
+    }
+    if (props.parsedRawAnalysis?.shipping_info && Number(props.parsedRawAnalysis.shipping_info.total) > 0) {
+        return props.parsedRawAnalysis.shipping_info;
+    }
+    const notes = String(props.editForm?.condition_notes || props.item?.conditionNotes || '');
+    const m = notes.match(/\[Shipping:\s*\$([\d.]+),\s*Handling:\s*\$([\d.]+)\s*via\s*([^\]]+?)\s*to\s*([^\]]+)\]/i);
+    if (m) {
+        const ship = parseFloat(m[1]) || 0;
+        const handle = parseFloat(m[2]) || 0;
+        return {
+            shipping: ship,
+            handling: handle,
+            total: Number((ship + handle).toFixed(2)),
+            carrier: m[3].trim(),
+            zipCode: m[4].trim()
+        };
+    }
+    return null;
+});
+
+const includeShippingInCost = ref(false);
+
+const toggleShippingInCost = (e) => {
+    const checked = Boolean(e?.target?.checked);
+    const shipTotal = Number(scoutShippingInfo.value?.total || 0);
+    if (shipTotal <= 0) return;
+    const currentCost = parseFloat(String(props.editForm?.cost || 0)) || 0;
+    if (checked && !includeShippingInCost.value) {
+        includeShippingInCost.value = true;
+        props.editForm.cost = Number((currentCost + shipTotal).toFixed(2)).toFixed(2);
+    } else if (!checked && includeShippingInCost.value) {
+        includeShippingInCost.value = false;
+        props.editForm.cost = Number(Math.max(0, currentCost - shipTotal).toFixed(2)).toFixed(2);
+    }
+};
+
+const isTierSelected = (tierObj) => {
+    if (!tierObj || (!tierObj.low && !tierObj.high)) return false;
+    const currentPrice = parseFloat(String(props.editForm?.resalePrice || 0)) || 0;
+    if (currentPrice <= 0) return false;
+    const mid = (Number(tierObj.low || 0) + Number(tierObj.high || tierObj.low || 0)) / 2;
+    return Math.abs(currentPrice - mid) <= 1.5;
+};
+
+const isHeroAnchor = (subItem, lotItems) => {
+    if (!subItem || !Array.isArray(lotItems) || lotItems.length <= 1) return false;
+    if (subItem.anchor || subItem.hero || subItem.is_anchor || subItem.is_hero) return true;
+    const getVal = (i) => {
+        const bStr = getSubItemBoutique(i);
+        const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+        return bVal > 0 ? bVal : parsePriceValue(i?.price_breakdown?.boutique_premium || i?.estimated_value || i?.fair || i?.price_breakdown?.fair, 'midpoint', 0);
+    };
+    const thisVal = getVal(subItem);
+    if (thisVal <= 0) return false;
+    const maxVal = Math.max(...lotItems.map(getVal));
+    return thisVal === maxVal && maxVal > 0;
+};
+
+const getSortedLotItems = (lotItems) => {
+    if (!Array.isArray(lotItems) || lotItems.length <= 1) return lotItems || [];
+    const getBoutiqueNum = (i) => {
+        const bStr = getSubItemBoutique(i);
+        const bVal = bStr && bStr !== '-' ? parsePriceValue(bStr, 'midpoint', 0) : 0;
+        return bVal > 0 ? bVal : parsePriceValue(i?.price_breakdown?.boutique_premium || i?.pricing_potential?.boutique || i?.estimated_value, 'midpoint', 0);
+    };
+    return [...lotItems].sort((a, b) => {
+        const aHero = isHeroAnchor(a, lotItems);
+        const bHero = isHeroAnchor(b, lotItems);
+        if (aHero && !bHero) return -1;
+        if (!aHero && bHero) return 1;
+        const aVal = getBoutiqueNum(a);
+        const bVal = getBoutiqueNum(b);
+        if (bVal !== aVal) return bVal - aVal;
+        const aFair = parsePriceValue(getSubItemFair(a) || a?.estimated_value, 'midpoint', 0);
+        const bFair = parsePriceValue(getSubItemFair(b) || b?.estimated_value, 'midpoint', 0);
+        return bFair - aFair;
+    });
+};
+
+const lotSplitRec = computed(() => {
+    if (!props.parsedComponents || props.parsedComponents.length <= 1) return null;
+    const first = props.scoutItemsArray?.[0] || props.parsedRawAnalysis || {};
+    return getLotSplitRecommendation({
+        ...first,
+        lot_items: props.parsedComponents
+    });
 });
 
 const selectedFacility = ref('HG');
