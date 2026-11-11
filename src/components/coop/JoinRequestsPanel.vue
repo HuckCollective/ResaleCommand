@@ -320,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
@@ -720,11 +720,25 @@ const sendDecision = async (req: JoinRequest, decision: JoinDecisionKey, questio
   }
 };
 
+const handleExternalOpenTray = () => {
+  const defaultBucket: BucketId =
+    activeRequests.value.length > 0 ? 'waiting' : waitlistedRequests.value.length > 0 ? 'waitlist' : 'invited';
+  trayTab.value = defaultBucket;
+  trayOpen.value = true;
+};
+
 onMounted(() => {
   mounted.value = true;
   if (typeof window !== 'undefined') {
     currentOrigin.value = window.location.origin;
+    window.addEventListener('rc:open-join-queue-tray', handleExternalOpenTray);
   }
   load();
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('rc:open-join-queue-tray', handleExternalOpenTray);
+  }
 });
 </script>

@@ -104,9 +104,11 @@ const daysSince = (iso: string | undefined | null, now: number): number => {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
+const cleanAlertLabel = (raw: unknown): string => String(raw || '').replace(/\\\$/g, '$').trim();
+
 const sampleItems = (items: any[], max = 3): AlertSample[] =>
   items.slice(0, max).map((i) => ({
-    label: String(i.title || i.upc || i.$id || 'Item'),
+    label: cleanAlertLabel(i.title || i.upc || i.$id || 'Item'),
     href: i.$id ? `/item/${i.$id}` : '/inventory',
   }));
 
@@ -263,7 +265,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
       return {
         count: open.length,
         detail: soon > 0 ? `${soon} closing within ${cfg.voteSoonDays} days.` : 'Open proposals you have not voted on.',
-        samples: open.slice(0, 3).map((p) => ({ label: p.title, href: '/coop/governance' })),
+        samples: open.slice(0, 3).map((p) => ({ label: cleanAlertLabel(p.title), href: `/coop/governance/${encodeURIComponent(p.id)}` })),
       };
     },
   },

@@ -4,7 +4,7 @@ import DashboardMetrics from '../components/dashboard/DashboardMetrics.vue';
 import { siteConfig } from '../site-config';
 ---
 
-<Layout title={`Command Center — ${siteConfig.title}`}>
+<Layout title={`Command Center — ${siteConfig.title}`} hideFooter={true}>
   <div class="rc-page-shell">
     <DashboardMetrics client:only="vue" />
   </div>

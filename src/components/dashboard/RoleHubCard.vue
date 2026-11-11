@@ -1,31 +1,57 @@
 <template>
-  <div class="card bg-base-100 border border-primary/25 shadow-sm rounded-2xl p-4 sm:p-5 space-y-3">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-      <div class="min-w-0">
-        <div class="text-[11px] font-extrabold uppercase tracking-wider text-primary">My Role in the Collective</div>
-        <div class="text-sm sm:text-base font-black break-words">
-          {{ memberName }}
-          <span v-if="showAllHatsNote" class="text-xs font-semibold opacity-60">(showing all hats)</span>
+  <div class="card bg-base-100 border border-base-300/90 shadow-sm rounded-2xl overflow-hidden">
+    <div
+      class="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer hover:bg-base-200/40 transition-colors select-none"
+      :class="{ 'border-b border-base-200': !isCollapsed }"
+      role="button"
+      :aria-expanded="!isCollapsed"
+      tabindex="0"
+      @click="toggle"
+      @keydown.enter.space="toggle"
+    >
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <Icon icon="solar:compass-bold-duotone" class="w-5 h-5" />
+        </div>
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-sm font-extrabold text-base-content break-words">
+              {{ META[activeHat].icon }} {{ META[activeHat].label }} Shortcuts
+            </span>
+            <span class="badge badge-xs badge-ghost font-semibold whitespace-nowrap shrink-0">
+              {{ memberName }}
+            </span>
+            <span v-if="showAllHatsNote" class="text-[11px] font-semibold opacity-55">(all hats)</span>
+          </div>
+          <p class="text-[11px] text-base-content/65 break-words">{{ META[activeHat].pitch }}</p>
         </div>
       </div>
-      <div class="flex flex-wrap gap-1.5">
+
+      <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
         <button
-          v-for="hat in availableHats"
-          :key="hat"
           type="button"
-          class="btn btn-xs h-7 min-h-0 rounded-lg gap-1 font-bold"
-          :class="activeHat === hat ? 'btn-primary' : 'btn-ghost border border-base-300'"
-          @click="activeHat = hat"
+          class="btn btn-xs btn-outline rounded-xl font-bold gap-1"
+          @click.stop="openTray('tools')"
         >
-          <span>{{ META[hat].icon }}</span>
-          <span>{{ META[hat].label }}</span>
+          <span>Open in Tray</span>
+          <Icon icon="solar:alt-arrow-up-bold" class="w-3 h-3 shrink-0" />
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs btn-circle shrink-0"
+          :aria-expanded="!isCollapsed"
+          aria-label="Toggle Role Shortcuts"
+        >
+          <Icon
+            icon="solar:alt-arrow-down-linear"
+            class="w-4 h-4 transition-transform duration-200"
+            :class="{ '-rotate-90': isCollapsed }"
+          />
         </button>
       </div>
     </div>
 
-    <p class="text-xs text-base-content/70">{{ META[activeHat].pitch }}</p>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+    <div v-show="!isCollapsed" class="p-3.5 sm:p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 bg-base-100">
       <a
         v-for="action in actions"
         :key="action.href + action.label"
@@ -61,57 +87,23 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { MEMBER_HAT_META } from '../../lib/memberHats';
 import { useDashboardSource, useActiveHat } from '../../composables/dashboard/useDashboardSource';
+import { useCollapsibleSection } from '../../composables/dashboard/useCollapsibleSection';
+import { useDashboardCommandTray, getRoleActionsForHat } from '../../composables/dashboard/useDashboardCommandTray';
 
 const META = MEMBER_HAT_META;
 const source = useDashboardSource();
 const activeHat = useActiveHat();
+const { openTray } = useDashboardCommandTray();
+const { isCollapsed, toggle } = useCollapsibleSection('role_shortcuts_v1', true, source.mode === 'live');
 const logging = ref(false);
 
 const member = source.member;
 const memberName = computed(() => member.value.name);
-const availableHats = computed(() => member.value.hats);
 const prefix = computed(() => member.value.inventoryPrefix || '');
 const showAllHatsNote = computed(() => source.mode === 'live' && !source.hasMemberProfile.value);
 
 const canLogHours = computed(() => activeHat.value === 'promoter' || activeHat.value === 'enabler');
-
-const actions = computed(() => {
-  switch (activeHat.value) {
-    case 'founder':
-      return [
-        { label: 'Collective Settlements', hint: 'Monthly payouts & breakeven', icon: 'solar:hand-money-bold-duotone', href: '/coop/settlements' },
-        { label: 'Governance & Votes', hint: 'Proposals and sliders', icon: 'solar:users-group-two-rounded-bold-duotone', href: '/coop/governance' },
-        { label: 'Org & Co-op Settings', hint: 'Personas, prefixes, contracts', icon: 'solar:settings-bold-duotone', href: '/settings' },
-        { label: 'Expenses & Receipts', hint: 'Commons vs personal', icon: 'solar:bill-list-bold-duotone', href: '/expenses' },
-        { label: 'Idea & Prompt Vault', hint: 'Phone notes & Gemini prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault' },
-      ];
-    case 'curator':
-      return [
-        { label: 'Quick Scout', hint: prefix.value ? `Sourcing for ${prefix.value}` : 'Source new inventory', icon: 'solar:scanner-bold', href: '/scout?quick=true' },
-        { label: 'My Inventory', hint: 'Items, costs and status', icon: 'solar:box-bold-duotone', href: '/inventory' },
-        { label: 'My Payout Statement', hint: 'Cost back + profit share', icon: 'solar:hand-money-bold-duotone', href: '/coop/settlements' },
-        { label: 'Sales Ledger', hint: 'Register tickets', icon: 'solar:dollar-minimalistic-bold-duotone', href: '/sales' },
-      ];
-    case 'promoter':
-      return [
-        { label: 'Social Dropcast Studio', hint: 'Booth drops & reels', icon: 'solar:broadcast-bold-duotone', href: '/social' },
-        { label: 'Labor Ledger', hint: 'My logged work', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },
-        { label: 'Collective Home', hint: 'Charter and pillars', icon: 'solar:shield-star-bold-duotone', href: '/coop' },
-      ];
-    case 'enabler':
-      return [
-        { label: 'Memory Den Sync', hint: 'Booth barcode sync', icon: 'solar:refresh-circle-bold-duotone', href: '/warehouse/sync/MD' },
-        { label: 'Thermal Label Studio', hint: 'Print booth tags', icon: 'solar:printer-bold-duotone', href: '/labels/studio' },
-        { label: 'Inventory', hint: 'Restock & staging queues', icon: 'solar:box-bold-duotone', href: '/inventory' },
-        { label: 'Labor Ledger', hint: 'My logged work', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },
-      ];
-    default:
-      return [
-        { label: 'My Statement & What-If', hint: prefix.value ? `${prefix.value} payouts` : 'Consignor payouts', icon: 'solar:document-text-bold-duotone', href: '/coop/settlements' },
-        { label: 'Sales Ledger', hint: 'Sold items', icon: 'solar:dollar-minimalistic-bold-duotone', href: '/sales' },
-      ];
-  }
-});
+const actions = computed(() => getRoleActionsForHat(activeHat.value, prefix.value));
 
 const logHours = async () => {
   if (!source.logHours) {

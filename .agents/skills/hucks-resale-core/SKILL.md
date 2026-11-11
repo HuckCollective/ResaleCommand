@@ -188,6 +188,14 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 10, 2026)
 
+## ✅ `/dashboard` PRIORITY-FIRST UX/IA REFACTOR + CONTEXTUAL `BottomActionDock` & 3-TAB DETENT TRAY STACK (Nov 10, 2026 — `alpha-1`)
+- **Priority-First Information Architecture (`src/lib/dashboardWidgets.ts`, `src/lib/dashboardAlerts.ts`, `src/components/dashboard/DashboardShell.vue`, `src/components/dashboard/RoleAlertsGrid.vue`, `src/components/dashboard/FinancialsOverview.vue`, `src/components/dashboard/RoleHubCard.vue`)**:
+  - Re-ordered `ROLE_LAYOUTS` so urgent triage (`alerts`) + live operational metrics (`financials` / `my_inventory` / `my_statement` / `radar`) render **first above the fold** across both `/dashboard` and `/demo`.
+  - Replaced the giant top link-directory wall with a slim 1-line **Unified Command Header + Active Hat Scope Bar** (`Hat:` switcher chips + `Shortcuts & Tools` tray button + conditional `📬 Join Request` alert badge when pending > 0), moving `JoinRequestsPanel.vue` and collapsible `RoleHubCard.vue` below the primary operational core.
+  - Upgraded `RoleAlertsGrid.vue` to the canonical **Ledger Queue Pattern**: spotlights the **Top 3 Most Urgent Action Cards** (`#1`–`#3`) above the fold with a compact `+N more in queue` overflow bar that opens the full **Triage Queue Bottom Sheet**, and cleaned escaped `\$` in proposal/item sample labels while deep-linking vote samples to `/coop/governance/[id]`.
+- **Contextual Bottom Action Dock + Mutually-Exclusive 3-Tab Tray Stack (`src/composables/dashboard/useDashboardCommandTray.ts`, `src/components/dashboard/DashboardCommandDock.vue`, `src/pages/dashboard.astro`, `src/pages/demo.astro`)**:
+  - Added `<BottomActionDock placement="viewport">` (`hideFooter={true}` on `dashboard.astro` & `demo.astro`) with a single upward-sliding `rounded-t-3xl` **Bottom-Sheet Detent Tray Stack** (`🔔 Triage Queue` with category/snooze filters & 1-click restore, `📡 Restock Radar` for voting members, `🧭 Role & Tools` with hat switcher, `+1.5h` labor logger, `📬 Join Queue` & `📗 Tax Playbook` handoffs, `💬 Msgs` handoff to `CoopMessagesTray`, and a role-adaptive solid elevated Hero CPA pill).
+
 ## ✅ CO-OP GOVERNANCE LOCKED MARKDOWN + PHOTO COMPOSER, DEDICATED `coop_proposals` + `coop_media`, ASTRO 6 STRATEGY DOCS, BOTTOM-SHEET MESSAGES & BUGS TRAY & AUCTION TRACKER STORE BUNDLES (Nov 10, 2026 — `alpha-1`)
 - **Live Appwrite Cloud Provisioning (`resale_db.coop_proposals` + `coop_media` Storage Bucket)**:
   - Provisioned dedicated `resale_db.coop_proposals` collection (20 attributes + `idx_tenantId` / `idx_status` indexes) and `coop_media` Storage bucket (`src/lib/coopGovernance.ts`, `src/lib/coopMedia.ts`, `scripts/audit_schema.mjs`, `docs/SCHEMA_AUDIT.md`).

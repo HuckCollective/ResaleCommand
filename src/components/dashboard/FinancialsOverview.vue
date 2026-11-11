@@ -61,7 +61,7 @@ import { useCollapsibleSection } from '../../composables/dashboard/useCollapsibl
 const source = useDashboardSource();
 const { totalItemsCount, globalProfit, globalProjectedRevenue, globalSunkCost, totalSpentPurchases, totalPurchasesCount } =
   useDashboardMetrics();
-const { isCollapsed, toggle } = useCollapsibleSection('overview', true, source.mode === 'live');
+const { isCollapsed, toggle } = useCollapsibleSection('overview_v2', false, source.mode === 'live');
 
 const stats = computed(() => [
   { label: 'Total Profit', value: `$${globalProfit.value.toFixed(2)}`, hint: 'From sold inventory', icon: 'solar:wallet-money-bold-duotone', tone: 'text-success' },

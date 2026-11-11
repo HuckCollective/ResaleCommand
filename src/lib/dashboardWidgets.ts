@@ -31,13 +31,13 @@ export const DASHBOARD_WIDGETS: DashboardWidgetDef[] = [
   { id: 'ai_usage', title: 'AI Cost Monitor', audience: 'admin', demo: false },
 ];
 
-/** Ordered widget ids per hat. Top of every layout: role hub, then alerts. */
+/** Ordered widget ids per hat. Most urgent triage & live numbers FIRST, secondary tools below. */
 export const ROLE_LAYOUTS: Record<MemberHat, string[]> = {
-  founder: ['role_hub', 'alerts', 'financials', 'radar', 'tax_tips', 'admin_tools', 'ai_usage'],
-  curator: ['role_hub', 'alerts', 'financials', 'my_inventory', 'radar', 'tax_tips'],
-  promoter: ['role_hub', 'alerts', 'financials', 'labor_week', 'tax_tips'],
-  enabler: ['role_hub', 'alerts', 'financials', 'radar', 'labor_week', 'tax_tips'],
-  consignor: ['role_hub', 'alerts', 'my_statement', 'my_inventory'],
+  founder: ['alerts', 'financials', 'radar', 'role_hub', 'tax_tips', 'admin_tools', 'ai_usage'],
+  curator: ['alerts', 'my_inventory', 'financials', 'radar', 'role_hub', 'tax_tips'],
+  promoter: ['alerts', 'labor_week', 'financials', 'role_hub', 'tax_tips'],
+  enabler: ['alerts', 'radar', 'labor_week', 'financials', 'role_hub', 'tax_tips'],
+  consignor: ['alerts', 'my_statement', 'my_inventory', 'role_hub'],
 };
 
 const HAT_ORDER: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler', 'consignor'];

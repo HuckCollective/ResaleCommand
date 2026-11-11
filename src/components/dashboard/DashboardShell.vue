@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-5 sm:space-y-7" @click.capture="onDemoClick">
+  <div class="space-y-4 sm:space-y-6" @click.capture="onDemoClick">
     <!-- PUBLIC DEMO BANNER -->
     <div v-if="mode === 'demo'" class="card bg-secondary/10 border border-secondary/40 rounded-2xl p-4 space-y-3">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -10,7 +10,7 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-2 shrink-0">
-          <a href="/coop" data-demo-allow class="btn btn-sm btn-primary rounded-xl font-bold">Connect With Us</a>
+          <a href="/coop" data-demo-allow class="btn btn-sm btn-primary text-primary-content rounded-xl font-bold">Connect With Us</a>
           <a href="/login" data-demo-allow class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
         </div>
       </div>
@@ -21,7 +21,7 @@
           :key="hat"
           type="button"
           class="btn btn-xs h-7 min-h-0 rounded-lg gap-1 font-bold"
-          :class="demoRole === hat ? 'btn-secondary' : 'btn-ghost border border-base-300'"
+          :class="demoRole === hat ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
           @click="demoRole = hat"
         >
           <span>{{ META[hat].icon }}</span>
@@ -30,39 +30,88 @@
       </div>
     </div>
 
-    <!-- HEADER -->
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <div class="min-w-0">
-        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-base-content leading-tight">
-          {{ mode === 'demo' ? 'Example Works Hub' : 'The Works' }}
-        </h1>
-        <p class="text-[11px] sm:text-xs text-base-content/65">Alerts, live restock radar, financials, and what needs you today</p>
-      </div>
-      <div class="flex items-center gap-1.5 shrink-0">
-        <a href="/scout" data-demo-allow class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-bold gap-1 shadow-xs">
-          <span>🚀 Scout</span>
-        </a>
-        <button
-          @click="toggleAllSections"
-          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300/80 font-bold gap-1 hover:bg-base-200 transition-all shrink-0"
-          :title="allCollapsed ? 'Expand All Dashboard Areas' : 'Collapse All Dashboard Areas'"
-        >
-          <Icon :icon="allCollapsed ? 'solar:maximize-square-minimalistic-bold' : 'solar:minimize-square-minimalistic-bold'" class="w-3.5 h-3.5 text-primary" />
-          <span class="text-xs hidden xs:inline">{{ allCollapsed ? 'Expand All' : 'Collapse All' }}</span>
-        </button>
-      </div>
-    </div>
+    <!-- UNIFIED COMMAND HEADER + SLIM ROLE SCOPE BAR -->
+    <header class="rounded-2xl bg-base-100 border border-base-300/85 shadow-2xs p-3.5 sm:p-4 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-base-content leading-tight">
+              {{ mode === 'demo' ? 'Example Works Hub' : 'The Works' }}
+            </h1>
+            <span class="badge badge-xs badge-outline font-semibold whitespace-nowrap shrink-0">
+              {{ memberName }}
+            </span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-base-content/65">
+            Priority triage first, live financials &amp; booth radar next, deep queues in your bottom dock
+          </p>
+        </div>
 
-    <!-- LIVE JOIN REQUESTS & INVITES TRAY -->
-    <JoinRequestsPanel v-if="mode === 'live'" />
+        <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+          <button
+            v-if="pendingJoinCount > 0 && mode === 'live'"
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
+            @click="openJoinQueueTray"
+          >
+            <span>📬 {{ pendingJoinCount }} Join Request{{ pendingJoinCount === 1 ? '' : 's' }}</span>
+          </button>
 
-    <!-- ROLE-ORDERED WIDGETS -->
+          <button
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-ghost border border-base-300/80 rounded-xl font-bold gap-1 hover:bg-base-200 transition-all shrink-0"
+            :title="allCollapsed ? 'Expand All Dashboard Areas' : 'Collapse All Dashboard Areas'"
+            @click="toggleAllSections"
+          >
+            <Icon :icon="allCollapsed ? 'solar:maximize-square-minimalistic-bold' : 'solar:minimize-square-minimalistic-bold'" class="w-3.5 h-3.5 text-primary" />
+            <span class="text-xs hidden sm:inline">{{ allCollapsed ? 'Expand All' : 'Collapse All' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 1-Line Active Role Hat Scope Switcher (Replaces Giant Top Link Directory) -->
+      <div class="pt-2.5 border-t border-base-200 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none py-0.5" role="group" aria-label="Active collective hat">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-primary shrink-0 mr-0.5">Hat:</span>
+          <button
+            v-for="hat in availableHats"
+            :key="hat"
+            type="button"
+            class="btn btn-xs h-7 min-h-0 rounded-xl gap-1 font-bold shrink-0"
+            :class="activeHat === hat ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost border border-base-300'"
+            @click="activeHat = hat"
+          >
+            <span>{{ META[hat].icon }}</span>
+            <span>{{ META[hat].label }}</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            class="btn btn-xs rounded-xl btn-ghost border border-base-300 font-bold gap-1"
+            @click="tray.openTray('tools')"
+          >
+            <Icon icon="solar:compass-bold-duotone" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Shortcuts &amp; Tools</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ROLE-ORDERED PRIORITY WIDGETS (URGENT ALERTS + LIVE METRICS FIRST) -->
     <div v-if="loading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
     <template v-else>
       <component :is="WIDGET_COMPONENTS[id]" v-for="id in widgetIds" :key="`${activeHat}-${id}`" />
+
+      <!-- SECONDARY CO-OP JOIN & INVITE QUEUE (Sits below core ops; accessible anytime via Tray Stack) -->
+      <JoinRequestsPanel v-if="mode === 'live'" />
     </template>
+
+    <!-- CONTEXTUAL BOTTOM ACTION DOCK + UNIFIED DETENT TRAY STACK -->
+    <DashboardCommandDock />
   </div>
 </template>
 
@@ -79,6 +128,7 @@ import {
 } from '../../composables/dashboard/useDashboardSource';
 import { useLiveDashboardSource } from '../../composables/dashboard/useLiveDashboardSource';
 import { useDemoDashboardSource } from '../../composables/dashboard/useDemoDashboardSource';
+import { createDashboardCommandTray } from '../../composables/dashboard/useDashboardCommandTray';
 import { useLoader } from '../../composables/useLoader';
 import RoleHubCard from './RoleHubCard.vue';
 import RoleAlertsGrid from './RoleAlertsGrid.vue';
@@ -90,6 +140,7 @@ import MyStatementCard from './MyStatementCard.vue';
 import LaborWeekCard from './LaborWeekCard.vue';
 import AdminToolsCard from './AdminToolsCard.vue';
 import AiUsageCard from './AiUsageCard.vue';
+import DashboardCommandDock from './DashboardCommandDock.vue';
 import JoinRequestsPanel from '../coop/JoinRequestsPanel.vue';
 
 const props = defineProps<{ mode: 'live' | 'demo' }>();
@@ -118,6 +169,12 @@ provideDashboardSource(source);
 const activeHat = ref<MemberHat>(source.member.value.hats[0]);
 provideActiveHat(activeHat);
 
+const tray = createDashboardCommandTray(source, activeHat);
+
+const memberName = computed(() => source.member.value.name);
+const availableHats = computed(() => source.member.value.hats);
+const pendingJoinCount = computed(() => source.snapshot.value.joinRequests || 0);
+
 // Reset the active hat whenever the member's hats change (role switch in demo, roster load in live)
 watch(
   () => source.member.value.hats.join(','),
@@ -138,6 +195,10 @@ const allCollapsed = ref(false);
 const toggleAllSections = () => {
   allCollapsed.value = !allCollapsed.value;
   window.dispatchEvent(new CustomEvent('rc:toggle-all-dashboard', { detail: { collapse: allCollapsed.value } }));
+};
+
+const openJoinQueueTray = () => {
+  window.dispatchEvent(new CustomEvent('rc:open-join-queue-tray'));
 };
 
 // Demo is read-only: links inside widgets go nowhere (they would just bounce to /login).
@@ -163,4 +224,3 @@ onMounted(() => {
   source.init();
 });
 </script>
-

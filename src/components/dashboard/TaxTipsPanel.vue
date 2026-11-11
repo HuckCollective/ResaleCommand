@@ -120,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useDashboardSource } from '../../composables/dashboard/useDashboardSource';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
@@ -130,6 +130,18 @@ const source = useDashboardSource();
 const { taxTips } = useDashboardMetrics();
 const { isCollapsed, toggle } = useCollapsibleSection('insights', true, source.mode === 'live');
 const showModal = ref(false);
+
+const openPlaybookFromTray = () => {
+  showModal.value = true;
+};
+
+onMounted(() => {
+  window.addEventListener('rc:open-tax-playbook', openPlaybookFromTray);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('rc:open-tax-playbook', openPlaybookFromTray);
+});
 
 interface PlaybookRule {
   title: string;
