@@ -2,6 +2,7 @@ import { ref, reactive } from 'vue';
 
 // Global shared state for the full-page HuckleberryLoader (Bucket 3)
 const globalLoading = ref(false);
+const externalLoaderActive = ref(false);
 const loaderMessage = ref("Picking, Counting, Shipping or Finding...");
 const loaderStep = ref("");
 const loaderProgress = ref<number | null>(null);
@@ -70,6 +71,10 @@ export function useLoader() {
             debounceMs?: number
         }
     ) => {
+        // Guard: Never spawn a competing global loader when an external progress modal (e.g. BulkImport) is active
+        if (externalLoaderActive.value) {
+            return;
+        }
         // Clear any previous anti-strobe or safety timers
         if (antiStrobeTimer) {
             clearTimeout(antiStrobeTimer);
@@ -142,9 +147,17 @@ export function useLoader() {
         if (step !== undefined) loaderStep.value = step;
         if (progress !== undefined) loaderProgress.value = progress;
     };
+
+    const setExternalLoaderActive = (active: boolean) => {
+        externalLoaderActive.value = active;
+        if (active && globalLoading.value) {
+            hideLoader();
+        }
+    };
     
     return { 
         globalLoading, 
+        externalLoaderActive,
         loaderMessage, 
         loaderStep, 
         loaderProgress, 
@@ -158,6 +171,7 @@ export function useLoader() {
         hideLoader, 
         triggerCancel, 
         updateLoader,
+        setExternalLoaderActive,
         setScopedLoading,
         isScopedLoading,
         scopedLoadingMap

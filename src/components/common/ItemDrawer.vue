@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="relative z-400">
+    <div class="relative z-450">
       <!-- Backdrop (Solid bg-black/60 without blur to prevent severe GPU scroll lag across 50+ cards) -->
       <div
         class="fixed inset-0 bg-black/60 transition-opacity"

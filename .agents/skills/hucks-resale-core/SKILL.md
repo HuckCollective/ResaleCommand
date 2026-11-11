@@ -186,7 +186,15 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ## 5. Live Active Session Summary (Auto-Synced from `ACTIVE_SESSION.md`)
 
-# Active Session Summary (Updated Nov 10, 2026)
+# Active Session Summary (Updated Nov 11, 2026)
+
+## ✅ `/purchases` WARM PARCHMENT LOADER THEME, SINGLE-LOADER LOCK & IN-PLACE PO ITEMS TRAY (`PurchaseItemsTray.vue` + `ItemDrawer.vue`) (Nov 11, 2026 — `alpha-1`)
+- **Warm Parchment `BulkImport.vue` Loader & Single-Loader Lock (`src/composables/useLoader.ts`, `src/components/inventory/BulkImport.vue`, `src/components/purchases/PurchasesList.vue`)**:
+  - Restyled `BulkImport.vue`'s full-screen progress overlay from solid sage-green (`bg-secondary/90`) to the **Huckleberry Warm Parchment theme** (`bg-base-100/92 backdrop-blur-md text-base-content`, `bg-base-100 border-2 border-base-300 shadow-2xl` progress card, `text-primary`/`text-secondary` 3D box & falling item icons, `bg-primary` progress bar, and dark `bg-neutral` terminal log box).
+  - Added `externalLoaderActive` / `setExternalLoaderActive(active)` in `src/composables/useLoader.ts` so `HuckleberryLoader` (`showLoader`) never spawns over `BulkImport.vue`, and updated `PurchasesList.vue` (`loadPurchases(forceInventory, silent)`) so background refreshes (`purchase-created`, `purchase-updated`, `visibilitychange`, `pageshow`) run silently in-place without flashing a second full-screen loader.
+- **PO Items List Tray & In-Place Item Operations (`src/components/purchases/PurchaseItemsTray.vue`, `src/components/purchases/PurchasesList.vue`, `src/components/common/SlideOverDrawer.vue`, `src/components/common/ItemDrawer.vue`)**:
+  - Clicking **`[📦 Items (N)]`** on any PO in `/purchases` now opens `PurchaseItemsTray.vue` (`SlideOverDrawer` `size="xl"`) right on the page instead of navigating away to `/inventory`.
+  - Provides full PO item operations inside the tray: **`[✅ Receive All (N)]`**, collapsible **`[➕ Link / Add Item]`**, per-row **`[✔ Receive]`** (into default backstock `HG`/`HH` with automatic PO status sync to `Partial`/`Received`), **`[✏ Update]`** (opens `ItemDrawer.vue` stacked at `z-450` above the `z-400` tray), and **`[🗑 Unlink]`**.
 
 ## ✅ INTERACTIVE QUICK SCOUT REPORT ON SAVED ITEMS (`PRICING ESTIMATES`, `SHIPPING TOGGLE` & `BUNDLE COMPONENTS` WITH LIVE UNIT `SPLIT COST`) + STRICT `ACQUIRED+` DEEP SCAN GUARD (Nov 10, 2026 — `alpha-1`)
 - **Strict `Tracked` vs. `Acquired+` Lifecycle Guard (`src/lib/inventory.ts`, `src/components/common/ItemDrawer.vue`, `src/components/common/drawer/ItemDetailsTab.vue`)**:

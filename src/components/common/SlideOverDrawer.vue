@@ -5,12 +5,12 @@
         <!-- Backdrop (solid, no blur — avoids GPU scroll lag) -->
         <div class="absolute inset-0 bg-black/60" @click="close"></div>
 
-        <!-- Panel: full-width on mobile, md (480px) or lg (640px–780px) on desktop -->
+        <!-- Panel: full-width on mobile, md (480px), lg (640px–780px), or xl (880px–960px) on desktop -->
         <aside
           ref="panelRef"
           tabindex="-1"
           class="rc-drawer-panel absolute inset-y-0 right-0 w-full max-w-full bg-base-100 shadow-2xl flex flex-col outline-none"
-          :class="size === 'lg' ? 'sm:w-160 lg:w-195' : 'sm:w-120'"
+          :class="size === 'xl' ? 'sm:w-160 lg:w-220 xl:w-240' : size === 'lg' ? 'sm:w-160 lg:w-195' : 'sm:w-120'"
         >
           <header class="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 pb-3 border-b border-base-200 flex-none">
             <div class="min-w-0">
@@ -52,7 +52,7 @@ const props = withDefaults(
     modelValue: boolean;
     title: string;
     subtitle?: string;
-    size?: 'md' | 'lg';
+    size?: 'md' | 'lg' | 'xl';
   }>(),
   {
     size: 'md',

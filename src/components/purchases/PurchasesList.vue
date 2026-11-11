@@ -258,17 +258,18 @@
 
         <!-- Touch Actions: Items (with count), Delete -->
         <div class="flex items-center gap-2 pt-1 border-t border-base-200/60">
-          <a 
-            :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
+          <button 
+            type="button"
+            @click="openItemsTray(purchase)" 
             class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1.5 min-h-[38px]"
-            title="View Items in Inventory"
+            title="Open PO Items Tray (Receive, Update, Unlink)"
           >
             <Icon icon="solar:box-minimalistic-linear" class="w-4 h-4" />
             <span>Items</span>
             <span class="badge badge-sm badge-secondary font-mono font-bold" v-if="getItemCount(purchase) > 0">
               {{ getItemCount(purchase) }}
             </span>
-          </a>
+          </button>
 
           <button 
             @click="deletePurchaseOrder(purchase)" 
@@ -397,17 +398,18 @@
               <!-- Actions -->
               <td class="py-3 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
-                  <a 
-                    :href="`/inventory?purchaseId=${encodeURIComponent(purchase.$id)}&orderId=${encodeURIComponent(purchase.orderId || '')}`" 
+                  <button 
+                    type="button"
+                    @click="openItemsTray(purchase)" 
                     class="btn btn-xs btn-outline btn-secondary font-bold gap-1 px-2.5 h-8 rounded-lg"
-                    title="View all items for this order in Inventory"
+                    title="Open PO Items Tray (Receive, Update, Unlink)"
                   >
                     <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                     <span>Items</span>
                     <span class="badge badge-xs badge-secondary font-mono font-bold" v-if="getItemCount(purchase) > 0">
                       {{ getItemCount(purchase) }}
                     </span>
-                  </a>
+                  </button>
 
                   <button 
                     @click="deletePurchaseOrder(purchase)" 
@@ -471,7 +473,14 @@
     </PaginationDock>
 
     <!-- Regular Bulk Import Modal (Identical to Inventory) -->
-    <BulkImport v-if="showImportModal" @close="showImportModal = false" @complete="showImportModal = false; loadPurchases();" />
+    <BulkImport v-if="showImportModal" @close="showImportModal = false" @complete="showImportModal = false; loadPurchases(true, true);" />
+
+    <!-- PO Items List Tray + In-Place Item Ops & Edit Drawer -->
+    <PurchaseItemsTray
+      v-model="showItemsTray"
+      :purchase="activeTrayPurchase"
+      @updated="loadPurchases(true, true)"
+    />
   </div>
 </template>
 
@@ -487,6 +496,7 @@ import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
 import BulkImport from '../inventory/BulkImport.vue';
 import PaginationDock from '../common/PaginationDock.vue';
+import PurchaseItemsTray from './PurchaseItemsTray.vue';
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';
@@ -571,8 +581,15 @@ const statusCounts = computed(() => {
 });
 
 const showImportModal = ref(false);
+const showItemsTray = ref(false);
+const activeTrayPurchase = ref(null);
 const undoBatch = ref(null);
 const processingUndo = ref(false);
+
+const openItemsTray = (purchase) => {
+    activeTrayPurchase.value = purchase;
+    showItemsTray.value = true;
+};
 
 const searchQuery = ref('');
 const sortBy = ref('created'); // 'created', 'po', 'vendor', 'date', 'total'
@@ -708,18 +725,27 @@ const filteredPurchases = computed(() => {
     return list;
 });
 
-const loadPurchases = async (forceInventory = false) => {
-    showLoader("Loading Purchases...");
+const loadPurchases = async (forceInventory = false, silent = false) => {
+    const shouldShowBlockingLoader = !silent && !showImportModal.value && (purchases.value || []).length === 0;
+    if (shouldShowBlockingLoader) {
+        showLoader("Loading Purchases...");
+    }
     try {
         const promises = [fetchPurchases()];
         if (forceInventory || inventoryItems.value.length === 0) {
             promises.push(fetchInventory());
         }
         await Promise.all(promises);
+        if (activeTrayPurchase.value) {
+            const refreshed = (purchases.value || []).find(p => p.$id === activeTrayPurchase.value.$id);
+            if (refreshed) activeTrayPurchase.value = refreshed;
+        }
     } catch (e) {
         console.error('Failed to load purchases:', e);
     } finally {
-        hideLoader();
+        if (shouldShowBlockingLoader) {
+            hideLoader();
+        }
     }
 };
 
@@ -964,23 +990,24 @@ onMounted(async () => {
 
     // 1. Detect Back-Forward Cache (bfcache) navigation when user clicks browser back from PO details
     handlePageShow = (e) => {
-        if (e && e.persisted) {
-            loadPurchases(true);
+        if (e && e.persisted && !showImportModal.value) {
+            loadPurchases(true, true);
         }
     };
     window.addEventListener('pageshow', handlePageShow);
 
     // 2. Detect tab switching back to Purchases view
     handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-            loadPurchases(true);
+        if (document.visibilityState === 'visible' && !showImportModal.value) {
+            loadPurchases(true, true);
         }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // 3. Detect instant PO mutations dispatched by PurchaseEditor or other components
     handlePurchaseEvent = () => {
-        loadPurchases(true);
+        if (showImportModal.value) return;
+        loadPurchases(true, true);
     };
     window.addEventListener('purchase-updated', handlePurchaseEvent);
     window.addEventListener('purchase-created', handlePurchaseEvent);

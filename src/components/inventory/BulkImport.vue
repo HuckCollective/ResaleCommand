@@ -61,49 +61,53 @@
         </div>
     </div>
 
-    <!-- FULLSCREEN HUCKLEBERRY LOADER -->
-    <div v-else class="fixed inset-0 z-100 flex flex-col items-center justify-center bg-secondary/90 backdrop-blur-sm p-4">
+    <!-- FULLSCREEN HUCKLEBERRY LOADER (WARM PARCHMENT THEME) -->
+    <div v-else class="fixed inset-0 z-9999 flex flex-col items-center justify-center bg-base-100/92 backdrop-blur-md p-4 text-base-content">
         <div class="max-w-2xl w-full flex flex-col items-center">
             
-            <!-- Huckleberry Animation -->
-            <div class="relative w-48 h-48 mb-8 z-10">
-                <Icon icon="solar:box-minimalistic-bold-duotone" class="w-48 h-48 text-secondary-content/80 drop-shadow-xl animate-[bounce_2s_ease-in-out_infinite]" />
-                <Icon icon="solar:document-add-bold-duotone" class="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-12 text-secondary-content/90 drop-shadow-md animate-[fall_1.5s_ease-in_infinite]" />
-                <Icon icon="solar:database-bold-duotone" class="absolute top-12 left-[30%] w-10 h-10 text-secondary-content/70 drop-shadow-md animate-[fall_2s_ease-in_infinite_0.5s]" />
-                <Icon icon="solar:file-download-bold-duotone" class="absolute top-8 left-[70%] w-8 h-8 text-secondary-content/80 drop-shadow-md animate-[fall_1.8s_ease-in_infinite_0.2s]" />
-                <div class="absolute inset-x-4 bottom-4 h-16 bg-linear-to-t from-secondary/50 to-transparent rounded-b-3xl -z-10"></div>
+            <!-- Huckleberry 3D Box & Falling Items Animation -->
+            <div class="relative w-44 h-44 mb-4 z-10 flex items-center justify-center">
+                <Icon icon="solar:box-minimalistic-bold-duotone" class="w-40 h-40 text-primary drop-shadow-xl animate-[bounce_2s_ease-in-out_infinite]" />
+                <Icon icon="solar:document-add-bold-duotone" class="absolute top-2 left-1/2 -translate-x-1/2 w-11 h-11 text-secondary drop-shadow-md animate-[fall_1.5s_ease-in_infinite]" />
+                <Icon icon="solar:database-bold-duotone" class="absolute top-10 left-[28%] w-9 h-9 text-accent drop-shadow-md animate-[fall_2s_ease-in_infinite_0.5s]" />
+                <Icon icon="solar:file-download-bold-duotone" class="absolute top-6 left-[68%] w-8 h-8 text-primary/80 drop-shadow-md animate-[fall_1.8s_ease-in_infinite_0.2s]" />
+                <div class="absolute inset-x-6 bottom-2 h-10 bg-primary/15 blur-xl rounded-full -z-10"></div>
             </div>
 
-            <h2 class="text-3xl font-black text-secondary-content mb-2 tracking-tight">Processing Items...</h2>
-            <p class="text-secondary-content/70 mb-8 font-medium">Please wait while we import your data.</p>
+            <h2 class="text-2xl sm:text-3xl font-black text-base-content mb-1 tracking-tight">Processing Items...</h2>
+            <p class="text-xs sm:text-sm text-base-content/70 mb-6 font-medium">Please wait while we import your data into Huckleberry Inventory &amp; Purchases.</p>
             
-            <div class="w-full bg-base-100/20 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/10 flex flex-col gap-4">
+            <div class="w-full bg-base-100 rounded-2xl p-5 sm:p-6 shadow-2xl border-2 border-base-300 flex flex-col gap-4">
                 
-                <div class="flex justify-between items-end">
-                    <div class="font-bold text-secondary-content tracking-wide">Progress</div>
-                    <div class="text-xs font-mono bg-secondary-content/10 px-2 py-1 rounded text-secondary-content">
+                <div class="flex justify-between items-center">
+                    <div class="font-black text-xs sm:text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-2">
+                        <span v-if="processing" class="loading loading-spinner loading-xs text-primary"></span>
+                        <Icon v-else icon="solar:check-circle-bold" class="w-4 h-4 text-success" />
+                        <span>Progress</span>
+                    </div>
+                    <div class="text-xs font-mono font-black bg-primary/15 text-primary border border-primary/25 px-2.5 py-1 rounded-lg">
                         {{ Math.round(progress) }}%
                     </div>
                 </div>
 
-                <div class="w-full bg-secondary-content/20 rounded-full h-4 overflow-hidden relative">
-                    <div class="absolute inset-y-0 left-0 bg-secondary-content rounded-full transition-all duration-300 ease-out flex items-center justify-end px-2" :style="{ width: progress + '%' }">
-                        <div class="w-2 h-2 bg-secondary rounded-full animate-pulse shadow-sm"></div>
+                <div class="w-full bg-base-300 rounded-full h-3.5 overflow-hidden relative border border-base-content/10 shadow-inner">
+                    <div class="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-300 ease-out flex items-center justify-end px-2" :style="{ width: Math.min(100, Math.max(2, progress)) + '%' }">
+                        <div class="w-1.5 h-1.5 bg-primary-content rounded-full animate-pulse shadow-sm"></div>
                     </div>
                 </div>
 
-                <div class="bg-black/40 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto space-y-1 border border-white/5 shadow-inner mt-2">
-                    <div v-for="(log, idx) in logs" :key="idx" :class="{'text-error': log.startsWith('❌'), 'text-success': log.startsWith('✅'), 'text-info': log.startsWith('ℹ️'), 'text-warning': log.startsWith('⚠️'), 'text-white/80': !log.match(/^[❌✅ℹ️⚠️]/)}">
+                <div class="bg-neutral text-neutral-content rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto space-y-1.5 border border-base-300 shadow-inner mt-1">
+                    <div v-for="(log, idx) in logs" :key="idx" :class="{'text-error font-bold': log.startsWith('❌'), 'text-success font-semibold': log.startsWith('✅'), 'text-info': log.startsWith('ℹ️'), 'text-warning': log.startsWith('⚠️'), 'text-neutral-content/85': !log.match(/^[❌✅ℹ️⚠️]/)}">
                         {{ log }}
                     </div>
                 </div>
             </div>
             
-            <div class="mt-8 flex gap-4">
-                <button v-if="processing" class="btn btn-ghost text-secondary-content/70 hover:bg-secondary-content/20 hover:text-secondary-content" @click="cancelImport">
+            <div class="mt-6 flex gap-3">
+                <button v-if="processing" class="btn btn-sm btn-outline btn-error font-bold rounded-xl px-5" @click="cancelImport">
                     Cancel Import
                 </button>
-                <button v-if="!processing" class="btn bg-secondary-content text-secondary hover:bg-white px-8" @click="$emit('complete')">
+                <button v-if="!processing" class="btn btn-sm btn-primary text-primary-content font-black rounded-xl px-8 shadow-md" @click="setExternalLoaderActive(false); $emit('complete')">
                     Done
                 </button>
             </div>
@@ -113,10 +117,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useInventory } from '../../composables/useInventory';
 import { saveItemToInventory, sanitizeItemPayload, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';
+import { useLoader } from '../../composables/useLoader';
 import { databases, Query } from '../../lib/appwrite';
 import { isAlphaMode } from '../../stores/env';
 import { addToast } from '../../stores/toast';
@@ -133,9 +138,18 @@ const props = defineProps({
 const emit = defineEmits(['close', 'complete']);
 const { user, currentTeam } = useAuth();
 const { inventoryItems } = useInventory(); 
+const { setExternalLoaderActive } = useLoader();
 
 const processing = ref(false);
 const logs = ref([]);
+
+watch([processing, () => logs.value.length], ([isProc, logLen]) => {
+    setExternalLoaderActive(Boolean(isProc || logLen > 0));
+}, { immediate: true });
+
+onUnmounted(() => {
+    setExternalLoaderActive(false);
+});
 const file = ref(null);
 const progress = ref(0);
 const fileInputRef = ref(null);
