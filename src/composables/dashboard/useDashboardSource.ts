@@ -3,6 +3,12 @@ import type { MemberHat } from '../../lib/memberHats';
 import type { DashboardMember, DashboardSnapshot } from '../../lib/dashboardTypes';
 
 /**
+ *ActiveLens allows a multi-hat member to focus strictly on ONE hat's widgets/alerts at a time,
+ * or opt into `'all'` (deduplicated union across all of their real hats).
+ */
+export type ActiveLens = MemberHat | 'all';
+
+/**
  * One interface, two implementations:
  *  - live  (useLiveDashboardSource)  → real Appwrite data, signed-in members only
  *  - demo  (useDemoDashboardSource)  → fictional sample data, public /demo, NEVER touches the database
@@ -35,15 +41,32 @@ export function useDashboardSource(): DashboardSource {
   return source;
 }
 
-/** The hat the member is currently "wearing" on the dashboard (drives alerts + layout order). */
-const ACTIVE_HAT_KEY: InjectionKey<Ref<MemberHat>> = Symbol('dashboardActiveHat');
+/**
+ * Safe single MemberHat (`effectiveLeadHat`):
+ * When `activeLens === 'all'`, resolves cleanly to `member.hats[0]` so child lookups into
+ * `MEMBER_HAT_META[activeHat]` or `getRolePrimaryCpa(activeHat)` NEVER crash on `'all'`.
+ */
+const ACTIVE_HAT_KEY: InjectionKey<Ref<MemberHat> | ComputedRef<MemberHat>> = Symbol('dashboardActiveHat');
 
-export function provideActiveHat(hat: Ref<MemberHat>): void {
+export function provideActiveHat(hat: Ref<MemberHat> | ComputedRef<MemberHat>): void {
   provide(ACTIVE_HAT_KEY, hat);
 }
 
-export function useActiveHat(): Ref<MemberHat> {
+export function useActiveHat(): Ref<MemberHat> | ComputedRef<MemberHat> {
   const hat = inject(ACTIVE_HAT_KEY);
   if (!hat) throw new Error('useActiveHat() called outside a <DashboardShell>.');
   return hat;
+}
+
+/** Active UI lens (`MemberHat | 'all'`). */
+const ACTIVE_LENS_KEY: InjectionKey<Ref<ActiveLens>> = Symbol('dashboardActiveLens');
+
+export function provideActiveLens(lens: Ref<ActiveLens>): void {
+  provide(ACTIVE_LENS_KEY, lens);
+}
+
+export function useActiveLens(): Ref<ActiveLens> {
+  const lens = inject(ACTIVE_LENS_KEY);
+  if (!lens) throw new Error('useActiveLens() called outside a <DashboardShell>.');
+  return lens;
 }

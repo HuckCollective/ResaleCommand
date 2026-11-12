@@ -1,11 +1,38 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import CoopCharterView from '../components/coop/CoopCharterView.vue';
+import { loadCharterCmsBundle, parseCharterSectionParam } from '../lib/charterCms';
+
+// Server-side Zero-Flash Routing:
+// 1. Preserve legacy Charter deep-links (`/?section=...` or `/?tab=...`) by forwarding cleanly to `/coop`.
+const search = Astro.url.search || '';
+if (Astro.url.searchParams.has('section') || Astro.url.searchParams.has('tab')) {
+  return Astro.redirect(`/coop${search}`, 302);
+}
+
+// 2. Signed-in members with an active session indicator land directly on `/dashboard` at the SSR edge (0ms flash).
+const hasAuthCookie = Astro.cookies.get('auth_session_indicator')?.value === 'true';
+if (hasAuthCookie) {
+  return Astro.redirect('/dashboard', 302);
+}
+
+const charterBundle = await loadCharterCmsBundle();
+const initialSection = parseCharterSectionParam(null);
 ---
 
 <Layout
   title="The Huckleberry Collective | Worker Cooperative & Multi-Channel Resale"
   description="A worker self-directed cooperative: curators, promoters, enablers and consignors sharing booth rent, tools and surplus with full transparency."
 >
-  <CoopCharterView client:only="vue" />
+  <CoopCharterView
+    client:load
+    sections={charterBundle.sections}
+    roleCards={charterBundle.roleCards}
+    initialSection={initialSection}
+    initialAuthenticated={false}
+    primaryBoothRentLabel={charterBundle.primaryBoothRentLabel}
+    curatorPct={charterBundle.curatorPct}
+    commonsPct={charterBundle.commonsPct}
+  />
 </Layout>
+

@@ -6,7 +6,7 @@
         <div class="min-w-0">
           <div class="text-sm font-black">🧪 Example Works Hub — nothing here is real</div>
           <p class="text-xs text-base-content/75 leading-relaxed">
-            This is what members see after signing in. Everything below is invented sample data. Pick a role to see how the dashboard changes for each kind of member.
+            This is what members see after signing in. Everything below is invented sample data. Pick a role to see how the dashboard adapts for each kind of member.
           </p>
         </div>
         <div class="flex flex-wrap gap-2 shrink-0">
@@ -30,7 +30,7 @@
       </div>
     </div>
 
-    <!-- UNIFIED COMMAND HEADER + SLIM ROLE SCOPE BAR -->
+    <!-- UNIFIED COMMAND HEADER + ROLE LENS SWITCHER (WITH CROSS-HAT ALERT BADGES) -->
     <header class="rounded-2xl bg-base-100 border border-base-300/85 shadow-2xs p-3.5 sm:p-4 space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="min-w-0">
@@ -43,18 +43,29 @@
             </span>
           </div>
           <p class="text-[11px] sm:text-xs text-base-content/65">
-            Priority triage first, live financials &amp; booth radar next, deep queues in your bottom dock
+            {{ activeLensSubtitle }}
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5 shrink-0">
           <button
-            v-if="pendingJoinCount > 0 && mode === 'live'"
+            v-if="pendingJoinCount > 0 && mode === 'live' && canSeeCollective"
             type="button"
             class="btn btn-xs sm:btn-sm btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
             @click="openJoinQueueTray"
           >
             <span>📬 {{ pendingJoinCount }} Join Request{{ pendingJoinCount === 1 ? '' : 's' }}</span>
+          </button>
+
+          <button
+            v-if="canSeeCollective"
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-ghost border border-success/40 text-success rounded-xl font-bold gap-1 hover:bg-success/10 transition-all shrink-0"
+            title="Open IRS Schedule C Tax Playbook"
+            @click="openTaxPlaybook"
+          >
+            <Icon icon="solar:book-bookmark-bold-duotone" class="w-3.5 h-3.5 shrink-0" />
+            <span class="text-xs hidden sm:inline">Tax Playbook</span>
           </button>
 
           <button
@@ -69,20 +80,43 @@
         </div>
       </div>
 
-      <!-- 1-Line Active Role Hat Scope Switcher (Replaces Giant Top Link Directory) -->
+      <!-- 1-Line Role Hat Lens Bar with Cross-Hat Alert Badges + Opt-In ✨ All Hats -->
       <div class="pt-2.5 border-t border-base-200 flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none py-0.5" role="group" aria-label="Active collective hat">
-          <span class="text-[10px] font-extrabold uppercase tracking-wider text-primary shrink-0 mr-0.5">Hat:</span>
+        <div class="flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none py-0.5" role="group" aria-label="Active collective hat lens">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-primary shrink-0 mr-0.5">Lens:</span>
           <button
             v-for="hat in availableHats"
             :key="hat"
             type="button"
             class="btn btn-xs h-7 min-h-0 rounded-xl gap-1 font-bold shrink-0"
-            :class="activeHat === hat ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost border border-base-300'"
-            @click="activeHat = hat"
+            :class="activeLens === hat ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost border border-base-300'"
+            @click="selectLens(hat)"
           >
             <span>{{ META[hat].icon }}</span>
             <span>{{ META[hat].label }}</span>
+            <span
+              v-if="tray.hatAlertCounts.value[hat] > 0 && activeLens !== hat"
+              class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap"
+            >
+              {{ tray.hatAlertCounts.value[hat] }}
+            </span>
+          </button>
+
+          <button
+            v-if="availableHats.length > 1"
+            type="button"
+            class="btn btn-xs h-7 min-h-0 rounded-xl gap-1 font-bold shrink-0"
+            :class="activeLens === 'all' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost border border-base-300'"
+            @click="selectLens('all')"
+          >
+            <span>✨</span>
+            <span>All Hats</span>
+            <span
+              v-if="tray.unionActiveCount.value > 0 && activeLens !== 'all'"
+              class="badge badge-2xs badge-ghost font-mono font-bold whitespace-nowrap"
+            >
+              {{ tray.unionActiveCount.value }}
+            </span>
           </button>
         </div>
 
@@ -99,16 +133,22 @@
       </div>
     </header>
 
-    <!-- ROLE-ORDERED PRIORITY WIDGETS (URGENT ALERTS + LIVE METRICS FIRST) -->
+    <!-- STRICT PER-LENS PRIORITY WIDGET STACK -->
     <div v-if="loading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
     <template v-else>
-      <component :is="WIDGET_COMPONENTS[id]" v-for="id in widgetIds" :key="`${activeHat}-${id}`" />
+      <component :is="WIDGET_COMPONENTS[id]" v-for="id in widgetIds" :key="`${activeLens}-${id}`" />
 
-      <!-- SECONDARY CO-OP JOIN & INVITE QUEUE (Sits below core ops; accessible anytime via Tray Stack) -->
-      <JoinRequestsPanel v-if="mode === 'live'" />
+      <!-- CO-OP JOIN & INVITE QUEUE (Inline on Founder / All Hats lens; tray/drawer always reachable from Header/Dock) -->
+      <JoinRequestsPanel
+        v-if="mode === 'live' && canSeeCollective"
+        :inline-visible="activeLens === 'founder' || activeLens === 'all'"
+      />
     </template>
+
+    <!-- RIGHT-SIDE IRS SCHEDULE C PLAYBOOK DRAWER -->
+    <TaxPlaybookDrawer v-if="canSeeCollective" :playbook-html="taxPlaybookHtml" />
 
     <!-- CONTEXTUAL BOTTOM ACTION DOCK + UNIFIED DETENT TRAY STACK -->
     <DashboardCommandDock />
@@ -119,39 +159,43 @@
 import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
-import { MEMBER_HAT_META, type MemberHat } from '../../lib/memberHats';
-import { DASHBOARD_WIDGETS, visibleWidgetIds } from '../../lib/dashboardWidgets';
+import { canSeeCollectiveFinancials, MEMBER_HAT_META, type MemberHat } from '../../lib/memberHats';
+import { DASHBOARD_WIDGETS, visibleWidgetIdsForLens } from '../../lib/dashboardWidgets';
 import {
   provideDashboardSource,
   provideActiveHat,
+  provideActiveLens,
+  type ActiveLens,
   type DashboardSource,
 } from '../../composables/dashboard/useDashboardSource';
 import { useLiveDashboardSource } from '../../composables/dashboard/useLiveDashboardSource';
 import { useDemoDashboardSource } from '../../composables/dashboard/useDemoDashboardSource';
 import { createDashboardCommandTray } from '../../composables/dashboard/useDashboardCommandTray';
 import { useLoader } from '../../composables/useLoader';
-import RoleHubCard from './RoleHubCard.vue';
 import RoleAlertsGrid from './RoleAlertsGrid.vue';
 import FinancialsOverview from './FinancialsOverview.vue';
 import OperationsRadarGrid from './OperationsRadarGrid.vue';
-import TaxTipsPanel from './TaxTipsPanel.vue';
 import MyInventorySnapshot from './MyInventorySnapshot.vue';
 import MyStatementCard from './MyStatementCard.vue';
 import LaborWeekCard from './LaborWeekCard.vue';
 import AdminToolsCard from './AdminToolsCard.vue';
 import AiUsageCard from './AiUsageCard.vue';
+import TaxPlaybookDrawer from './TaxPlaybookDrawer.vue';
 import DashboardCommandDock from './DashboardCommandDock.vue';
 import JoinRequestsPanel from '../coop/JoinRequestsPanel.vue';
 
-const props = defineProps<{ mode: 'live' | 'demo' }>();
+const ACTIVE_HAT_STORAGE_KEY = 'rc_active_hat_v1';
+
+const props = defineProps<{
+  mode: 'live' | 'demo';
+  taxPlaybookHtml?: string;
+}>();
 
 const META = MEMBER_HAT_META;
 const WIDGET_COMPONENTS: Record<string, Component> = {
-  role_hub: RoleHubCard,
   alerts: RoleAlertsGrid,
   financials: FinancialsOverview,
   radar: OperationsRadarGrid,
-  tax_tips: TaxTipsPanel,
   my_inventory: MyInventorySnapshot,
   my_statement: MyStatementCard,
   labor_week: LaborWeekCard,
@@ -159,36 +203,76 @@ const WIDGET_COMPONENTS: Record<string, Component> = {
   ai_usage: AiUsageCard,
 };
 
-// Demo: visitors pick a role. Live: the signed-in member's own hats.
 const demoRoles: MemberHat[] = ['curator', 'promoter', 'enabler', 'consignor', 'founder'];
 const demoRole = ref<MemberHat>('curator');
 
 const source: DashboardSource = props.mode === 'demo' ? useDemoDashboardSource(demoRole) : useLiveDashboardSource();
 provideDashboardSource(source);
 
-const activeHat = ref<MemberHat>(source.member.value.hats[0]);
-provideActiveHat(activeHat);
+const activeLens = ref<ActiveLens>(source.member.value.hats[0]);
+const effectiveLeadHat = computed<MemberHat>(() => {
+  const hats = source.member.value.hats;
+  if (activeLens.value !== 'all' && hats.includes(activeLens.value)) {
+    return activeLens.value;
+  }
+  return hats[0] || 'curator';
+});
 
-const tray = createDashboardCommandTray(source, activeHat);
+provideActiveLens(activeLens);
+provideActiveHat(effectiveLeadHat);
+
+const tray = createDashboardCommandTray(source, activeLens, effectiveLeadHat);
 
 const memberName = computed(() => source.member.value.name);
 const availableHats = computed(() => source.member.value.hats);
+const canSeeCollective = computed(() => canSeeCollectiveFinancials(source.member.value.hats));
 const pendingJoinCount = computed(() => source.snapshot.value.joinRequests || 0);
+const loading = computed(() => source.loading.value);
 
-// Reset the active hat whenever the member's hats change (role switch in demo, roster load in live)
+const activeLensSubtitle = computed(() => {
+  if (activeLens.value === 'all') {
+    return 'Combined All-Hats view — priority triage first, personal & collective metrics below';
+  }
+  return `${META[effectiveLeadHat.value].icon} ${META[effectiveLeadHat.value].label} focus — ${META[effectiveLeadHat.value].pitch}`;
+});
+
+const persistLens = (lens: ActiveLens) => {
+  if (props.mode !== 'live' || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ACTIVE_HAT_STORAGE_KEY, lens);
+  } catch {}
+};
+
+const selectLens = (lens: ActiveLens) => {
+  activeLens.value = lens;
+  persistLens(lens);
+};
+
+const resolveValidStoredLens = (hats: readonly MemberHat[]): ActiveLens => {
+  if (props.mode === 'live' && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(ACTIVE_HAT_STORAGE_KEY) as ActiveLens | null;
+      if (stored === 'all' && hats.length > 1) return 'all';
+      if (stored && stored !== 'all' && hats.includes(stored)) return stored;
+    } catch {}
+  }
+  return hats[0] || 'curator';
+};
+
 watch(
   () => source.member.value.hats.join(','),
   () => {
-    activeHat.value = source.member.value.hats[0];
+    activeLens.value = resolveValidStoredLens(source.member.value.hats);
   }
 );
 
-const loading = computed(() => source.loading.value);
-
 const widgetIds = computed(() =>
-  visibleWidgetIds(source.member.value.hats, activeHat.value, source.isAdmin.value).filter(
-    (id) => props.mode !== 'demo' || DASHBOARD_WIDGETS.find((w) => w.id === id)?.demo
-  )
+  visibleWidgetIdsForLens(
+    source.member.value.hats,
+    activeLens.value,
+    effectiveLeadHat.value,
+    source.isAdmin.value
+  ).filter((id) => props.mode !== 'demo' || DASHBOARD_WIDGETS.find((w) => w.id === id)?.demo)
 );
 
 const allCollapsed = ref(false);
@@ -201,7 +285,10 @@ const openJoinQueueTray = () => {
   window.dispatchEvent(new CustomEvent('rc:open-join-queue-tray'));
 };
 
-// Demo is read-only: links inside widgets go nowhere (they would just bounce to /login).
+const openTaxPlaybook = () => {
+  window.dispatchEvent(new CustomEvent('rc:open-tax-playbook'));
+};
+
 let lastHint = 0;
 const onDemoClick = (e: MouseEvent) => {
   if (props.mode !== 'demo') return;
@@ -221,6 +308,7 @@ if (props.mode === 'live') {
 }
 
 onMounted(() => {
+  activeLens.value = resolveValidStoredLens(source.member.value.hats);
   source.init();
 });
 </script>

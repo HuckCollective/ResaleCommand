@@ -956,7 +956,7 @@ for (const contract of transportContracts) {
     if ((widgetsSrc.match(/audience:\s*'/g) || []).length < widgetIds.length) {
         fail('Every widget in DASHBOARD_WIDGETS must declare an audience.');
     }
-    for (const collective of ['financials', 'radar', 'tax_tips', 'labor_week']) {
+    for (const collective of ['financials', 'radar', 'labor_week']) {
         const row = widgetsSrc.split('\n').find((l) => l.includes(`id: '${collective}'`)) || '';
         if (!row.includes("'voting_members'")) fail(`Widget "${collective}" shows collective data and must use the 'voting_members' audience.`);
     }
@@ -983,6 +983,9 @@ for (const contract of transportContracts) {
     const FORBIDDEN = /(lib\/appwrite|lib\/auth|useAuth|useInventory|usePurchases|coopGovernance|coopExpenses|lib\/manifests)['"]?$/;
     const demoSafe = [
         ...fs.readdirSync('src/components/dashboard').filter((f) => f.endsWith('.vue') && f !== 'AiUsageCard.vue').map((f) => `src/components/dashboard/${f}`),
+        ...(fs.existsSync('src/components/dashboard/trays')
+            ? fs.readdirSync('src/components/dashboard/trays').filter((f) => f.endsWith('.vue')).map((f) => `src/components/dashboard/trays/${f}`)
+            : []),
         ...fs.readdirSync('src/composables/dashboard').filter((f) => f !== 'useLiveDashboardSource.ts').map((f) => `src/composables/dashboard/${f}`),
         'src/lib/dashboardAlerts.ts', 'src/lib/dashboardWidgets.ts', 'src/lib/demoDashboardData.ts',
         'src/lib/dashboardTypes.ts', 'src/lib/memberHats.ts', 'src/pages/demo.astro',

@@ -5,6 +5,7 @@ import ToastContainer from "@components/ui/ToastContainer.vue";
 import ConfirmContainer from "@components/ui/ConfirmContainer.vue";
 import MarkdownModal from "@components/ui/MarkdownModal.astro";
 import CookieConsent from "@components/common/CookieConsent.astro";
+import SessionRouter from "@components/common/SessionRouter.astro";
 import HuckleberryLoader from "@components/common/HuckleberryLoader.vue";
 import CoopMessagesTray from "@components/coop/CoopMessagesTray.vue";
 import { siteConfig } from "site-config";
@@ -20,6 +21,8 @@ export interface Props {
 }
 
 const { title = siteConfig.title, description, image, hideFooter = false } = Astro.props;
+const hasSessionHint = Astro.cookies.get("auth_session_indicator")?.value === "true";
+const initialPath = Astro.url.pathname;
 ---
 
 <!doctype html>
@@ -27,6 +30,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <SessionRouter />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="sitemap" href="/sitemap-index.xml" />
@@ -46,7 +50,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
   </head>
   <body>
     <div class="flex flex-col min-h-screen w-full max-w-full min-w-0 overflow-x-clip">
-      <Navbar client:load />
+      <Navbar client:load initialAuthenticated={hasSessionHint} initialPath={initialPath} />
       <main class="flex-1 w-full max-w-full min-w-0 relative">
         <div id="runtime-error-banner" class="hidden p-6 max-w-lg mx-auto my-8 bg-error/10 border border-error/30 rounded-2xl text-center space-y-3 shadow-lg z-50">
           <div class="text-3xl">⚠️</div>
@@ -54,7 +58,7 @@ const { title = siteConfig.title, description, image, hideFooter = false } = Ast
           <p id="runtime-error-msg" class="text-xs opacity-80 font-mono break-words"></p>
           <div class="pt-2 flex justify-center gap-2">
             <button onclick="window.location.reload()" class="btn btn-sm btn-error text-white font-bold">Reload Page</button>
-            <a href="/" class="btn btn-sm btn-ghost font-bold">Home</a>
+            <a href={hasSessionHint ? "/dashboard" : "/"} class="btn btn-sm btn-ghost font-bold">Home</a>
           </div>
         </div>
         <slot />

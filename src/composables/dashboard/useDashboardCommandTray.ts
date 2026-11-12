@@ -6,7 +6,7 @@ import {
   type AlertCategory,
   type AlertSeverity,
 } from '../../lib/dashboardAlerts';
-import type { DashboardSource } from './useDashboardSource';
+import type { ActiveLens, DashboardSource } from './useDashboardSource';
 
 export type DashboardTrayId = 'triage' | 'radar' | 'tools';
 export type TriageFilterId = 'all' | 'critical' | 'inventory' | 'sales' | 'coop' | 'snoozed';
@@ -65,14 +65,15 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
 
 export function getRolePrimaryCpa(hat: MemberHat): RolePrimaryCpa {
   switch (hat) {
+    case 'founder':
+      return { label: 'Settlements', shortLabel: 'Settle', icon: 'solar:hand-money-bold', href: '/coop/settlements' };
     case 'enabler':
       return { label: 'Booth & Sync Hub', shortLabel: 'Locations', icon: 'solar:shop-2-bold', href: '/warehouse' };
     case 'promoter':
       return { label: 'Dropcast Studio', shortLabel: 'Dropcast', icon: 'solar:broadcast-bold', href: '/social' };
     case 'consignor':
-      return { label: 'My Statement', shortLabel: 'Statement', icon: 'solar:hand-money-bold', href: '/coop/settlements' };
+      return { label: 'My Statement', shortLabel: 'Statement', icon: 'solar:document-text-bold', href: '/coop/settlements' };
     case 'curator':
-    case 'founder':
     default:
       return { label: 'Quick Scout', shortLabel: 'Scout', icon: 'solar:scanner-bold', href: '/scout' };
   }
@@ -116,6 +117,10 @@ export interface DashboardCommandTrayController {
   overflowCards: ComputedRef<AlertCardData[]>;
   snoozedCards: ComputedRef<AlertCardData[]>;
   criticalCount: ComputedRef<number>;
+  /** Active non-snoozed alert count per real hat so inactive hat pills surface urgent counts (`💎 Curator · 3`). */
+  hatAlertCounts: ComputedRef<Record<MemberHat, number>>;
+  /** Deduplicated union of active alerts across ALL of the member's real hats (used for bottom dock badge). */
+  unionActiveCount: ComputedRef<number>;
   openTray: (id: DashboardTrayId, filter?: TriageFilterId) => void;
   toggleTray: (id: DashboardTrayId) => void;
   closeTray: () => void;
@@ -129,7 +134,8 @@ const SNOOZE_KEY = 'rc_alert_snooze_v1';
 
 export function createDashboardCommandTray(
   source: DashboardSource,
-  activeHat: Ref<MemberHat>
+  activeLens: Ref<ActiveLens>,
+  effectiveLeadHat: ComputedRef<MemberHat>
 ): DashboardCommandTrayController {
   const activeTray = ref<DashboardTrayId | null>(null);
   const triageFilter = ref<TriageFilterId>('all');
@@ -142,18 +148,51 @@ export function createDashboardCommandTray(
     } catch {}
   };
 
+  const isNotSnoozed = (id: string) => (snoozeUntil.value[id] ?? 0) <= source.snapshot.value.now;
+
   const allCards = computed(() => {
-    const member = { ...source.member.value, hats: [activeHat.value] };
+    const lens = activeLens.value;
+    const realHats = source.member.value.hats;
+    const scopedHats: MemberHat[] =
+      lens === 'all'
+        ? [...realHats]
+        : realHats.includes(lens)
+          ? [lens]
+          : [effectiveLeadHat.value];
+    const member = { ...source.member.value, hats: scopedHats };
     return buildAlertsForMember(source.snapshot.value, member, { liveOnly: source.mode === 'live' });
   });
 
-  const activeCards = computed(() =>
-    allCards.value.filter((c) => (snoozeUntil.value[c.id] ?? 0) <= source.snapshot.value.now)
-  );
+  const activeCards = computed(() => allCards.value.filter((c) => isNotSnoozed(c.id)));
+  const snoozedCards = computed(() => allCards.value.filter((c) => !isNotSnoozed(c.id)));
 
-  const snoozedCards = computed(() =>
-    allCards.value.filter((c) => (snoozeUntil.value[c.id] ?? 0) > source.snapshot.value.now)
-  );
+  const hatAlertCounts = computed<Record<MemberHat, number>>(() => {
+    const counts: Record<MemberHat, number> = {
+      founder: 0,
+      curator: 0,
+      promoter: 0,
+      enabler: 0,
+      consignor: 0,
+    };
+    for (const hat of source.member.value.hats) {
+      const cards = buildAlertsForMember(
+        source.snapshot.value,
+        { ...source.member.value, hats: [hat] },
+        { liveOnly: source.mode === 'live' }
+      );
+      counts[hat] = cards.filter((c) => isNotSnoozed(c.id)).length;
+    }
+    return counts;
+  });
+
+  const unionActiveCount = computed(() => {
+    const unionCards = buildAlertsForMember(
+      source.snapshot.value,
+      source.member.value,
+      { liveOnly: source.mode === 'live' }
+    );
+    return unionCards.filter((c) => isNotSnoozed(c.id)).length;
+  });
 
   const topPriorityCards = computed(() => activeCards.value.slice(0, 3));
   const overflowCards = computed(() => activeCards.value.slice(3));
@@ -210,6 +249,8 @@ export function createDashboardCommandTray(
     overflowCards,
     snoozedCards,
     criticalCount,
+    hatAlertCounts,
+    unionActiveCount,
     openTray,
     toggleTray,
     closeTray,
@@ -229,4 +270,3 @@ export function useDashboardCommandTray(): DashboardCommandTrayController {
   }
   return ctx;
 }
-

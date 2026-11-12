@@ -2,10 +2,14 @@
 import Layout from '../layouts/Layout.astro';
 import DashboardMetrics from '../components/dashboard/DashboardMetrics.vue';
 import { siteConfig } from '../site-config';
+import { loadTaxPlaybookHtml } from '../lib/taxCms';
+
+const taxPlaybookHtml = await loadTaxPlaybookHtml();
 ---
 
 <Layout title={`Command Center — ${siteConfig.title}`} hideFooter={true}>
   <div class="rc-page-shell">
-    <DashboardMetrics client:only="vue" />
+    <DashboardMetrics client:only="vue" taxPlaybookHtml={taxPlaybookHtml} />
   </div>
 </Layout>
+

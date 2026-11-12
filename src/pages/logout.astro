@@ -3,7 +3,7 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout title="Logging out...">
-  <div class="flex min-h-screen items-center justify-center bg-gray-50">
+  <div class="flex min-h-screen items-center justify-center bg-base-100">
     <div class="text-center">
       <h2 class="text-2xl font-bold mb-4">Logging out...</h2>
       <span class="loading loading-spinner loading-lg text-primary"></span>
@@ -12,14 +12,10 @@ import Layout from "../layouts/Layout.astro";
 </Layout>
 
 <script>
-  import { auth } from "../lib/auth";
+  import { logout } from "../lib/store";
 
-  // Alpine.js was removed; perform logout directly and return to /login.
-  setTimeout(async () => {
-    try {
-      await auth.logout();
-    } finally {
-      window.location.href = "/login";
-    }
+  // Atomically clear Appwrite session, auth_session_indicator cookie, and rc_has_session hint.
+  setTimeout(() => {
+    void logout();
   }, 100);
 </script>

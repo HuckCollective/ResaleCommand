@@ -156,7 +156,19 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 ---
 
-# Active Session Summary (Updated Nov 11, 2026)
+# Active Session Summary (Updated Nov 12, 2026)
+
+## ✅ TRIPLE-THREAT MASTER REFACTOR: ZERO-FLASH ROUTING, ROLE-BASED IA & ASTRO 6 MD-CMS (Nov 12, 2026 — `alpha-1`)
+- **Phase 1 — Zero-Flash Routing & Pre-Hydration Chrome (`src/lib/store.ts`, `src/components/common/SessionRouter.astro`, `src/layouts/Layout.astro`, `src/pages/index.astro`, `src/pages/logout.astro`, `src/components/nav/Navbar.vue`)**:
+  - Synchronized dual non-sensitive session hints (`auth_session_indicator=true` cookie + `localStorage['rc_has_session'] = '1'`) across `initAuth()` and `try / finally`-hardened `logout()`, and updated `/logout` (`src/pages/logout.astro`) to atomically clear both hints.
+  - Added `SessionRouter.astro` (`is:inline` `<head>` router + `pageshow` `bfcache` listener + stale-hint self-healing) paired with SSR edge redirects in `src/pages/index.astro` so signed-in members hitting `/` land on `/dashboard` in `<1ms` with zero Charter flash, legacy `/?section=|tab=` links forward cleanly to `/coop`, and guests/crawlers pay `0ms` blocking-loader penalty.
+  - Passed `initialAuthenticated={hasSessionHint}` from `Layout.astro` to `Navbar.vue` (and `CoopCharterView.vue`) to eliminate guest-to-member navbar/banner swap flashes on initial load.
+- **Phase 2 — Role-Lens Dashboard IA, `<KpiStatGrid>` & Monolith Splits (`src/lib/dashboardWidgets.ts`, `src/composables/dashboard/useDashboardSource.ts`, `src/components/dashboard/*`, `src/components/common/KpiStatGrid.vue`, `src/components/coop/JoinApplicantDrawer.vue`, `src/components/coop/CharterPayoutSimulator.vue`)**:
+  - Separated `activeLens` (`MemberHat | 'all'`) from safe `effectiveLeadHat` (`MemberHat`), added cross-hat alert count badges on inactive hat pills, and enforced `widgetAllowed()` strictly against real `member.hats` + `isAdmin`.
+  - Extracted shared `<KpiStatGrid>` (`FinancialsOverview`, `MyInventorySnapshot`, `MyStatementCard`, `AiUsageCard`), made `FinancialsOverview` role-adaptive (expanded on `Founder` / `All Hats`, 1-line badge ribbon by default on `Curator` / `Promoter` / `Enabler`), split `DashboardCommandDock.vue` into `trays/{TriageTrayBody,RadarTrayBody,ToolsTrayBody}.vue` + `RadarCardList.vue`, extracted `TaxPlaybookDrawer.vue` (`SlideOverDrawer`) + `JoinApplicantDrawer.vue` (deleting `RoleHubCard.vue` and `TaxTipsPanel.vue`), and extracted dynamic-location `CharterPayoutSimulator.vue`.
+- **Phase 3 — Astro 6 Markdown-Driven CMS (`src/content.config.ts`, `src/content/{charter,tax,roles}/*.md`, `src/lib/charterCms.ts`, `src/lib/taxCms.ts`, `src/components/coop/CoopCharterView.vue`, `src/pages/{index,coop,dashboard,demo}.astro`, `src/pages/coop/charter.astro`)**:
+  - Defined Astro 6 `glob` collections (`charter`, `tax`, `roleHelp`) alongside `coopDocs`, moving Charter sections, IRS Schedule C Tax Rules, and Role Onboarding cards out of Vue into human-editable Markdown files.
+  - Built `loadCharterCmsBundle()` (dynamically interpolating booth fees/rents from `src/lib/warehouses.ts` and policy splits from `coopGovernance.ts`) and pure Appwrite-free `loadTaxPlaybookHtml()` (keeping `/demo` 100% Check 14D compliant), shrinking `CoopCharterView.vue` from **1,265 lines ➔ ~390 lines** and removing the inline `<CoopGovernanceView />`, disconnected `localStorage` labor logger, retired `SWEAT-` badge, and hardcoded `$2,819.54` KPI boxes.
 
 ## ✅ AUCTION TRACKER PACIFIC TIMEZONE FIX, DATETIME CAPTURE & 1-CLICK LIVE RESYNC ("RECYST") (Nov 11, 2026 — `alpha-1`)
 - **Universal Pacific Timezone Parser (`src/lib/dateTimeUtils.ts`, `src/pages/api/identify-item.ts`, `src/pages/api/proxy-item-details.ts`)**:

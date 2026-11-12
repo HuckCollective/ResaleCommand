@@ -2,7 +2,7 @@
   <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-8 border-b border-base-200/60 overflow-visible">
     <!-- Brand / Left -->
     <div class="navbar-start w-auto lg:w-1/4 flex items-center gap-1.5">
-      <a href="/" class="btn btn-ghost px-2 sm:px-3 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5">
+      <a :href="showMemberNav ? '/dashboard' : '/'" class="btn btn-ghost px-2 sm:px-3 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5">
         <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 shrink-0" />
         <span class="truncate">{{ siteConfig.shortTitle }}</span>
         <span class="badge badge-primary badge-outline badge-xs sm:badge-sm font-mono font-black tracking-normal shrink-0">{{ siteConfig.badgeText }}</span>
@@ -16,7 +16,7 @@
     </div>
 
     <!-- Desktop Center (guests): public pages only -->
-    <div v-if="!isAuthenticated && !loading" class="navbar-center hidden lg:flex items-center gap-1">
+    <div v-if="!showMemberNav && !loading" class="navbar-center hidden lg:flex items-center gap-1">
       <a href="/coop" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold">
         <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
         <span>Collective Charter</span>
@@ -28,7 +28,7 @@
     </div>
 
     <!-- Desktop Center: 5-Pillar Lifecycle Navigation (Zero nested .menu-horizontal scrollbars) -->
-    <div v-if="isAuthenticated" class="navbar-center hidden lg:flex items-center gap-1 overflow-visible">
+    <div v-if="showMemberNav" class="navbar-center hidden lg:flex items-center gap-1 overflow-visible">
       <a
         href="/dashboard"
         :aria-current="isRouteActive('/dashboard') ? 'page' : undefined"
@@ -314,7 +314,7 @@
           <Icon icon="solar:scanner-bold" class="w-4 h-4 shrink-0" :class="isRouteActive('/scout') ? '' : 'text-primary'" />
           <span class="hidden sm:inline text-xs">Quick Scout</span>
           <span
-            v-if="!isAuthenticated"
+            v-if="!showMemberNav"
             class="badge badge-secondary badge-xs text-secondary-content font-black whitespace-nowrap shrink-0"
           >
             Preview
@@ -839,6 +839,17 @@ import { getAllLocationSettingMetas, resolveDefaultRicochetLocationMeta } from '
 import { siteConfig } from '../../site-config';
 import { Icon } from '@iconify/vue';
 
+const props = defineProps({
+  initialAuthenticated: {
+    type: Boolean,
+    default: false,
+  },
+  initialPath: {
+    type: String,
+    default: '/',
+  },
+});
+
 const {
   user,
   isAuthenticated,
@@ -853,11 +864,13 @@ const {
   logout: authLogout,
 } = useAuth();
 
+const showMemberNav = computed(() => isAuthenticated.value || (loading.value && props.initialAuthenticated));
+
 const { cartItems } = useCart();
 const { purchaseItems, activePurchase, pausedTracker, draftPurchases, loadDraftPurchases, toggleTray } =
   useScoutPurchase();
 
-const currentPath = ref('/');
+const currentPath = ref(props.initialPath || '/');
 const isMounted = ref(false);
 
 const locationMetas = computed(() => getAllLocationSettingMetas());

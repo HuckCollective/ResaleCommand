@@ -1,11 +1,28 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import CoopCharterView from '../components/coop/CoopCharterView.vue';
+import { loadCharterCmsBundle, parseCharterSectionParam } from '../lib/charterCms';
+
+const charterBundle = await loadCharterCmsBundle();
+const initialSection = parseCharterSectionParam(
+  Astro.url.searchParams.get('section') || Astro.url.searchParams.get('tab')
+);
+const hasSessionHint = Astro.cookies.get('auth_session_indicator')?.value === 'true';
 ---
 
-<Layout 
+<Layout
   title="Cooperative Charter & Member Rules | Huckleberry Collective"
-  description="Democratic Worker Self-Directed Enterprise charter, 3-tier financial distribution waterfall, partner prefix attribution, and transparent operations policy."
+  description="Democratic Worker Self-Directed Enterprise charter, 4-gate financial distribution waterfall, partner prefix attribution, and transparent operations policy."
 >
-  <CoopCharterView client:only="vue" />
+  <CoopCharterView
+    client:load
+    sections={charterBundle.sections}
+    roleCards={charterBundle.roleCards}
+    initialSection={initialSection}
+    initialAuthenticated={hasSessionHint}
+    primaryBoothRentLabel={charterBundle.primaryBoothRentLabel}
+    curatorPct={charterBundle.curatorPct}
+    commonsPct={charterBundle.commonsPct}
+  />
 </Layout>
+

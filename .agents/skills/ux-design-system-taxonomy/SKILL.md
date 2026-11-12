@@ -346,3 +346,23 @@ For any queue of people/decisions (Join Requests, Waitlist, Approved Invites, Go
 2. **Bottom Sheet Tray** (`rounded-t-3xl`, drag pill, bucket tabs, scannable rows, `z-[390]`).
 3. **`SlideOverDrawer.vue`** for details, edit, voting, and decision buttons (sticky `#footer`). Create/edit forms use the drawer, not a centered `<dialog>`. Destructive or emailing decisions still go through a confirmation modal with an email preview.
 Approved invites leave the queue automatically when the applicant creates their account (`accept` ➔ `join_request_joined`).
+
+
+---
+
+## 10. Universal Role-Driven IA, `<KpiStatGrid>`, Zero-Flash Routing & Astro 6 MD-CMS
+
+1. **Zero-Flash Edge + `<head>` Session Routing (`src/components/common/SessionRouter.astro`, `src/pages/index.astro`, `src/layouts/Layout.astro`, `src/lib/store.ts`)**:
+   - Signed-in members carry a dual non-sensitive session hint (`auth_session_indicator=true` cookie + `localStorage.rc_has_session = '1'`).
+   - `/` redirects signed-in members straight to `/dashboard` (`302` at the SSR edge + `<1ms` inline `<head>` + `bfcache` `pageshow` guard in `SessionRouter.astro`), while preserving `/?section=` / `/?tab=` Charter deep-links to `/coop`.
+   - `Layout.astro` passes `initialAuthenticated={hasSessionHint}` into `Navbar.vue` so the member 5-pillar chrome renders on frame 0 with zero guest-to-member hydration flash, while guests and crawlers pay `0ms` spinner penalty.
+2. **Strict Role Lens + Safe `effectiveLeadHat` Separation (`src/composables/dashboard/useDashboardSource.ts`, `src/lib/dashboardWidgets.ts`)**:
+   - Multi-hat members switch between focused single-hat lenses (`curator`, `promoter`, `enabler`, `founder`, `consignor`) and opt-in `✨ All Hats` (`ActiveLens = MemberHat | 'all'`), with cross-hat alert count badges on inactive hat pills so urgent items are never buried.
+   - Always expose `effectiveLeadHat: ComputedRef<MemberHat>` (`activeLens === 'all' ? member.hats[0] : activeLens`) for `MEMBER_HAT_META` / primary CPA lookups, and enforce `widgetAllowed()` strictly against the member's **real** `member.hats` + `isAdmin` (never the UI lens).
+3. **Canonical `<KpiStatGrid>` & Role-Adaptive Progressive Disclosure (`src/components/common/KpiStatGrid.vue`)**:
+   - Reuse `<KpiStatGrid :items="stats" :columns="2 | 3 | 4" />` across KPI summary strips (`FinancialsOverview.vue`, `MyInventorySnapshot.vue`, `MyStatementCard.vue`, `AiUsageCard.vue`) instead of copy-pasted stat loops.
+   - Keep on-canvas surfaces scannable: `FinancialsOverview.vue` expands by default on `👑 Founder` and `✨ All Hats` and collapses to a 1-line live badge ribbon on `Curator` / `Promoter` / `Enabler`; `OperationsRadarGrid.vue` caps on-canvas queues to Top 6 and delegates full lists to `RadarTrayBody.vue`; deep tables/playbooks (`AiUsageCard`, `TaxPlaybookDrawer`, `JoinApplicantDrawer`) open inside `SlideOverDrawer.vue`.
+4. **Astro 6 Markdown Content Collections (`src/content.config.ts` ➔ `src/content/{charter,tax,roles,coop}/`)**:
+   - Static collective prose (Charter sections in `src/content/charter/*.md`, IRS Schedule C Tax Playbook in `src/content/tax/rules.md`, Role Playbooks in `src/content/roles/*.md`, and Strategy Docs in `src/content/coop/*.md`) lives in Markdown so non-developer members can edit living policy docs without touching Vue components.
+   - Server loaders (`src/lib/charterCms.ts`, `src/lib/taxCms.ts`) compile Markdown at SSR time and interpolate dynamic location fees/rents (`{{PRIMARY_BOOTH_FEE}}`, `{{PRIMARY_BOOTH_RENT}}`) from `src/lib/warehouses.ts`—keeping client JS bundles lean and preserving Golden Rule #2 (Zero Hardcoded Locations).
+

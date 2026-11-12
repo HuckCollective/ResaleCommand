@@ -1,0 +1,44 @@
+---
+/**
+ * SessionRouter.astro
+ * Zero-flash inline `<head>` session router.
+ * Executes synchronously before `<body>` first paint (<1ms) and on browser
+ * bfcache restoration (`pageshow`) so signed-in members hitting `/` never see
+ * a flash of the public Charter, while stale localStorage hints self-heal.
+ * Guests and search crawlers pay 0ms and never see a blocking loader.
+ */
+---
+<script is:inline>
+  (function () {
+    function routeSession() {
+      try {
+        if (window.location.pathname !== '/') return;
+        var search = window.location.search || '';
+        // Preserve deep-linked Charter tabs/sections on `/coop`
+        if (/[?&](section|tab)=/.test(search)) {
+          window.location.replace('/coop' + search);
+          return;
+        }
+        var hasSessionHint = localStorage.getItem('rc_has_session') === '1';
+        var hasAuthCookie = /(?:^|;\s*)auth_session_indicator=true/.test(document.cookie || '');
+        if (hasSessionHint && hasAuthCookie) {
+          window.location.replace('/dashboard');
+        } else if (hasSessionHint && !hasAuthCookie) {
+          // Self-heal stale localStorage hint when session cookie is absent
+          localStorage.removeItem('rc_has_session');
+        }
+      } catch (_err) {
+        // Never block initial render if storage is restricted
+      }
+    }
+
+    routeSession();
+    window.addEventListener('pageshow', function (event) {
+      if (event && event.persisted) {
+        routeSession();
+      }
+    });
+  })();
+</script>
+
+

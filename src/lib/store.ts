@@ -25,12 +25,28 @@ export const authStore = map<AuthStoreState>({
 });
 
 
+export const SESSION_HINT_KEY = 'rc_has_session';
+
 function setAuthCookie() {
-    document.cookie = "auth_session_indicator=true; path=/; max-age=31536000; SameSite=Lax";
+    if (typeof document !== 'undefined') {
+        document.cookie = "auth_session_indicator=true; path=/; max-age=31536000; SameSite=Lax";
+    }
+    try {
+        localStorage.setItem(SESSION_HINT_KEY, '1');
+    } catch {
+        // Ignore storage quota / private mode errors
+    }
 }
 
 function clearAuthCookie() {
-    document.cookie = "auth_session_indicator=; path=/; max-age=0; SameSite=Lax";
+    if (typeof document !== 'undefined') {
+        document.cookie = "auth_session_indicator=; path=/; max-age=0; SameSite=Lax";
+    }
+    try {
+        localStorage.removeItem(SESSION_HINT_KEY);
+    } catch {
+        // Ignore storage errors
+    }
 }
 
 export async function initAuth() {
@@ -105,19 +121,28 @@ export async function login(email: string, pass: string) {
 }
 
 export async function logout() {
-    await auth.logout();
-    clearAuthCookie();
-    authStore.set({
-      user: null,
-      isAuthenticated: false,
-      isPartner: false,
-      teams: [],
-      currentTeam: null,
-      ownedTeam: null,
-      loading: false
-    });
-    localStorage.removeItem('activeTeamId');
-    window.location.href = '/login';
+    try {
+        await auth.logout();
+    } finally {
+        clearAuthCookie();
+        authStore.set({
+          user: null,
+          isAuthenticated: false,
+          isPartner: false,
+          teams: [],
+          currentTeam: null,
+          ownedTeam: null,
+          loading: false
+        });
+        try {
+            localStorage.removeItem('activeTeamId');
+        } catch {
+            // Ignore storage errors
+        }
+        if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+        }
+    }
 }
 
 export async function switchTeam(team: Models.Team | null) {

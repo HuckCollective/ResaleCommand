@@ -1,6 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import DashboardShell from '../components/dashboard/DashboardShell.vue';
+import { loadTaxPlaybookHtml } from '../lib/taxCms';
+
+const taxPlaybookHtml = await loadTaxPlaybookHtml();
 ---
 
 <Layout
@@ -9,7 +12,8 @@ import DashboardShell from '../components/dashboard/DashboardShell.vue';
   hideFooter={true}
 >
   <div class="rc-page-shell">
-    <DashboardShell client:only="vue" mode="demo" />
+    <DashboardShell client:only="vue" mode="demo" taxPlaybookHtml={taxPlaybookHtml} />
   </div>
 </Layout>
+
 

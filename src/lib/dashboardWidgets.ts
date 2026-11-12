@@ -1,4 +1,5 @@
 import { canSeeCollectiveFinancials, type MemberHat } from './memberHats';
+import type { ActiveLens } from '../composables/dashboard/useDashboardSource';
 
 /**
  * Who may see a widget (see financial_visibility_plan.md):
@@ -19,25 +20,29 @@ export interface DashboardWidgetDef {
 }
 
 export const DASHBOARD_WIDGETS: DashboardWidgetDef[] = [
-  { id: 'role_hub', title: 'My Role', audience: 'everyone', demo: true },
   { id: 'alerts', title: 'Needs Your Attention', audience: 'everyone', demo: true },
   { id: 'financials', title: 'Collective Financials', audience: 'voting_members', demo: true },
   { id: 'my_inventory', title: 'My Inventory', audience: 'own_only', demo: true },
   { id: 'my_statement', title: 'My Statement', audience: 'own_only', demo: true },
   { id: 'labor_week', title: 'Labor This Week', audience: 'voting_members', demo: true },
   { id: 'radar', title: 'Operations Radar', audience: 'voting_members', demo: true },
-  { id: 'tax_tips', title: 'Tax Tips', audience: 'voting_members', demo: true },
   { id: 'admin_tools', title: 'Steward Tools', audience: 'admin', demo: true },
   { id: 'ai_usage', title: 'AI Cost Monitor', audience: 'admin', demo: false },
 ];
 
-/** Ordered widget ids per hat. Most urgent triage & live numbers FIRST, secondary tools below. */
+/**
+ * Strict role-focused widget stack per hat:
+ * 1) Urgent triage alerts first
+ * 2) Personal / role pulse second
+ * 3) Collective financials / steward pulse third (with role-adaptive collapse defaults)
+ * Secondary shortcuts & IRS Schedule C Tax Playbook live cleanly in the Command Dock / SlideOverDrawer.
+ */
 export const ROLE_LAYOUTS: Record<MemberHat, string[]> = {
-  founder: ['alerts', 'financials', 'radar', 'role_hub', 'tax_tips', 'admin_tools', 'ai_usage'],
-  curator: ['alerts', 'my_inventory', 'financials', 'radar', 'role_hub', 'tax_tips'],
-  promoter: ['alerts', 'labor_week', 'financials', 'role_hub', 'tax_tips'],
-  enabler: ['alerts', 'radar', 'labor_week', 'financials', 'role_hub', 'tax_tips'],
-  consignor: ['alerts', 'my_statement', 'my_inventory', 'role_hub'],
+  founder: ['alerts', 'financials', 'admin_tools', 'ai_usage', 'radar'],
+  curator: ['alerts', 'my_inventory', 'my_statement', 'financials'],
+  promoter: ['alerts', 'labor_week', 'financials'],
+  enabler: ['alerts', 'radar', 'labor_week', 'financials'],
+  consignor: ['alerts', 'my_statement', 'my_inventory'],
 };
 
 const HAT_ORDER: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler', 'consignor'];
@@ -58,10 +63,14 @@ export function layoutForHats(hats: readonly MemberHat[], leadHat: MemberHat): s
   return out;
 }
 
-export function widgetAllowed(def: DashboardWidgetDef, hats: readonly MemberHat[], isAdmin: boolean): boolean {
+/**
+ * Access-control check: ALWAYS evaluated against the member's REAL `memberHats` + `isAdmin`
+ * (never the UI lens), so switching lenses can never elevate visibility.
+ */
+export function widgetAllowed(def: DashboardWidgetDef, memberHats: readonly MemberHat[], isAdmin: boolean): boolean {
   switch (def.audience) {
     case 'voting_members':
-      return canSeeCollectiveFinancials(hats);
+      return canSeeCollectiveFinancials(memberHats);
     case 'admin':
       return isAdmin;
     default:
@@ -69,10 +78,30 @@ export function widgetAllowed(def: DashboardWidgetDef, hats: readonly MemberHat[
   }
 }
 
-export function visibleWidgetIds(hats: readonly MemberHat[], leadHat: MemberHat, isAdmin: boolean): string[] {
-  return layoutForHats(hats, leadHat).filter((id) => {
+/**
+ * Strict per-lens widget resolver:
+ * - Single hat lens (`curator`, `promoter`, `enabler`, `founder`, `consignor`): renders ONLY that hat's focused stack.
+ * - `'all'` lens: renders the deduplicated union across all of the member's real hats.
+ */
+export function visibleWidgetIdsForLens(
+  memberHats: readonly MemberHat[],
+  lens: ActiveLens,
+  leadHat: MemberHat,
+  isAdmin: boolean
+): string[] {
+  const rawIds =
+    lens === 'all'
+      ? layoutForHats(memberHats, leadHat)
+      : memberHats.includes(lens)
+        ? ROLE_LAYOUTS[lens] ?? []
+        : ROLE_LAYOUTS[leadHat] ?? [];
+
+  return rawIds.filter((id) => {
     const def = DASHBOARD_WIDGETS.find((w) => w.id === id);
-    return !!def && widgetAllowed(def, hats, isAdmin);
+    return !!def && widgetAllowed(def, memberHats, isAdmin);
   });
 }
 
+export function visibleWidgetIds(hats: readonly MemberHat[], leadHat: MemberHat, isAdmin: boolean): string[] {
+  return visibleWidgetIdsForLens(hats, 'all', leadHat, isAdmin);
+}
