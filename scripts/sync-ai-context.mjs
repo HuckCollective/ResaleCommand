@@ -11,6 +11,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const PLAYBOOK_PATH = path.join(ROOT_DIR, 'docs', 'AI_STUDIO_PLAYBOOK.md');
 const ACTIVE_SESSION_PATH = path.join(ROOT_DIR, 'ACTIVE_SESSION.md');
 const GEMINI_MD_PATH = path.join(ROOT_DIR, 'GEMINI.md');
+const CLINERULES_PATH = path.join(ROOT_DIR, '.clinerules');
 const SKILLS_SRC_DIR = path.join(ROOT_DIR, '.agents', 'skills');
 const RULES_SRC_DIR = path.join(ROOT_DIR, '.agents', 'rules');
 const HUCKS_CORE_SKILL_PATH = path.join(SKILLS_SRC_DIR, 'hucks-resale-core', 'SKILL.md');
@@ -51,26 +52,21 @@ const MASTER_ARCHITECTURE_LAWS = `## Resale Command — 7 Immutable Architecture
 **READ-FIRST pointer (applies to every agent):** before editing sales or inventory-sync code (Ricochet Sales Sync, Commit, dedupe, payout/CSV imports, any script touching \`sales\`), read \`.agents/rules/sales-reconciliation-and-payout-invariants.md\` and the Booth Bin rules (\`resale-booth-sync\` §2.4). SKU + price is never an identity; one sale line = ticket # + gross + net.
 `;
 
-const WORKFLOW_AND_ANTI_GLITCH_RULES = `### Antigravity IDE Workflow, 4-Tier Gemini Ultra Routing & Anti-Rabbit-Hole Rules
-1. **Exact Antigravity IDE 4-Tier Model + Level Lock (\`src/lib/devAiRouting.ts\`):** Every IDE prompt (and every \`/plan\` Pre-Proceed banner) must specify one of the exact Antigravity IDE dropdown choices + thinking level:
-   - \`Gemini 3.8 Flash\` -> Level: \`Low\` or \`Medium\` (0% Partner pool — ~8x lighter quota for ALL file scouting/recon, doc/session syncs, and \`npm run verify\` + \`git push\`)
-   - \`Gemini 4 Argon\` -> Level: \`Medium\` (0% Partner pool — fast daily driver for standard 1–3 file Vue 3.5 / DaisyUI v5 UI & clear feature edits)
-   - \`Gemini 4 Carbon\` -> Level: \`Medium\` or \`High\` (0% Partner pool — frontier architect & code surgeon for \`/plan\`, multi-store/API adapters, and tricky bug fixes BEFORE touching Claude!)
-   - \`Claude Sonnet 5.5\` -> Level: \`Medium\` (Rare outside tie-breaker after \`/compact\` ONLY if an isolated bug needs a second opinion — max 2–3 tool calls per turn; avoid \`Claude Opus 5.5\`)
-2. **Pre-Proceed \`/plan\` Model Gate & 3-Step "Flash Scout ➔ Argon/Carbon Surgeon ➔ Flash Closer" Sandwich:**
-   - **Mandatory Pre-Proceed \`/plan\` Banner:** Every \`implementation_plan.md\` MUST evaluate execution difficulty *before* handing the user the \`Proceed\` button and stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` (\`⚡ 3.8 Flash\`, \`🟢 4 Argon (Medium)\`, or \`🔥 4 Carbon (Medium / High)\`) at Line 1 of the plan AND in the chat reply so zero turns are wasted switching after \`Proceed\`.
-   - **Step A — Scout Turn (\`⚡ PICK IN ANTIGRAVITY: Gemini 3.8 Flash — Low\`):** Run a read-only recon turn on \`Gemini 3.8 Flash\` FIRST to read exact line ranges of 1–3 files and return exact target lines/signatures (costs **0% Partner quota**).
-   - **Step B — 1-Shot Surgeon Turn (\`🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon (Medium)\` or \`🔥 PICK IN ANTIGRAVITY: Gemini 4 Carbon (Medium / High)\`):** Execute surgical \`edit_file\`/\`write_file\` calls on exact line ranges (zero file hunting, zero retry loops!).
-   - **Step C — Closer Turn (\`⚡ PICK IN ANTIGRAVITY: Gemini 3.8 Flash — Low\`):** Switch to \`Gemini 3.8 Flash\` to update \`ACTIVE_SESSION.md\` and run \`npm run verify\` + \`git push\`.
-3. **1-Click \`run_command\` (\`BypassSandbox: true\`) Auto-Verify & Push Rule (Always Push Active Branch \`origin HEAD\`):** Use native \`read_file\`, \`edit_file\`, and \`write_file\` on explicit file paths + line ranges for all code edits. Never call \`run_command\` with \`BypassSandbox: false\` (Windows sandbox fails with \`CreateProcessSecurityEnvironment\`) and never run \`astro build\` locally. Whenever verifying, committing, and pushing, ALWAYS invoke \`run_command\` with **\`BypassSandbox: true\`** running \`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }\` so it always pushes to the currently checked-out branch (\`HEAD\`, e.g. \`alpha-1\`) and never pushes to \`main\` unless the user explicitly asks to merge to \`main\`.
-4. **Clean Single Code Block Rule (Anti-Splice-Glitch in Gemini Web):** Whenever Gemini Web outputs a copy-paste prompt for Antigravity IDE, output ONE single fenced code block (\` \`\`\`text ... \`\`\` \`) and zero inline backticks, emojis, or horizontal dividers anywhere outside the code block so the Gemini Web streaming parser never splices or truncates the message.
-5. **Anti-Rabbit-Hole Scope Lock (Max 3 Files & Hard Tool-Call Cap Per Turn):**
-   - Every IDE prompt MUST include an explicit \`ALLOWED FILES (MAX 3)\` list with exact \`StartLine\`–\`EndLine\` ranges and a \`MAX TOOL CALLS: 3\` cap.
-   - The IDE agent is strictly forbidden from reading or editing any file outside \`ALLOWED FILES\`, and must stop immediately (0 extra tool calls) and report to the user if an expected target anchor does not match—never loop or guess!
-6. **Senior Engineering & Anti-Monolith Guardrails (Zero Bad Coding Practices):**
-   - **Never Bloat Monoliths:** Never dump 100+ lines of inline business/matching logic into large files (\`public/ricochet-upc-sync.user.js\`, \`LocationManifestTray.vue\`, \`LocationSyncView.vue\`, \`SalesImporter.vue\`). Extract pure, reusable functions into \`src/lib/...\` or focused composables (\`src/composables/...\`).
-   - **Never Reinvent Canonical Pipelines or Hardcode Fallbacks:** Always delegate to \`src/lib/salesBucketing.ts\`, \`src/lib/warehouses.ts\`, \`src/lib/upcAuthority.ts\`, and \`src/lib/manifests.ts\`. Never write silent empty \`catch {}\` blocks on DB writes, never mutate unrelated functions, never use untyped \`any\` spaghetti when an interface exists, and never hardcode fallback dates, fees, \`0EJ...\` SKUs, or \`HUCK-...\` barcodes.
-   - **Mandatory \`FORBIDDEN ACTIONS\` Block:** Every IDE prompt generated by Gemini Web must include a \`FORBIDDEN ACTIONS\` checklist locking out refactors of unrelated code, extra file reads, and schema violations.
+const WORKFLOW_AND_ANTI_GLITCH_RULES = `### IDE-Independent Gemini 4 Model Routing & Dual-IDE Auto-Morphing (\`VS Code · Cline\` ⇄ \`Antigravity\`)
+1. **4-Tier Model Selection Lock (\`src/lib/devAiRouting.ts\` — IDE-Independent in \`/coop/vault\`):**
+   - \`⚡ Gemini 4 Hydrogen\` (\`gemini-4-hydrogen\`, \`Low\` / \`Medium\` — succeeds \`3.8 Flash\`): ~8x lighter quota (1M context) for ALL file scouting/recon, doc/session syncs, and \`npm run verify\` + \`git push\`.
+   - \`🟢 Gemini 4 Argon\` (\`gemini-4-argon\`, \`Medium\`): Fast Act-mode daily driver for standard 1–3 file Vue 3.5 / DaisyUI v5 UI & clear feature edits *(💡 Best $0-pool swap if Claude Sonnet is selected)*.
+   - \`🔥 Gemini 4 Carbon\` (\`gemini-4-carbon\`, \`Medium\` / \`High\`): Frontier Plan-mode architect & code surgeon for architecture, multi-store/API adapters, and tricky bug fixes BEFORE touching Claude *(💡 Best $0-pool swap for Claude Thinking)*.
+   - \`🟣 Claude Sonnet 5.5\` (\`Medium\`): Rare outside tie-breaker after compacting context (\`/smol\` or \`/compact\`) ONLY if an isolated bug needs a second opinion — always display the Best Gemini 4 \`$0\`-pool alternative alongside it, and never use \`Opus 5.5\` on routine work.
+2. **Dual-IDE Auto-Morphing Rule (Detect Active IDE Automatically from System Context):**
+   - **In VS Code (\`Cline\` — reads \`.clinerules\`):** Use Cline's split **Plan Mode** (\`4 Carbon\`) ⇄ **Act Mode** (\`4 Argon\` / \`4 Hydrogen\`), batch parallel \`read_files\` / \`search_codebase\` calls, keep \`editor\` chunks \`<5,000\` chars, chain \`git add -A; git commit -m "..."; git push origin HEAD\` sequentially in ONE command string (avoiding \`.git/index.lock\` collisions), and end every reply with:
+     \`🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!\`
+   - **In Antigravity IDE (reads \`GEMINI.md\`):** Stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of \`implementation_plan.md\`, invoke \`run_command\` with \`BypassSandbox: true\` (\`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }\`), and end every reply with:
+     \`🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best $0 swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!\`
+3. **Active-Branch Push Rule (\`origin HEAD\`) & Zero One-Off Scripts in \`scripts/\`:** Always push to \`origin HEAD\` (e.g. \`alpha-1\`) and never push to \`main\` unless explicitly asked to merge. Put temporary audit scripts in git-ignored \`scratch/\` and delete before committing.
+4. **Clean Single Code Block Rule (Anti-Splice-Glitch in Gemini Web):** Whenever Gemini Web outputs a copy-paste prompt for a Coding IDE, output ONE single fenced code block (\` \`\`\`text ... \`\`\` \`) with IDE-independent model headers + Best Gemini \`$0\`-pool swap line inside it, and zero inline backticks, emojis, or horizontal dividers outside the code block.
+5. **Anti-Rabbit-Hole Scope Lock & Senior Engineering Guardrails:**
+   - Every Vault/Web IDE prompt MUST include \`ALLOWED FILES (MAX 3)\`, parallel native IDE file reads/edits (never PowerShell file-writes), and a \`FORBIDDEN ACTIONS\` checklist (no local \`astro build\` unless explicitly requested, no \`quantity: 0\` or Base64 writes to Appwrite, no hardcoded fallback dates/fees/\`0EJ\` SKUs, no monolith bloat—delegate to \`src/lib/salesBucketing.ts\`, \`src/lib/warehouses.ts\`, \`src/lib/upcAuthority.ts\`, and \`src/lib/manifests.ts\`).
 `;
 
 const GOLDEN_RULES_AND_WAREHOUSES = `---
@@ -114,19 +110,21 @@ You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR,
 - **Co-op Waterfall:** 1) Venue Fee (15% Memory Den / 10% Dusty Tiger) -> 2) 100% Curator Cost Basis Recouped -> 3) Net Surplus split 70% Curator / 30% Commons Pool (covers $382.50 rent & tech/supplies).
 
 ### STRICT SYSTEM INVARIANTS
-1. **IDE Prompt & 4-Tier Model Routing Standard (Google AI Ultra Pool — \`src/lib/devAiRouting.ts\`):** Keep **World 1 (\`src/lib/gemini.ts\` App Runtime AI on $40/mo Cloud credits)** strictly separate from **World 2 (\`src/lib/devAiRouting.ts\` Dev/Arch AI on Google AI Ultra)**. Default 95%+ of Antigravity IDE work inside the Google AI Ultra Gemini pool: **\`Gemini 3.8 Flash\`** (~8x lower quota draw for file inspections, doc/session syncs, and verify + push), **\`Gemini 4 Argon (Medium)\`** (fast 1–3 file Vue/TS UI & feature edits), and **\`Gemini 4 Carbon (Medium / High)\`** (\`/plan\` architecture, multi-store/API adapters, and tricky bug surgery BEFORE touching Claude); reserve \`Claude Sonnet 5.5 (Medium)\` strictly as a rare outside tie-breaker (\`Enable AI Credit Overages\` kept \`OFF\`; never \`Opus 5.5\`). Never use multi-line PowerShell blocks to write files—always instruct the IDE to use native file tools.
-2. **ADHD-Friendly Model Picker Guardrail & Pre-Proceed \`/plan\` Model Gate:**
-   - **Rule for Gemini Web & \`/coop/vault\`**: Whenever generating a copy-paste prompt box for Antigravity IDE, always place one of these bold headers immediately above the code block:
-     - \`⚡ PICK IN ANTIGRAVITY: Gemini 3.8 Flash\` (for file reads, doc updates, \`ACTIVE_SESSION.md\` / \`GEMINI.md\` syncs, and verify + push)
-     - \`🟢 PICK IN ANTIGRAVITY: Gemini 4 Argon (Medium)\` (for standard 1–3 file UI & feature code/refactor prompts)
-     - \`🔥 PICK IN ANTIGRAVITY: Gemini 4 Carbon (Medium / High)\` (for \`/plan\` architecture, multi-store/API adapters, & tricky bug surgery)
-     - \`🟣 PICK IN ANTIGRAVITY: Claude Sonnet 5.5 (⚠️ Switch back to Gemini right after!)\` (rare fallback only)
-   - **Mandatory Pre-Proceed \`/plan\` Model Gate**: Every \`implementation_plan.md\` must evaluate execution difficulty *before* handing the user the \`Proceed\` button and stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of the plan AND in the chat reply.
-   - **Rule for Antigravity IDE**: At the very end of every response in Antigravity IDE, always print this exact 1-line footer right above the chat input box:
-     \`🔔 **ADHD MODEL & /compact CHECK:** ⚡ **3.8 Flash** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!\`
-3. **NO Local \`astro build\`:** Every IDE prompt MUST forbid running \`astro build\` or \`npm run build\` locally (hangs Windows PC). Only run \`node scripts/validate-templates.mjs\` locally; let Vercel build in the cloud.
-4. **1-Click \`run_command\` (\`BypassSandbox: true\`) Auto-Verify & Push Standard:** On Windows, standard sandboxed terminal calls (\`BypassSandbox: false\`) fail with \`CreateProcessSecurityEnvironment\` and local \`astro build\` hangs the PC. Antigravity must do all file inspections and code edits using native \`read_file\`, \`edit_file\`, and \`write_file\` tools, and whenever running \`npm run verify\`, \`git commit\`, and \`git push\` (or executing a \`scratch/\` script), Antigravity MUST invoke \`run_command\` with **\`BypassSandbox: true\`** so the user gets a 1-click Run button in chat and Antigravity monitors the terminal output directly without manual copy-pasting.
-5. **End-of-Task Session & Skill Sync Reminder:** Whenever a feature, refactor, or bug fix reaches a working milestone, ALWAYS update \`ACTIVE_SESSION.md\` using \`write_file\` to log what was completed and what is next, and run \`npm run verify\` + \`git push\` via \`run_command\` (\`BypassSandbox: true\`).
+1. **IDE Prompt & 4-Tier Gemini 4 Routing Standard (Google AI Ultra Pool — \`src/lib/devAiRouting.ts\`):** Keep **World 1 (\`src/lib/gemini.ts\` App Runtime AI on $40/mo Cloud credits)** strictly separate from **World 2 (\`src/lib/devAiRouting.ts\` Dev/Arch AI on Google AI Ultra)**. Default 95%+ of Coding IDE work inside the Google AI Ultra Gemini 4 pool: **\`Gemini 4 Hydrogen\`** (\`gemini-4-hydrogen\`, ~8x lighter quota draw for file inspections, doc/session syncs, and verify + push; succeeds \`3.8 Flash\`), **\`Gemini 4 Argon (Medium)\`** (\`gemini-4-argon\`, fast 1–3 file Vue/TS UI & feature edits — best $0-pool swap for Claude Sonnet), and **\`Gemini 4 Carbon (Medium / High)\`** (\`gemini-4-carbon\`, Plan-mode architecture, multi-store/API adapters, and tricky bug surgery BEFORE touching Claude — best $0-pool swap for Claude Thinking); reserve \`Claude Sonnet 5.5 (Medium)\` strictly as a rare outside tie-breaker (never \`Opus 5.5\`). Never use multi-line PowerShell blocks to write files—always instruct the IDE to use native file tools.
+2. **IDE-Independent Vault Prompts & Dual-IDE Auto-Morphing (\`VS Code · Cline\` ⇄ \`Antigravity IDE\`):**
+   - **Rule for Gemini Web & \`/coop/vault\` (100% IDE-Independent & Model-Specific)**: Whenever generating a copy-paste prompt box for a Coding IDE, always place one of these IDE-agnostic model headers + a \`💡 Best Gemini $0-Pool Swap\` line immediately above/inside the code block:
+     - \`⚡ MODEL PICK: Gemini 4 Hydrogen (Low / Medium)\` (for file reads, doc updates, \`ACTIVE_SESSION.md\` syncs, and verify + push)
+     - \`🟢 MODEL PICK: Gemini 4 Argon (Medium)\` (for standard 1–3 file UI & feature code/refactor prompts — 💡 $0-pool alt to Claude Sonnet)
+     - \`🔥 MODEL PICK: Gemini 4 Carbon (Medium / High)\` (for Plan-mode architecture, multi-store/API adapters, & tricky bug surgery — 💡 $0-pool alt to Claude Thinking)
+     - \`🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — Rare Tie-Breaker) | 💡 BEST GEMINI ALT: Gemini 4 Carbon (High)\`
+   - **Auto-Morphing Inside the Editor (Detect Active IDE Automatically)**:
+     - **In VS Code (\`Cline\` — reads \`.clinerules\`):** Use Cline's **Plan Mode** (\`4 Carbon\`) ⇄ **Act Mode** (\`4 Argon\` / \`4 Hydrogen\`), batch parallel \`read_files\` / \`search_codebase\` calls, keep \`editor\` chunks \`<5,000\` chars, chain \`git add -A; git commit -m "..."; git push origin HEAD\` sequentially in one command string, and print at the bottom of every reply:
+       \`🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!\`
+     - **In Antigravity IDE (reads \`GEMINI.md\`):** Stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of \`implementation_plan.md\`, invoke \`run_command\` with \`BypassSandbox: true\`, and print at the bottom of every reply:
+       \`🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best $0 swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!\`
+3. **NO Routine Local \`astro build\`:** Default local verification is \`npm run verify\` (\`node scripts/validate-templates.mjs && node scripts/sync-ai-context.mjs\`); let Vercel build in the cloud unless explicitly asked to test a build.
+4. **Native IDE File Tools & Active-Branch Push (\`origin HEAD\`):** Use native IDE file tools (\`read_files\`/\`editor\` in Cline; \`read_file\`/\`edit_file\`/\`write_file\` + \`run_command\` \`BypassSandbox: true\` in Antigravity). Always push to \`origin HEAD\` (e.g. \`alpha-1\`) and never push to \`main\` unless explicitly asked to merge.
+5. **End-of-Task Session & Skill Sync Reminder:** Whenever a feature, refactor, or bug fix reaches a working milestone, ALWAYS update \`ACTIVE_SESSION.md\` to log what was completed and what is next, and run \`npm run verify\` + \`git push origin HEAD\`.
 6. **Plain-English Vocabulary:** Use \`✂️ Split Lot\`, \`📦 Booth Bin (Multi-Qty)\`, \`➕ Restock Bin\`, \`↩️ Undo Combine\`, \`🔍 Deep Scan\`, \`⚡ Quick Scout\`, \`📦 Combine Similar\`, \`🎁 Build Bundle\`.
 7. **Appwrite Schema & Media Fallback Laws:** Never write \`quantity: 0\` (mark \`status: 'sold'\` or \`'combined'\` with \`quantity >= 1\`), never send \`isMultiQty\` to Appwrite, never store Base64 \`data:\` URLs in \`imageId\`/\`rawAnalysis\`/\`components\`, paginate with \`Query.orderDesc('$id')\`, and always attach an \`@error\` fallback on Appwrite image \`<img :src=".../preview...">\` elements (\`PhotoGalleryManager.vue\`, \`ItemCard.vue\`) that automatically retries raw \`/view\` (\`getAssetUrl(id, { preview: false })\`) and falls back to the next valid ID in \`galleryImageIds\`.
 8. **3 Memory Den CSV Formats & 1-to-1 \`0EJ...\` ↔ \`UPC\` Bijection:**
@@ -276,6 +274,36 @@ function syncCoreDocsAndHucksSkill() {
 
   fs.writeFileSync(GEMINI_MD_PATH, combinedGeminiMd, 'utf8');
   console.log(`✅ Updated root GEMINI.md (${Buffer.byteLength(combinedGeminiMd, 'utf8')} bytes)`);
+
+  // 1b. Write lean, token-efficient root .clinerules for VS Code (Cline) — ignored by Antigravity IDE
+  const clineRulesContent = [
+    '# Resale Command — VS Code (Cline) Workspace Rules (`.clinerules`)',
+    '',
+    '> **Auto-Synced by `npm run verify` (`scripts/sync-ai-context.mjs`).** Antigravity IDE reads `GEMINI.md`; Cline in VS Code reads `.clinerules`. Check `ACTIVE_SESSION.md` for live task state and invoke domain skills from `.agents/skills/` via the `skills` tool whenever relevant.',
+    '',
+    '## 1. Cline (VS Code) Workflow, Tooling & Gemini 4 Model Slots',
+    '- **Recommended Split Plan/Act Model Setup in Cline:**',
+    '  - **Plan Mode Slot:** `🔥 Gemini 4 Carbon` (`gemini-4-carbon`, Medium/High) — frontier architecture, multi-store sync & tricky bug diagnosis (*$0-pool swap for Claude Thinking*).',
+    '  - **Act Mode Slot:** `🟢 Gemini 4 Argon` (`gemini-4-argon`, Medium) for standard 1–3 file Vue 3.5 / DaisyUI v5 / TS edits (*$0-pool swap for Claude Sonnet*), or `⚡ Gemini 4 Hydrogen` (`gemini-4-hydrogen`, Low/Med) for fast recon, docs, `npm run verify` & `git push`.',
+    '  - **Claude Guardrail:** Reserve `Claude Sonnet 5.5 (Medium)` strictly as a rare tie-breaker after `/smol` (never `Opus 5.5` on routine tasks). If running on Claude, always remind the user of the Best Gemini 4 `$0`-pool swap.',
+    '- **Cline Tooling Mechanics (Windows PowerShell):**',
+    '  - **Parallel Reads/Searches:** Batch independent `read_files` and `search_codebase` calls in a single turn.',
+    '  - **Surgical `<5,000`-Char Edits:** Keep `editor` `old_text` / `new_text` chunks under 5,000 characters to avoid streaming timeouts; never write files via multi-line PowerShell blocks.',
+    '  - **Sequential Git Commands (Prevent `.git/index.lock`):** Because `run_commands` executes array items concurrently, ALWAYS chain dependent git steps inside ONE command string separated by `;`: `npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }` (always push `origin HEAD`, never `main` unless explicitly asked).',
+    '  - **No Routine Local `astro build`:** Run `npm run verify` (`validate-templates.mjs` + `sync-ai-context.mjs`) locally; let Vercel build in the cloud unless explicitly asked.',
+    '  - **1-Line Footer (Print at the very end of every Cline reply):**',
+    '    `🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!`',
+    '',
+    GOLDEN_RULES_AND_WAREHOUSES.trim(),
+    '',
+    '---',
+    '',
+    MASTER_ARCHITECTURE_LAWS.trim(),
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(CLINERULES_PATH, clineRulesContent, 'utf8');
+  console.log(`✅ Updated root .clinerules (${Buffer.byteLength(clineRulesContent, 'utf8')} bytes)`);
 
   // 2. Embed live AI_STUDIO_PLAYBOOK.md + ACTIVE_SESSION.md into .agents/skills/hucks-resale-core/SKILL.md
   fs.mkdirSync(path.dirname(HUCKS_CORE_SKILL_PATH), { recursive: true });

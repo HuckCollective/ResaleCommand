@@ -231,6 +231,8 @@ export const generateContentWithBackoff = async (
         new Set([
             DEFAULT_GEMINI_MODEL,
             "gemini-flash-latest",
+            "gemini-4-hydrogen",
+            "gemini-3.8-flash",
             "gemini-flash-lite-latest",
             "gemini-pro-latest",
             "gemini-2.5-flash",

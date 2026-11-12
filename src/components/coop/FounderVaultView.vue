@@ -109,17 +109,22 @@
 
       <div class="p-3.5 rounded-xl bg-base-200/70 border border-base-300 space-y-2 text-xs">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="font-black text-base-content">🛠️ 4-Tier Dev AI Picker Rule (<code class="font-mono text-[11px]">src/lib/devAiRouting.ts</code>)</div>
+          <div class="font-black text-base-content">🛠️ IDE-Independent 4-Tier Model Guide (<code class="font-mono text-[11px]">src/lib/devAiRouting.ts</code>)</div>
           <span class="badge badge-ghost badge-xs font-mono">Reviewed {{ devRosterFreshness.lastReviewed }}</span>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
           <div
             v-for="tier in DEV_AI_TIERS"
             :key="tier.id"
-            class="p-2.5 rounded-lg bg-base-100 border border-base-300 space-y-0.5"
+            class="p-2.5 rounded-lg bg-base-100 border border-base-300 space-y-1 flex flex-col justify-between"
           >
-            <div class="font-black text-base-content">{{ tier.icon }} {{ tier.pickerModel }} ({{ tier.thinkingLevels }})</div>
-            <p class="text-base-content/75 leading-snug">{{ tier.whenToUse }}</p>
+            <div class="space-y-0.5">
+              <div class="font-black text-base-content">{{ tier.icon }} {{ tier.pickerModel }} ({{ tier.thinkingLevels }})</div>
+              <p class="text-base-content/75 leading-snug">{{ tier.whenToUse }}</p>
+            </div>
+            <div class="text-[10px] font-semibold text-primary pt-1 border-t border-base-200">
+              {{ tier.geminiAlternative }}
+            </div>
           </div>
         </div>
       </div>

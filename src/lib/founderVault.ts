@@ -217,7 +217,7 @@ export const DESTINATION_META: Record<PromptTargetDestination, { icon: string; l
   gemini_app: { icon: '📱', label: 'Gemini App (Phone)' },
   chrome_sidebar: { icon: '🌐', label: 'Chrome Sidebar' },
   ai_studio: { icon: '🧪', label: 'AI Studio' },
-  antigravity_ide: { icon: '🎯', label: 'Antigravity IDE' },
+  antigravity_ide: { icon: '💻', label: 'Coding IDE' },
   product_spec: { icon: '📌', label: 'Master Spec' },
 };
 
@@ -265,25 +265,26 @@ export interface PlaybookPresetItem {
 export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
   {
     id: 'ide-surgical-builder',
-    icon: '🎯',
-    title: 'Antigravity IDE: Surgical Bug Fix & Feature',
+    icon: '💻',
+    title: 'Coding IDE: Surgical Bug Fix & Feature',
     summary:
-      'Turns an AI Report, UI bug, or feature note (e.g., saving Quick Scout estimate range cards) into a 1-shot surgical Antigravity IDE prompt with Model Picker & 3-file lock.',
+      'Turns an AI Report, UI bug, or feature note into an IDE-independent surgical prompt (VS Code Cline, Antigravity, Cursor) with Gemini 4 model pick, Claude $0-pool swap, & 3-file lock.',
     destination: 'antigravity_ide',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
-      'Turn this issue description into a surgical Antigravity IDE prompt (with Model Picker header, ALLOWED FILES max 3, MAX TOOL CALLS: 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
+      'Turn this issue description into an IDE-independent surgical coding prompt (with Model Pick + Best Gemini $0-Pool Swap if on Claude, ALLOWED FILES max 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
     masterPromptBody: [
       DEV_AI_IDE_PICKER_BADGE,
+      '💡 IF CLAUDE IS SELECTED: Best $0-pool Gemini alternative is Gemini 4 Argon (Medium) for 1–3 file UI edits, or Gemini 4 Carbon (High) for Plan Mode & tricky multi-store bugs.',
       '',
       'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
       '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
       '',
       'STRICT CONSTRAINTS:',
       '- ALLOWED FILES (MAX 3): Identify the exact 1-3 files first (e.g., `src/components/scout/ScoutView.vue`, `src/components/inventory/ItemDetailsTab.vue`, `src/types/inventory.ts`).',
-      '- MAX TOOL CALLS: 3 edit calls after targeted line-range reads.',
+      '- EXECUTION: Batch parallel file reads and apply surgical edits using native IDE file tools (never PowerShell file-writes).',
       '- FORBIDDEN ACTIONS: Never run `astro build` or `npm run build` locally; never write `quantity: 0` or Base64 to Appwrite; never mutate unrelated functions.',
-      '- VERIFY & PUSH: Run `npm run verify` via `run_command` (`BypassSandbox: true`) and push to `origin HEAD` (`alpha-1`).',
+      '- VERIFY & PUSH: Run `npm run verify` and push to `origin HEAD` (`alpha-1`).',
     ].join('\n'),
     locked: true,
   },
@@ -292,7 +293,7 @@ export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
     icon: '🧪',
     title: 'Chrome Sidebar: Paired Human-AI Live Page QA',
     summary:
-      'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for Antigravity IDE.',
+      'Step-by-step live DOM verification in Chrome Gemini Sidebar with pre-click checklists and 4-line status reports for your Coding IDE.',
     destination: 'chrome_sidebar',
     bundles: ['rc-2-inventory-splitter', 'rc-5-social-studio'],
     defaultGoal:
@@ -563,15 +564,15 @@ export function recommendVaultTemplateAndSurface(
       recommendedPresetId: presetObj.id,
       recommendedPresetTitle: presetObj.title,
       recommendedDestination: 'antigravity_ide',
-      whereToPasteLabel: '🎯 Paste into Antigravity IDE (Active Branch: alpha-1)',
+      whereToPasteLabel: '💻 Paste into Your Coding IDE (Active Branch: alpha-1)',
       aiStudioChatLabel,
       modelPickerBadge: DEV_AI_IDE_PICKER_BADGE,
       whyThisSurface:
-        'This issue describes app behavior, UI state, or scan persistence (e.g., saving Quick Scout estimate range cards when tracking an item) that can be fixed directly in the repo on alpha-1.',
+        'This issue describes app behavior, UI state, or scan persistence that can be fixed directly in the repo on alpha-1 in any coding IDE (VS Code Cline, Antigravity, Cursor).',
       handoffSteps: [
         '1. Click "📋 Copy IDE Prompt" below.',
-        '2. In Antigravity IDE, start a fresh chat (or run /compact) and pick "Gemini 4 Argon (Medium)" for standard edits, "Gemini 4 Carbon (Medium/High)" for /plan or tricky multi-file code, or "Gemini 3.8 Flash" for read-only recon.',
-        `3. Paste and press Enter — or if you want to brainstorm UX options first, switch Target Surface to "🧪 AI Studio" and paste into "${aiStudioChatLabel}".`,
+        '2. Pick the recommended model tier: "Gemini 4 Argon (Med)" for standard 1–3 file edits, "Gemini 4 Carbon (Med/High)" for Plan Mode / tricky multi-file code, or "Gemini 4 Hydrogen" for recon/verify (💡 On Claude? Swap to 4 Carbon High or 4 Argon Med for $0-pool speed).',
+        `3. Paste into a fresh or compacted chat (/smol or /compact) — or switch Target Surface to "🧪 AI Studio" ("${aiStudioChatLabel}") to brainstorm UX options first.`,
       ],
       recommendedBundles,
     };
@@ -586,11 +587,11 @@ export function recommendVaultTemplateAndSurface(
       aiStudioChatLabel,
       modelPickerBadge: `🧪 OPEN AI STUDIO: ${aiStudioChatLabel} (${DEV_AI_STUDIO_MODELS_LABEL})`,
       whyThisSurface:
-        'Best when you want to explore UX alternatives, co-design a multi-file workflow, and build up a SAVED MASTER SPEC & IDE QUEUE before writing code in Antigravity IDE.',
+        'Best when you want to explore UX alternatives, co-design a multi-file workflow, and build up a SAVED MASTER SPEC & IDE QUEUE before writing code in your Coding IDE.',
       handoffSteps: [
         `1. Open Google AI Studio and select "${aiStudioChatLabel}".`,
         '2. Click "📋 Copy Prompt" below and paste it into the chat.',
-        '3. Answer the 2-3 follow-up questions, then copy the final IDE prompt block back into Antigravity IDE.',
+        '3. Answer the 2-3 follow-up questions, then copy the final IDE prompt block into your Coding IDE.',
       ],
       recommendedBundles,
     };

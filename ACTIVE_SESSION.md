@@ -1,5 +1,14 @@
 # Active Session Summary (Updated Nov 12, 2026)
 
+## ✅ GEMINI 4 HYDROGEN ROSTER UPGRADE, IDE-INDEPENDENT VAULT & DUAL-IDE AUTO-MORPHING (`.clinerules` ⇄ `GEMINI.md`) (Nov 12, 2026 — `alpha-1`)
+- **Gemini 4 Hydrogen (`gemini-4-hydrogen`) + Best Gemini `$0`-Pool Swap (`src/lib/devAiRouting.ts`, `src/lib/gemini.ts`)**:
+  - Upgraded Tier 1 fast scout from `Gemini 3.8 Flash` to Google's November 2026 **`Gemini 4 Hydrogen` (`gemini-4-hydrogen`, 1M unified context)** alongside `Gemini 4 Argon` and `Gemini 4 Carbon`, and added `gemini-4-hydrogen` + `gemini-3.8-flash` to `src/lib/gemini.ts`'s fallback chain.
+  - Added explicit `geminiAlternative` `$0`-pool swap guidance across all 4 tiers so whenever `Claude Sonnet` is selected or considered, the exact Gemini 4 replacement (`4 Carbon High` for Plan/tricky code, `4 Argon Medium` for 1–3 file UI edits, `4 Hydrogen` for recon/verify/push) is surfaced immediately.
+- **100% IDE-Independent `/coop/vault` (`src/lib/founderVault.ts`, `src/pages/api/generate-vault-prompt.ts`, `src/components/coop/FounderVaultView.vue`)**:
+  - Made Vault prompt headers, Master Templates (`Coding IDE: Surgical Bug Fix & Feature`), and AI Ally instructions completely IDE-agnostic (`💻 Coding IDE` — works identically in VS Code Cline, Antigravity IDE, or Cursor while preserving backward-compatible `'antigravity_ide'` Appwrite document keys).
+- **Zero-Friction Dual-IDE Auto-Morphing (`scripts/sync-ai-context.mjs`, `.clinerules`, `GEMINI.md`, `docs/AI_STUDIO_PLAYBOOK.md`)**:
+  - Configured `npm run verify` to auto-generate a lean, token-efficient root **`.clinerules`** (read by Cline in VS Code: Plan/Act model slot pairing, `<5,000`-char `editor` chunks, `;`-chained git commands to prevent `.git/index.lock`, and `/smol` footer) alongside **`GEMINI.md`** (read by Antigravity IDE: `BypassSandbox: true`, `/plan`, and `/compact`), so switching IDEs requires zero manual rewrites.
+
 ## ✅ TRIPLE-THREAT MASTER REFACTOR: ZERO-FLASH ROUTING, ROLE-BASED IA & ASTRO 6 MD-CMS (Nov 12, 2026 — `alpha-1`)
 - **Phase 1 — Zero-Flash Routing & Pre-Hydration Chrome (`src/lib/store.ts`, `src/components/common/SessionRouter.astro`, `src/layouts/Layout.astro`, `src/pages/index.astro`, `src/pages/logout.astro`, `src/components/nav/Navbar.vue`)**:
   - Synchronized dual non-sensitive session hints (`auth_session_indicator=true` cookie + `localStorage['rc_has_session'] = '1'`) across `initAuth()` and `try / finally`-hardened `logout()`, and updated `/logout` (`src/pages/logout.astro`) to atomically clear both hints.

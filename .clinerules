@@ -1,0 +1,79 @@
+# Resale Command — VS Code (Cline) Workspace Rules (`.clinerules`)
+
+> **Auto-Synced by `npm run verify` (`scripts/sync-ai-context.mjs`).** Antigravity IDE reads `GEMINI.md`; Cline in VS Code reads `.clinerules`. Check `ACTIVE_SESSION.md` for live task state and invoke domain skills from `.agents/skills/` via the `skills` tool whenever relevant.
+
+## 1. Cline (VS Code) Workflow, Tooling & Gemini 4 Model Slots
+- **Recommended Split Plan/Act Model Setup in Cline:**
+  - **Plan Mode Slot:** `🔥 Gemini 4 Carbon` (`gemini-4-carbon`, Medium/High) — frontier architecture, multi-store sync & tricky bug diagnosis (*$0-pool swap for Claude Thinking*).
+  - **Act Mode Slot:** `🟢 Gemini 4 Argon` (`gemini-4-argon`, Medium) for standard 1–3 file Vue 3.5 / DaisyUI v5 / TS edits (*$0-pool swap for Claude Sonnet*), or `⚡ Gemini 4 Hydrogen` (`gemini-4-hydrogen`, Low/Med) for fast recon, docs, `npm run verify` & `git push`.
+  - **Claude Guardrail:** Reserve `Claude Sonnet 5.5 (Medium)` strictly as a rare tie-breaker after `/smol` (never `Opus 5.5` on routine tasks). If running on Claude, always remind the user of the Best Gemini 4 `$0`-pool swap.
+- **Cline Tooling Mechanics (Windows PowerShell):**
+  - **Parallel Reads/Searches:** Batch independent `read_files` and `search_codebase` calls in a single turn.
+  - **Surgical `<5,000`-Char Edits:** Keep `editor` `old_text` / `new_text` chunks under 5,000 characters to avoid streaming timeouts; never write files via multi-line PowerShell blocks.
+  - **Sequential Git Commands (Prevent `.git/index.lock`):** Because `run_commands` executes array items concurrently, ALWAYS chain dependent git steps inside ONE command string separated by `;`: `npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }` (always push `origin HEAD`, never `main` unless explicitly asked).
+  - **No Routine Local `astro build`:** Run `npm run verify` (`validate-templates.mjs` + `sync-ai-context.mjs`) locally; let Vercel build in the cloud unless explicitly asked.
+  - **1-Line Footer (Print at the very end of every Cline reply):**
+    `🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!`
+
+---
+
+## The 3 Golden Rules, Workflow Guardrails & Canonical Warehouse IDs (`resale_db.warehouses`)
+
+### The 3 Golden Rules
+1. **`storageLocation` must NEVER be blank/unassigned & 4 Canonical Locations Only:** Every physical item (`received`, `placed`, etc.) must have an explicit canonical location code (`MD`, `DT`, `HG`, `HH`). Default unplaced intake items to `HG` (or `HH` when specified), and never create duplicate warehouse records.
+2. **Zero Hardcoded Locations (100% Driven by Central Location Settings):** Never hardcode location codes, names, fees, or static manifest keys in UI components, API routes, or bookmarklets—always read dynamically from `src/lib/warehouses.ts` (`usesRicochet`, `supportsPaperSalesSheet`, `salesIntakeMode`, `commissionRate`, `monthlyRent`).
+3. **Reuse Canonical Pipelines (`src/lib/salesBucketing.ts`), Break Down Monoliths, & Keep Read-Only Audits Clean:** Never reinvent duplicate matching/deduplication pipelines or bloat giant monolithic files—always delegate to `src/lib/salesBucketing.ts` (`splitTrailingBoothSku`, `isPayoutSummaryRow`, `assignOccurrenceFingerprints`, `flagAlreadyRecordedRows`, `matchMemoryDenInventoryItem`, `buildLockedMultiBinMap`), extract focused composables/panels (`src/lib/ricochetPayoutParser.ts`, `src/composables/useRicochetSalesSync.ts`, `src/components/sales/RicochetLiveSalesPanel.vue`), and never modify `.vue` files or run local builds on read-only tasks.
+
+### IDE-Independent Gemini 4 Model Routing & Dual-IDE Auto-Morphing (`VS Code · Cline` ⇄ `Antigravity`)
+1. **4-Tier Model Selection Lock (`src/lib/devAiRouting.ts` — IDE-Independent in `/coop/vault`):**
+   - `⚡ Gemini 4 Hydrogen` (`gemini-4-hydrogen`, `Low` / `Medium` — succeeds `3.8 Flash`): ~8x lighter quota (1M context) for ALL file scouting/recon, doc/session syncs, and `npm run verify` + `git push`.
+   - `🟢 Gemini 4 Argon` (`gemini-4-argon`, `Medium`): Fast Act-mode daily driver for standard 1–3 file Vue 3.5 / DaisyUI v5 UI & clear feature edits *(💡 Best $0-pool swap if Claude Sonnet is selected)*.
+   - `🔥 Gemini 4 Carbon` (`gemini-4-carbon`, `Medium` / `High`): Frontier Plan-mode architect & code surgeon for architecture, multi-store/API adapters, and tricky bug fixes BEFORE touching Claude *(💡 Best $0-pool swap for Claude Thinking)*.
+   - `🟣 Claude Sonnet 5.5` (`Medium`): Rare outside tie-breaker after compacting context (`/smol` or `/compact`) ONLY if an isolated bug needs a second opinion — always display the Best Gemini 4 `$0`-pool alternative alongside it, and never use `Opus 5.5` on routine work.
+2. **Dual-IDE Auto-Morphing Rule (Detect Active IDE Automatically from System Context):**
+   - **In VS Code (`Cline` — reads `.clinerules`):** Use Cline's split **Plan Mode** (`4 Carbon`) ⇄ **Act Mode** (`4 Argon` / `4 Hydrogen`), batch parallel `read_files` / `search_codebase` calls, keep `editor` chunks `<5,000` chars, chain `git add -A; git commit -m "..."; git push origin HEAD` sequentially in ONE command string (avoiding `.git/index.lock` collisions), and end every reply with:
+     `🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!`
+   - **In Antigravity IDE (reads `GEMINI.md`):** Stamp `🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:` at Line 1 of `implementation_plan.md`, invoke `run_command` with `BypassSandbox: true` (`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }`), and end every reply with:
+     `🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best $0 swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!`
+3. **Active-Branch Push Rule (`origin HEAD`) & Zero One-Off Scripts in `scripts/`:** Always push to `origin HEAD` (e.g. `alpha-1`) and never push to `main` unless explicitly asked to merge. Put temporary audit scripts in git-ignored `scratch/` and delete before committing.
+4. **Clean Single Code Block Rule (Anti-Splice-Glitch in Gemini Web):** Whenever Gemini Web outputs a copy-paste prompt for a Coding IDE, output ONE single fenced code block (` ```text ... ``` `) with IDE-independent model headers + Best Gemini `$0`-pool swap line inside it, and zero inline backticks, emojis, or horizontal dividers outside the code block.
+5. **Anti-Rabbit-Hole Scope Lock & Senior Engineering Guardrails:**
+   - Every Vault/Web IDE prompt MUST include `ALLOWED FILES (MAX 3)`, parallel native IDE file reads/edits (never PowerShell file-writes), and a `FORBIDDEN ACTIONS` checklist (no local `astro build` unless explicitly requested, no `quantity: 0` or Base64 writes to Appwrite, no hardcoded fallback dates/fees/`0EJ` SKUs, no monolith bloat—delegate to `src/lib/salesBucketing.ts`, `src/lib/warehouses.ts`, `src/lib/upcAuthority.ts`, and `src/lib/manifests.ts`).
+
+### Canonical Warehouse & Location IDs
+| Code | Name | Document `$id` | Type | Commission | Monthly Rent | Notes / Vibes & Exclusions |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`MD`** | Memory Den - Huck's Adventures Outfitters | `6a7e70050009db0e1857` | On-Site Booth (`#0EJ`) | `15%` | `$382.50/mo` | Goth, Whimsigoth, TTRPG, metaphysical, eclectic, punk, sci-fi, adventure, horror, cos-play |
+| **`DT`** | Dusty Tiger | `6a7e71eb001f53734a86` | Consignment Booth | `10%` | `$75.00/mo` | Small Collectibles, Jewelry, Pins, Pocket Items, Wands & Arcana `<8"`. **NO Clothes, NO Large Toys, NO Bulky Playsets** |
+| **`HG`** | Huck's Garage | `6a7e6f73003a5a2a7c34` | Warehouse / Backstock | `0%` | `$0.00/mo` | Primary backstock facility (hardgoods, toys, decor, bulk) |
+| **`HH`** | Huck's Hideout | `6ae3afbd0030a7eb8a9c` | Warehouse / Backstock | `0%` | `$0.00/mo` | Climate-controlled backstock & staging (`HH` — apparel, books, media, electronics, jewelry) |
+
+---
+
+## Resale Command — 7 Immutable Architecture Laws
+
+1. **LAW 1 — 4 Locations Only (`HG`, `HH`, `MD`, `DT`).**
+   Every physical item and every sale belongs to exactly one of these four canonical `resale_db.warehouses` documents. Never invent a fifth location code, never create duplicate warehouse records, never leave `storageLocation` blank.
+
+2. **LAW 2 — Zero Hardcoding.**
+   No fallback dates (never stamp "today" or a past check date onto a missing sold/paid date), no rent amounts, no commission/fee percentages, no account/project IDs inside UI components, composables, API routes, or bookmarklets. Fee, rent, `usesRicochet`, `salesIntakeMode` etc. always resolve from the live Appwrite `warehouses` document via `src/lib/warehouses.ts` (+ `src/lib/locationSettingsServer.ts` on the server). The fee/rent figures in the Canonical Warehouse table are reference documentation only — never copy them into code.
+
+3. **LAW 3 — 100% Shared Matching via `src/lib/salesBucketing.ts`.**
+   SKU/UPC/title matching, ticket parsing, partner bucketing, occurrence fingerprints, ledger de-duplication and month bucketing are implemented ONCE in `src/lib/salesBucketing.ts` (`matchMemoryDenInventoryItem`, `buildLockedMultiBinMap`, `splitTrailingBoothSku`, `canonicalTicketNumber`, `flagAlreadyRecordedRows`, `pacificMonthKey`, `calendarMonthKeyFromDateString`). Components, composables and API routes delegate to it — never re-implement matching or bucketing.
+
+4. **LAW 4 — Appwrite-First Persistence.**
+   Zero static lookup dictionaries (no `0EJxxx -> HUCK-xxxx` tables, no baked JSON snapshots) in code. Lookup maps are built at runtime, in memory, from live `resale_db` documents: `items`, `warehouses`, `sales`, `manifests`. Staging/commit state lives in `manifests`; seed historical mappings into Appwrite documents (`scripts/seed-md-booth-skus.mjs`), never into source files. Never send an attribute that is not in the collection schema (Appwrite rejects unknown attributes with 400).
+
+5. **LAW 5 — Enterprise UX/IA Pattern.**
+   Primary canvas = Top KPIs ➔ full DataTable ➔ Sticky Bottom Action Bar (`BottomActionDock`, `fixed bottom-0`, `backdrop-blur`, `z-50`, page clearance via `.rc-page-shell` + self-clearing `.rc-dock-spacer` (docks self-measure via `useDockClearance`; never add manual `pb-36 sm:pb-44`), Astro page passes `hideFooter={true}`). Secondary inputs (manual CSV upload, demo loaders, paste drawers) live in right-edge Slide-Over Trays (`SalesImportTray.vue` pattern), triggered from the top toolbar — never as large cards in the page body.
+
+6. **LAW 6 — 3-Tier Commit Idempotency.**
+   Every money-moving commit must be safe to click twice, retry, or resume:
+   - **Layer 1 — UI button lock:** the commit button disables synchronously on click (`isSubmitting`/`isCommitting = true`) and shows batch progress; writes are chunked (25–50 rows per request); any failure unlocks the UI and surfaces the exact Appwrite error in a toast.
+   - **Layer 2 — Manifest status transition:** on success the Appwrite staging manifest moves `staged ➔ committed` (`committed_at`, `committed_count`); a committed manifest hides Commit and shows "✅ Already Synced".
+   - **Layer 3 — Database ticket de-duplication:** the server checks `ticket_number + sale date + location` against `sales` before every insert and skips anything already present (0 duplicate sales, ever).
+
+7. **LAW 7 — Date Bucketing Standard.**
+   Group sales by the **calendar `sold_date`** as written — never by payout/check/paid dates. Month keys are one-indexed `YYYY-MM` strings produced by string parsing (`calendarMonthKeyFromDateString`, `pacificMonthKey`) and labeled by `monthKeyToLabel` (`2026-11` ➔ `November 2026`). Never derive a month from `Date#getMonth()` (0-indexed), and never convert a date-only/UTC-midnight sold date through a time zone. `11-02-2026` and `11-03-2026` must render as "November 2026".
+
+**READ-FIRST pointer (applies to every agent):** before editing sales or inventory-sync code (Ricochet Sales Sync, Commit, dedupe, payout/CSV imports, any script touching `sales`), read `.agents/rules/sales-reconciliation-and-payout-invariants.md` and the Booth Bin rules (`resale-booth-sync` §2.4). SKU + price is never an identity; one sale line = ticket # + gross + net.
