@@ -223,7 +223,10 @@
       v-show="activeSection === section.id"
       class="space-y-6 charter-print-section"
     >
-      <CharterPayoutSimulator v-if="section.id === 'payouts'" :is-authenticated="showMemberActions" />
+      <CharterPayoutSimulator
+        v-if="section.id === 'payouts' && activeSection === 'payouts'"
+        :is-authenticated="showMemberActions"
+      />
 
       <article class="card bg-base-100 border border-base-300 shadow-md rounded-3xl overflow-hidden">
         <div class="card-body p-6 sm:p-8 space-y-5">
@@ -292,14 +295,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
-import ConnectWithUsForm from './ConnectWithUsForm.vue';
-import CharterPayoutSimulator from './CharterPayoutSimulator.vue';
 import type { CharterRoleCard, CharterSectionId, CharterSectionView } from '../../lib/charterCms';
+
+const ConnectWithUsForm = defineAsyncComponent(() => import('./ConnectWithUsForm.vue'));
+const CharterPayoutSimulator = defineAsyncComponent(() => import('./CharterPayoutSimulator.vue'));
 
 const VALID_SECTION_IDS: readonly CharterSectionId[] = ['payouts', 'monthly', 'expenses', 'governance', 'legal'];
 

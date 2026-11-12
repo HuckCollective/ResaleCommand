@@ -165,6 +165,7 @@ import {
   provideDashboardSource,
   provideActiveHat,
   provideActiveLens,
+  provideRoleHelpHtml,
   type ActiveLens,
   type DashboardSource,
 } from '../../composables/dashboard/useDashboardSource';
@@ -189,6 +190,7 @@ const ACTIVE_HAT_STORAGE_KEY = 'rc_active_hat_v1';
 const props = defineProps<{
   mode: 'live' | 'demo';
   taxPlaybookHtml?: string;
+  roleHelpHtmlMap?: Partial<Record<MemberHat, string>>;
 }>();
 
 const META = MEMBER_HAT_META;
@@ -220,6 +222,7 @@ const effectiveLeadHat = computed<MemberHat>(() => {
 
 provideActiveLens(activeLens);
 provideActiveHat(effectiveLeadHat);
+provideRoleHelpHtml(props.roleHelpHtmlMap);
 
 const tray = createDashboardCommandTray(source, activeLens, effectiveLeadHat);
 

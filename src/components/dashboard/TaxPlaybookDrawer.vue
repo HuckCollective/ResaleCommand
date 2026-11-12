@@ -27,29 +27,12 @@
         </div>
       </div>
 
-      <!-- Server-Rendered Markdown CMS Playbook (Phase 3 MD-CMS) or Fallback Rules -->
+      <!-- Server-Rendered Markdown CMS Playbook (src/content/tax/rules.md) -->
       <div
         v-if="playbookHtml"
-        class="prose prose-sm max-w-none prose-headings:font-black prose-headings:tracking-tight prose-p:leading-relaxed"
+        class="prose prose-sm max-w-none prose-headings:font-black prose-headings:tracking-tight prose-p:leading-relaxed prose-blockquote:border-warning prose-blockquote:bg-warning/10 prose-blockquote:rounded-r-xl prose-blockquote:py-2 prose-blockquote:px-4"
         v-html="playbookHtml"
       ></div>
-      <div v-else class="space-y-3">
-        <div
-          v-for="(rule, i) in displayRules"
-          :key="rule.title"
-          class="p-3.5 rounded-xl border"
-          :class="rule.warn ? 'bg-warning/10 border-warning/30' : 'bg-base-200/60 border-base-300'"
-        >
-          <div class="flex flex-wrap items-center justify-between gap-1.5 font-bold text-sm mb-1.5 text-base-content">
-            <span class="flex items-center gap-2 break-words">
-              <Icon :icon="rule.icon" class="w-4 h-4 shrink-0" :class="rule.tone" />
-              <span>{{ i + 1 }}. {{ rule.title }}</span>
-            </span>
-            <span class="badge badge-xs font-mono font-bold whitespace-nowrap" :class="rule.badge">{{ rule.line }}</span>
-          </div>
-          <p class="text-base-content/80 leading-relaxed break-words">{{ rule.body }}</p>
-        </div>
-      </div>
     </div>
 
     <template #footer>
@@ -67,21 +50,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
-import { DEFAULT_TAX_PLAYBOOK_RULES, type TaxPlaybookRule } from '../../lib/taxPlaybookRules';
 
-const props = defineProps<{
+defineProps<{
   playbookHtml?: string;
-  rules?: TaxPlaybookRule[];
 }>();
 
 const isOpen = ref(false);
 const { taxTips } = useDashboardMetrics();
-
-const displayRules = computed(() => (props.rules && props.rules.length > 0 ? props.rules : DEFAULT_TAX_PLAYBOOK_RULES));
 
 const openPlaybook = () => {
   isOpen.value = true;

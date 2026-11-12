@@ -70,3 +70,14 @@ export function useActiveLens(): Ref<ActiveLens> {
   if (!lens) throw new Error('useActiveLens() called outside a <DashboardShell>.');
   return lens;
 }
+
+/** Server-rendered Markdown Role Playbook HTML map (`src/content/roles/*.md`). */
+const ROLE_HELP_HTML_KEY: InjectionKey<Partial<Record<MemberHat, string>>> = Symbol('dashboardRoleHelpHtml');
+
+export function provideRoleHelpHtml(map?: Partial<Record<MemberHat, string>>): void {
+  provide(ROLE_HELP_HTML_KEY, map || {});
+}
+
+export function useRoleHelpHtml(): Partial<Record<MemberHat, string>> {
+  return inject(ROLE_HELP_HTML_KEY, {});
+}

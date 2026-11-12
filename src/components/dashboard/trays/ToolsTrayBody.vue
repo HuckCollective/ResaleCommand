@@ -43,6 +43,15 @@
       <p class="text-xs text-base-content/70 break-words">
         {{ activeLens === 'all' ? 'Combined view across all of your Collective hats.' : META[activeHat].pitch }}
       </p>
+      <details v-if="activeRoleHelpHtml" class="text-xs text-base-content/75 pt-1 border-t border-base-300/70">
+        <summary class="cursor-pointer font-bold text-primary select-none">
+          How the {{ META[activeHat].label }} role works &amp; earns
+        </summary>
+        <div
+          class="prose prose-xs max-w-none pt-1.5 text-base-content/85 break-words"
+          v-html="activeRoleHelpHtml"
+        ></div>
+      </details>
     </div>
 
     <!-- Role Quick Launch Grid -->
@@ -155,6 +164,7 @@ import {
   useDashboardSource,
   useActiveHat,
   useActiveLens,
+  useRoleHelpHtml,
 } from '../../../composables/dashboard/useDashboardSource';
 import {
   useDashboardCommandTray,
@@ -171,7 +181,10 @@ const META = MEMBER_HAT_META;
 const source = useDashboardSource();
 const activeHat = useActiveHat();
 const activeLens = useActiveLens();
+const roleHelpHtmlMap = useRoleHelpHtml();
 const { hatAlertCounts } = useDashboardCommandTray();
+
+const activeRoleHelpHtml = computed(() => roleHelpHtmlMap[activeHat.value] || '');
 
 const loggingHours = ref(false);
 const memberName = computed(() => source.member.value.name);

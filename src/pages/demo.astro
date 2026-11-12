@@ -1,9 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import DashboardShell from '../components/dashboard/DashboardShell.vue';
-import { loadTaxPlaybookHtml } from '../lib/taxCms';
+import { loadRoleHelpHtmlMap, loadTaxPlaybookHtml } from '../lib/taxCms';
 
-const taxPlaybookHtml = await loadTaxPlaybookHtml();
+const [taxPlaybookHtml, roleHelpHtmlMap] = await Promise.all([
+  loadTaxPlaybookHtml(),
+  loadRoleHelpHtmlMap(),
+]);
 ---
 
 <Layout
@@ -12,8 +15,14 @@ const taxPlaybookHtml = await loadTaxPlaybookHtml();
   hideFooter={true}
 >
   <div class="rc-page-shell">
-    <DashboardShell client:only="vue" mode="demo" taxPlaybookHtml={taxPlaybookHtml} />
+    <DashboardShell
+      client:only="vue"
+      mode="demo"
+      taxPlaybookHtml={taxPlaybookHtml}
+      roleHelpHtmlMap={roleHelpHtmlMap}
+    />
   </div>
 </Layout>
+
 
 
