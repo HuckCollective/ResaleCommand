@@ -28,11 +28,11 @@
         <a 
           v-if="warehouse && activeLocationMeta.usesRicochet" 
           :href="bookmarkletHref" 
-          @click.prevent="addToast({ type: 'info', message: `Drag '⚡ ${activeLocationMeta.shortName} Sync' up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
+          @click.prevent="addToast({ type: 'info', message: `Drag '${bookmarkletBarLabel}' up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
           class="btn btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B)! (' + activeLocationMeta.shortName + ' Sync)'"
+          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B)! (' + bookmarkletBarLabel + ')'"
         >
-          <span>⬆️ Drag Bookmarklet: ⚡ {{ activeLocationMeta.shortName }} Sync</span>
+          <span>⬆️ Drag: {{ bookmarkletBarLabel }}</span>
         </a>
 
         <a 
@@ -1182,6 +1182,12 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useInventory } from '../../composables/useInventory';
 import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta, buildRicochetBookmarkletHref } from '../../lib/warehouses';
+import {
+  formatBmlBarLabel,
+  getCachedBmlRegistryConfig,
+  loadBmlRegistryConfig,
+  type BookmarkletRegistryConfig,
+} from '../../lib/bml/registry';
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
@@ -1317,6 +1323,10 @@ const handleUnverifyDrop = async (drop: ManifestDocument) => {
 const warehouse = ref<WarehouseDocument | null>(null);
 const activeLocationMeta = computed(() => getLocationSettingMeta(warehouse.value || props.locationId));
 const bookmarkletHref = computed(() => buildRicochetBookmarkletHref(activeLocationMeta.value.code || 'MD'));
+const bmlRegistry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
+const bookmarkletBarLabel = computed(() =>
+  formatBmlBarLabel(bmlRegistry.value.tools.ricochet_sync, activeLocationMeta.value.shortName)
+);
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
 const error = ref('');
@@ -1989,6 +1999,9 @@ const confirmDeleteLocation = async () => {
 
 onMounted(() => {
   loadLocationData();
+  void loadBmlRegistryConfig().then((cfg) => {
+    bmlRegistry.value = cfg;
+  });
 });
 
 watch(team, () => {

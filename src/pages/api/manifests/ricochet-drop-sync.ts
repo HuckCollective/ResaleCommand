@@ -15,15 +15,11 @@ import {
   sanitizeRicochetDescription,
   truncateCleanly,
 } from '../../../lib/exportUtils';
+import { BML_CORS_HEADERS, requireBookmarkletMember } from '../../../lib/bml/serverAuth';
 
 export const prerender = false;
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+const CORS_HEADERS: Record<string, string> = BML_CORS_HEADERS;
 
 const MANIFESTS_COL_ID = 'manifests';
 const OPEN_STATUSES = ['draft', 'paused', 'exported', 'in-transit'];
@@ -172,7 +168,10 @@ async function fetchItems(
 export const OPTIONS: APIRoute = async () =>
   new Response(null, { status: 204, headers: CORS_HEADERS });
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   const appwrite = getAppwriteClients();
   if (url.searchParams.get('mode') !== 'active_manifests') {
     return json({ error: 'Unsupported mode' }, 400);
@@ -270,6 +269,9 @@ export const GET: APIRoute = async ({ url }) => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   const appwrite = getAppwriteClients();
 
   let body: any;

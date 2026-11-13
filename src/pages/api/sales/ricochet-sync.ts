@@ -20,16 +20,12 @@ import {
 } from '../../../lib/ricochetPayoutParser';
 import { getLocationManifestDocIds } from '../../../lib/warehouses';
 import { loadLiveWarehouseDocs } from '../../../lib/locationSettingsServer';
+import { BML_CORS_HEADERS, requireBookmarkletMember } from '../../../lib/bml/serverAuth';
 
 export type { RicochetSalesSyncPayload, RicochetSyncSaleLine, SpaceRentalAdjustment };
 export const prerender = false;
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+const CORS_HEADERS: Record<string, string> = BML_CORS_HEADERS;
 
 const MANIFESTS_COL_ID = 'manifests';
 
@@ -423,7 +419,10 @@ async function createSaleDocSchemaSafe(
 
 export const OPTIONS: APIRoute = async () => new Response(null, { status: 204, headers: CORS_HEADERS });
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const liveWarehouses = await loadLiveWarehouseDocs();
     const locMeta = resolveRicochetLocation(url.searchParams.get('location'), liveWarehouses);
@@ -492,6 +491,9 @@ export const GET: APIRoute = async ({ url }) => {
 };
 
 export const POST: APIRoute = async ({ request, url }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json().catch(() => ({}));
     const rawLoc = body?.locationCode || body?.location || url.searchParams.get('location');

@@ -46,9 +46,9 @@
           :href="bookmarkletHref"
           @click.prevent="notifyDragBookmarklet"
           class="btn btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click on Ricochet! (' + locationMeta.shortName + ' Sync)'"
+          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click on Ricochet! (' + bookmarkletBarLabel + ')'"
         >
-          <span>⬆️ Drag Bookmarklet: ⚡ {{ locationMeta.shortName }} Sync</span>
+          <span>⬆️ Drag: {{ bookmarkletBarLabel }}</span>
         </a>
 
         <button
@@ -60,6 +60,15 @@
         >
           <span>📋 Copy BML</span>
         </button>
+
+        <a
+          v-if="locationMeta.usesRicochet"
+          href="/settings?tab=bookmarklets"
+          class="btn btn-sm btn-ghost border border-base-300 font-bold gap-1"
+          title="Customize Bookmarklet Label & Pixel 8 Trigger"
+        >
+          <span>⚙️ BML</span>
+        </a>
 
         <button
           type="button"
@@ -628,9 +637,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { resolvePartnerBucketForSaleRow } from '../../lib/salesBucketing';
 import { buildRicochetBookmarkletHref, type LocationSettingMeta } from '../../lib/warehouses';
+import {
+  formatBmlBarLabel,
+  getCachedBmlRegistryConfig,
+  loadBmlRegistryConfig,
+  type BookmarkletRegistryConfig,
+} from '../../lib/bml/registry';
 import { addToast } from '../../stores/toast';
 import BottomActionDock from '../common/BottomActionDock.vue';
 
@@ -699,11 +714,21 @@ const partnerFilter = ref<PartnerFilterMode>('all');
 const bookmarkletHref = computed(() =>
   buildRicochetBookmarkletHref(props.locationMeta?.code || 'MD')
 );
+const bmlRegistry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
+const bookmarkletBarLabel = computed(() =>
+  formatBmlBarLabel(bmlRegistry.value.tools.ricochet_sync, props.locationMeta?.shortName)
+);
+
+onMounted(() => {
+  void loadBmlRegistryConfig().then((cfg) => {
+    bmlRegistry.value = cfg;
+  });
+});
 
 const notifyDragBookmarklet = () => {
   addToast({
     type: 'info',
-    message: `Drag "⚡ ${props.locationMeta.shortName} Sync" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!`,
+    message: `Drag "${bookmarkletBarLabel.value}" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!`,
   });
 };
 

@@ -12,6 +12,7 @@ export const PUBLIC_EXACT_PATHS: ReadonlySet<string> = new Set([
   '/demo', // Example Command Center with fictional data (never touches the database)
   '/login',
   '/logout',
+  '/bml/connect', // Bookmarklet popup / Pixel 8 tab auth handshake (renders Login if signed out)
   '/join',
   '/signup',
   '/404',

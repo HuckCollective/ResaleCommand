@@ -19,15 +19,11 @@ import {
   getLocationSettingMeta,
   resolveCanonicalLocationCode,
 } from '../../lib/warehouses';
+import { BML_CORS_HEADERS, requireBookmarkletMember } from '../../lib/bml/serverAuth';
 
 export const prerender = false;
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+const CORS_HEADERS: Record<string, string> = BML_CORS_HEADERS;
 
 const MANIFESTS_COL_ID = 'manifests';
 
@@ -669,7 +665,10 @@ export const OPTIONS: APIRoute = async () => {
   });
 };
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   const mode = url.searchParams.get('mode');
   const locCode = (resolveCanonicalLocationCode(url.searchParams.get('location') || 'MD') || 'MD').toUpperCase();
   if (mode === 'payload') {
@@ -709,6 +708,9 @@ export const GET: APIRoute = async ({ url }) => {
 };
 
 export const POST: APIRoute = async ({ request, url }) => {
+  const auth = await requireBookmarkletMember(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const locCode = (

@@ -114,9 +114,9 @@
           :href="bookmarkletHref"
           @click.prevent="addToast({ type: 'info', message: `Drag this button up to your browser Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
           class="btn btn-xs sm:btn-sm btn-warning text-warning-content font-black shadow-sm border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="'Drag me to your Chrome Bookmarks Bar! (' + activeCanonicalLocationMeta.shortName + ' Sync)'"
+          :title="'Drag me to your Chrome Bookmarks Bar! (' + bookmarkletBarLabel + ')'"
         >
-          <span>⚡ {{ activeCanonicalLocationMeta.shortName }} Sync</span>
+          <span>{{ bookmarkletBarLabel }}</span>
         </a>
         <button
           type="button"
@@ -126,6 +126,13 @@
         >
           <span>📋 Copy Bookmarklet URL</span>
         </button>
+        <a
+          href="/settings?tab=bookmarklets"
+          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
+          title="Customize Bookmarklet Icon, Label & Pixel 8 Trigger"
+        >
+          <span>⚙️ Customize / Pixel 8</span>
+        </a>
         <button
           type="button"
           class="btn btn-xs sm:btn-sm btn-outline btn-warning font-bold gap-1"
@@ -2165,6 +2172,12 @@ import {
   getLocationManifestDocIds,
   buildRicochetBookmarkletHref,
 } from '../../lib/warehouses';
+import {
+  formatBmlBarLabel,
+  getCachedBmlRegistryConfig,
+  loadBmlRegistryConfig,
+  type BookmarkletRegistryConfig,
+} from '../../lib/bml/registry';
 import { salesApi } from '../../lib/sales';
 import { client, databases, ID } from '../../lib/appwrite';
 import {
@@ -2828,6 +2841,10 @@ const ricochetBarcodePayloadCount = computed(() => Object.keys(ricochetBarcodePa
 
 // Permanent Multi-Domain Live-Loader Bookmarklet (`⚡ Sync`) — Auto-fails over across .llc, .coop, and .com!
 const bookmarkletHref = computed(() => buildRicochetBookmarkletHref(activeLocationCode.value || 'MD'));
+const bmlRegistry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
+const bookmarkletBarLabel = computed(() =>
+  formatBmlBarLabel(bmlRegistry.value.tools.ricochet_sync, activeCanonicalLocationMeta.value.shortName)
+);
 
 // =========================================================================
 // 4. METHODS, WATCHERS & LIFECYCLE (All refs & computeds are now initialized)
@@ -5470,6 +5487,9 @@ onMounted(() => {
       if (document.visibilityState === 'visible' && !isCommitting.value && !isBulkQuickAdding.value) {
         void fetchMdVerifyReport(false);
       }
+    });
+    void loadBmlRegistryConfig().then((cfg) => {
+      bmlRegistry.value = cfg;
     });
   }
 });

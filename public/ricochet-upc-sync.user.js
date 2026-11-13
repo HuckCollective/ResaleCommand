@@ -31,8 +31,20 @@
 
   // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
+  const activeBmlTool = window.__RC_BML_TOOL_CONFIG__ || {};
   const activeLocationCode = String(window.__RC_ACTIVE_LOCATION_CODE__ || activeLocMeta.code || '').toUpperCase();
   const activeLocationName = String(activeLocMeta.name || activeLocMeta.fullName || 'Ricochet Booth');
+  const activeBmlIcon = String(activeBmlTool.icon || '⚡').trim() || '⚡';
+  const activeHudTitle = String(activeBmlTool.hudTitle || `${activeLocationName} Barcode Sync & Verifier`).trim();
+  const getBmlMemberSession = () => {
+    try {
+      return window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.getSession === 'function'
+        ? window.__RC_BML_AUTH__.getSession()
+        : null;
+    } catch (e) {
+      return null;
+    }
+  };
   // Fee / rent come ONLY from central Location Settings (injected as __RC_ACTIVE_LOCATION_META__) — no literal fallbacks
   const activeCommissionRate = Number(activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? 0) || 0;
   const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? 0) || 0;
@@ -881,7 +893,7 @@
         gap: 8px;
         transition: transform 0.15s ease;
       ">
-        <span>⚡ ${activeLocationName} Sync</span>
+        <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeLocationName)} Sync</span>
         <span id="rc-fab-badge" style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:999px;font-size:11px;">Ready</span>
       </button>
 
@@ -904,10 +916,13 @@
         <div style="padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <div style="font-weight: 800; font-size: 14px; color: #f8fafc; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-              <span>⚡ ${activeLocationName} Barcode Sync &amp; Verifier</span>
+              <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeHudTitle)}</span>
               <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800;">✅ ${RC_SCRIPT_VERSION} Live Auto-Updated</span>
             </div>
-            <div style="font-size: 11px; color: #94a3b8;" id="rc-catalog-status">Connecting to Ricochet session...</div>
+            <div style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
+              <span id="rc-catalog-status">Connecting to Ricochet session...</span>
+              <button id="rc-bml-member-btn" type="button" title="Works@TheHC Member Bookmarklet Session (click to connect or refresh)" style="background:rgba(124,58,237,0.22);border:1px solid rgba(167,139,250,0.45);color:#ddd6fe;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;cursor:pointer;">🔐 Connect Member</button>
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <button id="rc-refresh-cloud-btn" title="Re-fetch latest live barcodes from Resale Command" style="background:#334155;border:none;color:#cbd5e1;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;cursor:pointer;">🔄 Live Fetch</button>
@@ -1309,6 +1324,32 @@
       fetchLivePayloadFromCloud(true);
       harvestLiveSpaPayoutTables(true);
     });
+    const refreshMemberBtnState = () => {
+      const mBtn = document.getElementById('rc-bml-member-btn');
+      if (!mBtn) return;
+      const sess = getBmlMemberSession();
+      if (sess) {
+        mBtn.textContent = `👤 ${sess.name || 'Member'} (${sess.prefix || 'HUCK-'})`;
+        mBtn.style.background = 'rgba(16,185,129,0.2)';
+        mBtn.style.borderColor = 'rgba(52,211,153,0.45)';
+        mBtn.style.color = '#6ee7b7';
+      } else {
+        mBtn.textContent = '🔐 Connect Member';
+        mBtn.style.background = 'rgba(245,158,11,0.22)';
+        mBtn.style.borderColor = 'rgba(251,191,36,0.5)';
+        mBtn.style.color = '#fde68a';
+      }
+    };
+    const memberBtn = document.getElementById('rc-bml-member-btn');
+    if (memberBtn) {
+      memberBtn.addEventListener('click', () => {
+        if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.openConnectFlow === 'function') {
+          window.__RC_BML_AUTH__.openConnectFlow();
+        }
+      });
+    }
+    window.addEventListener('rc-bml-authenticated', refreshMemberBtnState);
+    refreshMemberBtnState();
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
     document.getElementById('rc-push-sales-btn').addEventListener('click', () => pushSalesToResaleCore({ silent: false }));
@@ -1419,6 +1460,7 @@
     const mergedCloudMeta = {};
     const mergedVerifiedBySku = {};
     let bestEndpointData = null;
+    let sawAuthRequired = false;
 
     // Also pull the full 808-item persisted report (`?mode=report` / default GET) and merge with `?mode=payload`
     // so all 501 In-Stock + 307 Sold/Historical + 83 Partner items are guaranteed present!
@@ -1429,6 +1471,9 @@
           fetch(`${baseEndpoint}?mode=payload&${locQuery}&t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
           fetch(`${baseEndpoint}?${locQuery}&t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
         ]);
+        if ((payloadRes && payloadRes.status === 401) || (reportRes && reportRes.status === 401)) {
+          sawAuthRequired = true;
+        }
 
         if (reportRes && reportRes.ok) {
           const rData = await reportRes.json().catch(() => null);
@@ -1563,9 +1608,21 @@
     isFetchingCloudPayload = false;
     if (cloudBadge) {
       const fallbackCount = Math.max(Object.keys(parsedMap).length, verifiedSkuSet.size);
-      cloudBadge.textContent = fallbackCount > 0 ? `✅ ${RC_SCRIPT_VERSION} Live Auto-Updated (${fallbackCount})` : '⚠️ Offline';
-      cloudBadge.style.background = '#78350f';
-      cloudBadge.style.color = '#fde68a';
+      if (sawAuthRequired && fallbackCount === 0) {
+        cloudBadge.textContent = '🔐 Sign In Required';
+        cloudBadge.style.background = '#78350f';
+        cloudBadge.style.color = '#fde68a';
+        cloudBadge.style.cursor = 'pointer';
+        cloudBadge.onclick = () => {
+          if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.openConnectFlow === 'function') {
+            window.__RC_BML_AUTH__.openConnectFlow();
+          }
+        };
+      } else {
+        cloudBadge.textContent = fallbackCount > 0 ? `✅ ${RC_SCRIPT_VERSION} Live Auto-Updated (${fallbackCount})` : '⚠️ Offline';
+        cloudBadge.style.background = '#78350f';
+        cloudBadge.style.color = '#fde68a';
+      }
     }
     hideModalLoaderAfterMinDuration();
     return false;

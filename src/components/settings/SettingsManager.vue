@@ -323,35 +323,43 @@
       <OrgSettingsView />
     </div>
 
-    <!-- TAB 4: THERMAL HARDWARE -->
-    <div v-show="activeTab === 'hardware'" class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h3 class="text-lg font-black flex items-center gap-2">
-            <Icon icon="solar:printer-bold" class="w-6 h-6 text-primary" />
-            Thermal Label &amp; Hardware Studio
-          </h3>
-          <p class="text-sm text-base-content/70 mt-1 max-w-xl">
-            Calibrate direct thermal printers, preview Code128 barcodes, test gap sensors, and print replacement tags for lost booth stickers.
-          </p>
+    <!-- TAB 4: THERMAL HARDWARE & BOOKMARKLETS -->
+    <div v-show="activeTab === 'hardware'" class="space-y-6">
+      <BookmarkletRegistryPanel
+        :can-edit="canEditGlobal"
+        :default-location-code="ricochetMeta.code"
+        :default-location-short-name="ricochetMeta.shortName"
+      />
+
+      <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-black flex items-center gap-2">
+              <Icon icon="solar:printer-bold" class="w-6 h-6 text-primary" />
+              Thermal Label &amp; Hardware Studio
+            </h3>
+            <p class="text-sm text-base-content/70 mt-1 max-w-xl">
+              Calibrate direct thermal printers, preview Code128 barcodes, test gap sensors, and print replacement tags for lost booth stickers.
+            </p>
+          </div>
+          <a href="/labels/studio" class="btn btn-primary text-primary-content font-bold gap-2 shrink-0">
+            <Icon icon="solar:printer-bold" class="w-5 h-5" />
+            Launch Studio
+          </a>
         </div>
-        <a href="/labels/studio" class="btn btn-primary font-bold gap-2 shrink-0">
-          <Icon icon="solar:printer-bold" class="w-5 h-5" />
-          Launch Studio
-        </a>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
-          <div class="text-xs font-bold">🏷️ Supported Media</div>
-          <div class="text-xs text-base-content/60 mt-1">2"×1" Booth, 2.2"×0.5" Butterfly Jewelry, 3"×2" Bin, 4"×6" Shipping</div>
-        </div>
-        <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
-          <div class="text-xs font-bold">🖨️ Hardware Profiles</div>
-          <div class="text-xs text-base-content/60 mt-1">Rollo Direct Thermal, Zebra ZD411, Dymo 550, Munbyn (Mac &amp; PC)</div>
-        </div>
-        <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
-          <div class="text-xs font-bold">⚡ Ricochet POS Authority</div>
-          <div class="text-xs text-base-content/60 mt-1">Memory Den 6-char location SKU encoding for instant register checkout</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold">🏷️ Supported Media</div>
+            <div class="text-xs text-base-content/60 mt-1">2"×1" Booth, 2.2"×0.5" Butterfly Jewelry, 3"×2" Bin, 4"×6" Shipping</div>
+          </div>
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold">🖨️ Hardware Profiles</div>
+            <div class="text-xs text-base-content/60 mt-1">Rollo Direct Thermal, Zebra ZD411, Dymo 550, Munbyn (Mac &amp; PC)</div>
+          </div>
+          <div class="p-3 rounded-xl bg-base-200/60 border border-base-300">
+            <div class="text-xs font-bold">⚡ Ricochet POS Authority</div>
+            <div class="text-xs text-base-content/60 mt-1">Memory Den 6-char location SKU encoding for instant register checkout</div>
+          </div>
         </div>
       </div>
     </div>
@@ -373,6 +381,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import OrgSettingsView from '../org/OrgSettingsView.vue';
+import BookmarkletRegistryPanel from '../bml/BookmarkletRegistryPanel.vue';
 import {
   warehousesApi,
   getAllLocationSettingMetas,
@@ -408,7 +417,7 @@ const tabs: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'personas', label: 'Personas, Prefixes & Contracts', icon: 'solar:masks-bold-duotone' },
   { id: 'locations', label: 'Locations & Intake', icon: 'solar:shop-2-bold-duotone' },
   { id: 'team', label: 'Team, Storefront & API', icon: 'solar:users-group-two-rounded-bold-duotone' },
-  { id: 'hardware', label: 'Thermal Hardware', icon: 'solar:printer-bold-duotone' },
+  { id: 'hardware', label: 'Bookmarklets & Thermal', icon: 'solar:printer-bold-duotone' },
 ];
 const activeTab = ref<SettingsTab>('personas');
 
@@ -683,6 +692,7 @@ onMounted(async () => {
   if (typeof window !== 'undefined') {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'personas' || tab === 'locations' || tab === 'team' || tab === 'hardware') activeTab.value = tab;
+    if (tab === 'bookmarklets') activeTab.value = 'hardware';
     if (tab === 'members') activeTab.value = 'team';
   }
   await Promise.all([loadSettings(), loadWarehouses()]);

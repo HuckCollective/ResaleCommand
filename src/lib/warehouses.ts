@@ -464,19 +464,14 @@ export function matchesLocationFilter(
            checkValue(item.purchaseLocation);
 }
 
+import { buildEvergreenBookmarkletHref } from './bml/registry';
+
 /**
  * Single Source of Truth for the Drag-and-Drop Permanent Live-Loader Bookmarklet (`⚡ Memory Den Sync`).
  * Generates a thin multi-origin fallback loader that fetches `/scripts/rico-bookmarklet.js?location=${code}&t=...`
  * so the user's browser bookmark never goes stale and works across `works.thehc.llc`, `works.thehc.coop`, and `resalecmd.com`.
  */
 export function buildRicochetBookmarkletHref(locationCode = 'MD'): string {
-    const currentOrigin =
-        typeof window !== 'undefined' &&
-        window.location?.origin &&
-        !window.location.origin.includes('localhost')
-            ? window.location.origin
-            : siteConfig.siteUrl;
-    const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS]));
-    const locCode = encodeURIComponent(resolveCanonicalLocationCode(locationCode));
-    return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/scripts/rico-bookmarklet.js?location=${locCode}&t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
+    const locCode = encodeURIComponent(resolveCanonicalLocationCode(locationCode) || 'MD');
+    return buildEvergreenBookmarkletHref(`/scripts/rico-bookmarklet.js?location=${locCode}`);
 }
