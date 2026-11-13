@@ -10,6 +10,7 @@ import {
 import { BML_CORS_HEADERS, requireBookmarkletMember } from '../../../lib/bml/serverAuth';
 import { parseTrackingNumbers } from '../../../lib/shipmentTracking';
 import { parsePacificDateToIso } from '../../../lib/dateTimeUtils';
+import { formatReadableSellerLabel } from '../../../lib/shipping-rules';
 
 export const prerender = false;
 
@@ -195,9 +196,39 @@ export const GET: APIRoute = async ({ request }) => {
     const { bySgwItemId } = await scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix);
 
     const watchlist: Record<string, any> = {};
+    const combinableItems: any[] = [];
     for (const [sgwId, doc] of bySgwItemId.entries()) {
       const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
-      watchlist[sgwId] = {
+      const rawSellerName =
+        doc.sellerName ||
+        rawObj.sgwSeller ||
+        rawObj.seller_info?.seller_name ||
+        rawObj.sellerName ||
+        '';
+      const sellerId =
+        doc.sellerId ||
+        rawObj.sgwSellerId ||
+        rawObj.seller_info?.seller_id ||
+        null;
+      const cleanSeller = rawSellerName
+        ? formatReadableSellerLabel({ sellerName: rawSellerName, sellerId, platform: 'shopgoodwill' })
+        : '';
+      const shippingWeight =
+        Number(
+          doc.shippingWeight ||
+            rawObj.sgwShippingWeight ||
+            rawObj.seller_info?.shipping_weight ||
+            rawObj.shipping_info?.weight ||
+            1.0
+        ) || 1.0;
+      const canCombineShipping =
+        doc.canCombineShipping !== undefined
+          ? Boolean(doc.canCombineShipping)
+          : rawObj.seller_info?.can_combine_shipping !== undefined
+          ? Boolean(rawObj.seller_info.can_combine_shipping)
+          : true;
+
+      const entry = {
         itemId: sgwId,
         docId: doc.$id,
         title: doc.title || '',
@@ -206,9 +237,25 @@ export const GET: APIRoute = async ({ request }) => {
         currentBid: Number(doc.currentBid || doc.cost || 0),
         boutiquePrice: Number(doc.boutiquePrice || doc.resalePrice || 0),
         auctionStatus: doc.auctionStatus || null,
-        bidState: rawObj.sgwBidState || null,
-        myMaxBid: Number(rawObj.sgwMyMaxBid || 0),
+        bidState: rawObj.sgwBidState || (doc.status === 'acquired' ? 'won' : null),
+        myMaxBid: Number(rawObj.sgwMyMaxBid || doc.maxBid || 0),
+        sellerId,
+        sellerName: cleanSeller,
+        rawSellerName,
+        shippingWeight,
+        canCombineShipping,
+        auctionEndsAt: doc.auctionEndsAt || rawObj.auction_meta?.end_time || null,
+        orderId: doc.orderId || null,
       };
+      watchlist[sgwId] = entry;
+
+      // Active tracked items OR recent unshipped won ('acquired' without a shipped orderId) are eligible for SGW 7-day Combined Shipping
+      const isTrackOrUnshippedWon =
+        doc.status === 'tracked' ||
+        (doc.status === 'acquired' && !doc.orderId);
+      if (isTrackOrUnshippedWon && cleanSeller) {
+        combinableItems.push(entry);
+      }
     }
 
     return new Response(
@@ -217,6 +264,7 @@ export const GET: APIRoute = async ({ request }) => {
         member: auth.member,
         count: Object.keys(watchlist).length,
         watchlist,
+        combinableItems,
       }),
       { status: 200, headers: BML_CORS_HEADERS }
     );
@@ -719,7 +767,7 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // 4. SINGLE ITEM PAGE (/item/:id) -> Quick Track in Active Buy Tracker
+    // 4. SINGLE ITEM PAGE (/item/:id) -> Track in ShopGoodwill Buy Tracker (with or without AI Speed Scout report)
     if (pageType === 'item') {
       const r = rows[0] || body?.item || {};
       const itemId = String(r?.itemId || '').replace(/\D/g, '').trim();
@@ -731,9 +779,66 @@ export const POST: APIRoute = async ({ request }) => {
       }
       const title = String(r?.title || `ShopGoodwill #${itemId}`).trim();
       const currentPrice = Number(r?.currentPrice || 0);
+      const maxBid = Number(r?.maxBid || 0);
+      const boutiquePrice = Number(r?.boutiquePrice || r?.resalePrice || 0);
+      const resalePrice = Number(r?.resalePrice || r?.boutiquePrice || 0);
+      const sellerName = r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill';
+      const sellerId = r?.sellerId ? String(r.sellerId) : undefined;
+      const shippingWeight = Number(r?.shippingWeight || 0) || undefined;
+      const canCombineShipping = r?.canCombineShipping !== undefined ? Boolean(r.canCombineShipping) : true;
+      const auctionEndsAtRaw = String(r?.auctionEndsAt || r?.endingDate || '').trim();
+      const auctionEndsAt = auctionEndsAtRaw
+        ? (auctionEndsAtRaw.includes('T') ? auctionEndsAtRaw : parsePacificDateToIso(auctionEndsAtRaw)) || undefined
+        : undefined;
+      const conditionNotes = r?.conditionNotes ? String(r.conditionNotes).slice(0, 2000) : undefined;
+      const aiReport = r?.aiReport && typeof r.aiReport === 'object' ? r.aiReport : null;
+
       const matched = bySgwItemId.get(itemId);
 
       if (matched) {
+        if (!dryRun) {
+          const rawObj = {
+            ...parseRawAnalysisJson(matched.rawAnalysis),
+            ...(aiReport || {}),
+            sgwItemId: itemId,
+            sgwSeller: sellerName,
+            sgwSellerId: sellerId || null,
+            sgwShippingWeight: shippingWeight || 1.0,
+            sgwMyMaxBid: maxBid > 0 ? maxBid : Number(matched.maxBid || 0),
+            sgwSyncedAt: new Date().toISOString(),
+          };
+          const updateDoc: Record<string, any> = {
+            title: title || matched.title,
+            currentBid: currentPrice > 0 ? currentPrice : matched.currentBid,
+            sellerName,
+            canCombineShipping,
+            rawAnalysis: serializeRawAnalysisJson(rawObj),
+          };
+          if (maxBid > 0) {
+            updateDoc.maxBid = maxBid;
+            updateDoc.maxBuyPrice = maxBid;
+          }
+          if (boutiquePrice > 0) updateDoc.boutiquePrice = boutiquePrice;
+          if (resalePrice > 0) updateDoc.resalePrice = resalePrice;
+          if (auctionEndsAt) updateDoc.auctionEndsAt = auctionEndsAt;
+          if (conditionNotes) updateDoc.conditionNotes = conditionNotes;
+          if (!matched.storageLocation) updateDoc.storageLocation = 'HG';
+
+          await databases.updateDocument(dbId, itemsCol, matched.$id, updateDoc);
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              pageType,
+              dryRun: false,
+              action: 'UPDATED_TRACKED',
+              docId: matched.$id,
+              itemId,
+              title,
+              maxBid,
+            }),
+            { status: 200, headers: BML_CORS_HEADERS }
+          );
+        }
         return new Response(
           JSON.stringify({
             ok: true,
@@ -743,6 +848,7 @@ export const POST: APIRoute = async ({ request }) => {
             docId: matched.$id,
             itemId,
             title: matched.title || title,
+            maxBid: maxBid || matched.maxBid || 0,
           }),
           { status: 200, headers: BML_CORS_HEADERS }
         );
@@ -756,22 +862,43 @@ export const POST: APIRoute = async ({ request }) => {
           auth.member.teamId,
           auth.member.userId
         );
+        const rawObj = {
+          ...(aiReport || {}),
+          sgwItemId: itemId,
+          sgwSeller: sellerName,
+          sgwSellerId: sellerId || null,
+          sgwShippingWeight: shippingWeight || 1.0,
+          sgwMyMaxBid: maxBid > 0 ? maxBid : 0,
+          sgwSyncedAt: new Date().toISOString(),
+        };
+        const createPayload: Record<string, any> = {
+          title,
+          status: 'tracked',
+          storageLocation: 'HG',
+          cost: currentPrice,
+          currentBid: currentPrice,
+          sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
+          sellerName,
+          canCombineShipping,
+          purchaseId: trackerPo?.$id || null,
+          cartId: trackerPo?.$id || null,
+          tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
+          rawAnalysis: serializeRawAnalysisJson(rawObj),
+        };
+        if (maxBid > 0) {
+          createPayload.maxBid = maxBid;
+          createPayload.maxBuyPrice = maxBid;
+        }
+        if (boutiquePrice > 0) createPayload.boutiquePrice = boutiquePrice;
+        if (resalePrice > 0) createPayload.resalePrice = resalePrice;
+        if (auctionEndsAt) createPayload.auctionEndsAt = auctionEndsAt;
+        if (conditionNotes) createPayload.conditionNotes = conditionNotes;
+
         const created = await databases.createDocument(
           dbId,
           itemsCol,
           NodeID.unique(),
-          {
-            title,
-            status: 'tracked',
-            storageLocation: 'HG',
-            cost: currentPrice,
-            currentBid: currentPrice,
-            sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
-            sellerName: r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill',
-            purchaseId: trackerPo?.$id || null,
-            cartId: trackerPo?.$id || null,
-            tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
-          },
+          createPayload,
           perms
         );
         return new Response(
@@ -783,6 +910,7 @@ export const POST: APIRoute = async ({ request }) => {
             docId: created.$id,
             itemId,
             title,
+            maxBid,
           }),
           { status: 200, headers: BML_CORS_HEADERS }
         );
@@ -797,6 +925,7 @@ export const POST: APIRoute = async ({ request }) => {
           itemId,
           title,
           currentPrice,
+          maxBid,
         }),
         { status: 200, headers: BML_CORS_HEADERS }
       );

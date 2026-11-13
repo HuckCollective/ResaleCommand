@@ -1741,6 +1741,19 @@ onMounted(async () => {
         } finally {
             analyzing.value = false;
         }
+    } else {
+        const directUrl = urlParams.get('url')?.trim();
+        if (directUrl && /^https?:\/\//i.test(directUrl)) {
+            scoutUrl.value = directUrl;
+            sourcingLocation.value = directUrl;
+            isAcquired.value = false;
+            intakeAutoSource.value = 'url_auction';
+            setTimeout(() => {
+                if (capabilities.value.canScoutByUrl && !loading.value) {
+                    handleAnalyze();
+                }
+            }, 350);
+        }
     }
 });
 

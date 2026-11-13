@@ -7,7 +7,7 @@ import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-buil
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
 import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
-import { verifyAppwriteJwtToMember } from '../../lib/bml/serverAuth';
+import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/bml/serverAuth';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -603,7 +603,7 @@ export const ALL: APIRoute = async ({ request }) => {
             headers: {
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "POST, PUT, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, X-Client-Claim",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Appwrite-JWT, X-Client-Claim",
             }
         });
     }
@@ -624,8 +624,17 @@ export const ALL: APIRoute = async ({ request }) => {
     let scrapedListingContext = "";
     let shippingSummary = "";
 
+    // Verify signed Bookmarklet Bearer token (rcbml_v1) if sent from ShopGoodwill bookmarklet
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
+    let hasValidBmlBearer = false;
+    if (/^Bearer\s+\S+/i.test(authHeader)) {
+        const bmlAuth = await requireBookmarkletMember(request);
+        if (!bmlAuth.ok) return bmlAuth.response;
+        hasValidBmlBearer = true;
+    }
+
     // GUEST PREVIEW: unauthenticated visitors get a limited scan (daily quota, max photos, no URLs/locations).
-    const isGuest = isGuestRequest(request);
+    const isGuest = !hasValidBmlBearer && isGuestRequest(request);
     if (isGuest) {
         const quota = consumeGuestScan(request);
         if (!quota.allowed) {
