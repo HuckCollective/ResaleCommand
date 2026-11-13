@@ -556,8 +556,8 @@ export function useInventoryFilters(
                 return false;
             }
 
-            // 3. Core Exclusion: Sold items
-            if (doHideSold && itemStatus === 'sold' && st !== 'sold') {
+            // 3. Core Exclusion: Sold items (bypassed when inspecting sold items via insight or SO filter)
+            if (doHideSold && itemStatus === 'sold' && st !== 'sold' && insight !== 'missing_sold_price' && !filterSO.value) {
                 return false;
             }
 
@@ -677,7 +677,12 @@ export function useInventoryFilters(
             // 15. AI Health Insights
             if (insight) {
                 if (insight === 'missing_sold_price') {
-                    if (itemStatus !== 'sold' || (parseVal(anyItem, 'soldPrice', 'Sold') || parseVal(anyItem, 'price', 'Sold'))) return false;
+                    const hasSoldOrTagPrice =
+                        parseVal(anyItem, 'soldPrice', 'Sold') ||
+                        parseVal(anyItem, 'resalePrice', 'Resale') ||
+                        parseVal(anyItem, 'listPrice', 'Est') ||
+                        parseVal(anyItem, 'price', 'Sold');
+                    if (itemStatus !== 'sold' || hasSoldOrTagPrice) return false;
                 } else if (insight === 'missing_est_value' || insight === 'missing_pricing') {
                     if (itemStatus === 'sold' || (parseVal(anyItem, 'resalePrice', 'Resale') || parseVal(anyItem, 'estValue', 'Est. Low') || parseVal(anyItem, 'listPrice', 'Est'))) return false;
                 } else if (insight === 'missing_cost') {
@@ -993,6 +998,9 @@ export function useInventoryFilters(
 
         if (p.has('insightFilter')) {
             filterInsight.value = p.get('insightFilter') || '';
+            if (filterInsight.value === 'missing_sold_price') {
+                hideSold.value = false;
+            }
         }
         if (p.has('queue') || p.has('smartQueue')) {
             filterSmartQueue.value = (p.get('queue') || p.get('smartQueue') || '') as SmartQueueId | '';

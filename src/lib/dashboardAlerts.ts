@@ -89,7 +89,11 @@ export const isActiveInventory = (i: any): boolean =>
 const estValueOf = (i: any) =>
   parseItemValue(i, 'resalePrice', 'Resale') || parseItemValue(i, 'estValue', 'Est. Low') || parseItemValue(i, 'listPrice', 'Est');
 const costOf = (i: any) => parseItemValue(i, 'cost', 'Paid') || parseItemValue(i, 'purchasePrice', 'Paid');
-const soldPriceOf = (i: any) => parseItemValue(i, 'soldPrice', 'Sold') || parseItemValue(i, 'price', 'Sold');
+const soldPriceOf = (i: any) =>
+  parseItemValue(i, 'soldPrice', 'Sold') ||
+  parseItemValue(i, 'resalePrice', 'Resale') ||
+  parseItemValue(i, 'listPrice', 'Est') ||
+  parseItemValue(i, 'price', 'Sold');
 
 const hasPhoto = (i: any): boolean => {
   if (i.imageId || (i.galleryImageIds && i.galleryImageIds.length > 0)) return true;
@@ -205,14 +209,14 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   // Sales & sync
   {
     id: 'unlinked_tickets', category: 'sales', severity: 'warning', icon: 'solar:link-broken-bold-duotone',
-    title: 'Unlinked register tickets', actionText: 'Link tickets', href: '/sales',
+    title: 'Unlinked register tickets', actionText: 'Link tickets', href: '/sales?unlinked=1',
     hats: ['founder'], liveWired: true,
     evaluate: ({ snap }) => {
       const rows = snap.sales.filter((s) => !s.matched);
       return {
         count: rows.length,
         detail: 'Register tickets not matched to an inventory item.',
-        samples: rows.slice(0, 3).map((s) => ({ label: `${s.title} (${money(s.amount)})`, href: '/sales' })),
+        samples: rows.slice(0, 3).map((s) => ({ label: `${s.title} (${money(s.amount)})`, href: '/sales?unlinked=1' })),
       };
     },
   },

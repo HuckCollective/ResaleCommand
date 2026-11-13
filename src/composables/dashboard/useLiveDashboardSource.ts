@@ -33,11 +33,13 @@ import { joinApi } from '../../lib/joinRequestsClient';
 import {
   PREVERIFIED_MD_MULTI_QTY_BINS,
   buildLockedMultiBinMap,
+  cleanCatalogSku,
   matchMemoryDenInventoryItem,
   pacificMonthKey,
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
 } from '../../lib/salesBucketing';
+import { salesApi } from '../../lib/sales';
 import type { DashboardSource } from './useDashboardSource';
 
 /** Real dashboard data (signed-in members). The ONLY dashboard file that talks to Appwrite. */
@@ -65,54 +67,125 @@ export function useLiveDashboardSource(): DashboardSource {
     joinRequests.value = res.ok ? res.data.pending || 0 : 0;
   };
 
-  /** Recent sales ledger docs. Uses `salesBucketing.ts` (Law 3) so Booth Bins (`0EJ097`, `0EJ0OF`, etc.) and SKU matches count as matched. */
+  /** Recent sales ledger docs. Uses `salesBucketing.ts` (Law 3) and matches `SalesList.vue` 1:1 so Booth Bins, `orderId` titles, `COMMONS-`, and SKU/UPC matches all resolve accurately. */
   const loadSales = async () => {
-    const res = await databases.listDocuments(getDatabaseId(), resolveCollectionId('sales'), [
-      Query.limit(100),
-      Query.orderDesc('$id'),
-    ]);
+    const allDocs = await salesApi.listSales(currentTeam.value?.$id);
     const activeItems = inventoryItems.value || [];
     const itemBySaleId = new Map<string, any>();
     for (const i of activeItems) if (i.saleId) itemBySaleId.set(String(i.saleId), i);
     const claimed = new Map<string, string>();
     const multiBins = buildLockedMultiBinMap(activeItems, claimed);
 
-    const validDocs = (res.documents as any[]).filter(
+    const validDocs = (allDocs as any[]).filter(
       (d) => String(d.status || '').toLowerCase() !== 'cancelled'
     );
     rawSalesDocs.value = validDocs;
     sales.value = validDocs.map((d) => {
-        const rawTitle = String(d.soNumber || d.orderId || '').trim();
-        const split = splitTrailingBoothSku(rawTitle);
-        const sku = String(d.sku || split.sku || '').trim().toUpperCase();
-        const isPreverifiedBin = Boolean(sku && PREVERIFIED_MD_MULTI_QTY_BINS[sku]);
-        const item =
-          itemBySaleId.get(d.$id) ||
-          matchMemoryDenInventoryItem({
-            sku,
-            upc: d.upc,
-            title: split.title || rawTitle,
-            price: Number(d.grossAmount || 0),
-            activeItems,
-            claimedItemIdToSku: claimed,
-            multiBinResolvedBySku: multiBins,
-          });
-        const bucket = resolvePartnerBucketForSaleRow({
+      const sSo = cleanCatalogSku(d.soNumber).toUpperCase();
+      const sOrd = cleanCatalogSku(d.orderId).toUpperCase();
+      const rawOrderDesc =
+        d.orderId && String(d.orderId).includes('•')
+          ? String(d.orderId).split('•').slice(1).join('•').trim()
+          : String(d.orderId || '');
+      const split = splitTrailingBoothSku(rawOrderDesc);
+      const extractedSku = cleanCatalogSku(split.sku || (/^0EJ/i.test(sSo) ? sSo : '')).toUpperCase();
+      const extractedUpc = /^(?:HUCK|PDXGL|BB)-/i.test(sSo) ? sSo : '';
+      const sku = extractedSku || sSo;
+
+      const soUpper = String(d.soNumber || '').trim().toUpperCase();
+      const ordUpper = String(d.orderId || '').trim().toUpperCase();
+      const isCommons =
+        soUpper.startsWith('COMMONS-') || soUpper.startsWith('COMMONS') || ordUpper.includes('[COMMONS]');
+      const isIntentionalNoSku =
+        ordUpper.includes('-SHEET') ||
+        ordUpper.startsWith('ONLINE') ||
+        ordUpper.startsWith('EBAY') ||
+        ordUpper.startsWith('POSH') ||
+        ordUpper.startsWith('POPUP');
+
+      const item =
+        (sSo && multiBins.get(sSo)) ||
+        (extractedSku && multiBins.get(extractedSku)) ||
+        (sOrd && multiBins.get(sOrd)) ||
+        itemBySaleId.get(d.$id) ||
+        activeItems.find(
+          (i) =>
+            (sSo &&
+              (cleanCatalogSku(i.locationSku).toUpperCase() === sSo ||
+                cleanCatalogSku(i.upc).toUpperCase() === sSo)) ||
+            (extractedSku &&
+              (cleanCatalogSku(i.locationSku).toUpperCase() === extractedSku ||
+                cleanCatalogSku(i.upc).toUpperCase() === extractedSku)) ||
+            (sOrd &&
+              (cleanCatalogSku(i.locationSku).toUpperCase() === sOrd ||
+                cleanCatalogSku(i.upc).toUpperCase() === sOrd))
+        ) ||
+        matchMemoryDenInventoryItem({
           sku,
-          upc: item?.upc || d.upc,
-          title: item?.title || rawTitle,
+          upc: extractedUpc,
+          title: split.title || rawOrderDesc,
+          price: Number(d.grossAmount || 0),
+          extraText: `${d.soNumber || ''} ${d.orderId || ''}`,
+          allowPrefixForPayout: true,
+          activeItems,
+          claimedItemIdToSku: claimed,
+          multiBinResolvedBySku: multiBins,
         });
-        const inferredPrefix =
-          item?.upc || (bucket === 'BB' ? 'BB-' : bucket === 'PDXGL' ? 'PDXGL-' : 'HUCK-');
-        return {
-          id: d.$id,
-          title: item?.title || split.title || rawTitle || 'Register sale',
-          soldAt: d.saleDate || d.$createdAt,
-          amount: Number(d.grossAmount || 0),
-          matched: Boolean(item || isPreverifiedBin),
-          ownerPrefix: inferredPrefix,
-        };
+
+      const resolvedBinSku = cleanCatalogSku(item?.locationSku || item?.sku || sku).toUpperCase();
+      const resolvedUpc = cleanCatalogSku(item?.upc || sSo).toUpperCase();
+      const isPreverifiedBin = Object.entries(PREVERIFIED_MD_MULTI_QTY_BINS).some(
+        ([skuKey, b]) =>
+          skuKey === resolvedBinSku ||
+          (resolvedUpc &&
+            ((b.upc && b.upc.toUpperCase() === resolvedUpc) ||
+              (b.altUpc && b.altUpc.toUpperCase() === resolvedUpc)))
+      );
+
+      if (item && !item.soldPrice && (d.netPayout || d.grossAmount)) {
+        item.soldPrice = Number(d.netPayout || d.grossAmount || 0);
+      }
+
+      const bucket = resolvePartnerBucketForSaleRow({
+        sku,
+        upc: item?.upc || extractedUpc,
+        title: item?.title || split.title || rawOrderDesc || soUpper,
       });
+      const inferredPrefix =
+        item?.upc ||
+        (isCommons
+          ? 'COMMONS-'
+          : bucket === 'BB'
+            ? 'BB-'
+            : bucket === 'PDXGL'
+              ? 'PDXGL-'
+              : 'HUCK-');
+
+      const displayTitle = (
+        item?.title ||
+        split.title ||
+        rawOrderDesc.replace(/\s*\[COST:\d+(?:\.\d+)?\]\s*/gi, ' ').trim() ||
+        soUpper ||
+        'Register sale'
+      ).trim();
+
+      const isUnlinkedSo = /^SO-/i.test(soUpper);
+      const isUnlinkedGenericTitle =
+        !item && (/^ticket\s*#/i.test(displayTitle) || /^order\s+/i.test(displayTitle) || /^md-payout/i.test(displayTitle));
+      const isMatched =
+        !isCommons && !isIntentionalNoSku
+          ? !isUnlinkedSo && !isUnlinkedGenericTitle && Boolean(item || isPreverifiedBin)
+          : true;
+
+      return {
+        id: d.$id,
+        title: displayTitle,
+        soldAt: d.saleDate || d.$createdAt,
+        amount: Number(d.grossAmount || 0),
+        matched: isMatched,
+        ownerPrefix: inferredPrefix,
+      };
+    });
   };
 
   /** Latest register-sync stamp across all system raw-CSV manifests (no hardcoded locations). */

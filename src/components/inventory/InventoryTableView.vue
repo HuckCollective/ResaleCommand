@@ -528,6 +528,7 @@ const {
     getSortIcon,
     countByStatus,
     clearFilters,
+    initFromUrl,
     getVendorName,
     calculateRoi
 } = useInventoryFilters(inventoryItems);
@@ -644,16 +645,7 @@ const pagedInventory = computed(() => {
 
 // Lifecycle
 onMounted(async () => {
-    if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('search')) searchQuery.value = params.get('search') || '';
-        if (params.has('location')) filterLocation.value = params.get('location') || 'all';
-        if (params.has('status')) filterStatus.value = params.get('status') || 'active';
-        if (params.has('insightFilter')) filterInsight.value = params.get('insightFilter') || '';
-        if (params.has('purchaseId') || params.has('po')) {
-            searchQuery.value = params.get('purchaseId') || params.get('po') || '';
-        }
-    }
+    initFromUrl();
     if (inventoryItems.value.length === 0) {
         await fetchInventory();
     }

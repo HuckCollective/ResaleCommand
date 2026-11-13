@@ -1313,6 +1313,15 @@ const fetchData = async () => {
 };
 
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('unlinked') === '1') {
+      onlyUnlinkedFilter.value = true;
+      monthFilter.value = 'all';
+      partnerFilter.value = 'all';
+      monthDefaulted = true;
+    }
+  }
   if (currentTeam.value) fetchData();
 });
 

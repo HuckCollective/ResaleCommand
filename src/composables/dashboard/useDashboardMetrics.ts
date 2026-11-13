@@ -33,7 +33,12 @@ export function useDashboardMetrics() {
 
     const globalProfit = computed(() =>
         items.value.filter((i) => i.status === 'sold').reduce((sum, item) => {
-            const sold = parseItemValue(item, 'soldPrice', 'Sold') || parseItemValue(item, 'price', 'Sold') || 0;
+            const sold =
+                parseItemValue(item, 'soldPrice', 'Sold') ||
+                parseItemValue(item, 'resalePrice', 'Resale') ||
+                parseItemValue(item, 'listPrice', 'Est') ||
+                parseItemValue(item, 'price', 'Sold') ||
+                0;
             return sum + (sold - costOf(item)) * qtyOf(item);
         }, 0)
     );

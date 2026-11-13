@@ -1,9 +1,10 @@
 # Active Session Summary (Updated Nov 12, 2026)
 
 ## ✅ CROSS-APP IA ROLLOUT — PILLARS C & D: `/warehouse/sync/:code` & `/sales` (`<KpiStatGrid>` + `SlideOverDrawer` Unification) (Nov 12, 2026 — `alpha-1`)
-- **Pillar D — `/sales` & `/coop/settlements` (`src/components/sales/SalesList.vue`, `src/components/sales/LinkTicketInventoryModal.vue`)**:
+- **Pillar D — `/sales` & `/coop/settlements` (`src/components/sales/SalesList.vue`, `src/components/sales/LinkTicketInventoryModal.vue`, `src/composables/dashboard/useLiveDashboardSource.ts`, `src/lib/dashboardAlerts.ts`, `src/composables/useInventoryFilters.ts`)**:
   - Replaced the custom 4-box ledger KPI markup in `SalesList.vue` with `<KpiStatGrid :items="salesLedgerKpiStats" />` (`Gross Sales`, `Net Payout`, `Total Fees`, `Items Sold` with active month/partner/venue scope hints).
   - Converted `LinkTicketInventoryModal.vue` from a centered `<dialog>` into a right-side `SlideOverDrawer.vue` (`size="lg"`), keeping the Sales Ledger visible while linking Booth `#0EJ` SKUs or sweeping orphan tickets to the Commons Pool.
+  - Synchronized `useLiveDashboardSource.ts` `loadSales()` 1:1 with `SalesList.vue` (paginated `salesApi.listSales()`, `d.orderId` title/trailing `- 0EJxxx` SKU extraction, `COMMONS-` & intentional paper-sheet exclusions, and in-memory `soldPrice` backfill), unlocked `hideSold` when navigating to `/inventory?insightFilter=missing_sold_price`, and wired `/sales?unlinked=1` deep-linking so Dashboard alert counts and filtered views match 1:1.
 - **Pillar C — `/warehouse/sync/:code` (`src/components/warehouses/LocationSyncView.vue`)**:
   - Replaced the 5-card sync overview strip with `<KpiStatGrid :items="syncWorkspaceKpiStats" />` (`Total Sync Rows`, `In-Stock Booth Value`, `Sold Take-Home Net`, and `Matched in RC` with unmatched exception badge) and upgraded the Sync History & Add Location dialogs to `SlideOverDrawer.vue`.
 
