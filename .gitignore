@@ -11,4 +11,5 @@ dist-gemini-skills
 .vercel
 scratch/
 *.csv
+*.log
 .cache-*.json
