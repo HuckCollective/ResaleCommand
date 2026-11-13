@@ -50,6 +50,28 @@ function clearAuthCookie() {
 }
 
 export async function initAuth() {
+    if (typeof window !== 'undefined' && window.location.pathname === '/logout') {
+      authStore.setKey('loading', false);
+      return;
+    }
+    if (typeof window !== 'undefined' && !(window as any).__RC_MULTI_TAB_AUTH_SYNC__) {
+      (window as any).__RC_MULTI_TAB_AUTH_SYNC__ = true;
+      window.addEventListener('storage', (ev) => {
+        if ((ev.key === SESSION_HINT_KEY || ev.key === 'rc_bml_session_v1') && ev.newValue === null) {
+          clearAuthCookie();
+          authStore.set({
+            user: null,
+            isAuthenticated: false,
+            isPartner: false,
+            teams: [],
+            currentTeam: null,
+            ownedTeam: null,
+            loading: false,
+          });
+          redirectGuestToLogin();
+        }
+      });
+    }
     console.log("Auth init started (Global)");
     try {
       const currentUser = await auth.getCurrentUser();
@@ -137,6 +159,7 @@ export async function logout() {
         try {
             localStorage.removeItem('activeTeamId');
             localStorage.removeItem('rc_bml_session_v1');
+            localStorage.removeItem('cookieFallback');
         } catch {
             // Ignore storage errors
         }

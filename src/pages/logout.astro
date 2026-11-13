@@ -15,7 +15,5 @@ import Layout from "../layouts/Layout.astro";
   import { logout } from "../lib/store";
 
   // Atomically clear Appwrite session, auth_session_indicator cookie, and rc_has_session hint.
-  setTimeout(() => {
-    void logout();
-  }, 100);
+  void logout();
 </script>

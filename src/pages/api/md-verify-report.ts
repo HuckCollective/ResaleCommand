@@ -434,6 +434,26 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
     }
   };
 
+  // Load persisted live payload and verification report upfront so physical booth tags
+  // that were already verified/adopted in Ricochet are preferred when multiple DB candidates exist
+  const cachedLive = (await loadPersistedLivePayloadFromAppwrite(activeLocCode)) || getStoredLivePayload(activeLocCode);
+  const storedReport = await getOrLoadReport(activeLocCode);
+  const preferredBoothUpcBySku = new Map<string, string>();
+  if (cachedLive?.skuToUpcMap) {
+    for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
+      const s = cleanCatalogSku(rawSku).toUpperCase();
+      const u = cleanCatalogSku(rawUpc).toUpperCase();
+      if (s && isValidProductionUpc(u)) preferredBoothUpcBySku.set(s, u);
+    }
+  }
+  if (storedReport?.rows?.length) {
+    for (const r of storedReport.rows) {
+      const s = cleanCatalogSku(r.sku).toUpperCase();
+      const u = cleanCatalogSku(r.upc || r.expectedRcUpc).toUpperCase();
+      if (s && isValidProductionUpc(u)) preferredBoothUpcBySku.set(s, u);
+    }
+  }
+
   // Sort SKUs so SKUs with exactly 1 DB candidate claim their UPC first, then multi-candidate SKUs pick the newest unclaimed UPC
   const sortedSkus = Array.from(candidatesBySku.keys()).sort((a, b) => {
     const lenA = candidatesBySku.get(a)!.length;
@@ -445,10 +465,18 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
   for (const sku of sortedSkus) {
     if (finalSkuToUpcMap[sku]) continue;
     const docsForSku = candidatesBySku.get(sku) || [];
-    let chosen = docsForSku.find((d) => {
-      const u = cleanCatalogSku(d?.upc).toUpperCase();
-      return isValidProductionUpc(u) && !usedUpcs.has(u);
-    });
+    const prefUpc = preferredBoothUpcBySku.get(sku) || '';
+    let chosen =
+      (prefUpc
+        ? docsForSku.find((d) => {
+            const u = cleanCatalogSku(d?.upc).toUpperCase();
+            return u === prefUpc && !usedUpcs.has(u);
+          })
+        : null) ||
+      docsForSku.find((d) => {
+        const u = cleanCatalogSku(d?.upc).toUpperCase();
+        return isValidProductionUpc(u) && !usedUpcs.has(u);
+      });
 
     if (!chosen && docsForSku.length > 0) {
       const fallbackDoc = docsForSku[0];
@@ -483,7 +511,6 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
 
   // 2. Merge live payload persisted in Appwrite manifests BEFORE static baseline
   // so adopted booth tags (adopt_md_upc) and soldSkus status are NEVER reverted by PREVERIFIED_MD_SKU_TO_UPC_OR_ID!
-  const cachedLive = (await loadPersistedLivePayloadFromAppwrite(activeLocCode)) || getStoredLivePayload(activeLocCode);
   if (cachedLive?.skuToUpcMap) {
     for (const [rawSku, rawUpc] of Object.entries(cachedLive.skuToUpcMap)) {
       const sku = cleanCatalogSku(rawSku).toUpperCase();
@@ -509,7 +536,6 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
   }
 
   // 3. Load persisted Verification Report from Appwrite and extract verifiedMdUpcBySku + sold status
-  const storedReport = await getOrLoadReport(activeLocCode);
   if (storedReport?.rows?.length) {
     for (const r of storedReport.rows) {
       const sku = cleanCatalogSku(r.sku).toUpperCase();

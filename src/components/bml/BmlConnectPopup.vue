@@ -138,6 +138,7 @@ const mintedMember = ref<{ name: string; prefix: string; role: string; roleBadge
 const targetOrigin = ref('*');
 const returnUrl = ref('');
 const hostLabel = ref('works.thehc.llc');
+const forceLoginRequested = ref(false);
 
 const sanitizeHttpUrl = (raw: string): URL | null => {
   if (!raw) return null;
@@ -242,6 +243,7 @@ const handleSwitchAccount = async () => {
   try {
     localStorage.removeItem('rc_bml_session_v1');
     localStorage.removeItem('rc_has_session');
+    localStorage.removeItem('cookieFallback');
     document.cookie = 'auth_session_indicator=; path=/; max-age=0; SameSite=Lax';
   } catch {}
   mintedToken.value = '';
@@ -263,6 +265,7 @@ const handleLoginAndConnect = async () => {
   submitting.value = true;
   errorMsg.value = '';
   roleRestrictedMsg.value = '';
+  forceLoginRequested.value = false;
   try {
     await auth.login(email.value, password.value);
     await exchangeJwtForBmlToken();
@@ -284,13 +287,13 @@ const closeOrReturn = () => {
 watch(
   () => auth.isAuthenticated.value,
   (signedIn) => {
-    if (signedIn && !mintedToken.value) {
+    if (signedIn && !mintedToken.value && !forceLoginRequested.value) {
       void exchangeJwtForBmlToken();
     }
   }
 );
 
-onMounted(() => {
+onMounted(async () => {
   if (typeof window !== 'undefined') {
     hostLabel.value = window.location.host;
     const params = new URLSearchParams(window.location.search);
@@ -298,8 +301,13 @@ onMounted(() => {
     if (parsedOrigin) targetOrigin.value = parsedOrigin.origin;
     const parsedReturn = sanitizeHttpUrl(params.get('returnUrl') || '');
     if (parsedReturn) returnUrl.value = parsedReturn.toString();
+    if (params.get('forceLogin') === '1') {
+      forceLoginRequested.value = true;
+      await handleSwitchAccount();
+      return;
+    }
   }
-  if (auth.isAuthenticated.value) {
+  if (auth.isAuthenticated.value && !forceLoginRequested.value) {
     void exchangeJwtForBmlToken();
   }
 });

@@ -79,6 +79,7 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
         savedAt: Date.now()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sess));
+      try { sessionStorage.removeItem('rc_bml_force_login'); } catch (_e2) {}
       renderAuthBanner(false);
       return sess;
     } catch (_e) {
@@ -88,15 +89,20 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
 
   function clearSession() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_e) {}
+    try { sessionStorage.setItem('rc_bml_force_login', '1'); } catch (_e2) {}
     renderAuthBanner(false);
     try {
       window.dispatchEvent(new CustomEvent('rc-bml-cleared'));
     } catch (_e) {}
   }
 
-  function openConnectFlow() {
+  function openConnectFlow(forceLogin) {
+    var shouldForce = Boolean(forceLogin);
+    if (!shouldForce) {
+      try { shouldForce = sessionStorage.getItem('rc_bml_force_login') === '1'; } catch (_e) {}
+    }
     var returnUrl = window.location.href.split('#')[0];
-    var connectUrl = PRIMARY_ORIGIN + '/bml/connect?origin=' + encodeURIComponent(window.location.origin) + '&returnUrl=' + encodeURIComponent(returnUrl);
+    var connectUrl = PRIMARY_ORIGIN + '/bml/connect?origin=' + encodeURIComponent(window.location.origin) + '&returnUrl=' + encodeURIComponent(returnUrl) + (shouldForce ? '&forceLogin=1' : '');
     var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
     if (isMobile) {
       window.location.href = connectUrl;

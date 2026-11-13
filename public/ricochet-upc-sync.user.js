@@ -1623,7 +1623,7 @@
               const s = cleanStr(k).toUpperCase();
               const u = cleanStr(v).toUpperCase();
               if (s) verifiedSkuSet.add(s);
-              if (s && u && isRealUpc(u)) {
+              if (s && u && isRealUpc(u) && !mergedCloudSkuToUpc[s]) {
                 mergedCloudSkuToUpc[s] = u;
               }
             }
@@ -1861,7 +1861,7 @@
       window.__RC_CATALOG_PRODUCTS_CACHE__ = catalogProducts;
       window.__RC_CONSIGNOR_ID_CACHE__ = consignorId;
       addLog(`✅ Loaded ${catalogProducts.length} booth items from ${activeLocationName}.`, '#10b981');
-      if (Object.keys(parsedMap).length === 0 && !isFetchingCloudPayload) {
+      if (getBmlMemberSession() && Object.keys(parsedMap).length === 0) {
         await fetchLivePayloadFromCloud(false, true);
       }
       await harvestLiveSpaPayoutTables(false);
@@ -2319,6 +2319,9 @@
       if (!sess) {
         fabBadge.textContent =
           catalogProducts.length > 0 ? `${catalogProducts.length} Booth Items` : 'Click to Sign In';
+      } else if (isFetchingCloudPayload && totalMapped === 0) {
+        fabBadge.textContent =
+          catalogProducts.length > 0 ? `⏳ Auditing ${catalogProducts.length}...` : '⏳ Syncing...';
       } else {
         const fixHint = mismatchUpc > 0 ? ` • 🟠 ${mismatchUpc} Fix` : '';
         fabBadge.textContent =
