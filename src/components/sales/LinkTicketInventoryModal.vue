@@ -1,37 +1,23 @@
 <template>
-  <Teleport to="body" :disabled="!isMounted">
-    <dialog :class="{ 'modal modal-open': isOpen && !!sale }" class="modal modal-bottom sm:modal-middle z-50">
-      <div v-if="sale" class="modal-box max-w-2xl rounded-3xl p-5 sm:p-6 space-y-5 border border-base-300 shadow-2xl">
-        <!-- Modal Header -->
-        <div class="flex items-start justify-between gap-3 border-b border-base-200 pb-3.5">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="badge badge-warning font-black text-xs gap-1 py-2.5 px-2.5">
-                ⚠️ Unlinked Ticket Reconciliation
-              </span>
-              <span class="badge badge-outline font-mono font-bold text-xs">
-                {{ sale.soNumber }}
-              </span>
-              <span class="badge badge-success badge-outline font-mono font-bold text-xs">
-                Gross: ${{ Number(sale.grossAmount || 0).toFixed(2) }} · Net: ${{ Number(sale.netPayout || 0).toFixed(2) }}
-              </span>
-            </div>
-            <h3 class="text-lg sm:text-xl font-black text-base-content tracking-tight">
-              Link Ticket to Booth #0EJ Inventory or Reassign
-            </h3>
-            <p class="text-xs text-base-content/65">
-              Select the matching Booth #0EJ item to pull its true SKU, description, and out-of-pocket Cost Basis (Gate 2 100% recoupment), or claim for the Commons Pool.
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="$emit('close')"
-            class="btn btn-ghost btn-sm btn-circle shrink-0"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
+  <SlideOverDrawer
+    :model-value="isOpen && !!sale"
+    title="Link Ticket to Booth Inventory or Reassign"
+    subtitle="Select the matching item to pull its true SKU, description, and out-of-pocket Cost Basis (Gate 2 100% recoupment), or claim for the Commons Pool."
+    size="lg"
+    @close="$emit('close')"
+  >
+    <div v-if="sale" class="space-y-4">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="badge badge-warning font-black text-xs gap-1">
+          ⚠️ Unlinked Ticket Reconciliation
+        </span>
+        <span class="badge badge-outline font-mono font-bold text-xs">
+          {{ sale.soNumber }}
+        </span>
+        <span class="badge badge-success badge-outline font-mono font-bold text-xs">
+          Gross: ${{ Number(sale.grossAmount || 0).toFixed(2) }} · Net: ${{ Number(sale.netPayout || 0).toFixed(2) }}
+        </span>
+      </div>
 
         <!-- Step 1: Partner / Member Attribution Selector -->
         <div class="p-3.5 rounded-2xl bg-base-200/50 border border-base-300 space-y-2">
@@ -258,63 +244,62 @@
           </div>
         </div>
 
-        <!-- Modal Footer Actions: 1) Claim for Commons Pool, 2) Link Inventory / Reassign Member -->
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-base-200">
-          <!-- Fallback: Claim for Commons Pool (30-Day Orphan Ticket Rule) -->
-          <div class="flex flex-col gap-1">
-            <button
-              type="button"
-              :disabled="isSubmitting || !isCommonsSweepEligible"
-              @click="handleClaimForCommons"
-              class="btn btn-sm btn-outline btn-warning rounded-xl font-black gap-1.5 h-10"
-              title="Set curator split to $0.00 and sweep 100% of net margin into the Shared Commons Pool"
-            >
-              <Icon icon="solar:buildings-2-bold-duotone" class="w-4 h-4 shrink-0" />
-              <span>Assign 100% to Commons Pool</span>
-            </button>
-            <label
-              v-if="daysUntilCommonsEligible > 0"
-              class="flex items-center gap-1.5 text-[10px] opacity-70 cursor-pointer"
-            >
-              <input v-model="commonsOverride" type="checkbox" class="checkbox checkbox-xs checkbox-warning" />
-              <span>Claim window open {{ daysUntilCommonsEligible }} more day(s) — all partners agreed to sweep early</span>
-            </label>
-          </div>
+    </div>
 
-          <div class="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              :disabled="isSubmitting"
-              @click="$emit('close')"
-              class="btn btn-sm btn-ghost rounded-xl font-bold h-10"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              :disabled="isSubmitting"
-              @click="handleConfirmLinkOrReassign"
-              class="btn btn-sm btn-primary rounded-xl font-black gap-1.5 px-4 shadow-md h-10"
-            >
-              <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
-              <Icon v-else icon="solar:link-circle-bold" class="w-4 h-4 shrink-0" />
-              <span>
-                {{ selectedItem ? `Link SKU & Assign ${selectedPartnerPrefix}` : `Reassign to ${selectedPartnerPrefix}` }}
-              </span>
-            </button>
-          </div>
+    <template #footer>
+      <!-- Drawer Footer Actions: 1) Claim for Commons Pool, 2) Link Inventory / Reassign Member -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <div class="flex flex-col gap-1">
+          <button
+            type="button"
+            :disabled="isSubmitting || !isCommonsSweepEligible"
+            @click="handleClaimForCommons"
+            class="btn btn-sm btn-outline btn-warning rounded-xl font-black gap-1.5 h-10"
+            title="Set curator split to $0.00 and sweep 100% of net margin into the Shared Commons Pool"
+          >
+            <Icon icon="solar:buildings-2-bold-duotone" class="w-4 h-4 shrink-0" />
+            <span>Assign 100% to Commons Pool</span>
+          </button>
+          <label
+            v-if="daysUntilCommonsEligible > 0"
+            class="flex items-center gap-1.5 text-[10px] opacity-70 cursor-pointer"
+          >
+            <input v-model="commonsOverride" type="checkbox" class="checkbox checkbox-xs checkbox-warning" />
+            <span>Claim window open {{ daysUntilCommonsEligible }} more day(s) — all partners agreed to sweep early</span>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2 justify-end">
+          <button
+            type="button"
+            :disabled="isSubmitting"
+            @click="$emit('close')"
+            class="btn btn-sm btn-ghost rounded-xl font-bold h-10"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            :disabled="isSubmitting"
+            @click="handleConfirmLinkOrReassign"
+            class="btn btn-sm btn-primary text-primary-content rounded-xl font-black gap-1.5 px-4 shadow-md h-10"
+          >
+            <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:link-circle-bold" class="w-4 h-4 shrink-0" />
+            <span>
+              {{ selectedItem ? `Link SKU & Assign ${selectedPartnerPrefix}` : `Reassign to ${selectedPartnerPrefix}` }}
+            </span>
+          </button>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop" @click="$emit('close')">
-        <button type="button">close</button>
-      </form>
-    </dialog>
-  </Teleport>
+    </template>
+  </SlideOverDrawer>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { addToast } from '../../stores/toast';
 import { salesApi } from '../../lib/sales';
 import { updateInventoryItem, DB_ID } from '../../lib/inventory';

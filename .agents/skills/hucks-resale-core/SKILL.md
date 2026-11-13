@@ -192,6 +192,13 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 12, 2026)
 
+## ✅ CROSS-APP IA ROLLOUT — PILLARS C & D: `/warehouse/sync/:code` & `/sales` (`<KpiStatGrid>` + `SlideOverDrawer` Unification) (Nov 12, 2026 — `alpha-1`)
+- **Pillar D — `/sales` & `/coop/settlements` (`src/components/sales/SalesList.vue`, `src/components/sales/LinkTicketInventoryModal.vue`)**:
+  - Replaced the custom 4-box ledger KPI markup in `SalesList.vue` with `<KpiStatGrid :items="salesLedgerKpiStats" />` (`Gross Sales`, `Net Payout`, `Total Fees`, `Items Sold` with active month/partner/venue scope hints).
+  - Converted `LinkTicketInventoryModal.vue` from a centered `<dialog>` into a right-side `SlideOverDrawer.vue` (`size="lg"`), keeping the Sales Ledger visible while linking Booth `#0EJ` SKUs or sweeping orphan tickets to the Commons Pool.
+- **Pillar C — `/warehouse/sync/:code` (`src/components/warehouses/LocationSyncView.vue`)**:
+  - Replaced the 5-card sync overview strip with `<KpiStatGrid :items="syncWorkspaceKpiStats" />` (`Total Sync Rows`, `In-Stock Booth Value`, `Sold Take-Home Net`, and `Matched in RC` with unmatched exception badge) and upgraded the Sync History & Add Location dialogs to `SlideOverDrawer.vue`.
+
 ## ✅ CROSS-APP IA ROLLOUT — PILLAR B: `/inventory` MASTER CATALOG (`<KpiStatGrid>` + `InventoryCombineDrawer.vue`) (Nov 12, 2026 — `alpha-1`)
 - **Shared 4-Stat Catalog Valuation & Spread Strip (`src/lib/inventoryKpiStats.ts`, `src/components/inventory/InventoryManager.vue`, `src/components/inventory/InventoryTableView.vue`)**:
   - Created `computeInventoryKpiStats(items)` and mounted `<KpiStatGrid>` across both the Visual Card Grid (`InventoryManager.vue`) and Dense Spreadsheet Table (`InventoryTableView.vue`), reacting live to active spatial location, barcode prefix, status, and search filters (`Filtered Catalog` units & booth count, `Est. Retail Value`, `Landed Cost Basis`, and `Projected Spread` with `+% ROI` badge & cost multiple).

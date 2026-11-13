@@ -214,74 +214,67 @@
       </div>
     </div>
 
-    <!-- Sync History Modal -->
-    <div v-if="showHistoryModal" class="modal modal-open">
-      <div class="modal-box max-w-2xl max-h-[85vh] flex flex-col">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div class="flex items-center gap-2">
-            <div class="p-2 bg-secondary/10 text-secondary rounded-lg">
-              <Icon icon="solar:history-bold" class="w-5 h-5" />
-            </div>
-            <div>
-              <h3 class="font-bold text-lg">Sync History: {{ currentLocation?.name || 'Location' }}</h3>
-              <p class="text-xs opacity-60">Record of all sales and inventory imports committed for this location.</p>
-            </div>
-          </div>
-          <button class="btn btn-sm btn-ghost btn-circle" @click="showHistoryModal = false">✕</button>
+    <!-- Sync History SlideOverDrawer -->
+    <SlideOverDrawer
+      v-model="showHistoryModal"
+      :title="`Sync History: ${currentLocation?.name || 'Location'}`"
+      subtitle="Audit trail of sales and inventory imports committed for this location."
+      size="lg"
+    >
+      <div class="space-y-3">
+        <div v-if="locationHistory.length === 0" class="text-center py-12 opacity-60 text-xs">
+          <Icon icon="solar:documents-minimalistic-linear" class="w-12 h-12 mx-auto mb-2 opacity-40" />
+          No previous syncs recorded for {{ currentLocation?.name || 'this location' }} yet.
         </div>
 
-        <!-- History List -->
-        <div class="overflow-y-auto flex-1 py-4 space-y-3">
-          <div v-if="locationHistory.length === 0" class="text-center py-12 opacity-60 text-xs">
-            <Icon icon="solar:documents-minimalistic-linear" class="w-12 h-12 mx-auto mb-2 opacity-40" />
-            No previous syncs recorded for {{ currentLocation?.name || 'this location' }} yet.
+        <div
+          v-for="entry in locationHistory"
+          :key="entry.id"
+          class="p-4 bg-base-200/60 hover:bg-base-200 rounded-xl border border-base-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all"
+        >
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-xs font-mono text-primary">{{ formatDate(entry.timestamp) }}</span>
+              <span class="badge badge-xs badge-neutral font-mono">{{ entry.fileName }}</span>
+              <span class="badge badge-xs badge-outline badge-primary font-bold">UPC: {{ entry.upcPrefix || 'HUCK-' }}</span>
+            </div>
+            <div class="text-[11px] opacity-75 flex items-center gap-3 flex-wrap">
+              <span>Total Rows: <b>{{ entry.totalRows }}</b></span>
+              <span>In-Stock: <b class="text-info">{{ entry.inStockCount }}</b></span>
+              <span>Sold: <b class="text-success">{{ entry.soldCount }}</b></span>
+              <span v-if="entry.newItemsCreated > 0">Created: <b class="text-warning">+{{ entry.newItemsCreated }} items</b></span>
+            </div>
           </div>
 
-          <div 
-            v-for="entry in locationHistory" 
-            :key="entry.id"
-            class="p-4 bg-base-200/60 hover:bg-base-200 rounded-xl border border-base-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all"
-          >
-            <div class="space-y-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-bold text-xs font-mono text-primary">{{ formatDate(entry.timestamp) }}</span>
-                <span class="badge badge-xs badge-neutral font-mono">{{ entry.fileName }}</span>
-                <span class="badge badge-xs badge-outline badge-primary font-bold">UPC: {{ entry.upcPrefix || 'HUCK-' }}</span>
-              </div>
-              <div class="text-[11px] opacity-75 flex items-center gap-3 flex-wrap">
-                <span>Total Rows: <b>{{ entry.totalRows }}</b></span>
-                <span>In-Stock: <b class="text-info">{{ entry.inStockCount }}</b></span>
-                <span>Sold: <b class="text-success">{{ entry.soldCount }}</b></span>
-                <span v-if="entry.newItemsCreated > 0">Created: <b class="text-warning">+{{ entry.newItemsCreated }} items</b></span>
-              </div>
+          <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-base-300">
+            <div class="text-right">
+              <div class="text-xs font-extrabold text-success font-mono">+${{ Number(entry.totalNet || 0).toFixed(2) }} Net</div>
+              <div class="text-[10px] opacity-60 font-mono">${{ Number(entry.totalGross || 0).toFixed(2) }} Gross (${{ Number(entry.commissionPaid || 0).toFixed(2) }} Fee)</div>
             </div>
-
-            <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-base-300">
-              <div class="text-right">
-                <div class="text-xs font-extrabold text-success font-mono">+${{ Number(entry.totalNet || 0).toFixed(2) }} Net</div>
-                <div class="text-[10px] opacity-60 font-mono">${{ Number(entry.totalGross || 0).toFixed(2) }} Gross (${{ Number(entry.commissionPaid || 0).toFixed(2) }} Fee)</div>
-              </div>
-              <button class="btn btn-xs btn-ghost btn-circle text-error opacity-60 hover:opacity-100" @click="deleteHistoryItem(entry.id)" title="Delete log entry">
-                <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button class="btn btn-xs btn-ghost btn-circle text-error opacity-60 hover:opacity-100" @click="deleteHistoryItem(entry.id)" title="Delete log entry">
+              <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
+      </div>
 
-        <div class="modal-action border-t border-base-200 pt-3 flex justify-between items-center">
-          <button 
-            v-if="locationHistory.length > 0" 
-            class="btn btn-xs btn-ghost text-error" 
+      <template #footer>
+        <div class="flex justify-between items-center gap-2">
+          <button
+            v-if="locationHistory.length > 0"
+            type="button"
+            class="btn btn-xs btn-ghost text-error font-bold"
             @click="clearHistoryForCurrentLocation"
           >
             Clear {{ currentLocation?.name }} History
           </button>
           <div v-else></div>
-          <button class="btn btn-sm btn-ghost" @click="showHistoryModal = false">Close</button>
+          <button type="button" class="btn btn-sm btn-primary text-primary-content rounded-xl font-bold" @click="showHistoryModal = false">
+            Done
+          </button>
         </div>
-      </div>
-      <div class="modal-backdrop" @click="showHistoryModal = false"></div>
-    </div>
+      </template>
+    </SlideOverDrawer>
 
     <!-- Custom DaisyUI Confirmation Dialog Modal -->
     <div v-if="confirmDialog.isOpen" class="modal modal-open z-50">
@@ -313,48 +306,49 @@
       <div class="modal-backdrop" @click="handleConfirmCancel"></div>
     </div>
 
-    <!-- Quick Create Location Modal -->
-    <div v-if="showNewLocationModal" class="modal modal-open">
-      <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg flex items-center gap-2">
-          <Icon icon="solar:shop-2-bold" class="w-5 h-5 text-primary" />
-          Add Selling Location / Booth
-        </h3>
-        <div class="space-y-3 mt-4">
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Name</span></label>
-            <input type="text" v-model="newLocationForm.name" placeholder="e.g. Memory Den, Booth 42..." class="input input-bordered input-sm" />
-          </div>
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Type</span></label>
-            <select v-model="newLocationForm.type" class="select select-bordered select-sm">
-              <option value="Consignment Booth">Consignment Booth</option>
-              <option value="Antique Mall">Antique Mall</option>
-              <option value="Warehouse">Warehouse</option>
-              <option value="Retail Store">Retail Store</option>
-              <option value="Online">Online Marketplace</option>
-            </select>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div class="form-control">
-              <label class="label py-0.5"><span class="label-text text-xs font-bold">Commission %</span></label>
-              <input type="number" v-model="newLocationForm.commissionRate" placeholder="15" class="input input-bordered input-sm" />
-            </div>
-            <div class="form-control">
-              <label class="label py-0.5"><span class="label-text text-xs font-bold">Monthly Rent ($)</span></label>
-              <input type="number" v-model="newLocationForm.monthlyRent" placeholder="0" class="input input-bordered input-sm" />
-            </div>
-          </div>
+    <!-- Quick Create Location SlideOverDrawer -->
+    <SlideOverDrawer
+      v-model="showNewLocationModal"
+      title="Add Selling Location / Booth"
+      subtitle="Register a selling venue, commission percentage, and monthly rent."
+    >
+      <div class="space-y-3">
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Name</span></label>
+          <input type="text" v-model="newLocationForm.name" placeholder="e.g. Memory Den, Booth 42..." class="input input-bordered input-sm rounded-xl" />
         </div>
-        <div class="modal-action">
-          <button class="btn btn-sm btn-ghost" @click="showNewLocationModal = false">Cancel</button>
-          <button class="btn btn-sm btn-primary" :disabled="!newLocationForm.name.trim() || isCreatingLocation" @click="createNewLocation">
-            <span v-if="isCreatingLocation" class="loading loading-spinner loading-xs"></span>
-            Save Location
-          </button>
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Type</span></label>
+          <select v-model="newLocationForm.type" class="select select-bordered select-sm rounded-xl">
+            <option value="Consignment Booth">Consignment Booth</option>
+            <option value="Antique Mall">Antique Mall</option>
+            <option value="Warehouse">Warehouse</option>
+            <option value="Retail Store">Retail Store</option>
+            <option value="Online">Online Marketplace</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Commission %</span></label>
+            <input type="number" v-model="newLocationForm.commissionRate" placeholder="15" class="input input-bordered input-sm rounded-xl" />
+          </div>
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text text-xs font-bold">Monthly Rent ($)</span></label>
+            <input type="number" v-model="newLocationForm.monthlyRent" placeholder="0" class="input input-bordered input-sm rounded-xl" />
+          </div>
         </div>
       </div>
-    </div>
+
+      <template #footer>
+        <div class="flex items-center justify-between gap-2">
+          <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showNewLocationModal = false">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary text-primary-content rounded-xl font-black" :disabled="!newLocationForm.name.trim() || isCreatingLocation" @click="createNewLocation">
+            <span v-if="isCreatingLocation" class="loading loading-spinner loading-xs"></span>
+            <span>Save Location</span>
+          </button>
+        </div>
+      </template>
+    </SlideOverDrawer>
 
     <!-- Live Location Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
     <div
@@ -684,50 +678,8 @@
         </button>
       </div>
 
-      <!-- Metrics & Overview Header -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
-          <div class="p-2.5 bg-base-200 rounded-lg text-primary"><Icon icon="solar:documents-bold" class="w-5 h-5" /></div>
-          <div>
-            <div class="text-[11px] opacity-60">Total Rows</div>
-            <div class="text-lg font-extrabold font-mono">{{ syncRows.length }}</div>
-          </div>
-        </div>
-
-        <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
-          <div class="p-2.5 bg-info/10 text-info rounded-lg"><Icon icon="solar:box-bold" class="w-5 h-5" /></div>
-          <div>
-            <div class="text-[11px] opacity-60">In-Stock</div>
-            <div class="text-lg font-extrabold font-mono text-info">{{ inStockCount }} <span class="text-xs font-normal opacity-70">(${{ totalInStockGross.toFixed(0) }})</span></div>
-          </div>
-        </div>
-
-        <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
-          <div class="p-2.5 bg-secondary/10 text-secondary rounded-lg"><Icon icon="solar:cart-check-bold" class="w-5 h-5" /></div>
-          <div>
-            <div class="text-[11px] opacity-60">Gross Sold</div>
-            <div class="text-lg font-extrabold font-mono text-secondary">${{ totalSoldGross.toFixed(2) }}</div>
-          </div>
-        </div>
-
-        <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
-          <div class="p-2.5 bg-success/10 text-success rounded-lg"><Icon icon="solar:dollar-bold" class="w-5 h-5" /></div>
-          <div>
-            <div class="text-[11px] opacity-60 font-bold text-success">Net Made (Take-Home)</div>
-            <div class="text-lg font-extrabold font-mono text-success">${{ totalSoldNet.toFixed(2) }}</div>
-          </div>
-        </div>
-
-        <div class="bg-base-100 p-3.5 rounded-xl border border-base-200 shadow-sm flex items-center gap-3">
-          <div class="p-2.5 bg-primary/10 text-primary rounded-lg"><Icon icon="solar:check-circle-bold" class="w-5 h-5" /></div>
-          <div>
-            <div class="text-[11px] opacity-60">Matched in RC</div>
-            <div class="text-lg font-extrabold font-mono" :class="matchedCount === syncRows.length ? 'text-success' : 'text-primary'">
-              {{ matchedCount }} / {{ syncRows.length }}
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 4-Stat Live Sync Scorecard Strip -->
+      <KpiStatGrid :items="syncWorkspaceKpiStats" />
 
       <!-- Controls & Filters Bar -->
       <div class="bg-base-100 p-4 rounded-xl border border-base-200 shadow-sm flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
@@ -2195,6 +2147,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { useAuth } from '../../composables/useAuth';
 import { useDockClearance } from '../../composables/useDockClearance';
@@ -2544,6 +2498,43 @@ const totalSoldNet = computed(() => {
   return (syncRows.value || [])
     .filter((r) => r.status === 'sold' || r.status === 'paid')
     .reduce((acc, r) => acc + (r.netSoldPrice || 0), 0);
+});
+
+const syncWorkspaceKpiStats = computed<KpiStatItem[]>(() => {
+  const total = syncRows.value.length;
+  const unmatched = Math.max(0, total - matchedCount.value);
+  return [
+    {
+      label: 'Total Sync Rows',
+      value: String(total),
+      hint: `${inStockCount.value} in-stock · ${soldCount.value} sold`,
+      icon: 'solar:documents-bold-duotone',
+      tone: 'text-base-content',
+    },
+    {
+      label: 'In-Stock Booth Value',
+      value: `$${totalInStockGross.value.toFixed(2)}`,
+      hint: `${inStockCount.value} active shelf row${inStockCount.value === 1 ? '' : 's'}`,
+      icon: 'solar:box-bold-duotone',
+      tone: 'text-info',
+    },
+    {
+      label: 'Sold Take-Home Net',
+      value: `$${totalSoldNet.value.toFixed(2)}`,
+      hint: `Gross sold: $${totalSoldGross.value.toFixed(2)}`,
+      icon: 'solar:dollar-bold-duotone',
+      tone: 'text-success',
+    },
+    {
+      label: 'Matched in RC',
+      value: `${matchedCount.value} / ${total}`,
+      hint: unmatched > 0 ? `${unmatched} unmatched exception${unmatched === 1 ? '' : 's'}` : '100% of rows linked',
+      icon: 'solar:check-circle-bold-duotone',
+      tone: unmatched === 0 && total > 0 ? 'text-success' : 'text-primary',
+      badge: unmatched > 0 ? `${unmatched} to match` : undefined,
+      badgeClass: 'badge-warning text-warning-content',
+    },
+  ];
 });
 
 const highConfidenceUnmatchedRows = computed(() => {

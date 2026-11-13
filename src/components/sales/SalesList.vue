@@ -222,59 +222,7 @@
       <!-- 1. SALES LEDGER TAB -->
       <div v-show="salesViewTab === 'ledger'" class="space-y-5">
         <!-- Ledger 4-Card KPI Strip (Shown ONLY on Ledger tab so Payouts tab never double-stacks 8 boxes!) -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-            <div class="flex items-center gap-2.5 sm:gap-3">
-              <div class="p-2.5 sm:p-3 bg-success/10 text-success rounded-xl shrink-0">
-                <Icon icon="solar:dollar-bold" class="w-5 h-5 sm:w-6 h-6" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Gross Sales</div>
-                <div class="text-lg sm:text-2xl font-black font-mono text-success truncate">{{ formatCurrency(totalGross) }}</div>
-                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-            <div class="flex items-center gap-2.5 sm:gap-3">
-              <div class="p-2.5 sm:p-3 bg-primary/10 text-primary rounded-xl shrink-0">
-                <Icon icon="solar:wallet-money-bold" class="w-5 h-5 sm:w-6 h-6" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Net Payout</div>
-                <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">{{ formatCurrency(totalNet) }}</div>
-                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-            <div class="flex items-center gap-2.5 sm:gap-3">
-              <div class="p-2.5 sm:p-3 bg-error/10 text-error rounded-xl shrink-0">
-                <Icon icon="solar:ticket-sale-bold" class="w-5 h-5 sm:w-6 h-6" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Total Fees</div>
-                <div class="text-lg sm:text-2xl font-black font-mono text-error truncate">{{ formatCurrency(totalFees) }}</div>
-                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
-            <div class="flex items-center gap-2.5 sm:gap-3">
-              <div class="p-2.5 sm:p-3 bg-info/10 text-info rounded-xl shrink-0">
-                <Icon icon="solar:box-bold" class="w-5 h-5 sm:w-6 h-6" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[11px] uppercase font-bold opacity-60 truncate">Items Sold</div>
-                <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">{{ scopedSales.length }}</div>
-                <div class="text-[10px] font-semibold opacity-50 truncate" :title="scopeLabel">{{ scopeLabel }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <KpiStatGrid :items="salesLedgerKpiStats" />
 
       <!-- Unlinked Tickets Quick-Filter Banner -->
       <div
@@ -680,6 +628,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import CoopSettlementView from './CoopSettlementView.vue';
 import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
 import RecordSaleDrawer from './RecordSaleDrawer.vue';
@@ -1183,6 +1132,37 @@ const scopedSales = computed(() => {
 const totalGross = computed(() => scopedSales.value.reduce((acc, s) => acc + s.grossAmount, 0));
 const totalFees = computed(() => scopedSales.value.reduce((acc, s) => acc + s.fees, 0));
 const totalNet = computed(() => scopedSales.value.reduce((acc, s) => acc + s.netPayout, 0));
+
+const salesLedgerKpiStats = computed<KpiStatItem[]>(() => [
+  {
+    label: 'Gross Sales',
+    value: formatCurrency(totalGross.value),
+    hint: scopeLabel.value,
+    icon: 'solar:dollar-bold-duotone',
+    tone: 'text-success',
+  },
+  {
+    label: 'Net Payout',
+    value: formatCurrency(totalNet.value),
+    hint: scopeLabel.value,
+    icon: 'solar:wallet-money-bold-duotone',
+    tone: 'text-primary',
+  },
+  {
+    label: 'Total Fees',
+    value: formatCurrency(totalFees.value),
+    hint: scopeLabel.value,
+    icon: 'solar:ticket-sale-bold-duotone',
+    tone: 'text-error',
+  },
+  {
+    label: 'Items Sold',
+    value: String(scopedSales.value.length),
+    hint: scopeLabel.value,
+    icon: 'solar:box-bold-duotone',
+    tone: 'text-info',
+  },
+]);
 
 // Condensed venue badge, e.g. "Memory Den #0EJ0MZ"
 const condenseLocation = (sale: any) => {
