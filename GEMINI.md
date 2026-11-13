@@ -155,6 +155,12 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 13, 2026)
 
+## ✅ PHASE 0 DIAGNOSTIC BOOKMARKLET TESTER (`🧪 BML Test`) FOR SHOPGOODWILL CSP, PING & DOM INSPECTION (Nov 13, 2026 — `alpha-1`)
+- **`🧪 BML Test` Diagnostic Bookmarklet & Ping Endpoint (`src/pages/scripts/bml-test.js.ts`, `src/pages/api/bml/ping.ts`, `src/components/bml/BookmarkletRegistryPanel.vue`)**:
+  - Built `/scripts/bml-test.js` (evergreen live-loader bookmarklet) and `GET /api/bml/ping` to test cross-site Content-Security-Policy (`script-src` & `connect-src`), CORS reachability, `localStorage`, `/bml/connect` popup capability, page-type detection (`sgw:item`, `sgw:inprogress-auctions`, `sgw:closed-auctions`, `sgw:shipped-orders`), and visible DOM row/header inspection with zero access to ShopGoodwill's auth tokens or cookies.
+  - Added the **Phase 0 Diagnostic (`🧪 BML Test`)** card with draggable pill, `📋 Copy Tester URL`, and quick target links inside `/settings?tab=bookmarklets` (`BookmarkletRegistryPanel.vue`).
+  - **Next Up (After User's 4 SGW Test Reports)**: Phase 1 (Role-based access hardening in `serverAuth.ts` + `memberAccess.ts`), Phase 2 (`shipmentTracking.ts` + `/purchases` FedEx/USPS/UPS tracking pills & search), and Phase 3 (`🔭 Auction Scout & Orders` bookmarklet + `/api/bml/sgw-sync`). *(Parked follow-up: tighten `Role.any()` manifest permissions in `md-verify-report.ts` & `ricochet-sync.ts`, and future consignor proposed-drop approval workflow).*
+
 ## ✅ UNIVERSAL BOOKMARKLET (`BML`) MEMBER AUTH HANDSHAKE, REGISTRY CUSTOMIZER & RICOCHET API LOCKDOWN (Nov 13, 2026 — `alpha-1`)
 - **14-Day HMAC Member Handshake, Founder/Curator RBAC Gate & Cross-Site Auth Runtime (`src/lib/bml/serverAuth.ts`, `src/pages/api/bml/session.ts`, `src/lib/bml/clientCore.ts`, `src/pages/bml/connect.astro`, `src/components/bml/BmlConnectPopup.vue`, `src/lib/publicRoutes.ts`, `src/lib/store.ts`)**:
   - Built `/bml/connect` + `POST /api/bml/session` to exchange a member's active Appwrite JWT (`X-Appwrite-JWT`) for a 14-day HMAC-SHA256 `rcbml_v1` Bearer token, strictly enforcing **`👑 Founder` (`founder`) & `💎 Curator` (`curator`) RBAC** (`403 Forbidden` for Consignors `BB-` and Sweat-only roles, with a 1-click `🚪 Switch Account` flow in `BmlConnectPopup.vue`).

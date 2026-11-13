@@ -228,6 +228,71 @@
       </div>
     </div>
 
+    <!-- Phase 0 Diagnostic Tester Card (🧪 BML Test) -->
+    <div class="rounded-2xl border border-info/40 bg-info/10 p-4 sm:p-5 space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="badge badge-xs badge-info text-info-content font-black uppercase tracking-wider">
+              Phase 0 Diagnostic
+            </span>
+            <h4 class="font-black text-sm text-base-content">
+              🧪 BML Test — Cross-Site CSP, Ping &amp; DOM Inspector
+            </h4>
+          </div>
+          <p class="text-xs text-base-content/75 leading-relaxed max-w-2xl">
+            1) Drag <strong class="font-bold">🧪 BML Test</strong> to your Chrome Bookmarks Bar. 2) Open any ShopGoodwill page and click it. 3) Click <strong class="font-bold">📋 Copy Report</strong> on the bottom-right pill and paste the 5-line report back into chat! (Zero third-party cookies or tokens are ever read.)
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+          <a
+            :href="bmlTestHref"
+            @click.prevent="notifyTestDrag"
+            class="btn btn-xs sm:btn-sm btn-info text-info-content font-black shadow-xs border border-info-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+            title="⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!"
+          >
+            <span>🧪 BML Test</span>
+          </a>
+          <button
+            type="button"
+            class="btn btn-xs sm:btn-sm btn-outline font-bold gap-1"
+            @click="copyTestJsUrl"
+          >
+            <span>📋 Copy Tester URL</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap text-[11px] pt-1 border-t border-info/20">
+        <span class="font-bold text-base-content/70">Quick Test Targets:</span>
+        <a
+          href="https://shopgoodwill.com/shopgoodwill/inprogress-auctions"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+        >
+          <span>1. inprogress-auctions ↗</span>
+        </a>
+        <a
+          href="https://shopgoodwill.com/shopgoodwill/closed-auctions"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+        >
+          <span>2. closed-auctions ↗</span>
+        </a>
+        <a
+          href="https://shopgoodwill.com/shopgoodwill/shipped-orders"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+        >
+          <span>3. shipped-orders ↗</span>
+        </a>
+      </div>
+    </div>
+
     <!-- Save / Reset Action Footer -->
     <div class="flex items-center justify-between gap-3 flex-wrap pt-1 border-t border-base-200">
       <div class="text-xs text-base-content/65">
@@ -268,6 +333,7 @@ import { buildRicochetBookmarkletHref } from '../../lib/warehouses';
 import {
   BML_ICON_PRESETS,
   DEFAULT_BML_REGISTRY_CONFIG,
+  buildEvergreenBookmarkletHref,
   formatBmlBarLabel,
   formatBmlMobileBookmarkName,
   getCachedBmlRegistryConfig,
@@ -308,6 +374,7 @@ const errMsg = ref('');
 const localSession = ref<{ name: string; prefix: string } | null>(null);
 
 const ricochetHref = computed(() => buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD'));
+const bmlTestHref = computed(() => buildEvergreenBookmarkletHref('/scripts/bml-test.js'));
 
 const getBarPreview = (id: BookmarkletToolId) =>
   formatBmlBarLabel(
@@ -396,6 +463,22 @@ const copyJsUrl = async (id: BookmarkletToolId) => {
     addToast({ type: 'success', message: 'Copied Bookmarklet JavaScript URL to clipboard!' });
   } catch {
     addToast({ type: 'error', message: 'Could not copy bookmarklet URL.' });
+  }
+};
+
+const notifyTestDrag = () => {
+  addToast({
+    type: 'info',
+    message: 'Drag "🧪 BML Test" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on any ShopGoodwill tab!',
+  });
+};
+
+const copyTestJsUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(bmlTestHref.value);
+    addToast({ type: 'success', message: 'Copied 🧪 BML Test JavaScript URL to clipboard!' });
+  } catch {
+    addToast({ type: 'error', message: 'Could not copy tester bookmarklet URL.' });
   }
 };
 
