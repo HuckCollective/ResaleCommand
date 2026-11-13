@@ -41,6 +41,9 @@
             @clear-filters="clearFilters"
         />
 
+        <!-- 1.5. 4-STAT CATALOG VALUATION & SPREAD STRIP -->
+        <KpiStatGrid :items="tableKpiStats" />
+
         <!-- 2. DENSE SPREADSHEET TABLE -->
         <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0 mb-6">
             <div class="overflow-x-auto w-full max-w-full min-w-0 overscroll-x-contain touch-pan-x">
@@ -441,7 +444,9 @@ import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import KpiStatGrid from '../common/KpiStatGrid.vue';
 import InventoryHeader from './InventoryHeader.vue';
+import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import LocationManifestTray from './LocationManifestTray.vue';
 import DropcastStagingTray from '../social/DropcastStagingTray.vue';
@@ -526,6 +531,8 @@ const {
     getVendorName,
     calculateRoi
 } = useInventoryFilters(inventoryItems);
+
+const tableKpiStats = computed(() => computeInventoryKpiStats(filteredItems.value));
 
 // -- 4. BULK ACTIONS COMPOSABLE --
 const {

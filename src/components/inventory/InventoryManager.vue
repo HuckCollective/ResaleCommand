@@ -221,6 +221,11 @@
                         </div>
                     </div>
 
+                    <!-- 4-STAT FILTERED CATALOG VALUATION & SPREAD STRIP -->
+                    <div class="mb-3">
+                        <KpiStatGrid :items="gridKpiStats" />
+                    </div>
+
                     <!-- 🔗 ACTIVE LINEAGE & PO FILTER BANNER -->
                     <div v-if="filterParentLotId || filterPO || filterSO" class="bg-base-200 border border-primary/30 rounded-2xl p-3.5 flex items-center justify-between shadow-xs mb-4">
                         <div class="flex items-center gap-2.5 min-w-0">
@@ -482,170 +487,27 @@
         <!-- Create Bundle Modal -->
         <!-- Moved to BundleModal.vue -->
 
-        <!-- Combine Selected into Lot Modal -->
-        <dialog ref="combineModal" class="modal">
-            <div class="modal-box max-w-lg">
-                <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
-                    <Icon icon="solar:link-minimalistic-bold" class="w-6 h-6 text-secondary" /> 
-                    <span>Batch & Lot Merchandising Hub</span>
-                </h3>
-
-                <!-- Mode Switcher Tabs -->
-                <div class="tabs tabs-boxed bg-base-200 p-1 mb-4 flex">
-                    <button 
-                        type="button" 
-                        class="tab flex-1 font-bold text-xs" 
-                        :class="{'tab-active': combineMode === 'create_new'}" 
-                        @click="combineMode = 'create_new'"
-                    >
-                        ✨ Create New Batch Lot
-                    </button>
-                    <button 
-                        type="button" 
-                        class="tab flex-1 font-bold text-xs" 
-                        :class="{'tab-active': combineMode === 'add_to_existing'}" 
-                        @click="combineMode = 'add_to_existing'"
-                    >
-                        📦 Add to Existing Batch / Lot
-                    </button>
-                </div>
+        <!-- Combine Selected into Lot / Restock Bin SlideOverDrawer -->
+        <InventoryCombineDrawer
+            v-if="isCombineModalOpen"
+            v-model="isCombineModalOpen"
+            v-model:combine-mode="combineMode"
+            v-model:combine-primary-id="combinePrimaryId"
+            v-model:combine-title="combineTitle"
+            v-model:combine-cost="combineCost"
+            v-model:combine-total-units="combineTotalUnits"
+            v-model:selected-target-lot-id="selectedTargetLotId"
+            :combine-title-suggestions="combineTitleSuggestions"
+            :selected-items-objects="selectedItemsObjects"
+            :available-main-lots="availableMainLotsInInventory"
+            :target-lot-preview="targetLotPreview"
+            :saving="savingCombine"
+            @primary-change="onCombinePrimaryChange"
+            @submit="submitCombine"
+            @close="closeCombineModal"
+        />
+        <!-- REMOVE_COMBINE_PART3 -->
                 
-                <!-- MODE 1: CREATE NEW BATCH LOT -->
-                <div v-if="combineMode === 'create_new'" class="space-y-4">
-                    <!-- Primary Item Selector -->
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span class="label-text font-bold opacity-70">Primary Item (Keep Photos & Description)</span>
-                        </label>
-                        <select v-model="combinePrimaryId" class="select select-bordered w-full text-xs font-bold" @change="onCombinePrimaryChange">
-                            <option v-for="item in selectedItemsObjects" :key="item.$id" :value="item.$id">
-                                {{ item.title }} (Qty: {{ item.quantity || 1 }}, Cost: ${{ Number(item.cost || 0).toFixed(2) }})
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Suggested Title -->
-                    <div class="form-control w-full">
-                        <div class="flex items-center justify-between pb-1">
-                            <label class="label-text font-bold opacity-70">Batch Lot Title</label>
-                            <span class="text-[10px] text-secondary font-bold uppercase tracking-wider flex items-center gap-1">
-                                <Icon icon="solar:magic-stick-3-bold" class="w-3 h-3" /> Smart Suggested
-                            </span>
-                        </div>
-                        <input type="text" v-model="combineTitle" class="input input-bordered w-full font-bold text-sm" placeholder="e.g. Vintage Sci-Fi Paperbacks (Lot of 4)" />
-                        
-                        <!-- Quick Title Suggestions -->
-                        <div v-if="combineTitleSuggestions.length > 0" class="flex flex-wrap gap-1.5 mt-2">
-                            <button 
-                                v-for="(sug, idx) in combineTitleSuggestions" 
-                                :key="idx" 
-                                type="button" 
-                                class="badge badge-sm py-2.5 px-3 cursor-pointer transition-all hover:badge-secondary text-xs"
-                                :class="combineTitle === sug ? 'badge-secondary font-bold shadow-sm' : 'badge-ghost border-base-300 opacity-80'"
-                                @click="combineTitle = sug"
-                            >
-                                {{ sug }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Cost & Resale row -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="form-control w-full">
-                            <label class="label"><span class="label-text font-bold opacity-70">Total Cost ($)</span></label>
-                            <input type="number" step="0.01" v-model="combineCost" class="input input-bordered w-full font-mono text-sm" />
-                        </div>
-                        <div class="form-control w-full">
-                            <label class="label"><span class="label-text font-bold opacity-70">Total Quantity</span></label>
-                            <input type="number" v-model.number="combineTotalUnits" min="1" class="input input-bordered w-full font-mono text-sm" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- MODE 2: ADD TO EXISTING BATCH / LOT -->
-                <div v-else class="space-y-4">
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span class="label-text font-bold opacity-70">Destination Batch / Lot</span>
-                        </label>
-                        <select v-model="selectedTargetLotId" class="select select-bordered w-full text-xs font-bold">
-                            <option value="">-- Choose an Existing Batch / Lot --</option>
-                            <option v-for="lot in availableMainLotsInInventory" :key="lot.$id" :value="lot.$id">
-                                {{ lot.title }} (Qty: {{ lot.quantity || 1 }}, Cost: ${{ Number(lot.cost || 0).toFixed(2) }})
-                            </option>
-                        </select>
-                    </div>
-
-                    <div v-if="targetLotPreview" class="bg-base-200/80 p-3 rounded-xl border border-secondary/30 text-xs space-y-1.5">
-                        <div class="flex justify-between font-bold">
-                            <span>Pieces After Merge:</span>
-                            <span class="text-secondary font-mono">{{ targetLotPreview.currentQty }} ➔ {{ targetLotPreview.newQty }} pieces</span>
-                        </div>
-                        <div class="flex justify-between font-bold">
-                            <span>Total Landed Cost:</span>
-                            <span class="font-mono">${{ Number(targetLotPreview.currentCost ?? 0).toFixed(2) }} ➔ ${{ Number(targetLotPreview.newCost ?? 0).toFixed(2) }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Shared: Selected Items Included -->
-                <div class="border border-base-300 rounded-xl p-3 bg-base-200/50 mt-4">
-                    <label class="label pt-0 pb-1.5">
-                        <span class="label-text font-bold text-[10px] uppercase opacity-60">Selected Items ({{ selectedItems.length }})</span>
-                    </label>
-                    <ul class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                        <li v-for="item in selectedItemsObjects" :key="item.$id" class="flex justify-between items-center bg-base-100 p-2 rounded border border-base-200 shadow-sm" :class="{'ring-1 ring-secondary': (combineMode === 'create_new' && item.$id === combinePrimaryId) || (combineMode === 'add_to_existing' && item.$id === selectedTargetLotId)}">
-                            <div class="flex flex-col min-w-0">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="font-medium truncate max-w-50" :class="(combineMode === 'create_new' && item.$id === combinePrimaryId) || (combineMode === 'add_to_existing' && item.$id === selectedTargetLotId) ? 'text-secondary font-bold' : ''">
-                                        {{ item.title }}
-                                    </span>
-                                    <span v-if="combineMode === 'create_new' && item.$id === combinePrimaryId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Primary</span>
-                                    <span v-else-if="combineMode === 'add_to_existing' && item.$id === selectedTargetLotId" class="badge badge-secondary badge-xs uppercase font-bold text-[8px] scale-90">Target Lot</span>
-                                </div>
-                                <span class="text-[9px] opacity-50 uppercase font-bold">
-                                    Cost: ${{ Number(item.cost || 0).toFixed(2) }} | Qty: {{ item.quantity || 1 }}
-                                </span>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-                
-                <div class="alert alert-warning py-2 shadow-sm text-xs leading-normal mt-4">
-                    <Icon icon="solar:danger-triangle-linear" class="w-5 h-5 shrink-0" />
-                    <span v-if="combineMode === 'create_new'">This will merge the selected items into a single Batch Lot. The constituent items will be archived into the new lot.</span>
-                    <span v-else>This will fold the selected items into the chosen Batch / Lot, updating its cost, pieces, and gallery.</span>
-                </div>
-
-                <!-- Smart UPC & Shop Tag Notice -->
-                <div v-if="combineMode === 'create_new' && selectedItemsObjects.some(i => i.upc || i.ricochetSynced)" class="alert alert-info py-2 shadow-sm text-xs leading-normal mt-2">
-                    <Icon icon="solar:info-circle-bold" class="w-5 h-5 shrink-0 text-info" />
-                    <span><b>Shop Barcode Notice:</b> One or more selected items already has a shop barcode (UPC). Creating a <i>New</i> lot will require a new barcode tag. To preserve an existing tag already in the shop, use <b>"Add to Existing Batch / Lot"</b> instead.</span>
-                </div>
-                <div v-else-if="combineMode === 'add_to_existing' && selectedTargetLotId" class="alert alert-success/15 border border-success/30 py-2 shadow-sm text-xs leading-normal mt-2">
-                    <Icon icon="solar:check-circle-bold" class="w-5 h-5 shrink-0 text-success" />
-                    <span><b>Preserves Shop Tag:</b> The target Batch / Lot keeps its original barcode / UPC. The tag on your shelf stays valid without re-printing.</span>
-                </div>
-
-                <div class="modal-action">
-                    <button type="button" class="btn btn-ghost btn-sm" @click="closeCombineModal" :disabled="savingCombine">Cancel</button>
-                    <button 
-                        type="button" 
-                        class="btn btn-secondary btn-sm px-6" 
-                        @click="submitCombine" 
-                        :disabled="savingCombine || (combineMode === 'create_new' && (!combineTitle || combineTotalUnits < 1)) || (combineMode === 'add_to_existing' && !selectedTargetLotId)"
-                    >
-                        <span v-if="savingCombine" class="loading loading-spinner loading-xs mr-1"></span>
-                        <span v-if="combineMode === 'create_new'">Create Batch Lot</span>
-                        <span v-else>Add to Batch / Lot</span>
-                    </button>
-                </div>
-            </div>
-            <form method="dialog" class="modal-backdrop">
-                <button @click="closeCombineModal" :disabled="savingCombine">close</button>
-            </form>
-        </dialog>
-
         <!-- Deconstruct Modal -->
         <dialog ref="deconstructModalRef" class="modal">
             <div class="modal-box max-w-sm">
@@ -738,9 +600,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { marked } from 'marked';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
+import KpiStatGrid from '../common/KpiStatGrid.vue';
+import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
@@ -762,6 +626,8 @@ import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import InventoryFilterPanel from './InventoryFilterPanel.vue';
 import InventorySpatialBar from './InventorySpatialBar.vue';
 import BundleModal from './BundleModal.vue';
+
+const InventoryCombineDrawer = defineAsyncComponent(() => import('./InventoryCombineDrawer.vue'));
 import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
@@ -1198,6 +1064,7 @@ watch(currentTeam, (n) => {
     } 
 }, { immediate: true });
 const isEstimating = ref(false);
+const gridKpiStats = computed(() => computeInventoryKpiStats(filteredInventory.value));
 const recentlySavedId = ref(null);
 let recentlySavedTimer = null;
 const markRecentlySaved = (id) => {
@@ -2876,7 +2743,7 @@ const submitDeconstruct = async () => {
 
 // Removed old bundle methods
 
-const combineModal = ref(null);
+const isCombineModalOpen = ref(false);
 const combineTitle = ref('');
 const combineTitleSuggestions = ref([]);
 const combineCost = ref(0);
@@ -3027,9 +2894,7 @@ const openCombineModal = () => {
     combineTitle.value = defaultTitle;
     combineTitleSuggestions.value = suggestions;
     
-    if (combineModal.value) {
-        combineModal.value.showModal();
-    }
+    isCombineModalOpen.value = true;
 };
 
 const onCombinePrimaryChange = () => {
@@ -3047,9 +2912,7 @@ const onCombinePrimaryChange = () => {
 };
 
 const closeCombineModal = () => {
-    if (combineModal.value) {
-        combineModal.value.close();
-    }
+    isCombineModalOpen.value = false;
 };
 
 const submitCombine = async () => {

@@ -155,6 +155,12 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 12, 2026)
 
+## ✅ CROSS-APP IA ROLLOUT — PILLAR B: `/inventory` MASTER CATALOG (`<KpiStatGrid>` + `InventoryCombineDrawer.vue`) (Nov 12, 2026 — `alpha-1`)
+- **Shared 4-Stat Catalog Valuation & Spread Strip (`src/lib/inventoryKpiStats.ts`, `src/components/inventory/InventoryManager.vue`, `src/components/inventory/InventoryTableView.vue`)**:
+  - Created `computeInventoryKpiStats(items)` and mounted `<KpiStatGrid>` across both the Visual Card Grid (`InventoryManager.vue`) and Dense Spreadsheet Table (`InventoryTableView.vue`), reacting live to active spatial location, barcode prefix, status, and search filters (`Filtered Catalog` units & booth count, `Est. Retail Value`, `Landed Cost Basis`, and `Projected Spread` with `+% ROI` badge & cost multiple).
+- **Extracted `InventoryCombineDrawer.vue` (`SlideOverDrawer.vue` — `src/components/inventory/InventoryCombineDrawer.vue`, `src/components/inventory/InventoryManager.vue`)**:
+  - Replaced the 165-line inline `<dialog ref="combineModal">` inside `InventoryManager.vue` with a lazy-mounted `SlideOverDrawer` component (`InventoryCombineDrawer.vue`) supporting both `✨ Create New Batch Lot` and `➕ Restock / Add to Existing Lot` with live `Before ➔ After` pieces/cost preview and physical shelf barcode preservation notices.
+
 ## ✅ CROSS-APP IA ROLLOUT — PILLAR A: `/purchases` HAULS HUB (`<KpiStatGrid>` + `SlideOverDrawer` CSV Importer) (Nov 12, 2026 — `alpha-1`)
 - **4-Stat Spend & Projected ROI Strip (`src/components/purchases/PurchasesList.vue`, `src/pages/purchases/index.astro`)**:
   - Mounted the shared `<KpiStatGrid>` (`Total Haul Spend`, `Est. Linked Retail` with live `+$X.XX spread` & ROI multiple, `Ready to Receive`, and `Received Hauls`) at the top of `/purchases`, dynamically reflecting active search/status filters with zero item double-counting across `purchaseId` / `cartId` / `poNumber`.
