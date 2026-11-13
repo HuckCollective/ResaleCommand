@@ -30,7 +30,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 /**
  * POST /api/bml/session — Exchanges an active Appwrite JWT (`X-Appwrite-JWT`) from `/bml/connect`
- * for a 14-day HMAC-SHA256 signed Bookmarklet Member Token.
+ * for a 14-day HMAC-SHA256 signed Bookmarklet Member Token (restricted to Founders 👑 and Curators 💎).
  */
 export const POST: APIRoute = async ({ request }) => {
   const jwt = request.headers.get('X-Appwrite-JWT') || '';
@@ -42,19 +42,25 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const verified = await verifyAppwriteJwtToMember(jwt);
-  if (!verified) {
+  if (!verified.ok) {
     return new Response(
-      JSON.stringify({ ok: false, error: 'Invalid or expired Appwrite session.' }),
-      { status: 401, headers: BML_CORS_HEADERS }
+      JSON.stringify({
+        ok: false,
+        error: verified.error,
+        message: verified.message,
+      }),
+      { status: verified.status, headers: BML_CORS_HEADERS }
     );
   }
 
   const { token, session } = mintBookmarkletToken({
-    userId: verified.userId,
-    teamId: verified.teamId,
-    name: verified.name,
-    email: verified.email,
-    prefix: verified.prefix,
+    userId: verified.member.userId,
+    teamId: verified.member.teamId,
+    name: verified.member.name,
+    email: verified.member.email,
+    prefix: verified.member.prefix,
+    role: verified.member.role,
+    roleBadge: verified.member.roleBadge,
   });
 
   return new Response(

@@ -11,15 +11,19 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
       var rawToken = decodeURIComponent(m[1]);
       var nameMatch = hash.match(/(?:^|[#&])rc_bml_name=([^&]+)/);
       var prefixMatch = hash.match(/(?:^|[#&])rc_bml_prefix=([^&]+)/);
+      var roleMatch = hash.match(/(?:^|[#&])rc_bml_role=([^&]+)/);
+      var roleVal = roleMatch && decodeURIComponent(roleMatch[1]) === 'curator' ? 'curator' : 'founder';
       var sess = {
         token: rawToken,
         name: nameMatch ? decodeURIComponent(nameMatch[1]) : 'Member',
         prefix: prefixMatch ? decodeURIComponent(prefixMatch[1]) : 'HUCK-',
+        role: roleVal,
+        roleBadge: roleVal === 'curator' ? '💎 Curator' : '👑 Founder',
         savedAt: Date.now()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sess));
       var cleanHash = hash
-        .replace(/([#&])rc_bml_(?:token|name|prefix)=[^&]+/g, '')
+        .replace(/([#&])rc_bml_(?:token|name|prefix|role)=[^&]+/g, '')
         .replace(/^#&/, '#')
         .replace(/^#$/, '');
       window.history.replaceState(null, '', window.location.pathname + window.location.search + cleanHash);
@@ -54,6 +58,8 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
         }
         parsed.name = payload.name || parsed.name || 'Member';
         parsed.prefix = payload.prefix || parsed.prefix || 'HUCK-';
+        parsed.role = payload.role || parsed.role || 'founder';
+        parsed.roleBadge = payload.roleBadge || (parsed.role === 'curator' ? '💎 Curator' : '👑 Founder');
       }
       return parsed;
     } catch (_e) {
@@ -63,10 +69,13 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
 
   function saveSession(token, member) {
     try {
+      var role = member && member.role === 'curator' ? 'curator' : 'founder';
       var sess = {
         token: token,
         name: (member && member.name) || 'Member',
         prefix: (member && member.prefix) || 'HUCK-',
+        role: role,
+        roleBadge: (member && member.roleBadge) || (role === 'curator' ? '💎 Curator' : '👑 Founder'),
         savedAt: Date.now()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sess));
@@ -76,9 +85,13 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
       return null;
     }
   }
+
   function clearSession() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_e) {}
-    renderAuthBanner(true);
+    renderAuthBanner(false);
+    try {
+      window.dispatchEvent(new CustomEvent('rc-bml-cleared'));
+    } catch (_e) {}
   }
 
   function openConnectFlow() {
@@ -112,8 +125,12 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
   function renderAuthBanner(needsLogin) {
     var id = 'rc-bml-auth-guard-bar';
     var existing = document.getElementById(id);
-    var sess = getSession();
-    if (!needsLogin && sess) {
+    if (!needsLogin) {
+      if (existing) existing.remove();
+      return;
+    }
+    // If the Ricochet bottom-right launcher pill (#rc-sync-fab) is present, it handles auth status inline!
+    if (document.getElementById('rc-sync-fab')) {
       if (existing) existing.remove();
       return;
     }
@@ -125,10 +142,10 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     }
     existing.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">' +
-        '<strong style="font-size:13px;color:#fbbf24;">🔐 Works@TheHC Member Sign-In Required</strong>' +
+        '<strong style="font-size:13px;color:#fbbf24;">🔐 Founder / Curator Sign-In Required</strong>' +
         '<button id="rc-bml-auth-close" style="background:transparent;border:0;color:#fdfaf6;opacity:0.7;cursor:pointer;font-size:14px;">✕</button>' +
       '</div>' +
-      '<div style="opacity:0.85;margin-bottom:10px;">Bookmarklets are protected for signed-in Collective members. Connect once (stays active 14 days on Desktop &amp; Pixel 8).</div>' +
+      '<div style="opacity:0.85;margin-bottom:10px;">Bookmarklets are protected for Collective Founders (👑) &amp; Curators (💎). Connect once (active 14 days).</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
         '<button id="rc-bml-auth-btn" style="flex:1;background:#7c3aed;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer;font-size:12px;">⚡ Connect Works@TheHC</button>' +
       '</div>';
@@ -153,7 +170,7 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
         }
         init.headers = headers;
         return origFetch(input, init).then(function(res) {
-          if (res.status === 401) {
+          if (res.status === 401 || res.status === 403) {
             renderAuthBanner(true);
           }
           return res;
@@ -170,9 +187,5 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     openConnectFlow: openConnectFlow,
     renderAuthBanner: renderAuthBanner
   };
-
-  if (!getSession()) {
-    setTimeout(function() { renderAuthBanner(true); }, 250);
-  }
 })();\n`;
 }

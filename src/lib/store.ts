@@ -136,6 +136,7 @@ export async function logout() {
         });
         try {
             localStorage.removeItem('activeTeamId');
+            localStorage.removeItem('rc_bml_session_v1');
         } catch {
             // Ignore storage errors
         }

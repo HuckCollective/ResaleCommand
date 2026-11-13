@@ -554,7 +554,7 @@
     if (!salesBtn || document.getElementById('rc-tab-btn-drops')) return;
     const btn = salesBtn.cloneNode(false);
     btn.id = 'rc-tab-btn-drops';
-    btn.innerHTML = '<span>📦 Outbound Drops</span><span id="rc-tab-drops-badge" style="background: rgba(56, 189, 248, 0.25); color: #7dd3fc; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
+    btn.innerHTML = '<span>🚚 New Drops</span><span id="rc-tab-drops-badge" style="background: rgba(56, 189, 248, 0.25); color: #7dd3fc; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
     salesBtn.parentNode.insertBefore(btn, salesBtn);
     salesBtn.parentNode.style.gridTemplateColumns = '1fr 1fr 1fr';
     const invView = document.getElementById('rc-tab-view-inventory');
@@ -878,24 +878,47 @@
     }
 
     root.innerHTML = `
-      <button id="rc-sync-fab" style="
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
-        color: #fff;
-        border: none;
-        border-radius: 9999px;
-        padding: 12px 20px;
-        font-weight: 800;
-        font-size: 13px;
-        box-shadow: 0 10px 25px rgba(79, 70, 229, 0.45);
-        cursor: pointer;
-        display: flex;
+      <div id="rc-fab-bar" style="
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        transition: transform 0.15s ease;
+        gap: 6px;
+        background: linear-gradient(135deg, #312e81, #4f46e5, #6d28d9);
+        color: #fff;
+        border: 1px solid rgba(167, 139, 250, 0.45);
+        border-radius: 9999px;
+        padding: 6px 10px 6px 14px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.65);
       ">
-        <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeLocationName)} Sync</span>
-        <span id="rc-fab-badge" style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:999px;font-size:11px;">Ready</span>
-      </button>
+        <button id="rc-sync-fab" type="button" style="
+          background: transparent;
+          color: #fff;
+          border: none;
+          padding: 3px 2px;
+          font-weight: 800;
+          font-size: 12.5px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          white-space: nowrap;
+        ">
+          <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeLocationName)} Sync</span>
+          <span id="rc-fab-auth" style="background:rgba(245,158,11,0.28);border:1px solid rgba(251,191,36,0.65);color:#fef08a;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">🔐 Sign In</span>
+          <span id="rc-fab-badge" style="background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.2);padding:2px 8px;border-radius:999px;font-size:11px;font-family:monospace;">Ready</span>
+        </button>
+        <button id="rc-fab-logout" type="button" title="Log Out / Reset Bookmarklet Session" style="
+          display: none;
+          background: rgba(239, 68, 68, 0.24);
+          border: 1px solid rgba(248, 113, 113, 0.55);
+          color: #fecaca;
+          border-radius: 9999px;
+          padding: 3px 8px;
+          font-size: 10.5px;
+          font-weight: 800;
+          cursor: pointer;
+          white-space: nowrap;
+        ">🚪 Log Out</button>
+      </div>
 
       <div id="rc-sync-panel" style="
         display: none;
@@ -913,27 +936,32 @@
         overflow: hidden;
       ">
         <!-- Header -->
-        <div style="padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <div style="font-weight: 800; font-size: 14px; color: #f8fafc; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-              <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeHudTitle)}</span>
-              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800;">✅ ${RC_SCRIPT_VERSION} Live Auto-Updated</span>
+        <div style="padding: 11px 14px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+            <div style="font-weight: 800; font-size: 13.5px; color: #f8fafc; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span style="overflow:hidden;text-overflow:ellipsis;">${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeHudTitle)}</span>
             </div>
-            <div style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
-              <span id="rc-catalog-status">Connecting to Ricochet session...</span>
-              <button id="rc-bml-member-btn" type="button" title="Works@TheHC Member Bookmarklet Session (click to connect or refresh)" style="background:rgba(124,58,237,0.22);border:1px solid rgba(167,139,250,0.45);color:#ddd6fe;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;cursor:pointer;">🔐 Connect Member</button>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              <button id="rc-refresh-cloud-btn" type="button" title="Refresh booth catalog & cloud tags" style="background:#334155;border:1px solid #475569;color:#f8fafc;font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;cursor:pointer;white-space:nowrap;">🔄 Refresh</button>
+              <button id="rc-sync-close" type="button" title="Minimize to bottom pill" style="background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;padding:2px 4px;">✕</button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button id="rc-refresh-cloud-btn" title="Re-fetch latest live barcodes from Resale Command" style="background:#334155;border:none;color:#cbd5e1;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;cursor:pointer;">🔄 Live Fetch</button>
-            <button id="rc-sync-close" style="background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;">✕</button>
+          <div style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800; white-space: nowrap;">✅ ${RC_SCRIPT_VERSION} Ready</span>
+              <span id="rc-catalog-status" style="font-size:10.5px;color:#cbd5e1;font-weight:600;">Scanning booth catalog...</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button id="rc-bml-member-btn" type="button" title="Works@TheHC Founder / Curator Session" style="background:rgba(124,58,237,0.22);border:1px solid rgba(167,139,250,0.45);color:#ddd6fe;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;cursor:pointer;white-space:nowrap;">🔐 Sign In</button>
+              <button id="rc-bml-logout-btn" type="button" title="Log Out / Reset Bookmarklet Session" style="display:none;background:rgba(239,68,68,0.18);border:1px solid rgba(248,113,113,0.45);color:#fca5a5;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;cursor:pointer;white-space:nowrap;">🚪 Log Out</button>
+            </div>
           </div>
         </div>
 
-        <!-- 2-Tab Mode Switcher (📦 Inventory & UPC Audit | 💰 Sales & Payout Sync) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155;">
+        <!-- 3-Tab Mode Switcher (🏷️ Booth Tags | 🚚 New Drops | 💰 Sales) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 14px; background: #0f172a; border-bottom: 1px solid #334155;">
           <button id="rc-tab-btn-inventory" type="button" style="
-            padding: 7px 10px;
+            padding: 7px 8px;
             border-radius: 8px;
             border: 1px solid #38bdf8;
             background: rgba(56, 189, 248, 0.18);
@@ -945,11 +973,12 @@
             align-items: center;
             justify-content: center;
             gap: 5px;
+            white-space: nowrap;
           ">
-            <span>📦 Inventory &amp; UPC Audit</span>
+            <span>🏷️ Booth Tags</span>
           </button>
           <button id="rc-tab-btn-sales" type="button" style="
-            padding: 7px 10px;
+            padding: 7px 8px;
             border-radius: 8px;
             border: 1px solid #334155;
             background: #1e293b;
@@ -961,8 +990,9 @@
             align-items: center;
             justify-content: center;
             gap: 5px;
+            white-space: nowrap;
           ">
-            <span>💰 Sales &amp; Payout Sync</span>
+            <span>💰 Sales</span>
             <span id="rc-tab-sales-badge" style="background: rgba(16, 185, 129, 0.25); color: #6ee7b7; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>
           </button>
         </div>
@@ -1035,24 +1065,24 @@
             <!-- 4-State Live Verification Scorecard -->
             <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px;">
               <div style="font-size: 11px; font-weight: 800; color: #cbd5e1; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <span>📊 Live ${activeLocationName} Barcode Audit</span>
+                <span>🏷️ ${activeLocationName} Tag Health</span>
                 <span id="rc-audit-total" style="font-family: monospace; color: #94a3b8;">0 items</span>
               </div>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #34d399; font-weight: 700;">🟢 Verified</span>
+                <div title="Physical barcode in Ricochet matches The Works database" style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #34d399; font-weight: 700;">🟢 Tags Matched</span>
                   <strong id="rc-pill-verified" style="font-family: monospace; font-size: 13px; color: #34d399;">0</strong>
                 </div>
-                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #fbbf24; font-weight: 700;">🟡 Missing UPC</span>
+                <div title="Item is blank in Ricochet and ready to fill with its barcode" style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #fbbf24; font-weight: 700;">🟡 Blank in Rico</span>
                   <strong id="rc-pill-missing" style="font-family: monospace; font-size: 13px; color: #fbbf24;">0</strong>
                 </div>
-                <div style="background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #fb923c; font-weight: 700;">🟠 Mismatch</span>
+                <div title="Ricochet has a different physical sticker than The Works database" style="background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #fb923c; font-weight: 700;">🟠 Tag Mismatch</span>
                   <strong id="rc-pill-mismatch" style="font-family: monospace; font-size: 13px; color: #fb923c;">0</strong>
                 </div>
-                <div style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="color: #cbd5e1; font-weight: 700;">⚪ Unlinked</span>
+                <div title="Past/Sold booth items or new items not yet linked in The Works" style="background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #cbd5e1; font-weight: 700;">⚪ Sold / Past</span>
                   <strong id="rc-pill-unlinked" style="font-family: monospace; font-size: 13px; color: #f8fafc;">0</strong>
                 </div>
               </div>
@@ -1070,31 +1100,66 @@
                 </summary>
                 <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; margin-bottom: 6px; line-height: 1.35;">
                   🛡️ <b>Physical Tag Guardrail:</b> Only items with a <b>BLANK</b> UPC in Ricochet are queued below. Existing Ricochet barcodes are never overwritten.<br/>
-                  <span style="color:#34d399;">🏷️ Pre-Tagged</span> = Existing RC tag &nbsp;|&nbsp; <span style="color:#38bdf8;">🆕 Virtual (9740+)</span> = Created today
+                  <span style="color:#34d399;">🏷️ Pre-Tagged</span> = Existing tag &nbsp;|&nbsp; <span style="color:#38bdf8;">🆕 Virtual (9740+)</span> = Created today
                 </div>
                 <div id="rc-preflight-list" style="max-height: 135px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 10.5px;"></div>
               </details>
 
-              <!-- 2-Way Report Actions -->
-              <div style="display: flex; gap: 6px; margin-top: 8px;">
-                <button id="rc-send-report-btn" style="
+              <!-- Progress Bar -->
+              <div id="rc-progress-wrap" style="display:none; flex-direction: column; gap: 4px; margin-top: 8px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;">
+                  <span id="rc-progress-text">Syncing...</span>
+                  <span id="rc-progress-pct">0%</span>
+                </div>
+                <div style="width:100%;height:8px;background:#0f172a;border-radius:999px;overflow:hidden;">
+                  <div id="rc-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width 0.2s;"></div>
+                </div>
+              </div>
+
+              <!-- Primary Reseller Action Bar (Always Visible Without Scrolling Past Logs) -->
+              <div style="display: flex; gap: 6px; margin-top: 10px;">
+                <button id="rc-send-report-btn" type="button" style="
                   flex: 1;
                   background: #0284c7;
                   color: #fff;
                   border: none;
-                  border-radius: 7px;
-                  padding: 7px 8px;
+                  border-radius: 8px;
+                  padding: 9px 8px;
                   font-weight: 800;
-                  font-size: 11px;
+                  font-size: 11.5px;
                   cursor: pointer;
-                ">📡 Send Report to RC</button>
-                <button id="rc-download-csv-btn" style="
+                ">📡 Sync to The Works</button>
+                <button id="rc-sync-start-btn" type="button" style="
+                  flex: 1.25;
+                  background: #10b981;
+                  color: #022c22;
+                  border: none;
+                  border-radius: 8px;
+                  padding: 9px 8px;
+                  font-weight: 800;
+                  font-size: 11.5px;
+                  cursor: pointer;
+                ">🚀 Fill Missing (0)</button>
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 6px;">
+                <button id="rc-sync-test-btn" type="button" style="
                   flex: 1;
                   background: #334155;
                   color: #f8fafc;
                   border: 1px solid #475569;
                   border-radius: 7px;
-                  padding: 7px 8px;
+                  padding: 6px 8px;
+                  font-weight: 700;
+                  font-size: 11px;
+                  cursor: pointer;
+                ">🧪 Test 1 Blank</button>
+                <button id="rc-download-csv-btn" type="button" style="
+                  flex: 1;
+                  background: #334155;
+                  color: #f8fafc;
+                  border: 1px solid #475569;
+                  border-radius: 7px;
+                  padding: 6px 8px;
                   font-weight: 700;
                   font-size: 11px;
                   cursor: pointer;
@@ -1102,82 +1167,44 @@
               </div>
             </div>
 
-            <!-- Collapsible Payload Editor -->
+            <!-- Collapsed Advanced Payload & Activity Log Accordion (Hidden from Low-Tech View by Default) -->
             <details style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px;">
-              <summary style="font-size: 11px; font-weight: 700; color: #94a3b8; cursor: pointer;">
-                🔧 View / Edit Barcode Payload (<span id="rc-match-count">0 ready</span>)
+              <summary style="font-size: 10.5px; font-weight: 700; color: #94a3b8; cursor: pointer;">
+                🛠️ Advanced Payload &amp; Activity Log (<span id="rc-match-count">0 ready</span>)
               </summary>
-              <textarea id="rc-sync-textarea" placeholder='{"0EJ08G": "HUCK-1024"}' style="
-                width: 100%;
-                height: 68px;
-                margin-top: 6px;
-                background: #0f172a;
-                color: #38bdf8;
-                border: 1px solid #334155;
-                border-radius: 6px;
-                padding: 6px;
-                font-family: monospace;
-                font-size: 11px;
-                resize: vertical;
-                box-sizing: border-box;
-              "></textarea>
+              <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+                <textarea id="rc-sync-textarea" placeholder='{"0EJ08G": "HUCK-1024"}' style="
+                  width: 100%;
+                  height: 60px;
+                  background: #0f172a;
+                  color: #38bdf8;
+                  border: 1px solid #334155;
+                  border-radius: 6px;
+                  padding: 6px;
+                  font-family: monospace;
+                  font-size: 10.5px;
+                  resize: vertical;
+                  box-sizing: border-box;
+                "></textarea>
+                <div id="rc-booth-log" style="display:none;"></div>
+                <div id="rc-sync-logs" style="
+                  background: #020617;
+                  border: 1px solid #1e293b;
+                  border-radius: 6px;
+                  padding: 6px;
+                  height: 75px;
+                  overflow-y: auto;
+                  font-family: monospace;
+                  font-size: 10.5px;
+                  color: #cbd5e1;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 2px;
+                ">
+                  <div style="color:#64748b;">Ready.</div>
+                </div>
+              </div>
             </details>
-
-            <!-- Progress Bar -->
-            <div id="rc-progress-wrap" style="display:none; flex-direction: column; gap: 4px;">
-              <div style="display:flex;justify-content:space-between;font-size:11px;">
-                <span id="rc-progress-text">Syncing...</span>
-                <span id="rc-progress-pct">0%</span>
-              </div>
-              <div style="width:100%;height:8px;background:#1e293b;border-radius:999px;overflow:hidden;">
-                <div id="rc-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width 0.2s;"></div>
-              </div>
-            </div>
-
-            <!-- Log Output -->
-            <div id="rc-booth-log" style="display:none;"></div>
-            <div id="rc-sync-logs" style="
-              background: #020617;
-              border: 1px solid #1e293b;
-              border-radius: 8px;
-              padding: 8px;
-              height: 95px;
-              overflow-y: auto;
-              font-family: monospace;
-              font-size: 11px;
-              color: #cbd5e1;
-              display: flex;
-              flex-direction: column;
-              gap: 3px;
-            ">
-              <div style="color:#64748b;">Waiting to start...</div>
-            </div>
-
-            <!-- Primary Sync Actions -->
-            <div style="display: flex; gap: 8px;">
-              <button id="rc-sync-test-btn" style="
-                flex: 1;
-                background: #334155;
-                color: #f8fafc;
-                border: 1px solid #475569;
-                border-radius: 8px;
-                padding: 9px;
-                font-weight: 700;
-                font-size: 12px;
-                cursor: pointer;
-              ">🧪 Test 1</button>
-              <button id="rc-sync-start-btn" style="
-                flex: 2;
-                background: #10b981;
-                color: #022c22;
-                border: none;
-                border-radius: 8px;
-                padding: 9px;
-                font-weight: 800;
-                font-size: 12px;
-                cursor: pointer;
-              ">🚀 Fill Missing (0)</button>
-            </div>
           </div>
 
           <!-- TAB 2: 💰 SALES & PAYOUT SYNC -->
@@ -1313,7 +1340,17 @@
 
     document.body.appendChild(root);
 
-    document.getElementById('rc-sync-fab').addEventListener('click', togglePanel);
+    document.getElementById('rc-sync-fab').addEventListener('click', () => {
+      const sess = getBmlMemberSession();
+      if (!sess) {
+        window.__RC_OPEN_PANEL_AFTER_AUTH__ = true;
+        if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.openConnectFlow === 'function') {
+          window.__RC_BML_AUTH__.openConnectFlow();
+        }
+        return;
+      }
+      togglePanel();
+    });
     document.getElementById('rc-sync-close').addEventListener('click', togglePanel);
     document.getElementById('rc-sync-textarea').addEventListener('input', parseInputPayload);
     document.getElementById('rc-sync-test-btn').addEventListener('click', () => runBatchSync(true));
@@ -1326,19 +1363,62 @@
     });
     const refreshMemberBtnState = () => {
       const mBtn = document.getElementById('rc-bml-member-btn');
-      if (!mBtn) return;
+      const mOutBtn = document.getElementById('rc-bml-logout-btn');
+      const fabAuth = document.getElementById('rc-fab-auth');
+      const fabLogout = document.getElementById('rc-fab-logout');
       const sess = getBmlMemberSession();
-      if (sess) {
-        mBtn.textContent = `👤 ${sess.name || 'Member'} (${sess.prefix || 'HUCK-'})`;
-        mBtn.style.background = 'rgba(16,185,129,0.2)';
-        mBtn.style.borderColor = 'rgba(52,211,153,0.45)';
-        mBtn.style.color = '#6ee7b7';
-      } else {
-        mBtn.textContent = '🔐 Connect Member';
-        mBtn.style.background = 'rgba(245,158,11,0.22)';
-        mBtn.style.borderColor = 'rgba(251,191,36,0.5)';
-        mBtn.style.color = '#fde68a';
+      const roleIcon = sess && sess.role === 'curator' ? '💎' : '👑';
+      if (mBtn) {
+        if (sess) {
+          mBtn.textContent = `${roleIcon} ${sess.name || 'Member'} (${sess.prefix || 'HUCK-'})`;
+          mBtn.style.background = 'rgba(16,185,129,0.2)';
+          mBtn.style.borderColor = 'rgba(52,211,153,0.45)';
+          mBtn.style.color = '#6ee7b7';
+        } else {
+          mBtn.textContent = '🔐 Sign In';
+          mBtn.style.background = 'rgba(245,158,11,0.22)';
+          mBtn.style.borderColor = 'rgba(251,191,36,0.5)';
+          mBtn.style.color = '#fde68a';
+        }
       }
+      if (mOutBtn) {
+        mOutBtn.style.display = sess ? 'inline-block' : 'none';
+      }
+      if (fabAuth) {
+        if (sess) {
+          fabAuth.textContent = `${roleIcon} ${sess.name || 'Member'}`;
+          fabAuth.style.background = 'rgba(16,185,129,0.28)';
+          fabAuth.style.borderColor = 'rgba(52,211,153,0.6)';
+          fabAuth.style.color = '#a7f3d0';
+        } else {
+          fabAuth.textContent = '🔐 Sign In';
+          fabAuth.style.background = 'rgba(245,158,11,0.28)';
+          fabAuth.style.borderColor = 'rgba(251,191,36,0.65)';
+          fabAuth.style.color = '#fef08a';
+        }
+      }
+      if (fabLogout) {
+        fabLogout.style.display = sess ? 'inline-block' : 'none';
+      }
+    };
+    const disconnectBmlMember = (ev) => {
+      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.clearSession === 'function') {
+        window.__RC_BML_AUTH__.clearSession();
+      }
+      parsedMap = {};
+      skuMetaMap = {};
+      verifiedSkuSet.clear();
+      cloudLiveSyncedCount = 0;
+      const ta = document.getElementById('rc-sync-textarea');
+      if (ta) ta.value = '';
+      if (isOpen) {
+        isOpen = false;
+        const panel = document.getElementById('rc-sync-panel');
+        if (panel) panel.style.display = 'none';
+      }
+      refreshMemberBtnState();
+      updateUI();
     };
     const memberBtn = document.getElementById('rc-bml-member-btn');
     if (memberBtn) {
@@ -1348,7 +1428,16 @@
         }
       });
     }
+    const headerLogoutBtn = document.getElementById('rc-bml-logout-btn');
+    if (headerLogoutBtn) {
+      headerLogoutBtn.addEventListener('click', disconnectBmlMember);
+    }
+    const fabLogoutBtn = document.getElementById('rc-fab-logout');
+    if (fabLogoutBtn) {
+      fabLogoutBtn.addEventListener('click', disconnectBmlMember);
+    }
     window.addEventListener('rc-bml-authenticated', refreshMemberBtnState);
+    window.addEventListener('rc-bml-cleared', refreshMemberBtnState);
     refreshMemberBtnState();
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
@@ -1385,8 +1474,8 @@
       });
     });
 
-    // Open panel and immediately fetch live cloud state from Resale Command (zero stale client snapshots)
-    hydratePreloadedBarcodes(true);
+    // Keep modal CLOSED by default on load — bottom-right pill shows Login Status + Counts until clicked!
+    hydratePreloadedBarcodes(false);
     setupLiveTabConnection();
   }
 
@@ -1441,6 +1530,24 @@
   // Evergreen Live Cloud Fetch from /api/md-verify-report?mode=payload
   async function fetchLivePayloadFromCloud(manualTrigger = false, forceBypassCooldown = false) {
     if (isFetchingCloudPayload) return false;
+    const activeSession = getBmlMemberSession();
+    const cloudBadge = document.getElementById('rc-cloud-badge');
+    if (!activeSession) {
+      if (cloudBadge) {
+        cloudBadge.textContent = '🔐 Sign In Required';
+        cloudBadge.style.background = '#78350f';
+        cloudBadge.style.color = '#fde68a';
+        cloudBadge.style.cursor = 'pointer';
+        cloudBadge.onclick = () => {
+          if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.openConnectFlow === 'function') {
+            window.__RC_BML_AUTH__.openConnectFlow();
+          }
+        };
+      }
+      updateUI();
+      hideModalLoaderAfterMinDuration();
+      return false;
+    }
     if (!manualTrigger && !forceBypassCooldown && lastCloudFetchAt > 0 && Date.now() - lastCloudFetchAt < CLOUD_FETCH_COOLDOWN_MS) {
       return true;
     }
@@ -1449,7 +1556,6 @@
     }
     isFetchingCloudPayload = true;
     lastCloudFetchAt = Date.now();
-    const cloudBadge = document.getElementById('rc-cloud-badge');
     if (cloudBadge) {
       cloudBadge.textContent = '⏳ Syncing Live Cloud...';
       cloudBadge.style.background = '#1e3a8a';
@@ -1471,8 +1577,12 @@
           fetch(`${baseEndpoint}?mode=payload&${locQuery}&t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
           fetch(`${baseEndpoint}?${locQuery}&t=${Date.now()}`, { method: 'GET', mode: 'cors' }).catch(() => null),
         ]);
-        if ((payloadRes && payloadRes.status === 401) || (reportRes && reportRes.status === 401)) {
+        if (
+          (payloadRes && (payloadRes.status === 401 || payloadRes.status === 403)) ||
+          (reportRes && (reportRes.status === 401 || reportRes.status === 403))
+        ) {
           sawAuthRequired = true;
+          break;
         }
 
         if (reportRes && reportRes.ok) {
@@ -1651,8 +1761,14 @@
 
   window.__RC_HYDRATE_PRELOADED__ = hydratePreloadedBarcodes;
   window.__RC_REFRESH_FROM_CLOUD__ = () => {
-    if (!isOpen) togglePanel();
-    showModalLoader(`⏳ Auditing ${activeLocationName} Catalog...`);
+    if (!isOpen && window.__RC_OPEN_PANEL_AFTER_AUTH__) {
+      window.__RC_OPEN_PANEL_AFTER_AUTH__ = false;
+      togglePanel();
+      return;
+    }
+    if (isOpen) {
+      showModalLoader(`⏳ Auditing ${activeLocationName} Catalog...`);
+    }
     fetchLivePayloadFromCloud(true, true);
     harvestLiveSpaPayoutTables(false);
     if (catalogProducts.length === 0 && !isLoadingCatalog) {
@@ -2010,11 +2126,22 @@
 
     const totalMapped = Math.max(Object.keys(parsedMap).length, verifiedSkuSet.size);
     if (countEl) countEl.textContent = `${totalMapped} SKU pairs loaded`;
+    const sess = getBmlMemberSession();
     const cloudBadge = document.getElementById('rc-cloud-badge');
-    if (cloudBadge && !isFetchingCloudPayload && totalMapped > 0) {
-      cloudBadge.textContent = `✅ Live Auto-Updated (${totalMapped})`;
-      cloudBadge.style.background = '#065f46';
-      cloudBadge.style.color = '#6ee7b7';
+    if (cloudBadge && !isFetchingCloudPayload) {
+      if (sess && totalMapped > 0) {
+        cloudBadge.textContent = `✅ ${totalMapped} Cloud Tags`;
+        cloudBadge.style.background = '#065f46';
+        cloudBadge.style.color = '#6ee7b7';
+      } else if (!sess) {
+        cloudBadge.textContent = '🔐 Sign In Required';
+        cloudBadge.style.background = '#78350f';
+        cloudBadge.style.color = '#fde68a';
+      }
+    }
+    const statusEl = document.getElementById('rc-catalog-status');
+    if (statusEl && catalogProducts.length > 0 && !isLoadingCatalog) {
+      statusEl.textContent = `✅ ${catalogProducts.length} Booth Items Ready`;
     }
 
     const report = buildVerificationReport();
@@ -2167,11 +2294,38 @@
           : `✅ ${activePartnerBucket === 'ALL' ? 'All' : activePartnerBucket} Blank Filled (${verifiedMatch} Verified)`;
     }
     if (testBtn && !isRunning) {
-      testBtn.textContent = `🧪 Test 1${partnerSuffix}`;
+      testBtn.textContent = `🧪 Test 1 Blank${partnerSuffix}`;
+    }
+    const fabAuth = document.getElementById('rc-fab-auth');
+    const fabLogout = document.getElementById('rc-fab-logout');
+    const roleIcon = sess && sess.role === 'curator' ? '💎' : '👑';
+    if (fabAuth) {
+      if (sess) {
+        fabAuth.textContent = `${roleIcon} ${sess.name || 'Member'}`;
+        fabAuth.style.background = 'rgba(16,185,129,0.28)';
+        fabAuth.style.borderColor = 'rgba(52,211,153,0.6)';
+        fabAuth.style.color = '#a7f3d0';
+      } else {
+        fabAuth.textContent = '🔐 Sign In';
+        fabAuth.style.background = 'rgba(245,158,11,0.28)';
+        fabAuth.style.borderColor = 'rgba(251,191,36,0.65)';
+        fabAuth.style.color = '#fef08a';
+      }
+    }
+    if (fabLogout) {
+      fabLogout.style.display = sess ? 'inline-block' : 'none';
     }
     if (fabBadge) {
-      fabBadge.textContent =
-        catalogProducts.length > 0 ? `${verifiedMatch}/${totalCatalog} Verified` : `${totalMapped} Ready`;
+      if (!sess) {
+        fabBadge.textContent =
+          catalogProducts.length > 0 ? `${catalogProducts.length} Booth Items` : 'Click to Sign In';
+      } else {
+        const fixHint = mismatchUpc > 0 ? ` • 🟠 ${mismatchUpc} Fix` : '';
+        fabBadge.textContent =
+          catalogProducts.length > 0
+            ? `${verifiedMatch}/${totalCatalog} Matched${fixHint}`
+            : `${totalMapped} Ready`;
+      }
     }
 
     updateSalesSyncTabUI();
@@ -3864,6 +4018,9 @@
           } catch (e) {}
           break;
         }
+        if (res.status === 401 || res.status === 403) {
+          break;
+        }
       } catch (e) {}
     }
 
@@ -3996,6 +4153,9 @@
           adoptedOk = true;
           adoptData = data;
           break;
+        } else if (res.status === 401 || res.status === 403) {
+          errMsg = data?.message || 'Sign in as a Founder (👑) or Curator (💎) to adopt booth tags.';
+          break;
         } else if (data?.error) {
           errMsg = data.error;
         }
@@ -4079,6 +4239,9 @@
         });
         if (res.ok) {
           sentOk = true;
+          break;
+        }
+        if (res.status === 401 || res.status === 403) {
           break;
         }
       } catch (e) {}
