@@ -4,14 +4,16 @@ import PurchasesList from '../../components/purchases/PurchasesList.vue';
 ---
 
 <Layout title="Purchases | Resale Command" hideFooter={true}>
-  <div class="rc-page-shell">
-    
+  <div class="rc-page-shell space-y-4">
     <!-- PAGE HEADER -->
-    <div class="flex flex-col gap-1">
-      <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight">Purchases & Inbound</h1>
-      <p class="text-xs sm:text-sm text-base-content/70">Track incoming hauls, online auction orders, and unboxing intake.</p>
-    </div>
-    
+    <header class="flex flex-col gap-0.5">
+      <h1 class="text-2xl sm:text-3xl font-black text-base-content tracking-tight">Purchases &amp; Inbound Hauls</h1>
+      <p class="text-xs sm:text-sm text-base-content/70">
+        Track haul spend, projected retail ROI, shipped auction orders, and 1-tap receiving into backstock.
+      </p>
+    </header>
+
     <PurchasesList client:load />
   </div>
 </Layout>
+

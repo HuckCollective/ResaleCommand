@@ -155,6 +155,13 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 12, 2026)
 
+## ✅ CROSS-APP IA ROLLOUT — PILLAR A: `/purchases` HAULS HUB (`<KpiStatGrid>` + `SlideOverDrawer` CSV Importer) (Nov 12, 2026 — `alpha-1`)
+- **4-Stat Spend & Projected ROI Strip (`src/components/purchases/PurchasesList.vue`, `src/pages/purchases/index.astro`)**:
+  - Mounted the shared `<KpiStatGrid>` (`Total Haul Spend`, `Est. Linked Retail` with live `+$X.XX spread` & ROI multiple, `Ready to Receive`, and `Received Hauls`) at the top of `/purchases`, dynamically reflecting active search/status filters with zero item double-counting across `purchaseId` / `cartId` / `poNumber`.
+  - Removed double icon+emoji labels on status pills and converted `BulkImport` in `PurchasesList.vue` to a lazy `defineAsyncComponent` chunk so `papaparse` / `xlsx` only download when opening the importer.
+- **Canonical `SlideOverDrawer` CSV Importer (`src/components/inventory/BulkImport.vue`)**:
+  - Upgraded `BulkImport.vue` Stage 1 (CSV/XLSX dropzone, `Auto-Scout Items` & `Update Already-Acquired` toggles, and `Undo Previous Import`) from the legacy centered modal to `SlideOverDrawer.vue` (`#footer` action bar) across both `/purchases` and `/inventory`, while preserving the Warm Parchment fullscreen terminal progress loader during active row processing.
+
 ## ✅ GEMINI 4 HYDROGEN ROSTER UPGRADE, IDE-INDEPENDENT VAULT & DUAL-IDE AUTO-MORPHING (`.clinerules` ⇄ `GEMINI.md`) (Nov 12, 2026 — `alpha-1`)
 - **Gemini 4 Hydrogen (`gemini-4-hydrogen`) + Best Gemini `$0`-Pool Swap (`src/lib/devAiRouting.ts`, `src/lib/gemini.ts`)**:
   - Upgraded Tier 1 fast scout from `Gemini 3.8 Flash` to Google's November 2026 **`Gemini 4 Hydrogen` (`gemini-4-hydrogen`, 1M unified context)** alongside `Gemini 4 Argon` and `Gemini 4 Carbon`, and added `gemini-4-hydrogen` + `gemini-3.8-flash` to `src/lib/gemini.ts`'s fallback chain.

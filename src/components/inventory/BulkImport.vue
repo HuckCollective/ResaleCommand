@@ -1,68 +1,85 @@
 <template>
-    <Teleport to="body">
-    <!-- FILE SELECTION MODAL -->
-    <div v-if="!processing && logs.length === 0" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="bg-base-100 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
-            <div class="p-4 border-b border-base-200 flex justify-between items-center">
-                <h3 class="text-xl font-bold">Bulk Import</h3>
-                <button class="btn btn-sm btn-circle btn-ghost" @click="$emit('close')">✕</button>
-            </div>
-            
-            <div class="p-6 overflow-y-auto flex-1 space-y-6">
-                <p class="opacity-70 text-sm">
-                    Upload a CSV or XLSX file containing your ShopGoodwill items. 
-                </p>
-                
-                <div class="form-control w-full">
-                    <label class="btn btn-outline btn-primary w-full gap-2 h-auto py-4 flex-col cursor-pointer select-none">
-                        <input 
-                            type="file" 
-                            ref="fileInputRef" 
-                            class="sr-only" 
-                            @change="handleFileUpload" 
-                            accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
-                        />
-                        <Icon icon="solar:upload-linear" class="w-8 h-8" />
-                        <span class="font-bold">{{ selectedFileName || 'Tap to select file (CSV/XLSX)' }}</span>
-                    </label>
-                </div>
-
-                <div class="form-control w-full space-y-2">
-                    <label class="label cursor-pointer justify-start gap-4">
-                        <input type="checkbox" v-model="runScout" class="checkbox checkbox-primary checkbox-sm" />
-                        <span class="label-text font-bold text-sm">Auto-Scout Items (AI Analysis)</span>
-                    </label>
-                    <label class="label cursor-pointer justify-start gap-4">
-                        <input type="checkbox" v-model="updateExisting" class="checkbox checkbox-secondary checkbox-sm" />
-                        <div class="flex flex-col">
-                            <span class="label-text font-bold text-sm">Update Already-Acquired Items & Orders</span>
-                            <span class="label-text-alt opacity-70 text-xs">Re-syncs costs, tracking, and PO links for previously imported items (tracked auction items auto-graduate to acquired)</span>
-                        </div>
-                    </label>
-                </div>
-
-                <div class="mt-4 flex justify-end">
-                    <button class="btn btn-primary w-full" @click="processCSV" :disabled="!file">
-                        Start Import 🚀
-                    </button>
-                </div>
-
-                <div v-if="undoBatch && undoBatch.items && (undoBatch.items.length > 0 || undoBatch.purchases.length > 0)" class="mt-4 border-t border-base-200 pt-4">
-                    <div class="flex flex-col gap-2">
-                        <span class="text-xs opacity-70 text-center text-error">Import didn't go as planned?</span>
-                        <button class="btn btn-error btn-outline w-full" @click="handleUndoImport" :disabled="processingUndo">
-                            <span v-if="processingUndo" class="loading loading-spinner loading-sm"></span>
-                            <Icon v-else icon="solar:undo-left-bold-duotone" class="w-5 h-5" />
-                            Undo Previous Import ({{ undoBatch.items.length }} items)
-                        </button>
+    <div>
+    <!-- STAGE 1: RIGHT-SIDE SLIDE-OVER IMPORT DRAWER -->
+    <SlideOverDrawer
+        :model-value="!processing && logs.length === 0"
+        title="Import Shipped &amp; Haul CSV"
+        subtitle="Upload a CSV or XLSX export (ShopGoodwill, auction orders, or haul sheets) to create POs and graduate tracked auctions."
+        @close="$emit('close')"
+    >
+        <div class="space-y-5">
+            <div class="form-control w-full">
+                <label class="border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 rounded-2xl p-6 flex flex-col items-center justify-center gap-2.5 cursor-pointer select-none transition-all text-center">
+                    <input 
+                        type="file" 
+                        ref="fileInputRef" 
+                        class="sr-only" 
+                        @change="handleFileUpload" 
+                        accept=".csv,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls,*/*" 
+                    />
+                    <div class="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center">
+                        <Icon icon="solar:upload-bold-duotone" class="w-6 h-6" />
                     </div>
+                    <div class="font-black text-sm text-base-content break-words">
+                        {{ selectedFileName || 'Tap to choose CSV or XLSX file' }}
+                    </div>
+                    <span class="text-[11px] text-base-content/65">
+                        Supports ShopGoodwill Shipped Reports, auction manifests &amp; spreadsheet exports
+                    </span>
+                </label>
+            </div>
+
+            <div class="rounded-2xl bg-base-200/60 border border-base-300 p-4 space-y-3">
+                <div class="text-[11px] font-extrabold uppercase tracking-wider text-base-content/65">
+                    Import Options
                 </div>
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" v-model="runScout" class="checkbox checkbox-primary checkbox-sm mt-0.5 shrink-0" />
+                    <div class="space-y-0.5">
+                        <div class="font-bold text-xs sm:text-sm text-base-content">Auto-Scout Items (AI Appraisal)</div>
+                        <p class="text-[11px] text-base-content/65 leading-relaxed">
+                            Runs pre-arrival Gemini identification and target tag-price drafting on newly imported items.
+                        </p>
+                    </div>
+                </label>
+
+                <label class="flex items-start gap-3 cursor-pointer pt-2 border-t border-base-300/70">
+                    <input type="checkbox" v-model="updateExisting" class="checkbox checkbox-secondary checkbox-sm mt-0.5 shrink-0" />
+                    <div class="space-y-0.5">
+                        <div class="font-bold text-xs sm:text-sm text-base-content">Update Already-Acquired Items &amp; Orders</div>
+                        <p class="text-[11px] text-base-content/65 leading-relaxed">
+                            Re-syncs landed costs, tracking numbers, and PO links on existing stock. (Tracked pre-buy auctions always auto-graduate to acquired!)
+                        </p>
+                    </div>
+                </label>
+            </div>
+
+            <div v-if="undoBatch && undoBatch.items && (undoBatch.items.length > 0 || undoBatch.purchases.length > 0)" class="rounded-2xl border border-error/35 bg-error/5 p-4 space-y-2.5">
+                <div class="text-xs font-bold text-error">Last import didn't go as planned?</div>
+                <button type="button" class="btn btn-sm btn-error btn-outline w-full rounded-xl font-bold gap-1.5" @click="handleUndoImport" :disabled="processingUndo">
+                    <span v-if="processingUndo" class="loading loading-spinner loading-xs"></span>
+                    <Icon v-else icon="solar:undo-left-bold-duotone" class="w-4 h-4 shrink-0" />
+                    <span>Undo Previous Import ({{ undoBatch.items.length }} items)</span>
+                </button>
             </div>
         </div>
-    </div>
 
-    <!-- FULLSCREEN HUCKLEBERRY LOADER (WARM PARCHMENT THEME) -->
-    <div v-else class="fixed inset-0 z-9999 flex flex-col items-center justify-center bg-base-100/92 backdrop-blur-md p-4 text-base-content">
+        <template #footer>
+            <div class="flex items-center justify-between gap-2">
+                <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="$emit('close')">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-sm btn-primary text-primary-content rounded-xl font-black gap-1.5 px-5" @click="processCSV" :disabled="!file">
+                    <Icon icon="solar:upload-track-bold" class="w-4 h-4 shrink-0" />
+                    <span>Start Import</span>
+                </button>
+            </div>
+        </template>
+    </SlideOverDrawer>
+
+    <!-- STAGE 2: FULLSCREEN HUCKLEBERRY LOADER (WARM PARCHMENT THEME) -->
+    <Teleport v-if="processing || logs.length > 0" to="body">
+    <div class="fixed inset-0 z-9999 flex flex-col items-center justify-center bg-base-100/92 backdrop-blur-md p-4 text-base-content">
         <div class="max-w-2xl w-full flex flex-col items-center">
             
             <!-- Huckleberry 3D Box & Falling Items Animation -->
@@ -132,10 +149,12 @@
         </div>
     </div>
     </Teleport>
+    </div>
 </template>
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useInventory } from '../../composables/useInventory';
 import { saveItemToInventory, sanitizeItemPayload, BUCKET_ID, getCollectionId, DB_ID } from '../../lib/inventory';
 import { useAuth } from '../../composables/useAuth';

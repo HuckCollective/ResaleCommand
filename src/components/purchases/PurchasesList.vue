@@ -1,5 +1,8 @@
 <template>
   <div class="space-y-4">
+    <!-- 4-STAT HAUL SPEND & PROJECTED ROI SUMMARY STRIP -->
+    <KpiStatGrid :items="purchaseKpiStats" />
+
     <!-- SEARCH & CONTROLS TOOLBAR (CLEAN & CONSTRAINED) -->
     <div class="card bg-base-100/90 shadow-sm border border-base-200/80 rounded-2xl p-2.5 sm:p-3">
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
@@ -43,7 +46,7 @@
       <!-- STATUS FILTER PILLS & ACTION FOCUS -->
       <div class="flex items-center justify-between gap-2 flex-wrap pt-2.5 mt-1 border-t border-base-200/60 text-xs">
         <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
-          <!-- ⚡ Needs Action Pill -->
+          <!-- Needs Action Pill -->
           <button 
             type="button" 
             class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
@@ -52,11 +55,11 @@
             title="Show open purchases requiring action (drafts, pending, shipped, unreceived)"
           >
             <Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5" />
-            <span>⚡ Needs Action</span>
+            <span>Needs Action</span>
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'needs-action' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.needsAction }}</span>
           </button>
 
-          <!-- 📦 Ready to Receive (Has items & not yet received) -->
+          <!-- Ready to Receive (Has items & not yet received) -->
           <button 
             type="button" 
             class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
@@ -65,7 +68,7 @@
             title="Purchases with items waiting to be checked in and received"
           >
             <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-            <span>📦 Ready to Receive</span>
+            <span>Ready to Receive</span>
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'ready-receive' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.readyReceive }}</span>
           </button>
 
@@ -485,7 +488,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { Query } from 'appwrite';
@@ -494,9 +497,11 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
-import BulkImport from '../inventory/BulkImport.vue';
+import KpiStatGrid from '../common/KpiStatGrid.vue';
 import PaginationDock from '../common/PaginationDock.vue';
 import PurchaseItemsTray from './PurchaseItemsTray.vue';
+
+const BulkImport = defineAsyncComponent(() => import('../inventory/BulkImport.vue'));
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';
@@ -723,6 +728,68 @@ const filteredPurchases = computed(() => {
     });
 
     return list;
+});
+
+const purchaseKpiStats = computed(() => {
+    const visiblePos = filteredPurchases.value || [];
+    const totalSpend = visiblePos.reduce((sum, p) => sum + (Number(p.grandTotal) || 0), 0);
+
+    const poKeys = new Set();
+    for (const p of visiblePos) {
+        if (p.$id) poKeys.add(p.$id);
+        if (p.orderId) poKeys.add(String(p.orderId));
+        if (p.poNumber) poKeys.add(String(p.poNumber));
+    }
+
+    let linkedRetailValue = 0;
+    let linkedUnitCount = 0;
+    for (const item of (inventoryItems.value || [])) {
+        const matchesPo =
+            (item.purchaseId && poKeys.has(item.purchaseId)) ||
+            (item.cartId && poKeys.has(item.cartId)) ||
+            (item.poNumber && poKeys.has(String(item.poNumber)));
+        if (!matchesPo) continue;
+        const qty = Number(item.quantity) || 1;
+        const unitRetail = Number(item.resalePrice || item.listPrice || item.boutiquePrice) || 0;
+        linkedUnitCount += qty;
+        linkedRetailValue += unitRetail * qty;
+    }
+
+    const spread = linkedRetailValue - totalSpend;
+    const roiMultiple = totalSpend > 0 && linkedRetailValue > 0 ? ` · ${(linkedRetailValue / totalSpend).toFixed(1)}x cost` : '';
+
+    return [
+        {
+            label: 'Total Haul Spend',
+            value: `$${totalSpend.toFixed(2)}`,
+            hint: `${visiblePos.length} purchase order${visiblePos.length === 1 ? '' : 's'} in view`,
+            icon: 'solar:wallet-money-bold-duotone',
+            tone: 'text-base-content',
+        },
+        {
+            label: 'Est. Linked Retail',
+            value: `$${linkedRetailValue.toFixed(2)}`,
+            hint: `${linkedUnitCount} linked unit${linkedUnitCount === 1 ? '' : 's'}${roiMultiple}`,
+            icon: 'solar:tag-price-bold-duotone',
+            tone: 'text-success',
+            badge: spread > 0 && totalSpend > 0 ? `+$${spread.toFixed(2)} spread` : undefined,
+            badgeClass: 'badge-success text-success-content',
+        },
+        {
+            label: 'Ready to Receive',
+            value: String(statusCounts.value.readyReceive),
+            hint: `${statusCounts.value.transit} in transit · ${statusCounts.value.draft} draft`,
+            icon: 'solar:box-minimalistic-bold-duotone',
+            tone: statusCounts.value.readyReceive > 0 ? 'text-secondary' : 'text-base-content',
+        },
+        {
+            label: 'Received Hauls',
+            value: String(statusCounts.value.received),
+            hint: `${statusCounts.value.needsAction} open needing action`,
+            icon: 'solar:check-circle-bold-duotone',
+            tone: 'text-primary',
+        },
+    ];
 });
 
 const loadPurchases = async (forceInventory = false, silent = false) => {
