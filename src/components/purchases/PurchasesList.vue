@@ -48,8 +48,37 @@
           class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
           @click="showBmlGuideModal = true"
         >
-          <span>📖 How to Use (4 SGW Pages)</span>
+          <span>📖 Instructions</span>
         </button>
+        <div class="hidden sm:flex items-center gap-1 pl-1 border-l border-base-300">
+          <a
+            href="https://shopgoodwill.com/shopgoodwill/inprogress-auctions"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
+            title="Open ShopGoodwill Auctions In Progress"
+          >
+            🔨 Bidding ↗
+          </a>
+          <a
+            href="https://shopgoodwill.com/shopgoodwill/closed-auctions"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
+            title="Open ShopGoodwill Closed Auctions (Won / Lost)"
+          >
+            🏆 Won/Lost ↗
+          </a>
+          <a
+            href="https://shopgoodwill.com/shopgoodwill/shipped-orders"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
+            title="Open ShopGoodwill Shipped Orders"
+          >
+            🚚 Shipped ↗
+          </a>
+        </div>
       </div>
     </div>
 
