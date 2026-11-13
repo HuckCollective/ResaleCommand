@@ -272,7 +272,11 @@ export const POST: APIRoute = async ({ request }) => {
         const title = String(r?.title || `ShopGoodwill #${itemId}`).trim();
         const currentPrice = Number(r?.currentPrice || 0);
         const myMaxBid = Number(r?.myMaxBid || 0);
-        const hasTrophy = Boolean(r?.hasTrophy);
+        const statusStr = String(r?.status || '');
+        const hasTrophy =
+          Boolean(r?.hasTrophy) ||
+          (myMaxBid > 0 && currentPrice > 0 && myMaxBid > currentPrice) ||
+          (/win|high/i.test(statusStr) && !/outbid|lost/i.test(statusStr));
         const bidState: 'winning' | 'outbid' = hasTrophy ? 'winning' : 'outbid';
         const endingDateRaw = String(r?.endingDate || '').trim();
         const auctionEndsAt = endingDateRaw ? parsePacificDateToIso(endingDateRaw) || undefined : undefined;
@@ -282,16 +286,23 @@ export const POST: APIRoute = async ({ request }) => {
 
         const matched = bySgwItemId.get(itemId);
         const rcMaxBid = matched ? Number(matched.maxBid || matched.maxBuyPrice || 0) : 0;
+        const stateBadge = bidState === 'winning' ? '🟢 WINNING' : '🚨 OUTBID';
 
         if (matched) {
+          const existingTitle = String(matched.title || '').trim();
+          const bestTitle =
+            title && (existingTitle.endsWith('...') || title.length > existingTitle.length)
+              ? title
+              : existingTitle || title;
           previewActions.push({
             itemId,
-            title: matched.title || title,
+            title: bestTitle,
             action: 'UPDATE_BID',
             bidState,
             currentPrice,
             myMaxBid,
             rcMaxBid,
+            detail: `${stateBadge} • $${currentPrice.toFixed(2)} (Max $${myMaxBid.toFixed(2)})`,
           });
           if (!dryRun) {
             const rawObj = parseRawAnalysisJson(matched.rawAnalysis);
@@ -299,6 +310,7 @@ export const POST: APIRoute = async ({ request }) => {
             rawObj.sgwMyMaxBid = myMaxBid;
             rawObj.sgwSyncedAt = new Date().toISOString();
             const updatePayload: Record<string, any> = {
+              title: bestTitle,
               currentBid: currentPrice,
               rawAnalysis: serializeRawAnalysisJson(rawObj),
             };
@@ -316,6 +328,7 @@ export const POST: APIRoute = async ({ request }) => {
             currentPrice,
             myMaxBid,
             rcMaxBid: 0,
+            detail: `${stateBadge} • $${currentPrice.toFixed(2)} (Max $${myMaxBid.toFixed(2)})`,
           });
           if (!dryRun) {
             const rawObj = {
