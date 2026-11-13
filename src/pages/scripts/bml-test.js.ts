@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { SYNC_FALLBACK_ORIGINS } from '../../site-config';
+import { ALPHA_SITE_URL, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { buildInjectableBmlAuthRuntimeJs } from '../../lib/bml/clientCore';
 
 export const prerender = false;
@@ -19,7 +19,7 @@ export const OPTIONS: APIRoute = async () => {
 };
 
 export const GET: APIRoute = async ({ url }) => {
-  const activeOrigins = Array.from(new Set([url.origin, ...SYNC_FALLBACK_ORIGINS]));
+  const activeOrigins = Array.from(new Set([url.origin, ALPHA_SITE_URL, ...SYNC_FALLBACK_ORIGINS]));
   const authRuntimeJs = buildInjectableBmlAuthRuntimeJs(activeOrigins, url.origin);
 
   const diagnosticBodyJs = `

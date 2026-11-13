@@ -47,6 +47,31 @@
                   <span>#{{ purchase.orderId }}</span>
                   <Icon icon="solar:link-external-linear" class="w-3 h-3" />
                 </a>
+                <!-- Live Carrier Tracking Pills in Tray Header -->
+                <div
+                  v-for="trk in parsedTrackingList"
+                  :key="trk.number"
+                  class="inline-flex items-center gap-0.5"
+                >
+                  <a
+                    :href="trk.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="badge badge-sm font-mono font-bold gap-1 hover:brightness-110 transition-all"
+                    :class="trk.badgeClass"
+                    :title="`Track ${trk.carrier} #${trk.number}`"
+                  >
+                    <span>🚚 {{ trk.carrier }} •••{{ trk.shortNumber }} ↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-[10px]"
+                    @click.stop="copyTracking(trk.number)"
+                    :title="`Copy tracking #: ${trk.number}`"
+                  >
+                    📋
+                  </button>
+                </div>
               </div>
               <p class="text-xs text-base-content/65 mt-0.5 truncate">
                 {{ traySubtitle }}
@@ -457,6 +482,7 @@ import {
   BUCKET_ID,
 } from '../../lib/inventory';
 import { purchasesAPI } from '../../lib/purchases';
+import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
@@ -476,6 +502,17 @@ const emit = defineEmits<{
 
 const mounted = ref(false);
 const trayPanelRef = ref<HTMLElement | null>(null);
+const parsedTrackingList = computed(() => parseTrackingNumbers(props.purchase?.trackingNumber));
+
+const copyTracking = async (num: string) => {
+  if (!num) return;
+  try {
+    await navigator.clipboard.writeText(num);
+    addToast({ type: 'success', message: `Copied tracking # ${num}` });
+  } catch {
+    addToast({ type: 'info', message: `Tracking #: ${num}` });
+  }
+};
 
 onMounted(() => {
   mounted.value = true;

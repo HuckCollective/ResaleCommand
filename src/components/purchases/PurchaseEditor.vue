@@ -291,6 +291,36 @@
                   <span class="text-xs opacity-60 font-medium">External Order ID</span>
                   <span class="font-mono text-xs">{{ form.orderId || 'None' }}</span>
                 </div>
+                <div class="flex items-center justify-between gap-2 py-1 border-b border-base-200/60 flex-wrap">
+                  <span class="text-xs opacity-60 font-medium">Tracking Number</span>
+                  <div v-if="parsedFormTracking.length > 0" class="flex flex-wrap items-center justify-end gap-1">
+                    <div
+                      v-for="trk in parsedFormTracking"
+                      :key="trk.number"
+                      class="inline-flex items-center gap-1"
+                    >
+                      <a
+                        :href="trk.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="badge badge-sm font-mono font-bold gap-1 hover:brightness-110 transition-all"
+                        :class="trk.badgeClass"
+                        :title="`Track ${trk.carrier} #${trk.number}`"
+                      >
+                        <span>🚚 {{ trk.carrier }} •••{{ trk.shortNumber }} ↗</span>
+                      </a>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-[10px]"
+                        @click.stop="copyFormTracking(trk.number)"
+                        :title="`Copy ${trk.number}`"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+                  <span v-else class="font-mono text-xs opacity-60">{{ form.trackingNumber || 'None' }}</span>
+                </div>
                 <div class="flex items-center justify-between py-1 border-b border-base-200/60">
                   <span class="text-xs opacity-60 font-medium">Date</span>
                   <span class="font-semibold">{{ formatDate(form.purchaseDate) }}</span>
@@ -316,6 +346,25 @@
                 <div class="form-control w-full">
                   <label class="label py-1"><span class="label-text text-xs font-semibold">External Order ID</span></label>
                   <input type="text" v-model="form.orderId" class="input input-sm input-bordered w-full font-mono text-xs" placeholder="Vendor Order ID" />
+                </div>
+                <div class="form-control w-full">
+                  <label class="label py-1 flex items-center justify-between">
+                    <span class="label-text text-xs font-semibold">Tracking Number(s)</span>
+                    <div v-if="parsedFormTracking.length > 0" class="flex flex-wrap items-center gap-1">
+                      <a
+                        v-for="trk in parsedFormTracking"
+                        :key="trk.number"
+                        :href="trk.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="badge badge-xs font-mono font-bold gap-1 hover:brightness-110"
+                        :class="trk.badgeClass"
+                      >
+                        <span>🚚 {{ trk.carrier }} •••{{ trk.shortNumber }} ↗</span>
+                      </a>
+                    </div>
+                  </label>
+                  <input type="text" v-model="form.trackingNumber" class="input input-sm input-bordered w-full font-mono text-xs" placeholder="FedEx, USPS, or UPS tracking number..." />
                 </div>
                 <div class="form-control w-full">
                   <label class="label py-1"><span class="label-text text-xs font-semibold">Purchase Date</span></label>
@@ -1030,6 +1079,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
+import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId } from '../../lib/inventory';
 import { databases, storage, client, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
@@ -1197,6 +1247,7 @@ const form = ref({
     poNumber: '',
     vendor: '',
     orderId: '',
+    trackingNumber: '',
     purchaseDate: new Date().toISOString().split('T')[0],
     status: 'Draft',
     subtotal: 0,
@@ -1206,6 +1257,18 @@ const form = ref({
     feeTotal: 0,
     receiptImageId: ''
 });
+
+const parsedFormTracking = computed(() => parseTrackingNumbers(form.value.trackingNumber));
+
+const copyFormTracking = async (num) => {
+    if (!num) return;
+    try {
+        await navigator.clipboard.writeText(num);
+        addToast(`Copied tracking # ${num}`, 'success');
+    } catch {
+        addToast(`Tracking #: ${num}`, 'info');
+    }
+};
 
 const computedGrandTotal = computed(() => {
     return (form.value.subtotal || 0) + 
@@ -1523,6 +1586,7 @@ onMounted(async () => {
                     poNumber: p.poNumber || '',
                     vendor: p.vendor || '',
                     orderId: p.orderId || '',
+                    trackingNumber: p.trackingNumber || '',
                     purchaseDate: p.purchaseDate ? p.purchaseDate.split('T')[0] : '',
                     status: p.status || 'Draft',
                     subtotal: p.subtotal || 0,
@@ -1583,6 +1647,7 @@ const initRealtime = () => {
                         poNumber: doc.poNumber || form.value.poNumber,
                         vendor: doc.vendor || form.value.vendor,
                         orderId: doc.orderId || form.value.orderId,
+                        trackingNumber: doc.trackingNumber !== undefined ? doc.trackingNumber : form.value.trackingNumber,
                         purchaseDate: doc.purchaseDate ? doc.purchaseDate.split('T')[0] : form.value.purchaseDate,
                         status: doc.status || form.value.status,
                         subtotal: doc.subtotal !== undefined ? doc.subtotal : form.value.subtotal,

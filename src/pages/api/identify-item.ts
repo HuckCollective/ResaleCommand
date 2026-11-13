@@ -7,6 +7,7 @@ import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-buil
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
 import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
+import { verifyAppwriteJwtToMember } from '../../lib/bml/serverAuth';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -842,6 +843,25 @@ export const ALL: APIRoute = async ({ request }) => {
                     }
                     if (Array.isArray(json.images)) {
                         json.images = json.images.slice(0, GUEST_MAX_PHOTOS_PER_SCAN);
+                    }
+                } else {
+                    const hasRemoteUrl =
+                        Boolean(json.imageUrl) ||
+                        (Array.isArray(json.remoteImageUrls) && json.remoteImageUrls.length > 0) ||
+                        /https?:\/\//i.test(String(json.notes || ''));
+                    const jwtHeader = request.headers.get('X-Appwrite-JWT') || '';
+                    if (hasRemoteUrl && jwtHeader) {
+                        const verifiedMember = await verifyAppwriteJwtToMember(jwtHeader);
+                        if (!verifiedMember.ok && verifiedMember.status === 403) {
+                            return new Response(
+                                JSON.stringify({
+                                    error: 'URL scouting restricted',
+                                    details:
+                                        '🔒 Web link & auction URL scouting is reserved for Collective Founders (👑) and Curators (💎). Please use Camera or Photo Scout instead.',
+                                }),
+                                { status: 403, headers: { 'Content-Type': 'application/json' } }
+                            );
+                        }
                     }
                 }
                 

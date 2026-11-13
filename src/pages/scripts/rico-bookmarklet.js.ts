@@ -7,7 +7,7 @@ import {
   resolveDefaultRicochetLocationMeta,
 } from '../../lib/warehouses';
 import { loadLiveWarehouseDocs } from '../../lib/locationSettingsServer';
-import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
+import { ALPHA_SITE_URL, siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { buildInjectableBmlAuthRuntimeJs } from '../../lib/bml/clientCore';
 import { loadServerBmlToolConfig } from '../../lib/bml/serverAuth';
 
@@ -49,7 +49,7 @@ export const GET: APIRoute = async ({ url }) => {
     const scriptPath = path.join(process.cwd(), 'public', 'ricochet-upc-sync.user.js');
     const source = fs.readFileSync(scriptPath, 'utf-8');
 
-    const activeOrigins = Array.from(new Set([url.origin, ...SYNC_FALLBACK_ORIGINS]));
+    const activeOrigins = Array.from(new Set([url.origin, ALPHA_SITE_URL, ...SYNC_FALLBACK_ORIGINS]));
     const authRuntimeJs = buildInjectableBmlAuthRuntimeJs(activeOrigins, url.origin);
 
     const injectedBootstrap = `window.__RC_ORIGIN__ = ${JSON.stringify(url.origin)};\nwindow.__RC_ORIGINS__ = ${JSON.stringify(activeOrigins)};\nwindow.__RC_BML_TOOL_CONFIG__ = ${JSON.stringify(bmlToolConfig || null)};\nwindow.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
@@ -70,7 +70,7 @@ export const GET: APIRoute = async ({ url }) => {
     });
   } catch (err: any) {
     const fallbackOrigin = url?.origin || siteConfig.siteUrl;
-    const fallbackOrigins = Array.from(new Set([fallbackOrigin, ...SYNC_FALLBACK_ORIGINS]));
+    const fallbackOrigins = Array.from(new Set([fallbackOrigin, ALPHA_SITE_URL, ...SYNC_FALLBACK_ORIGINS]));
     const fallbackAuth = buildInjectableBmlAuthRuntimeJs(fallbackOrigins, fallbackOrigin);
     const fallbackLoader = `${fallbackAuth}(function(){window.__RC_ORIGIN__=${JSON.stringify(fallbackOrigin)};var s=document.createElement('script');s.src=${JSON.stringify(fallbackOrigin)}+'/ricochet-upc-sync.user.js?t='+Date.now();document.body.appendChild(s);})();`;
     return new Response(fallbackLoader, {

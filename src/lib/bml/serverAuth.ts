@@ -18,7 +18,7 @@ export interface BookmarkletMemberSession {
 }
 
 const TOKEN_PREFIX = 'rcbml_v1';
-const DEFAULT_TTL_SECONDS = 14 * 24 * 60 * 60; // 14 days
+const DEFAULT_TTL_SECONDS = 3 * 24 * 60 * 60; // 3 days
 
 export const BML_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -129,6 +129,7 @@ export function verifyBookmarkletToken(rawToken?: string | null): BookmarkletMem
 }
 
 async function resolveCoopRosterMemberRole(
+  userId: string,
   userName: string,
   userEmail: string,
   prefix: string,
@@ -149,6 +150,7 @@ async function resolveCoopRosterMemberRole(
       .trim()
       .toLowerCase();
 
+  const uId = String(userId || '').trim();
   const uName = cleanName(userName);
   const uEmail = String(userEmail || '').trim().toLowerCase();
 
@@ -162,10 +164,15 @@ async function resolveCoopRosterMemberRole(
     const members: any[] = Array.isArray(parsed?.policyConfig?.members) ? parsed.policyConfig.members : [];
 
     for (const m of members) {
+      const mUserId = String(m?.userId || m?.id || '').trim();
+      const mEmail = String(m?.email || '').trim().toLowerCase();
       const mName = cleanName(m?.name || '');
-      const firstWordMatch =
-        uName && mName && uName.split(/\s+/)[0].length >= 3 && uName.split(/\s+/)[0] === mName.split(/\s+/)[0];
-      if ((uName && mName && (uName === mName || firstWordMatch)) || (uEmail && mName && uEmail.startsWith(mName))) {
+
+      const exactIdMatch = Boolean(uId && mUserId && uId === mUserId);
+      const exactEmailMatch = Boolean(uEmail && mEmail && uEmail === mEmail);
+      const exactFullNameMatch = Boolean(uName && mName && uName === mName);
+
+      if (exactIdMatch || exactEmailMatch || exactFullNameMatch) {
         const hats: string[] = Array.isArray(m.hats) ? m.hats : [];
         if (hats.includes('founder') || m.role === 'Co-op Member') return 'founder';
         if (hats.includes('curator') || m.role === 'Partner Curator') return 'curator';
@@ -251,6 +258,7 @@ export async function verifyAppwriteJwtToMember(
     }
 
     const resolvedRole = await resolveCoopRosterMemberRole(
+      me.$id,
       me.name || '',
       me.email || '',
       prefix,
@@ -318,7 +326,8 @@ function hasSameOriginSessionCookie(request: Request): boolean {
 }
 
 export async function requireBookmarkletMember(
-  request: Request
+  request: Request,
+  options?: { allowSameOriginCookieFallback?: boolean }
 ): Promise<{ ok: true; member: BookmarkletMemberSession } | { ok: false; response: Response }> {
   const url = new URL(request.url);
   const bearerHeader =
@@ -346,6 +355,8 @@ export async function requireBookmarkletMember(
         response: new Response(
           JSON.stringify({
             ok: false,
+            allowed: false,
+            role: 'restricted',
             error: verifiedJwt.error,
             message: verifiedJwt.message,
             connectPath: '/bml/connect',
@@ -356,7 +367,7 @@ export async function requireBookmarkletMember(
     }
   }
 
-  if (hasSameOriginSessionCookie(request)) {
+  if (options?.allowSameOriginCookieFallback && hasSameOriginSessionCookie(request)) {
     const nowSec = Math.floor(Date.now() / 1000);
     return {
       ok: true,

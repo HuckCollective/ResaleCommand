@@ -103,15 +103,16 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     }
     var returnUrl = window.location.href.split('#')[0];
     var connectUrl = PRIMARY_ORIGIN + '/bml/connect?origin=' + encodeURIComponent(window.location.origin) + '&returnUrl=' + encodeURIComponent(returnUrl) + (shouldForce ? '&forceLogin=1' : '');
-    var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-    if (isMobile) {
-      window.location.href = connectUrl;
-      return;
-    }
     var w = 440, h = 600;
     var left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
     var top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));
-    window.open(connectUrl, 'rc_bml_connect', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    var pop = null;
+    try {
+      pop = window.open(connectUrl, 'rc_bml_connect', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    } catch (_e2) {}
+    if (!pop) {
+      window.location.href = connectUrl;
+    }
   }
 
   window.addEventListener('message', function(ev) {
@@ -135,8 +136,8 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
       if (existing) existing.remove();
       return;
     }
-    // If the Ricochet bottom-right launcher pill (#rc-sync-fab) is present, it handles auth status inline!
-    if (document.getElementById('rc-sync-fab')) {
+    // If a bottom-right launcher pill (#rc-sync-fab or #rc-scout-fab-bar) is present, it handles auth status inline!
+    if (document.getElementById('rc-sync-fab') || document.getElementById('rc-scout-fab-bar')) {
       if (existing) existing.remove();
       return;
     }

@@ -59,10 +59,10 @@
                 </div>
 
                 <!-- OR DIVIDER -->
-                <div class="divider text-xs font-bold uppercase tracking-wider opacity-60 my-0">OR PASTE WEB LINK</div>
+                <div v-if="!isAuthenticated || capabilities.canScoutByUrl" class="divider text-xs font-bold uppercase tracking-wider opacity-60 my-0">OR PASTE WEB LINK</div>
 
                 <!-- 1c. WEB URL INPUT -->
-                <div v-if="isAuthenticated" class="form-control w-full space-y-2">
+                <div v-if="isAuthenticated && capabilities.canScoutByUrl" class="form-control w-full space-y-2">
                     <div class="flex flex-col sm:flex-row gap-2">
                         <div class="grow form-control">
                             <div class="relative flex items-center">
@@ -83,7 +83,7 @@
                     </div>
                 </div>
                 
-                <div v-else class="text-center bg-base-200 border border-base-300 rounded-lg p-3 text-xs">
+                <div v-else-if="!isAuthenticated" class="text-center bg-base-200 border border-base-300 rounded-lg p-3 text-xs">
                     <span class="opacity-70">🔒 Online auction &amp; web link scouting is reserved for Collective members. </span>
                     <a href="/login" class="link text-secondary font-bold">Member login</a>
                 </div>
@@ -1081,7 +1081,7 @@
         <!-- Modal Bottom Footer (flex-none, pinned cleanly at bottom, matching unified dock pattern) -->
         <div class="flex-none border-t border-base-300 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)] z-30">
             <!-- STACK ROW 1: SLIM BUY TRACKER STATUS (TOP STRIP) -->
-            <div v-if="isAuthenticated && (activePurchase || (draftPurchases.length > 0 && pausedTracker))" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+            <div v-if="isAuthenticated && capabilities.canUseBuyTracker && (activePurchase || (draftPurchases.length > 0 && pausedTracker))" class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
                 <div class="max-w-xl w-full mx-auto">
                     <!-- State C: Active Buy Tracker Status Strip -->
                     <button 
@@ -1180,7 +1180,7 @@
                         class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                         :disabled="savingAll || !canSaveReport"
                         :title="canSaveReport ? 'Save to Buy Tracker' : 'Saved to Tracker'"
-                        v-if="isAuthenticated"
+                        v-if="isAuthenticated && capabilities.canUseBuyTracker"
                     >
                         <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
                         <template v-else-if="!canSaveReport">
@@ -1345,7 +1345,7 @@
                             : 'bg-base-300/30 text-base-content/30 border border-base-content/10 cursor-not-allowed shadow-none')"
                 class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200"
                 :disabled="!result || savingAll || !canSaveReport"
-                v-if="isAuthenticated"
+                v-if="isAuthenticated && capabilities.canUseBuyTracker"
                 :title="activePurchase ? `Add to ${activePurchase.vendor || 'Tracker'}` : (pausedTracker ? `Add to ${pausedTracker.vendor || 'Tracker'}` : 'Add to Buy Tracker')"
             >
                 <span v-if="savingAll" class="loading loading-spinner loading-sm text-success-content"></span>
@@ -1373,6 +1373,7 @@ import { Icon } from '@iconify/vue';
 import { account, storage, databases, ID } from '../../lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
 import { useDockClearance } from '../../composables/useDockClearance';
@@ -1421,6 +1422,7 @@ import { warehousesApi, type WarehouseDocument } from '../../lib/warehouses';
 
 // -- COMPOSABLES --
 const { isAuthenticated, loading: authLoading, currentTeam, user, updatePrefs } = useAuth();
+const { capabilities } = useMemberCapabilities();
 
 // -- GUEST PREVIEW (logged-out visitors): limited scout, enforced again server-side in api/identify-item.ts --
 const GUEST_DAILY_LIMIT = 5;
@@ -2743,6 +2745,10 @@ const handleImageError = (e: Event) => {
 };
 
 async function analyzeListing() {
+    if (!capabilities.value.canScoutByUrl) {
+        addToast({ type: 'warning', message: '🔒 Web link & auction URL scouting is reserved for Founders and Curators. Use Camera / Photo Scout instead.' });
+        return;
+    }
     const url = scoutUrl.value || (sourcingLocation.value && sourcingLocation.value.trim().startsWith('http') ? sourcingLocation.value.trim() : '');
     const isId = url && url.match(/^\d+$/);
     if (!url || (!url.startsWith('http') && !isId)) {
@@ -2778,9 +2784,17 @@ async function analyzeListing() {
             locations: isGuest.value ? [] : availableWarehouses.value
         });
 
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (isAuthenticated.value) {
+            try {
+                const jwtRes = await account.createJWT();
+                if (jwtRes?.jwt) headers['X-Appwrite-JWT'] = jwtRes.jwt;
+            } catch {}
+        }
+
         const response = await fetch(`/api/identify-item`, {
             method: 'PUT', 
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: payload
         });
 
@@ -2975,9 +2989,17 @@ async function analyzeImage() {
             locations: isGuest.value ? [] : availableWarehouses.value
         });
 
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (isAuthenticated.value) {
+            try {
+                const jwtRes = await account.createJWT();
+                if (jwtRes?.jwt) headers['X-Appwrite-JWT'] = jwtRes.jwt;
+            } catch {}
+        }
+
         const response = await fetch(`/api/identify-item`, {
             method: 'PUT', 
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: payload
         });
 

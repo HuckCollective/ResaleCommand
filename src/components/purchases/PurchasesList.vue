@@ -1,5 +1,58 @@
 <template>
-  <div class="space-y-4">
+  <div v-if="!capabilities.canViewPurchases" class="max-w-xl mx-auto my-12">
+    <div class="card bg-base-100 border-2 border-warning/40 shadow-lg rounded-2xl p-6 text-center space-y-4">
+      <div class="text-4xl">🔒</div>
+      <h2 class="text-xl font-black text-base-content">Founders &amp; Curators Only</h2>
+      <p class="text-sm text-base-content/75 leading-relaxed">
+        Purchases, Hauls, and Auction Tracking are restricted to Collective Founders (👑) and Curators (💎). Your personal consignor and partner payout statement is available on your Command Dashboard.
+      </p>
+      <div class="pt-2 flex justify-center gap-3">
+        <a href="/dashboard" class="btn btn-primary font-bold rounded-xl">View My Payout Statement (/dashboard)</a>
+        <a href="/scout" class="btn btn-outline font-bold rounded-xl">Open Camera Scout</a>
+      </div>
+    </div>
+  </div>
+  <div v-else class="space-y-4">
+    <!-- FOUNDER/CURATOR-ONLY AUCTION SCOUT & ORDERS BOOKMARKLET BAR -->
+    <div
+      v-if="capabilities.canUseBml"
+      class="bg-primary/10 border border-primary/35 rounded-2xl p-3 sm:px-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3"
+    >
+      <div class="flex items-center gap-2.5 flex-wrap text-xs">
+        <span class="badge badge-sm badge-primary text-primary-content font-black font-mono">
+          {{ capabilities.roleBadge }} • ✅ Live Auto-Updated Script
+        </span>
+        <span class="font-bold text-base-content">
+          🔭 ShopGoodwill 4-Page Sync: Drag to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) to sync In-Progress Bids, Won/Lost Auctions, Shipped Orders &amp; Item Pages:
+        </span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <a
+          :href="auctionScoutBookmarkletHref"
+          @click.prevent="addToast('Drag this button up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on any ShopGoodwill page!', 'info')"
+          class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black shadow-sm border border-primary-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+          title="Drag me to your Chrome Bookmarks Bar! (🔭 Auction Scout & Orders)"
+        >
+          <span>🔭 Auction Scout &amp; Orders</span>
+        </a>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-outline font-bold gap-1"
+          @click="copyAuctionBookmarkletHref"
+          title="Copy javascript: URL for mobile Chrome (Pixel 8 keyword: rcscout)"
+        >
+          <span>📋 Copy JS URL</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
+          @click="showBmlGuideModal = true"
+        >
+          <span>📖 How to Use (4 SGW Pages)</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 4-STAT HAUL SPEND & PROJECTED ROI SUMMARY STRIP -->
     <KpiStatGrid :items="purchaseKpiStats" />
 
@@ -13,7 +66,7 @@
           <input 
             type="text" 
             v-model="searchQuery" 
-            placeholder="Search PO Number, Order ID, Vendor..." 
+            placeholder="Search PO, Order ID, Tracking #, Vendor..." 
             class="input input-bordered w-full pl-10 pr-9 text-xs sm:text-sm h-10 min-h-10 rounded-xl bg-base-200/50 hover:bg-base-200/70 focus:bg-base-100 border-base-300 focus:border-primary transition-all shadow-inner"
           />
           <button 
@@ -246,7 +299,7 @@
             <span class="truncate">{{ purchase.vendor || 'Unknown Vendor' }}</span>
           </div>
 
-          <div class="shrink-0 font-mono text-[11px]">
+          <div class="shrink-0 font-mono text-[11px] flex flex-col items-end gap-1">
             <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
                :href="getSgwUrl(purchase.orderId)" 
                target="_blank" 
@@ -256,6 +309,35 @@
               <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60" />
             </a>
             <span v-else class="opacity-60">#{{ purchase.orderId || '—' }}</span>
+          </div>
+        </div>
+
+        <!-- Live Carrier Tracking Pills (Mobile) -->
+        <div v-if="getTrackingPills(purchase).length > 0" class="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <div
+            v-for="trk in getTrackingPills(purchase)"
+            :key="trk.number"
+            class="inline-flex items-center gap-1"
+          >
+            <a
+              :href="trk.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="badge badge-sm font-mono font-bold gap-1 hover:brightness-110 transition-all py-2.5 px-2.5"
+              :class="trk.badgeClass"
+              :title="`Track ${trk.carrier} #${trk.number}`"
+            >
+              <span>🚚 {{ trk.carrier }} •••{{ trk.shortNumber }}</span>
+              <span class="text-[10px]">↗</span>
+            </a>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square h-6 w-6 min-h-0 opacity-70 hover:opacity-100"
+              @click.stop="copyTrackingNumber(trk.number)"
+              :title="`Copy full tracking number: ${trk.number}`"
+            >
+              📋
+            </button>
           </div>
         </div>
 
@@ -298,7 +380,7 @@
                   <span v-else class="text-xs opacity-20">▼</span>
                 </div>
               </th>
-              <th class="w-36 py-3.5 px-4 whitespace-nowrap">External ID</th>
+              <th class="w-44 py-3.5 px-4 whitespace-nowrap">External ID / Tracking</th>
               <th class="w-36 py-3.5 px-4 whitespace-nowrap cursor-pointer hover:bg-base-200 transition-colors" @click="toggleSort('created')">
                 <div class="flex items-center gap-1.5">
                   Created
@@ -345,25 +427,55 @@
                 </a>
               </td>
 
-              <!-- External ID -->
-              <td class="py-3 px-4 font-mono text-xs opacity-85 whitespace-nowrap">
-                <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
-                   :href="getSgwUrl(purchase.orderId)" 
-                   target="_blank" 
-                   class="link link-primary link-hover flex items-center gap-1 font-bold"
-                   title="Open in ShopGoodwill">
-                  <span>#{{ purchase.orderId }}</span>
-                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
-                </a>
-                <a v-else-if="purchase.orderId?.startsWith('http')"
-                   :href="purchase.orderId"
-                   target="_blank"
-                   class="link link-hover flex items-center gap-1 text-primary truncate max-w-[160px]"
-                   title="Open External URL">
-                  <span class="truncate">{{ purchase.orderId.length > 25 ? purchase.orderId.substring(0, 22) + '...' : purchase.orderId }}</span>
-                  <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
-                </a>
-                <span v-else class="truncate max-w-[160px] inline-block">{{ purchase.orderId || '—' }}</span>
+              <!-- External ID / Tracking -->
+              <td class="py-3 px-4 font-mono text-xs opacity-90 whitespace-nowrap">
+                <div class="flex flex-col gap-1">
+                  <a v-if="purchase.vendor?.toLowerCase().includes('goodwill') || purchase.orderId?.toString().match(/^\d+$/)" 
+                     :href="getSgwUrl(purchase.orderId)" 
+                     target="_blank" 
+                     class="link link-primary link-hover flex items-center gap-1 font-bold"
+                     title="Open in ShopGoodwill">
+                    <span>#{{ purchase.orderId }}</span>
+                    <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
+                  </a>
+                  <a v-else-if="purchase.orderId?.startsWith('http')"
+                     :href="purchase.orderId"
+                     target="_blank"
+                     class="link link-hover flex items-center gap-1 text-primary truncate max-w-[160px]"
+                     title="Open External URL">
+                    <span class="truncate">{{ purchase.orderId.length > 25 ? purchase.orderId.substring(0, 22) + '...' : purchase.orderId }}</span>
+                    <Icon icon="solar:link-external-linear" class="w-3 h-3 opacity-60 shrink-0" />
+                  </a>
+                  <span v-else class="truncate max-w-[160px] inline-block">{{ purchase.orderId || '—' }}</span>
+
+                  <!-- Carrier Tracking Pills -->
+                  <div v-if="getTrackingPills(purchase).length > 0" class="flex flex-wrap items-center gap-1">
+                    <div
+                      v-for="trk in getTrackingPills(purchase)"
+                      :key="trk.number"
+                      class="inline-flex items-center gap-0.5"
+                    >
+                      <a
+                        :href="trk.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="badge badge-xs font-mono font-bold gap-1 hover:brightness-110 transition-all py-2 px-2"
+                        :class="trk.badgeClass"
+                        :title="`Track ${trk.carrier} #${trk.number}`"
+                      >
+                        <span>🚚 {{ trk.carrier }} •••{{ trk.shortNumber }} ↗</span>
+                      </a>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs btn-square h-5 w-5 min-h-0 text-[10px] opacity-65 hover:opacity-100"
+                        @click.stop="copyTrackingNumber(trk.number)"
+                        :title="`Copy tracking #: ${trk.number}`"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </td>
 
               <!-- Created Date -->
@@ -484,6 +596,65 @@
       :purchase="activeTrayPurchase"
       @updated="loadPurchases(true, true)"
     />
+
+    <!-- How to Use 4-Page ShopGoodwill Bookmarklet Modal -->
+    <dialog class="modal" :class="{ 'modal-open': showBmlGuideModal }">
+      <div class="modal-box max-w-2xl rounded-2xl border border-base-300 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="font-black text-lg flex items-center gap-2">
+              <span>🔭 Auction Scout &amp; Orders Bookmarklet Guide</span>
+              <span class="badge badge-sm badge-primary">{{ capabilities.roleBadge }}</span>
+            </h3>
+            <p class="text-xs opacity-70 mt-0.5">
+              One evergreen bookmarklet for all 4 ShopGoodwill pages — zero third-party credentials or cookies ever touched.
+            </p>
+          </div>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showBmlGuideModal = false">✕</button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
+            <div class="font-black text-primary">1. In-Progress Auctions (`/inprogress-auctions`)</div>
+            <p class="opacity-80">
+              Overlays your RC Max Bid ceiling next to each row, flags <span class="badge badge-xs badge-success">🟢 WINNING</span> (🏆 trophy) vs. <span class="badge badge-xs badge-error">🚨 OUTBID</span>, and syncs live prices into your Buy Tracker.
+            </p>
+          </div>
+          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
+            <div class="font-black text-secondary">2. Closed Auctions (`/closed-auctions`)</div>
+            <p class="opacity-80">
+              Previews Won vs. Lost rows: promotes <span class="font-bold">Auction won</span> items to <span class="badge badge-xs badge-info">Acquired (HG)</span> and cleans <span class="font-bold">Auction lost</span> items from your Buy Tracker.
+            </p>
+          </div>
+          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
+            <div class="font-black text-info">3. Shipped Orders (`/shipped-orders`)</div>
+            <p class="opacity-80">
+              Creates/updates POs with live FedEx/USPS/UPS tracking pills (`🚚 Shipped`) and allocates true landed cost (`Price + Shipping + Handling + Tax`) across items.
+            </p>
+          </div>
+          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
+            <div class="font-black text-accent">4. Single Item Page (`/item/123456789`)</div>
+            <p class="opacity-80">
+              Extracts Item ID, title, price, shipping &amp; gallery images and opens Quick Scout or adds directly to your active Buy Tracker.
+            </p>
+          </div>
+        </div>
+
+        <div class="bg-base-200/50 rounded-xl p-3 border border-base-300 text-xs space-y-1.5">
+          <div class="font-black">📱 Mobile Chrome (Pixel 8 / Android) Address-Bar Trick:</div>
+          <p class="opacity-80">
+            Tap <button type="button" class="link link-primary font-bold" @click="copyAuctionBookmarkletHref">📋 Copy JS URL</button>, bookmark any page in mobile Chrome, edit the bookmark name to <code class="font-mono font-bold">rcscout</code>, and paste the copied <code class="font-mono">javascript:...</code> code into the URL field. On any ShopGoodwill tab, type <code class="font-mono font-bold">rcscout</code> in the address bar and tap the starred suggestion!
+          </p>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-sm btn-primary font-bold rounded-xl" @click="showBmlGuideModal = false">Got It</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="showBmlGuideModal = false">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -491,6 +662,10 @@
 import { ref, computed, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
+import { parseTrackingNumbers } from '../../lib/shipmentTracking';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { buildEvergreenBookmarkletHref } from '../../lib/bml/registry';
+import { siteConfig } from '../../site-config';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
@@ -509,6 +684,37 @@ import { useInventory } from '../../composables/useInventory';
 const { showLoader, hideLoader } = useLoader();
 const { purchases, loading, fetchPurchases } = usePurchases();
 const { inventoryItems, fetchInventory } = useInventory();
+const { capabilities } = useMemberCapabilities();
+
+const showBmlGuideModal = ref(false);
+const browserOrigin = ref(typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl);
+
+const auctionScoutBookmarkletHref = computed(() =>
+    buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value)
+);
+
+const copyAuctionBookmarkletHref = async () => {
+    try {
+        await navigator.clipboard.writeText(auctionScoutBookmarkletHref.value);
+        addToast('Copied Auction Scout JS URL! Paste into a bookmark URL field (keyword: rcscout).', 'success');
+    } catch {
+        addToast('Could not copy automatically — drag the button to your Bookmarks Bar instead.', 'warning');
+    }
+};
+
+const getTrackingPills = (purchase) => {
+    return parseTrackingNumbers(purchase?.trackingNumber);
+};
+
+const copyTrackingNumber = async (num) => {
+    if (!num) return;
+    try {
+        await navigator.clipboard.writeText(num);
+        addToast(`Copied tracking # ${num}`, 'success');
+    } catch {
+        addToast(`Tracking #: ${num}`, 'info');
+    }
+};
 
 const purchaseItemCounts = computed(() => {
     const counts = {};
@@ -567,7 +773,7 @@ const statusCounts = computed(() => {
 
         if (s === 'received') {
             received++;
-        } else if (s === 'ordered' || s === 'shipped') {
+        } else if (s === 'ordered' || s === 'shipped' || parseTrackingNumbers(p.trackingNumber).length > 0) {
             transit++;
         } else if (s === 'draft' || s === 'pending' || !s) {
             draft++;
@@ -670,7 +876,8 @@ const filteredPurchases = computed(() => {
     } else if (statusFilter.value === 'transit') {
         list = list.filter(p => {
             const s = (p.status || '').toLowerCase().trim();
-            return s === 'ordered' || s === 'shipped';
+            if (s === 'received' || s === 'cancelled' || s === 'returned') return false;
+            return s === 'ordered' || s === 'shipped' || parseTrackingNumbers(p.trackingNumber).length > 0;
         });
     } else if (statusFilter.value === 'draft') {
         list = list.filter(p => {

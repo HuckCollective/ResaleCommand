@@ -87,9 +87,10 @@
             <!-- Live Draggable Pill Preview -->
             <a
               v-if="registry.tools[toolId].status === 'active'"
-              :href="ricochetHref"
+              :href="getToolHref(toolId)"
               @click.prevent="notifyDrag(toolId)"
-              class="btn btn-xs sm:btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+              class="btn btn-xs sm:btn-sm font-black shadow-xs cursor-grab active:cursor-grabbing gap-1.5"
+              :class="toolId === 'ricochet_sync' ? 'btn-warning text-warning-content border border-warning-content/20' : 'btn-primary text-primary-content border border-primary-content/20'"
               :title="'⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!'"
             >
               <span>{{ getBarPreview(toolId) }}</span>
@@ -380,9 +381,15 @@ const ricochetHref = computed(() => {
   void browserOrigin.value;
   return buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD');
 });
+const auctionScoutHref = computed(() =>
+  buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value || undefined)
+);
 const bmlTestHref = computed(() =>
   buildEvergreenBookmarkletHref('/scripts/bml-test.js', browserOrigin.value || undefined)
 );
+
+const getToolHref = (id: BookmarkletToolId) =>
+  id === 'ricochet_sync' ? ricochetHref.value : auctionScoutHref.value;
 
 const getBarPreview = (id: BookmarkletToolId) =>
   formatBmlBarLabel(
@@ -465,9 +472,8 @@ const notifyDrag = (id: BookmarkletToolId) => {
 };
 
 const copyJsUrl = async (id: BookmarkletToolId) => {
-  if (id !== 'ricochet_sync') return;
   try {
-    await navigator.clipboard.writeText(ricochetHref.value);
+    await navigator.clipboard.writeText(getToolHref(id));
     addToast({ type: 'success', message: 'Copied Bookmarklet JavaScript URL to clipboard!' });
   } catch {
     addToast({ type: 'error', message: 'Could not copy bookmarklet URL.' });

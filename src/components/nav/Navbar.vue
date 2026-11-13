@@ -40,6 +40,7 @@
       </a>
 
       <a
+        v-if="capabilities.canViewPurchases"
         href="/purchases"
         :aria-current="isRouteActive('/purchases') ? 'page' : undefined"
         class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
@@ -154,6 +155,7 @@
             Revenue, Tax &amp; Co-op
           </div>
           <a
+            v-if="capabilities.canViewSales"
             href="/sales"
             class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
             :class="isRouteActive('/sales') ? 'bg-primary/15 text-primary font-bold' : ''"
@@ -294,7 +296,7 @@
       <!-- Single Quick Scout Pill -->
       <div class="indicator flex items-center">
         <span
-          v-if="isAuthenticated && displayTrackedCount > 0"
+          v-if="capabilities.canUseBuyTracker && isAuthenticated && displayTrackedCount > 0"
           class="indicator-item badge badge-primary badge-xs sm:badge-sm text-primary-content font-black z-10 whitespace-nowrap shrink-0"
         >
           {{ displayTrackedCount }}
@@ -831,6 +833,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { addToast } from '../../stores/toast';
 import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
 import { useCart } from '../../composables/useCart';
@@ -863,6 +866,7 @@ const {
   inviteMember,
   logout: authLogout,
 } = useAuth();
+const { capabilities } = useMemberCapabilities();
 
 const showMemberNav = computed(() => isAuthenticated.value || (loading.value && props.initialAuthenticated));
 
@@ -890,86 +894,101 @@ const isStudiosRouteActive = computed(() =>
   ['/social', '/labels'].some((p) => isRouteActive(p))
 );
 
-const mobileCoreLinks = computed(() => [
-  {
-    label: 'Command Center',
-    url: '/dashboard',
-    icon: 'solar:widget-bold-duotone',
-    active: isRouteActive('/dashboard'),
-  },
-  {
-    label: 'Purchases & Hauls',
-    url: '/purchases',
-    icon: 'solar:cart-large-2-bold-duotone',
-    active: isRouteActive('/purchases'),
-  },
-  {
-    label: 'Master Inventory',
-    url: '/inventory',
-    icon: 'solar:box-bold-duotone',
-    active: isRouteActive('/inventory'),
-  },
-  {
-    label: 'Locations Hub',
-    url: '/warehouse',
-    icon: 'solar:shop-2-bold-duotone',
-    active: currentPath.value === '/warehouse',
-    badge: `${locationMetas.value.length} Locations`,
-    badgeClass: 'badge-ghost',
-  },
-]);
+const mobileCoreLinks = computed(() =>
+  [
+    {
+      label: 'Command Center',
+      url: '/dashboard',
+      icon: 'solar:widget-bold-duotone',
+      active: isRouteActive('/dashboard'),
+      show: true,
+    },
+    {
+      label: 'Purchases & Hauls',
+      url: '/purchases',
+      icon: 'solar:cart-large-2-bold-duotone',
+      active: isRouteActive('/purchases'),
+      show: capabilities.value.canViewPurchases,
+    },
+    {
+      label: 'Master Inventory',
+      url: '/inventory',
+      icon: 'solar:box-bold-duotone',
+      active: isRouteActive('/inventory'),
+      show: true,
+    },
+    {
+      label: 'Locations Hub',
+      url: '/warehouse',
+      icon: 'solar:shop-2-bold-duotone',
+      active: currentPath.value === '/warehouse',
+      badge: `${locationMetas.value.length} Locations`,
+      badgeClass: 'badge-ghost',
+      show: true,
+    },
+  ].filter((item) => item.show)
+);
 
-const mobileFinanceLinks = computed(() => [
-  {
-    label: 'Sales & Payout Ledger',
-    url: '/sales',
-    icon: 'solar:dollar-minimalistic-bold-duotone',
-    iconColor: 'text-success',
-    active: isRouteActive('/sales'),
-  },
-  {
-    label: 'Co-op Monthly Settlements',
-    url: '/coop/settlements',
-    icon: 'solar:hand-money-bold-duotone',
-    iconColor: 'text-primary',
-    active: isRouteActive('/coop/settlements'),
-  },
-  {
-    label: 'Co-op Governance & Rules',
-    url: '/coop/governance',
-    icon: 'solar:users-group-two-rounded-bold-duotone',
-    iconColor: 'text-secondary',
-    active: isRouteActive('/coop/governance'),
-  },
-  {
-    label: 'Promoter & Enabler Labor Pool',
-    url: '/coop/labor',
-    icon: 'solar:clock-circle-bold-duotone',
-    iconColor: 'text-accent',
-    active: isRouteActive('/coop/labor'),
-  },
-  {
-    label: 'AI Vault & Prompt Maker',
-    url: '/coop/vault',
-    icon: 'solar:notebook-bold-duotone',
-    iconColor: 'text-primary',
-    active: isRouteActive('/coop/vault'),
-  },
-  {
-    label: 'Expenses & Receipts',
-    url: '/expenses',
-    icon: 'solar:bill-list-bold-duotone',
-    iconColor: 'text-warning',
-    active: isRouteActive('/expenses'),
-  },
-  {
-    label: 'Living Co-op Charter',
-    url: '/coop',
-    icon: 'solar:shield-star-bold-duotone',
-    iconColor: 'text-primary',
-    active: currentPath.value === '/coop',
-  },
-]);
+const mobileFinanceLinks = computed(() =>
+  [
+    {
+      label: 'Sales & Payout Ledger',
+      url: '/sales',
+      icon: 'solar:dollar-minimalistic-bold-duotone',
+      iconColor: 'text-success',
+      active: isRouteActive('/sales'),
+      show: capabilities.value.canViewSales,
+    },
+    {
+      label: 'Co-op Monthly Settlements',
+      url: '/coop/settlements',
+      icon: 'solar:hand-money-bold-duotone',
+      iconColor: 'text-primary',
+      active: isRouteActive('/coop/settlements'),
+      show: true,
+    },
+    {
+      label: 'Co-op Governance & Rules',
+      url: '/coop/governance',
+      icon: 'solar:users-group-two-rounded-bold-duotone',
+      iconColor: 'text-secondary',
+      active: isRouteActive('/coop/governance'),
+      show: true,
+    },
+    {
+      label: 'Promoter & Enabler Labor Pool',
+      url: '/coop/labor',
+      icon: 'solar:clock-circle-bold-duotone',
+      iconColor: 'text-accent',
+      active: isRouteActive('/coop/labor'),
+      show: true,
+    },
+    {
+      label: 'AI Vault & Prompt Maker',
+      url: '/coop/vault',
+      icon: 'solar:notebook-bold-duotone',
+      iconColor: 'text-primary',
+      active: isRouteActive('/coop/vault'),
+      show: true,
+    },
+    {
+      label: 'Expenses & Receipts',
+      url: '/expenses',
+      icon: 'solar:bill-list-bold-duotone',
+      iconColor: 'text-warning',
+      active: isRouteActive('/expenses'),
+      show: true,
+    },
+    {
+      label: 'Living Co-op Charter',
+      url: '/coop',
+      icon: 'solar:shield-star-bold-duotone',
+      iconColor: 'text-primary',
+      active: currentPath.value === '/coop',
+      show: true,
+    },
+  ].filter((item) => item.show)
+);
 
 const mobileStudioLinks = computed(() => [
   {

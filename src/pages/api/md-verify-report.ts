@@ -734,7 +734,7 @@ export const GET: APIRoute = async ({ request, url }) => {
 };
 
 export const POST: APIRoute = async ({ request, url }) => {
-  const auth = await requireBookmarkletMember(request);
+  const auth = await requireBookmarkletMember(request, { allowSameOriginCookieFallback: true });
   if (!auth.ok) return auth.response;
 
   try {

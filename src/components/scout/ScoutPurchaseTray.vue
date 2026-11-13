@@ -193,6 +193,21 @@
                 <span v-if="item.auctionStatus === 'won'" class="badge badge-xs badge-success text-success-content font-bold">
                   🏆 Won (${{ (item.cost || 0).toFixed(2) }})
                 </span>
+                <!-- Live SGW Winning / Outbid Badge -->
+                <span
+                  v-else-if="getSgwBidState(item) === 'winning'"
+                  class="badge badge-xs badge-success text-success-content font-black"
+                  title="ShopGoodwill High Bidder (Trophy verified)"
+                >
+                  🟢 WINNING
+                </span>
+                <span
+                  v-else-if="getSgwBidState(item) === 'outbid'"
+                  class="badge badge-xs badge-error text-error-content font-black animate-pulse"
+                  title="Outbid on ShopGoodwill"
+                >
+                  🚨 OUTBID
+                </span>
                 <span v-if="getItemTier(item)" class="badge badge-xs font-bold whitespace-nowrap" :class="getItemTier(item)?.class">
                   {{ getItemTier(item)?.label }}
                 </span>
@@ -688,6 +703,16 @@ const hasActiveAuctions = computed(() => {
 });
 
 // -- INLINE END-TIME EDITOR & +8h PT OFFSET FIX --
+const getSgwBidState = (item: ScoutPurchaseItem): 'winning' | 'outbid' | null => {
+  if (!item?.rawAnalysis) return null;
+  try {
+    const parsed = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+    const state = parsed?.sgwBidState;
+    if (state === 'winning' || state === 'outbid') return state;
+  } catch {}
+  return null;
+};
+
 const editingEndTimeId = ref<string | null>(null);
 const editingEndTimeValue = ref<string>('');
 

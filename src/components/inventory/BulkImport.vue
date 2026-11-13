@@ -165,6 +165,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
+import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { storage } from '../../lib/appwrite';
 import { checkInventoryDuplicate } from '../../lib/deduplication';
 
@@ -553,6 +554,7 @@ const processRows = async (rows) => {
 
         try {
             let existingPurchase = await purchasesAPI.getPurchaseByOrderId(orderId);
+            const hasValidTracking = parseTrackingNumbers(row._tracking).length > 0;
             if (!existingPurchase) {
                 logs.value.push(`🧾 Creating Purchase Order ${orderId}...`);
                 existingPurchase = await purchasesAPI.createPurchase({
@@ -566,7 +568,7 @@ const processRows = async (rows) => {
                     taxTotal: row._orderTotalTax,
                     feeTotal: row._orderTotalFee,
                     grandTotal: row._orderSubtotal + row._orderTotalShipping + row._orderTotalHandling + row._orderTotalTax + row._orderTotalFee,
-                    status: 'Pending'
+                    status: hasValidTracking ? 'Shipped' : 'Pending'
                 });
                 currentImportBatch.purchases.push(existingPurchase.$id);
                 persistBatch();
@@ -575,6 +577,9 @@ const processRows = async (rows) => {
                 const poUpdates = {};
                 if (row._tracking && (!existingPurchase.trackingNumber || existingPurchase.trackingNumber !== row._tracking)) {
                     poUpdates.trackingNumber = row._tracking;
+                }
+                if (hasValidTracking && (!existingPurchase.status || existingPurchase.status === 'Pending' || existingPurchase.status === 'Draft')) {
+                    poUpdates.status = 'Shipped';
                 }
                 if (row._orderSubtotal && (!existingPurchase.grandTotal || existingPurchase.grandTotal === 0)) {
                     poUpdates.subtotal = row._orderSubtotal;
@@ -668,8 +673,9 @@ const processRows = async (rows) => {
         if (isDuplicate) {
             const itemLabel = matchedDoc?.title ? `"${matchedDoc.title.substring(0, 32)}..." (${itemId})` : itemId;
             const isTrackedItem = matchedDoc?.status === 'tracked';
+            const isUnlinkedWonItem = matchedDoc?.status === 'acquired' && !matchedDoc?.purchaseId;
             
-            if ((isTrackedItem || updateExisting.value) && matchedDoc) {
+            if ((isTrackedItem || isUnlinkedWonItem || updateExisting.value) && matchedDoc) {
                 try {
                     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID;
                     const COL_ID = getCollectionId();
@@ -680,7 +686,7 @@ const processRows = async (rows) => {
                         itemUpdates.status = 'acquired';
                         itemUpdates.auctionStatus = 'won';
                     }
-                    if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price || isTrackedItem)) {
+                    if (price && (!matchedDoc.cost || Number(matchedDoc.cost) === 0 || matchedDoc.cost !== price || isTrackedItem || isUnlinkedWonItem)) {
                         itemUpdates.cost = parseFloat(price) || 0;
                     }
                     if (dbPurchaseId && (!matchedDoc.purchaseId || matchedDoc.purchaseId !== dbPurchaseId)) {

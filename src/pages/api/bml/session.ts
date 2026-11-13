@@ -5,6 +5,7 @@ import {
   requireBookmarkletMember,
   verifyAppwriteJwtToMember,
 } from '../../../lib/bml/serverAuth';
+import { capabilitiesForRole } from '../../../lib/memberAccess';
 
 export const prerender = false;
 
@@ -13,16 +14,34 @@ export const OPTIONS: APIRoute = async () => {
 };
 
 /**
- * GET /api/bml/session — Verifies an existing Bookmarklet Bearer token (`Authorization: Bearer rcbml_v1...`).
+ * GET /api/bml/session — Verifies an existing Bookmarklet Bearer token (`Authorization: Bearer rcbml_v1...`)
+ * or Appwrite JWT (`X-Appwrite-JWT`) and returns resolved role + capabilities.
  */
 export const GET: APIRoute = async ({ request }) => {
   const auth = await requireBookmarkletMember(request);
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) {
+    if (auth.response.status === 403) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          allowed: false,
+          role: 'restricted',
+          capabilities: capabilitiesForRole('restricted', 'BB-'),
+          message:
+            '🔒 Founder or Curator Hat Required: Bookmarklets, Purchases, and Sales Ledger are restricted to Collective Founders (👑) and Curators (💎).',
+        }),
+        { status: 403, headers: BML_CORS_HEADERS }
+      );
+    }
+    return auth.response;
+  }
 
   return new Response(
     JSON.stringify({
       ok: true,
+      allowed: true,
       member: auth.member,
+      capabilities: capabilitiesForRole(auth.member.role, auth.member.prefix),
     }),
     { status: 200, headers: BML_CORS_HEADERS }
   );
@@ -30,7 +49,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 /**
  * POST /api/bml/session — Exchanges an active Appwrite JWT (`X-Appwrite-JWT`) from `/bml/connect`
- * for a 14-day HMAC-SHA256 signed Bookmarklet Member Token (restricted to Founders 👑 and Curators 💎).
+ * for a 3-day HMAC-SHA256 signed Bookmarklet Member Token (restricted to Founders 👑 and Curators 💎).
  */
 export const POST: APIRoute = async ({ request }) => {
   const jwt = request.headers.get('X-Appwrite-JWT') || '';
@@ -46,6 +65,9 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(
       JSON.stringify({
         ok: false,
+        allowed: false,
+        role: verified.status === 403 ? 'restricted' : undefined,
+        capabilities: verified.status === 403 ? capabilitiesForRole('restricted', 'BB-') : undefined,
         error: verified.error,
         message: verified.message,
       }),
@@ -66,8 +88,10 @@ export const POST: APIRoute = async ({ request }) => {
   return new Response(
     JSON.stringify({
       ok: true,
+      allowed: true,
       token,
       member: session,
+      capabilities: capabilitiesForRole(session.role, session.prefix),
     }),
     { status: 200, headers: BML_CORS_HEADERS }
   );

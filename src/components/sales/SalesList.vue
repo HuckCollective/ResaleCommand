@@ -1,5 +1,18 @@
 <template>
-  <div class="space-y-6">
+  <div v-if="!capabilities.canViewSales" class="max-w-xl mx-auto my-12">
+    <div class="card bg-base-100 border-2 border-warning/40 shadow-lg rounded-2xl p-6 text-center space-y-4">
+      <div class="text-4xl">🔒</div>
+      <h2 class="text-xl font-black text-base-content">Founders &amp; Curators Only</h2>
+      <p class="text-sm text-base-content/75 leading-relaxed">
+        The collective-wide Sales &amp; Register Ledger is restricted to Founders (👑) and Curators (💎). Your personal consignor and partner payout statement is available on your Command Dashboard.
+      </p>
+      <div class="pt-2 flex justify-center gap-3">
+        <a href="/dashboard" class="btn btn-primary font-bold rounded-xl">View My Payout Statement (/dashboard)</a>
+        <a href="/scout" class="btn btn-outline font-bold rounded-xl">Open Camera Scout</a>
+      </div>
+    </div>
+  </div>
+  <div v-else class="space-y-6">
     <!-- Header: Clean Title + 2 Mistake-Proof Actions -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
@@ -634,6 +647,7 @@ import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
 import RecordSaleDrawer from './RecordSaleDrawer.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useInventory } from '../../composables/useInventory';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
@@ -659,6 +673,7 @@ const props = defineProps<{
 }>();
 
 const { currentTeam } = useAuth();
+const { capabilities } = useMemberCapabilities();
 const { inventoryItems, fetchInventory } = useInventory();
 
 const sales = ref<SaleDocument[]>([]);
