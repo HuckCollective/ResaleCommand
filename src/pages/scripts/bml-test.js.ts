@@ -127,7 +127,11 @@ export const GET: APIRoute = async ({ url }) => {
       var bodyStr = cleanText((document.body || {}).innerText || '');
       var hasOutbidWord = /\\b(outbid|winning|high bidder|won|lost)\\b/i.test(bodyStr);
       var hasTrackingWord = /\\b(tracking|fedex|usps|ups|shipped)\\b/i.test(bodyStr);
-      state.domSummary = 'TRs: ' + trs.length + ' | ItemLinks: ' + state.itemLinkCount + ' | BidStatusText: ' + (hasOutbidWord ? 'YES' : 'NO') + ' | TrackText: ' + (hasTrackingWord ? 'YES' : 'NO');
+      var csvBtns = Array.prototype.slice.call(document.querySelectorAll('button, a')).filter(function(el) {
+        return /^csv$/i.test(cleanText(el.textContent));
+      });
+      var trophyIcons = document.querySelectorAll('[class*="trophy"], svg[data-icon*="trophy"], img[alt*="high" i], [title*="high bidder" i]');
+      state.domSummary = 'TRs: ' + trs.length + ' | ItemLinks: ' + state.itemLinkCount + ' | CSVBtn: ' + (csvBtns.length > 0 ? 'YES' : 'NO') + ' | TrophyEls: ' + trophyIcons.length + ' | BidStatusText: ' + (hasOutbidWord ? 'YES' : 'NO') + ' | TrackText: ' + (hasTrackingWord ? 'YES' : 'NO');
 
       if (trs.length > 0) {
         var firstCells = Array.prototype.slice.call(trs[0].querySelectorAll('td')).map(function(td) {

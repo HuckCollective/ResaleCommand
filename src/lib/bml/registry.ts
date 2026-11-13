@@ -1,7 +1,7 @@
 import { databases } from '../appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from '../appwriteEnv';
-import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
+import { ALPHA_SITE_URL, siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 
 export type BookmarkletToolId = 'ricochet_sync' | 'auction_scout';
 export type BookmarkletDisplayMode = 'full' | 'compact' | 'icon_only';
@@ -121,14 +121,17 @@ export function formatBmlMobileBookmarkName(tool: BookmarkletToolConfig, locatio
   return `${kw} — ${tool.icon} ${tool.compactTitle || tool.barTitle}`;
 }
 
-export function buildEvergreenBookmarkletHref(scriptPathAndQuery: string): string {
+export function buildEvergreenBookmarkletHref(scriptPathAndQuery: string, preferredOrigin?: string): string {
+  const cleanPreferred =
+    preferredOrigin && !preferredOrigin.includes('localhost') ? preferredOrigin.replace(/\/+$/, '') : '';
   const currentOrigin =
-    typeof window !== 'undefined' &&
+    cleanPreferred ||
+    (typeof window !== 'undefined' &&
     window.location?.origin &&
     !window.location.origin.includes('localhost')
       ? window.location.origin
-      : siteConfig.siteUrl;
-  const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS]));
+      : siteConfig.siteUrl);
+  const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS, ALPHA_SITE_URL].filter(Boolean)));
   const sep = scriptPathAndQuery.includes('?') ? '&' : '?';
   return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+${JSON.stringify(scriptPathAndQuery + sep + 't=')}+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
 }

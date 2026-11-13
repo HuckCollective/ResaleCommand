@@ -372,9 +372,17 @@ const minting = ref(false);
 const savedMsg = ref('');
 const errMsg = ref('');
 const localSession = ref<{ name: string; prefix: string } | null>(null);
+const browserOrigin = ref<string>(
+  typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
+);
 
-const ricochetHref = computed(() => buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD'));
-const bmlTestHref = computed(() => buildEvergreenBookmarkletHref('/scripts/bml-test.js'));
+const ricochetHref = computed(() => {
+  void browserOrigin.value;
+  return buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD');
+});
+const bmlTestHref = computed(() =>
+  buildEvergreenBookmarkletHref('/scripts/bml-test.js', browserOrigin.value || undefined)
+);
 
 const getBarPreview = (id: BookmarkletToolId) =>
   formatBmlBarLabel(
@@ -523,6 +531,9 @@ const saveRegistry = async () => {
 };
 
 onMounted(async () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    browserOrigin.value = window.location.origin;
+  }
   readBrowserBmlSession();
   registry.value = await loadBmlRegistryConfig();
 });
