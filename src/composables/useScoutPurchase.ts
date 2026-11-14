@@ -188,37 +188,12 @@ export function useScoutPurchase() {
         loading.value = true;
         error.value = null;
         try {
-            const queries = [
+            const res = await databases.listDocuments(DB_ID, PURCHASES_COL, [
                 Query.equal('status', 'Draft'),
-                Query.orderDesc('$createdAt'),
-                Query.limit(50)
-            ];
-
-            const tenantId = currentTeam.value?.$id;
-            if (tenantId) {
-                queries.push(Query.equal('tenantId', tenantId));
-            } else if (user.value) {
-                queries.push(Query.equal('buyerId', user.value.$id));
-            }
-
-            let res = await databases.listDocuments(DB_ID, PURCHASES_COL, queries);
-            let rawDocs = res.documents as unknown as ScoutPurchase[];
-
-            // Fallback: if tenant or buyer filter returned 0, load recent drafts so POs are never missing
-            if (rawDocs.length === 0 && (tenantId || user.value)) {
-                try {
-                    const fallbackRes = await databases.listDocuments(DB_ID, PURCHASES_COL, [
-                        Query.equal('status', 'Draft'),
-                        Query.orderDesc('$createdAt'),
-                        Query.limit(50)
-                    ]);
-                    if (fallbackRes.documents && fallbackRes.documents.length > 0) {
-                        rawDocs = fallbackRes.documents as unknown as ScoutPurchase[];
-                    }
-                } catch (fbErr) {
-                    console.warn('[useScoutPurchase] Drafts fallback query error:', fbErr);
-                }
-            }
+                Query.orderDesc('$id'),
+                Query.limit(100)
+            ]);
+            const rawDocs = (res.documents || []) as unknown as ScoutPurchase[];
 
             const docs = rawDocs.sort((a, b) => {
                 const timeA = new Date(a.$updatedAt || a.purchaseDate || a.$createdAt || 0).getTime();
@@ -229,21 +204,23 @@ export function useScoutPurchase() {
             // Set immediately so PO cards render instantly with zero lag or empty states
             draftPurchases.value = docs;
 
-            // Hydrate item counts for all draft purchases so inactive trackers never display 0
+            // Hydrate item counts & live subtotal for all draft purchases so trackers always show accurate counts
             if (docs.length > 0) {
                 const collId = getItemsCollectionId();
                 const countMap: Record<string, number> = {};
+                const subtotalMap: Record<string, number> = {};
 
                 try {
-                    // Fetch recent items (guaranteed to succeed without index issues)
                     const recentItems = await databases.listDocuments(DB_ID, collId, [
-                        Query.orderDesc('$createdAt'),
+                        Query.orderDesc('$id'),
                         Query.limit(100)
                     ]);
                     recentItems.documents.forEach((item: any) => {
                         const pid = item.purchaseId || item.cartId;
                         if (pid) {
                             countMap[pid] = (countMap[pid] || 0) + 1;
+                            const itemCost = Number(item.cost || item.currentBid || item.maxBid || item.maxBuyPrice || 0);
+                            subtotalMap[pid] = (subtotalMap[pid] || 0) + itemCost;
                         }
                     });
                 } catch (recErr) {
@@ -258,6 +235,12 @@ export function useScoutPurchase() {
                                   d.itemCount || 
                                   0;
                     d.itemCount = count;
+                    if ((!d.subtotal || d.subtotal === 0) && subtotalMap[d.$id] > 0) {
+                        d.subtotal = Number(subtotalMap[d.$id].toFixed(2));
+                        if (!d.grandTotal || d.grandTotal === 0) {
+                            d.grandTotal = d.subtotal;
+                        }
+                    }
                 });
 
                 // If activePurchase is currently in memory, ensure its live item count takes precedence

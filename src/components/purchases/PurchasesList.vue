@@ -31,9 +31,17 @@
           :href="auctionScoutBookmarkletHref"
           @click.prevent="addToast('Drag this button up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on any ShopGoodwill page!', 'info')"
           class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black shadow-sm border border-primary-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          title="Drag me to your Chrome Bookmarks Bar! (🔭 Auction Scout & Orders)"
+          :title="`Drag me to your Chrome Bookmarks Bar! (${auctionScoutBookmarkletLabel})`"
         >
-          <span>🔭 Auction Scout &amp; Orders</span>
+          <span>{{ auctionScoutBookmarkletLabel }}</span>
+        </a>
+        <a
+          href="/scout/trackers"
+          class="btn btn-xs sm:btn-sm btn-secondary text-secondary-content font-black shadow-2xs gap-1"
+          title="Open active Scout Buy Trackers (/scout/trackers)"
+        >
+          <span>📌 Buy Trackers</span>
+          <span v-if="buyTrackerCount > 0" class="badge badge-xs badge-neutral font-mono">{{ buyTrackerCount }}</span>
         </a>
         <button
           type="button"
@@ -179,15 +187,15 @@
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'transit' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.transit }}</span>
           </button>
 
-          <!-- ⏳ Draft / Pending -->
+          <!-- ⏳ Pending Orders -->
           <button 
             type="button" 
             class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0" 
             :class="statusFilter === 'draft' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
             @click="statusFilter = 'draft'"
-            title="Draft or pending purchase orders"
+            title="Pending purchase orders"
           >
-            <span>Draft & Pending</span>
+            <span>Pending</span>
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'draft' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.draft }}</span>
           </button>
 
@@ -203,6 +211,17 @@
             <span>Received</span>
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'received' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.received }}</span>
           </button>
+
+          <!-- 📌 Active Buy Trackers Link (/scout/trackers) -->
+          <a
+            href="/scout/trackers"
+            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0 btn-ghost bg-secondary/10 text-secondary border border-secondary/30 hover:bg-secondary/20"
+            title="Un-acquired Scout Buy Trackers (SC-...) live in /scout/trackers until acquired"
+          >
+            <span>📌 Scout Trackers</span>
+            <span class="badge badge-xs badge-secondary font-mono font-bold">{{ buyTrackerCount }}</span>
+            <span>↗</span>
+          </a>
         </div>
 
         <!-- Quick Toggle: Hide Empty POs (0 Items) -->
@@ -693,7 +712,7 @@ import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
-import { buildEvergreenBookmarkletHref } from '../../lib/bml/registry';
+import { buildEvergreenBookmarkletHref, loadBmlRegistryConfig } from '../../lib/bml/registry';
 import { siteConfig } from '../../site-config';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
@@ -717,10 +736,34 @@ const { capabilities } = useMemberCapabilities();
 
 const showBmlGuideModal = ref(false);
 const browserOrigin = ref(typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl);
+const bmlRegistryConfig = ref(null);
 
 const auctionScoutBookmarkletHref = computed(() =>
     buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value)
 );
+
+const auctionScoutBookmarkletLabel = computed(() => {
+    const customTitle = bmlRegistryConfig.value?.tools?.auction_scout?.title;
+    return customTitle || '🔭 Auction Scout & Orders';
+});
+
+// Un-acquired Scout Buy Trackers (status === 'Draft' or SC- draft trackers) live strictly in /scout/trackers until acquired
+const isUnacquiredBuyTracker = (p) => {
+    if (!p) return false;
+    const st = String(p.status || '').trim().toLowerCase();
+    const oid = String(p.orderId || '').trim().toUpperCase();
+    if (st === 'draft') return true;
+    if (oid.startsWith('SC-') && st === 'draft') return true;
+    return false;
+};
+
+const buyTrackerCount = computed(() => {
+    return (purchases.value || []).filter(p => isUnacquiredBuyTracker(p)).length;
+});
+
+const acquiredPurchases = computed(() => {
+    return (purchases.value || []).filter(p => !isUnacquiredBuyTracker(p));
+});
 
 const copyAuctionBookmarkletHref = async () => {
     try {
@@ -776,7 +819,7 @@ const statusFilter = ref('all');
 const hideEmpty = ref(false);
 
 const statusCounts = computed(() => {
-    const list = purchases.value || [];
+    const list = acquiredPurchases.value || [];
     let needsAction = 0;
     let readyReceive = 0;
     let transit = 0;
@@ -888,7 +931,7 @@ const getTimestamp = (p) => {
 };
 
 const filteredPurchases = computed(() => {
-    let list = purchases.value || [];
+    let list = acquiredPurchases.value || [];
     
     // 1. Status Filter Pills
     if (statusFilter.value === 'needs-action') {
@@ -1226,8 +1269,8 @@ const cleanEmptyPurchases = async () => {
             }
         }
 
-        // 2. Identify POs with 0 active items
-        const emptyPOs = purchases.value.filter(p => {
+        // 2. Identify POs with 0 active items (never auto-delete active Buy Trackers)
+        const emptyPOs = acquiredPurchases.value.filter(p => {
             const hasPurchaseId = activePurchaseIds.has(p.$id);
             const hasCartId = p.orderId && activePurchaseIds.has(String(p.orderId).trim());
             return !hasPurchaseId && !hasCartId;
@@ -1272,8 +1315,13 @@ const cleanEmptyPurchases = async () => {
 let handlePageShow = null;
 let handleVisibilityChange = null;
 let handlePurchaseEvent = null;
+let syncBroadcastChannel = null;
 
 onMounted(async () => {
+    loadBmlRegistryConfig().then((cfg) => {
+        if (cfg) bmlRegistryConfig.value = cfg;
+    }).catch(() => {});
+
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';
@@ -1287,7 +1335,7 @@ onMounted(async () => {
     checkUndoBatch();
     await loadPurchases(true);
     // If no action is needed across the database on first load, gracefully show 'all'
-    if (!params.has('status') && statusCounts.value.needsAction === 0 && purchases.value.length > 0) {
+    if (!params.has('status') && statusCounts.value.needsAction === 0 && acquiredPurchases.value.length > 0) {
         statusFilter.value = 'all';
     }
 
@@ -1315,6 +1363,19 @@ onMounted(async () => {
     window.addEventListener('purchase-updated', handlePurchaseEvent);
     window.addEventListener('purchase-created', handlePurchaseEvent);
     window.addEventListener('purchase-deleted', handlePurchaseEvent);
+    window.addEventListener('rc-bml-sync-updated', handlePurchaseEvent);
+
+    // 4. Listen to cross-tab BroadcastChannel from Bookmarklets (e.g. ShopGoodwill Order Sync)
+    if (typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function') {
+        try {
+            syncBroadcastChannel = new window.BroadcastChannel('resale_command_sync');
+            syncBroadcastChannel.onmessage = () => {
+                if (!showImportModal.value) {
+                    loadPurchases(true, true);
+                }
+            };
+        } catch {}
+    }
 });
 
 onUnmounted(() => {
@@ -1324,6 +1385,11 @@ onUnmounted(() => {
         window.removeEventListener('purchase-updated', handlePurchaseEvent);
         window.removeEventListener('purchase-created', handlePurchaseEvent);
         window.removeEventListener('purchase-deleted', handlePurchaseEvent);
+        window.removeEventListener('rc-bml-sync-updated', handlePurchaseEvent);
+    }
+    if (syncBroadcastChannel) {
+        try { syncBroadcastChannel.close(); } catch {}
+        syncBroadcastChannel = null;
     }
 });
 </script>

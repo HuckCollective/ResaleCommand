@@ -166,8 +166,8 @@
             <!-- Thumbnail / Icon -->
             <div class="w-12 h-12 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
               <img 
-                v-if="item.imageId" 
-                :src="getImageUrl(item.imageId)" 
+                v-if="getItemThumbnailUrl(item)" 
+                :src="getItemThumbnailUrl(item)" 
                 @error="handleImageError($event, item.imageId)"
                 class="w-full h-full object-cover" 
                 alt="Item thumbnail"
@@ -611,6 +611,7 @@ import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
 import { addToast } from '../../stores/toast';
 import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
+import { purchasesAPI } from '../../lib/purchases';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import { evaluateSellerClusters, formatReadableSellerLabel, type SellerCluster } from '../../lib/shipping-rules';
@@ -1061,8 +1062,8 @@ const toggleTray = () => {
 const goToScoutHome = () => {
   toggleTray();
   emit('go-to-list');
-  if (typeof window !== 'undefined' && window.location.pathname !== '/scout') {
-    window.location.href = '/scout';
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/scout')) {
+    window.location.href = '/scout/trackers';
   }
 };
 
@@ -1176,7 +1177,12 @@ const handleCompletePurchase = async () => {
   completing.value = true;
   try {
     const pId = activePurchase.value.$id;
-    addToast({ type: 'info', message: '📋 Opening Draft Purchase Order...' });
+    try {
+      await purchasesAPI.updatePurchase(pId, { status: 'Pending' });
+    } catch (e) {
+      console.warn('[ScoutPurchaseTray] Could not promote status to Pending:', e);
+    }
+    addToast({ type: 'info', message: '📋 Promoted Buy Tracker to Purchase Order...' });
     emit('purchase-completed', pId);
     window.location.href = `/purchases/${pId}`;
   } catch (err: any) {
@@ -1230,6 +1236,24 @@ const getImageUrl = (imageId: string): string => {
   const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
   const bucket = BUCKET_ID || 'item_images';
   return `${ENDPOINT}/storage/buckets/${bucket}/files/${imageId}/view?project=${PROJECT}`;
+};
+
+const getItemThumbnailUrl = (item: ScoutPurchaseItem): string => {
+  if (item.imageId) return getImageUrl(item.imageId);
+  if (item.conditionNotes) {
+    const ext = item.conditionNotes.match(/\[EXTERNAL_IMAGE:\s*(https?:\/\/[^\]\s]+)\]/i);
+    if (ext && ext[1]) return ext[1];
+  }
+  if (item.rawAnalysis) {
+    try {
+      const raw = typeof item.rawAnalysis === 'string' ? JSON.parse(item.rawAnalysis) : item.rawAnalysis;
+      const target = Array.isArray(raw) ? raw[0] : raw;
+      if (target?.fetched_image && String(target.fetched_image).startsWith('http')) {
+        return String(target.fetched_image);
+      }
+    } catch {}
+  }
+  return '';
 };
 
 const handleImageError = (e: Event, imageId?: string) => {

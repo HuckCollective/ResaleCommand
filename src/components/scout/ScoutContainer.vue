@@ -1,11 +1,40 @@
 <template>
   <div>
+    <!-- TOP 2-TAB MODE SWITCHER BAR (Members Only: /scout ⇄ /scout/trackers) -->
+    <div v-if="!authLoading && isAuthenticated" class="flex items-center justify-center mb-5">
+      <div class="inline-flex items-center bg-base-200/90 border border-base-300 p-1 rounded-2xl shadow-xs gap-1">
+        <button
+          type="button"
+          class="btn btn-sm rounded-xl font-black gap-2 px-4 transition-all"
+          :class="currentView === 'scout' ? 'btn-primary text-primary-content shadow-sm' : 'btn-ghost text-base-content/75'"
+          @click="handleQuickScan"
+        >
+          <span>⚡ Quick Scout</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm rounded-xl font-black gap-2 px-4 transition-all"
+          :class="currentView === 'list' ? 'btn-secondary text-secondary-content shadow-sm' : 'btn-ghost text-base-content/75'"
+          @click="handleBackToList"
+        >
+          <span>📌 Buy Trackers</span>
+          <span
+            v-if="draftPurchases.length > 0"
+            class="badge badge-xs font-mono font-bold"
+            :class="currentView === 'list' ? 'badge-neutral' : 'badge-secondary'"
+          >
+            {{ draftPurchases.length }}
+          </span>
+        </button>
+      </div>
+    </div>
+
     <!-- 0. Wait for the session check so guests never flash member-only trackers -->
     <div v-if="authLoading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
 
-    <!-- 1. DRAFT PURCHASES LANDING DASHBOARD (members only) -->
+    <!-- 1. DRAFT PURCHASES / BUY TRACKERS DASHBOARD (/scout/trackers) -->
     <ScoutPurchaseList 
       v-else-if="currentView === 'list' && isAuthenticated"
       @start-purchase="handleStartPurchase"
@@ -13,7 +42,7 @@
       @quick-scan="handleQuickScan"
     />
 
-    <!-- 2. SCOUT SCANNER COCKPIT (guests get the limited Guest Preview) -->
+    <!-- 2. SCOUT SCANNER COCKPIT (/scout) -->
     <ScoutView 
       v-else
       :initial-purchase-id="isAuthenticated ? activePurchaseId : null"
@@ -36,12 +65,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import ScoutPurchaseList from './ScoutPurchaseList.vue';
 import ScoutView from './ScoutView.vue';
 import ScoutPurchaseTray from './ScoutPurchaseTray.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useScoutPurchase, type ScoutPurchase } from '../../composables/useScoutPurchase';
+
+const props = defineProps<{
+  initialView?: 'list' | 'scout';
+}>();
 
 const { isAuthenticated, loading: authLoading } = useAuth();
 
@@ -56,12 +89,19 @@ const authReady = () =>
     });
   });
 
-const getInitialView = () => {
-  if (typeof window === 'undefined') return 'scout';
+const isTrackersPathOrQuery = () => {
+  if (typeof window === 'undefined') return props.initialView === 'list';
+  const path = (window.location.pathname || '').toLowerCase();
   const p = new URLSearchParams(window.location.search);
-  if (p.get('view') === 'trackers') {
-    return 'list';
-  }
+  return (
+    props.initialView === 'list' ||
+    path.includes('/scout/tracker') ||
+    p.get('view') === 'trackers'
+  );
+};
+
+const getInitialView = (): 'list' | 'scout' => {
+  if (isTrackersPathOrQuery()) return 'list';
   return 'scout';
 };
 
@@ -73,6 +113,7 @@ const getInitialPurchaseId = () => {
 
 const getInitialQuickScan = () => {
   if (typeof window === 'undefined') return true;
+  if (isTrackersPathOrQuery()) return false;
   const p = new URLSearchParams(window.location.search);
   return p.has('rescout') || p.get('quick') === 'true' || !p.has('purchase');
 };
@@ -85,16 +126,29 @@ const {
   setActivePurchase, 
   loadPurchaseById, 
   loadDraftPurchases,
+  draftPurchases,
   activePurchase, 
   pausedTracker, 
   isTrayOpen, 
   toggleTray 
 } = useScoutPurchase();
 
+let syncBroadcastChannel: BroadcastChannel | null = null;
+let handleVisibilityChange: (() => void) | null = null;
+
+const refreshTrackersSilently = async () => {
+  if (!isAuthenticated.value) return;
+  try {
+    await loadDraftPurchases();
+    if (activePurchase.value?.$id) {
+      await loadPurchaseById(activePurchase.value.$id);
+    }
+  } catch {}
+};
+
 onMounted(async () => {
   await authReady();
   if (!isAuthenticated.value) {
-    // Guest Preview: no trackers, no purchases — straight to the limited scanner.
     currentView.value = 'scout';
     activePurchaseId.value = null;
     isQuickScanMode.value = true;
@@ -107,10 +161,11 @@ onMounted(async () => {
 
   const urlParams = new URLSearchParams(window.location.search);
   
-  if (urlParams.get('view') === 'trackers') {
+  if (isTrackersPathOrQuery()) {
     currentView.value = 'list';
     activePurchaseId.value = null;
     isQuickScanMode.value = false;
+    updateBrowserUrl('/scout/trackers', '');
   } else if (urlParams.has('purchase')) {
     const pId = urlParams.get('purchase');
     activePurchaseId.value = pId;
@@ -122,10 +177,37 @@ onMounted(async () => {
       });
     }
   } else {
-    // Untethered direct scout mode (Default)
     isQuickScanMode.value = true;
     currentView.value = 'scout';
     setActivePurchase(null);
+  }
+
+  if (typeof window !== 'undefined') {
+    handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshTrackersSilently();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (typeof window.BroadcastChannel === 'function') {
+      try {
+        syncBroadcastChannel = new window.BroadcastChannel('resale_command_sync');
+        syncBroadcastChannel.onmessage = () => {
+          refreshTrackersSilently();
+        };
+      } catch {}
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (handleVisibilityChange && typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }
+  if (syncBroadcastChannel) {
+    try { syncBroadcastChannel.close(); } catch {}
+    syncBroadcastChannel = null;
   }
 });
 
@@ -133,7 +215,7 @@ const handleStartPurchase = (purchase: ScoutPurchase) => {
   activePurchaseId.value = purchase.$id;
   isQuickScanMode.value = false;
   currentView.value = 'scout';
-  updateUrlParams(`purchase=${purchase.$id}`);
+  updateBrowserUrl('/scout', `purchase=${purchase.$id}`);
   try {
     setActivePurchase(purchase);
   } catch (e) {
@@ -142,11 +224,10 @@ const handleStartPurchase = (purchase: ScoutPurchase) => {
 };
 
 const handleResumePurchase = (purchase: ScoutPurchase) => {
-  console.log('[ScoutContainer] handleResumePurchase:', purchase.$id);
   activePurchaseId.value = purchase.$id;
   isQuickScanMode.value = false;
-  currentView.value = 'scout'; // Switch view immediately
-  updateUrlParams(`purchase=${purchase.$id}`);
+  currentView.value = 'scout';
+  updateBrowserUrl('/scout', `purchase=${purchase.$id}`);
   try {
     setActivePurchase(purchase);
   } catch (e) {
@@ -158,7 +239,7 @@ const handleQuickScan = () => {
   activePurchaseId.value = null;
   isQuickScanMode.value = true;
   currentView.value = 'scout';
-  updateUrlParams('quick=true');
+  updateBrowserUrl('/scout', '');
   try {
     setActivePurchase(null);
   } catch (e) {}
@@ -168,25 +249,27 @@ const handleBackToList = () => {
   currentView.value = 'list';
   activePurchaseId.value = null;
   isQuickScanMode.value = false;
-  updateUrlParams('');
+  updateBrowserUrl('/scout/trackers', '');
+  refreshTrackersSilently();
   try {
     setActivePurchase(null);
   } catch (e) {}
 };
 
-const handlePurchaseCompleted = (purchaseId: string) => {
+const handlePurchaseCompleted = () => {
   currentView.value = 'list';
   activePurchaseId.value = null;
   isQuickScanMode.value = false;
-  updateUrlParams('');
+  updateBrowserUrl('/scout/trackers', '');
+  refreshTrackersSilently();
   try {
     setActivePurchase(null);
   } catch (e) {}
 };
 
-const updateUrlParams = (query: string) => {
+const updateBrowserUrl = (path: string, query: string) => {
   try {
-    const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    const newUrl = query ? `${path}?${query}` : path;
     window.history.replaceState({}, '', newUrl);
   } catch (e) {
     // Ignore in non-browser environments

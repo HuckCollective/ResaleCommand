@@ -1162,8 +1162,10 @@ export const ALL: APIRoute = async ({ request }) => {
                              // Append to scraped listing context (preserving authoritative user notes separation)
                              scrapedListingContext += contextText + "\n";
                              
-                             // Fetch all external lot photos up to 40 images for deep multi-issue analysis
-                             if (imageParts.length === 0 && imgUrls.length > 0) {
+                             // Authoritative SGW API gallery always overrides any DOM-scraped remoteImageUrls
+                             // so "YOU MAY ALSO LIKE" sidebar recommendations can never contaminate the appraisal.
+                             if (imgUrls.length > 0) {
+                                 imageParts.length = 0;
                                  const promises = imgUrls.slice(0, 40).map(u => fetchAndAddImage(u));
                                  await Promise.all(promises);
                              }

@@ -1,0 +1,26 @@
+---
+export const prerender = false;
+import ScoutContainer from "../../components/scout/ScoutContainer.vue";
+import Layout from "../../layouts/Layout.astro";
+
+const rawParam = String(Astro.params.view || '').trim().toLowerCase();
+const queryView = String(Astro.url.searchParams.get('view') || '').trim().toLowerCase();
+const isTrackersView = rawParam === 'trackers' || rawParam === 'tracker' || queryView === 'trackers';
+const initialView = isTrackersView ? 'list' : 'scout';
+const pageTitle = isTrackersView ? 'Scout Buy Trackers | Works@TheHC' : 'Scout Tool | Works@TheHC';
+---
+
+<Layout title={pageTitle} hideFooter={true}>
+  <div class="rc-page-shell-narrow">
+    <div class="text-center mb-4">
+      <h1 class="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-1">
+        The Works Scout
+      </h1>
+      <p class="text-sm sm:text-base opacity-70">
+        AI-Powered Item Identification &amp; Active Auction Buy Trackers
+      </p>
+    </div>
+
+    <ScoutContainer client:only="vue" initialView={initialView} />
+  </div>
+</Layout>

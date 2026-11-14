@@ -187,6 +187,43 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     };
   }
 
+  var bmlBroadcastChannel = null;
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      bmlBroadcastChannel = new BroadcastChannel('resale_command_sync');
+    }
+  } catch (_bcErr) {}
+
+  function getToolConfig(defaults) {
+    var d = defaults || {};
+    var cfg = (typeof window !== 'undefined' && window.__RC_BML_TOOL_CONFIG__) || {};
+    return {
+      id: cfg.id || d.id || 'bookmarklet',
+      icon: String(cfg.icon || d.icon || '🔭').trim(),
+      barTitle: String(cfg.barTitle || d.barTitle || 'Works@TheHC Sync').trim(),
+      compactTitle: String(cfg.compactTitle || d.compactTitle || 'RC Sync').trim(),
+      hudTitle: String(cfg.hudTitle || d.hudTitle || 'Works@TheHC Sync').trim(),
+      mobileKeyword: String(cfg.mobileKeyword || d.mobileKeyword || 'rc').trim()
+    };
+  }
+
+  function notifyTabsUpdated(eventType, detail) {
+    var msg = Object.assign({ type: eventType || 'RC_BML_SYNC_COMPLETED', timestamp: Date.now() }, detail || {});
+    try {
+      if (bmlBroadcastChannel) bmlBroadcastChannel.postMessage(msg);
+    } catch (_e1) {}
+    try {
+      localStorage.setItem('rc_bml_last_sync_event', JSON.stringify(msg));
+    } catch (_e2) {}
+  }
+
+  window.__RC_BML_CORE__ = {
+    getToolConfig: getToolConfig,
+    notifyTabsUpdated: notifyTabsUpdated,
+    origins: ORIGINS,
+    primaryOrigin: PRIMARY_ORIGIN
+  };
+
   window.__RC_BML_AUTH__ = {
     getSession: getSession,
     saveSession: saveSession,

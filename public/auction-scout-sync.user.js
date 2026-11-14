@@ -2,6 +2,28 @@
   var ORIGIN = window.__RC_ORIGIN__ || 'https://resalecmd.com';
   var ORIGINS = window.__RC_ORIGINS__ || [ORIGIN, 'https://alpha.resalecmd.com', 'https://resalecmd.com'];
 
+  function getBmlToolConfig() {
+    var def = {
+      title: '🔭 RC Scout',
+      icon: '🔭',
+      trayTitle: 'Works@TheHC — ShopGoodwill Tray'
+    };
+    try {
+      if (window.__RC_BML_CORE__ && typeof window.__RC_BML_CORE__.getToolConfig === 'function') {
+        return window.__RC_BML_CORE__.getToolConfig('auction_scout', def);
+      }
+    } catch (e) {}
+    return def;
+  }
+
+  function notifyRcTabs(detail) {
+    try {
+      if (window.__RC_BML_CORE__ && typeof window.__RC_BML_CORE__.notifyTabsUpdated === 'function') {
+        window.__RC_BML_CORE__.notifyTabsUpdated(detail || { tool: 'auction_scout' });
+      }
+    } catch (e) {}
+  }
+
   function cleanText(s) {
     return String(s || '').replace(/\s+/g, ' ').trim();
   }
@@ -150,11 +172,15 @@
     capturingCsv: false,
     watchlist: {},
     combinableItems: [],
+    existingOrders: {},
+    activeTracker: null,
     trayOpen: false,
     loadingPreview: false,
     committing: false,
     previewData: null,
     commitResult: null,
+    selectedRowKeys: {},
+    tableFilter: 'ALL',
     errorMsg: null,
     statusToast: null,
     activeOrigin: ORIGIN,
@@ -167,7 +193,8 @@
     useCombineBonus: true,
     customMaxBid: '',
     savingTrack: false,
-    trackedSavedMsg: null
+    trackedSavedMsg: null,
+    lastSavedTracker: null
   };
 
   function installCsvInterceptor() {
@@ -385,6 +412,8 @@
 
         out.push({
           trEl: domRow ? domRow.trEl : null,
+          titleTd: domRow ? domRow.titleTd : null,
+          orderTd: domRow ? domRow.orderTd : null,
           orderId: orderId || itemId,
           itemId: itemId || orderId,
           title: csvTitle || (domRow ? domRow.title : 'ShopGoodwill #' + (itemId || orderId)),
@@ -400,6 +429,27 @@
       });
     }
     return out;
+  }
+
+  function isElementInsideRelatedSection(el) {
+    if (!el || !el.closest) return false;
+    if (
+      el.closest(
+        'app-related-items, .you-may-also-like, [class*="related-item" i], [class*="also-like" i], [class*="recommend" i], footer, header, nav'
+      )
+    ) {
+      return true;
+    }
+    // Check if preceded in parent container by "YOU MAY ALSO LIKE" heading
+    var cur = el;
+    while (cur && cur !== document.body) {
+      var txt = String(cur.textContent || '').trim();
+      if (/^you\s+may\s+also\s+like/i.test(txt) && txt.length < 600) {
+        return true;
+      }
+      cur = cur.parentElement;
+    }
+    return false;
   }
 
   function scrapeSingleItemDom() {
@@ -426,11 +476,27 @@
 
     var imgs = [];
     var seen = {};
+    var primaryFolderPrefix = null;
+
     Array.prototype.slice.call(document.querySelectorAll('img')).forEach(function (img) {
+      if (isElementInsideRelatedSection(img)) return;
       var src = String(img.getAttribute('src') || img.src || '').trim();
       if (!src || !/^https?:\/\//i.test(src)) return;
       if (/logo|icon|avatar|banner|badge|pixel|analytics|rokt|doubleclick/i.test(src)) return;
-      if (src.indexOf('shopgoodwillimages') !== -1 || src.indexOf('azureedge') !== -1 || (img.width >= 140 && img.height >= 140)) {
+
+      // Filter strictly to the main item's Azure folder prefix so "YOU MAY ALSO LIKE" sidebar images never leak in
+      var folderMatch = src.match(/(\/Items\/\d{1,2}-\d{1,2}-\d{4}\/[^/]+\/)/i);
+      if (folderMatch && folderMatch[1]) {
+        if (!primaryFolderPrefix) {
+          primaryFolderPrefix = folderMatch[1].toLowerCase();
+        } else if (folderMatch[1].toLowerCase() !== primaryFolderPrefix) {
+          return;
+        }
+      } else if (primaryFolderPrefix) {
+        return;
+      }
+
+      if (src.indexOf('shopgoodwillimages') !== -1 || src.indexOf('azureedge') !== -1) {
         var hiRes = src.replace(/-thumb\b|-small\b/i, '');
         if (!seen[hiRes]) {
           seen[hiRes] = true;
@@ -539,6 +605,8 @@
 
         var rowObj = {
           trEl: tr,
+          titleTd: tds[1] || null,
+          orderTd: tds[2] || null,
           orderId: orderId || itemId,
           itemId: itemId || orderId,
           title: title,
@@ -645,14 +713,16 @@
         badgeWrap.appendChild(statusPill);
 
         var wl = state.watchlist[r.itemId];
-        if (wl && wl.maxBid > 0) {
-          var ceilingPill = document.createElement('span');
-          var overCeiling = r.currentPrice > wl.maxBid;
-          ceilingPill.style.cssText = overCeiling
+        if (wl) {
+          var trackedPill = document.createElement('span');
+          var overCeiling = wl.maxBid > 0 && r.currentPrice > wl.maxBid;
+          trackedPill.style.cssText = overCeiling
             ? 'background:#7c2d12;color:#ffedd5;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;'
             : 'background:#1e3a8a;color:#dbeafe;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;';
-          ceilingPill.textContent = '🎯 RC Max: $' + Number(wl.maxBid).toFixed(2);
-          badgeWrap.appendChild(ceilingPill);
+          trackedPill.textContent = wl.maxBid > 0
+            ? '📌 Tracked (Max $' + Number(wl.maxBid).toFixed(2) + ')'
+            : '📌 In Tracker';
+          badgeWrap.appendChild(trackedPill);
         }
 
         var syn = evaluateSellerSynergy(r.seller, 1.5, r.itemId);
@@ -677,7 +747,15 @@
 
         var badgeWrap = document.createElement('div');
         badgeWrap.className = 'rc-sgw-inline-badge';
-        badgeWrap.style.cssText = 'margin-top:4px;font-family:system-ui,-apple-system,sans-serif;';
+        badgeWrap.style.cssText = 'margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;font-family:system-ui,-apple-system,sans-serif;';
+
+        var wl = state.watchlist[r.itemId];
+        if (wl) {
+          var trk = document.createElement('span');
+          trk.style.cssText = 'background:#312e81;color:#e0e7ff;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;';
+          trk.textContent = '📌 Was Tracked';
+          badgeWrap.appendChild(trk);
+        }
 
         var pill = document.createElement('span');
         if (isWon) {
@@ -689,6 +767,42 @@
         }
         badgeWrap.appendChild(pill);
         r.statusTd.appendChild(badgeWrap);
+      });
+    } else if (state.pageType === 'shipped-orders') {
+      state.rows.forEach(function (r) {
+        var targetTd = r.orderTd || r.titleTd;
+        if (!targetTd) return;
+        var oldBadge = targetTd.querySelector('.rc-sgw-inline-badge');
+        if (oldBadge) oldBadge.remove();
+
+        var wl = state.watchlist[r.itemId];
+        var existingOrder = state.existingOrders[r.orderId];
+        var badgeWrap = document.createElement('div');
+        badgeWrap.className = 'rc-sgw-inline-badge';
+        badgeWrap.style.cssText = 'margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-family:system-ui,-apple-system,sans-serif;';
+
+        if (wl && (wl.status === 'tracked' || !wl.orderId)) {
+          var trkPill = document.createElement('span');
+          trkPill.style.cssText = 'background:#4f46e5;color:#e0e7ff;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;';
+          trkPill.textContent = '📌 FROM TRACKER' + (wl.trackerLabel ? ' (' + wl.trackerLabel.split(' ')[0] + ')' : '');
+          badgeWrap.appendChild(trkPill);
+        }
+
+        if (existingOrder) {
+          var poPill = document.createElement('a');
+          poPill.href = state.activeOrigin + '/purchases/' + existingOrder.poId;
+          poPill.target = '_blank';
+          poPill.style.cssText = 'background:#065f46;color:#d1fae5;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;text-decoration:none;';
+          poPill.textContent = '✅ ' + (existingOrder.poNumber || 'Synced') + ' ↗';
+          badgeWrap.appendChild(poPill);
+        } else {
+          var newPill = document.createElement('span');
+          newPill.style.cssText = 'background:#78350f;color:#fef3c7;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:800;';
+          newPill.textContent = '🆕 Needs Order Sync';
+          badgeWrap.appendChild(newPill);
+        }
+
+        targetTd.appendChild(badgeWrap);
       });
     }
   }
@@ -727,19 +841,27 @@
     return tryOrigin();
   }
 
-  function fetchWatchlist() {
+  function fetchWatchlist(afterCallback) {
     var auth = window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.getSession ? window.__RC_BML_AUTH__.getSession() : null;
-    if (!auth) return;
+    if (!auth) {
+      if (afterCallback) afterCallback();
+      return;
+    }
     callRcApi('GET', '/api/bml/sgw-sync?mode=watchlist&t=' + Date.now(), null)
       .then(function (data) {
         if (data) {
           if (data.watchlist) state.watchlist = data.watchlist;
           if (Array.isArray(data.combinableItems)) state.combinableItems = data.combinableItems;
+          if (data.existingOrders) state.existingOrders = data.existingOrders;
+          if (data.activeTracker) state.activeTracker = data.activeTracker;
           decoratePageRows();
           renderUI();
         }
+        if (afterCallback) afterCallback();
       })
-      .catch(function () {});
+      .catch(function () {
+        if (afterCallback) afterCallback();
+      });
   }
 
   // Run full AI Speed Scout inside the Slide-Over Tray on /item/:id
@@ -760,10 +882,13 @@
     state.trayOpen = true;
     renderUI();
 
+    // Do NOT pass DOM remoteImageUrls for ShopGoodwill /item/:id pages so identify-item.ts always uses buyerapi.shopgoodwill.com's official item gallery (zero "YOU MAY ALSO LIKE" contamination)
+    var isSgwItemPage = /shopgoodwill\.com\/item\/\d+/i.test(window.location.href);
+
     callRcApi('POST', '/api/identify-item', {
       notes: window.location.href + '\nTitle: ' + itemRow.title + '\nCurrent Price: $' + itemRow.currentPrice + '\nSeller: ' + itemRow.seller,
       zipCode: state.zipCode || '97206',
-      remoteImageUrls: itemRow.images || []
+      remoteImageUrls: isSgwItemPage ? [] : (itemRow.images || [])
     })
       .then(function (data) {
         state.scoutingItem = false;
@@ -887,7 +1012,6 @@
     var fin = withAiReport ? computeScoutFinancials() : null;
     var targetMaxBid = parseFloat(state.customMaxBid) || (fin ? computeActiveMaxBid() : 0);
 
-    // Copy targetMaxBid to clipboard if > 0 so user can immediately paste into ShopGoodwill's Max Bid input!
     if (targetMaxBid > 0 && navigator.clipboard && navigator.clipboard.writeText) {
       try {
         navigator.clipboard.writeText(targetMaxBid.toFixed(2));
@@ -898,6 +1022,11 @@
     state.errorMsg = null;
     state.trackedSavedMsg = null;
     renderUI();
+
+    var primaryImageUrl =
+      (state.scoutReport && state.scoutReport.fetched_image) ||
+      (itemRow.images && itemRow.images[0]) ||
+      null;
 
     var payloadRow = {
       itemId: itemRow.itemId,
@@ -910,6 +1039,7 @@
       sellerId: fin ? fin.sellerId : null,
       shippingWeight: fin ? fin.weight : itemRow.shippingWeight,
       canCombineShipping: fin ? fin.canCombine : true,
+      primaryImageUrl: primaryImageUrl,
       endingDate: itemRow.endingDate || '',
       conditionNotes: fin ? fin.whyPayUp : '',
       aiReport: withAiReport && state.scoutReport ? state.scoutReport : null
@@ -920,12 +1050,17 @@
       dryRun: false,
       rows: [payloadRow]
     })
-      .then(function () {
+      .then(function (resData) {
         state.savingTrack = false;
+        state.lastSavedTracker = (resData && resData.tracker) || state.activeTracker || null;
+        var trkName = state.lastSavedTracker
+          ? state.lastSavedTracker.orderId + ' (' + state.lastSavedTracker.vendor + ')'
+          : 'Buy Tracker';
         state.trackedSavedMsg =
           targetMaxBid > 0
-            ? '✅ Saved to SGW Tracker & Copied $' + targetMaxBid.toFixed(2) + ' Max Bid to Clipboard!'
-            : '✅ Saved to ShopGoodwill Buy Tracker!';
+            ? '✅ Saved to ' + trkName + ' & Copied $' + targetMaxBid.toFixed(2) + ' Max Bid!'
+            : '✅ Saved to ' + trkName + '!';
+        notifyRcTabs({ tool: 'auction_scout', action: 'tracked_item', itemId: itemRow.itemId });
         fetchWatchlist();
         renderUI();
       })
@@ -934,6 +1069,15 @@
         state.errorMsg = (err && err.message) || 'Failed to save item to tracker.';
         renderUI();
       });
+  }
+
+  function getSelectedRowKeysArray() {
+    var keys = [];
+    var map = state.selectedRowKeys || {};
+    Object.keys(map).forEach(function (k) {
+      if (map[k]) keys.push(k);
+    });
+    return keys;
   }
 
   function executeSyncCall(dryRun) {
@@ -969,19 +1113,31 @@
       };
     });
 
-    callRcApi('POST', '/api/bml/sgw-sync', {
+    var reqPayload = {
       pageType: state.pageType,
       dryRun: Boolean(dryRun),
       rows: cleanRows
-    })
+    };
+    if (!dryRun) {
+      reqPayload.selectedKeys = getSelectedRowKeysArray();
+    }
+
+    callRcApi('POST', '/api/bml/sgw-sync', reqPayload)
       .then(function (data) {
         state.loadingPreview = false;
         state.committing = false;
         if (dryRun) {
           state.previewData = data;
+          var selMap = {};
+          ((data && data.rows) || []).forEach(function (pr) {
+            var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
+            selMap[rk] = pr.defaultSelected !== false;
+          });
+          state.selectedRowKeys = selMap;
         } else {
           state.commitResult = data;
           state.previewData = data;
+          notifyRcTabs({ tool: 'auction_scout', action: 'committed_sync', pageType: state.pageType });
           fetchWatchlist();
         }
         renderUI();
@@ -1079,11 +1235,15 @@
         '</div>' +
       '</div>';
 
-    // 2. Combined Shipping Synergy Banner (works both before and after running AI Scout!)
+    // 2. Combined Shipping Synergy Banner
     html += renderCombineBannerHtml(activeSynergy);
 
     if (state.trackedSavedMsg) {
-      html += '<div style="background:#065f46;color:#ecfdf5;border:1px solid #34d399;padding:9px 12px;border-radius:10px;margin-bottom:10px;font-weight:800;font-size:11.5px;">' + escHtml(state.trackedSavedMsg) + '</div>';
+      html +=
+        '<div style="background:#065f46;color:#ecfdf5;border:1px solid #34d399;padding:9px 12px;border-radius:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-weight:800;font-size:11.5px;">' +
+          '<span>' + escHtml(state.trackedSavedMsg) + '</span>' +
+          '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#022c22;color:#6ee7b7;padding:3px 8px;border-radius:6px;text-decoration:none;font-size:10.5px;font-weight:900;">Open /scout/trackers ↗</a>' +
+        '</div>';
     }
     if (state.errorMsg) {
       html += '<div style="background:#7f1d1d;color:#fecaca;padding:9px 12px;border-radius:10px;margin-bottom:10px;font-weight:700;font-size:11.5px;">❌ ' + escHtml(state.errorMsg) + '</div>';
@@ -1093,7 +1253,7 @@
       html +=
         '<div style="background:#1e1b4b;border:1px solid #818cf8;border-radius:14px;padding:22px 14px;text-align:center;margin-bottom:10px;">' +
           '<div style="font-size:14px;font-weight:900;color:#e0e7ff;margin-bottom:4px;">⚡ Running AI Speed Scout...</div>' +
-          '<div style="font-size:11px;color:#a5b4fc;">Fetching ShopGoodwill shipping quote (ZIP ' + escHtml(state.zipCode) + '), inspecting listing photos, and calculating 3-Tier Max Bid ceilings...</div>' +
+          '<div style="font-size:11px;color:#a5b4fc;">Fetching official ShopGoodwill gallery &amp; shipping quote (ZIP ' + escHtml(state.zipCode) + '), and calculating 3-Tier Max Bid ceilings...</div>' +
         '</div>';
       return html;
     }
@@ -1151,7 +1311,6 @@
           '</div>' +
         '</div>';
 
-    // Interactive 3-Tier Max Bid Selector
     var tierKeys = [
       { key: 'conservative', label: '🛡️ Conservative', sub: '3.0x ROI' },
       { key: 'balanced', label: '⚖️ Balanced', sub: '2.2x Target' },
@@ -1188,7 +1347,6 @@
     });
     html += '</div>';
 
-    // Editable Target Max Bid Input
     html +=
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:7px 10px;margin-bottom:8px;">' +
         '<span style="font-size:11px;font-weight:800;color:#e2e8f0;">🎯 My Target Max Bid ($):</span>' +
@@ -1223,7 +1381,7 @@
   function renderTableTrayBody() {
     var bodyHtml = '';
     if (state.loadingPreview) {
-      return '<div style="padding:24px;text-align:center;color:#cbd5e1;font-weight:700;">⏳ Building Pre-Flight Queue Preview...</div>';
+      return '<div style="padding:28px 16px;text-align:center;color:#cbd5e1;font-weight:800;background:#1e1b4b;border:1px solid #818cf8;border-radius:12px;">⏳ Building Ricochet-Style Pre-Flight Queue Preview...</div>';
     }
     if (state.errorMsg) {
       bodyHtml += '<div style="background:#7f1d1d;color:#fecaca;padding:10px 12px;border-radius:10px;margin-bottom:10px;font-weight:700;">❌ ' + escHtml(state.errorMsg) + '</div>';
@@ -1232,38 +1390,102 @@
       var pRows = state.previewData.rows || [];
       var sum = state.previewData.summary || {};
       var bannerText = state.commitResult
-        ? '✅ Sync Committed Successfully!'
-        : '🔍 Pre-Flight Queue Preview (Review before committing)';
+        ? '✅ Sync Committed to Works@TheHC!'
+        : '🔍 Pre-Flight Reconciliation Queue (Check/Uncheck Rows to Sync)';
       var bannerBg = state.commitResult ? '#065f46' : '#1e1b4b';
 
-      bodyHtml += '<div style="background:' + bannerBg + ';padding:8px 12px;border-radius:10px;margin-bottom:10px;font-weight:800;font-size:12px;">' + bannerText + '</div>';
+      bodyHtml += '<div style="background:' + bannerBg + ';border:1px solid ' + (state.commitResult ? '#34d399' : '#6366f1') + ';padding:8px 12px;border-radius:10px;margin-bottom:10px;font-weight:800;font-size:11.5px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<span>' + bannerText + '</span>' +
+        '<span style="font-family:monospace;font-size:10.5px;color:#cbd5e1;">' + pRows.length + ' total</span>' +
+      '</div>';
 
-      if (state.pageType === 'inprogress-auctions') {
-        bodyHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;">' +
-          '<span style="background:#065f46;padding:3px 8px;border-radius:6px;font-weight:800;">🟢 Winning: ' + (sum.winningCount || 0) + '</span>' +
-          '<span style="background:#991b1b;padding:3px 8px;border-radius:6px;font-weight:800;">🚨 Outbid: ' + (sum.outbidCount || 0) + '</span>' +
-          '<span style="background:#1e293b;padding:3px 8px;border-radius:6px;font-weight:800;">Update: ' + (sum.updatedCount || 0) + ' | New: ' + (sum.createdCount || 0) + '</span>' +
-        '</div>';
-      } else if (state.pageType === 'closed-auctions') {
-        bodyHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;">' +
-          '<span style="background:#065f46;padding:3px 8px;border-radius:6px;font-weight:800;">🏆 Won ➔ Acquired: ' + ((sum.promotedWonCount || 0) + (sum.createdWonCount || 0)) + '</span>' +
-          '<span style="background:#7c2d12;padding:3px 8px;border-radius:6px;font-weight:800;">🧹 Lost Cleaned: ' + (sum.cleanedLostCount || 0) + '</span>' +
-        '</div>';
-      } else if (state.pageType === 'shipped-orders') {
-        bodyHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;">' +
-          '<span style="background:#0284c7;padding:3px 8px;border-radius:6px;font-weight:800;">🧾 POs: +' + (sum.createdPoCount || 0) + ' / ↻' + (sum.updatedPoCount || 0) + '</span>' +
-          '<span style="background:#065f46;padding:3px 8px;border-radius:6px;font-weight:800;">📦 Items Linked: ' + ((sum.updatedItemCount || 0) + (sum.createdItemCount || 0)) + '</span>' +
-        '</div>';
-      }
+      // Count categories for Ricochet-style 4-box scorecard + filter tabs
+      var trackedCount = 0;
+      var newCount = 0;
+      var updateCount = 0;
+      var existingCount = 0;
+      pRows.forEach(function (pr) {
+        if (pr.wasTracked || pr.rowCategory === 'PROMOTE_TRACKED') trackedCount++;
+        if (pr.rowCategory === 'NEW_ORDER_ITEM') newCount++;
+        if (pr.rowCategory === 'UPDATE_TRACKING') updateCount++;
+        if (pr.rowCategory === 'EXISTING_SYNCED') existingCount++;
+      });
 
-      if (pRows.length > 0) {
-        bodyHtml += '<div style="background:#020617;border:1px solid #1e293b;border-radius:10px;padding:6px 8px;margin-bottom:10px;">';
-        pRows.forEach(function (pr) {
+      // Ricochet-Style 4-Box Scorecard (Clickable Filter Cards)
+      var filters = [
+        { key: 'ALL', label: '📋 All Rows', count: pRows.length, color: '#a5b4fc' },
+        { key: 'TRACKED', label: '📌 Was Tracked', count: trackedCount, color: '#34d399' },
+        { key: 'ACTIONABLE', label: '🆕 New / Upd', count: newCount + updateCount, color: '#fbbf24' },
+        { key: 'EXISTING', label: '✅ Existing POs', count: existingCount, color: '#38bdf8' }
+      ];
+
+      bodyHtml += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;">';
+      filters.forEach(function (f) {
+        var active = state.tableFilter === f.key;
+        bodyHtml +=
+          '<button type="button" class="rc-table-filter-btn" data-filter="' + f.key + '" style="background:' + (active ? '#1e1b4b' : '#020617') + ';border:1.5px solid ' + (active ? '#818cf8' : '#1e293b') + ';border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;color:#f8fafc;">' +
+            '<div style="font-size:9px;color:#94a3b8;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + f.label + '</div>' +
+            '<div style="font-size:14px;font-weight:900;color:' + f.color + ';font-family:monospace;margin-top:1px;">' + f.count + '</div>' +
+          '</button>';
+      });
+      bodyHtml += '</div>';
+
+      // Quick Selection Toolbar
+      var selectedCount = getSelectedRowKeysArray().length;
+      bodyHtml +=
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px;background:#1e293b;padding:5px 8px;border-radius:8px;font-size:10.5px;">' +
+          '<span style="font-weight:800;color:#e2e8f0;">☑️ Selected: <strong style="color:#34d399;">' + selectedCount + '</strong> / ' + pRows.length + '</span>' +
+          '<div style="display:flex;gap:4px;">' +
+            '<button type="button" id="rc-select-tracked-btn" style="background:#312e81;color:#e0e7ff;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">📌 Tracked Only</button>' +
+            '<button type="button" id="rc-select-actionable-btn" style="background:#065f46;color:#d1fae5;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">⚡ Actionable</button>' +
+            '<button type="button" id="rc-select-none-btn" style="background:#334155;color:#cbd5e1;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">Clear</button>' +
+          '</div>' +
+        '</div>';
+
+      var visibleRows = pRows.filter(function (pr) {
+        if (state.tableFilter === 'TRACKED') return Boolean(pr.wasTracked || pr.rowCategory === 'PROMOTE_TRACKED');
+        if (state.tableFilter === 'ACTIONABLE') return pr.rowCategory !== 'EXISTING_SYNCED';
+        if (state.tableFilter === 'EXISTING') return pr.rowCategory === 'EXISTING_SYNCED';
+        return true;
+      });
+
+      if (visibleRows.length === 0) {
+        bodyHtml += '<div style="padding:18px;text-align:center;color:#94a3b8;background:#020617;border-radius:10px;border:1px dashed #334155;">No rows match the selected filter.</div>';
+      } else {
+        bodyHtml += '<div style="background:#020617;border:1px solid #1e293b;border-radius:10px;padding:4px 8px;margin-bottom:10px;">';
+        visibleRows.forEach(function (pr) {
+          var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
+          var isChecked = Boolean(state.selectedRowKeys[rk]);
+          var badgesHtml = '';
+          if (pr.wasTracked) {
+            badgesHtml += '<span style="background:#4f46e5;color:#e0e7ff;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">📌 FROM TRACKER' + (pr.trackerLabel ? ' (' + escHtml(pr.trackerLabel) + ')' : '') + '</span> ';
+          }
+          if (pr.rowCategory === 'EXISTING_SYNCED') {
+            var poLabel = pr.existingPoNumber || (pr.orderId ? 'PO-' + String(pr.orderId).slice(-6) : 'Synced');
+            if (pr.existingPoId) {
+              badgesHtml += '<a href="' + state.activeOrigin + '/purchases/' + escHtml(pr.existingPoId) + '" target="_blank" style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;text-decoration:none;">✅ ' + escHtml(poLabel) + ' ↗</a> ';
+            } else {
+              badgesHtml += '<span style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">✅ ' + escHtml(poLabel) + '</span> ';
+            }
+          } else if (pr.rowCategory === 'NEW_ORDER_ITEM') {
+            badgesHtml += '<span style="background:#78350f;color:#fef3c7;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">🆕 NEW ITEM</span> ';
+          } else if (pr.rowCategory === 'UPDATE_TRACKING') {
+            badgesHtml += '<span style="background:#0369a1;color:#e0f2fe;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">🚚 TRACKING UPD</span> ';
+          }
+
           var rightText = pr.detail || ('$' + Number(pr.currentPrice || pr.landedCost || 0).toFixed(2) + ' • ' + pr.action);
-          bodyHtml += '<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;font-size:11px;">' +
-            '<span style="font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px;" title="' + escHtml(pr.title) + '">#' + escHtml(pr.itemId) + ' ' + escHtml(pr.title) + '</span>' +
-            '<span style="font-family:monospace;font-size:10.5px;color:#93c5fd;text-align:right;white-space:nowrap;">' + escHtml(rightText) + '</span>' +
-          '</div>';
+          bodyHtml +=
+            '<label style="padding:7px 2px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer;">' +
+              '<input type="checkbox" class="rc-row-select-cb" data-rowkey="' + escHtml(rk) + '" ' + (isChecked ? 'checked' : '') + ' style="margin-top:3px;cursor:pointer;" />' +
+              '<div style="min-width:0;flex:1;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">' +
+                  '<span style="font-family:monospace;font-size:10px;color:#94a3b8;">#' + escHtml(pr.itemId) + (pr.orderId && pr.orderId !== pr.itemId ? ' • Order #' + escHtml(pr.orderId) : '') + '</span>' +
+                  '<div>' + badgesHtml + '</div>' +
+                '</div>' +
+                '<div style="font-weight:800;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(pr.title) + '">' + escHtml(pr.title) + '</div>' +
+                '<div style="font-family:monospace;font-size:10px;color:#93c5fd;margin-top:2px;">' + escHtml(rightText) + '</div>' +
+              '</div>' +
+            '</label>';
         });
         bodyHtml += '</div>';
       }
@@ -1274,13 +1496,14 @@
       '<div style="padding:14px;background:#1e293b;border-radius:12px;margin-bottom:10px;color:#cbd5e1;">' +
         'Detected <strong>' + state.rows.length + '</strong> row(s) on <code>' + escHtml(state.pageType) + '</code> (' +
         (state.csvHarvested ? 'from Full CSV with complete titles' : 'from visible table') +
-        '). Click <strong>🔍 Preview Queue</strong> below to inspect changes before syncing to Works@TheHC.' +
+        '). Click <strong>🔍 Preview Queue</strong> below to inspect tracked items and existing orders before syncing to Works@TheHC.' +
       '</div>'
     );
   }
 
   function renderUI() {
     var auth = window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.getSession ? window.__RC_BML_AUTH__.getSession() : null;
+    var toolCfg = getBmlToolConfig();
 
     // 1. Minimal Bottom-Right Trigger Pill (#rc-scout-fab-bar)
     var bar = document.getElementById('rc-scout-fab-bar');
@@ -1308,7 +1531,7 @@
     bar.innerHTML =
       '<span id="rc-sync-fab" style="display:none;"></span>' +
       '<button id="rc-scout-toggle-btn" style="background:transparent;border:0;color:#f8fafc;cursor:pointer;display:flex;align-items:center;gap:6px;padding:2px 4px;font-weight:800;font-size:12px;">' +
-        '<span>🔭 RC Scout</span>' +
+        '<span>' + escHtml(toolCfg.title || '🔭 RC Scout') + '</span>' +
         pillCountBadge +
         combinePillBadge +
       '</button>' +
@@ -1318,6 +1541,10 @@
     if (toggleBtn) {
       toggleBtn.onclick = function () {
         state.trayOpen = !state.trayOpen;
+        if (state.trayOpen && state.pageType !== 'item' && !state.previewData && !state.loadingPreview) {
+          runPreviewOrSync(true);
+          return;
+        }
         renderUI();
       };
     }
@@ -1342,7 +1569,7 @@
     if (!tray) {
       tray = document.createElement('div');
       tray.id = 'rc-scout-tray';
-      tray.style.cssText = 'position:fixed;top:0;right:0;bottom:0;height:100dvh;width:450px;max-width:94vw;z-index:2147483646;background:#0f172a;color:#f8fafc;border-left:2px solid #818cf8;box-shadow:-16px 0 48px rgba(0,0,0,0.65);display:flex;flex-direction:column;font-family:system-ui,-apple-system,sans-serif;font-size:12px;line-height:1.45;';
+      tray.style.cssText = 'position:fixed;top:0;right:0;bottom:0;height:100dvh;width:460px;max-width:94vw;z-index:2147483646;background:#0f172a;color:#f8fafc;border-left:2px solid #818cf8;box-shadow:-16px 0 48px rgba(0,0,0,0.65);display:flex;flex-direction:column;font-family:system-ui,-apple-system,sans-serif;font-size:12px;line-height:1.45;';
       document.body.appendChild(tray);
     }
 
@@ -1352,8 +1579,11 @@
       ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">📄 Full CSV (' + state.rows.length + ' rows)</span>'
       : '<span style="background:#1e293b;color:#cbd5e1;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">📄 DOM Table (' + state.rows.length + ' rows)</span>';
 
+    var trackersHeaderLink =
+      '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" title="Open Scout Buy Trackers" style="background:#312e81;border:1px solid #4f46e5;color:#e0e7ff;text-decoration:none;border-radius:8px;padding:4px 8px;font-size:10.5px;font-weight:800;">📌 Trackers ↗</a>';
+
     var harvestCsvBtnHtml = state.pageType !== 'item'
-      ? '<button id="rc-scout-harvest-csv-btn" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:10.5px;font-weight:800;">📥 Harvest CSV</button>'
+      ? '<button id="rc-scout-harvest-csv-btn" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:10.5px;font-weight:800;">📥 CSV</button>'
       : '';
 
     var logoutBtnHtml = auth
@@ -1371,7 +1601,7 @@
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
               '<button id="rc-scout-quick-track-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">📌 Quick-Track Without AI</button>' +
-              '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="background:#1e293b;color:#93c5fd;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">/purchases ↗</a>' +
+              '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📌 Trackers ↗</a>' +
             '</div>' +
           '</div>';
       } else {
@@ -1379,26 +1609,28 @@
           '<div style="display:flex;flex-direction:column;gap:6px;">' +
             '<button id="rc-scout-save-track-btn" style="width:100%;background:#10b981;color:#052e16;border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;font-size:13px;">' +
               (state.savingTrack
-                ? '⏳ Saving to SGW Tracker...'
+                ? '⏳ Saving to Buy Tracker...'
                 : '📌 Track & Copy Max Bid ($' + Number(activeMax || 0).toFixed(2) + ')') +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
               '<button id="rc-scout-run-ai-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">🔄 Re-Run AI Scout</button>' +
-              '<a href="' + state.activeOrigin + '/scout?url=' + encodeURIComponent(window.location.href) + '" target="_blank" style="background:#1e293b;color:#93c5fd;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">Full /scout ↗</a>' +
+              '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📌 Trackers ↗</a>' +
             '</div>' +
           '</div>';
       }
     } else {
+      var selCount = getSelectedRowKeysArray().length;
       var commitBtnHtml = state.previewData && !state.commitResult
-        ? '<button id="rc-scout-commit-btn" style="flex:1;background:#10b981;color:#052e16;border:0;border-radius:10px;padding:10px 12px;font-weight:900;cursor:pointer;font-size:12.5px;">' +
-            (state.committing ? '⏳ Committing...' : '🚀 Commit Sync to Works@TheHC') +
+        ? '<button id="rc-scout-commit-btn" ' + (selCount === 0 ? 'disabled' : '') + ' style="flex:1;background:' + (selCount === 0 ? '#334155' : '#10b981') + ';color:' + (selCount === 0 ? '#94a3b8' : '#052e16') + ';border:0;border-radius:10px;padding:10px 12px;font-weight:900;cursor:' + (selCount === 0 ? 'not-allowed' : 'pointer') + ';font-size:12.5px;">' +
+            (state.committing ? '⏳ Committing...' : '🚀 Commit Selected (' + selCount + ')') +
           '</button>'
         : '<button id="rc-scout-preview-btn" style="flex:1;background:#818cf8;color:#0f172a;border:0;border-radius:10px;padding:10px 12px;font-weight:900;cursor:pointer;font-size:12.5px;">🔍 Preview Queue (' + state.rows.length + ')</button>';
 
       footerHtml =
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
           commitBtnHtml +
-          '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="background:#1e293b;color:#e2e8f0;text-decoration:none;border-radius:10px;padding:10px 12px;font-weight:800;font-size:11px;">/purchases ↗</a>' +
+          '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:10px;padding:10px 10px;font-weight:800;font-size:11px;">📌 Trackers ↗</a>' +
+          '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="background:#1e293b;color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:10px;padding:10px 10px;font-weight:800;font-size:11px;">/purchases ↗</a>' +
         '</div>';
     }
 
@@ -1406,13 +1638,14 @@
       // Pinned Tray Header
       '<div style="padding:12px 14px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">' +
         '<div>' +
-          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;">🔭 Works@TheHC — ShopGoodwill Tray</div>' +
+          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;">' + escHtml(toolCfg.trayTitle || '🔭 Works@TheHC — ShopGoodwill Tray') + '</div>' +
           '<div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-top:2px;">' +
             sourceBadge +
             (auth ? '<span style="color:#6ee7b7;font-weight:800;">' + escHtml(auth.roleBadge || '👑') + ' ' + escHtml(auth.name || '') + '</span>' : '') +
           '</div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:5px;">' +
+          trackersHeaderLink +
           harvestCsvBtnHtml +
           logoutBtnHtml +
           '<button id="rc-scout-close-tray" title="Minimize to corner pill" style="background:#0f172a;border:1px solid #334155;color:#f8fafc;border-radius:8px;padding:4px 9px;cursor:pointer;font-weight:900;">✕</button>' +
@@ -1450,10 +1683,62 @@
     if (harvestCsvBtn) {
       harvestCsvBtn.onclick = function () {
         harvestPageCsvSilently(function () {
-          if (state.previewData) {
-            executeSyncCall(true);
-          }
+          executeSyncCall(true);
         });
+      };
+    }
+
+    // Table filter buttons & row checkboxes
+    var filterBtns = tray.querySelectorAll('.rc-table-filter-btn');
+    Array.prototype.slice.call(filterBtns).forEach(function (btn) {
+      btn.onclick = function () {
+        state.tableFilter = btn.getAttribute('data-filter') || 'ALL';
+        renderUI();
+      };
+    });
+
+    var rowCheckboxes = tray.querySelectorAll('.rc-row-select-cb');
+    Array.prototype.slice.call(rowCheckboxes).forEach(function (cb) {
+      cb.onchange = function () {
+        var rk = cb.getAttribute('data-rowkey');
+        if (rk) {
+          state.selectedRowKeys[rk] = Boolean(cb.checked);
+          renderUI();
+        }
+      };
+    });
+
+    var selTrackedBtn = document.getElementById('rc-select-tracked-btn');
+    if (selTrackedBtn && state.previewData) {
+      selTrackedBtn.onclick = function () {
+        var next = {};
+        (state.previewData.rows || []).forEach(function (pr) {
+          var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
+          next[rk] = Boolean(pr.wasTracked || pr.rowCategory === 'PROMOTE_TRACKED');
+        });
+        state.selectedRowKeys = next;
+        renderUI();
+      };
+    }
+
+    var selActionableBtn = document.getElementById('rc-select-actionable-btn');
+    if (selActionableBtn && state.previewData) {
+      selActionableBtn.onclick = function () {
+        var next = {};
+        (state.previewData.rows || []).forEach(function (pr) {
+          var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
+          next[rk] = pr.rowCategory !== 'EXISTING_SYNCED';
+        });
+        state.selectedRowKeys = next;
+        renderUI();
+      };
+    }
+
+    var selNoneBtn = document.getElementById('rc-select-none-btn');
+    if (selNoneBtn) {
+      selNoneBtn.onclick = function () {
+        state.selectedRowKeys = {};
+        renderUI();
       };
     }
 
@@ -1547,28 +1832,41 @@
   }
 
   window.addEventListener('rc-bml-authenticated', function () {
-    fetchWatchlist();
-    renderUI();
+    fetchWatchlist(function () {
+      if (state.trayOpen && state.pageType !== 'item') {
+        runPreviewOrSync(true);
+      } else {
+        renderUI();
+      }
+    });
   });
 
   window.__RC_REFRESH_FROM_CLOUD__ = function () {
     detectPageAndRows();
-    if (state.pageType === 'item') {
-      state.trayOpen = true;
-    }
+    state.trayOpen = true;
     harvestPageCsvSilently(function () {
-      fetchWatchlist();
-      renderUI();
+      fetchWatchlist(function () {
+        if (state.pageType !== 'item') {
+          runPreviewOrSync(true);
+        } else {
+          renderUI();
+        }
+      });
     });
   };
 
   installCsvInterceptor();
   detectPageAndRows();
-  if (state.pageType === 'item') {
+  if (state.pageType === 'item' || state.pageType === 'shipped-orders') {
     state.trayOpen = true;
   }
   decoratePageRows();
   renderUI();
-  fetchWatchlist();
-  harvestPageCsvSilently();
+  fetchWatchlist(function () {
+    harvestPageCsvSilently(function () {
+      if (state.trayOpen && state.pageType !== 'item' && !state.previewData && !state.loadingPreview) {
+        runPreviewOrSync(true);
+      }
+    });
+  });
 })();

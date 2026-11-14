@@ -50,6 +50,10 @@ function getAppwriteServer() {
 
 function extractSgwItemIdFromDoc(doc: any): string | null {
   if (!doc) return null;
+  const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
+  if (rawObj.sgwItemId && /^\d{7,10}$/.test(String(rawObj.sgwItemId).trim())) {
+    return String(rawObj.sgwItemId).trim();
+  }
   const candidates = [
     doc.sourcingLocation,
     doc.orderId,
@@ -85,6 +89,39 @@ function serializeRawAnalysisJson(obj: Record<string, any>): string {
   return json.length > 60000 ? json.slice(0, 60000) : json;
 }
 
+function extractBoutiquePriceFromDoc(doc: any, rawObj: Record<string, any>): number {
+  if (Number(rawObj.boutiquePrice) > 0) return Number(rawObj.boutiquePrice);
+  const notes = String(doc?.conditionNotes || '');
+  const m = notes.match(/\[Boutique:\s*\$([\d.]+)\]/i);
+  if (m && m[1] && Number(m[1]) > 0) return Number(m[1]);
+  return Number(doc?.resalePrice || 0);
+}
+
+function buildConditionNotesWithMeta(
+  baseNotes: string | undefined,
+  existingNotes: string | undefined,
+  boutiquePrice: number,
+  primaryImageUrl?: string
+): string | undefined {
+  let clean = String(baseNotes !== undefined ? baseNotes : existingNotes || '')
+    .replace(/\[Boutique:\s*\$[\d.]+\]/gi, '')
+    .trim();
+  const imgUrl =
+    primaryImageUrl && /^https?:\/\//i.test(primaryImageUrl)
+      ? primaryImageUrl.trim()
+      : (() => {
+          const m = String(existingNotes || '').match(/\[EXTERNAL_IMAGE:\s*(https?:\/\/[^\]\s]+)\]/i);
+          return m ? m[1] : '';
+        })();
+  clean = clean.replace(/\[EXTERNAL_IMAGE:\s*https?:\/\/[^\]]+\]/gi, '').trim();
+
+  const tags: string[] = [];
+  if (boutiquePrice > 0) tags.push(`[Boutique: $${boutiquePrice.toFixed(2)}]`);
+  if (imgUrl) tags.push(`[EXTERNAL_IMAGE: ${imgUrl}]`);
+  const combined = [clean, ...tags].filter(Boolean).join(' ').trim();
+  return combined ? combined.slice(0, 2000) : undefined;
+}
+
 function buildDocPermissions(teamId?: string, userId?: string): string[] {
   const perms: string[] = [
     NodePermission.read(NodeRole.any()),
@@ -100,6 +137,27 @@ function buildDocPermissions(teamId?: string, userId?: string): string[] {
     perms.push(NodePermission.read(uRole), NodePermission.update(uRole), NodePermission.delete(uRole));
   }
   return Array.from(new Set(perms));
+}
+
+function resolvePurchaseTenantId(teamId?: string, userId?: string, recentPurchases: any[] = []): string {
+  if (teamId && teamId !== 'huck_collective') return teamId;
+  for (const p of recentPurchases) {
+    const tid = String(p?.tenantId || '').trim();
+    if (tid) return tid;
+  }
+  if (userId && userId !== 'same_origin_member') return userId;
+  return 'huck_collective';
+}
+
+function isDraftTrackerPurchase(p: any): boolean {
+  if (!p) return false;
+  const st = String(p?.status || '').trim().toLowerCase();
+  const oid = String(p?.orderId || '').trim().toUpperCase();
+  const vendor = String(p?.vendor || '').trim().toLowerCase();
+  if (st === 'draft') return true;
+  if (oid.startsWith('SC-') && (st === 'draft' || st === 'pending')) return true;
+  if (vendor === 'auctions' && st === 'draft') return true;
+  return false;
 }
 
 async function scanRecentInventoryAndMaxUpc(
@@ -143,33 +201,52 @@ async function scanRecentInventoryAndMaxUpc(
   return { bySgwItemId, nextUpc };
 }
 
+function findBestActiveSgwTracker(purchases: any[]): any | null {
+  const drafts = (purchases || []).filter((p: any) => isDraftTrackerPurchase(p));
+  // 1. Prefer an existing 'Auctions' or 'ShopGoodwill' SC- Draft tracker (e.g., SC-579892 | Auctions)
+  const exactAuction = drafts.find((p: any) => {
+    const vendor = String(p?.vendor || '').trim().toLowerCase();
+    return vendor === 'auctions' || vendor.includes('goodwill') || vendor.includes('auction');
+  });
+  if (exactAuction) return exactAuction;
+  // 2. Any SC- draft tracker
+  const scDraft = drafts.find((p: any) => String(p?.orderId || '').trim().toUpperCase().startsWith('SC-'));
+  if (scDraft) return scDraft;
+  return drafts[0] || null;
+}
+
 async function ensureActiveSgwBuyTracker(
   databases: NodeDatabases,
   dbId: string,
   purchasesCol: string,
   teamId: string,
-  userId: string
+  userId: string,
+  recentPurchases?: any[]
 ): Promise<any> {
-  const res = await databases.listDocuments(dbId, purchasesCol, [
-    NodeQuery.limit(50),
-    NodeQuery.orderDesc('$id'),
-  ]);
-  const existing = (res.documents || []).find((p: any) => {
-    const st = String(p?.status || '').toLowerCase();
-    const vendor = String(p?.vendor || '').toLowerCase();
-    return (st === 'draft' || st === 'pending') && vendor.includes('goodwill');
-  });
+  const docs =
+    recentPurchases ||
+    (
+      await databases.listDocuments(dbId, purchasesCol, [
+        NodeQuery.limit(100),
+        NodeQuery.orderDesc('$id'),
+      ])
+    ).documents ||
+    [];
+
+  const existing = findBestActiveSgwTracker(docs);
   if (existing) return existing;
 
-  const poNum = `PO-SGW-${String(Date.now()).slice(-5)}`;
+  const shortSuffix = String(Date.now()).slice(-6);
+  const resolvedTenantId = resolvePurchaseTenantId(teamId, userId, docs);
   return await databases.createDocument(
     dbId,
     purchasesCol,
     NodeID.unique(),
     {
-      poNumber: poNum,
-      vendor: 'ShopGoodwill (Active Bids)',
-      purchaseDate: new Date().toISOString(),
+      poNumber: `PO-${shortSuffix}`,
+      orderId: `SC-${shortSuffix}`,
+      vendor: 'Auctions',
+      purchaseDate: new Date().toISOString().split('T')[0],
       status: 'Draft',
       subtotal: 0,
       shippingTotal: 0,
@@ -177,10 +254,49 @@ async function ensureActiveSgwBuyTracker(
       taxTotal: 0,
       feeTotal: 0,
       grandTotal: 0,
-      tenantId: teamId && teamId !== 'huck_collective' ? teamId : null,
+      notes: 'Active ShopGoodwill & Online Auction Buy Tracker',
+      tenantId: resolvedTenantId,
     },
     buildDocPermissions(teamId, userId)
   );
+}
+
+async function syncTrackerTotals(
+  databases: NodeDatabases,
+  dbId: string,
+  purchasesCol: string,
+  itemsCol: string,
+  trackerPoId: string | null | undefined
+) {
+  if (!trackerPoId) return;
+  try {
+    const [byPurchase, byCart] = await Promise.all([
+      databases.listDocuments(dbId, itemsCol, [
+        NodeQuery.equal('purchaseId', trackerPoId),
+        NodeQuery.limit(100),
+      ]),
+      databases.listDocuments(dbId, itemsCol, [
+        NodeQuery.equal('cartId', trackerPoId),
+        NodeQuery.limit(100),
+      ]),
+    ]);
+    const map = new Map<string, any>();
+    for (const d of [...(byPurchase.documents || []), ...(byCart.documents || [])]) {
+      map.set(d.$id, d);
+    }
+    let subtotal = 0;
+    for (const item of map.values()) {
+      const price = Number(item.cost || item.currentBid || item.maxBid || item.maxBuyPrice || 0);
+      subtotal += price;
+    }
+    const cleanSub = Number(subtotal.toFixed(2));
+    await databases.updateDocument(dbId, purchasesCol, trackerPoId, {
+      subtotal: cleanSub,
+      grandTotal: cleanSub,
+    });
+  } catch (e) {
+    console.warn('[sgw-sync] Failed to sync tracker totals for', trackerPoId, e);
+  }
 }
 
 export const OPTIONS: APIRoute = async () => {
@@ -192,51 +308,94 @@ export const GET: APIRoute = async ({ request }) => {
   if (!auth.ok) return auth.response;
 
   try {
-    const { databases, dbId, itemsCol } = getAppwriteServer();
-    const { bySgwItemId } = await scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix);
+    const { databases, dbId, itemsCol, purchasesCol } = getAppwriteServer();
+    const [{ bySgwItemId }, poRes] = await Promise.all([
+      scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix),
+      databases.listDocuments(dbId, purchasesCol, [
+        NodeQuery.limit(100),
+        NodeQuery.orderDesc('$id'),
+      ]),
+    ]);
+
+    const poDocs = (poRes.documents || []) as any[];
+    const poById = new Map<string, any>();
+    const existingOrders: Record<string, any> = {};
+    for (const p of poDocs) {
+      poById.set(p.$id, p);
+      const oid = String(p?.orderId || '').trim();
+      if (oid && !isDraftTrackerPurchase(p) && !existingOrders[oid]) {
+        existingOrders[oid] = {
+          poId: p.$id,
+          poNumber: p.poNumber || `PO-${oid.slice(-6)}`,
+          orderId: oid,
+          status: p.status || 'Ordered',
+          trackingNumber: p.trackingNumber || '',
+          grandTotal: Number(p.grandTotal || 0),
+          purchaseDate: p.purchaseDate || p.$createdAt || null,
+        };
+      }
+    }
+
+    const activeTrackerDoc = findBestActiveSgwTracker(poDocs);
+    const activeTracker = activeTrackerDoc
+      ? {
+          id: activeTrackerDoc.$id,
+          poNumber: activeTrackerDoc.poNumber,
+          orderId: activeTrackerDoc.orderId || activeTrackerDoc.poNumber,
+          vendor: activeTrackerDoc.vendor || 'Auctions',
+        }
+      : null;
 
     const watchlist: Record<string, any> = {};
     const combinableItems: any[] = [];
     for (const [sgwId, doc] of bySgwItemId.entries()) {
       const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
       const rawSellerName =
-        doc.sellerName ||
         rawObj.sgwSeller ||
         rawObj.seller_info?.seller_name ||
         rawObj.sellerName ||
+        doc.sellerName ||
         '';
       const sellerId =
-        doc.sellerId ||
         rawObj.sgwSellerId ||
         rawObj.seller_info?.seller_id ||
+        doc.sellerId ||
         null;
       const cleanSeller = rawSellerName
         ? formatReadableSellerLabel({ sellerName: rawSellerName, sellerId, platform: 'shopgoodwill' })
         : '';
       const shippingWeight =
         Number(
-          doc.shippingWeight ||
-            rawObj.sgwShippingWeight ||
+          rawObj.sgwShippingWeight ||
             rawObj.seller_info?.shipping_weight ||
             rawObj.shipping_info?.weight ||
             1.0
         ) || 1.0;
       const canCombineShipping =
-        doc.canCombineShipping !== undefined
-          ? Boolean(doc.canCombineShipping)
+        rawObj.canCombineShipping !== undefined
+          ? Boolean(rawObj.canCombineShipping)
           : rawObj.seller_info?.can_combine_shipping !== undefined
           ? Boolean(rawObj.seller_info.can_combine_shipping)
           : true;
 
+      const linkedPo = poById.get(doc.purchaseId || doc.cartId || '');
+      const trackerLabel =
+        linkedPo && isDraftTrackerPurchase(linkedPo)
+          ? `${linkedPo.orderId || linkedPo.poNumber} (${linkedPo.vendor || 'Auctions'})`
+          : doc.status === 'tracked' && activeTracker
+          ? `${activeTracker.orderId} (${activeTracker.vendor})`
+          : null;
+
       const entry = {
         itemId: sgwId,
         docId: doc.$id,
-        title: doc.title || '',
+        title: doc.title || doc.identity || '',
         status: doc.status || 'tracked',
         maxBid: Number(doc.maxBid || doc.maxBuyPrice || 0),
         currentBid: Number(doc.currentBid || doc.cost || 0),
-        boutiquePrice: Number(doc.boutiquePrice || doc.resalePrice || 0),
-        auctionStatus: doc.auctionStatus || null,
+        boutiquePrice: extractBoutiquePriceFromDoc(doc, rawObj),
+        resalePrice: Number(doc.resalePrice || 0),
+        auctionStatus: rawObj.auctionStatus || (doc.status === 'acquired' ? 'won' : null),
         bidState: rawObj.sgwBidState || (doc.status === 'acquired' ? 'won' : null),
         myMaxBid: Number(rawObj.sgwMyMaxBid || doc.maxBid || 0),
         sellerId,
@@ -246,10 +405,11 @@ export const GET: APIRoute = async ({ request }) => {
         canCombineShipping,
         auctionEndsAt: doc.auctionEndsAt || rawObj.auction_meta?.end_time || null,
         orderId: doc.orderId || null,
+        purchaseId: doc.purchaseId || doc.cartId || null,
+        trackerLabel,
       };
       watchlist[sgwId] = entry;
 
-      // Active tracked items OR recent unshipped won ('acquired' without a shipped orderId) are eligible for SGW 7-day Combined Shipping
       const isTrackOrUnshippedWon =
         doc.status === 'tracked' ||
         (doc.status === 'acquired' && !doc.orderId);
@@ -265,6 +425,8 @@ export const GET: APIRoute = async ({ request }) => {
         count: Object.keys(watchlist).length,
         watchlist,
         combinableItems,
+        existingOrders,
+        activeTracker,
       }),
       { status: 200, headers: BML_CORS_HEADERS }
     );
@@ -285,15 +447,31 @@ export const POST: APIRoute = async ({ request }) => {
     const pageType = String(body?.pageType || '').trim();
     const dryRun = Boolean(body?.dryRun);
     const rows: any[] = Array.isArray(body?.rows) ? body.rows : [];
+    const selectedKeysRaw: string[] | null = Array.isArray(body?.selectedKeys)
+      ? body.selectedKeys.map((k: any) => String(k || '').trim()).filter(Boolean)
+      : null;
+    const selectedSet = selectedKeysRaw && selectedKeysRaw.length > 0 ? new Set(selectedKeysRaw) : null;
 
     const { databases, dbId, itemsCol, purchasesCol } = getAppwriteServer();
-    const { bySgwItemId, nextUpc } = await scanRecentInventoryAndMaxUpc(
-      databases,
-      dbId,
-      itemsCol,
-      auth.member.prefix
-    );
+    const [{ bySgwItemId, nextUpc }, poRes] = await Promise.all([
+      scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix),
+      databases.listDocuments(dbId, purchasesCol, [
+        NodeQuery.limit(100),
+        NodeQuery.orderDesc('$id'),
+      ]),
+    ]);
+    const recentPoDocs = (poRes.documents || []) as any[];
+    const poById = new Map<string, any>();
+    for (const p of recentPoDocs) poById.set(p.$id, p);
+
     const perms = buildDocPermissions(auth.member.teamId, auth.member.userId);
+    const resolvedPurchaseTenant = resolvePurchaseTenantId(
+      auth.member.teamId,
+      auth.member.userId,
+      recentPoDocs
+    );
+    const itemTenantId =
+      auth.member.teamId && auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null;
 
     // 1. IN-PROGRESS AUCTIONS
     if (pageType === 'inprogress-auctions') {
@@ -303,20 +481,22 @@ export const POST: APIRoute = async ({ request }) => {
       let winningCount = 0;
       let outbidCount = 0;
 
-      let trackerPo: any = null;
-      if (!dryRun && rows.length > 0) {
-        trackerPo = await ensureActiveSgwBuyTracker(
-          databases,
-          dbId,
-          purchasesCol,
-          auth.member.teamId,
-          auth.member.userId
-        );
-      }
+      const trackerPo = await ensureActiveSgwBuyTracker(
+        databases,
+        dbId,
+        purchasesCol,
+        auth.member.teamId,
+        auth.member.userId,
+        recentPoDocs
+      );
+      const trackerLabel = `${trackerPo.orderId || trackerPo.poNumber} (${trackerPo.vendor || 'Auctions'})`;
 
       for (const r of rows) {
         const itemId = String(r?.itemId || '').replace(/\D/g, '').trim();
         if (!itemId) continue;
+        const rowKey = itemId;
+        const isRowSelected = !selectedSet || selectedSet.has(rowKey);
+
         const title = String(r?.title || `ShopGoodwill #${itemId}`).trim();
         const currentPrice = Number(r?.currentPrice || 0);
         const myMaxBid = Number(r?.myMaxBid || 0);
@@ -337,74 +517,103 @@ export const POST: APIRoute = async ({ request }) => {
         const stateBadge = bidState === 'winning' ? '🟢 WINNING' : '🚨 OUTBID';
 
         if (matched) {
-          const existingTitle = String(matched.title || '').trim();
+          const existingTitle = String(matched.title || matched.identity || '').trim();
           const bestTitle =
             title && (existingTitle.endsWith('...') || title.length > existingTitle.length)
               ? title
               : existingTitle || title;
           previewActions.push({
+            rowKey,
             itemId,
             title: bestTitle,
             action: 'UPDATE_BID',
+            rowCategory: 'PROMOTE_TRACKED',
+            wasTracked: true,
+            trackerLabel,
+            defaultSelected: true,
             bidState,
             currentPrice,
             myMaxBid,
             rcMaxBid,
             detail: `${stateBadge} • $${currentPrice.toFixed(2)} (Max $${myMaxBid.toFixed(2)})`,
           });
-          if (!dryRun) {
+          if (!dryRun && isRowSelected) {
             const rawObj = parseRawAnalysisJson(matched.rawAnalysis);
+            rawObj.sgwItemId = itemId;
             rawObj.sgwBidState = bidState;
             rawObj.sgwMyMaxBid = myMaxBid;
+            if (r?.seller) rawObj.sgwSeller = String(r.seller).slice(0, 120);
             rawObj.sgwSyncedAt = new Date().toISOString();
             const updatePayload: Record<string, any> = {
-              title: bestTitle,
+              identity: bestTitle.slice(0, 255),
+              title: bestTitle.slice(0, 255),
               currentBid: currentPrice,
+              cost: currentPrice,
               rawAnalysis: serializeRawAnalysisJson(rawObj),
             };
+            if (myMaxBid > 0 && !matched.maxBid) {
+              updatePayload.maxBid = myMaxBid;
+              updatePayload.maxBuyPrice = myMaxBid;
+            }
             if (auctionEndsAt) updatePayload.auctionEndsAt = auctionEndsAt;
             if (!matched.storageLocation) updatePayload.storageLocation = 'HG';
+            if (!matched.purchaseId && trackerPo?.$id) {
+              updatePayload.purchaseId = trackerPo.$id;
+              updatePayload.cartId = trackerPo.$id;
+            }
             await databases.updateDocument(dbId, itemsCol, matched.$id, updatePayload);
             updatedCount++;
           }
         } else {
           previewActions.push({
+            rowKey,
             itemId,
             title,
             action: 'CREATE_TRACKED',
+            rowCategory: 'NEW_ORDER_ITEM',
+            wasTracked: false,
+            trackerLabel,
+            defaultSelected: true,
             bidState,
             currentPrice,
             myMaxBid,
             rcMaxBid: 0,
             detail: `${stateBadge} • $${currentPrice.toFixed(2)} (Max $${myMaxBid.toFixed(2)})`,
           });
-          if (!dryRun) {
+          if (!dryRun && isRowSelected) {
             const rawObj = {
               sgwItemId: itemId,
               sgwBidState: bidState,
               sgwMyMaxBid: myMaxBid,
-              sgwSeller: r?.seller || '',
+              sgwSeller: r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill',
+              canCombineShipping: true,
               sgwSyncedAt: new Date().toISOString(),
             };
+            const cleanTitle = (title || `ShopGoodwill #${itemId}`).slice(0, 255);
+            const createDoc: Record<string, any> = {
+              identity: cleanTitle,
+              title: cleanTitle,
+              status: 'tracked',
+              storageLocation: 'HG',
+              cost: currentPrice,
+              currentBid: currentPrice,
+              sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
+              purchaseId: trackerPo?.$id || null,
+              cartId: trackerPo?.$id || null,
+              tenantId: itemTenantId,
+              rawAnalysis: serializeRawAnalysisJson(rawObj),
+            };
+            if (myMaxBid > 0) {
+              createDoc.maxBid = myMaxBid;
+              createDoc.maxBuyPrice = myMaxBid;
+            }
+            if (auctionEndsAt) createDoc.auctionEndsAt = auctionEndsAt;
+
             const created = await databases.createDocument(
               dbId,
               itemsCol,
               NodeID.unique(),
-              {
-                title,
-                status: 'tracked',
-                storageLocation: 'HG',
-                cost: currentPrice,
-                currentBid: currentPrice,
-                maxBid: myMaxBid > 0 ? myMaxBid : undefined,
-                auctionEndsAt,
-                sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
-                sellerName: r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill',
-                purchaseId: trackerPo?.$id || null,
-                cartId: trackerPo?.$id || null,
-                tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
-                rawAnalysis: serializeRawAnalysisJson(rawObj),
-              },
+              createDoc,
               perms
             );
             bySgwItemId.set(itemId, created);
@@ -413,11 +622,23 @@ export const POST: APIRoute = async ({ request }) => {
         }
       }
 
+      if (!dryRun && trackerPo?.$id && (updatedCount > 0 || createdCount > 0)) {
+        await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, trackerPo.$id);
+      }
+
       return new Response(
         JSON.stringify({
           ok: true,
           pageType,
           dryRun,
+          activeTracker: trackerPo
+            ? {
+                id: trackerPo.$id,
+                poNumber: trackerPo.poNumber,
+                orderId: trackerPo.orderId || trackerPo.poNumber,
+                vendor: trackerPo.vendor || 'Auctions',
+              }
+            : null,
           summary: {
             totalRows: previewActions.length,
             winningCount,
@@ -438,10 +659,14 @@ export const POST: APIRoute = async ({ request }) => {
       let createdWonCount = 0;
       let cleanedLostCount = 0;
       let skippedCount = 0;
+      const touchedTrackerIds = new Set<string>();
 
       for (const r of rows) {
         const itemId = String(r?.itemId || '').replace(/\D/g, '').trim();
         if (!itemId) continue;
+        const rowKey = itemId;
+        const isRowSelected = !selectedSet || selectedSet.has(rowKey);
+
         const title = String(r?.title || `ShopGoodwill #${itemId}`).trim();
         const currentPrice = Number(r?.currentPrice || 0);
         const statusRaw = String(r?.status || '').toLowerCase();
@@ -449,39 +674,58 @@ export const POST: APIRoute = async ({ request }) => {
         const isLost = statusRaw.includes('lost');
 
         const matched = bySgwItemId.get(itemId);
+        const linkedPo = matched ? poById.get(matched.purchaseId || matched.cartId || '') : null;
+        const trackerLabel =
+          linkedPo && isDraftTrackerPurchase(linkedPo)
+            ? `${linkedPo.orderId || linkedPo.poNumber} (${linkedPo.vendor || 'Auctions'})`
+            : matched?.status === 'tracked'
+            ? 'Buy Tracker'
+            : null;
 
         if (isWon) {
           if (matched) {
             const existingStatus = String(matched.status || '').toLowerCase();
             if (existingStatus === 'tracked') {
               previewActions.push({
+                rowKey,
                 itemId,
                 title: matched.title || title,
                 action: 'PROMOTE_WON_TO_ACQUIRED',
+                rowCategory: 'PROMOTE_TRACKED',
+                wasTracked: true,
+                trackerLabel,
+                defaultSelected: true,
                 currentPrice,
-                detail: `Tracked ➔ Acquired (HG) @ $${currentPrice.toFixed(2)}`,
+                detail: `📌 Tracked ➔ Acquired (HG) @ $${currentPrice.toFixed(2)}`,
               });
-              if (!dryRun) {
+              if (!dryRun && isRowSelected) {
                 const rawObj = parseRawAnalysisJson(matched.rawAnalysis);
+                rawObj.sgwItemId = itemId;
                 rawObj.sgwBidState = 'won';
+                rawObj.auctionStatus = 'won';
                 rawObj.sgwWonBid = currentPrice;
                 const assignedUpc = matched.upc || nextUpc();
                 await databases.updateDocument(dbId, itemsCol, matched.$id, {
                   status: 'acquired',
-                  auctionStatus: 'won',
                   cost: currentPrice,
                   currentBid: currentPrice,
                   storageLocation: matched.storageLocation || 'HG',
                   upc: assignedUpc,
                   rawAnalysis: serializeRawAnalysisJson(rawObj),
                 });
+                if (matched.purchaseId) touchedTrackerIds.add(matched.purchaseId);
                 promotedWonCount++;
               }
             } else {
               previewActions.push({
+                rowKey,
                 itemId,
                 title: matched.title || title,
                 action: 'ALREADY_ACQUIRED',
+                rowCategory: 'EXISTING_SYNCED',
+                wasTracked: true,
+                trackerLabel,
+                defaultSelected: false,
                 currentPrice,
                 detail: `Already ${existingStatus} (${matched.upc || 'linked'})`,
               });
@@ -489,33 +733,40 @@ export const POST: APIRoute = async ({ request }) => {
             }
           } else {
             previewActions.push({
+              rowKey,
               itemId,
               title,
               action: 'CREATE_WON_ACQUIRED',
+              rowCategory: 'NEW_ORDER_ITEM',
+              wasTracked: false,
+              trackerLabel: null,
+              defaultSelected: true,
               currentPrice,
               detail: `New Won Item ➔ Acquired (HG) @ $${currentPrice.toFixed(2)}`,
             });
-            if (!dryRun) {
+            if (!dryRun && isRowSelected) {
               const assignedUpc = nextUpc();
+              const cleanTitle = (title || `ShopGoodwill #${itemId}`).slice(0, 255);
               const created = await databases.createDocument(
                 dbId,
                 itemsCol,
                 NodeID.unique(),
                 {
-                  title,
+                  identity: cleanTitle,
+                  title: cleanTitle,
                   status: 'acquired',
-                  auctionStatus: 'won',
                   storageLocation: 'HG',
                   upc: assignedUpc,
                   cost: currentPrice,
                   currentBid: currentPrice,
                   sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
-                  sellerName: r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill',
-                  tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
+                  tenantId: itemTenantId,
                   rawAnalysis: serializeRawAnalysisJson({
                     sgwItemId: itemId,
                     sgwBidState: 'won',
+                    auctionStatus: 'won',
                     sgwWonBid: currentPrice,
+                    sgwSeller: r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill',
                   }),
                 },
                 perms
@@ -527,27 +778,44 @@ export const POST: APIRoute = async ({ request }) => {
         } else if (isLost) {
           if (matched && String(matched.status || '').toLowerCase() === 'tracked') {
             previewActions.push({
+              rowKey,
               itemId,
               title: matched.title || title,
               action: 'DELETE_LOST_TRACKED',
+              rowCategory: 'PROMOTE_TRACKED',
+              wasTracked: true,
+              trackerLabel,
+              defaultSelected: true,
               currentPrice,
               detail: 'Auction lost ➔ Remove from Buy Tracker',
             });
-            if (!dryRun) {
+            if (!dryRun && isRowSelected) {
+              if (matched.purchaseId) touchedTrackerIds.add(matched.purchaseId);
               await databases.deleteDocument(dbId, itemsCol, matched.$id);
               bySgwItemId.delete(itemId);
               cleanedLostCount++;
             }
           } else {
             previewActions.push({
+              rowKey,
               itemId,
               title,
               action: 'SKIP_LOST_NOT_IN_TRACKER',
+              rowCategory: 'EXISTING_SYNCED',
+              wasTracked: false,
+              trackerLabel: null,
+              defaultSelected: false,
               currentPrice,
               detail: 'Auction lost (not in active Buy Tracker)',
             });
             skippedCount++;
           }
+        }
+      }
+
+      if (!dryRun && touchedTrackerIds.size > 0) {
+        for (const tid of touchedTrackerIds) {
+          await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, tid);
         }
       }
 
@@ -575,7 +843,7 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // 3. SHIPPED ORDERS (Group by Order #, Upsert PO with Tracking, Allocate True Landed Cost)
+    // 3. SHIPPED ORDERS (Ricochet-Style Preview: Promote Tracked, Create New Order Items, Update Tracking, Existing Orders)
     if (pageType === 'shipped-orders') {
       const ordersMap = new Map<string, any[]>();
       for (const r of rows) {
@@ -587,15 +855,12 @@ export const POST: APIRoute = async ({ request }) => {
         ordersMap.get(key)!.push({ ...r, orderId: key, itemId: itemId || key });
       }
 
-      // Fetch recent POs to match by orderId
-      const poRes = await databases.listDocuments(dbId, purchasesCol, [
-        NodeQuery.limit(100),
-        NodeQuery.orderDesc('$id'),
-      ]);
       const poByOrderId = new Map<string, any>();
-      for (const p of (poRes.documents || []) as any[]) {
+      for (const p of recentPoDocs) {
         const oid = String(p?.orderId || '').trim();
-        if (oid && !poByOrderId.has(oid)) poByOrderId.set(oid, p);
+        if (oid && !isDraftTrackerPurchase(p) && !poByOrderId.has(oid)) {
+          poByOrderId.set(oid, p);
+        }
       }
 
       const previewActions: any[] = [];
@@ -603,6 +868,9 @@ export const POST: APIRoute = async ({ request }) => {
       let updatedPoCount = 0;
       let updatedItemCount = 0;
       let createdItemCount = 0;
+      let promotedTrackedCount = 0;
+      let existingSyncedCount = 0;
+      const touchedTrackerIds = new Set<string>();
 
       for (const [orderId, groupRows] of ordersMap.entries()) {
         const subtotal = groupRows.reduce((s, r) => s + Number(r.price || 0) * Math.max(1, Number(r.qty || 1)), 0);
@@ -618,8 +886,26 @@ export const POST: APIRoute = async ({ request }) => {
         const hasValidTracking = parsedTrk.length > 0;
 
         let poDoc = poByOrderId.get(orderId) || null;
+        const poNeedsTrackingUpdate = Boolean(
+          poDoc &&
+            ((trackingRaw && poDoc.trackingNumber !== trackingRaw) ||
+              (hasValidTracking && (poDoc.status === 'Pending' || poDoc.status === 'Draft' || poDoc.status === 'Ordered')) ||
+              (!poDoc.grandTotal && grandTotal > 0))
+        );
+
+        const anyGroupRowSelected = groupRows.some((r) => {
+          const itemId = String(r.itemId || '').trim();
+          const rowKey = `${orderId}:${itemId}`;
+          return !selectedSet || selectedSet.has(rowKey) || selectedSet.has(itemId);
+        });
+
         if (!poDoc) {
-          if (!dryRun) {
+          if (!dryRun && anyGroupRowSelected) {
+            let safeDate = new Date().toISOString();
+            if (groupRows[0]?.date) {
+              const d = new Date(groupRows[0].date);
+              if (!isNaN(d.getTime())) safeDate = d.toISOString();
+            }
             poDoc = await databases.createDocument(
               dbId,
               purchasesCol,
@@ -628,9 +914,7 @@ export const POST: APIRoute = async ({ request }) => {
                 poNumber: `PO-${orderId.slice(-6)}`,
                 orderId,
                 vendor: 'ShopGoodwill',
-                purchaseDate: groupRows[0]?.date
-                  ? new Date(groupRows[0].date).toISOString()
-                  : new Date().toISOString(),
+                purchaseDate: safeDate,
                 trackingNumber: trackingRaw,
                 subtotal: Number(subtotal.toFixed(2)),
                 shippingTotal: Number(shippingTotal.toFixed(2)),
@@ -639,34 +923,35 @@ export const POST: APIRoute = async ({ request }) => {
                 feeTotal: 0,
                 grandTotal,
                 status: hasValidTracking ? 'Shipped' : 'Ordered',
-                tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
+                tenantId: resolvedPurchaseTenant,
               },
               perms
             );
             poByOrderId.set(orderId, poDoc);
+            poById.set(poDoc.$id, poDoc);
+            createdPoCount++;
+          } else if (dryRun) {
+            createdPoCount++;
           }
-          createdPoCount++;
-        } else {
-          const needsUpdate =
-            (trackingRaw && poDoc.trackingNumber !== trackingRaw) ||
-            (hasValidTracking && (poDoc.status === 'Pending' || poDoc.status === 'Draft')) ||
-            (!poDoc.grandTotal && grandTotal > 0);
-          if (needsUpdate) {
-            if (!dryRun) {
-              const poUpd: Record<string, any> = {};
-              if (trackingRaw) poUpd.trackingNumber = trackingRaw;
-              if (hasValidTracking && (poDoc.status === 'Pending' || poDoc.status === 'Draft')) {
-                poUpd.status = 'Shipped';
-              }
-              if (!poDoc.grandTotal && grandTotal > 0) {
-                poUpd.subtotal = Number(subtotal.toFixed(2));
-                poUpd.shippingTotal = Number(shippingTotal.toFixed(2));
-                poUpd.handlingTotal = Number(handlingTotal.toFixed(2));
-                poUpd.taxTotal = Number(taxTotal.toFixed(2));
-                poUpd.grandTotal = grandTotal;
-              }
-              poDoc = await databases.updateDocument(dbId, purchasesCol, poDoc.$id, poUpd);
+        } else if (poNeedsTrackingUpdate) {
+          if (!dryRun && anyGroupRowSelected) {
+            const poUpd: Record<string, any> = {};
+            if (trackingRaw) poUpd.trackingNumber = trackingRaw;
+            if (hasValidTracking && (poDoc.status === 'Pending' || poDoc.status === 'Draft' || poDoc.status === 'Ordered')) {
+              poUpd.status = 'Shipped';
             }
+            if (!poDoc.grandTotal && grandTotal > 0) {
+              poUpd.subtotal = Number(subtotal.toFixed(2));
+              poUpd.shippingTotal = Number(shippingTotal.toFixed(2));
+              poUpd.handlingTotal = Number(handlingTotal.toFixed(2));
+              poUpd.taxTotal = Number(taxTotal.toFixed(2));
+              poUpd.grandTotal = grandTotal;
+            }
+            poDoc = await databases.updateDocument(dbId, purchasesCol, poDoc.$id, poUpd);
+            poByOrderId.set(orderId, poDoc);
+            poById.set(poDoc.$id, poDoc);
+            updatedPoCount++;
+          } else if (dryRun) {
             updatedPoCount++;
           }
         }
@@ -675,33 +960,108 @@ export const POST: APIRoute = async ({ request }) => {
 
         for (const r of groupRows) {
           const itemId = String(r.itemId || '').trim();
+          const rowKey = `${orderId}:${itemId}`;
+          const isRowSelected = !selectedSet || selectedSet.has(rowKey) || selectedSet.has(itemId);
+
           const title = String(r.title || `ShopGoodwill #${itemId}`).trim();
           const basePrice = Number(r.price || 0);
           const landedCost = Number((basePrice + extraFeesPerRow).toFixed(2));
           const matched = bySgwItemId.get(itemId);
-          const carrierLabel = parsedTrk[0] ? `${parsedTrk[0].carrier} •••${parsedTrk[0].shortNumber}` : 'No tracking yet';
+          const carrierLabel = parsedTrk[0]
+            ? `${parsedTrk[0].carrier} •••${parsedTrk[0].shortNumber}`
+            : 'No tracking yet';
+
+          const oldLinkedPo = matched ? poById.get(matched.purchaseId || matched.cartId || '') : null;
+          const isFromDraftTracker = Boolean(oldLinkedPo && isDraftTrackerPurchase(oldLinkedPo));
+          const wasTracked = Boolean(
+            matched &&
+              (matched.status === 'tracked' ||
+                isFromDraftTracker ||
+                (!matched.orderId && matched.status === 'acquired'))
+          );
+          const trackerLabel = isFromDraftTracker
+            ? `${oldLinkedPo.orderId || oldLinkedPo.poNumber} (${oldLinkedPo.vendor || 'Auctions'})`
+            : wasTracked
+            ? 'Buy Tracker'
+            : null;
+
+          const existingPoNumber = poDoc?.poNumber || (poByOrderId.get(orderId)?.poNumber ?? null);
+          const existingPoId = poDoc?.$id || (poByOrderId.get(orderId)?.$id ?? null);
 
           if (matched) {
-            const isTrackedOrUnlinked =
-              matched.status === 'tracked' || (matched.status === 'acquired' && !matched.purchaseId);
+            const alreadyLinkedToThisOrder =
+              matched.status !== 'tracked' &&
+              !isFromDraftTracker &&
+              (String(matched.orderId || '') === orderId ||
+                (existingPoId && matched.purchaseId === existingPoId));
+
+            let rowCategory: 'PROMOTE_TRACKED' | 'UPDATE_TRACKING' | 'EXISTING_SYNCED' = 'EXISTING_SYNCED';
+            let action = 'VERIFY_SHIPPED_ITEM';
+            if (wasTracked) {
+              rowCategory = 'PROMOTE_TRACKED';
+              action = 'LINK_SHIPPED_ITEM';
+              promotedTrackedCount++;
+            } else if (poNeedsTrackingUpdate || !alreadyLinkedToThisOrder) {
+              rowCategory = 'UPDATE_TRACKING';
+              action = 'LINK_SHIPPED_ITEM';
+            } else {
+              rowCategory = 'EXISTING_SYNCED';
+              action = 'VERIFY_SHIPPED_ITEM';
+              existingSyncedCount++;
+            }
+
+            const defaultSelected = rowCategory !== 'EXISTING_SYNCED';
+
             previewActions.push({
+              rowKey,
               orderId,
               itemId,
-              title: matched.title || title,
-              action: isTrackedOrUnlinked ? 'LINK_SHIPPED_ITEM' : 'VERIFY_SHIPPED_ITEM',
+              title: matched.title || matched.identity || title,
+              action,
+              rowCategory,
+              wasTracked,
+              trackerLabel,
+              existingPoId,
+              existingPoNumber,
+              existingPoStatus: poDoc?.status || (hasValidTracking ? 'Shipped' : 'Ordered'),
+              defaultSelected,
+              basePrice,
               landedCost,
               trackingLabel: carrierLabel,
-              detail: `Order #${orderId} • Landed $${landedCost.toFixed(2)} (${carrierLabel})`,
+              trackingNumber: trackingRaw,
+              upc: matched.upc || null,
+              detail: wasTracked
+                ? `📌 Tracked (${trackerLabel || 'Scout'}) ➔ Order #${orderId} ($${landedCost.toFixed(2)} • ${carrierLabel})`
+                : rowCategory === 'EXISTING_SYNCED'
+                ? `✅ Synced in ${existingPoNumber || `PO-${orderId.slice(-6)}`} • $${landedCost.toFixed(2)} (${carrierLabel})`
+                : `🚚 Update Order #${orderId} • Landed $${landedCost.toFixed(2)} (${carrierLabel})`,
             });
-            if (!dryRun) {
+
+            if (!dryRun && isRowSelected && (rowCategory !== 'EXISTING_SYNCED' || selectedSet?.has(rowKey))) {
+              const rawObj = parseRawAnalysisJson(matched.rawAnalysis);
+              rawObj.sgwItemId = itemId;
+              rawObj.sgwBidState = 'won';
+              rawObj.auctionStatus = 'won';
+              rawObj.sgwOrderId = orderId;
+              rawObj.sgwSyncedAt = new Date().toISOString();
+
               const upd: Record<string, any> = {
                 orderId,
                 cost: landedCost,
+                rawAnalysis: serializeRawAnalysisJson(rawObj),
               };
-              if (poDoc?.$id) upd.purchaseId = poDoc.$id;
+              if (poDoc?.$id) {
+                if (matched.purchaseId && matched.purchaseId !== poDoc.$id && isFromDraftTracker) {
+                  touchedTrackerIds.add(matched.purchaseId);
+                }
+                if (matched.cartId && matched.cartId !== poDoc.$id) {
+                  touchedTrackerIds.add(matched.cartId);
+                }
+                upd.purchaseId = poDoc.$id;
+                upd.cartId = null;
+              }
               if (matched.status === 'tracked') {
                 upd.status = 'acquired';
-                upd.auctionStatus = 'won';
               }
               if (!matched.storageLocation) upd.storageLocation = 'HG';
               if (!matched.upc) upd.upc = nextUpc();
@@ -710,31 +1070,51 @@ export const POST: APIRoute = async ({ request }) => {
             }
           } else {
             previewActions.push({
+              rowKey,
               orderId,
               itemId,
               title,
               action: 'CREATE_SHIPPED_ITEM',
+              rowCategory: 'NEW_ORDER_ITEM',
+              wasTracked: false,
+              trackerLabel: null,
+              existingPoId,
+              existingPoNumber,
+              existingPoStatus: poDoc?.status || (hasValidTracking ? 'Shipped' : 'Ordered'),
+              defaultSelected: true,
+              basePrice,
               landedCost,
               trackingLabel: carrierLabel,
-              detail: `New Order #${orderId} ➔ Acquired (HG) @ $${landedCost.toFixed(2)} (${carrierLabel})`,
+              trackingNumber: trackingRaw,
+              upc: null,
+              detail: `🆕 New Order #${orderId} ➔ Acquired (HG) @ $${landedCost.toFixed(2)} (${carrierLabel})`,
             });
-            if (!dryRun) {
+            if (!dryRun && isRowSelected) {
+              const cleanTitle = (title || `ShopGoodwill #${itemId}`).slice(0, 255);
               const created = await databases.createDocument(
                 dbId,
                 itemsCol,
                 NodeID.unique(),
                 {
-                  title,
+                  identity: cleanTitle,
+                  title: cleanTitle,
                   status: 'acquired',
-                  auctionStatus: 'won',
                   storageLocation: 'HG',
                   upc: nextUpc(),
                   cost: landedCost,
+                  currentBid: basePrice,
                   orderId,
                   purchaseId: poDoc?.$id || null,
                   sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
-                  sellerName: 'ShopGoodwill',
-                  tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
+                  tenantId: itemTenantId,
+                  rawAnalysis: serializeRawAnalysisJson({
+                    sgwItemId: itemId,
+                    sgwBidState: 'won',
+                    auctionStatus: 'won',
+                    sgwOrderId: orderId,
+                    sgwSeller: 'ShopGoodwill',
+                    sgwSyncedAt: new Date().toISOString(),
+                  }),
                 },
                 perms
               );
@@ -742,6 +1122,12 @@ export const POST: APIRoute = async ({ request }) => {
               createdItemCount++;
             }
           }
+        }
+      }
+
+      if (!dryRun && touchedTrackerIds.size > 0) {
+        for (const tid of touchedTrackerIds) {
+          await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, tid);
         }
       }
 
@@ -754,8 +1140,20 @@ export const POST: APIRoute = async ({ request }) => {
             totalRows: previewActions.length,
             createdPoCount,
             updatedPoCount,
+            promotedTrackedCount: dryRun
+              ? previewActions.filter((a) => a.rowCategory === 'PROMOTE_TRACKED').length
+              : promotedTrackedCount,
+            newOrderItemCount: dryRun
+              ? previewActions.filter((a) => a.rowCategory === 'NEW_ORDER_ITEM').length
+              : createdItemCount,
+            updateTrackingCount: dryRun
+              ? previewActions.filter((a) => a.rowCategory === 'UPDATE_TRACKING').length
+              : updatedPoCount,
+            existingSyncedCount: dryRun
+              ? previewActions.filter((a) => a.rowCategory === 'EXISTING_SYNCED').length
+              : existingSyncedCount,
             updatedItemCount: dryRun
-              ? previewActions.filter((a) => a.action === 'LINK_SHIPPED_ITEM' || a.action === 'VERIFY_SHIPPED_ITEM').length
+              ? previewActions.filter((a) => a.action === 'LINK_SHIPPED_ITEM').length
               : updatedItemCount,
             createdItemCount: dryRun
               ? previewActions.filter((a) => a.action === 'CREATE_SHIPPED_ITEM').length
@@ -767,7 +1165,7 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // 4. SINGLE ITEM PAGE (/item/:id) -> Track in ShopGoodwill Buy Tracker (with or without AI Speed Scout report)
+    // 4. SINGLE ITEM PAGE (/item/:id) -> Track in Active Buy Tracker (e.g. SC-579892 | Auctions)
     if (pageType === 'item') {
       const r = rows[0] || body?.item || {};
       const itemId = String(r?.itemId || '').replace(/\D/g, '').trim();
@@ -786,45 +1184,79 @@ export const POST: APIRoute = async ({ request }) => {
       const sellerId = r?.sellerId ? String(r.sellerId) : undefined;
       const shippingWeight = Number(r?.shippingWeight || 0) || undefined;
       const canCombineShipping = r?.canCombineShipping !== undefined ? Boolean(r.canCombineShipping) : true;
+      const primaryImageUrl = r?.primaryImageUrl ? String(r.primaryImageUrl).trim() : undefined;
       const auctionEndsAtRaw = String(r?.auctionEndsAt || r?.endingDate || '').trim();
       const auctionEndsAt = auctionEndsAtRaw
         ? (auctionEndsAtRaw.includes('T') ? auctionEndsAtRaw : parsePacificDateToIso(auctionEndsAtRaw)) || undefined
         : undefined;
-      const conditionNotes = r?.conditionNotes ? String(r.conditionNotes).slice(0, 2000) : undefined;
+      const conditionNotesInput = r?.conditionNotes ? String(r.conditionNotes).slice(0, 1800) : undefined;
       const aiReport = r?.aiReport && typeof r.aiReport === 'object' ? r.aiReport : null;
+
+      const trackerPo = await ensureActiveSgwBuyTracker(
+        databases,
+        dbId,
+        purchasesCol,
+        auth.member.teamId,
+        auth.member.userId,
+        recentPoDocs
+      );
+      const trackerMeta = trackerPo
+        ? {
+            id: trackerPo.$id,
+            poNumber: trackerPo.poNumber,
+            orderId: trackerPo.orderId || trackerPo.poNumber,
+            vendor: trackerPo.vendor || 'Auctions',
+          }
+        : null;
 
       const matched = bySgwItemId.get(itemId);
 
       if (matched) {
         if (!dryRun) {
+          const existingRaw = parseRawAnalysisJson(matched.rawAnalysis);
           const rawObj = {
-            ...parseRawAnalysisJson(matched.rawAnalysis),
+            ...existingRaw,
             ...(aiReport || {}),
             sgwItemId: itemId,
             sgwSeller: sellerName,
-            sgwSellerId: sellerId || null,
-            sgwShippingWeight: shippingWeight || 1.0,
-            sgwMyMaxBid: maxBid > 0 ? maxBid : Number(matched.maxBid || 0),
+            sgwSellerId: sellerId || existingRaw.sgwSellerId || null,
+            sgwShippingWeight: shippingWeight || existingRaw.sgwShippingWeight || 1.0,
+            canCombineShipping,
+            boutiquePrice: boutiquePrice > 0 ? boutiquePrice : existingRaw.boutiquePrice || 0,
+            fetched_image: primaryImageUrl || existingRaw.fetched_image || null,
+            sgwMyMaxBid: maxBid > 0 ? maxBid : Number(matched.maxBid || existingRaw.sgwMyMaxBid || 0),
             sgwSyncedAt: new Date().toISOString(),
           };
+          const cleanTitle = (title || matched.title || matched.identity || `ShopGoodwill #${itemId}`).slice(0, 255);
           const updateDoc: Record<string, any> = {
-            title: title || matched.title,
+            identity: cleanTitle,
+            title: cleanTitle,
             currentBid: currentPrice > 0 ? currentPrice : matched.currentBid,
-            sellerName,
-            canCombineShipping,
+            cost: currentPrice > 0 ? currentPrice : matched.cost,
             rawAnalysis: serializeRawAnalysisJson(rawObj),
           };
+          if (!matched.purchaseId && trackerPo?.$id) {
+            updateDoc.purchaseId = trackerPo.$id;
+            updateDoc.cartId = trackerPo.$id;
+          }
           if (maxBid > 0) {
             updateDoc.maxBid = maxBid;
             updateDoc.maxBuyPrice = maxBid;
           }
-          if (boutiquePrice > 0) updateDoc.boutiquePrice = boutiquePrice;
           if (resalePrice > 0) updateDoc.resalePrice = resalePrice;
           if (auctionEndsAt) updateDoc.auctionEndsAt = auctionEndsAt;
-          if (conditionNotes) updateDoc.conditionNotes = conditionNotes;
+          const mergedNotes = buildConditionNotesWithMeta(
+            conditionNotesInput,
+            matched.conditionNotes,
+            boutiquePrice,
+            primaryImageUrl
+          );
+          if (mergedNotes) updateDoc.conditionNotes = mergedNotes;
           if (!matched.storageLocation) updateDoc.storageLocation = 'HG';
 
           await databases.updateDocument(dbId, itemsCol, matched.$id, updateDoc);
+          await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, updateDoc.purchaseId || matched.purchaseId || trackerPo?.$id);
+
           return new Response(
             JSON.stringify({
               ok: true,
@@ -833,8 +1265,9 @@ export const POST: APIRoute = async ({ request }) => {
               action: 'UPDATED_TRACKED',
               docId: matched.$id,
               itemId,
-              title,
+              title: cleanTitle,
               maxBid,
+              tracker: trackerMeta,
             }),
             { status: 200, headers: BML_CORS_HEADERS }
           );
@@ -849,50 +1282,52 @@ export const POST: APIRoute = async ({ request }) => {
             itemId,
             title: matched.title || title,
             maxBid: maxBid || matched.maxBid || 0,
+            tracker: trackerMeta,
           }),
           { status: 200, headers: BML_CORS_HEADERS }
         );
       }
 
       if (!dryRun) {
-        const trackerPo = await ensureActiveSgwBuyTracker(
-          databases,
-          dbId,
-          purchasesCol,
-          auth.member.teamId,
-          auth.member.userId
-        );
         const rawObj = {
           ...(aiReport || {}),
           sgwItemId: itemId,
           sgwSeller: sellerName,
           sgwSellerId: sellerId || null,
           sgwShippingWeight: shippingWeight || 1.0,
+          canCombineShipping,
+          boutiquePrice: boutiquePrice > 0 ? boutiquePrice : 0,
+          fetched_image: primaryImageUrl || null,
           sgwMyMaxBid: maxBid > 0 ? maxBid : 0,
           sgwSyncedAt: new Date().toISOString(),
         };
+        const cleanTitle = (title || `ShopGoodwill #${itemId}`).slice(0, 255);
         const createPayload: Record<string, any> = {
-          title,
+          identity: cleanTitle,
+          title: cleanTitle,
           status: 'tracked',
           storageLocation: 'HG',
           cost: currentPrice,
           currentBid: currentPrice,
           sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
-          sellerName,
-          canCombineShipping,
           purchaseId: trackerPo?.$id || null,
           cartId: trackerPo?.$id || null,
-          tenantId: auth.member.teamId !== 'huck_collective' ? auth.member.teamId : null,
+          tenantId: itemTenantId,
           rawAnalysis: serializeRawAnalysisJson(rawObj),
         };
         if (maxBid > 0) {
           createPayload.maxBid = maxBid;
           createPayload.maxBuyPrice = maxBid;
         }
-        if (boutiquePrice > 0) createPayload.boutiquePrice = boutiquePrice;
         if (resalePrice > 0) createPayload.resalePrice = resalePrice;
         if (auctionEndsAt) createPayload.auctionEndsAt = auctionEndsAt;
-        if (conditionNotes) createPayload.conditionNotes = conditionNotes;
+        const mergedNotes = buildConditionNotesWithMeta(
+          conditionNotesInput,
+          undefined,
+          boutiquePrice,
+          primaryImageUrl
+        );
+        if (mergedNotes) createPayload.conditionNotes = mergedNotes;
 
         const created = await databases.createDocument(
           dbId,
@@ -901,6 +1336,8 @@ export const POST: APIRoute = async ({ request }) => {
           createPayload,
           perms
         );
+        await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, trackerPo?.$id);
+
         return new Response(
           JSON.stringify({
             ok: true,
@@ -909,8 +1346,9 @@ export const POST: APIRoute = async ({ request }) => {
             action: 'CREATED_TRACKED',
             docId: created.$id,
             itemId,
-            title,
+            title: cleanTitle,
             maxBid,
+            tracker: trackerMeta,
           }),
           { status: 200, headers: BML_CORS_HEADERS }
         );
@@ -926,6 +1364,7 @@ export const POST: APIRoute = async ({ request }) => {
           title,
           currentPrice,
           maxBid,
+          tracker: trackerMeta,
         }),
         { status: 200, headers: BML_CORS_HEADERS }
       );

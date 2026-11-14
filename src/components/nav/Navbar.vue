@@ -293,27 +293,21 @@
 
     <!-- Right Cluster: Quick Scout + Workspace Switcher + User Avatar + Mobile Trigger -->
     <div class="navbar-end flex-1 lg:flex-initial lg:w-1/4 flex items-center justify-end gap-1.5 sm:gap-2">
-      <!-- Single Quick Scout Pill -->
-      <div class="indicator flex items-center">
-        <span
-          v-if="capabilities.canUseBuyTracker && isAuthenticated && displayTrackedCount > 0"
-          class="indicator-item badge badge-primary badge-xs sm:badge-sm text-primary-content font-black z-10 whitespace-nowrap shrink-0"
-        >
-          {{ displayTrackedCount }}
-        </span>
+      <!-- Quick Scout + Buy Trackers Pills -->
+      <div class="flex items-center gap-1">
         <a
           href="/scout?quick=true"
           @click="handleScoutClick"
           class="btn btn-sm rounded-xl gap-1.5 font-bold px-2.5 sm:px-3 transition-all"
           :class="
-            isRouteActive('/scout')
+            currentPath === '/scout'
               ? 'btn-primary text-primary-content shadow-sm'
               : 'btn-ghost border border-base-300 bg-base-200/60 hover:bg-base-200'
           "
           title="Quick Scout & Camera OCR"
           aria-label="Quick Scout"
         >
-          <Icon icon="solar:scanner-bold" class="w-4 h-4 shrink-0" :class="isRouteActive('/scout') ? '' : 'text-primary'" />
+          <Icon icon="solar:scanner-bold" class="w-4 h-4 shrink-0" :class="currentPath === '/scout' ? '' : 'text-primary'" />
           <span class="hidden sm:inline text-xs">Quick Scout</span>
           <span
             v-if="!showMemberNav"
@@ -322,6 +316,29 @@
             Preview
           </span>
         </a>
+
+        <div v-if="capabilities.canUseBuyTracker && showMemberNav" class="indicator flex items-center">
+          <span
+            v-if="capabilities.canUseBuyTracker && isAuthenticated && displayTrackedCount > 0"
+            class="indicator-item badge badge-secondary badge-xs sm:badge-sm text-secondary-content font-black z-10 whitespace-nowrap shrink-0"
+          >
+            {{ displayTrackedCount }}
+          </span>
+          <a
+            href="/scout/trackers"
+            class="btn btn-sm rounded-xl gap-1 font-bold px-2 sm:px-2.5 transition-all"
+            :class="
+              currentPath.startsWith('/scout/tracker')
+                ? 'btn-secondary text-secondary-content shadow-sm'
+                : 'btn-ghost border border-base-300 bg-base-200/60 hover:bg-base-200'
+            "
+            title="Active Scout Buy Trackers (/scout/trackers)"
+            aria-label="Buy Trackers"
+          >
+            <span>📌</span>
+            <span class="hidden xl:inline text-xs">Trackers</span>
+          </a>
+        </div>
       </div>
 
       <!-- Desktop Auth / Workspace Controls -->
@@ -909,6 +926,15 @@ const mobileCoreLinks = computed(() =>
       icon: 'solar:cart-large-2-bold-duotone',
       active: isRouteActive('/purchases'),
       show: capabilities.value.canViewPurchases,
+    },
+    {
+      label: 'Scout Buy Trackers',
+      url: '/scout/trackers',
+      icon: 'solar:scanner-bold-duotone',
+      active: currentPath.value.startsWith('/scout/tracker'),
+      badge: displayTrackedCount.value > 0 ? `${displayTrackedCount.value} items` : undefined,
+      badgeClass: 'badge-secondary text-secondary-content',
+      show: capabilities.value.canUseBuyTracker,
     },
     {
       label: 'Master Inventory',
