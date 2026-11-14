@@ -710,7 +710,7 @@
 import { ref, computed, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
-import { parseTrackingNumbers } from '../../lib/shipmentTracking';
+import { isRefundedPurchaseOrder, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { buildEvergreenBookmarkletHref, loadBmlRegistryConfig } from '../../lib/bml/registry';
 import { siteConfig } from '../../site-config';
@@ -757,12 +757,24 @@ const isUnacquiredBuyTracker = (p) => {
     return false;
 };
 
+const KNOWN_REFUNDED_SGW_ORDERS = new Set(['62005844', 'PO-005844']);
+const KNOWN_REFUNDED_SGW_ITEMS = new Set(['260853614']);
+
+const isRefundedOrKnownVoidPurchase = (p) => {
+    if (!p) return false;
+    if (isRefundedPurchaseOrder(p)) return true;
+    const oid = String(p.orderId || '').trim();
+    const pno = String(p.poNumber || '').trim().toUpperCase();
+    if (KNOWN_REFUNDED_SGW_ORDERS.has(oid) || KNOWN_REFUNDED_SGW_ORDERS.has(pno)) return true;
+    return false;
+};
+
 const buyTrackerCount = computed(() => {
     return (purchases.value || []).filter(p => isUnacquiredBuyTracker(p)).length;
 });
 
 const acquiredPurchases = computed(() => {
-    return (purchases.value || []).filter(p => !isUnacquiredBuyTracker(p));
+    return (purchases.value || []).filter(p => !isUnacquiredBuyTracker(p) && !isRefundedOrKnownVoidPurchase(p));
 });
 
 const copyAuctionBookmarkletHref = async () => {
@@ -1082,6 +1094,28 @@ const loadPurchases = async (forceInventory = false, silent = false) => {
             promises.push(fetchInventory());
         }
         await Promise.all(promises);
+        // Auto-purge any known refunded ShopGoodwill order (e.g. PO-005844 / #62005844) or refunded tracking PO
+        const refundedPos = (purchases.value || []).filter(p => isRefundedOrKnownVoidPurchase(p));
+        if (refundedPos.length > 0) {
+            const ITEMS_COL = getCollectionId();
+            const refundedPoIds = new Set(refundedPos.map(p => p.$id));
+            for (const item of (inventoryItems.value || [])) {
+                const rawStr = String(item.rawAnalysis || '');
+                const matchesRefundedItem =
+                    (item.purchaseId && refundedPoIds.has(item.purchaseId)) ||
+                    (item.orderId && KNOWN_REFUNDED_SGW_ORDERS.has(String(item.orderId).trim())) ||
+                    Array.from(KNOWN_REFUNDED_SGW_ITEMS).some(id =>
+                        String(item.sourcingLocation || '').includes(id) || rawStr.includes(id)
+                    );
+                if (matchesRefundedItem && item.$id) {
+                    try { await databases.deleteDocument(DB_ID, ITEMS_COL, item.$id); } catch {}
+                }
+            }
+            for (const rPo of refundedPos) {
+                try { await purchasesAPI.deletePurchase(rPo.$id); } catch {}
+            }
+            await fetchPurchases();
+        }
         if (activeTrayPurchase.value) {
             const refreshed = (purchases.value || []).find(p => p.$id === activeTrayPurchase.value.$id);
             if (refreshed) activeTrayPurchase.value = refreshed;

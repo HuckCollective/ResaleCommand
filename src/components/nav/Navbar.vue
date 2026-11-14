@@ -1,8 +1,8 @@
 <template>
-  <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-8 border-b border-base-200/60 overflow-visible">
-    <!-- Brand / Left -->
-    <div class="navbar-start w-auto lg:w-1/4 flex items-center gap-1.5">
-      <a :href="showMemberNav ? '/dashboard' : '/'" class="btn btn-ghost px-2 sm:px-3 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5">
+  <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-6 border-b border-base-200/60 flex items-center justify-between gap-2 overflow-visible">
+    <!-- Brand / Left (shrink-0, never trapped in a 25% box) -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      <a :href="showMemberNav ? '/dashboard' : '/'" class="btn btn-ghost px-2 sm:px-2.5 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5 whitespace-nowrap">
         <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 shrink-0" />
         <span class="truncate">{{ siteConfig.shortTitle }}</span>
         <span class="badge badge-primary badge-outline badge-xs sm:badge-sm font-mono font-black tracking-normal shrink-0">{{ siteConfig.badgeText }}</span>
@@ -16,23 +16,23 @@
     </div>
 
     <!-- Desktop Center (guests): public pages only -->
-    <div v-if="!showMemberNav && !loading" class="navbar-center hidden lg:flex items-center gap-1">
-      <a href="/coop" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold">
+    <div v-if="!showMemberNav && !loading" class="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0">
+      <a href="/coop" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold whitespace-nowrap">
         <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
         <span>Collective Charter</span>
       </a>
-      <a href="/demo" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold">
+      <a href="/demo" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold whitespace-nowrap">
         <Icon icon="solar:widget-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
         <span>Example Dashboard</span>
       </a>
     </div>
 
-    <!-- Desktop Center: 5-Pillar Lifecycle Navigation (Zero nested .menu-horizontal scrollbars) -->
-    <div v-if="showMemberNav" class="navbar-center hidden lg:flex items-center gap-1 overflow-visible">
+    <!-- Desktop Center: 5-Pillar Lifecycle Navigation (Zero overlap, natural flex-1) -->
+    <div v-if="showMemberNav" class="hidden lg:flex items-center justify-center gap-0.5 xl:gap-1 flex-1 min-w-0 overflow-visible">
       <a
         href="/dashboard"
         :aria-current="isRouteActive('/dashboard') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
         :class="isRouteActive('/dashboard') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
       >
         <Icon icon="solar:widget-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -43,7 +43,7 @@
         v-if="capabilities.canViewPurchases"
         href="/purchases"
         :aria-current="isRouteActive('/purchases') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
         :class="isRouteActive('/purchases') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
       >
         <Icon icon="solar:cart-large-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -53,7 +53,7 @@
       <a
         href="/inventory"
         :aria-current="isRouteActive('/inventory') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
         :class="isRouteActive('/inventory') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
       >
         <Icon icon="solar:box-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -61,11 +61,11 @@
       </a>
 
       <!-- Locations & Booth Sync Dropdown -->
-      <div class="dropdown dropdown-bottom">
+      <div class="dropdown dropdown-bottom shrink-0">
         <div
           tabindex="0"
           role="button"
-          class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
           :class="isRouteActive('/warehouse') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
         >
           <Icon icon="solar:shop-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -136,11 +136,11 @@
       </div>
 
       <!-- Finance & Co-op Ledger Dropdown -->
-      <div class="dropdown dropdown-bottom">
+      <div class="dropdown dropdown-bottom shrink-0">
         <div
           tabindex="0"
           role="button"
-          class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
           :class="isFinanceRouteActive ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
         >
           <Icon icon="solar:tag-price-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -236,11 +236,11 @@
       </div>
 
       <!-- Studios & Hardware Dropdown -->
-      <div class="dropdown dropdown-bottom">
+      <div class="dropdown dropdown-bottom shrink-0">
         <div
           tabindex="0"
           role="button"
-          class="btn btn-sm rounded-xl px-3 gap-1.5 font-semibold border-0 shadow-none"
+          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
           :class="isStudiosRouteActive ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
         >
           <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
@@ -291,24 +291,24 @@
       </div>
     </div>
 
-    <!-- Right Cluster: Quick Scout + Workspace Switcher + User Avatar + Mobile Trigger -->
-    <div class="navbar-end flex-1 lg:flex-initial lg:w-1/4 flex items-center justify-end gap-1.5 sm:gap-2">
-      <!-- Quick Scout + Buy Trackers Pills -->
-      <div class="flex items-center gap-1">
+    <!-- Right Cluster: Unified Scout & Trackers Pill + Workspace Switcher + User Avatar + Mobile Trigger -->
+    <div class="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+      <!-- Unified Segmented Pill: Scout + Trackers (Zero floating .indicator-item overlap) -->
+      <div class="inline-flex items-center rounded-xl border border-base-300 bg-base-200/60 p-0.5 gap-0.5 shrink-0">
         <a
           href="/scout?quick=true"
           @click="handleScoutClick"
-          class="btn btn-sm rounded-xl gap-1.5 font-bold px-2.5 sm:px-3 transition-all"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1.5 font-bold px-2.5 h-7 sm:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
           :class="
             currentPath === '/scout'
-              ? 'btn-primary text-primary-content shadow-sm'
-              : 'btn-ghost border border-base-300 bg-base-200/60 hover:bg-base-200'
+              ? 'btn-primary text-primary-content shadow-xs'
+              : 'btn-ghost hover:bg-base-100'
           "
-          title="Quick Scout & Camera OCR"
+          title="Quick Scout & Camera OCR (/scout)"
           aria-label="Quick Scout"
         >
-          <Icon icon="solar:scanner-bold" class="w-4 h-4 shrink-0" :class="currentPath === '/scout' ? '' : 'text-primary'" />
-          <span class="hidden sm:inline text-xs">Quick Scout</span>
+          <Icon icon="solar:scanner-bold" class="w-3.5 h-3.5 shrink-0" :class="currentPath === '/scout' ? '' : 'text-primary'" />
+          <span class="hidden sm:inline text-xs">Scout</span>
           <span
             v-if="!showMemberNav"
             class="badge badge-secondary badge-xs text-secondary-content font-black whitespace-nowrap shrink-0"
@@ -317,28 +317,32 @@
           </span>
         </a>
 
-        <div v-if="capabilities.canUseBuyTracker && showMemberNav" class="indicator flex items-center">
+        <a
+          v-if="capabilities.canUseBuyTracker && showMemberNav"
+          href="/scout/trackers"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold px-2.5 h-7 sm:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
+          :class="
+            currentPath.startsWith('/scout/tracker')
+              ? 'btn-secondary text-secondary-content shadow-xs'
+              : 'btn-ghost hover:bg-base-100'
+          "
+          title="Active Scout Buy Trackers (/scout/trackers)"
+          aria-label="Buy Trackers"
+        >
+          <span class="text-xs leading-none">📌</span>
+          <span class="text-xs">Trackers</span>
           <span
-            v-if="capabilities.canUseBuyTracker && isAuthenticated && displayTrackedCount > 0"
-            class="indicator-item badge badge-secondary badge-xs sm:badge-sm text-secondary-content font-black z-10 whitespace-nowrap shrink-0"
+            v-if="isAuthenticated && displayTrackedCount > 0"
+            class="badge badge-xs font-mono font-black px-1.5 shrink-0"
+            :class="
+              currentPath.startsWith('/scout/tracker')
+                ? 'badge-neutral text-neutral-content'
+                : 'badge-secondary text-secondary-content'
+            "
           >
             {{ displayTrackedCount }}
           </span>
-          <a
-            href="/scout/trackers"
-            class="btn btn-sm rounded-xl gap-1 font-bold px-2 sm:px-2.5 transition-all"
-            :class="
-              currentPath.startsWith('/scout/tracker')
-                ? 'btn-secondary text-secondary-content shadow-sm'
-                : 'btn-ghost border border-base-300 bg-base-200/60 hover:bg-base-200'
-            "
-            title="Active Scout Buy Trackers (/scout/trackers)"
-            aria-label="Buy Trackers"
-          >
-            <span>📌</span>
-            <span class="hidden xl:inline text-xs">Trackers</span>
-          </a>
-        </div>
+        </a>
       </div>
 
       <!-- Desktop Auth / Workspace Controls -->

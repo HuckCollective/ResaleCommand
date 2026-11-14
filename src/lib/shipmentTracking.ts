@@ -25,6 +25,23 @@ const IGNORED_TOKENS = new Set([
   'tbd',
 ]);
 
+const REFUNDED_OR_CANCELLED_PATTERN = /\b(refund(?:ed)?|cancel(?:led|ed)?|void(?:ed)?|chargeback|returned)\b/i;
+
+export function isRefundedOrCancelledTracking(raw?: unknown): boolean {
+  if (!raw || typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  if (!trimmed) return false;
+  return REFUNDED_OR_CANCELLED_PATTERN.test(trimmed);
+}
+
+export function isRefundedPurchaseOrder(po?: any): boolean {
+  if (!po || typeof po !== 'object') return false;
+  if (isRefundedOrCancelledTracking(po.trackingNumber)) return true;
+  if (isRefundedOrCancelledTracking(po.status)) return true;
+  if (isRefundedOrCancelledTracking(po.notes)) return true;
+  return false;
+}
+
 export function parseTrackingNumbers(raw?: string | null): ParsedTrackingInfo[] {
   if (!raw || typeof raw !== 'string') return [];
   const trimmed = raw.trim();

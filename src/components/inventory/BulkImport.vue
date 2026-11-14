@@ -165,7 +165,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
-import { parseTrackingNumbers } from '../../lib/shipmentTracking';
+import { isRefundedOrCancelledTracking, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { storage } from '../../lib/appwrite';
 import { checkInventoryDuplicate } from '../../lib/deduplication';
 
@@ -298,6 +298,14 @@ const preProcessLandedCosts = (rows) => {
         const itemCol = findCol(rKeys, ['item id', 'item #', 'itemid', 'item_id', 'itemno', 'item number', 'sku']);
         const fallbackItemCol = findCol(rKeys, ['id']);
         const orderCol = findCol(rKeys, ['order id', 'order #', 'order number', 'orderid', 'order no', 'invoice id', 'invoice #', 'order', 'invoice']);
+        const trackingCol = findCol(rKeys, ['tracking', 'tracking #', 'tracking number']);
+        const statusCol = findCol(rKeys, ['status', 'order status']);
+
+        const rawTrackingVal = trackingCol ? row[trackingCol] : null;
+        const rawStatusVal = statusCol ? row[statusCol] : null;
+        if (isRefundedOrCancelledTracking(rawTrackingVal) || isRefundedOrCancelledTracking(rawStatusVal)) {
+            continue;
+        }
 
         let itemId = itemCol ? row[itemCol] : (fallbackItemCol ? row[fallbackItemCol] : null);
         let orderId = orderCol ? row[orderCol] : null;

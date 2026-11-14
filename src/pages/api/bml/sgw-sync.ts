@@ -8,7 +8,11 @@ import {
   Role as NodeRole,
 } from 'node-appwrite';
 import { BML_CORS_HEADERS, requireBookmarkletMember } from '../../../lib/bml/serverAuth';
-import { parseTrackingNumbers } from '../../../lib/shipmentTracking';
+import {
+  isRefundedOrCancelledTracking,
+  isRefundedPurchaseOrder,
+  parseTrackingNumbers,
+} from '../../../lib/shipmentTracking';
 import { parsePacificDateToIso } from '../../../lib/dateTimeUtils';
 import { formatReadableSellerLabel } from '../../../lib/shipping-rules';
 
@@ -323,7 +327,7 @@ export const GET: APIRoute = async ({ request }) => {
     for (const p of poDocs) {
       poById.set(p.$id, p);
       const oid = String(p?.orderId || '').trim();
-      if (oid && !isDraftTrackerPurchase(p) && !existingOrders[oid]) {
+      if (oid && !isDraftTrackerPurchase(p) && !isRefundedPurchaseOrder(p) && !existingOrders[oid]) {
         existingOrders[oid] = {
           poId: p.$id,
           poNumber: p.poNumber || `PO-${oid.slice(-6)}`,
@@ -870,6 +874,7 @@ export const POST: APIRoute = async ({ request }) => {
       let createdItemCount = 0;
       let promotedTrackedCount = 0;
       let existingSyncedCount = 0;
+      let refundedSkippedCount = 0;
       const touchedTrackerIds = new Set<string>();
 
       for (const [orderId, groupRows] of ordersMap.entries()) {
@@ -882,10 +887,66 @@ export const POST: APIRoute = async ({ request }) => {
           groupRows
             .map((r) => String(r.trackingNumber || '').trim())
             .find((t) => t.length > 0) || '';
-        const parsedTrk = parseTrackingNumbers(trackingRaw);
-        const hasValidTracking = parsedTrk.length > 0;
+        const isOrderRefunded =
+          isRefundedOrCancelledTracking(trackingRaw) ||
+          groupRows.some(
+            (r) =>
+              isRefundedOrCancelledTracking(r.trackingNumber) ||
+              isRefundedOrCancelledTracking(r.status)
+          );
 
         let poDoc = poByOrderId.get(orderId) || null;
+
+        if (isOrderRefunded) {
+          refundedSkippedCount += groupRows.length;
+          // Auto-purge any previously imported refunded PO (e.g. PO-005844 / #62005844) and its items
+          if (!dryRun && poDoc?.$id) {
+            try {
+              await databases.deleteDocument(dbId, purchasesCol, poDoc.$id);
+              poByOrderId.delete(orderId);
+              poById.delete(poDoc.$id);
+            } catch {}
+          }
+          for (const r of groupRows) {
+            const itemId = String(r.itemId || '').trim();
+            const rowKey = `${orderId}:${itemId}`;
+            const title = String(r.title || `ShopGoodwill #${itemId}`).trim();
+            const basePrice = Number(r.price || 0);
+            const matched = bySgwItemId.get(itemId);
+            if (!dryRun && matched?.$id) {
+              if (matched.purchaseId) touchedTrackerIds.add(matched.purchaseId);
+              try {
+                await databases.deleteDocument(dbId, itemsCol, matched.$id);
+                bySgwItemId.delete(itemId);
+              } catch {}
+            }
+            previewActions.push({
+              rowKey,
+              orderId,
+              itemId,
+              title,
+              action: 'SKIP_REFUNDED_ORDER',
+              rowCategory: 'REFUNDED',
+              isRefunded: true,
+              wasTracked: false,
+              trackerLabel: null,
+              existingPoId: null,
+              existingPoNumber: null,
+              existingPoStatus: 'Refunded',
+              defaultSelected: false,
+              basePrice,
+              landedCost: 0,
+              trackingLabel: 'Refunded',
+              trackingNumber: 'Refunded',
+              upc: null,
+              detail: `🚫 Order #${orderId} Refunded ($${grandTotal.toFixed(2)}) — Ignored & Excluded from Purchases`,
+            });
+          }
+          continue;
+        }
+
+        const parsedTrk = parseTrackingNumbers(trackingRaw);
+        const hasValidTracking = parsedTrk.length > 0;
         const poNeedsTrackingUpdate = Boolean(
           poDoc &&
             ((trackingRaw && poDoc.trackingNumber !== trackingRaw) ||
@@ -1152,6 +1213,7 @@ export const POST: APIRoute = async ({ request }) => {
             existingSyncedCount: dryRun
               ? previewActions.filter((a) => a.rowCategory === 'EXISTING_SYNCED').length
               : existingSyncedCount,
+            refundedSkippedCount,
             updatedItemCount: dryRun
               ? previewActions.filter((a) => a.action === 'LINK_SHIPPED_ITEM').length
               : updatedItemCount,

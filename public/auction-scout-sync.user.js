@@ -1381,70 +1381,79 @@
   function renderTableTrayBody() {
     var bodyHtml = '';
     if (state.loadingPreview) {
-      return '<div style="padding:28px 16px;text-align:center;color:#cbd5e1;font-weight:800;background:#1e1b4b;border:1px solid #818cf8;border-radius:12px;">⏳ Building Ricochet-Style Pre-Flight Queue Preview...</div>';
+      return '<div style="padding:28px 16px;text-align:center;color:#cbd5e1;font-weight:800;background:#1e1b4b;border:1px solid #818cf8;border-radius:12px;">⏳ Building Pre-Flight Reconciliation Queue...</div>';
     }
     if (state.errorMsg) {
       bodyHtml += '<div style="background:#7f1d1d;color:#fecaca;padding:10px 12px;border-radius:10px;margin-bottom:10px;font-weight:700;">❌ ' + escHtml(state.errorMsg) + '</div>';
     }
     if (state.previewData) {
       var pRows = state.previewData.rows || [];
-      var sum = state.previewData.summary || {};
-      var bannerText = state.commitResult
-        ? '✅ Sync Committed to Works@TheHC!'
-        : '🔍 Pre-Flight Reconciliation Queue (Check/Uncheck Rows to Sync)';
-      var bannerBg = state.commitResult ? '#065f46' : '#1e1b4b';
-
-      bodyHtml += '<div style="background:' + bannerBg + ';border:1px solid ' + (state.commitResult ? '#34d399' : '#6366f1') + ';padding:8px 12px;border-radius:10px;margin-bottom:10px;font-weight:800;font-size:11.5px;display:flex;justify-content:space-between;align-items:center;">' +
-        '<span>' + bannerText + '</span>' +
-        '<span style="font-family:monospace;font-size:10.5px;color:#cbd5e1;">' + pRows.length + ' total</span>' +
-      '</div>';
-
-      // Count categories for Ricochet-style 4-box scorecard + filter tabs
       var trackedCount = 0;
       var newCount = 0;
       var updateCount = 0;
       var existingCount = 0;
+      var refundedCount = 0;
       pRows.forEach(function (pr) {
+        if (pr.isRefunded || pr.rowCategory === 'REFUNDED') {
+          refundedCount++;
+          return;
+        }
         if (pr.wasTracked || pr.rowCategory === 'PROMOTE_TRACKED') trackedCount++;
         if (pr.rowCategory === 'NEW_ORDER_ITEM') newCount++;
         if (pr.rowCategory === 'UPDATE_TRACKING') updateCount++;
         if (pr.rowCategory === 'EXISTING_SYNCED') existingCount++;
       });
+      var validCount = Math.max(0, pRows.length - refundedCount);
 
-      // Ricochet-Style 4-Box Scorecard (Clickable Filter Cards)
+      var bannerTitle = state.commitResult
+        ? '✅ Sync Committed to Works@TheHC'
+        : '🔍 Pre-Flight Reconciliation Queue';
+      var bannerBg = state.commitResult ? '#064e3b' : '#1e293b';
+      var bannerBorder = state.commitResult ? '#34d399' : '#334155';
+      var countPillText = validCount + ' valid' + (refundedCount > 0 ? ' • ' + refundedCount + ' refunded' : '');
+
+      bodyHtml +=
+        '<div style="background:' + bannerBg + ';border:1px solid ' + bannerBorder + ';border-radius:10px;padding:9px 10px;margin-bottom:8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">' +
+            '<span style="font-weight:900;font-size:12px;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + bannerTitle + '</span>' +
+            '<span style="background:#0f172a;color:#cbd5e1;border:1px solid #334155;padding:2px 8px;border-radius:999px;font-family:monospace;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">' + escHtml(countPillText) + '</span>' +
+          '</div>';
+
+      // Ricochet-Style 4-Box Scorecard (Clickable Filter Cards — Never wraps)
       var filters = [
-        { key: 'ALL', label: '📋 All Rows', count: pRows.length, color: '#a5b4fc' },
-        { key: 'TRACKED', label: '📌 Was Tracked', count: trackedCount, color: '#34d399' },
-        { key: 'ACTIONABLE', label: '🆕 New / Upd', count: newCount + updateCount, color: '#fbbf24' },
-        { key: 'EXISTING', label: '✅ Existing POs', count: existingCount, color: '#38bdf8' }
+        { key: 'ALL', label: '📋 All', count: pRows.length, color: '#a5b4fc' },
+        { key: 'TRACKED', label: '📌 Tracked', count: trackedCount, color: '#34d399' },
+        { key: 'ACTIONABLE', label: '🆕 New/Upd', count: newCount + updateCount, color: '#fbbf24' },
+        { key: 'EXISTING', label: '✅ Synced', count: existingCount, color: '#38bdf8' }
       ];
 
       bodyHtml += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;">';
       filters.forEach(function (f) {
         var active = state.tableFilter === f.key;
         bodyHtml +=
-          '<button type="button" class="rc-table-filter-btn" data-filter="' + f.key + '" style="background:' + (active ? '#1e1b4b' : '#020617') + ';border:1.5px solid ' + (active ? '#818cf8' : '#1e293b') + ';border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;color:#f8fafc;">' +
-            '<div style="font-size:9px;color:#94a3b8;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + f.label + '</div>' +
-            '<div style="font-size:14px;font-weight:900;color:' + f.color + ';font-family:monospace;margin-top:1px;">' + f.count + '</div>' +
+          '<button type="button" class="rc-table-filter-btn" data-filter="' + f.key + '" style="background:' + (active ? '#1e1b4b' : '#0f172a') + ';border:1.5px solid ' + (active ? '#818cf8' : '#334155') + ';border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;color:#f8fafc;min-width:0;">' +
+            '<div style="font-size:9.5px;color:#cbd5e1;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + f.label + '</div>' +
+            '<div style="font-size:14px;font-weight:900;color:' + f.color + ';font-family:monospace;margin-top:2px;line-height:1.1;">' + f.count + '</div>' +
           '</button>';
       });
       bodyHtml += '</div>';
 
-      // Quick Selection Toolbar
+      // Quick Selection Toolbar inside Pre-Flight Card
       var selectedCount = getSelectedRowKeysArray().length;
       bodyHtml +=
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px;background:#1e293b;padding:5px 8px;border-radius:8px;font-size:10.5px;">' +
-          '<span style="font-weight:800;color:#e2e8f0;">☑️ Selected: <strong style="color:#34d399;">' + selectedCount + '</strong> / ' + pRows.length + '</span>' +
-          '<div style="display:flex;gap:4px;">' +
-            '<button type="button" id="rc-select-tracked-btn" style="background:#312e81;color:#e0e7ff;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">📌 Tracked Only</button>' +
-            '<button type="button" id="rc-select-actionable-btn" style="background:#065f46;color:#d1fae5;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">⚡ Actionable</button>' +
-            '<button type="button" id="rc-select-none-btn" style="background:#334155;color:#cbd5e1;border:0;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;">Clear</button>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;background:#0f172a;border:1px solid #1e293b;padding:5px 8px;border-radius:7px;font-size:10.5px;">' +
+          '<span style="font-weight:800;color:#e2e8f0;white-space:nowrap;">☑️ Selected: <strong style="color:#34d399;">' + selectedCount + '</strong> / ' + validCount + '</span>' +
+          '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">' +
+            '<button type="button" id="rc-select-tracked-btn" style="background:#312e81;color:#e0e7ff;border:0;border-radius:5px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">📌 Tracked</button>' +
+            '<button type="button" id="rc-select-actionable-btn" style="background:#065f46;color:#d1fae5;border:0;border-radius:5px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">⚡ Actionable</button>' +
+            '<button type="button" id="rc-select-none-btn" style="background:#334155;color:#cbd5e1;border:0;border-radius:5px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">Clear</button>' +
           '</div>' +
-        '</div>';
+        '</div>' +
+      '</div>';
 
       var visibleRows = pRows.filter(function (pr) {
         if (state.tableFilter === 'TRACKED') return Boolean(pr.wasTracked || pr.rowCategory === 'PROMOTE_TRACKED');
-        if (state.tableFilter === 'ACTIONABLE') return pr.rowCategory !== 'EXISTING_SYNCED';
+        if (state.tableFilter === 'ACTIONABLE') return pr.rowCategory !== 'EXISTING_SYNCED' && pr.rowCategory !== 'REFUNDED' && !pr.isRefunded;
         if (state.tableFilter === 'EXISTING') return pr.rowCategory === 'EXISTING_SYNCED';
         return true;
       });
@@ -1455,35 +1464,40 @@
         bodyHtml += '<div style="background:#020617;border:1px solid #1e293b;border-radius:10px;padding:4px 8px;margin-bottom:10px;">';
         visibleRows.forEach(function (pr) {
           var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
-          var isChecked = Boolean(state.selectedRowKeys[rk]);
+          var isRefunded = Boolean(pr.isRefunded || pr.rowCategory === 'REFUNDED');
+          var isChecked = !isRefunded && Boolean(state.selectedRowKeys[rk]);
           var badgesHtml = '';
-          if (pr.wasTracked) {
-            badgesHtml += '<span style="background:#4f46e5;color:#e0e7ff;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">📌 FROM TRACKER' + (pr.trackerLabel ? ' (' + escHtml(pr.trackerLabel) + ')' : '') + '</span> ';
-          }
-          if (pr.rowCategory === 'EXISTING_SYNCED') {
-            var poLabel = pr.existingPoNumber || (pr.orderId ? 'PO-' + String(pr.orderId).slice(-6) : 'Synced');
-            if (pr.existingPoId) {
-              badgesHtml += '<a href="' + state.activeOrigin + '/purchases/' + escHtml(pr.existingPoId) + '" target="_blank" style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;text-decoration:none;">✅ ' + escHtml(poLabel) + ' ↗</a> ';
-            } else {
-              badgesHtml += '<span style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">✅ ' + escHtml(poLabel) + '</span> ';
+          if (isRefunded) {
+            badgesHtml += '<span style="background:#7f1d1d;color:#fecaca;border:1px solid #f87171;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;white-space:nowrap;">🚫 REFUNDED — IGNORED</span> ';
+          } else {
+            if (pr.wasTracked) {
+              badgesHtml += '<span style="background:#4f46e5;color:#e0e7ff;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;white-space:nowrap;">📌 FROM TRACKER' + (pr.trackerLabel ? ' (' + escHtml(pr.trackerLabel) + ')' : '') + '</span> ';
             }
-          } else if (pr.rowCategory === 'NEW_ORDER_ITEM') {
-            badgesHtml += '<span style="background:#78350f;color:#fef3c7;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">🆕 NEW ITEM</span> ';
-          } else if (pr.rowCategory === 'UPDATE_TRACKING') {
-            badgesHtml += '<span style="background:#0369a1;color:#e0f2fe;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;">🚚 TRACKING UPD</span> ';
+            if (pr.rowCategory === 'EXISTING_SYNCED') {
+              var poLabel = pr.existingPoNumber || (pr.orderId ? 'PO-' + String(pr.orderId).slice(-6) : 'Synced');
+              if (pr.existingPoId) {
+                badgesHtml += '<a href="' + state.activeOrigin + '/purchases/' + escHtml(pr.existingPoId) + '" target="_blank" style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;text-decoration:none;white-space:nowrap;">✅ ' + escHtml(poLabel) + ' ↗</a> ';
+              } else {
+                badgesHtml += '<span style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;white-space:nowrap;">✅ ' + escHtml(poLabel) + '</span> ';
+              }
+            } else if (pr.rowCategory === 'NEW_ORDER_ITEM') {
+              badgesHtml += '<span style="background:#78350f;color:#fef3c7;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;white-space:nowrap;">🆕 NEW ITEM</span> ';
+            } else if (pr.rowCategory === 'UPDATE_TRACKING') {
+              badgesHtml += '<span style="background:#0369a1;color:#e0f2fe;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:800;white-space:nowrap;">🚚 TRACKING UPD</span> ';
+            }
           }
 
           var rightText = pr.detail || ('$' + Number(pr.currentPrice || pr.landedCost || 0).toFixed(2) + ' • ' + pr.action);
           bodyHtml +=
-            '<label style="padding:7px 2px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer;">' +
-              '<input type="checkbox" class="rc-row-select-cb" data-rowkey="' + escHtml(rk) + '" ' + (isChecked ? 'checked' : '') + ' style="margin-top:3px;cursor:pointer;" />' +
+            '<label style="padding:7px 2px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:' + (isRefunded ? 'not-allowed' : 'pointer') + ';' + (isRefunded ? 'opacity:0.55;' : '') + '">' +
+              '<input type="checkbox" class="rc-row-select-cb" data-rowkey="' + escHtml(rk) + '" ' + (isChecked ? 'checked ' : '') + (isRefunded ? 'disabled ' : '') + 'style="margin-top:3px;cursor:' + (isRefunded ? 'not-allowed' : 'pointer') + ';flex-shrink:0;" />' +
               '<div style="min-width:0;flex:1;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">' +
-                  '<span style="font-family:monospace;font-size:10px;color:#94a3b8;">#' + escHtml(pr.itemId) + (pr.orderId && pr.orderId !== pr.itemId ? ' • Order #' + escHtml(pr.orderId) : '') + '</span>' +
-                  '<div>' + badgesHtml + '</div>' +
+                  '<span style="font-family:monospace;font-size:10px;color:#94a3b8;white-space:nowrap;">#' + escHtml(pr.itemId) + (pr.orderId && pr.orderId !== pr.itemId ? ' • Order #' + escHtml(pr.orderId) : '') + '</span>' +
+                  '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">' + badgesHtml + '</div>' +
                 '</div>' +
-                '<div style="font-weight:800;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(pr.title) + '">' + escHtml(pr.title) + '</div>' +
-                '<div style="font-family:monospace;font-size:10px;color:#93c5fd;margin-top:2px;">' + escHtml(rightText) + '</div>' +
+                '<div style="font-weight:800;color:' + (isRefunded ? '#fca5a5;text-decoration:line-through' : '#f8fafc') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(pr.title) + '">' + escHtml(pr.title) + '</div>' +
+                '<div style="font-family:monospace;font-size:10px;color:' + (isRefunded ? '#fca5a5' : '#93c5fd') + ';margin-top:2px;">' + escHtml(rightText) + '</div>' +
               '</div>' +
             '</label>';
         });
@@ -1566,6 +1580,19 @@
       return;
     }
 
+    if (!document.getElementById('rc-scout-tray-styles')) {
+      var styleEl = document.createElement('style');
+      styleEl.id = 'rc-scout-tray-styles';
+      styleEl.textContent =
+        '#rc-scout-tray, #rc-scout-tray * { box-sizing: border-box; }' +
+        '#rc-scout-tray-body { scrollbar-width: thin; scrollbar-color: #334155 transparent; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar { width: 5px; height: 5px; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar-track { background: transparent; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }' +
+        '#rc-scout-tray .rc-btn-pill { display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; flex-shrink: 0; height: 28px; padding: 0 9px; border-radius: 7px; font-size: 11px; font-weight: 800; line-height: 1; text-decoration: none; cursor: pointer; }';
+      document.head.appendChild(styleEl);
+    }
+
     if (!tray) {
       tray = document.createElement('div');
       tray.id = 'rc-scout-tray';
@@ -1574,20 +1601,20 @@
     }
 
     var sourceBadge = state.pageType === 'item'
-      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">⚡ Single Item Scout</span>'
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">⚡ Single Item Scout</span>'
       : state.csvHarvested
-      ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">📄 Full CSV (' + state.rows.length + ' rows)</span>'
-      : '<span style="background:#1e293b;color:#cbd5e1;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">📄 DOM Table (' + state.rows.length + ' rows)</span>';
+      ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">📄 ' + state.rows.length + ' CSV Rows</span>'
+      : '<span style="background:#1e293b;color:#cbd5e1;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">📄 ' + state.rows.length + ' DOM Rows</span>';
 
     var trackersHeaderLink =
-      '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" title="Open Scout Buy Trackers" style="background:#312e81;border:1px solid #4f46e5;color:#e0e7ff;text-decoration:none;border-radius:8px;padding:4px 8px;font-size:10.5px;font-weight:800;">📌 Trackers ↗</a>';
+      '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" class="rc-btn-pill" title="Open Scout Buy Trackers (/scout/trackers)" style="background:#312e81;border:1px solid #4f46e5;color:#e0e7ff;">📌 Trackers ↗</a>';
 
     var harvestCsvBtnHtml = state.pageType !== 'item'
-      ? '<button id="rc-scout-harvest-csv-btn" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:10.5px;font-weight:800;">📥 CSV</button>'
+      ? '<button id="rc-scout-harvest-csv-btn" class="rc-btn-pill" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;">🔄 CSV</button>'
       : '';
 
     var logoutBtnHtml = auth
-      ? '<button id="rc-scout-logout-btn" title="Log Out of Bookmarklet" style="background:#334155;color:#fca5a5;border:1px solid rgba(248,113,113,0.4);border-radius:8px;padding:4px 8px;font-size:10.5px;font-weight:800;cursor:pointer;">🚪</button>'
+      ? '<button id="rc-scout-logout-btn" class="rc-btn-pill" title="Log Out of Bookmarklet" style="background:#334155;color:#fca5a5;border:1px solid rgba(248,113,113,0.4);">🚪</button>'
       : '';
 
     var footerHtml = '';
@@ -1635,24 +1662,27 @@
     }
 
     tray.innerHTML =
-      // Pinned Tray Header
-      '<div style="padding:12px 14px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">' +
-        '<div>' +
-          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;">' + escHtml(toolCfg.trayTitle || '🔭 Works@TheHC — ShopGoodwill Tray') + '</div>' +
-          '<div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-top:2px;">' +
-            sourceBadge +
-            (auth ? '<span style="color:#6ee7b7;font-weight:800;">' + escHtml(auth.roleBadge || '👑') + ' ' + escHtml(auth.name || '') + '</span>' : '') +
+      // Clean 2-Tier Pinned Tray Header (Zero wrapping or colliding buttons)
+      '<div style="padding:10px 14px;background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🔭 ShopGoodwill Sync</div>' +
+          '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">' +
+            trackersHeaderLink +
+            harvestCsvBtnHtml +
+            logoutBtnHtml +
+            '<button id="rc-scout-close-tray" class="rc-btn-pill" title="Minimize to corner pill" style="background:#0f172a;border:1px solid #334155;color:#f8fafc;">✕</button>' +
           '</div>' +
         '</div>' +
-        '<div style="display:flex;align-items:center;gap:5px;">' +
-          trackersHeaderLink +
-          harvestCsvBtnHtml +
-          logoutBtnHtml +
-          '<button id="rc-scout-close-tray" title="Minimize to corner pill" style="background:#0f172a;border:1px solid #334155;color:#f8fafc;border-radius:8px;padding:4px 9px;cursor:pointer;font-weight:900;">✕</button>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.07);font-size:10.5px;">' +
+          '<div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">' +
+            sourceBadge +
+            (auth ? '<span style="color:#6ee7b7;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(auth.roleBadge || '👑') + ' ' + escHtml(auth.name || '') + '</span>' : '') +
+          '</div>' +
+          '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="color:#93c5fd;text-decoration:none;font-weight:800;white-space:nowrap;flex-shrink:0;">📦 /purchases ↗</a>' +
         '</div>' +
       '</div>' +
       // Scrollable Tray Body
-      '<div style="flex:1;overflow-y:auto;padding:12px 14px;">' +
+      '<div id="rc-scout-tray-body" style="flex:1;overflow-y:auto;padding:12px 14px;">' +
         (state.pageType === 'item' ? renderItemTrayBody() : renderTableTrayBody()) +
       '</div>' +
       // Pinned Tray Footer
@@ -1727,7 +1757,7 @@
         var next = {};
         (state.previewData.rows || []).forEach(function (pr) {
           var rk = pr.rowKey || (pr.orderId ? pr.orderId + ':' + pr.itemId : pr.itemId);
-          next[rk] = pr.rowCategory !== 'EXISTING_SYNCED';
+          next[rk] = pr.rowCategory !== 'EXISTING_SYNCED' && pr.rowCategory !== 'REFUNDED' && !pr.isRefunded;
         });
         state.selectedRowKeys = next;
         renderUI();

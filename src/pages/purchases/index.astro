@@ -6,11 +6,29 @@ import PurchasesList from '../../components/purchases/PurchasesList.vue';
 <Layout title="Purchases | Resale Command" hideFooter={true}>
   <div class="rc-page-shell space-y-4">
     <!-- PAGE HEADER -->
-    <header class="flex flex-col gap-0.5">
-      <h1 class="text-2xl sm:text-3xl font-black text-base-content tracking-tight">Purchases &amp; Inbound Hauls</h1>
-      <p class="text-xs sm:text-sm text-base-content/70">
-        Track haul spend, projected retail ROI, shipped auction orders, and 1-tap receiving into backstock.
-      </p>
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div class="flex flex-col gap-0.5">
+        <h1 class="text-2xl sm:text-3xl font-black text-base-content tracking-tight">Purchases &amp; Inbound Hauls</h1>
+        <p class="text-xs sm:text-sm text-base-content/70">
+          Track haul spend, projected retail ROI, shipped auction orders, and 1-tap receiving into backstock.
+        </p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <a
+          href="/scout/trackers"
+          class="btn btn-sm btn-secondary text-secondary-content font-black rounded-xl gap-1.5 shadow-xs whitespace-nowrap"
+          title="Open Active Scout Buy Trackers (/scout/trackers)"
+        >
+          <span>📌 Active Buy Trackers</span>
+        </a>
+        <a
+          href="/scout?quick=true"
+          class="btn btn-sm btn-outline rounded-xl font-bold gap-1.5 whitespace-nowrap"
+          title="Open AI Quick Scout (/scout)"
+        >
+          <span>⚡ Quick Scout</span>
+        </a>
+      </div>
     </header>
 
     <PurchasesList client:load />
