@@ -4,6 +4,13 @@ import {
     HarmBlockThreshold,
     type GenerateContentConfig,
 } from "@google/genai";
+import {
+    deliverAiTelemetry,
+    type AiSurface,
+    type AiTelemetryContext,
+} from "./aiTelemetry";
+
+export type { AiSurface, AiTelemetryContext };
 
 /**
  * Single Source of Truth for Live App Runtime AI (World 1 — Reseller Engine).
@@ -189,12 +196,20 @@ export const genAI = getApiKey()
     : null;
 export const model = getApiKey() ? getModel() : null;
 
+// Helper to extract verdict from JSON output when not explicitly supplied in telemetryContext
+function inferVerdictFromText(rawText: string): string | null {
+    if (!rawText || typeof rawText !== "string") return null;
+    const m = /"(?:buy_recommendation|verdict)"\s*:\s*"([^"]+)"/i.exec(rawText);
+    return m && m[1] ? m[1].trim() : null;
+}
+
 // Helper to provide robust exponential backoff for generateContent calls with automatic fallback models
 export const generateContentWithBackoff = async (
     modelOrRequest: any,
     maybeRequestOrRetries?: any,
     maxRetries = 10,
-    baseDelayMs = 2500
+    baseDelayMs = 2500,
+    telemetryContext?: AiTelemetryContext
 ) => {
     let requestPayload: any;
 
@@ -215,8 +230,21 @@ export const generateContentWithBackoff = async (
         requestPayload = modelOrRequest;
         if (typeof maybeRequestOrRetries === "number") {
             maxRetries = maybeRequestOrRetries;
+        } else if (
+            maybeRequestOrRetries &&
+            typeof maybeRequestOrRetries === "object" &&
+            !Array.isArray(maybeRequestOrRetries) &&
+            ("surface" in maybeRequestOrRetries || "verdict" in maybeRequestOrRetries)
+        ) {
+            telemetryContext = maybeRequestOrRetries as AiTelemetryContext;
         }
     }
+
+    const effectiveTelemetry: AiTelemetryContext | undefined =
+        telemetryContext ||
+        (requestPayload && typeof requestPayload === "object"
+            ? (requestPayload.telemetryContext as AiTelemetryContext | undefined)
+            : undefined);
 
     if (
         !requestPayload ||
@@ -244,6 +272,7 @@ export const generateContentWithBackoff = async (
     let retries = maxRetries;
     let delayMs = baseDelayMs;
     const ai = getGenAiClient();
+    const callStartedAt = Date.now();
 
     while (retries > 0) {
         const currentModelName = candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL;
@@ -277,6 +306,31 @@ export const generateContentWithBackoff = async (
                     continue;
                 }
             }
+
+            const usage: any = result.response?.usageMetadata || (rawRes as any)?.usageMetadata || {};
+            const latencyMs = Math.max(0, Date.now() - callStartedAt);
+            const textPreview = (() => {
+                try {
+                    return result.response.text();
+                } catch {
+                    return "";
+                }
+            })();
+
+            await deliverAiTelemetry({
+                surface: effectiveTelemetry?.surface || "other",
+                model: String(result.response?.modelVersion || currentModelName),
+                verdict: effectiveTelemetry?.verdict || inferVerdictFromText(textPreview),
+                promptTokens: Number(usage.promptTokenCount) || 0,
+                candTokens: Number(usage.candidatesTokenCount) || 0,
+                thoughtTokens: Number(usage.thoughtsTokenCount) || 0,
+                totalTokens: Number(usage.totalTokenCount) || 0,
+                latencyMs,
+                fallback: modelIdx > 0 || omitThinkingOnCurrent,
+                rulesVersion: effectiveTelemetry?.rulesVersion ?? null,
+                itemId: effectiveTelemetry?.itemId ?? null,
+            });
+
             return result;
         } catch (err: any) {
             const msg = (err.message || "").toLowerCase();

@@ -38,10 +38,10 @@
         <div class="flex flex-wrap items-center gap-1.5 self-start md:self-center">
           <div v-if="metrics" class="flex flex-wrap items-center gap-1.5">
             <span class="badge badge-xs sm:badge-sm badge-success text-success-content font-extrabold whitespace-nowrap shadow-xs">
-              Active: ${{ metrics.summary.thisMonth.actualBilled.toFixed(2) }}
+              {{ metrics.summary.thisMonth.label }}: ${{ metrics.summary.thisMonth.actualBilled.toFixed(2) }} / ${{ (metrics.creditPool?.monthlyCreditGrantUsd || 40).toFixed(0) }} Credit
             </span>
             <span class="badge badge-xs sm:badge-sm badge-ghost text-base-content/80 font-bold whitespace-nowrap shadow-xs">
-              Prior: ${{ metrics.summary.lastMonth.actualBilled.toFixed(2) }}
+              Net Out-of-Pocket: ${{ (metrics.creditPool?.thisMonthNetOutOfPocketUsd || 0).toFixed(2) }}
             </span>
           </div>
 
@@ -109,6 +109,12 @@
             <button type="button" @click="fetchMetrics(true)" :disabled="loading" class="btn btn-xs btn-ghost rounded-lg" title="Refresh">
               <Icon icon="solar:refresh-linear" class="w-3.5 h-3.5" :class="{ 'animate-spin': loading }" />
             </button>
+            <a
+              href="/studios/appraisal"
+              class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
+            >
+              <span>🔬 Appraisal &amp; Pricing Lab →</span>
+            </a>
             <button type="button" @click="showDetailsDrawer = true" class="btn btn-xs btn-outline rounded-lg font-bold">
               Timeline &amp; Prod/Dev Split →
             </button>
@@ -292,12 +298,15 @@ const summaryStats = computed<KpiStatItem[]>(() => {
   const tm = metrics.value.summary.thisMonth;
   const lm = metrics.value.summary.lastMonth;
   const at = metrics.value.summary.allTime;
+  const creditGrant = metrics.value.creditPool?.monthlyCreditGrantUsd ?? 40;
+  const netOop = metrics.value.creditPool?.thisMonthNetOutOfPocketUsd ?? 0;
+  const passCount = tm.funnel?.passCount ?? 0;
   return [
     {
       label: tm.period || 'Active Cycle',
       value: `$${tm.actualBilled.toFixed(2)}`,
-      hint: `${tm.totalScans} items · Forecast ~$${tm.forecast.toFixed(2)}`,
-      badge: 'Google Billed',
+      hint: `${tm.totalScans} scans (${passCount} 🛑 PASS) · $${creditGrant.toFixed(0)} GCP Credit ($${netOop.toFixed(2)} net)`,
+      badge: tm.billingSource === 'invoiced' ? 'Invoiced' : 'Live Est.',
       badgeClass: 'badge-success text-success-content',
       tone: 'text-success',
     },
@@ -305,7 +314,7 @@ const summaryStats = computed<KpiStatItem[]>(() => {
       label: lm.period || lm.label || 'Prior Cycle',
       value: `$${lm.actualBilled.toFixed(2)}`,
       hint: `${lm.totalScans} items scouted`,
-      badge: 'Closed Cycle',
+      badge: lm.billingSource === 'invoiced' ? 'Closed Invoice' : 'Estimated',
       badgeClass: 'badge-ghost',
       tone: 'text-base-content',
     },
