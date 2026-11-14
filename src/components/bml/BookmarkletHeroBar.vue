@@ -12,7 +12,7 @@
           ⚡ {{ locationMeta.shortName }} {{ locationMeta.posName || 'Ricochet POS' }} 2-Way Sync: Drag to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) to sync Booth Barcodes (<code class="font-mono">{{ locationMeta.skuPrefix }}...</code> ↔ UPC), Outbound Drops &amp; Payout Sales:
         </span>
         <span v-else class="font-bold text-base-content">
-          🔭 ShopGoodwill 4-Page Sync: Drag to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) to sync In-Progress Bids, Won/Lost Auctions, Shipped Orders &amp; Item Pages:
+          🔭 Universal Online Scout &amp; ShopGoodwill Sync: Drag to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) for 12-Photo AI Speed Scout on ShopGoodwill, eBay, FB Marketplace, HiBid, CTBids &amp; EstateSales.net + 4-Page SGW Order Sync:
         </span>
       </div>
 
@@ -80,7 +80,7 @@
               One evergreen bookmarklet for Booth Barcode Pre-Flight, Physical Tag Adoption, Outbound Drops &amp; Payout Sales Sync — auto-updates live from Resale Command.
             </p>
             <p v-else class="text-xs opacity-70 mt-0.5">
-              One evergreen bookmarklet for all 4 ShopGoodwill pages — zero third-party credentials or cookies ever touched.
+              One evergreen bookmarklet for 12-photo AI Speed Scout across ShopGoodwill, eBay, FB Marketplace, HiBid, CTBids, LiveAuctioneers &amp; EstateSales.net + all 4 ShopGoodwill Order pages — zero third-party credentials or cookies ever touched.
             </p>
           </div>
           <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showGuideModal = false">✕</button>

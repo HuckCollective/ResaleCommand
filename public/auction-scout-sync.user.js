@@ -204,7 +204,34 @@
     lastSyncedItemId: ''
   };
 
+  function isShopGoodwillHost() {
+    return /(^|\.)shopgoodwill\.com$/i.test(String(window.location.hostname || ''));
+  }
+
+  function isItemScoutMode() {
+    return state.pageType === 'item' || state.pageType === 'external-item';
+  }
+
+  function normalizeUrlWatchlistKey(rawUrl) {
+    try {
+      var u = new URL(String(rawUrl || window.location.href));
+      return (u.origin + u.pathname).replace(/\/+$/, '').toLowerCase();
+    } catch (e) {
+      return String(rawUrl || '').trim().toLowerCase();
+    }
+  }
+
+  function lookupWatchlistForItem(itemRow) {
+    if (!itemRow || !state.watchlist) return null;
+    if (itemRow.itemId && state.watchlist[itemRow.itemId]) return state.watchlist[itemRow.itemId];
+    if (itemRow.externalItemId && state.watchlist[itemRow.externalItemId]) return state.watchlist[itemRow.externalItemId];
+    var urlKey = normalizeUrlWatchlistKey(window.location.href);
+    if (urlKey && state.watchlist[urlKey]) return state.watchlist[urlKey];
+    return null;
+  }
+
   function installCsvInterceptor() {
+    if (!isShopGoodwillHost()) return;
     if (window.__RC_SGW_CSV_HOOKED__) return;
     window.__RC_SGW_CSV_HOOKED__ = true;
 
@@ -311,6 +338,7 @@
 
   // Evaluate ShopGoodwill Combined Shipping Synergy (20-lb limit, 20-item limit, 7-day window, ~$12 base freight savings)
   function evaluateSellerSynergy(candidateSeller, candidateWeight, candidateItemId) {
+    if (!isShopGoodwillHost()) return null;
     var sellerClean = cleanText(candidateSeller);
     var normKey = normalizeSellerKey(sellerClean);
     if (!normKey || normKey === 'shopgoodwill' || normKey.length < 4) return null;
@@ -442,21 +470,381 @@
     if (!el || !el.closest) return false;
     if (
       el.closest(
-        'app-related-items, .you-may-also-like, [class*="related-item" i], [class*="also-like" i], [class*="recommend" i], footer, header, nav'
+        'app-related-items, .you-may-also-like, [class*="related-item" i], [class*="also-like" i], [class*="recommend" i], [class*="similar-item" i], [aria-label*="similar" i], [aria-label*="sponsored" i], footer, header, nav'
       )
     ) {
       return true;
     }
-    // Check if preceded in parent container by "YOU MAY ALSO LIKE" heading
+    // Check if preceded in parent container by "YOU MAY ALSO LIKE" or "Similar items" heading
     var cur = el;
     while (cur && cur !== document.body) {
       var txt = String(cur.textContent || '').trim();
-      if (/^you\s+may\s+also\s+like/i.test(txt) && txt.length < 600) {
+      if (/^(?:you\s+may\s+also\s+like|similar\s+(?:items|listings|sponsored)|people\s+also\s+viewed|today'?s\s+picks)/i.test(txt) && txt.length < 700) {
         return true;
       }
       cur = cur.parentElement;
     }
     return false;
+  }
+
+  function extractJsonLdListingHints() {
+    var result = {
+      title: '',
+      description: '',
+      price: 0,
+      seller: '',
+      images: []
+    };
+    var scripts = Array.prototype.slice.call(document.querySelectorAll('script[type="application/ld+json"]'));
+    function visitNode(node) {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(visitNode);
+        return;
+      }
+      if (node['@graph']) visitNode(node['@graph']);
+      var t = String(node['@type'] || '').toLowerCase();
+      if (t.indexOf('product') !== -1 || t.indexOf('individualproduct') !== -1 || t.indexOf('offer') !== -1) {
+        if (!result.title && node.name) result.title = cleanText(node.name);
+        if (!result.description && node.description) result.description = cleanText(node.description).slice(0, 1800);
+        var imgs = node.image;
+        if (typeof imgs === 'string') result.images.push(imgs);
+        else if (Array.isArray(imgs)) {
+          imgs.forEach(function (it) {
+            if (typeof it === 'string') result.images.push(it);
+            else if (it && typeof it.url === 'string') result.images.push(it.url);
+            else if (it && typeof it.contentUrl === 'string') result.images.push(it.contentUrl);
+          });
+        } else if (imgs && typeof imgs.url === 'string') {
+          result.images.push(imgs.url);
+        }
+        var offers = Array.isArray(node.offers) ? node.offers[0] : node.offers;
+        if (offers && typeof offers === 'object') {
+          var rawP = offers.price || offers.lowPrice || offers.highPrice;
+          if (!result.price && rawP !== undefined) {
+            var numP = parseFloat(String(rawP).replace(/[^0-9.]/g, ''));
+            if (numP > 0) result.price = numP;
+          }
+          if (!result.seller && offers.seller && offers.seller.name) {
+            result.seller = cleanText(offers.seller.name);
+          }
+        }
+        if (!result.seller && node.brand && node.brand.name) {
+          result.seller = cleanText(node.brand.name);
+        }
+      }
+    }
+    scripts.forEach(function (sc) {
+      try {
+        var parsed = JSON.parse(sc.textContent || '');
+        visitNode(parsed);
+      } catch (e) {}
+    });
+    return result;
+  }
+
+  function upgradeAndKeyExternalImage(rawUrl, host) {
+    var u = String(rawUrl || '').trim();
+    if (!u) return null;
+    if (u.indexOf('//') === 0) u = window.location.protocol + u;
+    if (!/^https?:\/\//i.test(u)) return null;
+    if (/logo|icon|avatar|sprite|badge|pixel|analytics|rokt|doubleclick|blank\.gif|spacer|spinner|loading|placeholder/i.test(u)) {
+      return null;
+    }
+    if (/\.svg(?:\?|$)/i.test(u)) return null;
+
+    var hiRes = u;
+    var dedupeKey = u.split('#')[0];
+
+    // eBay high-res upgrade + /images/g/<HASH>/ deduplication
+    if (/ebayimg\.com/i.test(u)) {
+      var hashMatch = u.match(/\/images\/g\/([^/]+)\//i);
+      if (hashMatch && hashMatch[1]) {
+        dedupeKey = 'ebayimg:' + hashMatch[1];
+      }
+      hiRes = u.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)/i, '/s-l1600.$1');
+    } else if (/hibid\.com/i.test(u) || /hibid\.com/i.test(host)) {
+      hiRes = u.replace(/_thumb\b/i, '').replace(/([?&])(?:w|width|h|height)=\d+/gi, '$1width=1400');
+      dedupeKey = hiRes.split('?')[0];
+    } else if (/liveauctioneers\.com/i.test(u)) {
+      hiRes = u.replace(/([?&])width=\d+/i, '$1width=1600');
+      dedupeKey = hiRes.split('?')[0];
+    } else {
+      dedupeKey = hiRes.replace(/([?&])(?:w|width|h|height|size|impolicy)=[^&]+/gi, '');
+    }
+
+    return { url: hiRes, key: dedupeKey };
+  }
+
+  function scrapeExternalListingDom() {
+    var href = String(window.location.href || '');
+    var host = String(window.location.hostname || '').toLowerCase();
+    var path = String(window.location.pathname || '');
+    var ld = extractJsonLdListingHints();
+
+    var platformName = host.replace(/^www\./i, '') || 'Online Listing';
+    var domainFamily = 'generic_online';
+    var listingMode = 'fixed_online';
+    var isAuction = false;
+    var isSoftClose = false;
+    var isLocalPickupOnly = false;
+    var buyersPremiumPct = 0;
+    var shippingCost = null;
+    var externalItemId = '';
+
+    if (/(^|\.)ebay\./i.test(host)) {
+      platformName = 'eBay';
+      domainFamily = 'national_marketplace';
+      var ebMatch = href.match(/\/itm\/(?:[^/?#]+\/)?(\d{9,15})/i) || href.match(/[?&]item=(\d{9,15})/i);
+      if (ebMatch && ebMatch[1]) externalItemId = 'ebay:' + ebMatch[1];
+    } else if (/facebook\.com/i.test(host) && /\/marketplace\//i.test(path)) {
+      platformName = 'FB Marketplace';
+      domainFamily = 'local_cash';
+      listingMode = 'local_cash';
+      isLocalPickupOnly = true;
+      shippingCost = 0;
+      var fbMatch = path.match(/\/marketplace\/item\/(\d+)/i);
+      if (fbMatch && fbMatch[1]) externalItemId = 'fbm:' + fbMatch[1];
+    } else if (/hibid\.com/i.test(host)) {
+      platformName = 'HiBid';
+      domainFamily = 'buyers_premium_auction';
+      listingMode = 'soft_close_auction';
+      isAuction = true;
+      isSoftClose = true;
+      buyersPremiumPct = 15;
+      var hbMatch = path.match(/\/lot\/(\d+)/i);
+      if (hbMatch && hbMatch[1]) externalItemId = 'hibid:' + hbMatch[1];
+    } else if (/ctbids\.com/i.test(host)) {
+      platformName = 'CTBids';
+      domainFamily = 'buyers_premium_auction';
+      listingMode = 'soft_close_auction';
+      isAuction = true;
+      isSoftClose = true;
+      buyersPremiumPct = 15;
+      var ctMatch = path.match(/\/item\/(\d+)/i) || href.match(/item[_-]?id=(\d+)/i);
+      if (ctMatch && ctMatch[1]) externalItemId = 'ctbids:' + ctMatch[1];
+    } else if (/liveauctioneers\.com/i.test(host)) {
+      platformName = 'LiveAuctioneers';
+      domainFamily = 'buyers_premium_auction';
+      listingMode = 'soft_close_auction';
+      isAuction = true;
+      isSoftClose = true;
+      buyersPremiumPct = 20;
+      var laMatch = path.match(/\/item\/(\d+)/i);
+      if (laMatch && laMatch[1]) externalItemId = 'liveauc:' + laMatch[1];
+    } else if (/proxibid\.com/i.test(host) || /maxsold\.com/i.test(host)) {
+      platformName = /maxsold/i.test(host) ? 'MaxSold' : 'Proxibid';
+      domainFamily = 'buyers_premium_auction';
+      listingMode = 'soft_close_auction';
+      isAuction = true;
+      isSoftClose = true;
+      buyersPremiumPct = 15;
+    } else if (/estatesales\.net/i.test(host)) {
+      platformName = 'EstateSales.net';
+      if (/\/marketplace\//i.test(path)) {
+        domainFamily = 'buyers_premium_auction';
+        listingMode = 'soft_close_auction';
+        isAuction = true;
+        isSoftClose = true;
+        buyersPremiumPct = 15;
+      } else {
+        domainFamily = 'local_cash';
+        listingMode = 'local_cash';
+        isLocalPickupOnly = true;
+        shippingCost = 0;
+      }
+    } else if (/craigslist\.org/i.test(host) || /offerup\.com/i.test(host)) {
+      platformName = /craigslist/i.test(host) ? 'Craigslist' : 'OfferUp';
+      domainFamily = 'local_cash';
+      listingMode = 'local_cash';
+      isLocalPickupOnly = true;
+      shippingCost = 0;
+    } else if (/poshmark\.com|mercari\.com|depop\.com|etsy\.com|whatnot\.com/i.test(host)) {
+      platformName = /poshmark/i.test(host)
+        ? 'Poshmark'
+        : /mercari/i.test(host)
+        ? 'Mercari'
+        : /depop/i.test(host)
+        ? 'Depop'
+        : /whatnot/i.test(host)
+        ? 'Whatnot'
+        : 'Etsy';
+      domainFamily = 'national_marketplace';
+      listingMode = /whatnot/i.test(host) ? 'auction' : 'fixed_online';
+      isAuction = /whatnot/i.test(host);
+    }
+
+    var mainRoot =
+      (platformName === 'FB Marketplace' && document.querySelector('[role="main"]')) ||
+      document.querySelector('main, [role="main"], #mainContent') ||
+      document.body;
+
+    var ogTitleEl = document.querySelector('meta[property="og:title"], meta[name="twitter:title"]');
+    var ogTitle = ogTitleEl ? cleanText(ogTitleEl.getAttribute('content') || '') : '';
+    var eBayTitleEl = document.querySelector('.x-item-title__mainTitle');
+    var h1El = (mainRoot && mainRoot.querySelector('h1')) || document.querySelector('h1');
+    var rawTitle = cleanText((eBayTitleEl && eBayTitleEl.textContent) || (h1El && h1El.textContent) || ld.title || ogTitle || document.title || '');
+    rawTitle = rawTitle.replace(/\s*[|\-–]\s*(?:eBay|Facebook|Poshmark|Mercari|HiBid.*|CTBids.*)$/i, '').trim();
+
+    var mainText = cleanText((mainRoot && mainRoot.innerText) || (document.body && document.body.innerText) || '');
+    var topSlice = mainText.slice(0, 6500);
+
+    // Price extraction
+    var currentPrice = ld.price || 0;
+    if (platformName === 'eBay') {
+      var ebPriceEl = document.querySelector('.x-price-primary span, .x-bid-price__content span');
+      if (ebPriceEl) {
+        var ebP = parseDollar(ebPriceEl.textContent);
+        if (ebP > 0) currentPrice = ebP;
+      }
+      if (document.querySelector('[data-testid="x-bid-action"], #bidBtn_btn') || /\bplace\s+bid\b|\bbids?\s*·\s*time\s+left\b/i.test(topSlice.slice(0, 2500))) {
+        isAuction = true;
+        listingMode = 'auction';
+      }
+      var ebShipEl = document.querySelector('.ux-labels-values--shipping');
+      var ebShipTxt = cleanText((ebShipEl && ebShipEl.textContent) || '');
+      if (/local\s+pickup\s+only|free\s+local\s+pickup/i.test(ebShipTxt) && !/\$\d/.test(ebShipTxt)) {
+        isLocalPickupOnly = true;
+        shippingCost = 0;
+      } else if (/free\s+(?:standard\s+|expedited\s+|economy\s+)?shipping|free\s+delivery/i.test(ebShipTxt)) {
+        shippingCost = 0;
+      } else if (ebShipTxt) {
+        var ebShipM = ebShipTxt.match(/\$([0-9,]+(?:\.[0-9]{1,2})?)/);
+        if (ebShipM) shippingCost = parseFloat(ebShipM[1].replace(/,/g, '')) || 0;
+      }
+    }
+
+    if (!currentPrice) {
+      var metaPriceEl = document.querySelector('meta[property="product:price:amount"], meta[property="og:price:amount"]');
+      if (metaPriceEl) {
+        var mp = parseFloat(String(metaPriceEl.getAttribute('content') || '').replace(/[^0-9.]/g, ''));
+        if (mp > 0) currentPrice = mp;
+      }
+    }
+    if (!currentPrice) {
+      var askMatch = topSlice.match(/(?:Current\s+Bid|High\s+Bid|Winning\s+Bid|Starting\s+Bid|Current\s+Price|Asking\s+Price|Price)\s*:?\s*\$([0-9,]+(?:\.[0-9]{1,2})?)/i) ||
+        topSlice.slice(0, 1600).match(/\$([0-9,]+(?:\.[0-9]{1,2})?)/);
+      if (askMatch && askMatch[1]) {
+        currentPrice = parseFloat(askMatch[1].replace(/,/g, '')) || 0;
+      }
+    }
+
+    // Buyer's Premium & Soft-Close detection from visible terms
+    var bpMatch =
+      mainText.match(/(\d{1,2}(?:\.\d{1,2})?)\s*%\s*buyer'?s?\s*premium/i) ||
+      mainText.match(/buyer'?s?\s*premium[^0-9\n]{0,30}(\d{1,2}(?:\.\d{1,2})?)\s*%/i);
+    if (bpMatch && bpMatch[1]) {
+      var parsedBp = parseFloat(bpMatch[1]);
+      if (parsedBp >= 1 && parsedBp <= 40) {
+        buyersPremiumPct = parsedBp;
+        isAuction = true;
+        if (domainFamily === 'generic_online') domainFamily = 'buyers_premium_auction';
+        if (listingMode === 'fixed_online') listingMode = 'soft_close_auction';
+      }
+    }
+    if (/soft[\s-]*close|staggered\s+close|auto[\s-]*extend|popcorn\s+bidding/i.test(mainText)) {
+      isSoftClose = true;
+      isAuction = true;
+      listingMode = 'soft_close_auction';
+    }
+    if (/local\s+pick[\s-]*up\s+only|no\s+shipping\s+available|shipping\s*:?\s*not\s+available|in[\s-]*person\s+pick[\s-]*up\s+only/i.test(mainText)) {
+      isLocalPickupOnly = true;
+      shippingCost = 0;
+    }
+
+    // Location & Seller hints
+    var locationText = '';
+    var fbLocMatch = topSlice.match(/Listed\s+[^in\n]{0,35}\bin\s+([A-Z][A-Za-z .'-]+,\s*[A-Z]{2})\b/);
+    if (fbLocMatch && fbLocMatch[1]) locationText = cleanText(fbLocMatch[1]);
+
+    var seller = ld.seller || locationText || platformName;
+    var description = ld.description || topSlice.slice(0, 1800);
+    var termsMatch = mainText.match(/([^\n.]{0,80}(?:buyer'?s?\s*premium|pick[\s-]*up\s+only|soft[\s-]*close)[^\n.]{0,120})/i);
+    var termsText = termsMatch ? cleanText(termsMatch[1]).slice(0, 260) : '';
+
+    // Gallery harvesting (official JSON-LD + og:image + high-res DOM product images)
+    var imgs = [];
+    var seenKeys = {};
+    function addCandidate(rawSrc) {
+      var upg = upgradeAndKeyExternalImage(rawSrc, host);
+      if (!upg || seenKeys[upg.key]) return;
+      seenKeys[upg.key] = true;
+      imgs.push(upg.url);
+    }
+
+    // On eBay, inspect carousel/filmstrip first for exact gallery order
+    if (platformName === 'eBay') {
+      Array.prototype.slice
+        .call(document.querySelectorAll('.ux-image-carousel img, .ux-image-filmstrip img, [data-testid*="ux-image"] img'))
+        .forEach(function (img) {
+          var s = img.getAttribute('data-zoom-src') || img.getAttribute('data-src') || img.getAttribute('src') || img.src;
+          addCandidate(s);
+        });
+    }
+
+    (ld.images || []).forEach(addCandidate);
+    var ogImgEl = document.querySelector('meta[property="og:image"]');
+    if (ogImgEl) addCandidate(ogImgEl.getAttribute('content'));
+
+    var domImgs = Array.prototype.slice.call((mainRoot || document).querySelectorAll('img'));
+    domImgs.forEach(function (img) {
+      if (imgs.length >= 24) return;
+      if (isElementInsideRelatedSection(img)) return;
+      if (platformName === 'FB Marketplace' && img.closest && img.closest('a[href*="/marketplace/profile/"], a[href*="/marketplace/item/"]')) {
+        return;
+      }
+      var nw = Number(img.naturalWidth || 0);
+      var nh = Number(img.naturalHeight || 0);
+      var rw = Number(img.width || 0);
+      var rh = Number(img.height || 0);
+      if (img.complete && nw > 0 && nh > 0 && (nw < 130 || nh < 130)) return;
+      if (rw > 0 && rh > 0 && rw < 90 && rh < 90 && nw < 200) return;
+
+      var bestSrc =
+        img.getAttribute('data-zoom-src') ||
+        img.getAttribute('data-zoom-image') ||
+        img.getAttribute('data-large_image') ||
+        img.getAttribute('data-src') ||
+        img.currentSrc ||
+        img.getAttribute('src') ||
+        img.src ||
+        '';
+      addCandidate(bestSrc);
+    });
+
+    if (!externalItemId) {
+      externalItemId = normalizeUrlWatchlistKey(href);
+    }
+    var shortDisplayId = externalItemId.length > 22 ? platformName : externalItemId;
+
+    return {
+      itemId: externalItemId,
+      externalItemId: externalItemId,
+      displayBadgeId: shortDisplayId,
+      sourceUrl: href,
+      platformName: platformName,
+      domainFamily: domainFamily,
+      listingMode: listingMode,
+      isAuction: isAuction,
+      isSoftClose: isSoftClose,
+      isLocalPickupOnly: isLocalPickupOnly,
+      buyersPremiumPct: buyersPremiumPct,
+      shippingCost: shippingCost,
+      locationText: locationText,
+      termsText: termsText,
+      description: description,
+      title: rawTitle || (platformName + ' Listing'),
+      currentPrice: currentPrice,
+      seller: seller,
+      shippingWeight: 1.5,
+      endingDate: '',
+      images: imgs.slice(0, 24)
+    };
+  }
+
+  function getActiveItemRow() {
+    if (state.rows && state.rows[0]) return state.rows[0];
+    return isShopGoodwillHost() ? scrapeSingleItemDom() : scrapeExternalListingDom();
   }
 
   function scrapeSingleItemDom() {
@@ -595,6 +983,17 @@
     var path = (window.location.pathname || '').toLowerCase();
     var domRows = [];
     var domByItemId = {};
+
+    if (!isShopGoodwillHost()) {
+      state.pageType = 'external-item';
+      var extRow = scrapeExternalListingDom();
+      if (extRow.isSoftClose || !extRow.isAuction || Number(extRow.buyersPremiumPct || 0) > 0) {
+        state.useProxyCents = false;
+      }
+      domRows.push(extRow);
+      state.rows = domRows;
+      return;
+    }
 
     if (path.indexOf('/item/') !== -1) {
       state.pageType = 'item';
@@ -767,6 +1166,7 @@
   }
 
   function decoratePageRows() {
+    if (!isShopGoodwillHost()) return;
     if (state.pageType === 'inprogress-auctions') {
       state.rows.forEach(function (r) {
         if (!r.maxBidTd) return;
@@ -939,7 +1339,7 @@
       });
   }
 
-  // Run full AI Speed Scout inside the Slide-Over Tray on /item/:id
+  // Run full AI Speed Scout inside the Slide-Over Tray on /item/:id or any external listing page
   function runInTrayAiScout() {
     var auth = window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.getSession ? window.__RC_BML_AUTH__.getSession() : null;
     if (!auth) {
@@ -950,7 +1350,7 @@
     }
 
     detectPageAndRows();
-    var itemRow = state.rows[0] || scrapeSingleItemDom();
+    var itemRow = getActiveItemRow();
     syncGalleryStateForItem(itemRow);
     var selectedUrls = getSelectedGalleryUrls();
 
@@ -960,22 +1360,46 @@
     state.trayOpen = true;
     renderUI();
 
-    var isSgwItemPage = /shopgoodwill\.com\/item\/\d+/i.test(window.location.href);
-    var noteParts = [];
-    if (state.resellerNotes && cleanText(state.resellerNotes)) {
-      noteParts.push('USER GROUND-TRUTH NOTES: ' + cleanText(state.resellerNotes));
-    }
-    noteParts.push(window.location.href);
-    noteParts.push('Title: ' + itemRow.title);
-    noteParts.push('Current Price: $' + itemRow.currentPrice);
-    noteParts.push('Seller: ' + itemRow.seller);
+    var isSgwItemPage = isShopGoodwillHost() && /\/item\/\d+/i.test(window.location.pathname || '');
+    var humanNotes = state.resellerNotes && cleanText(state.resellerNotes)
+      ? 'USER GROUND-TRUTH NOTES: ' + cleanText(state.resellerNotes)
+      : '';
 
-    callRcApi('POST', '/api/identify-item', {
-      notes: noteParts.join('\n'),
+    var clientDomPayload = !isShopGoodwillHost()
+      ? {
+          sourceUrl: window.location.href,
+          platformName: itemRow.platformName || '',
+          domainFamily: itemRow.domainFamily || '',
+          listingMode: itemRow.listingMode || '',
+          externalItemId: itemRow.externalItemId || itemRow.itemId || '',
+          title: itemRow.title || '',
+          description: itemRow.description || '',
+          currentPrice: Number(itemRow.currentPrice || 0),
+          buyersPremiumPct: Number(itemRow.buyersPremiumPct || 0),
+          shippingCost: itemRow.shippingCost !== undefined && itemRow.shippingCost !== null ? Number(itemRow.shippingCost) : undefined,
+          isLocalPickupOnly: Boolean(itemRow.isLocalPickupOnly),
+          isAuction: Boolean(itemRow.isAuction),
+          isSoftClose: Boolean(itemRow.isSoftClose),
+          termsText: itemRow.termsText || '',
+          sellerName: itemRow.seller || '',
+          locationText: itemRow.locationText || '',
+          endingDate: itemRow.endingDate || '',
+          imageUrls: selectedUrls.length > 0 ? selectedUrls : (itemRow.images || [])
+        }
+      : null;
+
+    var reqBody = {
+      url: window.location.href,
+      notes: humanNotes,
       zipCode: state.zipCode || '97206',
       selectedRemoteImageUrls: selectedUrls,
       remoteImageUrls: isSgwItemPage && !state.hasManualPhotoToggles ? [] : selectedUrls
-    })
+    };
+    if (clientDomPayload) {
+      reqBody.clientDomListing = clientDomPayload;
+    }
+
+    callRcApi('POST', '/api/identify-item', reqBody)
       .then(function (data) {
         state.scoutingItem = false;
         var firstItem = (data && Array.isArray(data.items) && data.items[0]) ? data.items[0] : data;
@@ -989,6 +1413,20 @@
         }
         if (firstItem.seller_info && firstItem.seller_info.shipping_weight && state.rows[0]) {
           state.rows[0].shippingWeight = Number(firstItem.seller_info.shipping_weight) || state.rows[0].shippingWeight;
+        }
+        if (firstItem.auction_meta && state.rows[0]) {
+          if (firstItem.auction_meta.buyers_premium_pct !== undefined) {
+            state.rows[0].buyersPremiumPct = Number(firstItem.auction_meta.buyers_premium_pct) || 0;
+          }
+          if (firstItem.auction_meta.is_soft_close !== undefined) {
+            state.rows[0].isSoftClose = Boolean(firstItem.auction_meta.is_soft_close);
+          }
+          if (firstItem.auction_meta.listing_mode) {
+            state.rows[0].listingMode = firstItem.auction_meta.listing_mode;
+          }
+          if (state.rows[0].isSoftClose || Number(state.rows[0].buyersPremiumPct || 0) > 0) {
+            state.useProxyCents = false;
+          }
         }
         state.selectedTier = 'balanced';
         state.customMaxBid = String(computeActiveMaxBid().toFixed(2));
@@ -1022,25 +1460,68 @@
   }
 
   function computeScoutFinancials() {
-    var itemRow = state.rows[0] || {};
+    var itemRow = getActiveItemRow() || {};
     var rep = state.scoutReport;
     if (!rep) return null;
+
+    var isSgw = isShopGoodwillHost();
+    var auctionMeta = rep.auction_meta || {};
+    var purchaseStrat = rep.purchase_strategy || {};
+    var shipInfo = rep.shipping_info || {};
+
+    var listingMode =
+      auctionMeta.listing_mode ||
+      purchaseStrat.listing_mode ||
+      itemRow.listingMode ||
+      (isSgw ? 'auction' : 'auction');
+    var buyersPremiumPct = Number(
+      auctionMeta.buyers_premium_pct !== undefined
+        ? auctionMeta.buyers_premium_pct
+        : purchaseStrat.buyers_premium_pct !== undefined
+        ? purchaseStrat.buyers_premium_pct
+        : itemRow.buyersPremiumPct || 0
+    ) || 0;
+    var isSoftClose = Boolean(
+      auctionMeta.is_soft_close ||
+        itemRow.isSoftClose ||
+        listingMode === 'soft_close_auction'
+    );
+    var isAuction =
+      isSgw ||
+      listingMode === 'auction' ||
+      listingMode === 'soft_close_auction' ||
+      Boolean(itemRow.isAuction);
+    var isLocalPickupOnly = Boolean(
+      shipInfo.isLocalPickupOnly ||
+        auctionMeta.is_local_pickup_only ||
+        itemRow.isLocalPickupOnly ||
+        listingMode === 'local_cash'
+    );
 
     var currentBid = Number(
       itemRow.currentPrice ||
         rep.currentBid ||
-        (rep.auction_meta && rep.auction_meta.current_bid) ||
-        parseDollar(rep.purchase_strategy && rep.purchase_strategy.current_asking_price) ||
+        auctionMeta.current_bid ||
+        parseDollar(purchaseStrat.current_asking_price) ||
         0
     );
-    var shipInfo = rep.shipping_info || {};
-    var shipTotal = Number(shipInfo.total || (rep.auction_meta && rep.auction_meta.estimated_shipping) || 10.5);
-    var shipBase = Number(shipInfo.shipping || Math.max(0, shipTotal - 3));
-    var shipHandling = Number(shipInfo.handling || Math.max(0, shipTotal - shipBase));
+
+    var rawShipFallback = isLocalPickupOnly ? 0 : (isSgw ? 10.5 : Number(itemRow.shippingCost || 0));
+    var shipTotal = isLocalPickupOnly
+      ? 0
+      : Number(
+          shipInfo.total !== undefined && shipInfo.total !== null
+            ? shipInfo.total
+            : auctionMeta.estimated_shipping !== undefined && auctionMeta.estimated_shipping !== null
+            ? auctionMeta.estimated_shipping
+            : rawShipFallback
+        );
+    var shipBase = isLocalPickupOnly ? 0 : Number(shipInfo.shipping !== undefined ? shipInfo.shipping : (isSgw ? Math.max(0, shipTotal - 3) : shipTotal));
+    var shipHandling = isLocalPickupOnly ? 0 : Number(shipInfo.handling !== undefined ? shipInfo.handling : Math.max(0, shipTotal - shipBase));
     var weight = Number((rep.seller_info && rep.seller_info.shipping_weight) || itemRow.shippingWeight || 1.5);
-    var sellerName = cleanText((rep.seller_info && rep.seller_info.seller_name) || itemRow.seller || 'ShopGoodwill');
+    var sellerName = cleanText((rep.seller_info && rep.seller_info.seller_name) || itemRow.seller || itemRow.platformName || (isSgw ? 'ShopGoodwill' : 'Seller'));
     var sellerId = (rep.seller_info && rep.seller_info.seller_id) || null;
-    var canCombine = rep.seller_info && rep.seller_info.can_combine_shipping !== undefined ? Boolean(rep.seller_info.can_combine_shipping) : true;
+    var canCombine = isSgw && (rep.seller_info && rep.seller_info.can_combine_shipping !== undefined ? Boolean(rep.seller_info.can_combine_shipping) : true);
 
     var boutiqueStr = (rep.pricing_potential && rep.pricing_potential.boutique) || (rep.price_breakdown && rep.price_breakdown.boutique_premium) || '$24 - $38';
     var fairStr = (rep.pricing_potential && rep.pricing_potential.fair) || (rep.price_breakdown && rep.price_breakdown.fair) || '$16 - $26';
@@ -1072,24 +1553,69 @@
 
     var synergy = canCombine ? evaluateSellerSynergy(sellerName, weight, itemRow.itemId) : null;
     var combineSavings = (synergy && synergy.isEligible && state.useCombineBonus) ? Math.min(12, Math.max(5, Math.round(shipBase * 0.85))) : 0;
-    var effectiveShip = Math.max(shipHandling || 2, shipTotal - combineSavings);
+    var effectiveShip = isLocalPickupOnly ? 0 : Math.max(isSgw ? (shipHandling || 2) : 0, shipTotal - combineSavings);
+    var allowSniperCents = Boolean(isAuction && !isSoftClose && buyersPremiumPct <= 0);
 
     function calcTier(roiMultiple) {
       var targetLanded = Math.round((targetResale / roiMultiple) * 100) / 100;
-      var rawMax = Math.max(0, Math.floor(targetLanded - effectiveShip));
-      var finalMax = rawMax > 0 && state.useProxyCents ? Number((rawMax + 0.87).toFixed(2)) : rawMax;
-      var netProfit = Math.max(0, Math.round(netPayout - (finalMax + effectiveShip)));
+      var availAfterShip = Math.max(0, targetLanded - effectiveShip);
+      var bpMult = 1 + (buyersPremiumPct > 0 ? buyersPremiumPct / 100 : 0);
+      var rawHammer = bpMult > 1 ? availAfterShip / bpMult : availAfterShip;
+      var baseMax = isAuction ? Math.max(0, Math.floor(rawHammer)) : Math.max(0, Math.round(rawHammer * 100) / 100);
+      var finalMax = baseMax > 0 && allowSniperCents && state.useProxyCents ? Number((baseMax + 0.87).toFixed(2)) : baseMax;
+      var bpDollars = buyersPremiumPct > 0 ? Math.round(finalMax * buyersPremiumPct) / 100 : 0;
+      var estLanded = Math.round((finalMax + bpDollars + effectiveShip) * 100) / 100;
+      var netProfit = Math.max(0, Math.round(netPayout - estLanded));
       return {
         roi: roiMultiple.toFixed(1) + 'x',
         maxBid: finalMax,
+        bpDollars: bpDollars,
+        estLanded: estLanded,
         targetLanded: targetLanded,
         netProfit: netProfit,
-        passed: currentBid > finalMax
+        passed: currentBid > 0 && currentBid > finalMax
       };
     }
 
+    var tiers = {
+      conservative: calcTier(3.0),
+      balanced: calcTier(2.2),
+      aggressive: calcTier(1.7)
+    };
+
+    var targetCashOfferStr = purchaseStrat.target_cash_offer || '';
+    if (!targetCashOfferStr && listingMode === 'local_cash') {
+      var offerHigh = tiers.balanced.maxBid > 0 ? Math.round(tiers.balanced.maxBid) : 0;
+      var offerLow = tiers.conservative.maxBid > 0 ? Math.round(tiers.conservative.maxBid) : Math.max(5, Math.round(offerHigh * 0.8));
+      if (currentBid > 0) {
+        offerHigh = Math.min(offerHigh || Math.round(currentBid * 0.8), Math.round(currentBid * 0.85));
+        offerLow = Math.min(offerLow, Math.max(5, Math.round(currentBid * 0.65)));
+      }
+      if (offerHigh > 0) {
+        targetCashOfferStr = offerLow > 0 && offerLow < offerHigh ? ('$' + offerLow + ' – $' + offerHigh) : ('$' + offerHigh);
+      }
+    }
+
+    var actionLabel =
+      purchaseStrat.action_label ||
+      (listingMode === 'local_cash'
+        ? 'Target Cash Offer'
+        : !isAuction
+        ? 'Max Offer / Buy Price'
+        : buyersPremiumPct > 0
+        ? 'Max Hammer Bid (Excl. +' + buyersPremiumPct + '% BP)'
+        : 'Target Max Bid');
+
     return {
       currentBid: currentBid,
+      listingMode: listingMode,
+      isAuction: isAuction,
+      isSoftClose: isSoftClose,
+      isLocalPickupOnly: isLocalPickupOnly,
+      buyersPremiumPct: buyersPremiumPct,
+      allowSniperCents: allowSniperCents,
+      actionLabel: actionLabel,
+      targetCashOfferStr: targetCashOfferStr,
       shipTotal: shipTotal,
       shipBase: shipBase,
       shipHandling: shipHandling,
@@ -1106,16 +1632,12 @@
       fairMid: fairMid,
       netPayout: netPayout,
       sumPieceBoutique: Math.round(sumPieceBoutique * 100) / 100,
-      verdict: (rep.purchase_strategy && rep.purchase_strategy.verdict) || 'WATCH',
-      bestPlatform: (rep.market_report && rep.market_report.best_platform) || "Memory Den - Huck's Adventures Outfitters",
-      whyPayUp: rep.why_pay_up || (rep.purchase_strategy && rep.purchase_strategy.advice) || '',
+      verdict: purchaseStrat.verdict || 'WATCH',
+      bestPlatform: (rep.market_report && rep.market_report.best_platform) || "Memory Den (#0EJ)",
+      whyPayUp: rep.why_pay_up || purchaseStrat.advice || '',
       whyPass: rep.why_pass || '',
       lotItems: lotItems,
-      tiers: {
-        conservative: calcTier(3.0),
-        balanced: calcTier(2.2),
-        aggressive: calcTier(1.7)
-      }
+      tiers: tiers
     };
   }
 
@@ -1136,7 +1658,7 @@
     }
 
     detectPageAndRows();
-    var itemRow = state.rows[0] || scrapeSingleItemDom();
+    var itemRow = getActiveItemRow();
     syncGalleryStateForItem(itemRow);
     var selectedUrls = getSelectedGalleryUrls();
     var fin = withAiReport ? computeScoutFinancials() : null;
@@ -1168,8 +1690,15 @@
       combinedNotes.push(fin.whyPayUp);
     }
 
+    var isSgw = isShopGoodwillHost();
     var payloadRow = {
       itemId: itemRow.itemId,
+      externalItemId: itemRow.externalItemId || itemRow.itemId,
+      sourceUrl: window.location.href,
+      platformName: itemRow.platformName || (isSgw ? 'ShopGoodwill' : ''),
+      domainFamily: itemRow.domainFamily || '',
+      listingMode: (fin && fin.listingMode) || itemRow.listingMode || '',
+      buyersPremiumPct: fin ? fin.buyersPremiumPct : Number(itemRow.buyersPremiumPct || 0),
       title: (state.scoutReport && (state.scoutReport.title || state.scoutReport.identity)) || itemRow.title,
       currentPrice: fin ? fin.currentBid : itemRow.currentPrice,
       maxBid: targetMaxBid,
@@ -1178,7 +1707,7 @@
       seller: fin ? fin.sellerName : itemRow.seller,
       sellerId: fin ? fin.sellerId : null,
       shippingWeight: fin ? fin.weight : itemRow.shippingWeight,
-      canCombineShipping: fin ? fin.canCombine : true,
+      canCombineShipping: fin ? fin.canCombine : isSgw,
       primaryImageUrl: primaryImageUrl,
       imageUrls: selectedUrls,
       endingDate: itemRow.endingDate || '',
@@ -1187,7 +1716,7 @@
     };
 
     callRcApi('POST', '/api/bml/sgw-sync', {
-      pageType: 'item',
+      pageType: isSgw ? 'item' : 'external-item',
       dryRun: false,
       rows: [payloadRow]
     })
@@ -1197,10 +1726,12 @@
         var trkName = state.lastSavedTracker
           ? state.lastSavedTracker.orderId + ' (' + state.lastSavedTracker.vendor + ')'
           : 'Buy Tracker';
+        var archivedCount = Number((resData && resData.uploadedPhotosCount) || 0);
+        var archivedNote = archivedCount > 0 ? ' • 📸 ' + archivedCount + ' Archived' : '';
         state.trackedSavedMsg =
           targetMaxBid > 0
-            ? '✅ Saved to ' + trkName + ' & Copied $' + targetMaxBid.toFixed(2) + ' Max Bid!'
-            : '✅ Saved to ' + trkName + '!';
+            ? '✅ Saved to ' + trkName + archivedNote + ' & Copied $' + targetMaxBid.toFixed(2) + '!'
+            : '✅ Saved to ' + trkName + archivedNote + '!';
         notifyRcTabs({ tool: 'auction_scout', action: 'tracked_item', itemId: itemRow.itemId });
         fetchWatchlist();
         renderUI();
@@ -1300,7 +1831,7 @@
       return;
     }
 
-    if (!state.csvHarvested && state.pageType !== 'item') {
+    if (!state.csvHarvested && !isItemScoutMode()) {
       harvestPageCsvSilently(function () {
         executeSyncCall(dryRun);
       });
@@ -1635,11 +2166,31 @@
   }
 
   function renderItemTrayBody() {
-    var itemRow = state.rows[0] || scrapeSingleItemDom();
-    var existingWl = state.watchlist[itemRow.itemId] || null;
+    var itemRow = getActiveItemRow();
+    var isSgw = isShopGoodwillHost();
+    var existingWl = lookupWatchlistForItem(itemRow);
     var preSynergy = evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId);
     var fin = computeScoutFinancials();
     var activeSynergy = fin && fin.synergy ? fin.synergy : preSynergy;
+
+    var dispBpPct = fin ? fin.buyersPremiumPct : Number(itemRow.buyersPremiumPct || 0);
+    var dispLocal = fin ? fin.isLocalPickupOnly : Boolean(itemRow.isLocalPickupOnly);
+    var dispSoft = fin ? fin.isSoftClose : Boolean(itemRow.isSoftClose);
+    var dispMode = (fin && fin.listingMode) || itemRow.listingMode || (isSgw ? 'auction' : 'auction');
+    var dispIsAuction = fin ? fin.isAuction : (isSgw || Boolean(itemRow.isAuction));
+    var badgeIdText = isSgw ? ('#' + itemRow.itemId) : (itemRow.displayBadgeId || itemRow.platformName || 'Listing');
+    var priceHeading = (!dispIsAuction || dispMode === 'local_cash' || dispMode === 'fixed_online') ? 'Asking Price' : 'Current Bid';
+
+    var domainPillsHtml = '';
+    if (dispBpPct > 0) {
+      domainPillsHtml += '<span style="background:#7c2d12;color:#ffedd5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:900;">⚠️ +' + dispBpPct + '% Buyer\'s Premium</span>';
+    }
+    if (dispSoft) {
+      domainPillsHtml += '<span style="background:#3730a3;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">⏱️ Soft-Close (No .87)</span>';
+    }
+    if (dispLocal) {
+      domainPillsHtml += '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🚗 Local Pickup ($0 Ship)</span>';
+    }
 
     var html = '';
 
@@ -1649,21 +2200,24 @@
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
           '<div style="min-width:0;flex:1;">' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">' +
-              '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-family:monospace;font-size:10.5px;font-weight:800;">#' + escHtml(itemRow.itemId) + '</span>' +
+              '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-family:monospace;font-size:10.5px;font-weight:800;">' + escHtml(badgeIdText) + '</span>' +
               '<span style="color:#94a3b8;font-size:11px;font-weight:700;">📍 ' + escHtml((fin && fin.sellerName) || itemRow.seller) + '</span>' +
               (existingWl
                 ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">📌 Tracked (Max $' + Number(existingWl.maxBid || 0).toFixed(2) + ')</span>'
                 : '') +
+              domainPillsHtml +
             '</div>' +
             '<div style="font-weight:800;font-size:12.5px;color:#f8fafc;line-height:1.35;">' + escHtml(itemRow.title) + '</div>' +
           '</div>' +
           '<div style="text-align:right;flex-shrink:0;">' +
-            '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;font-weight:800;">Current Bid</div>' +
-            '<div style="font-size:16px;font-weight:900;color:#38bdf8;font-family:monospace;">$' + Number(itemRow.currentPrice || 0).toFixed(2) + '</div>' +
+            '<div style="font-size:10px;color:#94a3b8;text-transform:uppercase;font-weight:800;">' + priceHeading + '</div>' +
+            '<div style="font-size:16px;font-weight:900;color:#38bdf8;font-family:monospace;">$' + Number((fin && fin.currentBid) || itemRow.currentPrice || 0).toFixed(2) + '</div>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;">' +
-          '<span style="color:#cbd5e1;">⚖️ Est. Weight: <strong>' + Number((fin && fin.weight) || itemRow.shippingWeight || 1.5).toFixed(1) + ' lbs</strong></span>' +
+          '<span style="color:#cbd5e1;">' +
+            (dispLocal ? '🚗 Pickup: <strong>In-Person ($0 S&amp;H)</strong>' : '⚖️ Est. Weight: <strong>' + Number((fin && fin.weight) || itemRow.shippingWeight || 1.5).toFixed(1) + ' lbs</strong>') +
+          '</span>' +
           '<label style="display:flex;align-items:center;gap:5px;color:#cbd5e1;font-weight:700;">' +
             '<span>Ship ZIP:</span>' +
             '<input id="rc-scout-zip-input" type="text" maxlength="5" value="' + escHtml(state.zipCode) + '" style="width:62px;background:#0f172a;color:#f8fafc;border:1px solid #475569;border-radius:6px;padding:2px 6px;font-family:monospace;font-size:11px;text-align:center;" />' +
@@ -1674,7 +2228,7 @@
     // 2. Selectable Photo Strip + Authoritative Reseller Notes (Pre-Scan & Post-Scan!)
     html += renderPhotoStripAndNotesSection(itemRow);
 
-    // 3. Combined Shipping Synergy Banner
+    // 3. Combined Shipping Synergy Banner (ShopGoodwill regional hubs)
     html += renderCombineBannerHtml(activeSynergy);
 
     if (state.trackedSavedMsg) {
@@ -1692,7 +2246,7 @@
       html +=
         '<div style="background:#1e1b4b;border:1px solid #818cf8;border-radius:14px;padding:22px 14px;text-align:center;margin-bottom:10px;">' +
           '<div style="font-size:14px;font-weight:900;color:#e0e7ff;margin-bottom:4px;">⚡ Running AI Speed Scout...</div>' +
-          '<div style="font-size:11px;color:#a5b4fc;">Analyzing selected gallery photos, shipping quote (ZIP ' + escHtml(state.zipCode) + '), Hero-Anchor lot pieces &amp; 3-Tier Max Bid ceilings...</div>' +
+          '<div style="font-size:11px;color:#a5b4fc;">Analyzing selected gallery photos, domain fee/BP rules, Hero-Anchor lot pieces &amp; 3-Tier ceilings...</div>' +
         '</div>';
       return html;
     }
@@ -1701,7 +2255,7 @@
       html +=
         '<div style="background:#020617;border:1px dashed #334155;border-radius:12px;padding:14px 12px;text-align:center;margin-bottom:10px;color:#94a3b8;">' +
           '<div style="font-size:12.5px;font-weight:800;color:#e2e8f0;margin-bottom:4px;">Check Best Close-Up Photos Above ➔ Run AI Speed Scout</div>' +
-          '<div style="font-size:11px;line-height:1.45;">Uncheck filler/ruler shots if >12 photos, add optional Reseller Notes, then click <strong>⚡ Run AI Speed Scout</strong> below for full Hero-Anchor Lot Breakdown &amp; Max Bid math.</div>' +
+          '<div style="font-size:11px;line-height:1.45;">Uncheck filler/ruler shots if >12 photos, add optional Reseller Notes, then click <strong>⚡ Run AI Speed Scout</strong> below for full Hero-Anchor Lot Breakdown &amp; Max Bid / Offer math.</div>' +
         '</div>';
       return html;
     }
@@ -1719,7 +2273,18 @@
       : '⚠️ ';
 
     var activeBidNum = parseFloat(state.customMaxBid) || computeActiveMaxBid();
-    var activeLanded = Math.round((activeBidNum + fin.effectiveShip) * 100) / 100;
+    var activeBpDollars = fin.buyersPremiumPct > 0 ? Math.round(activeBidNum * fin.buyersPremiumPct) / 100 : 0;
+    var activeLanded = Math.round((activeBidNum + activeBpDollars + fin.effectiveShip) * 100) / 100;
+
+    var thirdBoxTitle = fin.buyersPremiumPct > 0 ? ('BP (' + fin.buyersPremiumPct + '%) + S&amp;H') : (fin.isLocalPickupOnly ? 'Local Pickup' : 'Est. S&amp;H');
+    var thirdBoxVal = fin.buyersPremiumPct > 0
+      ? ('$' + (activeBpDollars + fin.effectiveShip).toFixed(2))
+      : ('$' + fin.effectiveShip.toFixed(2));
+    var thirdBoxSub = fin.buyersPremiumPct > 0
+      ? ('+$' + activeBpDollars.toFixed(2) + ' BP + $' + fin.effectiveShip.toFixed(2) + ' ship')
+      : fin.isLocalPickupOnly
+      ? 'In-Person ($0 S&amp;H)'
+      : (fin.combineSavings > 0 ? 'Saved ~$' + fin.combineSavings + ' combine!' : '$' + fin.shipBase.toFixed(2) + ' + $' + fin.shipHandling.toFixed(2) + ' hdl');
 
     html +=
       '<div style="background:#020617;border:1px solid #334155;border-radius:12px;padding:11px 12px;margin-bottom:10px;">' +
@@ -1732,26 +2297,32 @@
           '</span>' +
         '</div>' +
 
-        // Valuation + S&H 3-box strip
+        // Valuation + S&H / BP 3-box strip
         '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">' +
           '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;">' +
-            '<div style="font-size:9.5px;color:#94a3b8;font-weight:800;text-transform:uppercase;">Boutique (MD)</div>' +
+            '<div style="font-size:9.5px;color:#94a3b8;font-weight:800;text-transform:uppercase;">Boutique (Booth)</div>' +
             '<div style="font-size:12.5px;font-weight:900;color:#34d399;font-family:monospace;">' + escHtml(fin.boutiqueStr) + '</div>' +
             '<div style="font-size:9.5px;color:#64748b;">Net ~$' + fin.netPayout.toFixed(0) + ' (after 15%)</div>' +
           '</div>' +
           '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;">' +
             '<div style="font-size:9.5px;color:#94a3b8;font-weight:800;text-transform:uppercase;">Fair Online</div>' +
             '<div style="font-size:12.5px;font-weight:900;color:#93c5fd;font-family:monospace;">' + escHtml(fin.fairStr) + '</div>' +
-            '<div style="font-size:9.5px;color:#64748b;">eBay / Comps</div>' +
+            '<div style="font-size:9.5px;color:#64748b;">Sold Comps</div>' +
           '</div>' +
           '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;">' +
-            '<div style="font-size:9.5px;color:#94a3b8;font-weight:800;text-transform:uppercase;">Est. S&amp;H</div>' +
-            '<div style="font-size:12.5px;font-weight:900;color:#fbbf24;font-family:monospace;">$' + fin.effectiveShip.toFixed(2) + '</div>' +
-            '<div style="font-size:9.5px;color:#64748b;">' +
-              (fin.combineSavings > 0 ? 'Saved ~$' + fin.combineSavings + ' combine!' : '$' + fin.shipBase.toFixed(2) + ' + $' + fin.shipHandling.toFixed(2) + ' hdl') +
-            '</div>' +
+            '<div style="font-size:9.5px;color:#94a3b8;font-weight:800;text-transform:uppercase;">' + thirdBoxTitle + '</div>' +
+            '<div style="font-size:12.5px;font-weight:900;color:#fbbf24;font-family:monospace;">' + thirdBoxVal + '</div>' +
+            '<div style="font-size:9.5px;color:#64748b;">' + thirdBoxSub + '</div>' +
           '</div>' +
         '</div>';
+
+    if (fin.targetCashOfferStr) {
+      html +=
+        '<div style="background:rgba(6,95,70,0.32);border:1px solid #34d399;border-radius:8px;padding:6px 9px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;">' +
+          '<span style="color:#d1fae5;font-weight:800;">💵 Cash Negotiation Window:</span>' +
+          '<span style="font-family:monospace;font-weight:900;color:#6ee7b7;">' + escHtml(fin.targetCashOfferStr) + '</span>' +
+        '</div>';
+    }
 
     var tierKeys = [
       { key: 'conservative', label: '🛡️ Conservative', sub: '3.0x ROI' },
@@ -1759,12 +2330,22 @@
       { key: 'aggressive', label: '🔥 Aggressive', sub: '1.7x Fast' }
     ];
 
-    html += '<div style="font-size:10.5px;font-weight:800;color:#cbd5e1;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;">' +
-      '<span>🎯 Click a Tier to Set Your Max Bid Ceiling:</span>' +
-      '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:10px;color:#a5b4fc;">' +
-        '<input type="checkbox" id="rc-scout-proxy-cents" ' + (state.useProxyCents ? 'checked' : '') + ' />' +
-        '<span>+.87 Sniper Cents</span>' +
-      '</label>' +
+    var rightModeHint = fin.allowSniperCents
+      ? '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:10px;color:#a5b4fc;">' +
+          '<input type="checkbox" id="rc-scout-proxy-cents" ' + (state.useProxyCents ? 'checked' : '') + ' />' +
+          '<span>+.87 Sniper Cents</span>' +
+        '</label>'
+      : '<span style="font-size:9.5px;color:#fbbf24;font-weight:800;">' +
+          (fin.buyersPremiumPct > 0
+            ? ('⚡ Auto-Deducts +' + fin.buyersPremiumPct + '% BP')
+            : fin.listingMode === 'local_cash'
+            ? '💵 Local Cash Tiers'
+            : '⏱️ Exact Ceiling') +
+        '</span>';
+
+    html += '<div style="font-size:10.5px;font-weight:800;color:#cbd5e1;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
+      '<span>🎯 Click a Tier Ceiling:</span>' +
+      rightModeHint +
     '</div>';
 
     if (fin.synergy && fin.synergy.isEligible) {
@@ -1791,7 +2372,7 @@
 
     html +=
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:7px 10px;">' +
-        '<span style="font-size:11px;font-weight:800;color:#e2e8f0;">🎯 My Target Max Bid ($):</span>' +
+        '<span style="font-size:11px;font-weight:800;color:#e2e8f0;">🎯 ' + escHtml(fin.actionLabel || 'My Target Max Bid') + ' ($):</span>' +
         '<input id="rc-scout-custom-maxbid" type="number" step="0.01" value="' + escHtml(state.customMaxBid || computeActiveMaxBid().toFixed(2)) + '" style="width:105px;background:#1e293b;color:#34d399;border:1px solid #475569;border-radius:8px;padding:4px 8px;font-family:monospace;font-size:13px;font-weight:900;text-align:right;" />' +
       '</div>' +
     '</div>';
@@ -1961,14 +2542,14 @@
       document.body.appendChild(bar);
     }
 
-    var itemRow = state.pageType === 'item' ? (state.rows[0] || scrapeSingleItemDom()) : null;
+    var itemRow = isItemScoutMode() ? getActiveItemRow() : null;
     var pillSynergy = itemRow ? evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId) : null;
     var combinePillBadge = pillSynergy && pillSynergy.isEligible
       ? '<span style="background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:900;">📦 Combine (+' + pillSynergy.matchCount + ')</span>'
       : '';
 
-    var pillCountBadge = state.pageType === 'item'
-      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;">⚡ AI Scout Tray</span>'
+    var pillCountBadge = isItemScoutMode()
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;">⚡ ' + escHtml(!isShopGoodwillHost() && itemRow && itemRow.platformName ? itemRow.platformName : 'AI Scout Tray') + '</span>'
       : '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-family:monospace;">' + state.rows.length + (state.csvHarvested ? ' CSV' : '') + '</span>';
 
     var signInOrRolePill = auth
@@ -1988,7 +2569,7 @@
     if (toggleBtn) {
       toggleBtn.onclick = function () {
         state.trayOpen = !state.trayOpen;
-        if (state.trayOpen && state.pageType !== 'item' && !state.previewData && !state.loadingPreview) {
+        if (state.trayOpen && !isItemScoutMode() && !state.previewData && !state.loadingPreview) {
           runPreviewOrSync(true);
           return;
         }
@@ -2033,7 +2614,9 @@
       document.body.appendChild(tray);
     }
 
-    var sourceBadge = state.pageType === 'item'
+    var sourceBadge = state.pageType === 'external-item'
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">🌐 ' + escHtml((itemRow && itemRow.platformName) || 'Web Listing') + '</span>'
+      : state.pageType === 'item'
       ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">⚡ Single Item Scout</span>'
       : state.csvHarvested
       ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">📄 ' + state.rows.length + ' CSV Rows</span>'
@@ -2042,7 +2625,7 @@
     var trackersHeaderLink =
       '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" class="rc-btn-pill" title="Open Scout Buy Trackers (/scout/trackers)" style="background:#312e81;border:1px solid #4f46e5;color:#e0e7ff;">📌 Trackers ↗</a>';
 
-    var harvestCsvBtnHtml = state.pageType !== 'item'
+    var harvestCsvBtnHtml = !isItemScoutMode() && isShopGoodwillHost()
       ? '<button id="rc-scout-harvest-csv-btn" class="rc-btn-pill" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;">🔄 CSV</button>'
       : '';
 
@@ -2050,8 +2633,14 @@
       ? '<button id="rc-scout-logout-btn" class="rc-btn-pill" title="Log Out of Bookmarklet" style="background:#334155;color:#fca5a5;border:1px solid rgba(248,113,113,0.4);">🚪</button>'
       : '';
 
+    var saveActionBtnPrefix = itemRow && itemRow.listingMode === 'local_cash'
+      ? '📌 Track & Copy Cash Offer'
+      : itemRow && !itemRow.isAuction && !isShopGoodwillHost()
+      ? '📌 Track & Copy Max Offer'
+      : '📌 Track & Copy Max Bid';
+
     var footerHtml = '';
-    if (state.pageType === 'item') {
+    if (isItemScoutMode()) {
       if (itemRow) syncGalleryStateForItem(itemRow);
       var selPhotoCount = getSelectedGalleryUrls().length;
       var photoCountSuffix = selPhotoCount > 0
@@ -2065,7 +2654,7 @@
               (state.scoutingItem ? '⏳ Scouting' + photoCountSuffix + '...' : '⚡ Run AI Speed Scout' + photoCountSuffix) +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
-              '<button id="rc-scout-quick-track-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">📌 Quick-Track Without AI</button>' +
+              '<button id="rc-scout-quick-track-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">📌 Quick-Track + Save Photos</button>' +
               '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📌 Trackers ↗</a>' +
             '</div>' +
           '</div>';
@@ -2074,8 +2663,8 @@
           '<div style="display:flex;flex-direction:column;gap:6px;">' +
             '<button id="rc-scout-save-track-btn" style="width:100%;background:#10b981;color:#052e16;border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;font-size:13px;">' +
               (state.savingTrack
-                ? '⏳ Saving to Buy Tracker...'
-                : '📌 Track & Copy Max Bid ($' + Number(activeMax || 0).toFixed(2) + ')') +
+                ? '⏳ Archiving Photos & Saving to Tracker...'
+                : saveActionBtnPrefix + ' ($' + Number(activeMax || 0).toFixed(2) + ')') +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
               '<button id="rc-scout-run-ai-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">' +
@@ -2101,6 +2690,10 @@
         '</div>';
     }
 
+    var trayHeaderTitle = isShopGoodwillHost()
+      ? '🔭 ShopGoodwill Sync'
+      : ('🔭 RC Scout — ' + escHtml((itemRow && itemRow.platformName) || 'Online Listing'));
+
     var prevTrayBody = document.getElementById('rc-scout-tray-body');
     var prevScrollTop = prevTrayBody ? prevTrayBody.scrollTop : 0;
 
@@ -2108,7 +2701,7 @@
       // Clean 2-Tier Pinned Tray Header (Zero wrapping or colliding buttons)
       '<div style="padding:10px 14px;background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
-          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🔭 ShopGoodwill Sync</div>' +
+          '<div style="font-size:13.5px;font-weight:900;color:#818cf8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + trayHeaderTitle + '</div>' +
           '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">' +
             trackersHeaderLink +
             harvestCsvBtnHtml +
@@ -2126,7 +2719,7 @@
       '</div>' +
       // Scrollable Tray Body
       '<div id="rc-scout-tray-body" style="flex:1;overflow-y:auto;padding:12px 14px;">' +
-        (state.pageType === 'item' ? renderItemTrayBody() : renderTableTrayBody()) +
+        (isItemScoutMode() ? renderItemTrayBody() : renderTableTrayBody()) +
       '</div>' +
       // Pinned Tray Footer
       '<div style="padding:10px 14px;background:#1e293b;border-top:1px solid #334155;flex-shrink:0;">' +
@@ -2268,7 +2861,7 @@
         var saveBtn = document.getElementById('rc-scout-save-track-btn');
         if (saveBtn && !state.savingTrack) {
           var v = parseFloat(state.customMaxBid) || 0;
-          saveBtn.textContent = '📌 Track & Copy Max Bid ($' + v.toFixed(2) + ')';
+          saveBtn.textContent = saveActionBtnPrefix + ' ($' + v.toFixed(2) + ')';
         }
       };
     }
@@ -2400,7 +2993,7 @@
 
   window.addEventListener('rc-bml-authenticated', function () {
     fetchWatchlist(function () {
-      if (state.trayOpen && state.pageType !== 'item') {
+      if (state.trayOpen && !isItemScoutMode()) {
         runPreviewOrSync(true);
       } else {
         renderUI();
@@ -2413,7 +3006,7 @@
     state.trayOpen = true;
     harvestPageCsvSilently(function () {
       fetchWatchlist(function () {
-        if (state.pageType !== 'item') {
+        if (!isItemScoutMode()) {
           runPreviewOrSync(true);
         } else {
           renderUI();
@@ -2424,14 +3017,14 @@
 
   installCsvInterceptor();
   detectPageAndRows();
-  if (state.pageType === 'item' || state.pageType === 'shipped-orders') {
+  if (isItemScoutMode() || state.pageType === 'shipped-orders') {
     state.trayOpen = true;
   }
   decoratePageRows();
   renderUI();
   fetchWatchlist(function () {
     harvestPageCsvSilently(function () {
-      if (state.trayOpen && state.pageType !== 'item' && !state.previewData && !state.loadingPreview) {
+      if (state.trayOpen && !isItemScoutMode() && !state.previewData && !state.loadingPreview) {
         runPreviewOrSync(true);
       }
     });

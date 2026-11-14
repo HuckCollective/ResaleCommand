@@ -121,6 +121,22 @@
             $0 OOP
           </span>
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          class="tab text-xs sm:text-sm font-black gap-1.5 rounded-xl px-3 sm:px-4 transition-all"
+          :class="activeTab === 'bookmarklets' ? 'tab-active bg-primary text-primary-content shadow-xs' : 'text-base-content/75'"
+          @click="activeTab = 'bookmarklets'"
+        >
+          <span>🔖 Bookmarklets</span>
+          <span
+            class="badge badge-xs font-mono font-bold whitespace-nowrap"
+            :class="activeTab === 'bookmarklets' ? 'badge-neutral text-neutral-content' : 'badge-ghost'"
+          >
+            All BMLs
+          </span>
+        </button>
       </div>
 
       <div v-if="saveNotice" class="badge badge-success text-success-content font-bold whitespace-nowrap py-3 px-3 gap-1.5">
@@ -1093,6 +1109,25 @@
     </section>
 
     <!-- =================================================================== -->
+    <!-- TAB 4: BOOKMARKLETS HUB (ALL CO-OP BMLs & ALPHA LIVE-LOADER)        -->
+    <!-- =================================================================== -->
+    <section v-else-if="activeTab === 'bookmarklets'" class="space-y-4">
+      <div class="bg-primary/10 border border-primary/35 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="badge badge-sm badge-primary text-primary-content font-black">🔖 Universal Bookmarklets Hub</span>
+            <span class="badge badge-sm badge-success text-success-content font-mono font-bold">12-Photo Vision • Multi-Domain • Photo Archival</span>
+          </div>
+          <p class="text-xs text-base-content/80">
+            Drag any pill below directly to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>). Each pill is bound to the exact domain you opened this Lab on (e.g. <code class="font-mono font-bold">alpha.resalecmd.com</code> vs <code class="font-mono font-bold">resalecmd.com</code>) so you can test new 12-photo Gallery Strip &amp; Multi-Domain Auction Scout features immediately.
+          </p>
+        </div>
+      </div>
+
+      <BookmarkletRegistryPanel />
+    </section>
+
+    <!-- =================================================================== -->
     <!-- SLIDE-OVER DRAWER: TRY IT PRICE & VENUE TESTBENCH                    -->
     <!-- =================================================================== -->
     <SlideOverDrawer
@@ -1312,7 +1347,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
@@ -1326,7 +1361,9 @@ import type {
   EstimateVsSoldScorecard,
 } from '../../lib/appraisalCalibration';
 
-type LabTab = 'scorecard' | 'rules' | 'telemetry';
+const BookmarkletRegistryPanel = defineAsyncComponent(() => import('../bml/BookmarkletRegistryPanel.vue'));
+
+type LabTab = 'scorecard' | 'rules' | 'telemetry' | 'bookmarklets';
 type ScorecardFilterKey =
   | 'all'
   | 'under_priced_gem'

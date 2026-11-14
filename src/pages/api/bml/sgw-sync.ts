@@ -15,6 +15,12 @@ import {
 } from '../../../lib/shipmentTracking';
 import { parsePacificDateToIso } from '../../../lib/dateTimeUtils';
 import { formatReadableSellerLabel } from '../../../lib/shipping-rules';
+import { mergeAppraisalHistory, parseRawAnalysis } from '../../../lib/appraisalCalibration';
+import { getSafeComponents } from '../../../lib/inventory';
+import {
+  archiveRemoteImagesToAppwriteStorage,
+  detectDomainFromUrl,
+} from '../../../lib/onlineSourcingAdapters';
 
 export const prerender = false;
 
@@ -52,6 +58,22 @@ function getAppwriteServer() {
   return { databases, dbId, itemsCol, purchasesCol };
 }
 
+function normalizeSourceUrlKey(rawUrl: unknown): string {
+  const s = String(rawUrl || '').trim();
+  if (!/^https?:\/\//i.test(s)) return '';
+  try {
+    const u = new URL(s);
+    u.hash = '';
+    // Strip tracking params while preserving meaningful listing params like ?item=
+    ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid', 'gclid', 'mkevt', 'mkcid', 'mkrid'].forEach((p) =>
+      u.searchParams.delete(p)
+    );
+    return u.toString().replace(/\/$/, '').toLowerCase();
+  } catch {
+    return s.split('#')[0].replace(/\/$/, '').toLowerCase();
+  }
+}
+
 function extractSgwItemIdFromDoc(doc: any): string | null {
   if (!doc) return null;
   const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
@@ -68,29 +90,50 @@ function extractSgwItemIdFromDoc(doc: any): string | null {
   ];
   for (const raw of candidates) {
     if (!raw || typeof raw !== 'string') continue;
-    const urlMatch = raw.match(/\/item\/(\d{7,10})/i);
-    if (urlMatch && urlMatch[1]) return urlMatch[1];
+    if (/shopgoodwill\.com/i.test(raw)) {
+      const urlMatch = raw.match(/\/(?:item|viewitem)\/(\d{7,10})/i);
+      if (urlMatch && urlMatch[1]) return urlMatch[1];
+    }
     const bareMatch = raw.match(/\b(2\d{8})\b/);
-    if (bareMatch && bareMatch[1]) return bareMatch[1];
+    if (bareMatch && bareMatch[1] && (!doc.sourcingLocation || /shopgoodwill/i.test(String(doc.sourcingLocation)))) {
+      return bareMatch[1];
+    }
   }
   return null;
 }
 
-function parseRawAnalysisJson(raw: any): Record<string, any> {
-  if (!raw) return {};
-  if (typeof raw === 'object') return { ...raw };
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
-    } catch {}
+function extractExternalItemKeysFromDoc(doc: any): string[] {
+  if (!doc) return [];
+  const keys = new Set<string>();
+  const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
+  if (rawObj.externalItemId && typeof rawObj.externalItemId === 'string') {
+    const k = rawObj.externalItemId.trim();
+    if (k) keys.add(k);
   }
-  return {};
+  const src = String(doc.sourcingLocation || '').trim();
+  if (/^https?:\/\//i.test(src)) {
+    const normUrl = normalizeSourceUrlKey(src);
+    if (normUrl) keys.add(normUrl);
+    const detected = detectDomainFromUrl(src);
+    if (detected.externalItemId) keys.add(detected.externalItemId);
+  }
+  return Array.from(keys);
 }
 
-function serializeRawAnalysisJson(obj: Record<string, any>): string {
-  const json = JSON.stringify(obj);
-  return json.length > 60000 ? json.slice(0, 60000) : json;
+function parseRawAnalysisJson(raw: any): Record<string, any> {
+  return parseRawAnalysis(raw);
+}
+
+function serializeRawAnalysisJson(
+  obj: Record<string, any>,
+  existingRaw?: unknown,
+  conditionNotes?: string | null
+): string {
+  const merged = mergeAppraisalHistory(existingRaw ?? null, obj, {
+    conditionNotes: conditionNotes || undefined,
+    scanKind: 'scout',
+  });
+  return JSON.stringify(merged);
 }
 
 function extractBoutiquePriceFromDoc(doc: any, rawObj: Record<string, any>): number {
@@ -105,7 +148,8 @@ function buildConditionNotesWithMeta(
   baseNotes: string | undefined,
   existingNotes: string | undefined,
   boutiquePrice: number,
-  primaryImageUrl?: string
+  primaryImageUrl?: string,
+  hasArchivedAppwriteImage = false
 ): string | undefined {
   let clean = String(baseNotes !== undefined ? baseNotes : existingNotes || '')
     .replace(/\[Boutique:\s*\$[\d.]+\]/gi, '')
@@ -121,9 +165,14 @@ function buildConditionNotesWithMeta(
 
   const tags: string[] = [];
   if (boutiquePrice > 0) tags.push(`[Boutique: $${boutiquePrice.toFixed(2)}]`);
-  if (imgUrl) tags.push(`[EXTERNAL_IMAGE: ${imgUrl}]`);
-  const combined = [clean, ...tags].filter(Boolean).join(' ').trim();
-  return combined ? combined.slice(0, 2000) : undefined;
+  if (imgUrl && (!hasArchivedAppwriteImage || imgUrl.length <= 240)) {
+    tags.push(`[EXTERNAL_IMAGE: ${imgUrl}]`);
+  }
+  const tagsStr = tags.join(' ').trim();
+  const maxCleanLen = Math.max(80, 940 - (tagsStr ? tagsStr.length + 1 : 0));
+  const clampedClean = clean.slice(0, maxCleanLen).trim();
+  const combined = [clampedClean, tagsStr].filter(Boolean).join(' ').trim();
+  return combined ? combined.slice(0, 950) : undefined;
 }
 
 function buildDocPermissions(teamId?: string, userId?: string): string[] {
@@ -172,6 +221,7 @@ async function scanRecentInventoryAndMaxUpc(
 ) {
   const normPrefix = prefix.toUpperCase().endsWith('-') ? prefix.toUpperCase() : `${prefix.toUpperCase()}-`;
   const bySgwItemId = new Map<string, any>();
+  const byExternalItemKey = new Map<string, any>();
   let maxSeq = normPrefix === 'HUCK-' ? 9750 : 1000;
   let cursor: string | null = null;
 
@@ -192,6 +242,12 @@ async function scanRecentInventoryAndMaxUpc(
       if (sgwId && !bySgwItemId.has(sgwId)) {
         bySgwItemId.set(sgwId, d);
       }
+      const extKeys = extractExternalItemKeysFromDoc(d);
+      for (const ek of extKeys) {
+        if (ek && !byExternalItemKey.has(ek)) {
+          byExternalItemKey.set(ek, d);
+        }
+      }
     }
     if (docs.length < 100) break;
     cursor = docs[docs.length - 1].$id;
@@ -202,7 +258,7 @@ async function scanRecentInventoryAndMaxUpc(
     return `${normPrefix}${String(maxSeq).padStart(4, '0')}`;
   };
 
-  return { bySgwItemId, nextUpc };
+  return { bySgwItemId, byExternalItemKey, nextUpc };
 }
 
 function findBestActiveSgwTracker(purchases: any[]): any | null {
@@ -313,7 +369,7 @@ export const GET: APIRoute = async ({ request }) => {
 
   try {
     const { databases, dbId, itemsCol, purchasesCol } = getAppwriteServer();
-    const [{ bySgwItemId }, poRes] = await Promise.all([
+    const [{ bySgwItemId, byExternalItemKey }, poRes] = await Promise.all([
       scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix),
       databases.listDocuments(dbId, purchasesCol, [
         NodeQuery.limit(100),
@@ -352,7 +408,8 @@ export const GET: APIRoute = async ({ request }) => {
 
     const watchlist: Record<string, any> = {};
     const combinableItems: any[] = [];
-    for (const [sgwId, doc] of bySgwItemId.entries()) {
+
+    const buildWatchlistEntry = (key: string, doc: any, isSgw: boolean) => {
       const rawObj = parseRawAnalysisJson(doc.rawAnalysis);
       const rawSellerName =
         rawObj.sgwSeller ||
@@ -366,7 +423,9 @@ export const GET: APIRoute = async ({ request }) => {
         doc.sellerId ||
         null;
       const cleanSeller = rawSellerName
-        ? formatReadableSellerLabel({ sellerName: rawSellerName, sellerId, platform: 'shopgoodwill' })
+        ? isSgw
+          ? formatReadableSellerLabel({ sellerName: rawSellerName, sellerId, platform: 'shopgoodwill' })
+          : String(rawSellerName).trim()
         : '';
       const shippingWeight =
         Number(
@@ -376,11 +435,12 @@ export const GET: APIRoute = async ({ request }) => {
             1.0
         ) || 1.0;
       const canCombineShipping =
-        rawObj.canCombineShipping !== undefined
+        isSgw &&
+        (rawObj.canCombineShipping !== undefined
           ? Boolean(rawObj.canCombineShipping)
           : rawObj.seller_info?.can_combine_shipping !== undefined
           ? Boolean(rawObj.seller_info.can_combine_shipping)
-          : true;
+          : true);
 
       const linkedPo = poById.get(doc.purchaseId || doc.cartId || '');
       const trackerLabel =
@@ -390,8 +450,8 @@ export const GET: APIRoute = async ({ request }) => {
           ? `${activeTracker.orderId} (${activeTracker.vendor})`
           : null;
 
-      const entry = {
-        itemId: sgwId,
+      return {
+        itemId: key,
         docId: doc.$id,
         title: doc.title || doc.identity || '',
         status: doc.status || 'tracked',
@@ -412,13 +472,23 @@ export const GET: APIRoute = async ({ request }) => {
         purchaseId: doc.purchaseId || doc.cartId || null,
         trackerLabel,
       };
+    };
+
+    for (const [sgwId, doc] of bySgwItemId.entries()) {
+      const entry = buildWatchlistEntry(sgwId, doc, true);
       watchlist[sgwId] = entry;
 
       const isTrackOrUnshippedWon =
         doc.status === 'tracked' ||
         (doc.status === 'acquired' && !doc.orderId);
-      if (isTrackOrUnshippedWon && cleanSeller) {
+      if (isTrackOrUnshippedWon && entry.sellerName) {
         combinableItems.push(entry);
+      }
+    }
+
+    for (const [extKey, doc] of byExternalItemKey.entries()) {
+      if (!watchlist[extKey]) {
+        watchlist[extKey] = buildWatchlistEntry(extKey, doc, false);
       }
     }
 
@@ -457,7 +527,7 @@ export const POST: APIRoute = async ({ request }) => {
     const selectedSet = selectedKeysRaw && selectedKeysRaw.length > 0 ? new Set(selectedKeysRaw) : null;
 
     const { databases, dbId, itemsCol, purchasesCol } = getAppwriteServer();
-    const [{ bySgwItemId, nextUpc }, poRes] = await Promise.all([
+    const [{ bySgwItemId, byExternalItemKey, nextUpc }, poRes] = await Promise.all([
       scanRecentInventoryAndMaxUpc(databases, dbId, itemsCol, auth.member.prefix),
       databases.listDocuments(dbId, purchasesCol, [
         NodeQuery.limit(100),
@@ -553,7 +623,7 @@ export const POST: APIRoute = async ({ request }) => {
               title: bestTitle.slice(0, 255),
               currentBid: currentPrice,
               cost: currentPrice,
-              rawAnalysis: serializeRawAnalysisJson(rawObj),
+              rawAnalysis: serializeRawAnalysisJson(rawObj, matched.rawAnalysis, matched.conditionNotes),
             };
             if (myMaxBid > 0 && !matched.maxBid) {
               updatePayload.maxBid = myMaxBid;
@@ -715,7 +785,7 @@ export const POST: APIRoute = async ({ request }) => {
                   currentBid: currentPrice,
                   storageLocation: matched.storageLocation || 'HG',
                   upc: assignedUpc,
-                  rawAnalysis: serializeRawAnalysisJson(rawObj),
+                  rawAnalysis: serializeRawAnalysisJson(rawObj, matched.rawAnalysis, matched.conditionNotes),
                 });
                 if (matched.purchaseId) touchedTrackerIds.add(matched.purchaseId);
                 promotedWonCount++;
@@ -1109,7 +1179,7 @@ export const POST: APIRoute = async ({ request }) => {
               const upd: Record<string, any> = {
                 orderId,
                 cost: landedCost,
-                rawAnalysis: serializeRawAnalysisJson(rawObj),
+                rawAnalysis: serializeRawAnalysisJson(rawObj, matched.rawAnalysis, matched.conditionNotes),
               };
               if (poDoc?.$id) {
                 if (matched.purchaseId && matched.purchaseId !== poDoc.$id && isFromDraftTracker) {
@@ -1227,32 +1297,82 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // 4. SINGLE ITEM PAGE (/item/:id) -> Track in Active Buy Tracker (e.g. SC-579892 | Auctions)
-    if (pageType === 'item') {
+    // 4. SINGLE ITEM OR UNIVERSAL EXTERNAL LISTING -> Track in Active Buy Tracker + Archive Appwrite Photos & Lot Components
+    if (pageType === 'item' || pageType === 'external-item') {
       const r = rows[0] || body?.item || {};
-      const itemId = String(r?.itemId || '').replace(/\D/g, '').trim();
-      if (!itemId) {
+      const rawItemIdStr = String(r?.itemId || '').trim();
+      const sgwNumericId = /^\d{7,10}$/.test(rawItemIdStr)
+        ? rawItemIdStr
+        : /shopgoodwill\.com/i.test(String(r?.sourceUrl || ''))
+          ? (String(r?.sourceUrl || '').match(/\/(?:item|viewitem)\/(\d{7,10})/i)?.[1] || '')
+          : '';
+      const rawSourceUrl = String(
+        r?.sourceUrl || (sgwNumericId ? `https://shopgoodwill.com/item/${sgwNumericId}` : '')
+      ).trim();
+      const detectedDomain = detectDomainFromUrl(rawSourceUrl);
+      const isSgwListing = Boolean(sgwNumericId) || detectedDomain.domainFamily === 'shopgoodwill';
+      const externalItemKey = String(
+        r?.externalItemId ||
+          (sgwNumericId ? sgwNumericId : '') ||
+          detectedDomain.externalItemId ||
+          rawItemIdStr
+      ).trim();
+      const normalizedUrlKey = normalizeSourceUrlKey(rawSourceUrl);
+
+      if (!sgwNumericId && !externalItemKey && !normalizedUrlKey) {
         return new Response(
-          JSON.stringify({ ok: false, error: 'Missing ShopGoodwill Item ID.' }),
+          JSON.stringify({ ok: false, error: 'Missing listing Item ID or source URL.' }),
           { status: 400, headers: BML_CORS_HEADERS }
         );
       }
-      const title = String(r?.title || `ShopGoodwill #${itemId}`).trim();
+
+      const platformName = String(
+        r?.platformName || (isSgwListing ? 'ShopGoodwill' : detectedDomain.platformName || 'Online Listing')
+      ).slice(0, 64);
+      const domainFamily = String(r?.domainFamily || detectedDomain.domainFamily || 'generic').slice(0, 40);
+      const listingMode = String(r?.listingMode || detectedDomain.listingMode || 'fixed_online').slice(0, 40);
+      const buyersPremiumPct = Math.max(
+        0,
+        Math.min(40, Number(r?.buyersPremiumPct ?? detectedDomain.defaultBuyersPremiumPct ?? 0) || 0)
+      );
+
+      const fallbackLabel = sgwNumericId
+        ? `ShopGoodwill #${sgwNumericId}`
+        : `${platformName} ${externalItemKey || 'Listing'}`;
+      const title = String(r?.title || fallbackLabel).trim();
       const currentPrice = Number(r?.currentPrice || 0);
       const maxBid = Number(r?.maxBid || 0);
       const boutiquePrice = Number(r?.boutiquePrice || r?.resalePrice || 0);
       const resalePrice = Number(r?.resalePrice || r?.boutiquePrice || 0);
-      const sellerName = r?.seller ? String(r.seller).slice(0, 120) : 'ShopGoodwill';
+      const sellerName = r?.seller ? String(r.seller).slice(0, 120) : platformName;
       const sellerId = r?.sellerId ? String(r.sellerId) : undefined;
       const shippingWeight = Number(r?.shippingWeight || 0) || undefined;
-      const canCombineShipping = r?.canCombineShipping !== undefined ? Boolean(r.canCombineShipping) : true;
+      const canCombineShipping =
+        r?.canCombineShipping !== undefined ? Boolean(r.canCombineShipping) : isSgwListing;
       const primaryImageUrl = r?.primaryImageUrl ? String(r.primaryImageUrl).trim() : undefined;
+      const candidateGalleryUrls: string[] = [];
+      const addCandImg = (u: unknown) => {
+        const s = String(u || '').trim();
+        if (s && !candidateGalleryUrls.includes(s)) candidateGalleryUrls.push(s);
+      };
+      if (primaryImageUrl) addCandImg(primaryImageUrl);
+      if (Array.isArray(r?.imageUrls)) r.imageUrls.forEach(addCandImg);
+      const aiReport = r?.aiReport && typeof r.aiReport === 'object' ? r.aiReport : null;
+      if (candidateGalleryUrls.length === 0 && aiReport) {
+        if (aiReport.fetched_image) addCandImg(aiReport.fetched_image);
+        if (Array.isArray(aiReport.fetched_images)) aiReport.fetched_images.forEach(addCandImg);
+      }
+
       const auctionEndsAtRaw = String(r?.auctionEndsAt || r?.endingDate || '').trim();
       const auctionEndsAt = auctionEndsAtRaw
         ? (auctionEndsAtRaw.includes('T') ? auctionEndsAtRaw : parsePacificDateToIso(auctionEndsAtRaw)) || undefined
         : undefined;
-      const conditionNotesInput = r?.conditionNotes ? String(r.conditionNotes).slice(0, 1800) : undefined;
-      const aiReport = r?.aiReport && typeof r.aiReport === 'object' ? r.aiReport : null;
+      const conditionNotesInput = r?.conditionNotes ? String(r.conditionNotes).slice(0, 1200) : undefined;
+
+      const safeComponentsJson =
+        aiReport && Array.isArray(aiReport.lot_items) && aiReport.lot_items.length > 0
+          ? getSafeComponents(aiReport.lot_items)
+          : null;
 
       const trackerPo = await ensureActiveSgwBuyTracker(
         databases,
@@ -1271,15 +1391,54 @@ export const POST: APIRoute = async ({ request }) => {
           }
         : null;
 
-      const matched = bySgwItemId.get(itemId);
+      const matched =
+        (sgwNumericId ? bySgwItemId.get(sgwNumericId) : null) ||
+        (externalItemKey ? byExternalItemKey.get(externalItemKey) : null) ||
+        (normalizedUrlKey ? byExternalItemKey.get(normalizedUrlKey) : null) ||
+        null;
+
+      const resolvedItemKey = sgwNumericId || externalItemKey || normalizedUrlKey;
 
       if (matched) {
         if (!dryRun) {
+          let archivedImageId: string | null = matched.imageId || null;
+          let archivedGalleryIds: string[] = Array.isArray(matched.galleryImageIds)
+            ? matched.galleryImageIds.filter(Boolean)
+            : [];
+          let uploadedPhotosCount = 0;
+
+          // Archive remote listing gallery into Appwrite Storage whenever item lacks photos or user selected additional photos
+          if (
+            candidateGalleryUrls.length > 0 &&
+            (!archivedImageId || archivedGalleryIds.length < Math.min(candidateGalleryUrls.length, 10))
+          ) {
+            const archived = await archiveRemoteImagesToAppwriteStorage(candidateGalleryUrls, {
+              maxImages: 10,
+              concurrency: 3,
+              timeoutMs: 6000,
+            });
+            if (archived.imageId) {
+              archivedImageId = archived.imageId;
+              const combinedIds = [...archived.galleryImageIds];
+              for (const oldId of archivedGalleryIds) {
+                if (oldId && !combinedIds.includes(oldId) && combinedIds.length < 16) {
+                  combinedIds.push(oldId);
+                }
+              }
+              archivedGalleryIds = combinedIds;
+              uploadedPhotosCount = archived.uploadedCount;
+            }
+          }
+
           const existingRaw = parseRawAnalysisJson(matched.rawAnalysis);
-          const rawObj = {
+          const rawObj: Record<string, any> = {
             ...existingRaw,
             ...(aiReport || {}),
-            sgwItemId: itemId,
+            externalItemId: externalItemKey || existingRaw.externalItemId || undefined,
+            domainFamily,
+            platformName,
+            listingMode,
+            buyersPremiumPct,
             sgwSeller: sellerName,
             sgwSellerId: sellerId || existingRaw.sgwSellerId || null,
             sgwShippingWeight: shippingWeight || existingRaw.sgwShippingWeight || 1.0,
@@ -1289,14 +1448,27 @@ export const POST: APIRoute = async ({ request }) => {
             sgwMyMaxBid: maxBid > 0 ? maxBid : Number(matched.maxBid || existingRaw.sgwMyMaxBid || 0),
             sgwSyncedAt: new Date().toISOString(),
           };
-          const cleanTitle = (title || matched.title || matched.identity || `ShopGoodwill #${itemId}`).slice(0, 255);
+          if (sgwNumericId) rawObj.sgwItemId = sgwNumericId;
+
+          const cleanTitle = (title || matched.title || matched.identity || fallbackLabel).slice(0, 255);
+          const mergedNotes = buildConditionNotesWithMeta(
+            conditionNotesInput,
+            matched.conditionNotes,
+            boutiquePrice,
+            primaryImageUrl || candidateGalleryUrls[0],
+            Boolean(archivedImageId)
+          );
+
           const updateDoc: Record<string, any> = {
             identity: cleanTitle,
             title: cleanTitle,
             currentBid: currentPrice > 0 ? currentPrice : matched.currentBid,
             cost: currentPrice > 0 ? currentPrice : matched.cost,
-            rawAnalysis: serializeRawAnalysisJson(rawObj),
+            rawAnalysis: serializeRawAnalysisJson(rawObj, matched.rawAnalysis, mergedNotes || matched.conditionNotes),
           };
+          if (rawSourceUrl && !matched.sourcingLocation) {
+            updateDoc.sourcingLocation = rawSourceUrl.slice(0, 500);
+          }
           if (!matched.purchaseId && trackerPo?.$id) {
             updateDoc.purchaseId = trackerPo.$id;
             updateDoc.cartId = trackerPo.$id;
@@ -1307,17 +1479,20 @@ export const POST: APIRoute = async ({ request }) => {
           }
           if (resalePrice > 0) updateDoc.resalePrice = resalePrice;
           if (auctionEndsAt) updateDoc.auctionEndsAt = auctionEndsAt;
-          const mergedNotes = buildConditionNotesWithMeta(
-            conditionNotesInput,
-            matched.conditionNotes,
-            boutiquePrice,
-            primaryImageUrl
-          );
           if (mergedNotes) updateDoc.conditionNotes = mergedNotes;
+          if (archivedImageId) updateDoc.imageId = archivedImageId;
+          if (archivedGalleryIds.length > 0) updateDoc.galleryImageIds = archivedGalleryIds;
+          if (safeComponentsJson) updateDoc.components = safeComponentsJson;
           if (!matched.storageLocation) updateDoc.storageLocation = 'HG';
 
           await databases.updateDocument(dbId, itemsCol, matched.$id, updateDoc);
-          await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, updateDoc.purchaseId || matched.purchaseId || trackerPo?.$id);
+          await syncTrackerTotals(
+            databases,
+            dbId,
+            purchasesCol,
+            itemsCol,
+            updateDoc.purchaseId || matched.purchaseId || trackerPo?.$id
+          );
 
           return new Response(
             JSON.stringify({
@@ -1326,9 +1501,13 @@ export const POST: APIRoute = async ({ request }) => {
               dryRun: false,
               action: 'UPDATED_TRACKED',
               docId: matched.$id,
-              itemId,
+              itemId: resolvedItemKey,
               title: cleanTitle,
               maxBid,
+              imageId: archivedImageId,
+              galleryImageIds: archivedGalleryIds,
+              uploadedPhotosCount,
+              savedComponentsCount: aiReport?.lot_items?.length || 0,
               tracker: trackerMeta,
             }),
             { status: 200, headers: BML_CORS_HEADERS }
@@ -1341,7 +1520,7 @@ export const POST: APIRoute = async ({ request }) => {
             dryRun,
             action: 'ALREADY_TRACKED',
             docId: matched.$id,
-            itemId,
+            itemId: resolvedItemKey,
             title: matched.title || title,
             maxBid: maxBid || matched.maxBid || 0,
             tracker: trackerMeta,
@@ -1351,19 +1530,48 @@ export const POST: APIRoute = async ({ request }) => {
       }
 
       if (!dryRun) {
-        const rawObj = {
+        const archived =
+          candidateGalleryUrls.length > 0
+            ? await archiveRemoteImagesToAppwriteStorage(candidateGalleryUrls, {
+                maxImages: 10,
+                concurrency: 3,
+                timeoutMs: 6000,
+              })
+            : {
+                imageId: null,
+                galleryImageIds: [] as string[],
+                uploadedCount: 0,
+                failedCount: 0,
+                fallbackExternalUrl: primaryImageUrl || null,
+              };
+
+        const rawObj: Record<string, any> = {
           ...(aiReport || {}),
-          sgwItemId: itemId,
+          externalItemId: externalItemKey || undefined,
+          domainFamily,
+          platformName,
+          listingMode,
+          buyersPremiumPct,
           sgwSeller: sellerName,
           sgwSellerId: sellerId || null,
           sgwShippingWeight: shippingWeight || 1.0,
           canCombineShipping,
           boutiquePrice: boutiquePrice > 0 ? boutiquePrice : 0,
-          fetched_image: primaryImageUrl || null,
+          fetched_image: primaryImageUrl || candidateGalleryUrls[0] || null,
           sgwMyMaxBid: maxBid > 0 ? maxBid : 0,
           sgwSyncedAt: new Date().toISOString(),
         };
-        const cleanTitle = (title || `ShopGoodwill #${itemId}`).slice(0, 255);
+        if (sgwNumericId) rawObj.sgwItemId = sgwNumericId;
+
+        const cleanTitle = (title || fallbackLabel).slice(0, 255);
+        const mergedNotes = buildConditionNotesWithMeta(
+          conditionNotesInput,
+          undefined,
+          boutiquePrice,
+          primaryImageUrl || candidateGalleryUrls[0],
+          Boolean(archived.imageId)
+        );
+
         const createPayload: Record<string, any> = {
           identity: cleanTitle,
           title: cleanTitle,
@@ -1371,11 +1579,11 @@ export const POST: APIRoute = async ({ request }) => {
           storageLocation: 'HG',
           cost: currentPrice,
           currentBid: currentPrice,
-          sourcingLocation: `https://shopgoodwill.com/item/${itemId}`,
+          sourcingLocation: (rawSourceUrl || `https://shopgoodwill.com/item/${sgwNumericId}`).slice(0, 500),
           purchaseId: trackerPo?.$id || null,
           cartId: trackerPo?.$id || null,
           tenantId: itemTenantId,
-          rawAnalysis: serializeRawAnalysisJson(rawObj),
+          rawAnalysis: serializeRawAnalysisJson(rawObj, null, mergedNotes),
         };
         if (maxBid > 0) {
           createPayload.maxBid = maxBid;
@@ -1383,13 +1591,10 @@ export const POST: APIRoute = async ({ request }) => {
         }
         if (resalePrice > 0) createPayload.resalePrice = resalePrice;
         if (auctionEndsAt) createPayload.auctionEndsAt = auctionEndsAt;
-        const mergedNotes = buildConditionNotesWithMeta(
-          conditionNotesInput,
-          undefined,
-          boutiquePrice,
-          primaryImageUrl
-        );
         if (mergedNotes) createPayload.conditionNotes = mergedNotes;
+        if (archived.imageId) createPayload.imageId = archived.imageId;
+        if (archived.galleryImageIds.length > 0) createPayload.galleryImageIds = archived.galleryImageIds;
+        if (safeComponentsJson) createPayload.components = safeComponentsJson;
 
         const created = await databases.createDocument(
           dbId,
@@ -1398,6 +1603,8 @@ export const POST: APIRoute = async ({ request }) => {
           createPayload,
           perms
         );
+        if (sgwNumericId) bySgwItemId.set(sgwNumericId, created);
+        if (externalItemKey) byExternalItemKey.set(externalItemKey, created);
         await syncTrackerTotals(databases, dbId, purchasesCol, itemsCol, trackerPo?.$id);
 
         return new Response(
@@ -1407,9 +1614,13 @@ export const POST: APIRoute = async ({ request }) => {
             dryRun: false,
             action: 'CREATED_TRACKED',
             docId: created.$id,
-            itemId,
+            itemId: resolvedItemKey,
             title: cleanTitle,
             maxBid,
+            imageId: archived.imageId,
+            galleryImageIds: archived.galleryImageIds,
+            uploadedPhotosCount: archived.uploadedCount,
+            savedComponentsCount: aiReport?.lot_items?.length || 0,
             tracker: trackerMeta,
           }),
           { status: 200, headers: BML_CORS_HEADERS }
@@ -1422,7 +1633,7 @@ export const POST: APIRoute = async ({ request }) => {
           pageType,
           dryRun: true,
           action: 'PREVIEW_TRACK',
-          itemId,
+          itemId: resolvedItemKey,
           title,
           currentPrice,
           maxBid,
