@@ -287,6 +287,18 @@
               <span class="text-[10px] opacity-60">Test Feed &amp; Label Dimensions</span>
             </div>
           </a>
+          <div class="divider my-1"></div>
+          <a
+            href="/studios/appraisal"
+            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+            :class="isRouteActive('/studios/appraisal') ? 'bg-primary/15 text-primary font-bold' : ''"
+          >
+            <Icon icon="solar:test-tube-minimalistic-bold-duotone" class="w-4 h-4 text-info shrink-0" />
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-xs">Appraisal &amp; Pricing Lab</span>
+              <span class="text-[10px] opacity-60">AI Valuation, Calibration &amp; Cost Telemetry</span>
+            </div>
+          </a>
         </div>
       </div>
     </div>
@@ -912,7 +924,7 @@ const isFinanceRouteActive = computed(() =>
 );
 
 const isStudiosRouteActive = computed(() =>
-  ['/social', '/labels'].some((p) => isRouteActive(p))
+  ['/social', '/labels', '/studios'].some((p) => isRouteActive(p))
 );
 
 const mobileCoreLinks = computed(() =>
@@ -1041,6 +1053,13 @@ const mobileStudioLinks = computed(() => [
     icon: 'solar:ruler-pen-bold-duotone',
     iconColor: 'text-accent',
     active: isRouteActive('/labels/test'),
+  },
+  {
+    label: 'Appraisal & Pricing Lab',
+    url: '/studios/appraisal',
+    icon: 'solar:test-tube-minimalistic-bold-duotone',
+    iconColor: 'text-info',
+    active: isRouteActive('/studios/appraisal'),
   },
 ]);
 

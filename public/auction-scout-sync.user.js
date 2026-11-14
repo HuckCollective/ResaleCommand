@@ -194,7 +194,14 @@
     customMaxBid: '',
     savingTrack: false,
     trackedSavedMsg: null,
-    lastSavedTracker: null
+    lastSavedTracker: null,
+    galleryUrls: [],
+    selectedPhotoUrls: {},
+    hasManualPhotoToggles: false,
+    coverPhotoUrl: '',
+    resellerNotes: '',
+    detailsOpen: false,
+    lastSyncedItemId: ''
   };
 
   function installCsvInterceptor() {
@@ -512,8 +519,76 @@
       seller: seller || 'ShopGoodwill',
       shippingWeight: shippingWeight,
       endingDate: endingDate,
-      images: imgs.slice(0, 12)
+      images: imgs.slice(0, 24)
     };
+  }
+
+  function syncGalleryStateForItem(itemRow, extraUrls) {
+    var row = itemRow || {};
+    var currentItemId = String(row.itemId || window.location.pathname || '');
+    if (currentItemId && state.lastSyncedItemId && state.lastSyncedItemId !== currentItemId) {
+      state.galleryUrls = [];
+      state.selectedPhotoUrls = {};
+      state.hasManualPhotoToggles = false;
+      state.coverPhotoUrl = '';
+      state.resellerNotes = '';
+      state.scoutReport = null;
+      state.detailsOpen = false;
+    }
+    if (currentItemId) state.lastSyncedItemId = currentItemId;
+
+    var merged = [];
+    var seen = {};
+    function pushUrl(u) {
+      var s = String(u || '').trim();
+      if (!s || !/^https?:\/\//i.test(s)) return;
+      if (!seen[s]) {
+        seen[s] = true;
+        merged.push(s);
+      }
+    }
+
+    (state.galleryUrls || []).forEach(pushUrl);
+    (row.images || []).forEach(pushUrl);
+    if (Array.isArray(extraUrls)) extraUrls.forEach(pushUrl);
+    if (state.scoutReport) {
+      if (state.scoutReport.fetched_image) pushUrl(state.scoutReport.fetched_image);
+      if (Array.isArray(state.scoutReport.fetched_images)) state.scoutReport.fetched_images.forEach(pushUrl);
+      if (Array.isArray(state.scoutReport.image_urls)) state.scoutReport.image_urls.forEach(pushUrl);
+    }
+
+    state.galleryUrls = merged.slice(0, 24);
+    if (!state.coverPhotoUrl && state.galleryUrls.length > 0) {
+      state.coverPhotoUrl = state.galleryUrls[0];
+    }
+
+    var selectedCount = 0;
+    Object.keys(state.selectedPhotoUrls || {}).forEach(function (k) {
+      if (state.selectedPhotoUrls[k]) selectedCount++;
+    });
+
+    if (!state.hasManualPhotoToggles && selectedCount === 0 && state.galleryUrls.length > 0) {
+      var initMap = {};
+      state.galleryUrls.slice(0, 12).forEach(function (u) {
+        initMap[u] = true;
+      });
+      state.selectedPhotoUrls = initMap;
+    }
+  }
+
+  function getSelectedGalleryUrls() {
+    var out = [];
+    var cover = state.coverPhotoUrl;
+    if (cover && state.selectedPhotoUrls[cover]) {
+      out.push(cover);
+    }
+    (state.galleryUrls || []).forEach(function (u) {
+      if (u === cover) return;
+      if (state.selectedPhotoUrls[u] && out.length < 12) {
+        out.push(u);
+      }
+    });
+    return out;
   }
 
   function detectPageAndRows() {
@@ -876,19 +951,30 @@
 
     detectPageAndRows();
     var itemRow = state.rows[0] || scrapeSingleItemDom();
+    syncGalleryStateForItem(itemRow);
+    var selectedUrls = getSelectedGalleryUrls();
+
     state.scoutingItem = true;
     state.errorMsg = null;
     state.trackedSavedMsg = null;
     state.trayOpen = true;
     renderUI();
 
-    // Do NOT pass DOM remoteImageUrls for ShopGoodwill /item/:id pages so identify-item.ts always uses buyerapi.shopgoodwill.com's official item gallery (zero "YOU MAY ALSO LIKE" contamination)
     var isSgwItemPage = /shopgoodwill\.com\/item\/\d+/i.test(window.location.href);
+    var noteParts = [];
+    if (state.resellerNotes && cleanText(state.resellerNotes)) {
+      noteParts.push('USER GROUND-TRUTH NOTES: ' + cleanText(state.resellerNotes));
+    }
+    noteParts.push(window.location.href);
+    noteParts.push('Title: ' + itemRow.title);
+    noteParts.push('Current Price: $' + itemRow.currentPrice);
+    noteParts.push('Seller: ' + itemRow.seller);
 
     callRcApi('POST', '/api/identify-item', {
-      notes: window.location.href + '\nTitle: ' + itemRow.title + '\nCurrent Price: $' + itemRow.currentPrice + '\nSeller: ' + itemRow.seller,
+      notes: noteParts.join('\n'),
       zipCode: state.zipCode || '97206',
-      remoteImageUrls: isSgwItemPage ? [] : (itemRow.images || [])
+      selectedRemoteImageUrls: selectedUrls,
+      remoteImageUrls: isSgwItemPage && !state.hasManualPhotoToggles ? [] : selectedUrls
     })
       .then(function (data) {
         state.scoutingItem = false;
@@ -897,6 +983,7 @@
           throw new Error('AI Scout returned an empty report.');
         }
         state.scoutReport = firstItem;
+        syncGalleryStateForItem(itemRow, firstItem.fetched_images || firstItem.image_urls || []);
         if (firstItem.seller_info && firstItem.seller_info.seller_name && state.rows[0]) {
           state.rows[0].seller = firstItem.seller_info.seller_name;
         }
@@ -912,6 +999,26 @@
         state.errorMsg = (err && err.message) || 'AI Speed Scout failed.';
         renderUI();
       });
+  }
+
+  function getPieceBoutiqueMid(li) {
+    if (!li) return 0;
+    var bStr =
+      (li.pricing_potential && li.pricing_potential.boutique) ||
+      (li.price_breakdown && li.price_breakdown.boutique_premium) ||
+      li.estimated_value ||
+      '';
+    return parseMidpointPrice(bStr);
+  }
+
+  function getPieceFairMid(li) {
+    if (!li) return 0;
+    var fStr =
+      (li.pricing_potential && li.pricing_potential.fair) ||
+      (li.price_breakdown && li.price_breakdown.fair) ||
+      li.estimated_value ||
+      '';
+    return parseMidpointPrice(fStr);
   }
 
   function computeScoutFinancials() {
@@ -940,6 +1047,26 @@
 
     var boutiqueMid = parseMidpointPrice(boutiqueStr) || 28;
     var fairMid = parseMidpointPrice(fairStr) || 20;
+
+    // Numerical Unity Standard: On multi-item lots, sum of piece Boutique midpoints is Single Source of Truth
+    var lotItems = Array.isArray(rep.lot_items) ? rep.lot_items : [];
+    var sumPieceBoutique = 0;
+    var sumPieceFair = 0;
+    if (lotItems.length > 1) {
+      lotItems.forEach(function (li) {
+        sumPieceBoutique += getPieceBoutiqueMid(li);
+        sumPieceFair += getPieceFairMid(li);
+      });
+      if (sumPieceBoutique > boutiqueMid) {
+        boutiqueMid = Math.round(sumPieceBoutique * 100) / 100;
+        boutiqueStr = '$' + Math.round(sumPieceBoutique) + ' (Σ ' + lotItems.length + ' pcs)';
+      }
+      if (sumPieceFair > fairMid) {
+        fairMid = Math.round(sumPieceFair * 100) / 100;
+        fairStr = '$' + Math.round(sumPieceFair) + ' (Σ ' + lotItems.length + ' pcs)';
+      }
+    }
+
     var targetResale = boutiqueMid > 0 ? boutiqueMid : fairMid;
     var netPayout = Math.round(targetResale * 0.85 * 100) / 100;
 
@@ -978,11 +1105,12 @@
       boutiqueMid: boutiqueMid,
       fairMid: fairMid,
       netPayout: netPayout,
+      sumPieceBoutique: Math.round(sumPieceBoutique * 100) / 100,
       verdict: (rep.purchase_strategy && rep.purchase_strategy.verdict) || 'WATCH',
       bestPlatform: (rep.market_report && rep.market_report.best_platform) || "Memory Den - Huck's Adventures Outfitters",
       whyPayUp: rep.why_pay_up || (rep.purchase_strategy && rep.purchase_strategy.advice) || '',
       whyPass: rep.why_pass || '',
-      lotItems: Array.isArray(rep.lot_items) ? rep.lot_items : [],
+      lotItems: lotItems,
       tiers: {
         conservative: calcTier(3.0),
         balanced: calcTier(2.2),
@@ -1009,6 +1137,8 @@
 
     detectPageAndRows();
     var itemRow = state.rows[0] || scrapeSingleItemDom();
+    syncGalleryStateForItem(itemRow);
+    var selectedUrls = getSelectedGalleryUrls();
     var fin = withAiReport ? computeScoutFinancials() : null;
     var targetMaxBid = parseFloat(state.customMaxBid) || (fin ? computeActiveMaxBid() : 0);
 
@@ -1024,9 +1154,19 @@
     renderUI();
 
     var primaryImageUrl =
+      state.coverPhotoUrl ||
+      selectedUrls[0] ||
       (state.scoutReport && state.scoutReport.fetched_image) ||
       (itemRow.images && itemRow.images[0]) ||
       null;
+
+    var combinedNotes = [];
+    if (state.resellerNotes && cleanText(state.resellerNotes)) {
+      combinedNotes.push('[RESELLER NOTE: ' + cleanText(state.resellerNotes) + ']');
+    }
+    if (fin && fin.whyPayUp) {
+      combinedNotes.push(fin.whyPayUp);
+    }
 
     var payloadRow = {
       itemId: itemRow.itemId,
@@ -1040,8 +1180,9 @@
       shippingWeight: fin ? fin.weight : itemRow.shippingWeight,
       canCombineShipping: fin ? fin.canCombine : true,
       primaryImageUrl: primaryImageUrl,
+      imageUrls: selectedUrls,
       endingDate: itemRow.endingDate || '',
-      conditionNotes: fin ? fin.whyPayUp : '',
+      conditionNotes: combinedNotes.join(' | '),
       aiReport: withAiReport && state.scoutReport ? state.scoutReport : null
     };
 
@@ -1198,6 +1339,301 @@
     );
   }
 
+  function renderPhotoStripAndNotesSection(itemRow) {
+    syncGalleryStateForItem(itemRow);
+    var allUrls = state.galleryUrls || [];
+    var selUrls = getSelectedGalleryUrls();
+
+    var thumbsHtml = '';
+    if (allUrls.length > 0) {
+      thumbsHtml +=
+        '<div class="rc-scout-scroll" style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px 0;">';
+      allUrls.forEach(function (url, idx) {
+        var isChecked = Boolean(state.selectedPhotoUrls[url]);
+        var isCover = state.coverPhotoUrl === url;
+        var borderCol = isCover ? '#fbbf24' : isChecked ? '#34d399' : '#334155';
+        var lensHref = 'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(url);
+        thumbsHtml +=
+          '<div style="position:relative;width:58px;height:58px;flex-shrink:0;border-radius:8px;overflow:hidden;border:2px solid ' + borderCol + ';background:#020617;' + (isChecked ? '' : 'opacity:0.48;') + '">' +
+            '<img src="' + escHtml(url) + '" alt="Photo ' + (idx + 1) + '" class="rc-photo-toggle-btn" data-url="' + escHtml(url) + '" style="width:100%;height:100%;object-fit:cover;cursor:pointer;display:block;" />' +
+            '<button type="button" class="rc-photo-toggle-btn" data-url="' + escHtml(url) + '" title="Include/exclude photo in AI scan (max 12)" style="position:absolute;top:2px;left:2px;background:' + (isChecked ? '#059669' : 'rgba(15,23,42,0.85)') + ';color:#fff;border:0;border-radius:4px;padding:1px 4px;font-size:9px;font-weight:900;cursor:pointer;line-height:1.1;">' +
+              (isChecked ? '✓' + (idx + 1) : '#' + (idx + 1)) +
+            '</button>' +
+            '<button type="button" class="rc-photo-star-btn" data-url="' + escHtml(url) + '" title="Set as primary cover photo" style="position:absolute;bottom:2px;left:2px;background:rgba(15,23,42,0.85);color:' + (isCover ? '#fbbf24' : '#94a3b8') + ';border:0;border-radius:4px;padding:1px 3px;font-size:9px;cursor:pointer;line-height:1.1;">★</button>' +
+            '<a href="' + escHtml(lensHref) + '" target="_blank" rel="noopener noreferrer" class="rc-photo-lens-link" title="Inspect in Google Lens" style="position:absolute;bottom:2px;right:2px;background:rgba(15,23,42,0.85);color:#93c5fd;border-radius:4px;padding:1px 3px;font-size:9px;text-decoration:none;line-height:1.1;">🔎</a>' +
+          '</div>';
+      });
+      thumbsHtml += '</div>';
+    } else {
+      thumbsHtml =
+        '<div style="font-size:10.5px;color:#94a3b8;padding:4px 0;">Official gallery thumbnails will attach automatically when AI Speed Scout runs.</div>';
+    }
+
+    return (
+      '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:9px 11px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:5px;">' +
+          '<span style="font-size:10.5px;font-weight:900;color:#e2e8f0;">📸 Gallery for AI Scan &amp; Save: <strong style="color:#34d399;">' + selUrls.length + '</strong> / ' + allUrls.length + ' (Max 12)</span>' +
+          (allUrls.length > 0
+            ? '<button type="button" id="rc-photo-select-top12" style="background:#1e293b;color:#a5b4fc;border:1px solid #334155;border-radius:5px;padding:2px 6px;font-size:9.5px;font-weight:800;cursor:pointer;">Top 12</button>'
+            : '') +
+        '</div>' +
+        thumbsHtml +
+        '<div style="margin-top:5px;">' +
+          '<input id="rc-scout-reseller-notes" type="text" maxlength="240" value="' + escHtml(state.resellerNotes) + '" placeholder="📝 Reseller Notes (e.g. &quot;Lot of 9 modules&quot;, &quot;1st print&quot;, &quot;missing cord&quot;)..." style="width:100%;background:#020617;color:#f8fafc;border:1px solid #334155;border-radius:7px;padding:5px 8px;font-size:11px;" />' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderLotBreakdownSection(fin, rep, activeLanded) {
+    var lotItems = (fin && Array.isArray(fin.lotItems)) ? fin.lotItems : [];
+    if (lotItems.length <= 1) return '';
+
+    var maxBoutique = 0;
+    lotItems.forEach(function (li) {
+      var v = getPieceBoutiqueMid(li);
+      if (v > maxBoutique) maxBoutique = v;
+    });
+
+    function isHeroPiece(li) {
+      if (!li) return false;
+      if (li.anchor || li.hero || li.is_anchor || li.is_hero) return true;
+      var v = getPieceBoutiqueMid(li);
+      return v > 0 && v === maxBoutique;
+    }
+
+    var sorted = lotItems.slice().sort(function (a, b) {
+      var aHero = isHeroPiece(a);
+      var bHero = isHeroPiece(b);
+      if (aHero && !bHero) return -1;
+      if (!aHero && bHero) return 1;
+      var diffB = getPieceBoutiqueMid(b) - getPieceBoutiqueMid(a);
+      if (diffB !== 0) return diffB;
+      return getPieceFairMid(b) - getPieceFairMid(a);
+    });
+
+    var sumBoutique = 0;
+    sorted.forEach(function (li) {
+      sumBoutique += getPieceBoutiqueMid(li);
+    });
+    if (sumBoutique <= 0) sumBoutique = fin.boutiqueMid || 1;
+
+    var heroPiece = sorted[0];
+    var heroVal = getPieceBoutiqueMid(heroPiece);
+    var heroNet = Math.round(heroVal * 0.85 * 100) / 100;
+    var landedRef = activeLanded > 0 ? activeLanded : (fin.currentBid + fin.effectiveShip);
+    var heroRecoupPct = landedRef > 0 ? Math.min(999, Math.round((heroNet / landedRef) * 100)) : 0;
+
+    var rawStrategy = String(rep.lot_strategy || (rep.market_report && rep.market_report.lot_strategy) || '').toLowerCase();
+    var shouldSplit = rawStrategy.indexOf('bundle') === -1 && (heroVal >= 16 || sumBoutique / sorted.length >= 10);
+    var strategyPill = shouldSplit
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:9.5px;font-weight:900;white-space:nowrap;">✂️ Split Individual</span>'
+      : '<span style="background:#0f766e;color:#ccfbf1;padding:2px 7px;border-radius:6px;font-size:9.5px;font-weight:900;white-space:nowrap;">📦 Bundle / Booth Bin</span>';
+
+    var out =
+      '<div style="background:#090d1f;border:1.5px solid #6366f1;border-radius:12px;padding:10px 11px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' +
+          '<span style="font-size:11.5px;font-weight:900;color:#e0e7ff;">🧩 Lot Breakdown (' + sorted.length + ' Pieces — 100% Shown)</span>' +
+          strategyPill +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;background:#1e1b4b;border:1px solid rgba(129,140,248,0.35);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10.5px;">' +
+          '<span style="color:#c7d2fe;font-weight:800;">Σ Boutique: <strong style="color:#34d399;font-family:monospace;">$' + sumBoutique.toFixed(0) + '</strong> vs Landed <strong style="color:#fbbf24;font-family:monospace;">$' + landedRef.toFixed(2) + '</strong></span>' +
+          (heroRecoupPct > 0
+            ? '<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:900;font-family:monospace;">👑 Hero Recoups ' + heroRecoupPct + '%</span>'
+            : '') +
+        '</div>' +
+        '<div class="rc-scout-scroll" style="max-height:290px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;padding-right:2px;">';
+
+    sorted.forEach(function (li, idx) {
+      var isHero = idx === 0 && heroVal > 0;
+      var pTitle = li.name || li.title || li.identity || ('Piece #' + (idx + 1));
+      var pBoutiqueStr =
+        (li.pricing_potential && li.pricing_potential.boutique) ||
+        (li.price_breakdown && li.price_breakdown.boutique_premium) ||
+        li.estimated_value ||
+        '-';
+      var pFairStr =
+        (li.pricing_potential && li.pricing_potential.fair) ||
+        (li.price_breakdown && li.price_breakdown.fair) ||
+        '-';
+      var pBuyStr =
+        (li.buy_range && li.buy_range.formatted) ||
+        (li.buy_range && li.buy_range.max !== undefined ? ('$' + Number(li.buy_range.max).toFixed(0)) : '');
+      var pVal = getPieceBoutiqueMid(li);
+      var allocCost = landedRef > 0 && sumBoutique > 0 ? (pVal / sumBoutique) * landedRef : (Number(li.split_cost_basis) || 0);
+      var condTxt = cleanText(li.condition || '');
+
+      out +=
+        '<div style="background:' + (isHero ? 'rgba(6,95,70,0.28)' : '#0f172a') + ';border:1px solid ' + (isHero ? '#34d399' : '#1e293b') + ';border-radius:8px;padding:6px 8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">' +
+            '<div style="font-size:11px;font-weight:800;color:#f8fafc;line-height:1.3;">' +
+              '<span style="color:#94a3b8;font-family:monospace;margin-right:4px;">#' + (idx + 1) + '</span>' +
+              (isHero ? '<span style="background:#f59e0b;color:#1e1b18;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:900;margin-right:4px;">👑 HERO</span>' : '') +
+              (li.is_key_issue ? '<span style="background:#7c3aed;color:#f3e8ff;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:900;margin-right:4px;">🔑 KEY</span>' : '') +
+              escHtml(pTitle) +
+            '</div>' +
+            (condTxt ? '<span style="background:#1e293b;color:#cbd5e1;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0;">' + escHtml(condTxt.slice(0, 18)) + '</span>' : '') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:4px;font-family:monospace;font-size:10px;">' +
+            '<span style="color:#34d399;font-weight:800;">Boutique: ' + escHtml(pBoutiqueStr) + '</span>' +
+            '<span style="color:#93c5fd;">Fair: ' + escHtml(pFairStr) + '</span>' +
+            (pBuyStr ? '<span style="color:#c4b5fd;">Buy: ' + escHtml(pBuyStr) + '</span>' : '') +
+            '<span style="color:#fbbf24;">Split Cost: $' + allocCost.toFixed(2) + '</span>' +
+          '</div>' +
+        '</div>';
+    });
+
+    out += '</div></div>';
+    return out;
+  }
+
+  function renderExitChannelsSection(fin, rep, activeLanded) {
+    var mkt = (rep && rep.market_report) || {};
+    var rawChannels = Array.isArray(mkt.channels) && mkt.channels.length > 0 ? mkt.channels : null;
+    var hasLot = fin.lotItems && fin.lotItems.length > 1;
+    var costRef = activeLanded > 0 ? activeLanded : (fin.currentBid + fin.effectiveShip);
+
+    var channels = [];
+    if (rawChannels) {
+      rawChannels.forEach(function (ch) {
+        var cName = String(ch.name || 'Channel');
+        var isBooth = /memory\s*den|booth/i.test(cName);
+        var isEbay = /ebay/i.test(cName);
+        var gross = isBooth && hasLot ? fin.boutiqueMid : (parseMidpointPrice(ch.est_price) || (isBooth ? fin.boutiqueMid : fin.fairMid));
+        var net = isBooth && hasLot
+          ? Math.round(gross * 0.85 * 100) / 100
+          : (parseMidpointPrice(ch.net_payout) || Math.round(gross * (isEbay ? 0.865 : 0.85) * 100) / 100);
+        channels.push({
+          name: cName,
+          gross: gross,
+          net: net,
+          note: cleanText(ch.recommendation || ''),
+          isBest: String(fin.bestPlatform || '').toLowerCase().indexOf(cName.toLowerCase().split(' ')[0]) !== -1
+        });
+      });
+    } else {
+      channels = [
+        {
+          name: "Memory Den (#0EJ)",
+          gross: fin.boutiqueMid,
+          net: Math.round(fin.boutiqueMid * 0.85 * 100) / 100,
+          note: 'Curated booth shelf showcase (15% fee)',
+          isBest: /memory\s*den|booth/i.test(fin.bestPlatform || '')
+        },
+        {
+          name: 'eBay (Online)',
+          gross: fin.fairMid,
+          net: Math.round(fin.fairMid * 0.865 * 100) / 100,
+          note: 'National sold-comp velocity (~13.5% fee)',
+          isBest: /ebay/i.test(fin.bestPlatform || '')
+        }
+      ];
+    }
+
+    var velocity = cleanText(mkt.sell_through_velocity || '');
+    var out =
+      '<div style="background:#020617;border:1px solid #334155;border-radius:12px;padding:9px 11px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">' +
+          '<span style="font-size:10.5px;font-weight:900;color:#cbd5e1;text-transform:uppercase;">🏪 Exit Play &amp; Channel Net</span>' +
+          (velocity ? '<span style="background:#1e293b;color:#38bdf8;padding:1px 7px;border-radius:999px;font-size:9.5px;font-weight:800;">⚡ ' + escHtml(velocity) + '</span>' : '') +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">';
+
+    channels.slice(0, 4).forEach(function (ch) {
+      var profit = Math.round((ch.net - costRef) * 100) / 100;
+      var roi = costRef > 0 ? Math.round((profit / costRef) * 100) : 0;
+      out +=
+        '<div style="background:#0f172a;border:1px solid ' + (ch.isBest ? '#34d399' : '#1e293b') + ';border-radius:8px;padding:6px 8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;margin-bottom:2px;">' +
+            '<span style="font-size:10px;font-weight:900;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(ch.name) + '</span>' +
+            (ch.isBest ? '<span style="background:#065f46;color:#6ee7b7;padding:0 5px;border-radius:4px;font-size:8.5px;font-weight:900;">BEST</span>' : '') +
+          '</div>' +
+          '<div style="font-family:monospace;font-size:11px;font-weight:800;color:#e2e8f0;">Tag $' + ch.gross.toFixed(0) + ' ➔ <span style="color:#34d399;">Net $' + ch.net.toFixed(2) + '</span></div>' +
+          '<div style="font-family:monospace;font-size:9.5px;color:' + (profit >= 0 ? '#6ee7b7' : '#fca5a5') + ';margin-top:1px;">' +
+            (profit >= 0 ? '+$' + profit.toFixed(2) : '-$' + Math.abs(profit).toFixed(2)) + ' (' + roi + '% ROI)' +
+          '</div>' +
+          (ch.note ? '<div style="font-size:9.5px;color:#94a3b8;margin-top:3px;line-height:1.25;">' + escHtml(ch.note.slice(0, 80)) + '</div>' : '') +
+        '</div>';
+    });
+
+    out += '</div></div>';
+    return out;
+  }
+
+  function renderCatalystsSection(fin) {
+    var html = '';
+    if (fin.whyPayUp) {
+      html += '<div style="font-size:11px;color:#cbd5e1;background:#0f172a;border-left:3px solid #34d399;padding:6px 9px;border-radius:6px;margin-bottom:6px;"><strong>💡 Why Buy:</strong> ' + escHtml(fin.whyPayUp) + '</div>';
+    }
+    if (fin.whyPass) {
+      html += '<div style="font-size:10.5px;color:#fca5a5;background:#0f172a;border-left:3px solid #f87171;padding:6px 9px;border-radius:6px;margin-bottom:8px;"><strong>⚠️ Watch Out:</strong> ' + escHtml(fin.whyPass) + '</div>';
+    }
+    return html;
+  }
+
+  function renderConditionCompsSection(rep) {
+    if (!rep) return '';
+    var flags = Array.isArray(rep.red_flags) ? rep.red_flags : [];
+    var comps = Array.isArray(rep.comparables)
+      ? rep.comparables
+      : Array.isArray(rep.comparable_sales)
+      ? rep.comparable_sales
+      : [];
+    var cond = cleanText(rep.condition_notes || '');
+    var reasoning = cleanText(rep.price_reasoning || '');
+    var era = cleanText(rep.era_and_origin || '');
+
+    if (!flags.length && !comps.length && !cond && !reasoning && !era) return '';
+
+    var digestBits = [];
+    if (flags.length > 0) digestBits.push('🚩 ' + flags.length + ' Flag' + (flags.length === 1 ? '' : 's'));
+    if (comps.length > 0) digestBits.push('💬 ' + comps.length + ' Comp' + (comps.length === 1 ? '' : 's'));
+    if (cond) digestBits.push('🔍 Condition');
+
+    var bodyHtml = '';
+    if (state.detailsOpen) {
+      bodyHtml += '<div class="rc-scout-scroll" style="max-height:220px;overflow-y:auto;padding:8px 10px;border-top:1px solid #1e293b;font-size:10.5px;color:#cbd5e1;display:flex;flex-direction:column;gap:6px;">';
+      if (cond) {
+        bodyHtml += '<div><strong style="color:#93c5fd;">🔍 Condition:</strong> ' + escHtml(cond) + '</div>';
+      }
+      if (era) {
+        bodyHtml += '<div><strong style="color:#c4b5fd;">🏛️ Era / Origin:</strong> ' + escHtml(era) + '</div>';
+      }
+      if (flags.length > 0) {
+        bodyHtml += '<div><strong style="color:#fca5a5;">🚩 Red Flags:</strong><ul style="margin:3px 0 0 16px;padding:0;">' +
+          flags.map(function (f) { return '<li style="margin-bottom:2px;color:#fecaca;">' + escHtml(f) + '</li>'; }).join('') +
+          '</ul></div>';
+      }
+      if (comps.length > 0) {
+        bodyHtml += '<div><strong style="color:#6ee7b7;">💬 Market Comparables:</strong>' +
+          comps.slice(0, 6).map(function (c) {
+            var cName = c.name || c.title || 'Comp';
+            var cPrice = c.price || c.sold_price || '';
+            var cStatus = c.status || 'Sold';
+            return '<div style="display:flex;justify-content:space-between;gap:6px;padding:2px 0;border-bottom:1px dashed rgba(255,255,255,0.06);">' +
+              '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(cName) + '</span>' +
+              '<span style="font-family:monospace;color:#34d399;white-space:nowrap;">' + escHtml(cPrice) + ' [' + escHtml(cStatus) + ']</span>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }
+      if (reasoning) {
+        bodyHtml += '<div style="color:#94a3b8;"><strong>📐 Pricing Logic:</strong> ' + escHtml(reasoning) + '</div>';
+      }
+      bodyHtml += '</div>';
+    }
+
+    return (
+      '<div style="background:#020617;border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:8px;">' +
+        '<button type="button" id="rc-scout-details-toggle" style="width:100%;background:#0f172a;color:#e2e8f0;border:0;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;font-size:10.5px;font-weight:800;">' +
+          '<span>🔍 Deep Scout Details</span>' +
+          '<span style="color:#a5b4fc;font-family:monospace;font-size:10px;">' + escHtml(digestBits.join(' • ')) + ' ' + (state.detailsOpen ? '▴' : '▾') + '</span>' +
+        '</button>' +
+        bodyHtml +
+      '</div>'
+    );
+  }
+
   function renderItemTrayBody() {
     var itemRow = state.rows[0] || scrapeSingleItemDom();
     var existingWl = state.watchlist[itemRow.itemId] || null;
@@ -1235,7 +1671,10 @@
         '</div>' +
       '</div>';
 
-    // 2. Combined Shipping Synergy Banner
+    // 2. Selectable Photo Strip + Authoritative Reseller Notes (Pre-Scan & Post-Scan!)
+    html += renderPhotoStripAndNotesSection(itemRow);
+
+    // 3. Combined Shipping Synergy Banner
     html += renderCombineBannerHtml(activeSynergy);
 
     if (state.trackedSavedMsg) {
@@ -1253,21 +1692,21 @@
       html +=
         '<div style="background:#1e1b4b;border:1px solid #818cf8;border-radius:14px;padding:22px 14px;text-align:center;margin-bottom:10px;">' +
           '<div style="font-size:14px;font-weight:900;color:#e0e7ff;margin-bottom:4px;">⚡ Running AI Speed Scout...</div>' +
-          '<div style="font-size:11px;color:#a5b4fc;">Fetching official ShopGoodwill gallery &amp; shipping quote (ZIP ' + escHtml(state.zipCode) + '), and calculating 3-Tier Max Bid ceilings...</div>' +
+          '<div style="font-size:11px;color:#a5b4fc;">Analyzing selected gallery photos, shipping quote (ZIP ' + escHtml(state.zipCode) + '), Hero-Anchor lot pieces &amp; 3-Tier Max Bid ceilings...</div>' +
         '</div>';
       return html;
     }
 
     if (!fin) {
       html +=
-        '<div style="background:#020617;border:1px dashed #334155;border-radius:12px;padding:16px 14px;text-align:center;margin-bottom:10px;color:#94a3b8;">' +
-          '<div style="font-size:13px;font-weight:800;color:#e2e8f0;margin-bottom:4px;">Scout First — Only Track What Is Worth Chasing</div>' +
-          '<div style="font-size:11px;line-height:1.45;">Click <strong>⚡ Run AI Speed Scout</strong> below to appraise Boutique vs. Online value, live S&amp;H, and your 3.0x / 2.2x / 1.7x Max Bid ceiling right inside this tray.</div>' +
+        '<div style="background:#020617;border:1px dashed #334155;border-radius:12px;padding:14px 12px;text-align:center;margin-bottom:10px;color:#94a3b8;">' +
+          '<div style="font-size:12.5px;font-weight:800;color:#e2e8f0;margin-bottom:4px;">Check Best Close-Up Photos Above ➔ Run AI Speed Scout</div>' +
+          '<div style="font-size:11px;line-height:1.45;">Uncheck filler/ruler shots if >12 photos, add optional Reseller Notes, then click <strong>⚡ Run AI Speed Scout</strong> below for full Hero-Anchor Lot Breakdown &amp; Max Bid math.</div>' +
         '</div>';
       return html;
     }
 
-    // 3. AI Speed Scout Report Card
+    // 4. AI Speed Scout Verdict + 3-Tier Bid Matrix Card
     var verdictBg = fin.verdict === 'CHASE_AUCTION' || fin.verdict === 'BUY_NOW'
       ? '#065f46'
       : fin.verdict === 'PASS'
@@ -1278,6 +1717,9 @@
       : fin.verdict === 'PASS'
       ? '🛑 '
       : '⚠️ ';
+
+    var activeBidNum = parseFloat(state.customMaxBid) || computeActiveMaxBid();
+    var activeLanded = Math.round((activeBidNum + fin.effectiveShip) * 100) / 100;
 
     html +=
       '<div style="background:#020617;border:1px solid #334155;border-radius:12px;padding:11px 12px;margin-bottom:10px;">' +
@@ -1348,33 +1790,24 @@
     html += '</div>';
 
     html +=
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:7px 10px;margin-bottom:8px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:7px 10px;">' +
         '<span style="font-size:11px;font-weight:800;color:#e2e8f0;">🎯 My Target Max Bid ($):</span>' +
         '<input id="rc-scout-custom-maxbid" type="number" step="0.01" value="' + escHtml(state.customMaxBid || computeActiveMaxBid().toFixed(2)) + '" style="width:105px;background:#1e293b;color:#34d399;border:1px solid #475569;border-radius:8px;padding:4px 8px;font-family:monospace;font-size:13px;font-weight:900;text-align:right;" />' +
-      '</div>';
+      '</div>' +
+    '</div>';
 
-    if (fin.whyPayUp) {
-      html += '<div style="font-size:11px;color:#cbd5e1;background:#0f172a;border-left:3px solid #34d399;padding:6px 9px;border-radius:6px;margin-bottom:6px;"><strong>💡 Why Buy:</strong> ' + escHtml(fin.whyPayUp) + '</div>';
-    }
-    if (fin.whyPass) {
-      html += '<div style="font-size:10.5px;color:#fca5a5;background:#0f172a;border-left:3px solid #f87171;padding:6px 9px;border-radius:6px;margin-bottom:6px;"><strong>⚠️ Watch Out:</strong> ' + escHtml(fin.whyPass) + '</div>';
-    }
+    // 5. Make-or-Break Hero-Anchor Lot Breakdown Card (Always Visible When Multi-Item Lot!)
+    html += renderLotBreakdownSection(fin, state.scoutReport, activeLanded);
 
-    if (fin.lotItems && fin.lotItems.length > 1) {
-      html += '<div style="margin-top:8px;border-top:1px solid #1e293b;padding-top:6px;">' +
-        '<div style="font-size:10.5px;font-weight:800;color:#a5b4fc;margin-bottom:4px;">🧩 Multi-Item Lot Breakdown (' + fin.lotItems.length + ' pcs):</div>';
-      fin.lotItems.slice(0, 8).forEach(function (li, idx) {
-        var liTitle = li.name || li.identity || li.title || ('Piece #' + (idx + 1));
-        var liVal = (li.pricing_potential && li.pricing_potential.boutique) || (li.price_breakdown && li.price_breakdown.boutique_premium) || li.estimated_value || '';
-        html += '<div style="display:flex;justify-content:space-between;font-size:10.5px;padding:2px 0;color:#cbd5e1;">' +
-          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;">' + (idx + 1) + '. ' + escHtml(liTitle) + '</span>' +
-          '<span style="font-family:monospace;color:#34d399;font-weight:700;">' + escHtml(liVal) + '</span>' +
-        '</div>';
-      });
-      html += '</div>';
-    }
+    // 6. Tactical Exit Play & Channel Comparison Card
+    html += renderExitChannelsSection(fin, state.scoutReport, activeLanded);
 
-    html += '</div>';
+    // 7. Catalyst & Risk Highlights
+    html += renderCatalystsSection(fin);
+
+    // 8. Collapsed-by-Default Deep Scout Details (Condition, Red Flags & Comps)
+    html += renderConditionCompsSection(state.scoutReport);
+
     return html;
   }
 
@@ -1585,10 +2018,10 @@
       styleEl.id = 'rc-scout-tray-styles';
       styleEl.textContent =
         '#rc-scout-tray, #rc-scout-tray * { box-sizing: border-box; }' +
-        '#rc-scout-tray-body { scrollbar-width: thin; scrollbar-color: #334155 transparent; }' +
-        '#rc-scout-tray-body::-webkit-scrollbar { width: 5px; height: 5px; }' +
-        '#rc-scout-tray-body::-webkit-scrollbar-track { background: transparent; }' +
-        '#rc-scout-tray-body::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }' +
+        '#rc-scout-tray-body, #rc-scout-tray .rc-scout-scroll { scrollbar-width: thin; scrollbar-color: #334155 transparent; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar { width: 5px; height: 5px; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar-track, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar-track { background: transparent; }' +
+        '#rc-scout-tray-body::-webkit-scrollbar-thumb, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }' +
         '#rc-scout-tray .rc-btn-pill { display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; flex-shrink: 0; height: 28px; padding: 0 9px; border-radius: 7px; font-size: 11px; font-weight: 800; line-height: 1; text-decoration: none; cursor: pointer; }';
       document.head.appendChild(styleEl);
     }
@@ -1619,12 +2052,17 @@
 
     var footerHtml = '';
     if (state.pageType === 'item') {
+      if (itemRow) syncGalleryStateForItem(itemRow);
+      var selPhotoCount = getSelectedGalleryUrls().length;
+      var photoCountSuffix = selPhotoCount > 0
+        ? ' (' + selPhotoCount + ' Photo' + (selPhotoCount === 1 ? '' : 's') + ')'
+        : ' (In-Tray)';
       var activeMax = parseFloat(state.customMaxBid) || computeActiveMaxBid();
       if (!state.scoutReport) {
         footerHtml =
           '<div style="display:flex;flex-direction:column;gap:6px;">' +
             '<button id="rc-scout-run-ai-btn" style="width:100%;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;font-size:13px;box-shadow:0 4px 14px rgba(99,102,241,0.4);">' +
-              (state.scoutingItem ? '⏳ Scouting Item...' : '⚡ Run AI Speed Scout (In-Tray)') +
+              (state.scoutingItem ? '⏳ Scouting' + photoCountSuffix + '...' : '⚡ Run AI Speed Scout' + photoCountSuffix) +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
               '<button id="rc-scout-quick-track-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">📌 Quick-Track Without AI</button>' +
@@ -1640,7 +2078,9 @@
                 : '📌 Track & Copy Max Bid ($' + Number(activeMax || 0).toFixed(2) + ')') +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
-              '<button id="rc-scout-run-ai-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">🔄 Re-Run AI Scout</button>' +
+              '<button id="rc-scout-run-ai-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">' +
+                '🔄 Re-Scan Selected' + (selPhotoCount > 0 ? ' (' + selPhotoCount + ')' : '') +
+              '</button>' +
               '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📌 Trackers ↗</a>' +
             '</div>' +
           '</div>';
@@ -1660,6 +2100,9 @@
           '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="background:#1e293b;color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:10px;padding:10px 10px;font-weight:800;font-size:11px;">/purchases ↗</a>' +
         '</div>';
     }
+
+    var prevTrayBody = document.getElementById('rc-scout-tray-body');
+    var prevScrollTop = prevTrayBody ? prevTrayBody.scrollTop : 0;
 
     tray.innerHTML =
       // Clean 2-Tier Pinned Tray Header (Zero wrapping or colliding buttons)
@@ -1689,6 +2132,11 @@
       '<div style="padding:10px 14px;background:#1e293b;border-top:1px solid #334155;flex-shrink:0;">' +
         footerHtml +
       '</div>';
+
+    var nextTrayBody = document.getElementById('rc-scout-tray-body');
+    if (nextTrayBody && prevScrollTop > 0) {
+      nextTrayBody.scrollTop = prevScrollTop;
+    }
 
     // Wire Tray event listeners
     var closeTrayBtn = document.getElementById('rc-scout-close-tray');
@@ -1822,6 +2270,95 @@
           var v = parseFloat(state.customMaxBid) || 0;
           saveBtn.textContent = '📌 Track & Copy Max Bid ($' + v.toFixed(2) + ')';
         }
+      };
+    }
+
+    var photoToggleBtns = tray.querySelectorAll('.rc-photo-toggle-btn');
+    Array.prototype.slice.call(photoToggleBtns).forEach(function (btn) {
+      btn.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        var url = btn.getAttribute('data-url');
+        if (!url) return;
+        var currentlyChecked = Boolean(state.selectedPhotoUrls[url]);
+        if (currentlyChecked) {
+          state.selectedPhotoUrls[url] = false;
+          if (state.coverPhotoUrl === url) {
+            var remaining = getSelectedGalleryUrls();
+            state.coverPhotoUrl = remaining[0] || state.galleryUrls[0] || '';
+          }
+          state.errorMsg = '';
+        } else {
+          var currentCount = getSelectedGalleryUrls().length;
+          if (currentCount >= 12) {
+            state.errorMsg = 'Maximum 12 photos per AI Speed Scout scan — uncheck a filler photo first.';
+            renderUI();
+            return;
+          }
+          state.selectedPhotoUrls[url] = true;
+          if (!state.coverPhotoUrl) state.coverPhotoUrl = url;
+          state.errorMsg = '';
+        }
+        state.hasManualPhotoToggles = true;
+        renderUI();
+      };
+    });
+
+    var photoStarBtns = tray.querySelectorAll('.rc-photo-star-btn');
+    Array.prototype.slice.call(photoStarBtns).forEach(function (btn) {
+      btn.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        var url = btn.getAttribute('data-url');
+        if (!url) return;
+        if (!state.selectedPhotoUrls[url] && getSelectedGalleryUrls().length >= 12) {
+          // Swap out the last non-cover selected photo so starring always succeeds cleanly
+          var curSel = getSelectedGalleryUrls();
+          var dropUrl = curSel[curSel.length - 1];
+          if (dropUrl) state.selectedPhotoUrls[dropUrl] = false;
+        }
+        state.selectedPhotoUrls[url] = true;
+        state.coverPhotoUrl = url;
+        state.hasManualPhotoToggles = true;
+        state.errorMsg = '';
+        renderUI();
+      };
+    });
+
+    var photoLensLinks = tray.querySelectorAll('.rc-photo-lens-link');
+    Array.prototype.slice.call(photoLensLinks).forEach(function (lnk) {
+      lnk.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+      };
+    });
+
+    var selectTop12Btn = document.getElementById('rc-photo-select-top12');
+    if (selectTop12Btn) {
+      selectTop12Btn.onclick = function () {
+        var nextSel = {};
+        (state.galleryUrls || []).slice(0, 12).forEach(function (u) {
+          nextSel[u] = true;
+        });
+        state.selectedPhotoUrls = nextSel;
+        if (!state.coverPhotoUrl || !nextSel[state.coverPhotoUrl]) {
+          state.coverPhotoUrl = (state.galleryUrls || [])[0] || '';
+        }
+        state.hasManualPhotoToggles = true;
+        state.errorMsg = '';
+        renderUI();
+      };
+    }
+
+    var resellerNotesInput = document.getElementById('rc-scout-reseller-notes');
+    if (resellerNotesInput) {
+      resellerNotesInput.oninput = function () {
+        state.resellerNotes = resellerNotesInput.value;
+      };
+    }
+
+    var detailsToggleBtn = document.getElementById('rc-scout-details-toggle');
+    if (detailsToggleBtn) {
+      detailsToggleBtn.onclick = function () {
+        state.detailsOpen = !state.detailsOpen;
+        renderUI();
       };
     }
 
