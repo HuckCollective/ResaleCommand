@@ -8,6 +8,9 @@ import { parsePriceValue } from '../../lib/lot-strategy';
 import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
 import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
 import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/bml/serverAuth';
+import type { AiSurface } from '../../lib/aiTelemetry';
+import { loadAppraisalRules, compileRulesPrompt } from '../../lib/appraisalCalibration';
+import { getAllLocationSettingMetas } from '../../lib/warehouses';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -623,6 +626,9 @@ export const ALL: APIRoute = async ({ request }) => {
     let userNotes = "";
     let scrapedListingContext = "";
     let shippingSummary = "";
+    let requestMode: 'scout' | 'deep' = 'scout';
+    let requestItemId: string | undefined = undefined;
+    let outerTargetLocations: any[] = [];
 
     // Verify signed Bookmarklet Bearer token (rcbml_v1) if sent from ShopGoodwill bookmarklet
     const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
@@ -878,6 +884,12 @@ export const ALL: APIRoute = async ({ request }) => {
                 if (json.notes) {
                     userNotes = json.notes;
                 }
+                if (json.mode === 'deep') {
+                    requestMode = 'deep';
+                }
+                if (json.itemId) {
+                    requestItemId = String(json.itemId).slice(0, 64);
+                }
 
                 if (json.zipCode) {
                     zipCode = String(json.zipCode).trim();
@@ -955,6 +967,7 @@ export const ALL: APIRoute = async ({ request }) => {
                 }
 
                 if (targetLocations.length > 0) {
+                    outerTargetLocations = targetLocations;
                     const locNames = targetLocations.map((l: any) => {
                         let desc = `${l.name} (Type: ${l.type || 'Physical'}`;
                         if (l.commissionRate !== undefined) desc += `, ${l.commissionRate}% comm.`;
@@ -1412,11 +1425,37 @@ export const ALL: APIRoute = async ({ request }) => {
                 });
         }
 
+        const appraisalRules = await loadAppraisalRules();
+        const calibrationBlock = compileRulesPrompt(
+            appraisalRules,
+            outerTargetLocations,
+            `${userNotes} ${scrapedListingContext}`
+        );
+        const notesWithCalibration = calibrationBlock
+            ? (userNotes ? `${userNotes}\n\n${calibrationBlock}` : calibrationBlock)
+            : userNotes;
+
+        const dynamicBoothChannels = getAllLocationSettingMetas(outerTargetLocations)
+            .filter((m) => m.commissionRate > 0)
+            .map((m) => `${m.name} (${m.code}, ${m.commissionRate}% fee${m.vibesAndNotes ? ` — ${m.vibesAndNotes}` : ''})`)
+            .join('; ');
+        const organizationChannelsStr = dynamicBoothChannels
+            ? `${dynamicBoothChannels}; eBay; Poshmark.`
+            : 'Physical Retail Booths; eBay; Poshmark.';
+
+        const detectedSurface: AiSurface = hasValidBmlBearer
+            ? 'bml_sgw_tray'
+            : requestMode === 'deep'
+              ? 'deep_scan_drawer'
+              : (Boolean(scrapedListingContext) || Boolean(parsedListingData) || /https?:\/\//i.test(userNotes))
+                ? 'scout_url'
+                : 'scout_camera';
+
         const promptText = buildSpeedScoutUserPrompt({
-            authoritativeUserNotes: userNotes,
+            authoritativeUserNotes: notesWithCalibration,
             scrapedListingContext: scrapedListingContext || undefined,
             shippingSummary: shippingSummary || (scrapedShipping ? `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode || 'Local'}` : undefined),
-            organizationChannels: "Memory Den Booth #0EJ (Vintage Apparel, RPGs, Books, Media, Collectibles); DustyTiger (Small Collectibles, Jewelry, Pins, Wands); eBay; Poshmark."
+            organizationChannels: organizationChannelsStr
         });
 
         const contentParts: any[] = [{ text: promptText }];
@@ -1431,6 +1470,11 @@ export const ALL: APIRoute = async ({ request }) => {
             generationConfig: { 
                 responseMimeType: "application/json",
                 responseSchema: speedScoutResponseSchema
+            },
+            telemetryContext: {
+                surface: detectedSurface,
+                itemId: requestItemId,
+                rulesVersion: appraisalRules.version
             }
         }, 3, 2000); // Only retry 3 times for real-time frontend calls to prevent 2.5 minute UI hangs
         
@@ -1621,6 +1665,16 @@ export const ALL: APIRoute = async ({ request }) => {
 
             if (jsonObj.lot_items && Array.isArray(jsonObj.lot_items)) {
                 jsonObj.lot_items = normalizeBundleComponents(jsonObj.lot_items);
+            }
+
+            const scannedAtIso = new Date().toISOString();
+            jsonObj.scanKind = requestMode;
+            jsonObj.scannedAt = scannedAtIso;
+            jsonObj.rulesVersion = appraisalRules.version;
+            if (Array.isArray(jsonObj.items) && jsonObj.items[0] && typeof jsonObj.items[0] === 'object') {
+                jsonObj.items[0].scanKind = requestMode;
+                jsonObj.items[0].scannedAt = scannedAtIso;
+                jsonObj.items[0].rulesVersion = appraisalRules.version;
             }
             cleanedResponse = JSON.stringify(jsonObj);
         } catch (e) {

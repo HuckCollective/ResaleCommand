@@ -748,15 +748,19 @@ export function getSafeRawAnalysis(item: any): string | null {
                 title: obj.title,
                 tag_title: obj.tag_title || obj.tagTitle || undefined,
                 tier: obj.tier || undefined,
+                buy_recommendation: obj.buy_recommendation || undefined,
                 why_pay_up: obj.why_pay_up || undefined,
                 why_pass: obj.why_pass || undefined,
-                red_flags: obj.red_flags || undefined,
+                red_flags: Array.isArray(obj.red_flags) ? obj.red_flags.slice(0, 6) : obj.red_flags || undefined,
+                era_and_origin: obj.era_and_origin ? String(obj.era_and_origin).substring(0, 500) : undefined,
+                price_reasoning: obj.price_reasoning ? String(obj.price_reasoning).substring(0, 1200) : undefined,
                 pricing_potential: obj.pricing_potential || undefined,
                 price_breakdown: obj.price_breakdown || undefined,
                 purchase_strategy: obj.purchase_strategy || undefined,
                 auction_meta: obj.auction_meta || undefined,
                 condition_notes: obj.condition_notes ? String(obj.condition_notes).substring(0, 1500) : undefined,
-                comparables: Array.isArray(obj.comparables) ? obj.comparables.slice(0, 10) : undefined,
+                comparables: Array.isArray(obj.comparables) ? obj.comparables.slice(0, 5) : undefined,
+                comparable_sales: Array.isArray(obj.comparable_sales) ? obj.comparable_sales.slice(0, 5) : undefined,
                 keywords: Array.isArray(obj.keywords) ? obj.keywords : undefined,
                 seller_info: obj.seller_info || undefined,
                 shipping_info: obj.shipping_info || undefined,
@@ -768,6 +772,16 @@ export function getSafeRawAnalysis(item: any): string | null {
                 maxBid: obj.maxBid !== undefined ? obj.maxBid : undefined,
                 currentBid: obj.currentBid !== undefined ? obj.currentBid : undefined,
                 boutiquePrice: obj.boutiquePrice !== undefined ? obj.boutiquePrice : undefined,
+                fairPrice: obj.fairPrice !== undefined ? obj.fairPrice : undefined,
+                estimatedValueLow: obj.estimatedValueLow !== undefined ? obj.estimatedValueLow : undefined,
+                estimatedValueHigh: obj.estimatedValueHigh !== undefined ? obj.estimatedValueHigh : undefined,
+                recommendedVenue: obj.recommendedVenue || undefined,
+                sgwItemId: obj.sgwItemId !== undefined ? obj.sgwItemId : undefined,
+                auctionStatus: obj.auctionStatus || undefined,
+                scoutPrior: obj.scoutPrior && typeof obj.scoutPrior === 'object' ? stripBase64AndBlob(obj.scoutPrior) : undefined,
+                scanKind: obj.scanKind === 'deep' || obj.scanKind === 'scout' ? obj.scanKind : undefined,
+                scannedAt: obj.scannedAt || undefined,
+                rulesVersion: obj.rulesVersion !== undefined ? obj.rulesVersion : undefined,
                 sourcingLocation: obj.sourcingLocation || obj.source_url || obj.url || undefined,
                 fetched_image: typeof obj.fetched_image === 'string' && !obj.fetched_image.startsWith('data:') && !obj.fetched_image.startsWith('blob:') && obj.fetched_image.length < 500 ? obj.fetched_image : undefined,
                 fetched_images: Array.isArray(obj.fetched_images) ? obj.fetched_images.filter((u: any) => typeof u === 'string' && !u.startsWith('data:') && !u.startsWith('blob:') && u.length < 500).slice(0, 10) : undefined,
@@ -815,6 +829,7 @@ export function getSafeRawAnalysis(item: any): string | null {
             if (resultStr.length > 64000) {
                 // Remove comparables to stay under limit if still oversized
                 if (compacted && compacted.comparables) delete compacted.comparables;
+                if (compacted && compacted.comparable_sales) delete compacted.comparable_sales;
                 resultStr = JSON.stringify(compacted);
             }
             if (resultStr.length > 64000) {
@@ -822,19 +837,31 @@ export function getSafeRawAnalysis(item: any): string | null {
                     delete compacted.keywords;
                     delete compacted.shipping_info;
                     delete compacted.market_report;
+                    delete compacted.price_reasoning;
+                    delete compacted.fetched_images;
                 }
                 resultStr = JSON.stringify(compacted);
             }
             if (resultStr.length > 64000) {
-                resultStr = resultStr.substring(0, 64000);
+                // Guaranteed-valid minimal lineage envelope (never slice a JSON string mid-object!)
+                const baseObj = Array.isArray(compacted) ? (compacted[0] || {}) : (compacted || {});
+                resultStr = JSON.stringify({
+                    identity: baseObj.identity || baseObj.title || '',
+                    title: baseObj.title || '',
+                    sgwItemId: baseObj.sgwItemId,
+                    scoutPrior: baseObj.scoutPrior,
+                    scanKind: baseObj.scanKind,
+                    scannedAt: baseObj.scannedAt,
+                    rulesVersion: baseObj.rulesVersion,
+                    boutiquePrice: baseObj.boutiquePrice,
+                    maxBid: baseObj.maxBid,
+                });
             }
         }
 
-        return resultStr.length > 64000 ? resultStr.substring(0, 64000) : resultStr;
+        return resultStr;
     } catch (e) {
-        // Fallback to safe substring if JSON parsing fails
-        const s = typeof item === 'string' ? item : JSON.stringify(item);
-        return s.length > 64000 ? s.substring(0, 64000) : s;
+        return '{}';
     }
 }
 

@@ -389,6 +389,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { warehousesApi } from '../../lib/warehouses';
 import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
+import { mergeAppraisalHistory } from '../../lib/appraisalCalibration';
 
 const { user, currentTeam } = useAuth();
 const { showLoader, hideLoader, updateLoader } = useLoader();
@@ -519,13 +520,19 @@ const { openLotSplitter } = useLotSplitter();
 
 const lotSplitterItemData = computed(() => {
     if (!props.item) return null;
+    const mergedRaw = scoutResult.value
+        ? mergeAppraisalHistory(props.item.rawAnalysis, scoutResult.value, {
+              conditionNotes: props.item.conditionNotes || editForm.condition_notes,
+              isPostBuyScan: isItemAcquired(props.item.status || editForm.status || '')
+          })
+        : props.item.rawAnalysis;
     return {
         ...props.item,
         cost: editForm.cost || props.item.cost,
         purchasePrice: editForm.purchasePrice || props.item.purchasePrice,
         title: editForm.title || props.item.title,
         quantity: editForm.quantity || props.item.quantity,
-        rawAnalysis: scoutResult.value || props.item.rawAnalysis,
+        rawAnalysis: mergedRaw,
         components: (scoutItemsArray.value && scoutItemsArray.value.length > 0) ? scoutItemsArray.value : props.item.components,
         images: (allAvailableGalleryUrls.value && allAvailableGalleryUrls.value.length > 0) ? allAvailableGalleryUrls.value : props.item.images
     };
@@ -1515,7 +1522,14 @@ const saveEdit = async () => {
             galleryFiles: finalGallery,
             existingGalleryIds: Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : [],
             scoutData: hasFreshScoutScan.value ? (scoutResult.value || null) : null,
-            ...(hasFreshScoutScan.value && scoutResult.value ? { rawAnalysis: scoutResult.value } : {}),
+            ...(hasFreshScoutScan.value && scoutResult.value
+                ? {
+                      rawAnalysis: mergeAppraisalHistory(props.item?.rawAnalysis, scoutResult.value, {
+                          conditionNotes: props.item?.conditionNotes || editForm.condition_notes,
+                          isPostBuyScan: isAcquiredItem.value
+                      })
+                  }
+                : {}),
             components: (lotComponents.value && lotComponents.value.length > 0)
                 ? JSON.stringify(lotComponents.value)
                 : ((verifyChecklist.value && Array.isArray(verifyChecklist.value) && verifyChecklist.value.length > 0)
@@ -1941,7 +1955,9 @@ const analyzeExistingItem = async () => {
                 quantity: lotQty || editForm.quantity || props.item?.quantity,
                 sourcingLocation: editForm.sourcingLocation || props.item?.sourcingLocation,
                 locations: activeLocations,
-                existingItems: existingChildComponents
+                existingItems: existingChildComponents,
+                mode: isAcquiredItem.value ? 'deep' : 'scout',
+                itemId: props.item?.$id || undefined
             }),
             signal: scoutAbortController.signal
         });
