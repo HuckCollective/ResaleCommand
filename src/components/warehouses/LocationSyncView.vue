@@ -96,52 +96,13 @@
       </div>
     </div>
 
-    <!-- Always-Visible Inline Draggable Bookmarklet Install Bar (No Modal Click Required!) -->
-    <div
+    <!-- Always-Visible Inline Draggable Bookmarklet Install Bar (Matches Auction Scout & Orders Pattern) -->
+    <RicochetBookmarkletBar
       v-if="activeCanonicalLocationMeta.usesRicochet"
-      class="bg-warning/10 border border-warning/40 rounded-2xl p-3 sm:px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-    >
-      <div class="flex items-center gap-2.5 flex-wrap text-xs">
-        <span class="badge badge-sm badge-warning text-warning-content font-black font-mono">
-          ✅ Live Auto-Updated Script
-        </span>
-        <span class="font-bold text-base-content">
-          ⬆️ Install Bookmarklet: Drag this yellow button to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>):
-        </span>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <a
-          :href="bookmarkletHref"
-          @click.prevent="addToast({ type: 'info', message: `Drag this button up to your browser Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
-          class="btn btn-xs sm:btn-sm btn-warning text-warning-content font-black shadow-sm border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="'Drag me to your Chrome Bookmarks Bar! (' + bookmarkletBarLabel + ')'"
-        >
-          <span>{{ bookmarkletBarLabel }}</span>
-        </a>
-        <button
-          type="button"
-          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
-          @click="copyBookmarkletUrl"
-          title="Copy Bookmarklet JavaScript URL to Clipboard"
-        >
-          <span>📋 Copy Bookmarklet URL</span>
-        </button>
-        <a
-          href="/settings?tab=bookmarklets"
-          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
-          title="Customize Bookmarklet Icon, Label & Pixel 8 Trigger"
-        >
-          <span>⚙️ Customize / Pixel 8</span>
-        </a>
-        <button
-          type="button"
-          class="btn btn-xs sm:btn-sm btn-outline btn-warning font-bold gap-1"
-          @click="showBrowserSyncModal = true"
-        >
-          <span>📖 Full Setup Guide</span>
-        </button>
-      </div>
-    </div>
+      :location-meta="activeCanonicalLocationMeta"
+      context="sync"
+      @open-advanced-guide="showBrowserSyncModal = true"
+    />
 
     <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
     <div
@@ -2160,6 +2121,7 @@ import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { useAuth } from '../../composables/useAuth';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
+import RicochetBookmarkletBar from './RicochetBookmarkletBar.vue';
 
 const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';

@@ -27,16 +27,6 @@
 
         <a 
           v-if="warehouse && activeLocationMeta.usesRicochet" 
-          :href="bookmarkletHref" 
-          @click.prevent="addToast({ type: 'info', message: `Drag '${bookmarkletBarLabel}' up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your Ricochet tab!` })"
-          class="btn btn-sm btn-warning text-warning-content font-black shadow-xs border border-warning-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="'⬆️ Drag me to your Chrome Bookmarks Bar (Ctrl+Shift+B)! (' + bookmarkletBarLabel + ')'"
-        >
-          <span>⬆️ Drag: {{ bookmarkletBarLabel }}</span>
-        </a>
-
-        <a 
-          v-if="warehouse && activeLocationMeta.usesRicochet" 
           :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
           class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
         >
@@ -69,6 +59,13 @@
 
     <!-- Main Location Cockpit -->
     <div v-else class="space-y-6">
+      <!-- Ricochet POS 2-Way Sync Bookmarklet Bar (Matches Auction Scout & Orders Pattern) -->
+      <RicochetBookmarkletBar
+        v-if="activeLocationMeta.usesRicochet"
+        :location-meta="activeLocationMeta"
+        context="detail"
+      />
+
       <!-- Location Identity Hero Banner -->
       <div class="card bg-base-100 border border-base-200 shadow-md p-5 sm:p-6 rounded-3xl">
         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -1191,6 +1188,7 @@ import {
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
+import RicochetBookmarkletBar from './RicochetBookmarkletBar.vue';
 import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';

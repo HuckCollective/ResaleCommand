@@ -97,6 +97,7 @@ export interface FacilityDefinition {
     monthlyRent: number;
     skuPrefix: string;
     posName: string;
+    posPortalUrl?: string;
     usesRicochet: boolean;
     supportsPaperSalesSheet: boolean;
     salesIntakeMode: 'paper_sheet' | 'pos_csv';
@@ -122,6 +123,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         monthlyRent: 382.5,
         skuPrefix: '0EJ',
         posName: 'Ricochet POS',
+        posPortalUrl: 'https://memoryden.ricoconsign.com',
         usesRicochet: true,
         supportsPaperSalesSheet: false,
         salesIntakeMode: 'pos_csv',
