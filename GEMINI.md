@@ -155,15 +155,10 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 # Active Session Summary (Updated Nov 14, 2026)
 
-## ✅ RICOCHET POS BOOKMARKLET BAR & INSTRUCTIONS MODAL ALIGNMENT ACROSS `/warehouse/MD` & `/warehouse/sync/MD` (Nov 14, 2026 — `alpha-1`)
-- **Unified `RicochetBookmarkletBar.vue` & 4-Card Ricochet Sync Guide Modal (`src/components/warehouses/RicochetBookmarkletBar.vue`, `src/components/warehouses/LocationDetailView.vue`, `src/components/warehouses/LocationSyncView.vue`, `src/lib/warehouses.ts`)**:
-  - Created `RicochetBookmarkletBar.vue` to mirror the exact visual & functional pattern of the `🔭 Auction Scout & Orders` Bookmarklet Bar on `/purchases` (`PurchasesList.vue`), driven 100% dynamically by `locationMeta` from `src/lib/warehouses.ts` (**Law 2 — Zero Hardcoded Locations**).
-  - Replaced the cramped standalone `⬆️ Drag: ⚡ Memory Den Sync` breadcrumb button on `/warehouse/MD` (`LocationDetailView.vue`) and the legacy inline yellow bar on `/warehouse/sync/MD` (`LocationSyncView.vue`) with `<RicochetBookmarkletBar>` featuring:
-    - Role + Evergreen status badge (`👑 Founder • ✅ Live Auto-Updated Script`)
-    - Draggable **`⚡ Memory Den Sync`** bookmarklet pill + context companion button (`🌐 Inventory Sync` on `/warehouse/MD`; `📥 Sales Importer` on `/warehouse/sync/MD`)
-    - **`📋 Copy JS URL`** button (copies evergreen `/scripts/rico-bookmarklet.js?location=MD&t=...` live-loader snippet with toast confirmation and mobile keyword `md`)
-    - **`📖 Instructions`** button opening a Ricochet-contextualized **4-Card + Manual/Mobile URL Paste Trick `<dialog>` Modal** (`1. Booth Inventory & Barcodes (/products)`, `2. Physical Tag Safety (🏷️ Adopt Booth Tag)`, `3. Unpaid & Settled Payouts (/payouts & /payout_history)`, `4. Live Scorecard & On-the-Fly Additions`, plus Desktop Bookmark Edit & Mobile Chrome `Pixel 8` keyword `md` setup)
-    - Quick Ricochet portal links (`📦 Products ↗`, `💵 Payouts ↗`, `📜 History ↗`) resolved dynamically from `locationMeta.posPortalUrl`.
+## ✅ UNIVERSAL `BookmarkletHeroBar.vue` PATTERN ACROSS `/purchases`, `/warehouse/MD`, `/warehouse/sync/MD` & `/sales/import/MD` (Nov 14, 2026 — `alpha-1`)
+- **Single Reusable `BookmarkletHeroBar.vue` & 4-Card Contextual Guide Modal (`src/components/bml/BookmarkletHeroBar.vue`, `src/components/purchases/PurchasesList.vue`, `src/components/warehouses/LocationDetailView.vue`, `src/components/warehouses/LocationSyncView.vue`, `src/components/sales/SalesImporter.vue`, `src/components/sales/RicochetLiveSalesPanel.vue`, `src/lib/warehouses.ts`)**:
+  - Created `src/components/bml/BookmarkletHeroBar.vue` (`tool="ricochet_sync" | "auction_scout"`) as the single canonical Bookmarklet Bar & `<dialog>` Instructions Modal across all 4 workspaces (`/purchases`, `/warehouse/MD`, `/warehouse/sync/MD`, and `/sales/import/MD`), driven 100% dynamically by `locationMeta` (**Law 2 — Zero Hardcoded Locations**).
+  - Removed the misplaced `📥 Sales Importer` button from inside the Ricochet Bookmarklet Bar, removed the duplicate `⚡ Ricochet Sync Guide` header button from `/warehouse/sync/MD` (`LocationSyncView.vue`), and removed the bespoke `⬆️ Drag / 📋 Copy BML / ⚙️ BML` buttons from `RicochetLiveSalesPanel.vue` on `/sales/import/MD` (replacing them with `<BookmarkletHeroBar>` at the top of `SalesImporter.vue` and shrinking `PurchasesList.vue` by ~150 lines).
 - **Parked Post-`main` Release Roadmap (`Studios ➔ 🔬 Appraisal & Pricing Lab`)**:
   - After merging `alpha-1` to `main`, next up is the **Product Research, Estimates & Pricing Engine** (`Studios ➔ 🔬 Appraisal & Pricing Lab` at `/studios/appraisal`, keeping `/coop/vault` strictly reserved for Co-op governance): real Gemini `usageMetadata` token telemetry (`ai_usage_logs`), Estimate-vs-Sold calibration scorecard (`resale_db.items` ⇄ `resale_db.sales`), live `pricing_engine_config_v1` manifest rules, and preserving `rawAnalysis` on `ItemDrawer.vue` save.
 

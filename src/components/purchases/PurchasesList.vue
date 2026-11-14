@@ -13,28 +13,9 @@
     </div>
   </div>
   <div v-else class="space-y-4">
-    <!-- FOUNDER/CURATOR-ONLY AUCTION SCOUT & ORDERS BOOKMARKLET BAR -->
-    <div
-      v-if="capabilities.canUseBml"
-      class="bg-primary/10 border border-primary/35 rounded-2xl p-3 sm:px-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3"
-    >
-      <div class="flex items-center gap-2.5 flex-wrap text-xs">
-        <span class="badge badge-sm badge-primary text-primary-content font-black font-mono">
-          {{ capabilities.roleBadge }} • ✅ Live Auto-Updated Script
-        </span>
-        <span class="font-bold text-base-content">
-          🔭 ShopGoodwill 4-Page Sync: Drag to your Chrome Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) to sync In-Progress Bids, Won/Lost Auctions, Shipped Orders &amp; Item Pages:
-        </span>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap shrink-0">
-        <a
-          :href="auctionScoutBookmarkletHref"
-          @click.prevent="addToast('Drag this button up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on any ShopGoodwill page!', 'info')"
-          class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black shadow-sm border border-primary-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-          :title="`Drag me to your Chrome Bookmarks Bar! (${auctionScoutBookmarkletLabel})`"
-        >
-          <span>{{ auctionScoutBookmarkletLabel }}</span>
-        </a>
+    <!-- FOUNDER/CURATOR-ONLY AUCTION SCOUT & ORDERS BOOKMARKLET BAR (Unified BookmarkletHeroBar Pattern) -->
+    <BookmarkletHeroBar tool="auction_scout">
+      <template #companion>
         <a
           href="/scout/trackers"
           class="btn btn-xs sm:btn-sm btn-secondary text-secondary-content font-black shadow-2xs gap-1"
@@ -43,52 +24,8 @@
           <span>📌 Buy Trackers</span>
           <span v-if="buyTrackerCount > 0" class="badge badge-xs badge-neutral font-mono">{{ buyTrackerCount }}</span>
         </a>
-        <button
-          type="button"
-          class="btn btn-xs sm:btn-sm btn-outline font-bold gap-1"
-          @click="copyAuctionBookmarkletHref"
-          title="Copy javascript: URL for mobile Chrome (Pixel 8 keyword: rcscout)"
-        >
-          <span>📋 Copy JS URL</span>
-        </button>
-        <button
-          type="button"
-          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold gap-1"
-          @click="showBmlGuideModal = true"
-        >
-          <span>📖 Instructions</span>
-        </button>
-        <div class="hidden sm:flex items-center gap-1 pl-1 border-l border-base-300">
-          <a
-            href="https://shopgoodwill.com/shopgoodwill/inprogress-auctions"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
-            title="Open ShopGoodwill Auctions In Progress"
-          >
-            🔨 Bidding ↗
-          </a>
-          <a
-            href="https://shopgoodwill.com/shopgoodwill/closed-auctions"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
-            title="Open ShopGoodwill Closed Auctions (Won / Lost)"
-          >
-            🏆 Won/Lost ↗
-          </a>
-          <a
-            href="https://shopgoodwill.com/shopgoodwill/shipped-orders"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-2xs btn-ghost border border-base-300 font-bold"
-            title="Open ShopGoodwill Shipped Orders"
-          >
-            🚚 Shipped ↗
-          </a>
-        </div>
-      </div>
-    </div>
+      </template>
+    </BookmarkletHeroBar>
 
     <!-- 4-STAT HAUL SPEND & PROJECTED ROI SUMMARY STRIP -->
     <KpiStatGrid :items="purchaseKpiStats" />
@@ -644,65 +581,6 @@
       :purchase="activeTrayPurchase"
       @updated="loadPurchases(true, true)"
     />
-
-    <!-- How to Use 4-Page ShopGoodwill Bookmarklet Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showBmlGuideModal }">
-      <div class="modal-box max-w-2xl rounded-2xl border border-base-300 space-y-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="font-black text-lg flex items-center gap-2">
-              <span>🔭 Auction Scout &amp; Orders Bookmarklet Guide</span>
-              <span class="badge badge-sm badge-primary">{{ capabilities.roleBadge }}</span>
-            </h3>
-            <p class="text-xs opacity-70 mt-0.5">
-              One evergreen bookmarklet for all 4 ShopGoodwill pages — zero third-party credentials or cookies ever touched.
-            </p>
-          </div>
-          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showBmlGuideModal = false">✕</button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
-            <div class="font-black text-primary">1. In-Progress Auctions (`/inprogress-auctions`)</div>
-            <p class="opacity-80">
-              Overlays your RC Max Bid ceiling next to each row, flags <span class="badge badge-xs badge-success">🟢 WINNING</span> (🏆 trophy) vs. <span class="badge badge-xs badge-error">🚨 OUTBID</span>, and syncs live prices into your Buy Tracker.
-            </p>
-          </div>
-          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
-            <div class="font-black text-secondary">2. Closed Auctions (`/closed-auctions`)</div>
-            <p class="opacity-80">
-              Previews Won vs. Lost rows: promotes <span class="font-bold">Auction won</span> items to <span class="badge badge-xs badge-info">Acquired (HG)</span> and cleans <span class="font-bold">Auction lost</span> items from your Buy Tracker.
-            </p>
-          </div>
-          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
-            <div class="font-black text-info">3. Shipped Orders (`/shipped-orders`)</div>
-            <p class="opacity-80">
-              Creates/updates POs with live FedEx/USPS/UPS tracking pills (`🚚 Shipped`) and allocates true landed cost (`Price + Shipping + Handling + Tax`) across items.
-            </p>
-          </div>
-          <div class="bg-base-200/70 p-3 rounded-xl border border-base-300 space-y-1">
-            <div class="font-black text-accent">4. Single Item Page (`/item/123456789`)</div>
-            <p class="opacity-80">
-              Extracts Item ID, title, price, shipping &amp; gallery images and opens Quick Scout or adds directly to your active Buy Tracker.
-            </p>
-          </div>
-        </div>
-
-        <div class="bg-base-200/50 rounded-xl p-3 border border-base-300 text-xs space-y-1.5">
-          <div class="font-black">📱 Mobile Chrome (Pixel 8 / Android) Address-Bar Trick:</div>
-          <p class="opacity-80">
-            Tap <button type="button" class="link link-primary font-bold" @click="copyAuctionBookmarkletHref">📋 Copy JS URL</button>, bookmark any page in mobile Chrome, edit the bookmark name to <code class="font-mono font-bold">rcscout</code>, and paste the copied <code class="font-mono">javascript:...</code> code into the URL field. On any ShopGoodwill tab, type <code class="font-mono font-bold">rcscout</code> in the address bar and tap the starred suggestion!
-          </p>
-        </div>
-
-        <div class="modal-action">
-          <button type="button" class="btn btn-sm btn-primary font-bold rounded-xl" @click="showBmlGuideModal = false">Got It</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="showBmlGuideModal = false">
-        <button>close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 
@@ -712,14 +590,13 @@ import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { isRefundedPurchaseOrder, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
-import { buildEvergreenBookmarkletHref, loadBmlRegistryConfig } from '../../lib/bml/registry';
-import { siteConfig } from '../../site-config';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
+import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import KpiStatGrid from '../common/KpiStatGrid.vue';
 import PaginationDock from '../common/PaginationDock.vue';
 import PurchaseItemsTray from './PurchaseItemsTray.vue';
@@ -733,19 +610,6 @@ const { showLoader, hideLoader } = useLoader();
 const { purchases, loading, fetchPurchases } = usePurchases();
 const { inventoryItems, fetchInventory } = useInventory();
 const { capabilities } = useMemberCapabilities();
-
-const showBmlGuideModal = ref(false);
-const browserOrigin = ref(typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl);
-const bmlRegistryConfig = ref(null);
-
-const auctionScoutBookmarkletHref = computed(() =>
-    buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value)
-);
-
-const auctionScoutBookmarkletLabel = computed(() => {
-    const customTitle = bmlRegistryConfig.value?.tools?.auction_scout?.title;
-    return customTitle || '🔭 Auction Scout & Orders';
-});
 
 // Un-acquired Scout Buy Trackers (status === 'Draft' or SC- draft trackers) live strictly in /scout/trackers until acquired
 const isUnacquiredBuyTracker = (p) => {
@@ -776,15 +640,6 @@ const buyTrackerCount = computed(() => {
 const acquiredPurchases = computed(() => {
     return (purchases.value || []).filter(p => !isUnacquiredBuyTracker(p) && !isRefundedOrKnownVoidPurchase(p));
 });
-
-const copyAuctionBookmarkletHref = async () => {
-    try {
-        await navigator.clipboard.writeText(auctionScoutBookmarkletHref.value);
-        addToast('Copied Auction Scout JS URL! Paste into a bookmark URL field (keyword: rcscout).', 'success');
-    } catch {
-        addToast('Could not copy automatically — drag the button to your Bookmarks Bar instead.', 'warning');
-    }
-};
 
 const getTrackingPills = (purchase) => {
     return parseTrackingNumbers(purchase?.trackingNumber);
@@ -1352,10 +1207,6 @@ let handlePurchaseEvent = null;
 let syncBroadcastChannel = null;
 
 onMounted(async () => {
-    loadBmlRegistryConfig().then((cfg) => {
-        if (cfg) bmlRegistryConfig.value = cfg;
-    }).catch(() => {});
-
     const params = new URLSearchParams(window.location.search);
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';

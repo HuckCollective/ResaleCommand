@@ -75,18 +75,8 @@
           <span v-if="locationHistory.length > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ locationHistory.length }}</span>
         </button>
 
-        <button 
-          v-if="activeCanonicalLocationMeta.usesRicochet"
-          type="button" 
-          class="btn btn-sm btn-outline btn-warning gap-1.5 font-bold"
-          @click="showBrowserSyncModal = true"
-          title="Open Ricochet In-Browser Barcode Sync Guide"
-        >
-          <span>⚡ Ricochet Sync Guide</span>
-        </button>
-
         <a
-          v-else-if="activeCanonicalLocationMeta.supportsPaperSalesSheet"
+          v-if="activeCanonicalLocationMeta.supportsPaperSalesSheet"
           :href="'/sales/import/' + encodeURIComponent(activeCanonicalLocationMeta.code)"
           class="btn btn-sm btn-primary gap-1.5 font-bold shadow-xs"
           :title="'Open Paper Sales Sheet & Hands-On Entry for ' + activeCanonicalLocationMeta.shortName"
@@ -96,11 +86,12 @@
       </div>
     </div>
 
-    <!-- Always-Visible Inline Draggable Bookmarklet Install Bar (Matches Auction Scout & Orders Pattern) -->
-    <RicochetBookmarkletBar
+    <!-- Always-Visible Inline Draggable Bookmarklet Install Bar (Unified BookmarkletHeroBar Pattern) -->
+    <BookmarkletHeroBar
       v-if="activeCanonicalLocationMeta.usesRicochet"
+      tool="ricochet_sync"
       :location-meta="activeCanonicalLocationMeta"
-      context="sync"
+      :show-console-fallback="true"
       @open-advanced-guide="showBrowserSyncModal = true"
     />
 
@@ -2121,7 +2112,7 @@ import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { useAuth } from '../../composables/useAuth';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
-import RicochetBookmarkletBar from './RicochetBookmarkletBar.vue';
+import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 
 const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';

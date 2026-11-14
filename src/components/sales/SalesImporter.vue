@@ -78,6 +78,14 @@
         </div>
       </div>
 
+      <!-- Unified Ricochet POS 2-Way Sync Bookmarklet Bar (Matches Auction Scout & Orders Pattern) -->
+      <BookmarkletHeroBar
+        v-if="activeCanonicalLocationMeta.usesRicochet"
+        tool="ricochet_sync"
+        :location-meta="activeCanonicalLocationMeta"
+        class="mb-5"
+      />
+
       <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
       <div
         v-if="!isLocationLocked"
@@ -2062,6 +2070,7 @@ import {
 } from '../../lib/warehouses';
 import { generatePartnerSettlementPdf } from '../../lib/coopSettlementPdf';
 import BottomActionDock from '../common/BottomActionDock.vue';
+import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import RicochetLiveSalesPanel from './RicochetLiveSalesPanel.vue';
 import SalesImportTray from './SalesImportTray.vue';
 import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';

@@ -59,11 +59,11 @@
 
     <!-- Main Location Cockpit -->
     <div v-else class="space-y-6">
-      <!-- Ricochet POS 2-Way Sync Bookmarklet Bar (Matches Auction Scout & Orders Pattern) -->
-      <RicochetBookmarkletBar
+      <!-- Ricochet POS 2-Way Sync Bookmarklet Bar (Unified BookmarkletHeroBar Pattern) -->
+      <BookmarkletHeroBar
         v-if="activeLocationMeta.usesRicochet"
+        tool="ricochet_sync"
         :location-meta="activeLocationMeta"
-        context="detail"
       />
 
       <!-- Location Identity Hero Banner -->
@@ -1188,7 +1188,7 @@ import {
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
-import RicochetBookmarkletBar from './RicochetBookmarkletBar.vue';
+import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
