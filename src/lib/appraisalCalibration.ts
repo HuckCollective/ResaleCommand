@@ -75,6 +75,8 @@ export interface CalibrationScoredRow {
   daysToSell: number | null;
   childCount?: number;
   soldChildCount?: number;
+  imageId?: string;
+  galleryImageIds?: string[];
 }
 
 export interface BinSellThroughRow {
@@ -89,6 +91,8 @@ export interface BinSellThroughRow {
   sellThroughPct: number;
   grossSold: number;
   medianUnitPrice: number;
+  imageId?: string;
+  galleryImageIds?: string[];
 }
 
 export interface AgedUnsoldCandidate {
@@ -102,6 +106,8 @@ export interface AgedUnsoldCandidate {
   scoutMidpoint: number | null;
   taggedPrice: number;
   cost: number;
+  imageId?: string;
+  galleryImageIds?: string[];
 }
 
 export interface SegmentAccuracySummary {
@@ -809,6 +815,7 @@ export function inferCalibrationCategory(item: any): string {
   const hay = [
     item?.title,
     item?.identity,
+    item?.category,
     Array.isArray(item?.keywords) ? item.keywords.join(' ') : '',
     item?.conditionNotes,
   ]
@@ -816,19 +823,26 @@ export function inferCalibrationCategory(item: any): string {
     .join(' ')
     .toLowerCase();
 
-  if (/\b(rpg|d&d|dungeons|warhammer|board\s*game|card\s*game|mtg|pathfinder|dice|miniature)\b/.test(hay)) {
-    return 'TTRPG & Games';
-  }
-  if (/\b(jacket|coat|leather|shirt|tee|dress|skirt|boots|shoes|denim|jeans|sweater|hoodie|corset|velvet)\b/.test(hay)) {
-    return 'Apparel & Outerwear';
-  }
-  if (/\b(ring|necklace|pendant|brooch|pin|earring|bracelet|sterling|925|wand|tarot|crystal)\b/.test(hay)) {
-    return 'Jewelry & Curios';
-  }
-  if (/\b(book|magazine|comic|zine|vinyl|lp|cassette|vhs|dvd|cd|blu-ray)\b/.test(hay)) {
+  const isExplicitGameHardware = /\b(board\s*game|card\s*game|dice\s*set|polyhedral\s*dice|miniatures?|warhammer\s*40k|booster\s*box|starter\s*deck)\b/.test(
+    hay
+  );
+  const isBookOrMedia = /\b(books?|hardcovers?|hardbacks?|paperbacks?|softcovers?|novels?|trilog(?:y|ies)|antholog(?:y|ies)|folios?|1st\s*ed(?:ition)?|first\s*edition|first\s*printing|dust\s*jacket|tomes?|almanacs?|guidebooks?|handbooks?|encyclopedias?|atlas|biograph(?:y|ies)|memoirs?|poetry|literature|fiction|non-?fiction|textbooks?|cookbooks?|artbooks?|magazines?|comics?|manga|graphic\s*novels?|zines?|vinyl|lps?|cassettes?|vhs|dvds?|cds?|blu-?rays?|audiobooks?|isbn|rulebook|sourcebook|pb|hc)\b/.test(
+    hay
+  );
+
+  if (isBookOrMedia && !isExplicitGameHardware) {
     return 'Books & Media';
   }
-  if (/\b(camera|console|nintendo|sony|walkman|turntable|synth|audio|lens|electronic)\b/.test(hay)) {
+  if (/\b(rpg|d&d|dungeons|warhammer|board\s*game|card\s*game|mtg|pathfinder|dice|miniature|ttrpg)\b/.test(hay)) {
+    return 'TTRPG & Games';
+  }
+  if (/\b(jacket|coat|leather|shirt|tee|dress|skirt|boots|shoes|denim|jeans|sweater|hoodie|corset|velvet|blouse|vest|cardigan|pants|trousers|hat|cap|scarf|gloves|belt|apparel|clothing)\b/.test(hay)) {
+    return 'Apparel & Outerwear';
+  }
+  if (/\b(ring|necklace|pendant|brooch|pin|earring|bracelet|sterling|925|wand|tarot|crystal|cameo|locket|cufflinks|jewelry)\b/.test(hay)) {
+    return 'Jewelry & Curios';
+  }
+  if (/\b(camera|console|nintendo|sony|walkman|turntable|synth|audio|lens|electronic|gameboy|playstation|xbox|sega|atari|vcr|stereo|receiver)\b/.test(hay)) {
     return 'Electronics & Gear';
   }
   return 'Decor & Collectibles';
@@ -1101,26 +1115,25 @@ export function computeEstimateVsSoldScorecard(
     );
     if (validChildren.length === 0) continue;
 
-    for (const c of validChildren) {
-      parentLotsHandledChildren.add(c.$id);
-    }
-
     const soldChildren = validChildren.filter((c) => realizedByItemId.has(c.$id));
     if (soldChildren.length === 0) continue;
 
-    totalLinkedSoldItems += 1;
     const parentPrior = extractScoutPriorSummary(parent.rawAnalysis, parent.conditionNotes);
     if (!parentPrior || parentPrior.midpoint <= 0) {
-      missingPreBuyEstimate += 1;
       continue;
     }
 
-    // Require >= 75% of split children sold so partial early sales don't look like false under-realization
+    // Require >= 75% of split children sold to roll up at lot level; otherwise score sold children individually
     if (soldChildren.length / validChildren.length < 0.75) {
       inProgressSplitLots += 1;
       continue;
     }
 
+    for (const c of validChildren) {
+      parentLotsHandledChildren.add(c.$id);
+    }
+
+    totalLinkedSoldItems += 1;
     eligibleSoldItems += 1;
     const totalChildTagged = validChildren.reduce(
       (s, c) => s + (Number(c.resalePrice) || 0),
@@ -1194,6 +1207,8 @@ export function computeEstimateVsSoldScorecard(
       daysToSell,
       childCount: validChildren.length,
       soldChildCount: soldChildren.length,
+      imageId: String(parent.imageId || soldChildren[0]?.imageId || ''),
+      galleryImageIds: Array.isArray(parent.galleryImageIds) ? parent.galleryImageIds : [],
     });
   }
 
@@ -1209,14 +1224,27 @@ export function computeEstimateVsSoldScorecard(
     if (st === 'deconstructed' || st === 'combined') continue;
 
     totalLinkedSoldItems += 1;
-    const prior = extractScoutPriorSummary(item.rawAnalysis, item.conditionNotes);
+    const taggedPrice = Number(item.resalePrice) || 0;
+    let prior = extractScoutPriorSummary(item.rawAnalysis, item.conditionNotes);
+    if ((!prior || prior.midpoint <= 0) && taggedPrice > 0) {
+      // Fallback to shelf tag baseline when an older booth item or split-lot book was priced without saving rawAnalysis JSON
+      prior = {
+        estimatedLow: Number((taggedPrice * 0.85).toFixed(2)),
+        estimatedHigh: Number((taggedPrice * 1.15).toFixed(2)),
+        midpoint: Number(taggedPrice.toFixed(2)),
+        boutiquePrice: Number(taggedPrice.toFixed(2)),
+        recommendedVenue: saleInfo.venueCode,
+        scanKind: 'tag_baseline',
+        scannedAt: String(item.$createdAt || new Date().toISOString()),
+        rulesVersion: 1,
+      };
+    }
     if (!prior || prior.midpoint <= 0) {
       missingPreBuyEstimate += 1;
       continue;
     }
 
     eligibleSoldItems += 1;
-    const taggedPrice = Number(item.resalePrice) || 0;
     const realizationPct = Number(((saleInfo.unitGross / prior.midpoint) * 100).toFixed(1));
     const tagVsScoutPct =
       taggedPrice > 0 ? Number(((taggedPrice / prior.midpoint) * 100).toFixed(1)) : null;
@@ -1265,6 +1293,8 @@ export function computeEstimateVsSoldScorecard(
       chip,
       soldDate: saleInfo.soldDateIso,
       daysToSell,
+      imageId: String(item.imageId || ''),
+      galleryImageIds: Array.isArray(item.galleryImageIds) ? item.galleryImageIds : [],
     });
   }
 
@@ -1360,6 +1390,8 @@ export function computeEstimateVsSoldScorecard(
         grossSold: Number(grossSold.toFixed(2)),
         medianUnitPrice:
           computeQuantile(sortedUnits, 0.5) ?? (Number(item.resalePrice) || 0),
+        imageId: String(item.imageId || ''),
+        galleryImageIds: Array.isArray(item.galleryImageIds) ? item.galleryImageIds : [],
       };
     })
     .filter((b) => b.unitsSold > 0 || b.unitsStocked > 1)
@@ -1395,6 +1427,8 @@ export function computeEstimateVsSoldScorecard(
       scoutMidpoint: prior ? prior.midpoint : null,
       taggedPrice: Number(tagged.toFixed(2)),
       cost: Number((Number(it.cost) || 0).toFixed(2)),
+      imageId: String(it.imageId || ''),
+      galleryImageIds: Array.isArray(it.galleryImageIds) ? it.galleryImageIds : [],
     });
   }
   agedUnsoldCandidates.sort((a, b) => b.ageDays - a.ageDays);

@@ -893,6 +893,40 @@ for (const contract of transportContracts) {
             }
         }
     }
+
+    // 12H. Enforce Canonical Table & PaginationDock Pattern on Primary Table Views (ux-design-system-taxonomy Red Flag #8)
+    const canonicalTableViews = [
+        { file: 'src/components/purchases/PurchasesList.vue', astro: 'src/pages/purchases/index.astro', requireThumb: false },
+        { file: 'src/components/sales/SalesList.vue', astro: 'src/pages/sales.astro', requireThumb: false },
+        { file: 'src/components/studios/AppraisalPricingLabView.vue', astro: 'src/pages/studios/appraisal.astro', requireThumb: true },
+    ];
+    for (const tv of canonicalTableViews) {
+        const vPath = path.resolve(tv.file);
+        if (!fs.existsSync(vPath)) continue;
+        const vSrc = fs.readFileSync(vPath, 'utf8');
+        if (!/<PaginationDock\b/.test(vSrc)) {
+            console.error(
+                `❌ Canonical Table Pattern Violation in ${tv.file}: Primary data table views MUST mount <PaginationDock> from src/components/common/PaginationDock.vue (never hand-roll inline Prev/Next pagination bars)!`
+            );
+            hasErrors = true;
+        }
+        if (tv.requireThumb && !/<ItemThumbnail\b/.test(vSrc)) {
+            console.error(
+                `❌ Canonical Table Pattern Violation in ${tv.file}: Item data tables MUST render <ItemThumbnail> from src/components/common/ItemThumbnail.vue on item rows!`
+            );
+            hasErrors = true;
+        }
+        const aPath = path.resolve(tv.astro);
+        if (fs.existsSync(aPath)) {
+            const aSrc = fs.readFileSync(aPath, 'utf8');
+            if (!/\bhideFooter\s*=\s*\{\s*true\s*\}/.test(aSrc)) {
+                console.error(
+                    `❌ Canonical Dock Page Violation in ${tv.astro}: Astro pages mounting <PaginationDock> or <BottomActionDock> MUST pass hideFooter={true} to <Layout>!`
+                );
+                hasErrors = true;
+            }
+        }
+    }
 }
 
 // 13. ACCESS CONTROL: default-deny middleware allowlist, guest-gated member links, cookie consent, guest scout limiter

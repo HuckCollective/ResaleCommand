@@ -89,7 +89,7 @@
             class="badge badge-xs font-mono font-black whitespace-nowrap"
             :class="activeTab === 'scorecard' ? 'badge-neutral text-neutral-content' : 'badge-ghost'"
           >
-            n={{ scorecard.headline.sampleSize }}
+            {{ scorecard.headline.sampleSize }} sold
           </span>
         </button>
 
@@ -160,6 +160,20 @@
     <!-- TAB 1: TRUTH SCORECARD (Default)                                     -->
     <!-- =================================================================== -->
     <section v-else-if="activeTab === 'scorecard'" class="space-y-4">
+      <!-- Plain-English Explainer Banner -->
+      <div class="bg-base-100 border border-base-300 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+        <div class="space-y-0.5">
+          <div class="font-black text-base-content flex items-center gap-1.5 flex-wrap">
+            <span>💡 What You Are Looking At:</span>
+            <span class="badge badge-xs badge-primary text-primary-content font-bold">AI Price Grade Card &amp; Booth Tuner</span>
+          </div>
+          <p class="text-base-content/75">
+            Compares what your items <strong>actually sold for at the register</strong> against the <strong>AI / tag estimate</strong>.
+            <strong>100%</strong> = sold right on target • <strong>138%</strong> = sold for <strong>38% MORE</strong> than estimated (click <strong>Use 1.38x</strong> to raise future AI booth prices!).
+          </p>
+        </div>
+      </div>
+
       <!-- Low Sample / Link Coverage Guidance Banner -->
       <div
         v-if="scorecard && scorecard.headline.lowConfidence"
@@ -169,10 +183,10 @@
           <Icon icon="solar:info-circle-bold" class="w-5 h-5 text-warning shrink-0 mt-0.5" />
           <div>
             <p class="font-black text-base-content">
-              Calibration Baseline Building (n = {{ scorecard.headline.sampleSize }} / 8 minimum for segment lock)
+              Building Sales History ({{ scorecard.headline.sampleSize }} sold items scored • 8+ sales needed per category)
             </p>
             <p class="text-base-content/75 mt-0.5">
-              Segments with fewer than 8 scored sales suppress auto-multiplier suggestions so small samples never skew pricing. Link Coverage is currently
+              Categories with fewer than 8 sold items wait for more sales before suggesting price changes so 1 lucky sale never skews your AI pricing. Register Ticket Match Rate:
               <strong class="font-mono">{{ scorecard.headline.linkCoveragePct }}%</strong>.
             </p>
           </div>
@@ -188,25 +202,30 @@
         <div class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-2.5">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-xs uppercase tracking-wider font-extrabold text-base-content/70">
-              Realization by Venue (Dynamic Warehouses)
+              Actual Sold vs. Estimate by Booth / Venue
             </h2>
-            <span class="badge badge-xs badge-ghost font-mono whitespace-nowrap">Median &amp; IQR</span>
+            <span class="badge badge-xs badge-ghost font-mono whitespace-nowrap">Tap row to filter table</span>
           </div>
           <div class="space-y-2">
             <div
               v-for="seg in scorecard.byVenue"
               :key="seg.key"
-              class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-base-200/60 border border-base-300/70 text-xs"
+              class="flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-all"
+              :class="venueFilter === seg.key ? 'bg-primary/15 border-primary shadow-2xs' : 'bg-base-200/60 border-base-300/70 hover:border-primary/40'"
+              @click="toggleVenueFilter(seg.key)"
             >
               <div class="min-w-0">
-                <div class="font-bold text-base-content truncate">{{ seg.label }}</div>
+                <div class="font-bold text-base-content truncate flex items-center gap-1.5">
+                  <span>{{ seg.label }}</span>
+                  <span v-if="venueFilter === seg.key" class="badge badge-2xs badge-primary text-primary-content font-bold">Filtered ✕</span>
+                </div>
                 <div class="text-[11px] text-base-content/65 font-mono">
                   <template v-if="seg.suppressed">
-                    ⏳ Need {{ seg.neededMoreCount }} more sold (n={{ seg.sampleSize }}/8)
+                    ⏳ {{ seg.sampleSize }} of 8 sold — need {{ seg.neededMoreCount }} more sales to unlock %
                   </template>
                   <template v-else>
-                    n={{ seg.sampleSize }} • IQR {{ seg.iqrLowPct }}%–{{ seg.iqrHighPct }}%
-                    <span v-if="seg.medianDaysToSell !== null"> • ~{{ seg.medianDaysToSell }}d turn</span>
+                    {{ seg.sampleSize }} sold • Typical range: {{ seg.iqrLowPct }}%–{{ seg.iqrHighPct }}%
+                    <span v-if="seg.medianDaysToSell !== null"> • ~{{ seg.medianDaysToSell }}d to sell</span>
                   </template>
                 </div>
               </div>
@@ -218,12 +237,15 @@
                 >
                   {{ seg.medianRealizationPct }}%
                 </span>
+                <span v-else class="badge badge-xs badge-ghost font-mono whitespace-nowrap">
+                  {{ seg.sampleSize }} sold
+                </span>
                 <button
                   v-if="!seg.suppressed && seg.suggestedMultiplier && isPhysicalVenueCode(seg.key)"
                   type="button"
                   class="btn btn-2xs btn-outline rounded-lg font-mono font-bold"
                   :title="'Stage suggested ' + seg.suggestedMultiplier + 'x multiplier in Rules tab'"
-                  @click="stageSuggestedVenueMultiplier(seg.key, seg.suggestedMultiplier)"
+                  @click.stop="stageSuggestedVenueMultiplier(seg.key, seg.suggestedMultiplier)"
                 >
                   Use {{ seg.suggestedMultiplier.toFixed(2) }}x
                 </button>
@@ -236,24 +258,29 @@
         <div class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-2.5">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-xs uppercase tracking-wider font-extrabold text-base-content/70">
-              Realization by Category
+              Actual Sold vs. Estimate by Category
             </h2>
-            <span class="badge badge-xs badge-ghost font-mono whitespace-nowrap">Min n=8 Guard</span>
+            <span class="badge badge-xs badge-ghost font-mono whitespace-nowrap">Tap category to filter table</span>
           </div>
           <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
             <div
               v-for="cat in scorecard.byCategory.slice(0, 6)"
               :key="cat.key"
-              class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-base-200/60 border border-base-300/70 text-xs"
+              class="flex items-center justify-between gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition-all"
+              :class="categoryFilter === cat.key ? 'bg-primary/15 border-primary shadow-2xs' : 'bg-base-200/60 border-base-300/70 hover:border-primary/40'"
+              @click="toggleCategoryFilter(cat.key)"
             >
               <div class="min-w-0">
-                <div class="font-bold text-base-content truncate">{{ cat.label }}</div>
+                <div class="font-bold text-base-content truncate flex items-center gap-1.5">
+                  <span>{{ cat.label }}</span>
+                  <span v-if="categoryFilter === cat.key" class="badge badge-2xs badge-primary text-primary-content font-bold">Filtered ✕</span>
+                </div>
                 <div class="text-[11px] text-base-content/65 font-mono">
                   <template v-if="cat.suppressed">
-                    ⏳ Need {{ cat.neededMoreCount }} more sold (n={{ cat.sampleSize }}/8)
+                    ⏳ {{ cat.sampleSize }} of 8 sold — need {{ cat.neededMoreCount }} more sales to unlock %
                   </template>
                   <template v-else>
-                    n={{ cat.sampleSize }} • IQR {{ cat.iqrLowPct }}%–{{ cat.iqrHighPct }}% • Net ${{ (cat.medianNetUsd || 0).toFixed(2) }}
+                    {{ cat.sampleSize }} sold • Typical: {{ cat.iqrLowPct }}%–{{ cat.iqrHighPct }}% • Avg Net ${{ (cat.medianNetUsd || 0).toFixed(2) }}
                   </template>
                 </div>
               </div>
@@ -265,14 +292,14 @@
                 {{ cat.medianRealizationPct }}%
               </span>
               <span v-else class="badge badge-xs badge-ghost font-mono whitespace-nowrap shrink-0">
-                n={{ cat.sampleSize }}
+                {{ cat.sampleSize }} sold
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Filter Chips + Venue & Search Bar -->
+      <!-- Filter Chips + Venue, Category & Search Bar -->
       <div class="card bg-base-100 border border-base-300 rounded-2xl p-3.5 space-y-3">
         <div class="flex items-center gap-1.5 flex-wrap">
           <button
@@ -293,7 +320,7 @@
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Search item title, UPC, or booth SKU..."
+              placeholder="Search item title, UPC, category, or booth SKU..."
               class="input input-bordered input-sm join-item w-full bg-base-100 text-xs"
               @input="currentPage = 1"
             />
@@ -309,8 +336,20 @@
           </div>
 
           <select
+            v-model="categoryFilter"
+            class="select select-bordered select-sm rounded-xl text-xs font-bold bg-base-100 sm:w-48"
+            aria-label="Filter by category"
+            @change="currentPage = 1"
+          >
+            <option value="ALL">All Categories</option>
+            <option v-for="c in availableCategoryFilters" :key="c.key" :value="c.key">
+              {{ c.label }} ({{ c.count }})
+            </option>
+          </select>
+
+          <select
             v-model="venueFilter"
-            class="select select-bordered select-sm rounded-xl text-xs font-bold bg-base-100 sm:w-52"
+            class="select select-bordered select-sm rounded-xl text-xs font-bold bg-base-100 sm:w-48"
             aria-label="Filter by venue"
             @change="currentPage = 1"
           >
@@ -319,6 +358,15 @@
               {{ v.label }}
             </option>
           </select>
+
+          <button
+            v-if="isTableFiltered"
+            type="button"
+            class="btn btn-xs btn-ghost border border-base-300 rounded-xl font-bold whitespace-nowrap"
+            @click="resetAllTableFilters"
+          >
+            Reset Filters ✕
+          </button>
         </div>
       </div>
 
@@ -360,8 +408,16 @@
                 @click="openItemInDrawer(row.itemId)"
               >
                 <td class="max-w-xs">
-                  <div class="font-bold text-xs text-base-content truncate">{{ row.title }}</div>
-                  <div class="text-[10px] font-mono text-base-content/60">{{ row.upc || row.itemId.slice(0, 8) }}</div>
+                  <div class="flex items-center gap-2.5">
+                    <ItemThumbnail :item="row" size="sm" rounded="lg" />
+                    <div class="min-w-0">
+                      <div class="font-bold text-xs text-base-content truncate" :title="row.title">{{ row.title }}</div>
+                      <div class="flex items-center gap-1.5 flex-wrap mt-0.5 text-[10px] font-mono text-base-content/60">
+                        <span>{{ row.upc || row.itemId.slice(0, 8) }}</span>
+                        <span class="badge badge-2xs badge-ghost font-sans font-bold whitespace-nowrap">{{ row.category }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <span class="badge badge-xs badge-ghost font-mono font-bold whitespace-nowrap">{{ row.venueCode }}</span>
@@ -416,9 +472,14 @@
                 @click="openItemInDrawer(bin.itemId)"
               >
                 <td class="max-w-xs">
-                  <div class="font-bold text-xs text-base-content truncate">{{ bin.title }}</div>
-                  <div class="text-[10px] font-mono text-base-content/60">
-                    {{ bin.sku }} <span v-if="bin.upc">• {{ bin.upc }}</span>
+                  <div class="flex items-center gap-2.5">
+                    <ItemThumbnail :item="bin" size="sm" rounded="lg" />
+                    <div class="min-w-0">
+                      <div class="font-bold text-xs text-base-content truncate" :title="bin.title">{{ bin.title }}</div>
+                      <div class="text-[10px] font-mono text-base-content/60">
+                        {{ bin.sku }} <span v-if="bin.upc">• {{ bin.upc }}</span>
+                      </div>
+                    </div>
                   </div>
                 </td>
                 <td>
@@ -444,7 +505,7 @@
             🎯 Scored Sales vs. Initial Speed Scout (Tap any row to inspect in ItemDrawer)
           </span>
           <span class="text-[11px] font-mono text-base-content/65">
-            Showing {{ paginatedScoredRows.length }} of {{ filteredScoredRows.length }}
+            Showing {{ paginatedScoredRows.length }} of {{ filteredScoredRows.length }} sold
           </span>
         </div>
 
@@ -456,7 +517,7 @@
                 <th class="text-right">Scout Said</th>
                 <th class="text-right">You Tagged</th>
                 <th class="text-right">It Sold For</th>
-                <th class="text-right">Δ%</th>
+                <th class="text-right">Sold vs Est</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -464,10 +525,10 @@
               <tr v-if="paginatedScoredRows.length === 0">
                 <td colspan="6" class="text-center py-10 space-y-2">
                   <p class="text-xs font-bold text-base-content/75">
-                    No scored Estimate-vs-Sold items match this filter yet.
+                    No scored sold items match this filter yet.
                   </p>
                   <p class="text-[11px] text-base-content/60 max-w-md mx-auto">
-                    As Speed Scout items sell and sync via Ricochet or online payouts, their pre-buy `scoutPrior` midpoint is automatically scored against realized register sales here.
+                    Click "Reset Filters" above or choose another Category / Venue to view all scored sales.
                   </p>
                 </td>
               </tr>
@@ -477,20 +538,28 @@
                 class="hover:bg-base-200/60 cursor-pointer transition-colors"
                 @click="openItemInDrawer(row.itemId)"
               >
-                <td class="max-w-[240px] sm:max-w-xs">
-                  <div class="font-bold text-xs text-base-content truncate" :title="row.title">
-                    {{ row.title }}
-                  </div>
-                  <div class="flex items-center gap-1.5 flex-wrap mt-0.5 text-[10px] font-mono text-base-content/60">
-                    <span>{{ row.venueCode }}</span>
-                    <span v-if="row.upc">• {{ row.upc }}</span>
-                    <span v-if="row.locationSku">• {{ row.locationSku }}</span>
-                    <span
-                      v-if="row.kind === 'split_lot'"
-                      class="badge badge-2xs badge-secondary text-secondary-content font-bold whitespace-nowrap"
-                    >
-                      ✂️ Split Lot ({{ row.soldChildCount }}/{{ row.childCount }})
-                    </span>
+                <td class="max-w-[260px] sm:max-w-sm">
+                  <div class="flex items-center gap-2.5">
+                    <ItemThumbnail :item="row" size="sm" rounded="lg" />
+                    <div class="min-w-0">
+                      <div class="font-bold text-xs text-base-content truncate" :title="row.title">
+                        {{ row.title }}
+                      </div>
+                      <div class="flex items-center gap-1.5 flex-wrap mt-0.5 text-[10px] font-mono text-base-content/60">
+                        <span>{{ row.venueCode }}</span>
+                        <span v-if="row.upc">• {{ row.upc }}</span>
+                        <span v-if="row.locationSku">• {{ row.locationSku }}</span>
+                        <span class="badge badge-2xs badge-ghost font-sans font-bold whitespace-nowrap">
+                          {{ row.category }}
+                        </span>
+                        <span
+                          v-if="row.kind === 'split_lot'"
+                          class="badge badge-2xs badge-secondary text-secondary-content font-bold whitespace-nowrap"
+                        >
+                          ✂️ Split Lot ({{ row.soldChildCount }}/{{ row.childCount }})
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </td>
                 <td class="text-right font-mono text-xs whitespace-nowrap">
@@ -522,46 +591,18 @@
                     v-else-if="row.chip === 'under_priced_gem'"
                     class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap"
                   >
-                    💎 Gem (&gt;115%)
+                    💎 Sold Higher (&gt;115%)
                   </span>
                   <span
                     v-else
                     class="badge badge-xs badge-warning text-warning-content font-bold whitespace-nowrap"
                   >
-                    ⚠️ Over-Est (&lt;85%)
+                    ⚠️ Sold Lower (&lt;85%)
                   </span>
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <!-- 25-Row Pagination Controls -->
-      <div
-        v-if="totalPages > 1"
-        class="flex items-center justify-between gap-2 bg-base-100 border border-base-300 rounded-2xl px-4 py-2.5 text-xs"
-      >
-        <span class="font-mono text-base-content/70">
-          Page <strong>{{ currentPage }}</strong> of <strong>{{ totalPages }}</strong> (25 / page)
-        </span>
-        <div class="join">
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :disabled="currentPage <= 1"
-            @click="currentPage = Math.max(1, currentPage - 1)"
-          >
-            ‹ Prev
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item font-bold"
-            :disabled="currentPage >= totalPages"
-            @click="currentPage = Math.min(totalPages, currentPage + 1)"
-          >
-            Next ›
-          </button>
         </div>
       </div>
 
@@ -1343,6 +1384,62 @@
       @save="handleDrawerItemSaved"
       @saved="handleDrawerItemSaved"
     />
+
+    <!-- Canonical 2-Tier Pagination & Command Dock (ux-design-system-taxonomy) -->
+    <PaginationDock
+      v-if="activeTab === 'scorecard' && activeTotalRowCount > 0"
+      v-model:currentPage="currentPage"
+      v-model:pageSize="pageSize"
+      :totalItems="activeTotalRowCount"
+      :totalPages="totalPages"
+      :isLoading="loadingLab"
+      entityLabel="items"
+      :isFiltered="isTableFiltered"
+      @scroll-top="scrollToTop"
+    >
+      <template #dock>
+        <button
+          type="button"
+          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          :disabled="loadingLab"
+          @click="loadLabSnapshot"
+          title="Refresh Estimate-vs-Sold audit"
+        >
+          <Icon icon="solar:refresh-bold" class="w-4 h-4" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Refresh</span>
+        </button>
+
+        <button
+          type="button"
+          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          @click="activeTab = 'rules'"
+          title="Open Calibration Rules & Venue Bias"
+        >
+          <Icon icon="solar:settings-bold" class="w-4 h-4" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Rules</span>
+        </button>
+
+        <button
+          type="button"
+          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          @click="activeTab = 'bookmarklets'"
+          title="Open Universal Bookmarklets Hub"
+        >
+          <Icon icon="solar:bookmark-bold" class="w-4 h-4" />
+          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">BMLs</span>
+        </button>
+
+        <button
+          type="button"
+          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          @click="isTestbenchOpen = true"
+          title="Open Price & Venue Testbench"
+        >
+          <Icon icon="solar:test-tube-bold" class="w-4 h-4 drop-shadow-xs" />
+          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Try It</span>
+        </button>
+      </template>
+    </PaginationDock>
   </div>
 </template>
 
@@ -1350,6 +1447,8 @@
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
+import PaginationDock from '../common/PaginationDock.vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import { account, databases } from '../../lib/appwrite';
@@ -1372,8 +1471,6 @@ type ScorecardFilterKey =
   | 'aged_unsold'
   | 'booth_bins';
 
-const PAGE_SIZE = 25;
-
 // Core State (Declared strictly above computed/lifecycle to prevent TDZ)
 const activeTab = ref<LabTab>('scorecard');
 const windowDays = ref<number>(180);
@@ -1392,8 +1489,10 @@ const aiMetrics = ref<any | null>(null);
 // Scorecard Filters & Pagination
 const scorecardFilter = ref<ScorecardFilterKey>('all');
 const venueFilter = ref<string>('ALL');
+const categoryFilter = ref<string>('ALL');
 const searchQuery = ref<string>('');
 const currentPage = ref<number>(1);
+const pageSize = ref<number>(25);
 
 // Rules & Ledger Save State
 const savingRules = ref<boolean>(false);
@@ -1525,21 +1624,21 @@ const kpiStats = computed<KpiStatItem[]>(() => {
   const med = h?.medianRealizationPct ?? null;
 
   let tile1Value = 'Building';
-  let tile1Badge = `⏳ n = ${n}/8`;
+  let tile1Badge = `⏳ ${n}/8 sold`;
   let tile1BadgeClass = 'badge-ghost';
   let tile1Tone = 'text-base-content';
   if (med !== null && n > 0) {
     tile1Value = `${med}%`;
     if (n < 8) {
-      tile1Badge = `🟡 Low Sample · n=${n}`;
+      tile1Badge = `🟡 ${n} sold (need 8)`;
       tile1BadgeClass = 'badge-warning text-warning-content';
       tile1Tone = 'text-warning';
     } else if (med >= 85 && med <= 115) {
-      tile1Badge = `🟢 Calibrated · n=${n}`;
+      tile1Badge = `🟢 On Target · ${n} sold`;
       tile1BadgeClass = 'badge-success text-success-content';
       tile1Tone = 'text-success';
     } else {
-      tile1Badge = `🔴 Drift · n=${n}`;
+      tile1Badge = `🔴 ${med > 115 ? 'Selling Higher' : 'Selling Lower'} · ${n} sold`;
       tile1BadgeClass = 'badge-error text-error-content';
       tile1Tone = 'text-warning';
     }
@@ -1556,15 +1655,15 @@ const kpiStats = computed<KpiStatItem[]>(() => {
 
   return [
     {
-      label: 'Median Sold vs. Scout',
+      label: 'Actual Sold vs. AI Est.',
       value: tile1Value,
       badge: tile1Badge,
       badgeClass: tile1BadgeClass,
       tone: tile1Tone,
       hint:
         h && h.iqrLowPct !== null && h.iqrHighPct !== null
-          ? `IQR ${h.iqrLowPct}%–${h.iqrHighPct}% • Link ${h.linkCoveragePct}%`
-          : `Link coverage ${h?.linkCoveragePct ?? 100}% across ${windowDays.value}d`,
+          ? `Typical: ${h.iqrLowPct}%–${h.iqrHighPct}% • Ticket Match ${h.linkCoveragePct}%`
+          : `Ticket match ${h?.linkCoveragePct ?? 100}% across ${windowDays.value}d`,
     },
     {
       label: 'Scout Funnel (This Month)',
@@ -1578,17 +1677,17 @@ const kpiStats = computed<KpiStatItem[]>(() => {
           : 'Logs Buy / Watch / Walk-Away Pass verdicts',
     },
     {
-      label: 'Net Realized by Venue',
+      label: 'Typical Net Payout by Booth',
       value:
         topVenue && topVenue.medianNetUsd !== null
-          ? `$${topVenue.medianNetUsd.toFixed(2)} med`
+          ? `$${topVenue.medianNetUsd.toFixed(2)} net`
           : `${retailBoothMetas.value.length} Booths`,
-      badge: topVenue ? `n = ${topVenue.sampleSize}` : '🏪 Live Fees',
+      badge: topVenue ? `${topVenue.sampleSize} sold` : '🏪 Live Fees',
       badgeClass: 'badge-ghost',
       tone: 'text-success',
       hint: topVenue
-        ? `${topVenue.label} after dynamic warehouses.ts fee`
-        : 'Net after dynamic warehouses.ts commissions',
+        ? `${topVenue.label} after booth commission`
+        : 'Net after booth commissions',
     },
     {
       label: 'Monthly AI Spend vs. Credit',
@@ -1649,6 +1748,49 @@ const availableVenueFilters = computed(() => {
   return Array.from(map.entries()).map(([code, label]) => ({ code, label }));
 });
 
+const availableCategoryFilters = computed(() => {
+  const counts = new Map<string, number>();
+  for (const r of scorecard.value?.rows || []) {
+    const cat = r.category || 'Decor & Collectibles';
+    counts.set(cat, (counts.get(cat) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([key, count]) => ({ key, label: key, count }))
+    .sort((a, b) => b.count - a.count);
+});
+
+const isTableFiltered = computed(
+  () =>
+    scorecardFilter.value !== 'all' ||
+    venueFilter.value !== 'ALL' ||
+    categoryFilter.value !== 'ALL' ||
+    searchQuery.value.trim().length > 0
+);
+
+function toggleVenueFilter(code: string) {
+  venueFilter.value = venueFilter.value === code ? 'ALL' : code;
+  currentPage.value = 1;
+}
+
+function toggleCategoryFilter(catKey: string) {
+  categoryFilter.value = categoryFilter.value === catKey ? 'ALL' : catKey;
+  currentPage.value = 1;
+}
+
+function resetAllTableFilters() {
+  scorecardFilter.value = 'all';
+  venueFilter.value = 'ALL';
+  categoryFilter.value = 'ALL';
+  searchQuery.value = '';
+  currentPage.value = 1;
+}
+
+function scrollToTop() {
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
 const filteredScoredRows = computed(() => {
   let rows = scorecard.value?.rows || [];
   if (
@@ -1660,6 +1802,9 @@ const filteredScoredRows = computed(() => {
   }
   if (venueFilter.value !== 'ALL') {
     rows = rows.filter((r) => r.venueCode === venueFilter.value);
+  }
+  if (categoryFilter.value !== 'ALL') {
+    rows = rows.filter((r) => r.category === categoryFilter.value);
   }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
@@ -1678,6 +1823,9 @@ const filteredAgedRows = computed(() => {
   let rows = scorecard.value?.agedUnsoldCandidates || [];
   if (venueFilter.value !== 'ALL') {
     rows = rows.filter((r) => r.venueCode === venueFilter.value);
+  }
+  if (categoryFilter.value !== 'ALL') {
+    rows = rows.filter((r) => r.category === categoryFilter.value);
   }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
@@ -1714,21 +1862,26 @@ const activeTotalRowCount = computed(() => {
   return filteredScoredRows.value.length;
 });
 
-const totalPages = computed(() => Math.max(1, Math.ceil(activeTotalRowCount.value / PAGE_SIZE)));
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(activeTotalRowCount.value / Math.max(1, pageSize.value)))
+);
 
 const paginatedScoredRows = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE;
-  return filteredScoredRows.value.slice(start, start + PAGE_SIZE);
+  const size = Math.max(1, pageSize.value);
+  const start = (currentPage.value - 1) * size;
+  return filteredScoredRows.value.slice(start, start + size);
 });
 
 const paginatedAgedRows = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE;
-  return filteredAgedRows.value.slice(start, start + PAGE_SIZE);
+  const size = Math.max(1, pageSize.value);
+  const start = (currentPage.value - 1) * size;
+  return filteredAgedRows.value.slice(start, start + size);
 });
 
 const paginatedBinRows = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE;
-  return filteredBinRows.value.slice(start, start + PAGE_SIZE);
+  const size = Math.max(1, pageSize.value);
+  const start = (currentPage.value - 1) * size;
+  return filteredBinRows.value.slice(start, start + size);
 });
 
 // Live client-side preview of compiled prompt string (`<= 600 chars`)

@@ -49,6 +49,10 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    - In DaisyUI v5, badges compute horizontal padding with `padding-inline: calc(var(--size) / 2 - var(--border))`. Custom themes in `src/styles/theme.css` MUST define `--border: 1px`, `--size-selector: 0.25rem`, `--size-field: 0.25rem`, `--depth: 1`, and `--noise: 0` so padding never collapses to 0px.
    - All custom utilities in `src/styles/global.css` MUST live inside `@layer utilities` or `@layer components` (zero un-layered CSS).
    - Component `<style>` blocks using `@apply` MUST declare `@reference "../../styles/global.css";` at line 1. Never apply `p-0` or `px-0` to `.badge` elements.
+8. **Red Flag: Hand-rolling custom inline `‹ Prev | Page X of Y | Next ›` pagination bars or rendering primary item tables without `<PaginationDock>` and `<ItemThumbnail>`**
+   👉 *STRICT TABLE & LEDGER ARCHETYPE INVARIANT*:
+   - Every primary table/ledger page (`/inventory`, `/purchases`, `/sales`, `/studios/appraisal`) MUST mount [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) (`v-model:currentPage`, `v-model:pageSize`, `:totalItems`, `:totalPages`) paired with `hideFooter={true}` on `<Layout>`.
+   - Every item table row MUST render [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) (`size="sm" rounded="lg"`) beside the item title and clickable category/venue filter badges. Never invent a one-off `‹ Prev / Next ›` pager div!
 
 ---
 
