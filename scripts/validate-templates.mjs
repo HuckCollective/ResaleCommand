@@ -704,6 +704,9 @@ const transportContracts = [
     },
     {
         file: 'src/components/sales/SalesList.vue',
+        mustContain: [
+            { pattern: /<SlideOverDrawer\b/, label: 'Canonical SlideOverDrawer confirmation UI for staged Ricochet sales' },
+        ],
         mustNotContain: [
             { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
         ],
@@ -748,6 +751,35 @@ for (const contract of transportContracts) {
     for (const ban of contract.mustNotContain || []) {
         if (ban.pattern.test(content)) {
             console.error(`❌ Transport Contract Violation in ${contract.file}: Forbidden ${ban.label}`);
+            hasErrors = true;
+        }
+    }
+}
+
+// =========================================================================
+// 11B. ZERO NATIVE BROWSER JS ALERT / CONFIRM / PROMPT DIALOGS IN SALES SYNC
+// =========================================================================
+{
+    const noNativeDialogFiles = [
+        'public/ricochet-upc-sync.user.js',
+        'src/components/sales/SalesList.vue',
+        'src/components/sales/RicochetLiveSalesPanel.vue',
+        'src/composables/useRicochetSalesSync.ts',
+    ];
+    for (const relFile of noNativeDialogFiles) {
+        const fullPath = path.resolve(relFile);
+        if (!fs.existsSync(fullPath)) continue;
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        // Strip HTML comments, block comments, and // line comments before checking
+        const codeOnly = raw
+            .replace(/<!--[\s\S]*?-->/g, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        const match = codeOnly.match(/(?:^|[^\w$.])(?:window\.)?(alert|confirm|prompt)\s*\(/m);
+        if (match) {
+            console.error(
+                `❌ UX Law Violation in ${relFile}: Native browser JS dialog (${match[0].trim()}) is strictly forbidden — use canonical SlideOverDrawer / DaisyUI UI on The Works.`
+            );
             hasErrors = true;
         }
     }

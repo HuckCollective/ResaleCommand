@@ -145,27 +145,27 @@
             </div>
           </div>
 
-          <!-- Primary Commit + Review + Refresh Actions -->
+          <!-- Primary Review & Confirm + Reconciler + Refresh Actions (Zero native JS confirm/alert popups) -->
           <div class="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
               class="btn btn-sm sm:btn-md btn-success font-black rounded-xl shadow-sm gap-1.5"
               :disabled="isCommittingRicochetSync"
-              @click="handleCommitStagedBannerClick"
+              @click="openRicochetConfirmDrawer"
             >
               <span v-if="isCommittingRicochetSync" class="loading loading-spinner loading-xs"></span>
               <span v-if="isCommittingRicochetSync && ricochetCommitProgress">
                 Writing {{ ricochetCommitProgress.done }} / {{ ricochetCommitProgress.total }}...
               </span>
               <span v-else>
-                ✅ Commit {{ ricochetActionableNewCount }} New {{ ricochetActionableNewCount === 1 ? 'Sale' : 'Sales' }}
+                ✅ Review &amp; Confirm {{ ricochetActionableNewCount }} New {{ ricochetActionableNewCount === 1 ? 'Sale' : 'Sales' }} (${{ ricochetNewBreakdown.net.toFixed(2) }} net)
               </span>
             </button>
             <a
               :href="`/sales/import/${activeRicochetVenueMeta.code}`"
               class="btn btn-sm sm:btn-md btn-outline font-bold rounded-xl"
             >
-              🔍 Review Staged Rows
+              🔍 Reconciler
             </a>
             <button
               type="button"
@@ -745,6 +745,213 @@
         @saved="handleRecordedSalesSaved"
       />
 
+      <!-- Canonical Slide-Over Confirmation Drawer for Staged Ricochet Sales (Zero JS alert/confirm popups) -->
+      <SlideOverDrawer
+        v-model="isRicochetConfirmDrawerOpen"
+        size="lg"
+        :title="`Confirm Staged ${activeRicochetVenueMeta.shortName} Sales`"
+        :subtitle="`${ricochetConfirmTargetMonthLabel} • Verified against live resale_db.sales (deterministic ticket-line deduplication)`"
+      >
+        <div class="space-y-4">
+          <!-- 4-Card Summary Strip -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">New Sales</div>
+              <div class="text-xl font-black text-info mt-0.5">{{ ricochetActionableNewCount }}</div>
+              <div class="text-[11px] text-base-content/65 font-semibold">{{ ricochetConfirmTargetMonthLabel }}</div>
+            </div>
+            <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">Gross Added</div>
+              <div class="text-xl font-black text-base-content mt-0.5">${{ ricochetNewBreakdown.gross.toFixed(2) }}</div>
+              <div class="text-[11px] text-base-content/65 font-semibold">{{ Math.round((activeRicochetVenueMeta.commissionRate || 0) * 100) }}% booth fee</div>
+            </div>
+            <div class="rounded-xl border border-success/40 bg-success/10 p-3">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-success">Net Payout</div>
+              <div class="text-xl font-black text-success mt-0.5">+${{ ricochetNewBreakdown.net.toFixed(2) }}</div>
+              <div class="text-[11px] text-base-content/70 font-semibold">Cleared to booth</div>
+            </div>
+            <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">Item Match</div>
+              <div class="text-xl font-black mt-0.5" :class="ricochetNewBreakdown.unmatchedCount === 0 ? 'text-success' : 'text-warning'">
+                {{ ricochetNewBreakdown.matchedCount }} / {{ ricochetActionableNewCount }}
+              </div>
+              <div class="text-[11px] text-base-content/65 font-semibold">
+                {{ ricochetNewBreakdown.unmatchedCount === 0 ? '100% SKU/UPC linked' : `${ricochetNewBreakdown.unmatchedCount} unlinked` }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Before ➔ After Partner Payout Preview -->
+          <div class="rounded-xl border border-base-300 bg-base-100 overflow-hidden">
+            <div class="px-3.5 py-2.5 bg-base-200/70 border-b border-base-300 flex items-center justify-between gap-2">
+              <div class="text-xs font-black uppercase tracking-wider text-base-content/80">
+                📊 Partner Ledger Impact ({{ activeRicochetVenueMeta.shortName }} · {{ ricochetConfirmTargetMonthLabel }})
+              </div>
+              <span class="badge badge-sm badge-ghost font-semibold">Before ➔ After</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="table table-xs sm:table-sm w-full">
+                <thead>
+                  <tr class="text-[11px] uppercase text-base-content/60 border-b border-base-200">
+                    <th>Partner</th>
+                    <th class="text-right">In Ledger Now</th>
+                    <th class="text-right text-info">+ Adding Now</th>
+                    <th class="text-right text-success">New Month Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="pRow in ricochetPartnerBeforeAfter.partners"
+                    :key="pRow.key"
+                    class="border-b border-base-200/70"
+                    :class="pRow.addCount > 0 ? 'bg-info/5 font-semibold' : 'opacity-75'"
+                  >
+                    <td>
+                      <span class="badge badge-sm font-bold" :class="pRow.badgeCls">{{ pRow.label }}</span>
+                    </td>
+                    <td class="text-right font-mono text-xs">
+                      {{ pRow.beforeCount }} <span class="text-base-content/60">(${{ pRow.beforeGross.toFixed(2) }})</span>
+                    </td>
+                    <td class="text-right font-mono text-xs font-black" :class="pRow.addCount > 0 ? 'text-info' : 'text-base-content/40'">
+                      <template v-if="pRow.addCount > 0">
+                        +{{ pRow.addCount }} (+${{ pRow.addGross.toFixed(2) }} / +${{ pRow.addNet.toFixed(2) }} net)
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="text-right font-mono text-xs font-black" :class="pRow.addCount > 0 ? 'text-success' : ''">
+                      {{ pRow.afterCount }} (${{ pRow.afterGross.toFixed(2) }} / ${{ pRow.afterNet.toFixed(2) }} net)
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr class="bg-base-200/80 font-black text-xs border-t-2 border-base-300">
+                    <td>Total ({{ activeRicochetVenueMeta.code }})</td>
+                    <td class="text-right font-mono">
+                      {{ ricochetPartnerBeforeAfter.total.beforeCount }} (${{ ricochetPartnerBeforeAfter.total.beforeNet.toFixed(2) }} net)
+                    </td>
+                    <td class="text-right font-mono text-info">
+                      +{{ ricochetPartnerBeforeAfter.total.addCount }} (+${{ ricochetPartnerBeforeAfter.total.addNet.toFixed(2) }} net)
+                    </td>
+                    <td class="text-right font-mono text-success">
+                      {{ ricochetPartnerBeforeAfter.total.afterCount }} (${{ ricochetPartnerBeforeAfter.total.afterNet.toFixed(2) }} net)
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- Full Scannable Ticket-Line List -->
+          <div class="rounded-xl border border-base-300 bg-base-100 overflow-hidden">
+            <div class="px-3.5 py-2.5 bg-base-200/70 border-b border-base-300 flex items-center justify-between gap-2">
+              <div class="text-xs font-black uppercase tracking-wider text-base-content/80">
+                🧾 Ticket Lines to Write ({{ ricochetActionableNewCount }})
+              </div>
+              <span class="text-[11px] text-base-content/65 font-semibold">📦 Booth Bins keep stock active</span>
+            </div>
+            <div class="divide-y divide-base-200 max-h-96 overflow-y-auto">
+              <div
+                v-for="(row, rIdx) in ricochetActionableNewRows"
+                :key="`confirm-${row.payoutId || row.saleNumber}-${row.sku}-${rIdx}`"
+                class="px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-base-200/40"
+              >
+                <div class="min-w-0 space-y-0.5">
+                  <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span class="font-mono font-black text-primary">#{{ String(row.payoutId || row.saleNumber || '').replace(/^#/, '') }}</span>
+                    <span class="font-mono text-base-content/70">{{ row.soldDate }}</span>
+                    <span
+                      class="badge badge-xs font-bold"
+                      :class="row.partnerBucket === 'PDXGL' ? 'badge-accent' : row.partnerBucket === 'BB' ? 'badge-secondary' : 'badge-primary'"
+                    >
+                      {{ row.partnerBucket === 'PDXGL' ? '🎲 PDXGL' : row.partnerBucket === 'BB' ? '👗 B&B' : '🫐 HUCK' }}
+                    </span>
+                    <span v-if="row.sku" class="font-mono font-bold text-warning">{{ row.sku }}</span>
+                    <span v-if="row.matchedItemUpc || row.upc" class="font-mono font-bold text-info">{{ row.matchedItemUpc || row.upc }}</span>
+                    <span v-if="isStagedRowBoothBin(row)" class="badge badge-xs badge-info badge-outline font-bold">
+                      📦 Booth Bin
+                    </span>
+                  </div>
+                  <div class="text-xs font-semibold text-base-content truncate">
+                    {{ row.matchedItemTitle || row.title }}
+                  </div>
+                </div>
+                <div class="flex items-center sm:flex-col sm:items-end justify-between gap-1 shrink-0 font-mono text-xs">
+                  <div class="font-bold">
+                    ${{ Number(row.grossPrice || 0).toFixed(2) }}
+                    <span class="opacity-50">→</span>
+                    <span class="text-success font-black">${{ Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0).toFixed(2) }} net</span>
+                  </div>
+                  <div v-if="row.matchedItemCost !== undefined" class="text-[11px] text-base-content/60">
+                    Cost: ${{ Number(row.matchedItemCost || 0).toFixed(2) }}
+                  </div>
+                </div>
+              </div>
+              <div v-if="ricochetActionableNewCount === 0" class="p-6 text-center text-sm font-bold text-success">
+                ✅ All staged Ricochet ticket lines are now recorded in the ledger!
+              </div>
+            </div>
+          </div>
+
+          <!-- Inline Safety Checkbox ONLY when batch spans >1 month OR >25 rows (zero browser popups) -->
+          <label
+            v-if="ricochetNewBreakdown.exceedsGuardThreshold"
+            class="flex items-start gap-3 p-3.5 rounded-xl border-2 border-warning/60 bg-warning/10 cursor-pointer"
+          >
+            <input
+              v-model="confirmGuardAcknowledged"
+              type="checkbox"
+              class="checkbox checkbox-warning checkbox-sm mt-0.5 shrink-0"
+            />
+            <span class="text-xs font-semibold text-base-content leading-snug">
+              <strong class="font-black text-warning">⚠️ Large / Multi-Month Batch Check:</strong>
+              This batch contains <strong>{{ ricochetNewBreakdown.count }} rows</strong> across
+              <strong>{{ ricochetNewBreakdown.monthKeys.join(', ') }}</strong>. I verified these ticket lines are genuinely new before writing to <code>resale_db.sales</code>.
+            </span>
+          </label>
+        </div>
+
+        <template #footer>
+          <div class="space-y-2">
+            <div v-if="isCommittingRicochetSync && ricochetCommitProgress" class="space-y-1">
+              <div class="flex items-center justify-between text-xs font-bold text-info">
+                <span>Writing sales batch to Appwrite...</span>
+                <span class="font-mono">{{ ricochetCommitProgress.done }} / {{ ricochetCommitProgress.total }}</span>
+              </div>
+              <progress
+                class="progress progress-info w-full h-2"
+                :value="ricochetCommitProgress.done"
+                :max="Math.max(1, ricochetCommitProgress.total)"
+              ></progress>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                class="btn btn-ghost font-bold rounded-xl"
+                :disabled="isCommittingRicochetSync"
+                @click="isRicochetConfirmDrawerOpen = false"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn btn-success font-black rounded-xl shadow-sm gap-2"
+                :disabled="
+                  isCommittingRicochetSync ||
+                  ricochetActionableNewCount === 0 ||
+                  (ricochetNewBreakdown.exceedsGuardThreshold && !confirmGuardAcknowledged)
+                "
+                @click="executeRicochetDrawerCommit"
+              >
+                <span v-if="isCommittingRicochetSync" class="loading loading-spinner loading-xs"></span>
+                <span>
+                  ✅ Confirm &amp; Write {{ ricochetActionableNewCount }} {{ ricochetActionableNewCount === 1 ? 'Sale' : 'Sales' }} to Ledger (${{ ricochetNewBreakdown.net.toFixed(2) }} net)
+                </span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </SlideOverDrawer>
+
       <!-- Canonical Item Side Drawer (Mounted after RecordSaleDrawer so inspecting from Cart stacks cleanly on top!) -->
       <ItemDrawer
         v-if="inspectedItem"
@@ -767,6 +974,7 @@ import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import CoopSettlementView from './CoopSettlementView.vue';
 import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
 import RecordSaleDrawer from './RecordSaleDrawer.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
@@ -909,6 +1117,9 @@ const boothLocationMetas = computed(() =>
 );
 
 const stagedSyncStatusToast = ref<{ type: 'success' | 'error' | 'warning' | 'info'; message: string } | null>(null);
+const isRicochetConfirmDrawerOpen = ref(false);
+const confirmGuardAcknowledged = ref(false);
+const pendingAutoOpenConfirmDrawer = ref(false);
 
 const {
   hasLoadedLiveSalesLedger,
@@ -935,46 +1146,20 @@ const {
   getTenantId: () => currentTeam.value?.$id || '',
 });
 
-const handleCommitStagedBannerClick = async () => {
+const openRicochetConfirmDrawer = () => {
   if (isCommittingRicochetSync.value || ricochetActionableNewCount.value === 0) return;
-  const bd = ricochetNewBreakdown.value;
-  const monthSummary = bd.monthKeys
-    .map((m) => `${m === 'unknown' ? 'Unknown' : monthKeyToLabel(m)}: ${bd.byMonth[m].count} ($${bd.byMonth[m].gross.toFixed(2)} gross / $${bd.byMonth[m].net.toFixed(2)} net)`)
-    .join('\n  • ');
-  const partnerSummary = [
-    bd.byPartner.HUCK.count > 0 ? `HUCK: ${bd.byPartner.HUCK.count} ($${bd.byPartner.HUCK.gross.toFixed(2)})` : '',
-    bd.byPartner.PDXGL.count > 0 ? `PDXGL: ${bd.byPartner.PDXGL.count} ($${bd.byPartner.PDXGL.gross.toFixed(2)})` : '',
-    bd.byPartner.BB.count > 0 ? `B&B: ${bd.byPartner.BB.count} ($${bd.byPartner.BB.gross.toFixed(2)})` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  confirmGuardAcknowledged.value = false;
+  isRicochetConfirmDrawerOpen.value = true;
+};
 
-  const okFirst =
-    typeof window === 'undefined' ||
-    window.confirm(
-      `Commit ${bd.count} new ${activeRicochetVenueMeta.value.shortName} sales to the ledger?\n\n` +
-        `Gross: $${bd.gross.toFixed(2)}  |  Net Payout: $${bd.net.toFixed(2)}\n` +
-        `Partners: ${partnerSummary || 'HUCK'}\n` +
-        `Matched: ${bd.matchedCount}  |  Unmatched: ${bd.unmatchedCount}\n` +
-        `By Month:\n  • ${monthSummary}`
-    );
-  if (!okFirst) return;
-
-  // Preflight safety guard: require a second explicit confirmation when new rows span >1 calendar month OR exceed 25 rows
-  if (bd.exceedsGuardThreshold && typeof window !== 'undefined') {
-    const guardReasons: string[] = [];
-    if (bd.spansMultipleMonths) guardReasons.push(`spans ${bd.monthKeys.length} calendar months (${bd.monthKeys.join(', ')})`);
-    if (bd.count > 25) guardReasons.push(`contains ${bd.count} rows (> 25 threshold)`);
-    const okSecond = window.confirm(
-      `⚠️ PREFLIGHT SAFETY GUARD:\n\n` +
-        `This commit ${guardReasons.join(' and ')}.\n\n` +
-        `Confirm a second time ONLY if you verified these ${bd.count} sales are genuinely missing from the ledger:`
-    );
-    if (!okSecond) return;
-  }
-
+const executeRicochetDrawerCommit = async () => {
+  if (isCommittingRicochetSync.value || ricochetActionableNewCount.value === 0) return;
+  if (ricochetNewBreakdown.value.exceedsGuardThreshold && !confirmGuardAcknowledged.value) return;
   isRicochetLiveCommitUnlocked.value = true;
   await commitLiveSales();
+  if (ricochetActionableNewCount.value === 0) {
+    isRicochetConfirmDrawerOpen.value = false;
+  }
 };
 
 // Sorting state (PO treatment)
@@ -1296,6 +1481,131 @@ watch(monthOptions, (opts) => {
   }
 }, { immediate: true });
 
+const ricochetConfirmTargetMonthKey = computed(() => {
+  const mKeys = ricochetNewBreakdown.value.monthKeys.filter((k) => k && k !== 'unknown');
+  if (mKeys.length === 1) return mKeys[0];
+  if (monthFilter.value !== 'all') return monthFilter.value;
+  return mKeys[0] || 'all';
+});
+
+const ricochetConfirmTargetMonthLabel = computed(() => {
+  const mKeys = ricochetNewBreakdown.value.monthKeys.filter((k) => k && k !== 'unknown');
+  if (mKeys.length > 1) {
+    return mKeys.map((k) => monthKeyToLabel(k)).join(' + ');
+  }
+  const target = ricochetConfirmTargetMonthKey.value;
+  return target === 'all' ? 'All Months' : monthKeyToLabel(target);
+});
+
+const isStagedRowBoothBin = (row: any): boolean => {
+  const cleanSku = String(row?.sku || row?.ricoSku || '').trim().toUpperCase();
+  if (cleanSku && PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku]) return true;
+  if (row?.matchedItemId) {
+    const it = (inventoryItems.value || []).find((i: any) => i.$id === row.matchedItemId);
+    if (it && Number(it.quantity || 1) > 1) return true;
+  }
+  return false;
+};
+
+const ricochetPartnerBeforeAfter = computed(() => {
+  const targetMonth = ricochetConfirmTargetMonthKey.value;
+  const multiMonths = new Set(ricochetNewBreakdown.value.monthKeys.filter((k) => k && k !== 'unknown'));
+  const venueCode = activeRicochetVenueMeta.value.code;
+  const beforeSales = consolidatedSales.value.filter((s) => {
+    const matchesMonth =
+      multiMonths.size > 1
+        ? multiMonths.has(monthKeyOf(s.date))
+        : targetMonth === 'all'
+          ? true
+          : monthKeyOf(s.date) === targetMonth;
+    if (!matchesMonth) return false;
+    return matchesLocationFilter({ storageLocation: s.locationName, sellingLocations: [s.locationName] }, venueCode);
+  });
+
+  const defs: Array<{ key: 'HUCK' | 'PDXGL' | 'BB'; label: string; badgeCls: string }> = [
+    { key: 'HUCK', label: '🫐 HUCK', badgeCls: 'badge-primary' },
+    { key: 'PDXGL', label: '🎲 PDXGL', badgeCls: 'badge-accent' },
+    { key: 'BB', label: '👗 B&B', badgeCls: 'badge-secondary' },
+  ];
+
+  let totBeforeCount = 0;
+  let totBeforeGross = 0;
+  let totBeforeNet = 0;
+  let totAddCount = 0;
+  let totAddGross = 0;
+  let totAddNet = 0;
+
+  const partners = defs.map((d) => {
+    const pBefore = beforeSales.filter((s) => s.partner === d.key);
+    const beforeCount = pBefore.length;
+    const beforeGross = Number(pBefore.reduce((acc, s) => acc + Number(s.grossAmount || 0), 0).toFixed(2));
+    const beforeNet = Number(pBefore.reduce((acc, s) => acc + Number(s.netPayout || 0), 0).toFixed(2));
+    const add = ricochetNewBreakdown.value.byPartner[d.key] || { count: 0, gross: 0, net: 0 };
+    const addCount = add.count;
+    const addGross = add.gross;
+    const addNet = add.net;
+
+    totBeforeCount += beforeCount;
+    totBeforeGross += beforeGross;
+    totBeforeNet += beforeNet;
+    totAddCount += addCount;
+    totAddGross += addGross;
+    totAddNet += addNet;
+
+    return {
+      ...d,
+      beforeCount,
+      beforeGross,
+      beforeNet,
+      addCount,
+      addGross,
+      addNet,
+      afterCount: beforeCount + addCount,
+      afterGross: Number((beforeGross + addGross).toFixed(2)),
+      afterNet: Number((beforeNet + addNet).toFixed(2)),
+    };
+  });
+
+  return {
+    partners,
+    total: {
+      beforeCount: totBeforeCount,
+      beforeGross: Number(totBeforeGross.toFixed(2)),
+      beforeNet: Number(totBeforeNet.toFixed(2)),
+      addCount: totAddCount,
+      addGross: Number(totAddGross.toFixed(2)),
+      addNet: Number(totAddNet.toFixed(2)),
+      afterCount: totBeforeCount + totAddCount,
+      afterGross: Number((totBeforeGross + totAddGross).toFixed(2)),
+      afterNet: Number((totBeforeNet + totAddNet).toFixed(2)),
+    },
+  };
+});
+
+watch(
+  [ricochetActionableNewCount, hasLoadedLiveSalesLedger, isLoadingRicochetSync],
+  ([newCount, loaded, syncing]) => {
+    if (!pendingAutoOpenConfirmDrawer.value || !loaded || syncing) return;
+    if (newCount > 0) {
+      const targetMonth = ricochetConfirmTargetMonthKey.value;
+      if (targetMonth && targetMonth !== 'all') {
+        monthDefaulted = true;
+        monthFilter.value = targetMonth;
+      }
+      confirmGuardAcknowledged.value = false;
+      isRicochetConfirmDrawerOpen.value = true;
+      pendingAutoOpenConfirmDrawer.value = false;
+    } else if (!loading.value) {
+      pendingAutoOpenConfirmDrawer.value = false;
+      stagedSyncStatusToast.value = {
+        type: 'success',
+        message: `✅ All staged ${activeRicochetVenueMeta.value.shortName} sales are already recorded in the ledger!`,
+      };
+    }
+  },
+  { immediate: true }
+);
+
 const PARTNER_LABELS: Record<Exclude<PartnerKey, 'all'>, string> = {
   HUCK: 'Huck (HUCK-)',
   BB: 'B&B (BB-)',
@@ -1528,6 +1838,14 @@ onMounted(() => {
       monthFilter.value = 'all';
       partnerFilter.value = 'all';
       monthDefaulted = true;
+    }
+    if (params.get('confirmRicochet') === '1') {
+      pendingAutoOpenConfirmDrawer.value = true;
+      params.delete('confirmRicochet');
+      params.delete('location');
+      const qs = params.toString();
+      const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', cleanUrl);
     }
   }
   if (currentTeam.value) fetchData();

@@ -598,7 +598,9 @@
   let harvestedPaidHistoryPages = []; // [{ page, rows }] one entry per traversed "N out of M" Payout History page
   let alreadySyncedRicoKeys = new Set();
   let hasHydratedLedgerSyncKeys = false;
-  let isCommittingSales = false;
+  let lastCloudPersistedOk = true;
+  let lastCloudPersistWarning = '';
+  let lastSalesTargetOrigin = '';
   let lastServerSalesPayload = null;
   let salesPushSuccessUrl = '';
   let isOpen = false;
@@ -1455,7 +1457,7 @@
     refreshMemberBtnState();
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
-    document.getElementById('rc-commit-sales-btn').addEventListener('click', () => commitNewSalesFromBookmarklet());
+    document.getElementById('rc-commit-sales-btn').addEventListener('click', () => openConfirmOnWorks());
     document.getElementById('rc-push-sales-btn').addEventListener('click', () => pushSalesToResaleCore({ silent: false }));
     document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
     const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
@@ -3963,25 +3965,25 @@
       pushBtn.textContent = `🧪 Stage Sales to Resale Core (${allRows.length} Dry-Run)`;
     }
 
-    if (commitBtn && !isCommittingSales) {
+    if (commitBtn) {
       const actionable = getActionableNewSalesRows();
       if (!hasHydratedLedgerSyncKeys) {
-        commitBtn.disabled = true;
+        commitBtn.disabled = isPushingSales || isHarvestingPayoutPages;
         commitBtn.style.background = '#334155';
-        commitBtn.style.color = '#94a3b8';
+        commitBtn.style.color = '#e2e8f0';
         commitBtn.style.border = '1px solid #475569';
-        commitBtn.style.cursor = 'not-allowed';
+        commitBtn.style.cursor = commitBtn.disabled ? 'not-allowed' : 'pointer';
         commitBtn.textContent =
           isPushingSales || isHarvestingPayoutPages
-            ? '⏳ Checking Resale Command Ledger...'
-            : '🧪 Click Stage Dry-Run Below to Check Ledger';
+            ? '⏳ Staging Sales to Resale Core...'
+            : '🧪 Stage & Check Ledger on The Works';
       } else if (actionable.count > 0) {
         commitBtn.disabled = false;
         commitBtn.style.background = 'linear-gradient(135deg, #38bdf8, #0284c7)';
         commitBtn.style.color = '#082f49';
         commitBtn.style.border = 'none';
         commitBtn.style.cursor = 'pointer';
-        commitBtn.textContent = `⚡ Commit ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'} to Ledger ($${actionable.net.toFixed(2)} net)`;
+        commitBtn.textContent = `↗ Review & Confirm ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'} on The Works ($${actionable.net.toFixed(2)} net)`;
       } else {
         commitBtn.disabled = true;
         commitBtn.style.background = 'rgba(16,185,129,0.14)';
@@ -4159,14 +4161,21 @@
   function renderSalesSyncBanner(targetOrigin, resolvedCode) {
     const syncBanner = document.getElementById('rc-sales-sync-banner');
     if (!syncBanner) return;
-    const baseOrigin = targetOrigin || RC_ORIGINS[0] || '';
+    const baseOrigin = targetOrigin || lastSalesTargetOrigin || RC_ORIGINS[0] || '';
+    const locParam = encodeURIComponent(resolvedCode || activeLocationCode || 'MD');
     const salesUrl = `${baseOrigin}/sales`;
-    const reconcilerUrl = `${baseOrigin}/sales/import/${encodeURIComponent(resolvedCode || activeLocationCode)}`;
+    const confirmSalesUrl = `${baseOrigin}/sales?confirmRicochet=1&location=${locParam}`;
+    const reconcilerUrl = `${baseOrigin}/sales/import/${locParam}`;
     const actionable = getActionableNewSalesRows();
     const totalRows = lastServerSalesPayload && Array.isArray(lastServerSalesPayload.rows) ? lastServerSalesPayload.rows.length : 0;
     const syncedCount = lastServerSalesPayload && Array.isArray(lastServerSalesPayload.rows)
       ? lastServerSalesPayload.rows.filter((r) => r.alreadySynced).length
       : alreadySyncedRicoKeys.size;
+    const persistWarnHtml = !lastCloudPersistedOk
+      ? `<div style="margin-top:5px;padding:4px 7px;border-radius:5px;background:rgba(245,158,11,0.2);border:1px solid rgba(251,191,36,0.5);color:#fde68a;font-size:10px;font-weight:700;">
+           ⚠️ Cloud manifest save warning${lastCloudPersistWarning ? `: ${lastCloudPersistWarning}` : ''} — if /sales looks empty, click "📋 Copy Sales Sync JSON" below and paste on /sales/import/${locParam}.
+         </div>`
+      : '';
 
     syncBanner.style.display = 'block';
     if (actionable.count > 0) {
@@ -4180,21 +4189,15 @@
           ⭐ HUCK ${actionable.byPartner.HUCK} · 🎲 PDXGL ${actionable.byPartner.PDXGL} · 💛 B&amp;B ${actionable.byPartner.BB} &nbsp;|&nbsp; Months: <b>${actionable.monthKeys.join(', ')}</b>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <button type="button" id="rc-banner-commit-sales-btn" style="background:linear-gradient(135deg,#38bdf8,#0284c7);color:#082f49;border:none;font-weight:900;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:11px;">
-            ⚡ Commit ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'}
-          </button>
-          <a href="${salesUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:5px 9px;border-radius:6px;text-decoration:none;font-size:11px;">
-            ↗ Open /sales
+          <a href="${confirmSalesUrl}" target="_blank" rel="noopener noreferrer" id="rc-banner-commit-sales-btn" style="background:linear-gradient(135deg,#38bdf8,#0284c7);color:#082f49;font-weight:900;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:11px;">
+            ↗ Review &amp; Confirm ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'} on The Works
           </a>
           <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#334155;color:#f8fafc;font-weight:700;padding:5px 9px;border-radius:6px;text-decoration:none;font-size:10.5px;">
             ↗ Reconciler (${totalRows})
           </a>
         </div>
+        ${persistWarnHtml}
       `;
-      const bannerBtn = document.getElementById('rc-banner-commit-sales-btn');
-      if (bannerBtn) {
-        bannerBtn.addEventListener('click', () => commitNewSalesFromBookmarklet());
-      }
     } else {
       syncBanner.style.background = 'rgba(16,185,129,0.18)';
       syncBanner.style.border = '1px solid #10b981';
@@ -4213,194 +4216,70 @@
             </a>
           </div>
         </div>
+        ${persistWarnHtml}
       `;
     }
   }
 
-  async function commitNewSalesFromBookmarklet() {
-    if (isCommittingSales || isPushingSales) return;
-    if (!hasHydratedLedgerSyncKeys || !lastServerSalesPayload) {
-      await pushSalesToResaleCore({ silent: false });
-    }
-    const actionable = getActionableNewSalesRows();
-    if (actionable.count === 0) {
-      setStatusBanner('success', `✅ All ticketed ${activeLocationName} sales are already recorded in Resale Command!`);
-      updateSalesSyncTabUI();
+  // Stage-only handoff to The Works (/sales?confirmRicochet=1) — ZERO native JS confirm/alert popups or cross-origin DB commits!
+  async function openConfirmOnWorks() {
+    if (isPushingSales) return;
+    const buildConfirmUrl = () => {
+      const baseOrigin = lastSalesTargetOrigin || RC_ORIGINS[0] || '';
+      const locParam = encodeURIComponent(activeLocationCode || 'MD');
+      return `${baseOrigin}/sales?confirmRicochet=1&location=${locParam}`;
+    };
+
+    if (hasHydratedLedgerSyncKeys && lastServerSalesPayload && lastCloudPersistedOk) {
+      const actionable = getActionableNewSalesRows();
+      if (actionable.count === 0) {
+        setStatusBanner('success', `✅ All ticketed ${activeLocationName} sales are already recorded in Resale Command!`);
+        updateSalesSyncTabUI();
+        return;
+      }
+      const confirmUrl = buildConfirmUrl();
+      window.open(confirmUrl, '_blank', 'noopener,noreferrer');
+      setStatusBanner(
+        'info',
+        `↗ Opened The Works (/sales) — review & confirm ${actionable.count} new ${actionable.count === 1 ? 'sale' : 'sales'} ($${actionable.net.toFixed(2)} net) in the Slide-Over Drawer!`
+      );
       return;
     }
 
-    const monthSummary = actionable.monthKeys
-      .map((m) => `${m} (${actionable.byMonth[m]})`)
-      .join(', ');
-    const previewLines = actionable.rows
-      .slice(0, 6)
-      .map(
-        (r) =>
-          `• #${cleanStr(r.payoutId || r.saleNumber).replace(/^#/, '')} (${r.soldDate}) ${r.sku || ''} ${r.matchedItemUpc || r.upc || ''} — $${Number(r.grossPrice || 0).toFixed(2)}`
-      )
-      .join('\n');
+    // Open tab synchronously inside user click gesture so browsers never block the handoff tab during async staging
+    const pendingWin = window.open('about:blank', '_blank');
+    if (pendingWin) {
+      try {
+        pendingWin.opener = null;
+      } catch (e) {}
+    }
 
-    const ok1 = window.confirm(
-      `Commit ${actionable.count} NEW ${activeLocationName} ${actionable.count === 1 ? 'sale' : 'sales'} to Resale Command Ledger?\n\n` +
-        `• Gross: $${actionable.gross.toFixed(2)}  |  Net Payout: $${actionable.net.toFixed(2)}\n` +
-        `• Partners: HUCK ${actionable.byPartner.HUCK} · PDXGL ${actionable.byPartner.PDXGL} · B&B ${actionable.byPartner.BB}\n` +
-        `• Month(s): ${monthSummary}\n\n` +
-        `${previewLines}${actionable.count > 6 ? `\n...and ${actionable.count - 6} more` : ''}`
+    await pushSalesToResaleCore({ silent: false });
+    const actionable = getActionableNewSalesRows();
+    if (!lastServerSalesPayload || actionable.count === 0) {
+      if (pendingWin && !pendingWin.closed) {
+        try {
+          pendingWin.close();
+        } catch (e) {}
+      }
+      if (lastServerSalesPayload && actionable.count === 0) {
+        setStatusBanner('success', `✅ All ticketed ${activeLocationName} sales are already recorded in Resale Command!`);
+      }
+      return;
+    }
+
+    const confirmUrl = buildConfirmUrl();
+    if (pendingWin && !pendingWin.closed) {
+      pendingWin.location.replace(confirmUrl);
+    } else {
+      window.open(confirmUrl, '_blank', 'noopener,noreferrer');
+    }
+    setStatusBanner(
+      lastCloudPersistedOk ? 'info' : 'warning',
+      lastCloudPersistedOk
+        ? `↗ Staged & opened The Works (/sales) — review & confirm ${actionable.count} new ${actionable.count === 1 ? 'sale' : 'sales'} ($${actionable.net.toFixed(2)} net)!`
+        : `⚠️ Staged in memory (${lastCloudPersistWarning || 'cloud manifest warning'}) — if /sales is empty, click "📋 Copy Sales Sync JSON" below.`
     );
-    if (!ok1) return;
-
-    if (actionable.monthKeys.length > 1 || actionable.count > 25) {
-      const ok2 = window.confirm(
-        `⚠️ SAFETY CHECK: This commit spans ${actionable.monthKeys.length} calendar month(s) (${monthSummary}) and ${actionable.count} rows.\n\n` +
-          `Expected normal daily sync is a single month and <= 25 rows. Are you 100% sure you want to write all ${actionable.count} rows to resale_db.sales?`
-      );
-      if (!ok2) return;
-    }
-
-    isCommittingSales = true;
-    const commitBtn = document.getElementById('rc-commit-sales-btn');
-    const bannerCommitBtn = document.getElementById('rc-banner-commit-sales-btn');
-    if (commitBtn) commitBtn.disabled = true;
-    if (bannerCommitBtn) bannerCommitBtn.disabled = true;
-
-    const BATCH_SIZE = 25;
-    const totalBatches = Math.ceil(actionable.rows.length / BATCH_SIZE);
-    let totalCommitted = 0;
-    let totalSkipped = 0;
-    let totalFailed = 0;
-    let totalCommittedNet = 0;
-    const commitErrors = [];
-    let activeEndpoint = RC_SALES_SYNC_ENDPOINTS[0] || '';
-    let targetOrigin = RC_ORIGINS[0] || '';
-
-    try {
-      for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
-        const chunk = actionable.rows.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
-        const progressLabel = `⏳ Committing Batch ${bIdx + 1}/${totalBatches} (${Math.min(actionable.rows.length, (bIdx + 1) * BATCH_SIZE)}/${actionable.rows.length})...`;
-        if (commitBtn) commitBtn.textContent = progressLabel;
-        if (bannerCommitBtn) bannerCommitBtn.textContent = progressLabel;
-
-        let batchResp = null;
-        const candidateEndpoints = activeEndpoint
-          ? [activeEndpoint, ...RC_SALES_SYNC_ENDPOINTS.filter((e) => e !== activeEndpoint)]
-          : RC_SALES_SYNC_ENDPOINTS;
-
-        for (const ep of candidateEndpoints) {
-          try {
-            const res = await fetch(ep, {
-              method: 'POST',
-              mode: 'cors',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mode: 'commit',
-                locationCode: activeLocationCode,
-                batch: { index: bIdx + 1, total: totalBatches },
-                rows: chunk,
-              }),
-            });
-            const data = await res.json().catch(() => null);
-            if (res.ok && data && data.ok) {
-              batchResp = data;
-              activeEndpoint = ep;
-              try {
-                targetOrigin = new URL(ep).origin;
-              } catch (e) {}
-              break;
-            }
-            if (res.status === 401 || res.status === 403) {
-              throw new Error((data && (data.message || data.error)) || 'Sign in as a Founder or Curator first.');
-            }
-            if (data && data.error) {
-              commitErrors.push(data.error);
-            }
-          } catch (netErr) {
-            if (/Sign in|401|403/i.test(String(netErr && netErr.message))) throw netErr;
-          }
-        }
-
-        if (!batchResp) {
-          totalFailed += chunk.length;
-          break;
-        }
-        totalCommitted += Number(batchResp.committedCount || 0);
-        totalSkipped += Number(batchResp.skippedCount || 0);
-        totalFailed += Number(batchResp.failedCount || 0);
-        totalCommittedNet += Number(batchResp.committedNet || 0);
-        if (Array.isArray(batchResp.commitErrors)) {
-          for (const ce of batchResp.commitErrors) {
-            if (ce && !commitErrors.includes(ce)) commitErrors.push(ce);
-          }
-        }
-      }
-
-      // Finalize manifest & refresh server-side ticket-line ledger flags
-      if (activeEndpoint && totalFailed === 0) {
-        try {
-          const finRes = await fetch(activeEndpoint, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'finalize',
-              locationCode: activeLocationCode,
-              committedCount: totalCommitted,
-              failedCount: totalFailed,
-            }),
-          });
-          const finData = await finRes.json().catch(() => null);
-          if (finRes.ok && finData && finData.payload) {
-            syncLedgerStateFromServerPayload(finData.payload);
-          }
-        } catch (e) {}
-      } else if (activeEndpoint) {
-        try {
-          const getRes = await fetch(`${activeEndpoint}?location=${encodeURIComponent(activeLocationCode)}&t=${Date.now()}`, {
-            method: 'GET',
-            mode: 'cors',
-          });
-          const getData = await getRes.json().catch(() => null);
-          if (getRes.ok && getData && getData.payload) {
-            syncLedgerStateFromServerPayload(getData.payload);
-          }
-        } catch (e) {}
-      }
-
-      if (rcBroadcastChannel) {
-        try {
-          rcBroadcastChannel.postMessage({
-            type: 'RC_RICOCHET_SALES_SYNCED',
-            locationCode: activeLocationCode,
-            committedCount: totalCommitted,
-            timestamp: Date.now(),
-          });
-        } catch (e) {}
-      }
-      if (window.__RC_BML_CORE__ && typeof window.__RC_BML_CORE__.notifyTabsUpdated === 'function') {
-        window.__RC_BML_CORE__.notifyTabsUpdated('RC_RICOCHET_SALES_SYNCED', {
-          locationCode: activeLocationCode,
-          committedCount: totalCommitted,
-        });
-      }
-
-      addLog(
-        `✅ Committed ${totalCommitted} new sales ($${totalCommittedNet.toFixed(2)} net), ${totalSkipped} skipped, ${totalFailed} failed.`,
-        totalFailed > 0 ? '#f59e0b' : '#10b981'
-      );
-      setStatusBanner(
-        totalFailed > 0 ? 'warning' : 'success',
-        totalFailed > 0
-          ? `⚠️ Committed ${totalCommitted} sales, ${totalFailed} failed${commitErrors[0] ? ` (${commitErrors[0]})` : ''}. Click Commit again to retry.`
-          : `🎉 Committed ${totalCommitted} new ${activeLocationName} sales ($${totalCommittedNet.toFixed(2)} net) to Resale Command Ledger!`
-      );
-    } catch (err) {
-      const msg = (err && err.message) || 'Commit failed';
-      addLog(`❌ Sales commit error: ${msg}`, '#ef4444');
-      setStatusBanner('error', `❌ ${msg}`);
-    } finally {
-      isCommittingSales = false;
-      updateSalesSyncTabUI();
-      renderSalesSyncBanner(targetOrigin, activeLocationCode);
-    }
   }
 
   async function pushSalesToResaleCore(options = {}) {
@@ -4451,8 +4330,11 @@
         const data = await res.json().catch(() => null);
         if (res.ok && data && data.ok) {
           pushedData = data.payload || data;
+          lastCloudPersistedOk = data.persistedToCloud !== false;
+          lastCloudPersistWarning = cleanStr(data.persistWarning || '');
           try {
             targetOrigin = new URL(endpoint).origin;
+            lastSalesTargetOrigin = targetOrigin;
           } catch (e) {}
           break;
         }

@@ -1,5 +1,6 @@
 import {
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
+  type FingerprintAccessors,
   assignOccurrenceFingerprints,
   buildLockedMultiBinMap,
   buildTicketLineLedger,
@@ -766,8 +767,17 @@ export function buildEnrichedRicochetSalesPayload(params: {
 
   // Delegate canonical ticket & occurrence fingerprint stamping to `salesBucketing.ts` (Golden Rule #3),
   // then enforce Law 15's exact `ticket|gross|net` multiset (`consumeTicketLine`) as sole authority on ticketed rows.
-  assignOccurrenceFingerprints(normalizedRows as any[]);
-  flagAlreadyRecordedRows(normalizedRows as any[], allSales, locMeta.id);
+  const RICOCHET_SYNC_FINGERPRINT_ACCESSORS: FingerprintAccessors<RicochetSyncSaleLine> = {
+    getSaleNumber: (row) => row.payoutId || row.saleNumber,
+    getSoldDate: (row) => row.soldDate,
+    getGross: (row) => row.grossPrice,
+    getNet: (row) => row.ricoNetPayout ?? row.expectedNetPayout,
+    getSku: (row) => row.sku || row.ricoSku,
+    getUpc: (row) => row.matchedItemUpc || row.upc,
+    getTitle: (row) => row.matchedItemTitle || row.title,
+  };
+  assignOccurrenceFingerprints(normalizedRows, RICOCHET_SYNC_FINGERPRINT_ACCESSORS);
+  flagAlreadyRecordedRows(normalizedRows, allSales, RICOCHET_SYNC_FINGERPRINT_ACCESSORS);
 
   const ticketLedger = buildTicketLineLedger(allSales);
   const seenTicketLineOccurrences = new Map<string, number>();

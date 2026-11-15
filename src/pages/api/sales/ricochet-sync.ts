@@ -122,13 +122,95 @@ async function loadPersistedSalesSync(locCode: string): Promise<RicochetSalesSyn
   return getStoredSalesSync(code);
 }
 
-async function savePersistedSalesSync(payload: RicochetSalesSyncPayload, locCode: string): Promise<void> {
+/**
+ * Compacts `RicochetSalesSyncPayload` before writing to `manifests.itemsSnapshot` so 270+ staged rows serialize
+ * cleanly (~38–48 KB) without derived runtime bloat (`fingerprint`, `alreadySynced`, duplicate titles/SKUs).
+ * `GET /api/sales/ricochet-sync` and `useRicochetSalesSync.ts` re-enrich live ledger status on read.
+ */
+export function compactPayloadForStorage(
+  payload: RicochetSalesSyncPayload,
+  maxChars: number = 900_000
+): RicochetSalesSyncPayload {
+  const compactRow = (r: any) => {
+    const sku = String(r.sku || r.ricoSku || '').trim();
+    const upc = String(r.matchedItemUpc || r.upc || '').trim();
+    const title = String(r.matchedItemTitle || r.title || '').trim().slice(0, 80);
+    const payoutId = String(r.payoutId || r.saleNumber || '').trim();
+    const saleNumber = String(r.saleNumber || payoutId || '').trim();
+    const out: Record<string, any> = {
+      ricoItemId: String(r.ricoItemId || sku || ''),
+      sku,
+      upc,
+      title,
+      payoutId,
+      soldDate: String(r.soldDate || '').trim(),
+      grossPrice: Number(r.grossPrice || 0),
+      ricoNetPayout: Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0),
+      payoutStatus: r.payoutStatus === 'pending_payout' ? 'pending_payout' : 'paid',
+    };
+    if (saleNumber && saleNumber !== payoutId) out.saleNumber = saleNumber;
+    if (r.paidDate) out.paidDate = String(r.paidDate).trim();
+    if (r.matchedItemId) out.matchedItemId = String(r.matchedItemId);
+    if (r.matchedItemCost !== undefined && r.matchedItemCost !== null) {
+      out.matchedItemCost = Number(r.matchedItemCost || 0);
+    }
+    if (r.matchTier && r.matchTier !== 'unmatched') out.matchTier = r.matchTier;
+    if (r.partnerBucket && r.partnerBucket !== 'HUCK') out.partnerBucket = r.partnerBucket;
+    return out;
+  };
+
+  const allCompact = (Array.isArray(payload.rows) ? payload.rows : []).map(compactRow);
+  const candidate: any = {
+    locationCode: payload.locationCode,
+    locationName: payload.locationName,
+    timestamp: payload.timestamp,
+    dryRun: true,
+    summary: payload.summary,
+    spaceRentalAdjustments: Array.isArray(payload.spaceRentalAdjustments) ? payload.spaceRentalAdjustments : [],
+    rows: allCompact,
+  };
+
+  if (JSON.stringify(candidate).length <= maxChars) {
+    return candidate as RicochetSalesSyncPayload;
+  }
+
+  // Safety valve if history grows to thousands of rows: ALWAYS retain 100% of pending_payout & uncommitted rows first
+  const priority: any[] = [];
+  const historical: any[] = [];
+  const srcRows = Array.isArray(payload.rows) ? payload.rows : [];
+  for (let i = 0; i < allCompact.length; i++) {
+    const orig = srcRows[i];
+    if (allCompact[i].payoutStatus === 'pending_payout' || !orig?.alreadySynced) {
+      priority.push(allCompact[i]);
+    } else {
+      historical.push(allCompact[i]);
+    }
+  }
+  const fitted = [...priority];
+  for (const h of historical) {
+    fitted.push(h);
+    candidate.rows = fitted;
+    if (JSON.stringify(candidate).length > maxChars) {
+      fitted.pop();
+      break;
+    }
+  }
+  candidate.rows = fitted;
+  return candidate as RicochetSalesSyncPayload;
+}
+
+async function savePersistedSalesSync(
+  payload: RicochetSalesSyncPayload,
+  locCode: string
+): Promise<{ persistedToCloud: boolean; persistWarning?: string }> {
   const locMeta = resolveRicochetLocation(locCode);
   const { salesSyncDocId } = getLocationManifestDocIds(locMeta.code);
   setStoredSalesSync(payload, locMeta.code);
 
   const { databases, dbId } = getAppwriteConfig();
-  if (!databases) return;
+  if (!databases) {
+    return { persistedToCloud: false, persistWarning: 'Appwrite client unavailable on server' };
+  }
 
   const docPerms = [
     NodePermission.read(NodeRole.any()),
@@ -136,25 +218,39 @@ async function savePersistedSalesSync(payload: RicochetSalesSyncPayload, locCode
     NodePermission.delete(NodeRole.any()),
   ];
 
+  const compact = compactPayloadForStorage(payload);
   const docPayload: Record<string, any> = {
     name: `${locMeta.shortName} Live Ricochet Sales & Payout Sync`,
     tenantId: 'system',
     locationId: locMeta.id,
     locationName: locMeta.shortName,
     status: 'system_sales_sync',
-    itemCount: Number(payload.rows?.length || 0),
-    itemsSnapshot: JSON.stringify(payload),
+    itemCount: Number(compact.rows?.length || 0),
+    itemsSnapshot: JSON.stringify(compact),
     notes: JSON.stringify({ timestamp: payload.timestamp, summary: payload.summary }).slice(0, 4900),
   };
 
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, salesSyncDocId, docPayload, docPerms);
+    // IMPORTANT: Do NOT pass `docPerms` on `updateDocument` — `manifests` has DLS enabled and Appwrite rejects
+    // permission array mutations with 401 when `APPWRITE_API_KEY` is absent (even when `update("any")` is granted).
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, salesSyncDocId, docPayload);
+    return { persistedToCloud: true };
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
         await databases.createDocument(dbId, MANIFESTS_COL_ID, salesSyncDocId, docPayload, docPerms);
-      } catch {}
+        return { persistedToCloud: true };
+      } catch (createErr: any) {
+        return {
+          persistedToCloud: false,
+          persistWarning: String(createErr?.message || 'Failed to create cloud sales sync manifest'),
+        };
+      }
     }
+    return {
+      persistedToCloud: false,
+      persistWarning: String(updateErr?.message || 'Failed to update cloud sales sync manifest'),
+    };
   }
 }
 
@@ -169,7 +265,7 @@ export interface StagedRawCsv {
   committed_count?: number;
 }
 
-const MAX_RAW_CSV_CHARS = 600_000;
+const MAX_RAW_CSV_CHARS = 400_000;
 
 function normalizeRawCsvBody(raw: any): StagedRawCsv {
   const clip = (v: any) => (typeof v === 'string' ? v.slice(0, MAX_RAW_CSV_CHARS) : '');
@@ -231,7 +327,8 @@ async function savePersistedRawCsv(
     notes: JSON.stringify({ capturedAt: stored.capturedAt }).slice(0, 4900),
   };
   try {
-    await databases.updateDocument(dbId, MANIFESTS_COL_ID, rawCsvDocId, docPayload, docPerms);
+    // Do NOT pass `docPerms` on `updateDocument` (prevents Appwrite 401 when `APPWRITE_API_KEY` is unset)
+    await databases.updateDocument(dbId, MANIFESTS_COL_ID, rawCsvDocId, docPayload);
   } catch (updateErr: any) {
     if (updateErr?.code === 404 || String(updateErr?.message || '').includes('not be found')) {
       try {
@@ -935,7 +1032,7 @@ export const POST: APIRoute = async ({ request, url }) => {
       spaceRentalAdjustments: ingested.adjustments,
       dryRun: true,
     });
-    await savePersistedSalesSync(stagedPayload, locMeta.code);
+    const persistRes = await savePersistedSalesSync(stagedPayload, locMeta.code);
     // A fresh stage re-opens the manifest lock (status back to 'staged'); only rewrite when there's CSV text or a lock to clear
     const priorRawCsv = await loadPersistedRawCsv(locMeta.code);
     const hasNewCsvText = Boolean(ingested.rawCsv.payout || ingested.rawCsv.payoutHistory);
@@ -949,6 +1046,8 @@ export const POST: APIRoute = async ({ request, url }) => {
         ok: true,
         mode: 'stage',
         dryRun: true,
+        persistedToCloud: persistRes.persistedToCloud,
+        ...(persistRes.persistWarning ? { persistWarning: persistRes.persistWarning } : {}),
         locationCode: locMeta.code,
         reconcilerPath: `/sales/import/${locMeta.code}`,
         summary: stagedPayload.summary,

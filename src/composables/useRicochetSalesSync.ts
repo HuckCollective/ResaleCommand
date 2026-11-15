@@ -502,8 +502,11 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     let alreadySynced = 0;
     for (const r of rows) {
       const net = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
-      grossSales += Number(r.grossPrice || 0);
-      expectedCommission += Number(r.expectedFee ?? r.expectedCommission ?? r.ricoCommission ?? 0);
+      const gross = Number(r.grossPrice || 0);
+      grossSales += gross;
+      expectedCommission += Number(
+        r.expectedFee ?? r.expectedCommission ?? r.ricoCommission ?? Math.max(0, Number((gross - net).toFixed(2)))
+      );
       netPayout += net;
       if (r.payoutStatus === 'pending_payout') {
         pendingPayoutCount++;
@@ -630,11 +633,12 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         const res = await fetch(`/api/sales/ricochet-sync?location=${code}&t=${Date.now()}`);
         const data = await res.json().catch(() => null);
         if (res.ok && data?.ok && data?.payload) {
-          ricochetSyncPayload.value = data.payload;
           ricochetRawCsv.value = data?.rawCsv || null;
-          loadedFromServer = true;
           const stagedRowCount = Array.isArray(data.payload?.rows) ? data.payload.rows.length : 0;
-          if (stagedRowCount === 0 && (data?.rawCsv?.payout || data?.rawCsv?.payoutHistory)) {
+          if (stagedRowCount > 0) {
+            ricochetSyncPayload.value = data.payload;
+            loadedFromServer = true;
+          } else if (data?.rawCsv?.payout || data?.rawCsv?.payoutHistory) {
             const parsedStagedCsv = parseRicochetExportCsv(
               [data.rawCsv.payout, data.rawCsv.payoutHistory].filter(Boolean).join('\n')
             );
@@ -651,8 +655,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
                 }),
               });
               const stageData = await stageRes.json().catch(() => null);
-              if (stageRes.ok && stageData?.ok && stageData?.payload) {
+              if (stageRes.ok && stageData?.ok && Array.isArray(stageData?.payload?.rows) && stageData.payload.rows.length > 0) {
                 ricochetSyncPayload.value = stageData.payload;
+                loadedFromServer = true;
               }
             }
           }
@@ -1014,7 +1019,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             continue;
           }
 
-          const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
+          const fee = Number(
+            row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? Math.max(0, Number((gross - net).toFixed(2)))
+          );
           // 📦 Booth Bin (multi-qty): one SKU sells many times. A bin sale only records the sale — it must NEVER flip the bin item to
           // "sold / qty 1" (stock is managed by the Booth Bin / Restock flows and the Products sync).
           const rowBinSku = String(row.sku || row.ricoSku || '').trim().toUpperCase();
